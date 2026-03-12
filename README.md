@@ -92,7 +92,7 @@ Create a `KCODE.md` file in your project root to give KCode project-specific con
 - API is at localhost:16000
 ```
 
-KCode loads `KCODE.md` (and `CLAUDE.md` for compatibility) from the working directory up to the git root.
+KCode loads `KCODE.md` from the working directory up to the git root.
 
 ## Tools (17 built-in)
 

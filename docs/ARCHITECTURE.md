@@ -57,7 +57,7 @@ reference-source
 - Memory: YAML frontmatter + markdown files in ~/.kcode/projects/<hash>/memory/
 - MEMORY.md index (200 line limit), @include directives
 - Settings hierarchy: user > project > local + env vars
-- KCODE.md/CLAUDE.md: loaded from cwd up to git root
+- KCODE.md: loaded from cwd up to git root
 - Rules directory: .kcode/rules/ recursive loading
 - Git context: branch, status, log 5 commits (snapshot at session start)
 
@@ -144,7 +144,7 @@ scripts/
 - [x] Subagent spawning (general/explore/plan types, background, resume, worktree)
 - [x] Memory system (YAML frontmatter, MEMORY.md index, @include, search)
 - [x] Configuration hierarchy (user/project/local settings + env vars)
-- [x] KCODE.md/CLAUDE.md loading (cwd + parent dirs)
+- [x] KCODE.md loading (cwd + parent dirs)
 - [x] Rules directory (.kcode/rules/)
 - [x] Git context gathering (branch, status, commits)
 - [x] System prompt builder (modular sections)
