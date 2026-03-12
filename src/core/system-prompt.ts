@@ -208,8 +208,7 @@ When multiple independent pieces of information are needed, make multiple tool c
   // ─── Section: Project Instructions ──────────────────────────────
 
   static loadProjectInstructions(cwd: string): string | null {
-    // Look for KCODE.md first, then CLAUDE.md
-    const candidates = ["KCODE.md", "CLAUDE.md"];
+    const candidates = ["KCODE.md"];
     const loaded: string[] = [];
 
     for (const filename of candidates) {

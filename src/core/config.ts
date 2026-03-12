@@ -171,12 +171,12 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   };
 }
 
-// ─── KCODE.md / CLAUDE.md Loading ───────────────────────────────
+// ─── KCODE.md Loading ────────────────────────────────────────────
 
-const INSTRUCTION_FILES = ["KCODE.md", "CLAUDE.md"];
+const INSTRUCTION_FILES = ["KCODE.md"];
 
 /**
- * Load instruction files (KCODE.md, CLAUDE.md) from cwd up to git root.
+ * Load instruction files (KCODE.md) from cwd up to git root.
  * Files closer to cwd take precedence (appended later).
  * Returns concatenated content from all found files.
  */
