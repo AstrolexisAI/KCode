@@ -1,0 +1,36 @@
+{
+  "name": "kcode",
+  "version": "0.1.0",
+  "description": "AI-powered coding assistant for the terminal - by Astrolexis",
+  "author": "Astrolexis",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "kcode": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "build": "bun run build.ts",
+    "build:dev": "bun run build.ts --dev",
+    "test": "bun test",
+    "version:patch": "bun run --bun npm version patch",
+    "version:minor": "bun run --bun npm version minor",
+    "version:major": "bun run --bun npm version major"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "react-devtools-core": "^7.0.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "ink": "^6.8.0",
+    "ora": "^9.3.0",
+    "react": "^19.2.4"
+  }
+}

@@ -1,0 +1,155 @@
+// KCode - Conversation Compaction
+// Summarizes pruned messages via LLM instead of discarding them
+
+import type { Message, ContentBlock, TextBlock } from "./types.js";
+import { getModelBaseUrl } from "./models.js";
+
+// ─── Constants ───────────────────────────────────────────────────
+
+const SUMMARY_MAX_TOKENS = 1024;
+const SUMMARY_MODEL = "mnemo:code3"; // Use the local code model for summaries
+
+const SUMMARY_SYSTEM_PROMPT =
+  "You are a conversation summarizer. Produce a concise summary of the conversation context provided. " +
+  "Focus on: key decisions made, files modified, important findings, current task state, and any " +
+  "outstanding questions. Be factual and brief. Output only the summary, no preamble.";
+
+// ─── CompactionManager ──────────────────────────────────────────
+
+export class CompactionManager {
+  private apiBase?: string;
+  private apiKey?: string;
+  private model: string;
+  private compactionCount = 0;
+
+  constructor(apiKey?: string, model?: string, apiBase?: string) {
+    this.model = model ?? SUMMARY_MODEL;
+    this.apiKey = apiKey;
+    this.apiBase = apiBase; // resolved lazily via getModelBaseUrl if not provided
+  }
+
+  private async resolveApiBase(): Promise<string> {
+    if (this.apiBase) return this.apiBase;
+    this.apiBase = await getModelBaseUrl(this.model);
+    return this.apiBase;
+  }
+
+  /**
+   * Compact a set of messages by summarizing them via the LLM.
+   * Returns a single system-injected summary message to replace the pruned messages.
+   * Falls back to simple pruning (returns null) if the summary call fails.
+   */
+  async compact(messagesToPrune: Message[]): Promise<Message | null> {
+    if (messagesToPrune.length === 0) return null;
+
+    try {
+      const conversationText = this.messagesToText(messagesToPrune);
+      const summaryPrompt =
+        "Summarize the following conversation context that is being compacted to save space. " +
+        "Preserve all important details about what was discussed, decided, and accomplished:\n\n" +
+        conversationText;
+
+      const apiBase = await this.resolveApiBase();
+      const url = `${apiBase}/v1/chat/completions`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (this.apiKey) {
+        headers["Authorization"] = `Bearer ${this.apiKey}`;
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: this.model,
+          max_tokens: SUMMARY_MAX_TOKENS,
+          messages: [
+            { role: "system", content: SUMMARY_SYSTEM_PROMPT },
+            { role: "user", content: summaryPrompt },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data = (await response.json()) as any;
+      const summaryText = data.choices?.[0]?.message?.content;
+      if (!summaryText) return null;
+
+      this.compactionCount++;
+
+      return {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `[Conversation Summary - Compaction #${this.compactionCount}]\n` +
+              `The following is a summary of ${messagesToPrune.length} earlier messages ` +
+              `that were compacted to save context space:\n\n${summaryText}`,
+          } as TextBlock,
+        ],
+      };
+    } catch {
+      // Fallback: return null so caller can do simple pruning
+      return null;
+    }
+  }
+
+  /**
+   * Convert messages to a plain-text representation for summarization.
+   */
+  private messagesToText(messages: Message[]): string {
+    const parts: string[] = [];
+
+    for (const msg of messages) {
+      const role = msg.role.toUpperCase();
+
+      if (typeof msg.content === "string") {
+        parts.push(`${role}: ${msg.content}`);
+        continue;
+      }
+
+      for (const block of msg.content) {
+        switch (block.type) {
+          case "text":
+            parts.push(`${role}: ${block.text}`);
+            break;
+          case "thinking":
+            // Skip thinking blocks in summaries
+            break;
+          case "tool_use":
+            parts.push(`${role} [tool_use ${block.name}]: ${JSON.stringify(block.input).slice(0, 200)}`);
+            break;
+          case "tool_result": {
+            const content =
+              typeof block.content === "string"
+                ? block.content.slice(0, 300)
+                : JSON.stringify(block.content).slice(0, 300);
+            parts.push(`${role} [tool_result${block.is_error ? " ERROR" : ""}]: ${content}`);
+            break;
+          }
+        }
+      }
+    }
+
+    return parts.join("\n");
+  }
+
+  /**
+   * Number of compactions performed this session.
+   */
+  getCompactionCount(): number {
+    return this.compactionCount;
+  }
+
+  /**
+   * Reset compaction count (e.g., on conversation reset).
+   */
+  reset(): void {
+    this.compactionCount = 0;
+  }
+}
