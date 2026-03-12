@@ -21,6 +21,7 @@ export interface Settings {
   apiKey?: string;
   apiBase?: string;
   systemPromptExtra?: string;
+  autoRoute?: boolean;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     apiKey: typeof raw.apiKey === "string" ? raw.apiKey : undefined,
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
     systemPromptExtra: typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
+    autoRoute: typeof raw.autoRoute === "boolean" ? raw.autoRoute : undefined,
   };
 }
 
@@ -97,6 +99,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.apiKey !== undefined) result.apiKey = layer.apiKey;
     if (layer.apiBase !== undefined) result.apiBase = layer.apiBase;
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
+    if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
   }
   return result;
 }
@@ -168,6 +171,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     workingDirectory: cwd,
     permissionMode: settings.permissionMode ?? "ask",
     contextWindowSize: contextSize,
+    autoRoute: settings.autoRoute ?? true, // enabled by default
   };
 }
 

@@ -15,10 +15,13 @@ import type {
   OpenAIToolDefinition,
 } from "./types";
 import { getModelBaseUrl } from "./models";
+import { routeToModel } from "./router";
 import { ToolRegistry } from "./tool-registry";
 import { SystemPromptBuilder } from "./system-prompt";
 import { PermissionManager } from "./permissions";
 import { HookManager } from "./hooks";
+import { RateLimiter } from "./rate-limiter";
+import { UndoManager } from "./undo";
 import { log } from "./logger";
 
 // ─── Constants ───────────────────────────────────────────────────
@@ -320,6 +323,8 @@ export class ConversationManager {
   private cumulativeUsage: TokenUsage;
   private permissions: PermissionManager;
   private hooks: HookManager;
+  private rateLimiter: RateLimiter;
+  private undoManager: UndoManager;
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
@@ -329,6 +334,11 @@ export class ConversationManager {
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
     this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory);
     this.hooks = new HookManager(config.workingDirectory);
+    this.rateLimiter = new RateLimiter(
+      config.rateLimit?.maxPerMinute ?? 60,
+      config.rateLimit?.maxConcurrent ?? 2,
+    );
+    this.undoManager = new UndoManager();
     this.state = {
       messages: [],
       tokenCount: 0,
@@ -350,6 +360,11 @@ export class ConversationManager {
   /** Access the hook manager (e.g., to force reload). */
   getHooks(): HookManager {
     return this.hooks;
+  }
+
+  /** Access the undo manager (e.g., for /undo command). */
+  getUndo(): UndoManager {
+    return this.undoManager;
   }
 
   /**
@@ -390,8 +405,10 @@ export class ConversationManager {
       // Stream the API response with retry logic
       let sseStream: AsyncGenerator<SSEChunk>;
       try {
+        await this.rateLimiter.acquire();
         sseStream = await this.createStreamWithRetry();
       } catch (error) {
+        this.rateLimiter.release();
         yield {
           type: "error",
           error: error instanceof Error ? error : new Error(String(error)),
@@ -511,6 +528,8 @@ export class ConversationManager {
         };
         yield { type: "turn_end", stopReason: "error" };
         return;
+      } finally {
+        this.rateLimiter.release();
       }
 
       // Finalize text content
@@ -603,7 +622,13 @@ export class ConversationManager {
           }
         }
 
-        // 3. Execute the tool
+        // 3. Capture undo snapshot for file-modifying tools
+        let undoSnapshot: import("./undo").FileSnapshot | null = null;
+        if ((call.name === "Edit" || call.name === "Write") && typeof effectiveInput.file_path === "string") {
+          undoSnapshot = this.undoManager.captureSnapshot(effectiveInput.file_path as string);
+        }
+
+        // 4. Execute the tool
         yield {
           type: "tool_executing",
           name: call.name,
@@ -612,6 +637,14 @@ export class ConversationManager {
         };
 
         const result = await this.tools.execute(call.name, effectiveInput);
+
+        // Record undo action if snapshot was captured and tool succeeded
+        if (undoSnapshot && !result.is_error) {
+          const desc = call.name === "Edit"
+            ? `Edit ${effectiveInput.file_path}`
+            : `Write ${effectiveInput.file_path}`;
+          this.undoManager.pushAction(call.name, [undoSnapshot], desc);
+        }
 
         yield {
           type: "tool_result",
@@ -628,7 +661,7 @@ export class ConversationManager {
           is_error: result.is_error,
         });
 
-        // 4. Run PostToolUse hooks (for logging/notification, non-blocking)
+        // 5. Run PostToolUse hooks (for logging/notification, non-blocking)
         if (this.hooks.hasHooks("PostToolUse")) {
           await this.hooks.runPostToolUse(call, {
             tool_use_id: call.id,
@@ -657,7 +690,14 @@ export class ConversationManager {
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        const apiBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
+        // Auto-route to a better model if enabled and user didn't explicitly set one
+        let effectiveModel = this.config.model;
+        if (this.config.autoRoute !== false && !this.config.modelExplicitlySet) {
+          const recentText = this.getRecentMessageText();
+          effectiveModel = await routeToModel(this.config.model, recentText);
+        }
+
+        const apiBase = await getModelBaseUrl(effectiveModel, this.config.apiBase);
         const url = `${apiBase}/v1/chat/completions`;
         const requestStart = Date.now();
 
@@ -668,7 +708,7 @@ export class ConversationManager {
         const openAITools = convertToOpenAITools(this.tools.getDefinitions());
 
         const body: Record<string, unknown> = {
-          model: this.config.model,
+          model: effectiveModel,
           messages: openAIMessages,
           max_tokens: this.config.maxTokens,
           stream: true,
@@ -688,7 +728,7 @@ export class ConversationManager {
           headers["Authorization"] = `Bearer ${this.config.apiKey}`;
         }
 
-        log.info("llm", `Request to ${this.config.model} at ${url} (${openAIMessages.length} messages)`);
+        log.info("llm", `Request to ${effectiveModel} at ${url} (${openAIMessages.length} messages)`);
 
         const response = await fetch(url, {
           method: "POST",
@@ -782,6 +822,40 @@ export class ConversationManager {
       this.cumulativeUsage.inputTokens + this.cumulativeUsage.outputTokens;
   }
 
+  // ─── Router Helpers ────────────────────────────────────────────
+
+  /**
+   * Extract text from recent messages for routing heuristics.
+   * Looks at the last few messages (user + tool results) to detect content type.
+   */
+  private getRecentMessageText(): string {
+    const parts: string[] = [];
+    // Check the last 4 messages (enough to catch recent tool results)
+    const recent = this.state.messages.slice(-4);
+    for (const msg of recent) {
+      if (typeof msg.content === "string") {
+        parts.push(msg.content);
+      } else {
+        for (const block of msg.content) {
+          if (block.type === "text") {
+            parts.push(block.text);
+          } else if (block.type === "tool_result") {
+            if (typeof block.content === "string") {
+              parts.push(block.content);
+            } else {
+              for (const sub of block.content) {
+                if (sub.type === "text") {
+                  parts.push(sub.text);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return parts.join("\n");
+  }
+
   // ─── State Access ───────────────────────────────────────────────
 
   getState(): ConversationState {
@@ -790,6 +864,36 @@ export class ConversationManager {
 
   getUsage(): TokenUsage {
     return { ...this.cumulativeUsage };
+  }
+
+  /**
+   * Restore messages from a previous session (for --continue).
+   * Sets the message history and estimates token count from content length.
+   */
+  restoreMessages(messages: Message[]): void {
+    this.state.messages = [...messages];
+    // Rough token estimate: ~4 chars per token
+    let totalChars = 0;
+    for (const msg of messages) {
+      if (typeof msg.content === "string") {
+        totalChars += msg.content.length;
+      } else {
+        for (const block of msg.content) {
+          if (block.type === "text") {
+            totalChars += block.text.length;
+          } else if (block.type === "thinking") {
+            totalChars += block.thinking.length;
+          } else if (block.type === "tool_use") {
+            totalChars += JSON.stringify(block.input).length;
+          } else if (block.type === "tool_result") {
+            totalChars += typeof block.content === "string"
+              ? block.content.length
+              : JSON.stringify(block.content).length;
+          }
+        }
+      }
+    }
+    this.state.tokenCount = Math.ceil(totalChars / 4);
   }
 
   /**

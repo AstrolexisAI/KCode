@@ -78,21 +78,35 @@ reference-source
 ```
 src/
 ├── core/                          # Core engine
-│   ├── types.ts         (180)     # Type definitions, StreamEvent, TokenUsage
-│   ├── conversation.ts  (804)     # Agent loop with SSE streaming, retry, context pruning
+│   ├── types.ts         (183)     # Type definitions, StreamEvent, TokenUsage
+│   ├── conversation.ts  (870)     # Agent loop with SSE streaming, retry, context pruning, undo
 │   ├── tool-registry.ts  (51)     # Tool registration and dispatch
 │   ├── system-prompt.ts (341)     # Modular prompt builder (identity, tools, git, env)
-│   ├── permissions.ts   (489)     # Permission system, bash safety analysis, pipe-to-shell, allowlist
+│   ├── permissions.ts   (520)     # Permission system, bash safety, pipe-to-shell, diff preview
 │   ├── hooks.ts         (333)     # Hook system (PreToolUse, PostToolUse, lifecycle)
-│   ├── config.ts        (245)     # Settings hierarchy, env vars, KCODE.md loading
+│   ├── config.ts        (249)     # Settings hierarchy, env vars, KCODE.md loading
 │   ├── memory.ts        (325)     # Memory files with YAML frontmatter, @include
 │   ├── git.ts           (144)     # Git context (branch, status, commits)
-│   ├── models.ts        (158)     # Dynamic model registry (~/.kcode/models.json)
+│   ├── models.ts        (166)     # Dynamic model registry (~/.kcode/models.json)
 │   ├── compaction.ts    (155)     # Conversation compaction via LLM summarization
-│   ├── transcript.ts    (189)     # Session transcript persistence (JSONL)
-│   ├── skills.ts        (235)     # Skill discovery, template expansion, slash commands
-│   ├── builtin-skills.ts (73)     # Built-in skill definitions (commit, review-pr, etc.)
-│   └── mcp.ts           (588)     # MCP client manager (JSON-RPC, server lifecycle, discoverTools)
+│   ├── transcript.ts    (299)     # Session transcript persistence (JSONL) + session resume
+│   ├── skills.ts        (302)     # Skill discovery, template expansion, slash commands
+│   ├── builtin-skills.ts (80)     # Built-in skill definitions (commit, review-pr, template, etc.)
+│   ├── mcp.ts           (588)     # MCP client manager (JSON-RPC, server lifecycle, discoverTools)
+│   ├── router.ts         (79)     # Multi-model auto-routing (images → vision model)
+│   ├── stats.ts         (324)     # Usage statistics aggregation from logs/transcripts
+│   ├── diff.ts          (130)     # Unified diff generation for file change previews
+│   ├── rate-limiter.ts   (80)     # Request rate limiting (sliding window + semaphore)
+│   ├── undo.ts          (110)     # Undo system for file-modifying tools
+│   ├── indexer.ts       (240)     # Project file indexer with symbol extraction
+│   ├── templates.ts     (140)     # Reusable prompt template system
+│   ├── doctor.ts        (190)     # Setup diagnostics and health checks
+│   ├── logger.ts        (194)     # Logging system with rotation and categories
+│   ├── theme.ts         (120)     # Color theme system (default/dark/light + custom)
+│   ├── export.ts        (105)     # Conversation export (markdown/JSON)
+│   ├── clipboard.ts      (55)     # Clipboard integration (xclip/xsel/wl-copy)
+│   ├── watcher.ts       (125)     # File watcher with debouncing
+│   └── metrics.ts       (165)     # LLM performance metrics collector
 │
 ├── tools/                         # 17 built-in + 2 MCP resource tools
 │   ├── bash.ts           (61)     # Shell execution with timeout
@@ -110,24 +124,24 @@ src/
 │   └── index.ts          (85)     # Registration of all tools + MCP integration
 │
 ├── ui/                            # Ink-based terminal UI
-│   ├── App.tsx          (370)     # Main component, event processing, thinking state
+│   ├── App.tsx          (430)     # Main component, event processing, undo, templates
 │   ├── render.tsx        (26)     # Ink render entry point
 │   ├── print-mode.ts     (64)     # Non-interactive piped output mode
 │   └── components/
 │       ├── Header.tsx     (45)    # Model, cwd, token/tool stats
-│       ├── MessageList.tsx(184)   # Static completed + streaming text + thinking
+│       ├── MessageList.tsx(342)   # Static messages + markdown rendering
 │       ├── ThinkingBlock.tsx(94)  # Collapsible thinking block (streaming/collapsed/expanded)
-│       ├── InputPrompt.tsx(114)   # Custom input with history/cursor
+│       ├── InputPrompt.tsx(302)   # Input with history, cursor, tab completion
 │       ├── PermissionDialog.tsx(81)# Allow/deny/always prompt
 │       └── Spinner.tsx    (30)    # Animated braille spinner
 │
-├── index.ts             (241)     # CLI entry point with models subcommand
+├── index.ts             (279)     # CLI entry point (models, stats, doctor subcommands)
 └── build.ts              (67)     # Build script (Bun.build, version injection, minification)
 scripts/
 └── install.sh                     # Installer (copies binary to ~/.local/bin or /usr/local/bin)
 ```
 
-**Total: 38 files, ~7,610 lines of TypeScript**
+**Total: 51 files, ~11,000+ lines of TypeScript**
 
 ### What's Implemented (v1.0)
 
@@ -163,6 +177,23 @@ scripts/
 - [x] Print mode for piped output (`kcode --print "prompt" | less`)
 
 - [x] Extended thinking UI (ThinkingBlock.tsx: streaming, collapsed, expanded modes)
+- [x] Tab completion for slash commands and file paths
+- [x] Session resume (`kcode --continue` to restore last session)
+- [x] Usage statistics dashboard (`kcode stats --days N`)
+- [x] Multi-model auto-routing (images → vision model, code → code model)
+- [x] Markdown rendering in TUI (code blocks, headers, lists, bold, inline code, links)
+- [x] Diff preview in permission dialogs for Edit/Write tools
+- [x] Request rate limiting (sliding window + concurrency semaphore)
+- [x] Undo system for file modifications (`/undo` command)
+- [x] Project file indexer with symbol extraction
+- [x] Reusable prompt templates (`/template` command)
+- [x] Health check diagnostics (`kcode doctor`)
+- [x] Theme system (3 built-in themes + custom ~/.kcode/theme.json)
+- [x] Conversation export (markdown/JSON)
+- [x] Clipboard integration (xclip/xsel/wl-copy)
+- [x] File watcher for change detection
+- [x] LLM performance metrics collector
+- [x] 24 slash commands (git, code analysis, testing, docs, system)
 - [x] Standalone binary compilation (`build.ts` → `dist/kcode`, 100MB ELF)
 - [x] Installer script (`scripts/install.sh` → `~/.local/bin/kcode`)
 - [x] 149 tests across 5 suites (models, config, permissions, edit, read)
@@ -252,7 +283,11 @@ Session transcripts are persisted in JSONL format for crash safety and post-sess
 Slash commands that expand into LLM prompts via Handlebars-style templates:
 
 - **Discovery order** (later overrides earlier): built-in > `~/.kcode/skills/*.md` > `.kcode/skills/*.md`
-- **Built-in skills**: `/commit` (`/ci`), `/review-pr` (`/pr`, `/review`), `/simplify` (`/clean`, `/refactor`), `/help` (`/?`, `/commands`)
+- **24 built-in slash commands**:
+  - **Git**: `/commit` (`/ci`), `/diff`, `/branch` (`/br`), `/log` (`/gl`), `/stash`
+  - **Code**: `/review-pr` (`/pr`), `/simplify` (`/clean`, `/refactor`), `/explain` (`/what`), `/find-bug` (`/bug`, `/debug`), `/security` (`/audit`)
+  - **Dev**: `/test` (`/tests`), `/build`, `/lint` (`/fix`), `/deps` (`/dependencies`), `/todo` (`/todos`), `/test-for` (`/test-gen`), `/doc` (`/document`), `/type` (`/types`)
+  - **System**: `/help` (`/?`), `/template` (`/tpl`, `/tmpl`), `/stats`, `/doctor` (`/health`), `/models` (`/model`), `/clear` (`/cls`), `/compact` (`/summarize`), `/undo`, `/status`
 - **Custom skills**: Markdown files with YAML frontmatter (`name`, `description`, `aliases`, `args`) and a template body
 - **Template expansion**: `{{args}}` substitution, `{{#if args}}...{{/if}}` conditional blocks
 - **Matching**: by name or alias, case-insensitive

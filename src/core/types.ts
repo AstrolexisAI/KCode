@@ -91,6 +91,9 @@ export interface KCodeConfig {
   permissionMode: PermissionMode;
   contextWindowSize?: number; // model's context window size in tokens
   maxRetries?: number;
+  autoRoute?: boolean; // auto-route to best model based on content (default true)
+  modelExplicitlySet?: boolean; // true if user set model via -m flag
+  rateLimit?: { maxPerMinute?: number; maxConcurrent?: number };
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny";

@@ -7,6 +7,9 @@ import type { ConversationManager } from "../core/conversation.js";
 import type { KCodeConfig, StreamEvent } from "../core/types.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
 import { SkillManager } from "../core/skills.js";
+import { collectStats, formatStats } from "../core/stats.js";
+import { runDiagnostics } from "../core/doctor.js";
+import { listModels, loadModelsConfig } from "../core/models.js";
 
 import Header from "./components/Header.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
@@ -32,6 +35,20 @@ export default function App({ config, conversationManager, tools }: AppProps) {
     const sm = new SkillManager(config.workingDirectory);
     sm.load();
     return sm;
+  });
+
+  // Build completions list from skills (slash commands + aliases)
+  const [slashCompletions] = useState(() => {
+    const names: string[] = [];
+    for (const skill of skillManager.listSkills()) {
+      names.push("/" + skill.name);
+      for (const alias of skill.aliases) {
+        names.push("/" + alias);
+      }
+    }
+    // Add built-in non-skill commands
+    names.push("/exit", "/quit", "/status", "/undo");
+    return names.sort();
   });
 
   const [mode, setMode] = useState<AppMode>("input");
@@ -94,6 +111,20 @@ export default function App({ config, conversationManager, tools }: AppProps) {
         return;
       }
 
+      if (lower === "/undo") {
+        const result = conversationManager.getUndo().undo();
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: userInput },
+          {
+            kind: "text",
+            role: "assistant",
+            text: result ?? "  Nothing to undo.",
+          },
+        ]);
+        return;
+      }
+
       if (userInput === "/status") {
         const state = conversationManager.getState();
         const usage = conversationManager.getUsage();
@@ -125,6 +156,31 @@ export default function App({ config, conversationManager, tools }: AppProps) {
                 role: "assistant",
                 text: skillManager.formatHelp(tools.getToolNames()),
               },
+            ]);
+            return;
+          }
+
+          // Built-in template command — display result locally (no LLM call)
+          if (expanded.isTemplate) {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "user", text: userInput },
+              {
+                kind: "text",
+                role: "assistant",
+                text: expanded.prompt,
+              },
+            ]);
+            return;
+          }
+
+          // Built-in action commands (stats, doctor, models, clear, compact)
+          if (expanded.builtinAction) {
+            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted);
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "user", text: userInput },
+              { kind: "text", role: "assistant", text: result },
             ]);
             return;
           }
@@ -368,6 +424,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
         isActive={mode === "input"}
         model={config.model}
         cwd={config.workingDirectory}
+        completions={slashCompletions}
       />
     </Box>
   );
@@ -393,5 +450,51 @@ function summarizeInput(name: string, input: Record<string, unknown>): string {
       return String(input.query ?? "").slice(0, 60);
     default:
       return "";
+  }
+}
+
+async function handleBuiltinAction(
+  action: string,
+  conversationManager: ConversationManager,
+  setCompleted: React.Dispatch<React.SetStateAction<MessageEntry[]>>,
+): Promise<string> {
+  switch (action) {
+    case "stats": {
+      const stats = await collectStats(7);
+      return formatStats(stats);
+    }
+    case "doctor": {
+      const checks = await runDiagnostics();
+      const lines = checks.map((c) => {
+        const icon = c.status === "ok" ? "✓" : c.status === "warn" ? "⚠" : "✗";
+        return `  ${icon} ${c.name}: ${c.message}`;
+      });
+      return lines.join("\n");
+    }
+    case "models": {
+      const models = await listModels();
+      const config = await loadModelsConfig();
+      if (models.length === 0) return "  No models registered. Use 'kcode models add' to register one.";
+      const lines = models.map((m) => {
+        const def = m.name === config.defaultModel ? " (default)" : "";
+        const ctx = m.contextSize ? `, ctx: ${m.contextSize.toLocaleString()}` : "";
+        const gpu = m.gpu ? `, gpu: ${m.gpu}` : "";
+        return `  ${m.name}${def} — ${m.baseUrl}${ctx}${gpu}`;
+      });
+      return lines.join("\n");
+    }
+    case "clear": {
+      setCompleted([{
+        kind: "banner",
+        title: "KCode v0.1.0",
+        subtitle: "Kulvex Code by Astrolexis",
+      }]);
+      return "  Conversation cleared.";
+    }
+    case "compact": {
+      return "  Use the LLM to compact conversation history. (Run /compact in a conversation with many messages.)";
+    }
+    default:
+      return `  Unknown built-in action: ${action}`;
   }
 }

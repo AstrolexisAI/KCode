@@ -3,7 +3,9 @@
 
 import type { PermissionMode, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
 import { resolve, isAbsolute } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
 import { log } from "./logger";
+import { generateDiff, formatDiffPreview } from "./diff";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -460,11 +462,38 @@ export class PermissionManager {
       }
       case "Write": {
         const input = tool.input as unknown as FileWriteInput;
-        return `Write file: ${input.file_path}`;
+        let summary = `Write file: ${input.file_path}`;
+        try {
+          if (existsSync(input.file_path)) {
+            const oldContent = readFileSync(input.file_path, "utf-8");
+            const diff = generateDiff(oldContent, input.content, input.file_path);
+            if (diff.length > 0) {
+              summary += "\n" + formatDiffPreview(diff, 30);
+            }
+          }
+        } catch {
+          // If we can't read the file, just show the basic summary
+        }
+        return summary;
       }
       case "Edit": {
         const input = tool.input as unknown as FileEditInput;
-        return `Edit file: ${input.file_path}`;
+        let summary = `Edit file: ${input.file_path}`;
+        try {
+          if (existsSync(input.file_path)) {
+            const oldContent = readFileSync(input.file_path, "utf-8");
+            const updated = input.replace_all
+              ? oldContent.replaceAll(input.old_string, input.new_string)
+              : oldContent.replace(input.old_string, input.new_string);
+            const diff = generateDiff(oldContent, updated, input.file_path);
+            if (diff.length > 0) {
+              summary += "\n" + formatDiffPreview(diff, 30);
+            }
+          }
+        } catch {
+          // If we can't read the file, just show the basic summary
+        }
+        return summary;
       }
       default:
         return `Execute ${tool.name}`;

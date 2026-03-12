@@ -18,6 +18,9 @@ import {
   setDefaultModel,
 } from "./core/models";
 import { log } from "./core/logger";
+import { TranscriptManager } from "./core/transcript";
+import { collectStats, formatStats } from "./core/stats";
+import { runDiagnostics } from "./core/doctor";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
@@ -143,6 +146,46 @@ modelsCmd
     console.log(`Default model set to "${name}".`);
   });
 
+// ─── Stats subcommand ────────────────────────────────────────────
+
+program
+  .command("stats")
+  .description("Show usage statistics")
+  .option("--days <n>", "Number of days to look back", parseInt, 7)
+  .action(async (opts: { days: number }) => {
+    const stats = await collectStats(opts.days);
+    console.log(formatStats(stats));
+  });
+
+// ─── Doctor subcommand ───────────────────────────────────────────
+
+program
+  .command("doctor")
+  .description("Check KCode setup and diagnose issues")
+  .action(async () => {
+    console.log("KCode Doctor\n");
+    const results = await runDiagnostics();
+
+    const icons = { ok: "\x1b[32m✓\x1b[0m", warn: "\x1b[33m⚠\x1b[0m", fail: "\x1b[31m✗\x1b[0m" };
+
+    for (const r of results) {
+      console.log(`  ${icons[r.status]} ${r.name}: ${r.message}`);
+    }
+
+    const fails = results.filter((r) => r.status === "fail").length;
+    const warns = results.filter((r) => r.status === "warn").length;
+    console.log();
+
+    if (fails > 0) {
+      console.log(`\x1b[31m${fails} issue(s) need attention.\x1b[0m`);
+      process.exit(1);
+    } else if (warns > 0) {
+      console.log(`\x1b[33m${warns} warning(s), but KCode should work.\x1b[0m`);
+    } else {
+      console.log("\x1b[32mAll checks passed!\x1b[0m");
+    }
+  });
+
 // ─── Parse ──────────────────────────────────────────────────────
 
 program.parse();
@@ -160,6 +203,7 @@ async function runMain(
   // Apply CLI overrides
   if (opts.model) {
     config.model = opts.model;
+    config.modelExplicitlySet = true;
   }
   if (opts.permission) {
     config.permissionMode = opts.permission as PermissionMode;
@@ -174,6 +218,24 @@ async function runMain(
   // Create conversation manager
   const conversationManager = new ConversationManager(config, tools);
   log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}`);
+
+  // Resume previous session if --continue flag is set
+  if (opts.continue) {
+    const transcript = new TranscriptManager();
+    const latestFile = transcript.getLatestSession();
+    if (latestFile) {
+      const messages = transcript.loadSessionMessages(latestFile);
+      if (messages.length > 0) {
+        conversationManager.restoreMessages(messages);
+        console.error(`Resuming session (${messages.length} messages)`);
+        log.info("session", `Resumed session from ${latestFile} with ${messages.length} messages`);
+      } else {
+        console.error("Warning: Previous session is empty, starting fresh.");
+      }
+    } else {
+      console.error("Warning: No previous session found, starting fresh.");
+    }
+  }
 
   // ─── Route to the appropriate mode ──────────────────────────
 

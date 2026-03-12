@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { readdirSync } from "node:fs";
 import { builtinSkills, type SkillDefinition } from "./builtin-skills.js";
+import { TemplateManager } from "./templates.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -20,6 +21,10 @@ export interface ExpandedSkill {
   prompt: string;
   /** Whether this is the built-in help command (handled specially) */
   isHelp: boolean;
+  /** Whether this is a template command (handled locally, not sent to LLM) */
+  isTemplate: boolean;
+  /** Built-in action name (stats, doctor, models, clear, compact) — handled by App */
+  builtinAction?: string;
 }
 
 // ─── Skill File Parsing ─────────────────────────────────────────
@@ -103,11 +108,18 @@ function expandTemplate(template: string, args: string): string {
   // Replace {{args}} with the provided args
   result = result.replace(/\{\{args\}\}/g, args);
 
-  // Handle {{#if args}}...{{/if}} blocks
+  // Handle {{#if args}}...{{/if}} blocks (positive conditional)
   if (args.trim()) {
     result = result.replace(/\{\{#if args\}\}([\s\S]*?)\{\{\/if\}\}/g, "$1");
   } else {
     result = result.replace(/\{\{#if args\}\}[\s\S]*?\{\{\/if\}\}/g, "");
+  }
+
+  // Handle {{^if args}}...{{/if}} blocks (inverse conditional)
+  if (args.trim()) {
+    result = result.replace(/\{\{\^if args\}\}[\s\S]*?\{\{\/if\}\}/g, "");
+  } else {
+    result = result.replace(/\{\{\^if args\}\}([\s\S]*?)\{\{\/if\}\}/g, "$1");
   }
 
   return result.trim();
@@ -118,8 +130,11 @@ function expandTemplate(template: string, args: string): string {
 export class SkillManager {
   private skills: SkillDefinition[] = [];
   private loaded = false;
+  private templateManager: TemplateManager;
 
-  constructor(private workingDirectory: string) {}
+  constructor(private workingDirectory: string) {
+    this.templateManager = new TemplateManager(workingDirectory);
+  }
 
   /**
    * Discover and load all skills from all sources.
@@ -188,11 +203,113 @@ export class SkillManager {
     const { skill, args } = skillMatch;
 
     if (skill.template === "__builtin_help__") {
-      return { skill, prompt: "", isHelp: true };
+      return { skill, prompt: "", isHelp: true, isTemplate: false };
+    }
+
+    if (skill.template === "__builtin_template__") {
+      const result = this.handleTemplateCommand(args);
+      if (result.sendToLLM) {
+        return { skill, prompt: result.text, isHelp: false, isTemplate: false };
+      }
+      return { skill, prompt: result.text, isHelp: false, isTemplate: true };
+    }
+
+    // Built-in action commands (handled by App.tsx, not the LLM)
+    const builtinMatch = skill.template.match(/^__builtin_(\w+)__$/);
+    if (builtinMatch) {
+      return { skill, prompt: args, isHelp: false, isTemplate: false, builtinAction: builtinMatch[1] };
     }
 
     const prompt = expandTemplate(skill.template, args);
-    return { skill, prompt, isHelp: false };
+    return { skill, prompt, isHelp: false, isTemplate: false };
+  }
+
+  /**
+   * Handle /template subcommands: list, use, save.
+   */
+  private handleTemplateCommand(args: string): { text: string; sendToLLM: boolean } {
+    const parts = args.trim().split(/\s+/);
+    const subcommand = parts[0]?.toLowerCase() ?? "list";
+
+    if (subcommand === "list" || !subcommand) {
+      return { text: this.formatTemplateList(), sendToLLM: false };
+    }
+
+    if (subcommand === "use") {
+      const templateName = parts[1];
+      if (!templateName) {
+        return { text: "Usage: /template use <name> [arg1=value1 arg2=value2 ...]", sendToLLM: false };
+      }
+
+      const template = this.templateManager.findTemplate(templateName);
+      if (!template) {
+        return { text: `Template "${templateName}" not found. Use /template list to see available templates.`, sendToLLM: false };
+      }
+
+      // Parse key=value args from remaining parts
+      const templateArgs: Record<string, string> = {};
+      const freeArgs: string[] = [];
+      for (let i = 2; i < parts.length; i++) {
+        const part = parts[i]!;
+        const eqIdx = part.indexOf("=");
+        if (eqIdx !== -1) {
+          const key = part.slice(0, eqIdx);
+          const value = part.slice(eqIdx + 1);
+          templateArgs[key] = value;
+        } else {
+          freeArgs.push(part);
+        }
+      }
+
+      // If there are free args and the template has defined arg names, map positionally
+      if (freeArgs.length > 0 && template.args.length > 0) {
+        for (let i = 0; i < Math.min(freeArgs.length, template.args.length); i++) {
+          const argName = template.args[i]!;
+          if (!templateArgs[argName]) {
+            templateArgs[argName] = freeArgs[i]!;
+          }
+        }
+      }
+
+      // If there are free args but no named template args, join them as a single value for the first arg
+      if (freeArgs.length > 0 && template.args.length > 0 && Object.keys(templateArgs).length === 0) {
+        templateArgs[template.args[0]!] = freeArgs.join(" ");
+      }
+
+      const expanded = this.templateManager.expandTemplate(template, templateArgs);
+      return { text: expanded, sendToLLM: true };
+    }
+
+    if (subcommand === "save") {
+      const templateName = parts[1];
+      if (!templateName) {
+        return { text: "Usage: /template save <name>", sendToLLM: false };
+      }
+      // Placeholder — saving the last assistant message requires conversation context
+      return { text: `Template save is not yet implemented. To create a template manually, add a .md file to ~/.kcode/templates/ with YAML frontmatter (name, description, args) and a template body using {{arg_name}} placeholders.`, sendToLLM: false };
+    }
+
+    return { text: `Unknown subcommand "${subcommand}". Available: list, use, save`, sendToLLM: false };
+  }
+
+  /**
+   * Format a list of all available templates for display.
+   */
+  private formatTemplateList(): string {
+    const templates = this.templateManager.listTemplates();
+    if (templates.length === 0) {
+      return "No templates found.\n\nTo create templates, add .md files to ~/.kcode/templates/ with YAML frontmatter:\n\n  ---\n  name: my-template\n  description: What it does\n  args: [arg1, arg2]\n  ---\n  Template body with {{arg1}} placeholders.\n\nExample templates to try:\n  - explain.md — \"Explain this code: {{code}}\"\n  - test-for.md — \"Write tests for: {{target}}\"\n  - refactor.md — \"Refactor this to be more readable: {{code}}\"";
+    }
+
+    const lines: string[] = ["\n  Templates (~/.kcode/templates/)"];
+    for (const t of templates) {
+      const argsStr = t.args.length > 0 ? ` [${t.args.join(", ")}]` : "";
+      lines.push(`  ${t.name}${argsStr.padEnd(20 - t.name.length)}  ${t.description}`);
+    }
+    lines.push("");
+    lines.push("  Usage: /template use <name> [arg=value ...]");
+    lines.push("");
+    return lines.join("\n");
   }
 
   /**

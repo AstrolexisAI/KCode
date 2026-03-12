@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import type { Message, ToolUseBlock, ToolResultBlock, ContentBlock } from "./types";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -185,5 +186,114 @@ export class TranscriptManager {
    */
   get isActive(): boolean {
     return this.sessionFile !== null;
+  }
+
+  /**
+   * Return the filename of the most recent session file, or null if none exist.
+   */
+  getLatestSession(): string | null {
+    this.ensureDir();
+
+    const files = readdirSync(TRANSCRIPTS_DIR)
+      .filter((f) => f.endsWith(".jsonl"))
+      .sort();
+
+    if (files.length === 0) return null;
+    return files[files.length - 1];
+  }
+
+  /**
+   * Parse a JSONL session file and reconstruct Message[] for ConversationManager.
+   * Maps transcript entry types back to internal Message format.
+   */
+  loadSessionMessages(filename: string): Message[] {
+    const entries = this.loadSession(filename);
+    const messages: Message[] = [];
+
+    for (const entry of entries) {
+      try {
+        switch (entry.type) {
+          case "user_message": {
+            messages.push({ role: "user", content: entry.content });
+            break;
+          }
+
+          case "assistant_text": {
+            // Merge consecutive assistant_text entries into one message
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg && lastMsg.role === "assistant" && Array.isArray(lastMsg.content)) {
+              lastMsg.content.push({ type: "text", text: entry.content });
+            } else {
+              messages.push({
+                role: "assistant",
+                content: [{ type: "text", text: entry.content }],
+              });
+            }
+            break;
+          }
+
+          case "tool_use": {
+            const parsed = JSON.parse(entry.content);
+            const toolBlock: ToolUseBlock = {
+              type: "tool_use",
+              id: parsed.id ?? `call_restored_${Date.now()}`,
+              name: parsed.name ?? "unknown",
+              input: parsed.input ?? {},
+            };
+            // Merge into existing assistant message or create new one
+            const lastAssistant = messages[messages.length - 1];
+            if (lastAssistant && lastAssistant.role === "assistant" && Array.isArray(lastAssistant.content)) {
+              lastAssistant.content.push(toolBlock);
+            } else {
+              messages.push({
+                role: "assistant",
+                content: [toolBlock],
+              });
+            }
+            break;
+          }
+
+          case "tool_result": {
+            const resultBlock: ToolResultBlock = {
+              type: "tool_result",
+              tool_use_id: entry.content,
+              content: entry.content,
+            };
+            // Try to parse structured content
+            try {
+              const parsed = JSON.parse(entry.content);
+              if (parsed.tool_use_id) {
+                resultBlock.tool_use_id = parsed.tool_use_id;
+                resultBlock.content = parsed.content ?? entry.content;
+                if (parsed.is_error !== undefined) {
+                  resultBlock.is_error = parsed.is_error;
+                }
+              }
+            } catch {
+              // Use raw content as-is
+            }
+            // Merge into existing user tool_result message or create new one
+            const lastUser = messages[messages.length - 1];
+            if (lastUser && lastUser.role === "user" && Array.isArray(lastUser.content)) {
+              (lastUser.content as ContentBlock[]).push(resultBlock);
+            } else {
+              messages.push({
+                role: "user",
+                content: [resultBlock],
+              });
+            }
+            break;
+          }
+
+          // Skip thinking and error entries — not needed for resume
+          default:
+            break;
+        }
+      } catch {
+        // Skip entries that fail to parse
+      }
+    }
+
+    return messages;
   }
 }

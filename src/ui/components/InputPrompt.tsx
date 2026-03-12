@@ -1,8 +1,10 @@
 // KCode - InputPrompt component
-// Text input with prompt character, history, and multi-line support
+// Text input with prompt character, history, multi-line support, and tab completion
 
 import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
+import { readdirSync } from "node:fs";
+import { resolve, dirname, basename } from "node:path";
 
 interface InputPromptProps {
   /** Called when the user submits input (Enter key) */
@@ -13,13 +15,75 @@ interface InputPromptProps {
   model?: string;
   /** Working directory to show in prompt */
   cwd?: string;
+  /** List of completable strings (slash commands, etc.) */
+  completions?: string[];
 }
 
-export default function InputPrompt({ onSubmit, isActive, model, cwd }: InputPromptProps) {
+/**
+ * Try to complete a file path. Returns matching entries with `/` appended for directories.
+ */
+function getFileCompletions(partial: string): string[] {
+  try {
+    const expanded = partial.startsWith("~")
+      ? (process.env.HOME ?? "") + partial.slice(1)
+      : partial;
+
+    const dir = partial.endsWith("/") ? expanded : dirname(expanded);
+    const prefix = partial.endsWith("/") ? "" : basename(expanded);
+    const resolvedDir = resolve(dir);
+
+    const entries = readdirSync(resolvedDir, { withFileTypes: true });
+    const matches: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") && !prefix.startsWith(".")) continue;
+      if (entry.name.startsWith(prefix)) {
+        const suffix = entry.isDirectory() ? "/" : "";
+        // Reconstruct the path with the original prefix style
+        const dirPart = partial.endsWith("/") ? partial : partial.slice(0, partial.length - prefix.length);
+        matches.push(dirPart + entry.name + suffix);
+      }
+    }
+
+    return matches.sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Find the longest common prefix among an array of strings.
+ */
+function commonPrefix(strings: string[]): string {
+  if (strings.length === 0) return "";
+  if (strings.length === 1) return strings[0];
+
+  let prefix = strings[0];
+  for (let i = 1; i < strings.length; i++) {
+    while (!strings[i].startsWith(prefix)) {
+      prefix = prefix.slice(0, -1);
+      if (prefix.length === 0) return "";
+    }
+  }
+  return prefix;
+}
+
+export default function InputPrompt({ onSubmit, isActive, model, cwd, completions = [] }: InputPromptProps) {
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Tab completion state
+  const [tabMatches, setTabMatches] = useState<string[]>([]);
+  const [tabIndex, setTabIndex] = useState(0);
+  const [tabOriginal, setTabOriginal] = useState("");
+
+  const resetTabState = useCallback(() => {
+    setTabMatches([]);
+    setTabIndex(0);
+    setTabOriginal("");
+  }, []);
 
   const submit = useCallback(() => {
     const trimmed = value.trim();
@@ -29,8 +93,99 @@ export default function InputPrompt({ onSubmit, isActive, model, cwd }: InputPro
     setHistoryIndex(-1);
     setValue("");
     setCursor(0);
+    resetTabState();
     onSubmit(trimmed);
-  }, [value, onSubmit]);
+  }, [value, onSubmit, resetTabState]);
+
+  const handleTab = useCallback(() => {
+    // If we're already cycling through matches, advance to next
+    if (tabMatches.length > 1) {
+      const nextIndex = (tabIndex + 1) % tabMatches.length;
+      setTabIndex(nextIndex);
+      const completed = tabMatches[nextIndex];
+      setValue(completed);
+      setCursor(completed.length);
+      return;
+    }
+
+    const currentValue = tabMatches.length > 0 ? tabOriginal : value;
+
+    // Slash command completion
+    if (currentValue.startsWith("/") && !currentValue.includes(" ")) {
+      const prefix = currentValue.toLowerCase();
+      const matches = completions
+        .filter((c) => c.toLowerCase().startsWith(prefix))
+        .sort();
+
+      if (matches.length === 0) return;
+
+      if (matches.length === 1) {
+        // Exact single match — fill it in with trailing space
+        const completed = matches[0] + " ";
+        setValue(completed);
+        setCursor(completed.length);
+        resetTabState();
+        return;
+      }
+
+      // Multiple matches — fill common prefix, set up cycling
+      const cp = commonPrefix(matches);
+      if (cp.length > currentValue.length) {
+        setValue(cp);
+        setCursor(cp.length);
+        setTabMatches(matches);
+        setTabIndex(-1);
+        setTabOriginal(currentValue);
+      } else {
+        // Common prefix equals current input — start cycling
+        setTabMatches(matches);
+        setTabIndex(0);
+        setTabOriginal(currentValue);
+        setValue(matches[0]);
+        setCursor(matches[0].length);
+      }
+      return;
+    }
+
+    // File path completion — extract last word
+    const words = currentValue.split(/\s+/);
+    const lastWord = words[words.length - 1] ?? "";
+    const isPathLike = lastWord.includes("/") || lastWord.startsWith("~") || lastWord.startsWith(".");
+
+    if (!isPathLike || lastWord.length === 0) return;
+
+    const fileMatches = getFileCompletions(lastWord);
+    if (fileMatches.length === 0) return;
+
+    const prefixPart = currentValue.slice(0, currentValue.length - lastWord.length);
+
+    if (fileMatches.length === 1) {
+      const completed = prefixPart + fileMatches[0];
+      setValue(completed);
+      setCursor(completed.length);
+      resetTabState();
+      return;
+    }
+
+    // Multiple file matches
+    const cp = commonPrefix(fileMatches);
+    const fullMatches = fileMatches.map((m) => prefixPart + m);
+
+    if (cp.length > lastWord.length) {
+      const completed = prefixPart + cp;
+      setValue(completed);
+      setCursor(completed.length);
+      setTabMatches(fullMatches);
+      setTabIndex(-1);
+      setTabOriginal(currentValue);
+    } else {
+      setTabMatches(fullMatches);
+      setTabIndex(0);
+      setTabOriginal(currentValue);
+      setValue(fullMatches[0]);
+      setCursor(fullMatches[0].length);
+    }
+  }, [value, tabMatches, tabIndex, tabOriginal, completions, resetTabState]);
 
   useInput(
     (input, key) => {
@@ -39,6 +194,16 @@ export default function InputPrompt({ onSubmit, isActive, model, cwd }: InputPro
       if (key.return) {
         submit();
         return;
+      }
+
+      if (key.tab) {
+        handleTab();
+        return;
+      }
+
+      // Any non-tab key resets tab completion state
+      if (tabMatches.length > 0) {
+        resetTabState();
       }
 
       if (key.backspace || key.delete) {
@@ -111,6 +276,14 @@ export default function InputPrompt({ onSubmit, isActive, model, cwd }: InputPro
   const cursorChar = value[cursor] ?? " ";
   const after = value.slice(cursor + 1);
 
+  // Compute hint text for tab completion
+  let hint = "";
+  if (tabMatches.length > 1 && tabIndex >= 0) {
+    hint = ` (${tabIndex + 1}/${tabMatches.length})`;
+  } else if (tabMatches.length > 1 && tabIndex === -1) {
+    hint = ` (${tabMatches.length} matches, Tab to cycle)`;
+  }
+
   return (
     <Box flexDirection="column">
       <Box gap={1}>
@@ -121,6 +294,7 @@ export default function InputPrompt({ onSubmit, isActive, model, cwd }: InputPro
           {before}
           <Text inverse>{cursorChar}</Text>
           {after}
+          {hint && <Text dimColor>{hint}</Text>}
         </Text>
       </Box>
     </Box>
