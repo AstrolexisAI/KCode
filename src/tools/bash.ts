@@ -3,6 +3,7 @@
 
 import { spawn } from "node:child_process";
 import type { ToolDefinition, ToolResult, BashInput } from "../core/types";
+import { log } from "../core/logger";
 
 const MAX_TIMEOUT = 600_000; // 10 minutes
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
@@ -24,6 +25,8 @@ export const bashDefinition: ToolDefinition = {
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
   const { command, timeout } = input as BashInput;
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
+  const startTime = Date.now();
+  const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
 
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -39,6 +42,8 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     proc.stderr.on("data", (data: Buffer) => errChunks.push(data));
 
     proc.on("close", (code) => {
+      const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+      log.debug("tool", `Bash executed in ${duration}s (exit ${code}): ${cmdPrefix}`);
       const stdout = Buffer.concat(chunks).toString("utf-8");
       const stderr = Buffer.concat(errChunks).toString("utf-8");
       const output = stdout + (stderr ? `\n${stderr}` : "");

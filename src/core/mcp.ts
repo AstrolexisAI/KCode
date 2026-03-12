@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { ToolDefinition, ToolResult } from "./types";
 import { ToolRegistry } from "./tool-registry";
+import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ class McpServerConnection {
   }
 
   async start(): Promise<void> {
+    log.info("mcp", `Starting server "${this.name}": ${this.config.command} ${(this.config.args ?? []).join(" ")}`);
     const env = { ...process.env, ...(this.config.env ?? {}) };
 
     this.process = spawn({
@@ -229,6 +231,7 @@ class McpServerConnection {
   async discoverTools(): Promise<McpToolSchema[]> {
     const result = await this.sendRequest("tools/list", {}) as { tools?: McpToolSchema[] };
     this.tools = result?.tools ?? [];
+    log.info("mcp", `Server "${this.name}" discovered ${this.tools.length} tools`);
     return this.tools;
   }
 
@@ -282,9 +285,11 @@ class McpServerConnection {
 
   async restart(): Promise<boolean> {
     if (this.restartCount >= this.maxRestarts) {
+      log.warn("mcp", `Server "${this.name}" exceeded max restarts (${this.maxRestarts})`);
       return false;
     }
     this.restartCount++;
+    log.info("mcp", `Restarting server "${this.name}" (attempt ${this.restartCount}/${this.maxRestarts})`);
     this.shutdown();
     await this.start();
     await this.discoverTools();
@@ -293,6 +298,7 @@ class McpServerConnection {
   }
 
   shutdown(): void {
+    log.info("mcp", `Shutting down server "${this.name}"`);
     // Reject all pending requests
     for (const [id, pending] of this.pendingRequests) {
       clearTimeout(pending.timer);

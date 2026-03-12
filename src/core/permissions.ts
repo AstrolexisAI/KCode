@@ -3,6 +3,7 @@
 
 import type { PermissionMode, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
 import { resolve, isAbsolute } from "node:path";
+import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -376,6 +377,8 @@ export class PermissionManager {
     const summary = this.summarizeTool(tool);
     const riskLevel = this.getToolRiskLevel(tool, safetyResult);
 
+    log.debug("permission", `Prompting user for ${tool.name} (risk: ${riskLevel}): ${summary}`);
+
     const response = await this.promptFn({
       toolName: tool.name,
       toolInput: tool.input,
@@ -390,6 +393,7 @@ export class PermissionManager {
       return { allowed: true };
     }
 
+    log.debug("permission", `User denied ${tool.name}`);
     return { allowed: false, reason: "User denied permission" };
   }
 

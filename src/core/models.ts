@@ -4,6 +4,7 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -89,10 +90,15 @@ export async function getModelBaseUrl(modelName: string, configBase?: string): P
 
   const config = await loadModelsConfig();
   const entry = config.models.find((m) => m.name === modelName);
-  if (entry) return entry.baseUrl;
+  if (entry) {
+    log.debug("config", `Model "${modelName}" resolved to ${entry.baseUrl}`);
+    return entry.baseUrl;
+  }
 
   // Fallback: env var or default
-  return process.env.KCODE_API_BASE ?? "http://localhost:10091";
+  const fallback = process.env.KCODE_API_BASE ?? "http://localhost:10091";
+  log.debug("config", `Model "${modelName}" not in registry, using fallback ${fallback}`);
+  return fallback;
 }
 
 /** Get the context window size for a model. Returns undefined if not configured. */
@@ -129,6 +135,7 @@ export async function addModel(entry: ModelEntry): Promise<void> {
   } else {
     config.models.push(entry);
   }
+  log.debug("config", `Model "${entry.name}" ${existing >= 0 ? "updated" : "added"} at ${entry.baseUrl}`);
   await saveModelsConfig(config);
 }
 

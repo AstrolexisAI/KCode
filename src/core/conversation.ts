@@ -19,6 +19,7 @@ import { ToolRegistry } from "./tool-registry";
 import { SystemPromptBuilder } from "./system-prompt";
 import { PermissionManager } from "./permissions";
 import { HookManager } from "./hooks";
+import { log } from "./logger";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -658,6 +659,7 @@ export class ConversationManager {
       try {
         const apiBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
         const url = `${apiBase}/v1/chat/completions`;
+        const requestStart = Date.now();
 
         const openAIMessages = convertToOpenAIMessages(
           this.systemPrompt,
@@ -686,6 +688,8 @@ export class ConversationManager {
           headers["Authorization"] = `Bearer ${this.config.apiKey}`;
         }
 
+        log.info("llm", `Request to ${this.config.model} at ${url} (${openAIMessages.length} messages)`);
+
         const response = await fetch(url, {
           method: "POST",
           headers,
@@ -703,6 +707,7 @@ export class ConversationManager {
           throw new Error("Response body is null - streaming not supported");
         }
 
+        log.debug("llm", `Stream opened in ${Date.now() - requestStart}ms`);
         return parseSSEStream(response);
       } catch (error) {
         lastError =
@@ -710,10 +715,12 @@ export class ConversationManager {
 
         if (attempt < this.maxRetries && isRetryableError(error)) {
           const delay = computeRetryDelay(attempt);
+          log.warn("llm", `Retryable error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${delay}ms`, lastError);
           await sleep(delay);
           continue;
         }
 
+        log.error("llm", `Request failed: ${lastError.message}`, lastError);
         throw lastError;
       }
     }

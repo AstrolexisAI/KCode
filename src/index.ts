@@ -17,6 +17,7 @@ import {
   removeModel,
   setDefaultModel,
 } from "./core/models";
+import { log } from "./core/logger";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
@@ -154,6 +155,7 @@ async function runMain(
 ) {
   const cwd = process.cwd();
   const config = await buildConfig(cwd);
+  log.init();
 
   // Apply CLI overrides
   if (opts.model) {
@@ -171,6 +173,7 @@ async function runMain(
 
   // Create conversation manager
   const conversationManager = new ConversationManager(config, tools);
+  log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}`);
 
   // ─── Route to the appropriate mode ──────────────────────────
 
@@ -189,6 +192,8 @@ async function runMain(
   // Interactive mode: start the Ink-based terminal UI
   const app = startUI({ config, conversationManager, tools });
   await app.waitUntilExit();
+  log.info("session", "Session ended");
+  log.shutdown();
 }
 
 // ─── Non-interactive single-prompt mode ─────────────────────────
