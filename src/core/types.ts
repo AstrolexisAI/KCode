@@ -94,6 +94,7 @@ export interface KCodeConfig {
   autoRoute?: boolean; // auto-route to best model based on content (default true)
   modelExplicitlySet?: boolean; // true if user set model via -m flag
   rateLimit?: { maxPerMinute?: number; maxConcurrent?: number };
+  version?: string;
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny";
@@ -131,6 +132,7 @@ export type StreamEvent =
   | { type: "usage_update"; usage: TokenUsage }
   | { type: "error"; error: Error; retryable: boolean; attempt?: number }
   | { type: "turn_start" }
+  | { type: "suggestion"; suggestions: { type: string; message: string; priority: string }[] }
   | { type: "turn_end"; stopReason: string };
 
 // ─── Tool Input/Output Schemas ───────────────────────────────────
@@ -139,6 +141,7 @@ export interface BashInput {
   command: string;
   description?: string;
   timeout?: number;
+  run_in_background?: boolean;
 }
 
 export interface FileReadInput {

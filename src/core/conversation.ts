@@ -22,7 +22,12 @@ import { PermissionManager } from "./permissions";
 import { HookManager } from "./hooks";
 import { RateLimiter } from "./rate-limiter";
 import { UndoManager } from "./undo";
+import { TranscriptManager } from "./transcript";
 import { log } from "./logger";
+import { getWorldModel } from "./world-model";
+import { getUserModel } from "./user-model";
+import { getIntentionEngine } from "./intentions";
+import type { Suggestion } from "./intentions";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -31,6 +36,8 @@ const CONTEXT_WINDOW_MARGIN = 0.2; // prune when we reach 80% of context window
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
+const MAX_AGENT_TURNS = 50; // prevent infinite loops
+const MAX_CONSECUTIVE_DENIALS = 3; // stop after N permission denials in a row
 
 // ─── Retry Logic ─────────────────────────────────────────────────
 
@@ -325,11 +332,13 @@ export class ConversationManager {
   private hooks: HookManager;
   private rateLimiter: RateLimiter;
   private undoManager: UndoManager;
+  private transcript: TranscriptManager;
+  private abortController: AbortController | null = null;
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
     this.tools = tools;
-    this.systemPrompt = SystemPromptBuilder.build(config);
+    this.systemPrompt = SystemPromptBuilder.build(config, config.version);
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
     this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory);
@@ -339,6 +348,7 @@ export class ConversationManager {
       config.rateLimit?.maxConcurrent ?? 2,
     );
     this.undoManager = new UndoManager();
+    this.transcript = new TranscriptManager();
     this.state = {
       messages: [],
       tokenCount: 0,
@@ -367,17 +377,90 @@ export class ConversationManager {
     return this.undoManager;
   }
 
+  /** Abort the current LLM request / agent loop. */
+  abort(): void {
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+      log.info("session", "Request aborted by user");
+    }
+  }
+
+  /** Whether a request is currently in progress. */
+  get isRunning(): boolean {
+    return this.abortController !== null;
+  }
+
   /**
    * Send a user message and get back an async generator of StreamEvents.
    * The generator runs the full agent loop: streaming response, tool execution, repeat.
    */
   async *sendMessage(userMessage: string): AsyncGenerator<StreamEvent> {
+    // Start transcript session on first message
+    if (!this.transcript.isActive) {
+      this.transcript.startSession(userMessage);
+    } else {
+      this.transcript.append("user", "user_message", userMessage);
+    }
+
     this.state.messages.push({
       role: "user",
       content: userMessage,
     });
 
-    yield* this.runAgentLoop();
+    // Layer 7: Update user model from message signals
+    try { getUserModel().updateFromMessage(userMessage); } catch { /* ignore */ }
+
+    // Layer 9: Reset intention engine for new turn
+    try { getIntentionEngine().reset(); } catch { /* ignore */ }
+
+    // Wrap the agent loop to record events to transcript
+    for await (const event of this.runAgentLoop()) {
+      this.recordTranscriptEvent(event);
+      yield event;
+    }
+  }
+
+  private recordTranscriptEvent(event: StreamEvent): void {
+    switch (event.type) {
+      case "text_delta":
+        // Text deltas are accumulated — we record the final text in turn_end via messages
+        break;
+      case "thinking_delta":
+        break;
+      case "tool_executing":
+        this.transcript.append("assistant", "tool_use", JSON.stringify({
+          id: event.toolUseId,
+          name: event.name,
+          input: event.input,
+        }));
+        break;
+      case "tool_result":
+        this.transcript.append("tool", "tool_result", JSON.stringify({
+          tool_use_id: event.toolUseId,
+          name: event.name,
+          content: event.result.slice(0, 2000),
+          is_error: event.isError,
+        }));
+        break;
+      case "error":
+        this.transcript.append("system", "error", event.error.message);
+        break;
+      case "turn_end": {
+        // Record the final assistant text from the last message
+        const lastMsg = this.state.messages[this.state.messages.length - 1];
+        if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
+          for (const block of lastMsg.content) {
+            if (block.type === "text") {
+              this.transcript.append("assistant", "assistant_text", block.text);
+            } else if (block.type === "thinking") {
+              this.transcript.append("assistant", "thinking", block.thinking);
+            }
+          }
+        }
+        break;
+      }
+    }
   }
 
   /**
@@ -385,7 +468,25 @@ export class ConversationManager {
    * Stops when the LLM's finish_reason is "stop" or there are no tool calls.
    */
   private async *runAgentLoop(): AsyncGenerator<StreamEvent> {
+    this.abortController = new AbortController();
+    let turnCount = 0;
+    let consecutiveDenials = 0;
+
     while (true) {
+      turnCount++;
+      if (turnCount > MAX_AGENT_TURNS) {
+        log.warn("session", `Agent loop exceeded ${MAX_AGENT_TURNS} turns, stopping`);
+        yield { type: "turn_end", stopReason: "max_turns" };
+        this.abortController = null;
+        return;
+      }
+      // Check if aborted
+      if (this.abortController?.signal.aborted) {
+        yield { type: "turn_end", stopReason: "aborted" };
+        this.abortController = null;
+        return;
+      }
+
       // Prune context if approaching the limit
       this.pruneMessagesIfNeeded();
 
@@ -546,7 +647,12 @@ export class ConversationManager {
           try {
             parsedInput = JSON.parse(fullJson);
           } catch {
-            parsedInput = { _raw: fullJson };
+            if (fullJson.length > 50000) {
+              parsedInput = { _raw: `[truncated: ${fullJson.length} chars of malformed JSON]` };
+              log.warn("llm", `Truncated malformed tool args: ${fullJson.length} chars`);
+            } else {
+              parsedInput = { _raw: fullJson };
+            }
           }
         }
         const toolBlock: ToolUseBlock = {
@@ -567,19 +673,72 @@ export class ConversationManager {
 
       // If no tool calls or stop reason is not tool_use, we're done
       if (toolCalls.length === 0 || stopReason !== "tool_use") {
+        // Layer 9: Evaluate intentions and emit suggestions
+        let hasHighPrioritySuggestion = false;
+        try {
+          const suggestions = getIntentionEngine().evaluate();
+          if (suggestions.length > 0) {
+            yield { type: "suggestion", suggestions };
+            // Check if any high-priority suggestion indicates incomplete work
+            hasHighPrioritySuggestion = suggestions.some(s => s.priority === "high" && s.type === "verify");
+          }
+        } catch { /* ignore */ }
+
+        // Auto-continue: if the model stopped but has incomplete tasks, push it to continue
+        if (hasHighPrioritySuggestion && turnCount <= 3) {
+          log.info("session", "Auto-continuing: model stopped with incomplete tasks");
+          this.state.messages.push({
+            role: "user",
+            content: "You stopped before completing the task. Continue working — create the actual files and finish what you planned. Do not re-plan, just execute.",
+          });
+          // Don't break — loop continues to next turn
+          yield { type: "turn_end", stopReason };
+          continue;
+        }
+
         yield { type: "turn_end", stopReason };
+        this.abortController = null;
         break;
+      }
+
+      // Check abort between tool calls
+      if (this.abortController?.signal.aborted) {
+        yield { type: "turn_end", stopReason: "aborted" };
+        this.abortController = null;
+        return;
       }
 
       // Execute tool calls with permission checks and hooks
       const toolResultBlocks: ContentBlock[] = [];
+      let turnHadDenial = false;
+
+      // Dedup: track executed tool signatures to skip identical calls in same batch
+      const executedSigs = new Map<string, number>(); // sig -> count executed
+
       for (const call of toolCalls) {
         this.state.toolUseCount++;
+
+        // 0. Dedup identical tool calls within same response
+        const dedupKey = call.name === "Bash"
+          ? String((call.input as Record<string, unknown>).command ?? "").slice(0, 120)
+          : String((call.input as Record<string, unknown>).file_path ?? (call.input as Record<string, unknown>).pattern ?? (call.input as Record<string, unknown>).query ?? JSON.stringify(call.input).slice(0, 120));
+        const sig = `${call.name}:${dedupKey}`;
+        const prevCount = executedSigs.get(sig) ?? 0;
+        executedSigs.set(sig, prevCount + 1);
+
+        if (prevCount >= 2) {
+          const skipMsg = `BLOCKED: You already called ${call.name} with these exact parameters ${prevCount + 1} times in this response. You are in an infinite loop. STOP calling this tool and do something different.`;
+          log.warn("tool", `Dedup blocked: ${sig.slice(0, 80)} (attempt ${prevCount + 1})`);
+          yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
+          toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: skipMsg, is_error: true });
+          continue;
+        }
 
         // 1. Check permissions before executing
         const permResult = await this.permissions.checkPermission(call);
         if (!permResult.allowed) {
-          const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}`;
+          turnHadDenial = true;
+          const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}. STOP: Do not retry this tool. Inform the user that permission mode needs to be changed (use -p auto) or approve in interactive mode.`;
           yield {
             type: "tool_result",
             name: call.name,
@@ -628,7 +787,11 @@ export class ConversationManager {
           undoSnapshot = this.undoManager.captureSnapshot(effectiveInput.file_path as string);
         }
 
-        // 4. Execute the tool
+        // 4. Layer 6: World Model — predict outcome before executing
+        let prediction: { action: string; expected: string; confidence: number } | null = null;
+        try { prediction = getWorldModel().predict(call.name, effectiveInput); } catch { /* ignore */ }
+
+        // Execute the tool
         yield {
           type: "tool_executing",
           name: call.name,
@@ -637,6 +800,12 @@ export class ConversationManager {
         };
 
         const result = await this.tools.execute(call.name, effectiveInput);
+
+        // Layer 6: Compare prediction with actual result
+        try { if (prediction) getWorldModel().compare(prediction, result.content, result.is_error); } catch { /* ignore */ }
+
+        // Layer 9: Record action for post-task evaluation
+        try { getIntentionEngine().recordAction(call.name, effectiveInput, result.content, result.is_error); } catch { /* ignore */ }
 
         // Record undo action if snapshot was captured and tool succeeded
         if (undoSnapshot && !result.is_error) {
@@ -654,10 +823,20 @@ export class ConversationManager {
           isError: result.is_error,
         };
 
+        // Truncate large tool results to protect context window
+        // ~4 chars per token, leave room for other messages
+        const maxResultChars = Math.floor(this.contextWindowSize * 1.5);
+        let contextContent = result.content;
+        if (contextContent.length > maxResultChars) {
+          contextContent = contextContent.slice(0, maxResultChars)
+            + `\n\n... [truncated: result was ${result.content.length} chars, showing first ${maxResultChars}]`;
+          log.warn("tool", `Truncated ${call.name} result from ${result.content.length} to ${maxResultChars} chars`);
+        }
+
         toolResultBlocks.push({
           type: "tool_result",
           tool_use_id: call.id,
-          content: result.content,
+          content: contextContent,
           is_error: result.is_error,
         });
 
@@ -675,6 +854,31 @@ export class ConversationManager {
         role: "user",
         content: toolResultBlocks,
       });
+
+      // Layer 9: Inline warning — detect wasted context mid-loop
+      try {
+        const inlineWarning = getIntentionEngine().getInlineWarning();
+        if (inlineWarning) {
+          log.warn("intentions", `Inline warning: ${inlineWarning.slice(0, 100)}`);
+          this.state.messages.push({
+            role: "user",
+            content: `⚠️ SYSTEM WARNING: ${inlineWarning}`,
+          });
+        }
+      } catch { /* ignore */ }
+
+      // Track consecutive permission denials to prevent infinite loops
+      if (turnHadDenial) {
+        consecutiveDenials++;
+        if (consecutiveDenials >= MAX_CONSECUTIVE_DENIALS) {
+          log.warn("session", `${MAX_CONSECUTIVE_DENIALS} consecutive permission denials, stopping agent loop`);
+          yield { type: "turn_end", stopReason: "permission_denied" };
+          this.abortController = null;
+          return;
+        }
+      } else {
+        consecutiveDenials = 0;
+      }
 
       yield { type: "turn_end", stopReason };
       // Loop continues for next agent turn
@@ -734,6 +938,7 @@ export class ConversationManager {
           method: "POST",
           headers,
           body: JSON.stringify(body),
+          signal: this.abortController?.signal,
         });
 
         if (!response.ok) {
@@ -775,21 +980,57 @@ export class ConversationManager {
    * Keeps the system prompt, first user message, and recent messages.
    */
   private pruneMessagesIfNeeded(): void {
+    // Use the higher of: tracked token count or estimated from message content
+    const estimatedTokens = this.estimateContextTokens();
+    const effectiveCount = Math.max(this.state.tokenCount, estimatedTokens);
     const threshold = this.contextWindowSize * (1 - CONTEXT_WINDOW_MARGIN);
-    if (this.state.tokenCount < threshold) {
+    if (effectiveCount < threshold) {
       return;
     }
 
     const messages = this.state.messages;
     if (messages.length <= 4) {
-      // Too few messages to prune meaningfully
       return;
     }
 
-    // Strategy: remove the oldest non-first messages in pairs (assistant + user)
-    // to maintain alternation. Keep at least the first user message and last 4 messages.
-    const keepFirst = 1; // first user message
-    const keepLast = 4; // recent context
+    log.info("session", `Context pruning triggered: ~${estimatedTokens} tokens, threshold ${Math.floor(threshold)}`);
+
+    // Phase 1: Compress large tool results in older messages (keep last 6 messages intact)
+    const compressibleEnd = Math.max(0, messages.length - 6);
+    let compressed = 0;
+    for (let i = 0; i < compressibleEnd; i++) {
+      const msg = messages[i];
+      if (Array.isArray(msg.content)) {
+        for (let j = 0; j < msg.content.length; j++) {
+          const block = msg.content[j];
+          if (block.type === "tool_result" && typeof block.content === "string" && block.content.length > 500) {
+            // Summarize tool results: keep first line + truncate
+            const firstLine = block.content.split("\n")[0].slice(0, 200);
+            const wasError = block.is_error ? " (error)" : "";
+            msg.content[j] = {
+              ...block,
+              content: `[Compressed] ${firstLine}${wasError} (was ${block.content.length} chars)`,
+            };
+            compressed++;
+          }
+        }
+      }
+    }
+
+    if (compressed > 0) {
+      log.info("session", `Compressed ${compressed} tool results`);
+    }
+
+    // Re-check after compression
+    const postCompressTokens = this.estimateContextTokens();
+    if (postCompressTokens < threshold) {
+      this.state.tokenCount = postCompressTokens;
+      return;
+    }
+
+    // Phase 2: Drop old messages if still over threshold
+    const keepFirst = 1;
+    const keepLast = 6;
 
     if (messages.length <= keepFirst + keepLast) {
       return;
@@ -802,11 +1043,29 @@ export class ConversationManager {
 
     if (pruneCount > 0) {
       messages.splice(keepFirst, pruneCount);
-      // Rough estimate: reduce token count proportionally
-      this.state.tokenCount = Math.floor(
-        this.state.tokenCount * (messages.length / (messages.length + pruneCount)),
-      );
+      this.state.tokenCount = this.estimateContextTokens();
+      log.info("session", `Pruned ${pruneCount} old messages, ~${this.state.tokenCount} tokens remaining`);
     }
+  }
+
+  /** Rough estimate of current context size in tokens from message content. */
+  private estimateContextTokens(): number {
+    let chars = this.systemPrompt.length;
+    for (const msg of this.state.messages) {
+      if (typeof msg.content === "string") {
+        chars += msg.content.length;
+      } else if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "text") chars += block.text.length;
+          else if (block.type === "tool_result") {
+            chars += typeof block.content === "string" ? block.content.length : 100;
+          } else if (block.type === "tool_use") {
+            chars += JSON.stringify(block.input).length;
+          }
+        }
+      }
+    }
+    return Math.ceil(chars / 4); // ~4 chars per token
   }
 
   // ─── Usage Tracking ─────────────────────────────────────────────
@@ -894,6 +1153,50 @@ export class ConversationManager {
       }
     }
     this.state.tokenCount = Math.ceil(totalChars / 4);
+  }
+
+  /**
+   * Collect session data for the narrative system (Layer 10).
+   */
+  collectSessionData(): {
+    project: string;
+    messagesCount: number;
+    toolsUsed: string[];
+    actionsCount: number;
+    topicsDiscussed: string[];
+    errorsEncountered: number;
+    filesModified: string[];
+  } {
+    const toolsUsed: string[] = [];
+    const filesModified: string[] = [];
+    let errorsEncountered = 0;
+
+    for (const msg of this.state.messages) {
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "tool_use") {
+            toolsUsed.push(block.name);
+            if (block.name === "Write" || block.name === "Edit") {
+              const fp = String((block.input as any)?.file_path ?? "");
+              if (fp && !filesModified.includes(fp)) filesModified.push(fp);
+            }
+          }
+          if (block.type === "tool_result" && block.is_error) {
+            errorsEncountered++;
+          }
+        }
+      }
+    }
+
+    return {
+      project: this.config.workingDirectory,
+      messagesCount: this.state.messages.length,
+      toolsUsed,
+      actionsCount: this.state.toolUseCount,
+      topicsDiscussed: [],
+      errorsEncountered,
+      filesModified,
+    };
   }
 
   /**

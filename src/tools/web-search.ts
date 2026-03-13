@@ -1,5 +1,5 @@
 // KCode - WebSearch Tool
-// Search the web using Brave Search API or fallback scraping
+// Search the web using Brave Search API, SearXNG, or DuckDuckGo fallback scraping
 
 import type { ToolDefinition, ToolResult } from "../core/types";
 
@@ -18,7 +18,7 @@ interface SearchResult {
 export const webSearchDefinition: ToolDefinition = {
   name: "WebSearch",
   description:
-    "Search the web for information. Uses Brave Search API if BRAVE_API_KEY is set, otherwise falls back to scraping.",
+    "Search the web for information. Uses Brave Search API if BRAVE_API_KEY is set, SearXNG if SEARXNG_URL is set, otherwise falls back to DuckDuckGo HTML scraping.",
   input_schema: {
     type: "object",
     properties: {
@@ -61,6 +61,27 @@ async function braveSearch(query: string, apiKey: string): Promise<SearchResult[
     title: r.title,
     url: r.url,
     snippet: r.description,
+  }));
+}
+
+async function searxngSearch(query: string, baseUrl: string): Promise<SearchResult[]> {
+  const params = new URLSearchParams({ q: query, format: "json" });
+  const response = await fetch(`${baseUrl}/search?${params}`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SearXNG error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as {
+    results?: Array<{ title: string; url: string; content: string }>;
+  };
+
+  return (data.results ?? []).slice(0, 10).map((r) => ({
+    title: r.title,
+    url: r.url,
+    snippet: r.content,
   }));
 }
 
@@ -154,28 +175,43 @@ function formatResults(results: SearchResult[]): string {
 export async function executeWebSearch(input: Record<string, unknown>): Promise<ToolResult> {
   const { query, allowed_domains, blocked_domains } = input as WebSearchInput;
 
-  try {
-    const apiKey = process.env.BRAVE_API_KEY;
-    let results: SearchResult[];
+  const apiKey = process.env.BRAVE_API_KEY;
 
-    if (apiKey) {
-      results = await braveSearch(query, apiKey);
-    } else {
-      results = await fallbackScrapeSearch(query);
-    }
+  // Build search tier list in priority order
+  const tiers: Array<{ name: string; fn: () => Promise<SearchResult[]> }> = [];
 
-    results = filterResults(results, allowed_domains, blocked_domains);
-
-    const source = apiKey ? "Brave Search" : "DuckDuckGo (fallback)";
-    const output = `Search: "${query}" (via ${source})\n\n${formatResults(results)}`;
-
-    return { tool_use_id: "", content: output };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return {
-      tool_use_id: "",
-      content: `Error searching for "${query}": ${msg}`,
-      is_error: true,
-    };
+  if (apiKey) {
+    tiers.push({ name: "Brave Search", fn: () => braveSearch(query, apiKey) });
   }
+
+  // SearXNG: enabled when SEARXNG_URL env var is set (even if empty string, defaults to localhost:8888)
+  if ("SEARXNG_URL" in process.env) {
+    const searxngUrl = process.env.SEARXNG_URL || "http://localhost:8888";
+    tiers.push({ name: "SearXNG", fn: () => searxngSearch(query, searxngUrl) });
+  }
+
+  tiers.push({ name: "DuckDuckGo (fallback)", fn: () => fallbackScrapeSearch(query) });
+
+  const errors: string[] = [];
+
+  for (const tier of tiers) {
+    try {
+      let results = await tier.fn();
+      results = filterResults(results, allowed_domains, blocked_domains);
+
+      const output = `Search: "${query}" (via ${tier.name})\n\n${formatResults(results)}`;
+      return { tool_use_id: "", content: output };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`${tier.name}: ${msg}`);
+      // Fall through to next tier
+    }
+  }
+
+  // All tiers failed
+  return {
+    tool_use_id: "",
+    content: `All search backends failed for "${query}":\n${errors.map((e) => `  - ${e}`).join("\n")}`,
+    is_error: true,
+  };
 }

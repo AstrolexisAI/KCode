@@ -1,7 +1,7 @@
 // KCode - Main Ink application component
 // Top-level component managing conversation flow and rendering
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { Box, useInput, useApp } from "ink";
 import type { ConversationManager } from "../core/conversation.js";
 import type { KCodeConfig, StreamEvent } from "../core/types.js";
@@ -55,7 +55,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
   const [completed, setCompleted] = useState<MessageEntry[]>([
     {
       kind: "banner",
-      title: "KCode v0.1.0",
+      title: `KCode v${config.version ?? "?"}`,
       subtitle: "Kulvex Code by Astrolexis",
     },
   ]);
@@ -64,7 +64,13 @@ export default function App({ config, conversationManager, tools }: AppProps) {
   const [isThinking, setIsThinking] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [tokenCount, setTokenCount] = useState(0);
+  const [turnTokens, setTurnTokens] = useState(0);
+  const [turnStartTime, setTurnStartTime] = useState(0);
   const [toolUseCount, setToolUseCount] = useState(0);
+
+  // Message queue — user can type while KCode is responding
+  const [messageQueue, setMessageQueue] = useState<string[]>([]);
+  const messageQueueRef = useRef<string[]>([]);
 
   // Permission dialog state
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequest | null>(null);
@@ -93,13 +99,47 @@ export default function App({ config, conversationManager, tools }: AppProps) {
 
   // Global keybindings
   useInput((input, key) => {
+    // Escape cancels current response
+    if (key.escape && mode === "responding") {
+      conversationManager.abort();
+      setMode("input");
+      setStreamingText("");
+      setStreamingThinking("");
+      setIsThinking(false);
+      setLoadingMessage("");
+      setCompleted((prev) => [
+        ...prev,
+        { kind: "text", role: "assistant", text: "\n  [Cancelled]" },
+      ]);
+      return;
+    }
+
+    // Ctrl+C: cancel response + clear queue if running, otherwise exit
     if (key.ctrl && input === "c") {
-      exit();
+      if (mode === "responding") {
+        conversationManager.abort();
+        // Clear the entire queue
+        const queuedCount = messageQueueRef.current.length;
+        messageQueueRef.current = [];
+        setMessageQueue([]);
+        setMode("input");
+        setStreamingText("");
+        setStreamingThinking("");
+        setIsThinking(false);
+        setLoadingMessage("");
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "assistant", text: `\n  [Cancelled${queuedCount > 0 ? `, ${queuedCount} queued message${queuedCount > 1 ? "s" : ""} cleared` : ""}]` },
+        ]);
+      } else {
+        exit();
+      }
       return;
     }
   });
 
-  const handleSubmit = useCallback(
+  // Process a single message (sends to LLM, handles events, resets state)
+  const processMessage = useCallback(
     async (userInput: string) => {
       // Built-in exit commands
       const lower = userInput.toLowerCase().trim();
@@ -176,7 +216,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
 
           // Built-in action commands (stats, doctor, models, clear, compact)
           if (expanded.builtinAction) {
-            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted);
+            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted, config.version);
             setCompleted((prev) => [
               ...prev,
               { kind: "text", role: "user", text: userInput },
@@ -189,6 +229,8 @@ export default function App({ config, conversationManager, tools }: AppProps) {
           setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
           setMode("responding");
           setStreamingText("");
+          setTurnTokens(0);
+          setTurnStartTime(Date.now());
           setLoadingMessage("Thinking...");
 
           try {
@@ -232,6 +274,8 @@ export default function App({ config, conversationManager, tools }: AppProps) {
       // Start response
       setMode("responding");
       setStreamingText("");
+      setTurnTokens(0);
+      setTurnStartTime(Date.now());
       setLoadingMessage("Thinking...");
 
       try {
@@ -257,6 +301,36 @@ export default function App({ config, conversationManager, tools }: AppProps) {
       setToolUseCount(state.toolUseCount);
     },
     [conversationManager, tools, skillManager, exit],
+  );
+
+  // Drain the message queue — process queued messages one by one
+  const drainQueue = useCallback(async () => {
+    while (messageQueueRef.current.length > 0) {
+      const next = messageQueueRef.current[0];
+      messageQueueRef.current = messageQueueRef.current.slice(1);
+      setMessageQueue([...messageQueueRef.current]);
+      await processMessage(next);
+    }
+  }, [processMessage]);
+
+  const handleSubmit = useCallback(
+    async (userInput: string) => {
+      if (mode === "responding") {
+        // Queue the message — show it as queued in the UI
+        messageQueueRef.current = [...messageQueueRef.current, userInput];
+        setMessageQueue([...messageQueueRef.current]);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: `${userInput}  [queued]` },
+        ]);
+        return;
+      }
+
+      await processMessage(userInput);
+      // After processing, drain any queued messages
+      await drainQueue();
+    },
+    [mode, processMessage, drainQueue],
   );
 
   const processEvents = useCallback(
@@ -332,20 +406,29 @@ export default function App({ config, conversationManager, tools }: AppProps) {
           }
 
           case "tool_result":
-            setCompleted((prev) => [
-              ...prev,
-              {
-                kind: "tool_result",
-                name: event.name,
-                result: event.result,
-                isError: event.isError,
-              },
-            ]);
+            // Learn tool gets a special visual treatment
+            if (event.name === "Learn" && !event.isError && event.result.startsWith("✧")) {
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "learn", text: event.result.replace(/^✧\s*/, "") },
+              ]);
+            } else {
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "tool_result",
+                  name: event.name,
+                  result: event.result,
+                  isError: event.isError,
+                },
+              ]);
+            }
             setLoadingMessage("Thinking...");
             break;
 
           case "usage_update":
             setTokenCount(event.usage.inputTokens + event.usage.outputTokens);
+            setTurnTokens(event.usage.inputTokens + event.usage.outputTokens);
             break;
 
           case "error":
@@ -357,6 +440,15 @@ export default function App({ config, conversationManager, tools }: AppProps) {
                 text: `\n  Error: ${event.error.message}${event.retryable ? " (retrying...)" : ""}\n`,
               },
             ]);
+            break;
+
+          case "suggestion":
+            if (event.suggestions.length > 0) {
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "suggestion", suggestions: event.suggestions },
+              ]);
+            }
             break;
 
           case "turn_end":
@@ -409,6 +501,8 @@ export default function App({ config, conversationManager, tools }: AppProps) {
         loadingMessage={loadingMessage}
         streamingThinking={streamingThinking}
         isThinking={isThinking}
+        turnTokens={turnTokens}
+        turnStartTime={turnStartTime}
       />
 
       {mode === "permission" && permissionRequest && (
@@ -421,7 +515,9 @@ export default function App({ config, conversationManager, tools }: AppProps) {
 
       <InputPrompt
         onSubmit={handleSubmit}
-        isActive={mode === "input"}
+        isActive={mode !== "permission"}
+        isQueuing={mode === "responding"}
+        queueSize={messageQueue.length}
         model={config.model}
         cwd={config.workingDirectory}
         completions={slashCompletions}
@@ -457,6 +553,7 @@ async function handleBuiltinAction(
   action: string,
   conversationManager: ConversationManager,
   setCompleted: React.Dispatch<React.SetStateAction<MessageEntry[]>>,
+  version?: string,
 ): Promise<string> {
   switch (action) {
     case "stats": {
@@ -486,7 +583,7 @@ async function handleBuiltinAction(
     case "clear": {
       setCompleted([{
         kind: "banner",
-        title: "KCode v0.1.0",
+        title: `KCode v${version ?? "?"}`,
         subtitle: "Kulvex Code by Astrolexis",
       }]);
       return "  Conversation cleared.";

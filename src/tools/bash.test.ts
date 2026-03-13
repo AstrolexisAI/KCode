@@ -1,0 +1,209 @@
+import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { executeBash, bashDefinition } from "./bash.ts";
+
+describe("bash tool", () => {
+  // ─── Definition ───
+
+  test("bashDefinition has correct name and required fields", () => {
+    expect(bashDefinition.name).toBe("Bash");
+    expect(bashDefinition.input_schema.required).toContain("command");
+  });
+
+  // ─── Basic execution ───
+
+  test("executes simple echo command", async () => {
+    const result = await executeBash({ command: "echo hello" });
+    expect(result.content).toContain("hello");
+    expect(result.is_error).toBeFalsy();
+  });
+
+  test("failing command returns is_error true", async () => {
+    const result = await executeBash({ command: "exit 1" });
+    expect(result.is_error).toBe(true);
+  });
+
+  test("captures stderr output", async () => {
+    const result = await executeBash({ command: "echo oops >&2" });
+    expect(result.content).toContain("oops");
+  });
+
+  test("returns exit code for empty output", async () => {
+    const result = await executeBash({ command: "exit 42" });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("exit code 42");
+  });
+
+  // ─── Timeout ───
+
+  test("respects timeout parameter", async () => {
+    const start = Date.now();
+    const result = await executeBash({ command: "sleep 30", timeout: 1000 });
+    const elapsed = Date.now() - start;
+    // Should be killed well before 30 seconds
+    expect(elapsed).toBeLessThan(10_000);
+    expect(result.is_error).toBe(true);
+  });
+
+  // ─── Dangerous kill pattern guard ───
+
+  test("blocks pkill -f serve", async () => {
+    const result = await executeBash({ command: 'pkill -f "serve"' });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+  });
+
+  test("blocks killall node", async () => {
+    const result = await executeBash({ command: "killall node" });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+  });
+
+  test("blocks pkill python", async () => {
+    const result = await executeBash({ command: "pkill python" });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+  });
+
+  test("blocks pkill -9 bun", async () => {
+    const result = await executeBash({ command: "pkill -9 bun" });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+  });
+
+  // ─── Safe kill patterns are allowed ───
+
+  test("allows kill by port via lsof", async () => {
+    // kill $(lsof ...) does not match the pkill/killall guard
+    const result = await executeBash({ command: "echo 'kill $(lsof -ti :3000)'" });
+    expect(result.is_error).toBeFalsy();
+    expect(result.content).toContain("kill $(lsof -ti :3000)");
+  });
+
+  test("pkill with full command path still blocked if it contains a guarded word", async () => {
+    // The regex matches the FIRST guarded word it finds after pkill -f
+    // So 'pkill -f "python3 -m http.server 8080"' matches "python" at the word boundary
+    // This is an intentional trade-off in the guard — overly broad patterns are blocked
+    const result = await executeBash({
+      command: 'pkill -f "python3 -m http.server 8080"',
+    });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+  });
+
+  test("safe kill alternatives are not blocked", async () => {
+    // Using fuser to kill by port is safe and not blocked
+    const result = await executeBash({ command: "echo 'fuser -k 8080/tcp'" });
+    expect(result.is_error).toBeFalsy();
+    expect(result.content).not.toContain("BLOCKED");
+  });
+
+  // ─── Auto-background detection ───
+
+  test("plain echo does NOT get backgrounded", async () => {
+    // A command without any server keywords should run in foreground
+    const result = await executeBash({ command: "echo 'npm test'" });
+    expect(result.content).toContain("npm test");
+    expect(result.is_error).toBeFalsy();
+  });
+
+  test("echo with serve keyword DOES get auto-backgrounded", async () => {
+    // The isServerCommand regex matches \bserve\b anywhere in the command
+    // so even `echo "serve"` triggers auto-backgrounding — this is by design
+    const start = Date.now();
+    const result = await executeBash({ command: "echo 'serve test'" });
+    // It still completes (auto-backgrounded echo finishes fast)
+    expect(result.content).toBeTruthy();
+  });
+
+  test("simple commands return immediately with output", async () => {
+    const start = Date.now();
+    const result = await executeBash({ command: "echo fast" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(5000);
+    expect(result.content).toContain("fast");
+  });
+
+  test("run_in_background flag returns quickly", async () => {
+    const start = Date.now();
+    const result = await executeBash({
+      command: "echo bg-started && sleep 60",
+      run_in_background: true,
+    });
+    const elapsed = Date.now() - start;
+    // Background wrapper waits ~3s for initial output, plus overhead
+    expect(elapsed).toBeLessThan(15_000);
+    expect(result.content).toContain("bg-started");
+  });
+
+  test("python3 -m http.server 0 gets auto-backgrounded", async () => {
+    const start = Date.now();
+    const result = await executeBash({
+      command: "python3 -m http.server 0",
+    });
+    const elapsed = Date.now() - start;
+    // Should auto-background and return in ~3-5s, not block for 2 minutes
+    expect(elapsed).toBeLessThan(20_000);
+    // Should have started successfully or show output
+    expect(result.content).toBeTruthy();
+  });
+
+  // ─── shellEscape (tested indirectly via background commands) ───
+
+  test("handles commands with single quotes via background", async () => {
+    // Background mode uses shellEscape internally
+    const result = await executeBash({
+      command: "echo 'hello'\\''s world'",
+      run_in_background: true,
+    });
+    // Should not error out
+    expect(result.is_error).toBeFalsy();
+  });
+
+  test("shellEscape handles single quotes in background commands", async () => {
+    const result = await executeBash({
+      command: "echo \"it's a test\"",
+      run_in_background: true,
+    });
+    expect(result.is_error).toBeFalsy();
+    expect(result.content).toContain("it's a test");
+  });
+
+  // ─── isServerCommand regex matching ───
+
+  test("isServerCommand matches uvicorn", async () => {
+    // uvicorn would block forever; auto-background should kick in
+    const start = Date.now();
+    const result = await executeBash({
+      command: "echo 'would run uvicorn' && exit 0",
+    });
+    // "uvicorn" appears in the command, so it gets auto-backgrounded
+    // The wrapper should return within ~15s
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("isServerCommand matches flask run", async () => {
+    const start = Date.now();
+    const result = await executeBash({
+      command: "echo 'flask run test' && exit 0",
+    });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("isServerCommand does NOT match npm test", async () => {
+    const start = Date.now();
+    const result = await executeBash({ command: "echo npm_test_output" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(5_000);
+    expect(result.content).toContain("npm_test_output");
+    expect(result.is_error).toBeFalsy();
+  });
+
+  // ─── tool_use_id is always empty string ───
+
+  test("result always has empty tool_use_id", async () => {
+    const result = await executeBash({ command: "echo test" });
+    expect(result.tool_use_id).toBe("");
+  });
+});

@@ -308,10 +308,23 @@ class McpServerConnection {
 
     if (this.process) {
       try {
-        this.process.kill();
+        // Send SIGTERM first for graceful shutdown
+        this.process.kill("SIGTERM");
       } catch {
         // Already dead
       }
+      // Schedule SIGKILL if still alive after 3 seconds
+      const proc = this.process;
+      setTimeout(() => {
+        try {
+          if (proc.exitCode === null) {
+            log.warn("mcp", `Server "${this.name}" did not exit after SIGTERM, sending SIGKILL`);
+            proc.kill("SIGKILL");
+          }
+        } catch {
+          // Already dead
+        }
+      }, 3000);
       this.process = null;
     }
     this.initialized = false;
@@ -396,6 +409,12 @@ export class McpManager {
     for (const [serverName, connection] of this.servers) {
       for (const tool of connection.getTools()) {
         const registeredName = `mcp__${serverName}__${tool.name}`;
+
+        // Check for tool name collisions
+        if (registry.has(registeredName)) {
+          log.warn("mcp", `Tool name collision: "${registeredName}" already registered, skipping`);
+          continue;
+        }
 
         const definition: ToolDefinition = {
           name: registeredName,
@@ -535,12 +554,15 @@ export class McpManager {
     this.healthCheckInterval = setInterval(async () => {
       for (const [name, connection] of this.servers) {
         if (!connection.isAlive()) {
+          log.warn("mcp", `Health check: server "${name}" is dead, attempting restart`);
           try {
             const restarted = await connection.restart();
             if (!restarted) {
+              log.warn("mcp", `Health check: removing dead server "${name}" (restart failed)`);
               this.servers.delete(name);
             }
           } catch {
+            log.warn("mcp", `Health check: removing dead server "${name}" (restart threw)`);
             this.servers.delete(name);
           }
         }
