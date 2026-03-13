@@ -322,6 +322,21 @@ async function runMain(
     // Don't set opts.continue — this starts a NEW transcript file
   }
 
+  // ─── Read piped stdin if available ─────────────────────────
+
+  if (promptText && !process.stdin.isTTY) {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) {
+        chunks.push(chunk);
+      }
+      const stdinContent = Buffer.concat(chunks).toString("utf-8").trim();
+      if (stdinContent) {
+        promptText = `${promptText}\n\n<stdin>\n${stdinContent}\n</stdin>`;
+      }
+    } catch { /* no stdin data */ }
+  }
+
   // ─── Route to the appropriate mode ──────────────────────────
 
   if (promptText && opts.print) {

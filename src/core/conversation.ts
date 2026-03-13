@@ -960,10 +960,11 @@ export class ConversationManager {
             const schema = this.config.jsonSchema.startsWith("{")
               ? JSON.parse(this.config.jsonSchema)
               : JSON.parse(readFileSync(this.config.jsonSchema, "utf-8"));
-            body.response_format = {
-              type: "json_schema",
-              json_schema: { name: "output", schema },
-            };
+            // llama.cpp supports json_schema in grammar form, OpenAI uses response_format
+            // Try the OpenAI-compatible format first; llama.cpp also accepts it in newer versions
+            body.response_format = { type: "json_object" };
+            // Pass schema via the json_schema field (works with vLLM, newer llama.cpp)
+            body.json_schema = schema;
           } catch (e) {
             log.warn("llm", `Invalid JSON schema, ignoring: ${e}`);
           }
