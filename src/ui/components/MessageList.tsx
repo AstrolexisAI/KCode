@@ -5,6 +5,7 @@ import React from "react";
 import { Box, Text, Static } from "ink";
 import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
+import { useTheme } from "../ThemeContext.js";
 
 // --- Types for rendered message entries ---
 
@@ -139,10 +140,12 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
 }
 
 function TextMessage({ role, text }: { role: "user" | "assistant"; text: string }) {
+  const { theme } = useTheme();
+
   if (role === "user") {
     return (
       <Box paddingLeft={2}>
-        <Text bold color="green">{"❯ "}</Text>
+        <Text bold color={theme.userPrompt}>{"❯ "}</Text>
         <Text bold>{text}</Text>
       </Box>
     );
@@ -157,9 +160,11 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
 }
 
 function ToolUseMessage({ name, summary }: { name: string; summary: string }) {
+  const { theme } = useTheme();
+
   return (
     <Box paddingLeft={2}>
-      <Text dimColor>
+      <Text color={theme.toolUse} dimColor>
         {"⚡ "}
         {name}
         {summary ? `: ${summary}` : ""}
@@ -177,11 +182,13 @@ function ToolResultMessage({
   result: string;
   isError?: boolean;
 }) {
+  const { theme } = useTheme();
+
   if (isError) {
     return (
       <Box flexDirection="column" paddingLeft={2}>
-        <Text color="red">{"✗ "}{name} failed</Text>
-        <Text dimColor color="red">{"    "}{result.slice(0, 200)}</Text>
+        <Text color={theme.error}>{"✗ "}{name} failed</Text>
+        <Text dimColor color={theme.error}>{"    "}{result.slice(0, 200)}</Text>
       </Box>
     );
   }
@@ -189,7 +196,7 @@ function ToolResultMessage({
   const preview = result.split("\n").slice(0, 3).join("\n    ");
   return (
     <Box flexDirection="column" paddingLeft={2}>
-      <Text color="green" dimColor>{"✓ "}{name}</Text>
+      <Text color={theme.toolResult} dimColor>{"✓ "}{name}</Text>
       {preview.length > 0 && preview.length < 500 && (
         <Text dimColor>{"    "}{preview}</Text>
       )}
@@ -208,22 +215,26 @@ function ThinkingMessage({ text }: { text: string }) {
 }
 
 function LearnMessage({ text }: { text: string }) {
+  const { theme } = useTheme();
+
   return (
     <Box paddingLeft={2} marginTop={0} marginBottom={0}>
-      <Text color="magenta" bold>{"✧ "}</Text>
-      <Text color="magenta" italic>{text}</Text>
+      <Text color={theme.accent} bold>{"✧ "}</Text>
+      <Text color={theme.accent} italic>{text}</Text>
     </Box>
   );
 }
 
 function SuggestionMessage({ suggestions }: { suggestions: { type: string; message: string; priority: string }[] }) {
+  const { theme } = useTheme();
+
   const icons: Record<string, string> = {
     test: "⚗", verify: "🔍", commit: "📦", cleanup: "🧹", safety: "⚠", optimize: "⚡",
   };
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={0}>
       {suggestions.map((s, i) => (
-        <Text key={`sug-${i}`} color={s.priority === "high" ? "yellow" : "gray"} dimColor={s.priority === "low"}>
+        <Text key={`sug-${i}`} color={s.priority === "high" ? theme.warning : theme.dimmed} dimColor={s.priority === "low"}>
           {icons[s.type] ?? "💡"} {s.message}
         </Text>
       ))}
@@ -232,18 +243,20 @@ function SuggestionMessage({ suggestions }: { suggestions: { type: string; messa
 }
 
 function BannerMessage({ title, subtitle }: { title: string; subtitle: string }) {
+  const { theme } = useTheme();
+
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box gap={1}>
-        <Text bold color="cyan">{title}</Text>
-        <Text dimColor>{subtitle}</Text>
+        <Text bold color={theme.primary}>{title}</Text>
+        <Text color={theme.dimmed}>{subtitle}</Text>
       </Box>
     </Box>
   );
 }
 
 /** Render inline markdown formatting (bold, code, links) within a single line */
-function renderInline(line: string, keyPrefix: string): React.ReactElement {
+function renderInline(line: string, keyPrefix: string, theme: import("../../core/theme.js").Theme): React.ReactElement {
   // Split by inline patterns: **bold**, `code`, [text](url)
   const parts: React.ReactElement[] = [];
   let remaining = line;
@@ -285,7 +298,7 @@ function renderInline(line: string, keyPrefix: string): React.ReactElement {
       parts.push(<Text key={`${keyPrefix}-${partIndex++}`} bold>{content}</Text>);
     } else if (first.type === "code") {
       const content = codeMatch![1]!;
-      parts.push(<Text key={`${keyPrefix}-${partIndex++}`} color="yellow">{content}</Text>);
+      parts.push(<Text key={`${keyPrefix}-${partIndex++}`} color={theme.warning}>{content}</Text>);
     } else if (first.type === "link") {
       const linkText = linkMatch![1]!;
       const linkUrl = linkMatch![2]!;
@@ -293,7 +306,7 @@ function renderInline(line: string, keyPrefix: string): React.ReactElement {
         <Text key={`${keyPrefix}-${partIndex++}`}>{linkText} </Text>,
       );
       parts.push(
-        <Text key={`${keyPrefix}-${partIndex++}`} dimColor>({linkUrl})</Text>,
+        <Text key={`${keyPrefix}-${partIndex++}`} color={theme.dimmed}>({linkUrl})</Text>,
       );
     }
 
@@ -311,6 +324,7 @@ function renderInline(line: string, keyPrefix: string): React.ReactElement {
 
 /** Markdown text renderer for assistant messages */
 function MarkdownText({ text }: { text: string }): React.ReactElement {
+  const { theme } = useTheme();
   const lines = text.split("\n");
   const elements: React.ReactElement[] = [];
   let i = 0;
@@ -332,9 +346,9 @@ function MarkdownText({ text }: { text: string }): React.ReactElement {
       i++;
 
       elements.push(
-        <Box key={`block-${elements.length}`} flexDirection="column" borderStyle="single" borderColor="gray" paddingLeft={1} paddingRight={1} marginTop={0} marginBottom={0}>
-          {lang && <Text dimColor>{lang}</Text>}
-          <Text color="yellow">{codeLines.join("\n")}</Text>
+        <Box key={`block-${elements.length}`} flexDirection="column" borderStyle="single" borderColor={theme.dimmed} paddingLeft={1} paddingRight={1} marginTop={0} marginBottom={0}>
+          {lang && <Text color={theme.dimmed}>{lang}</Text>}
+          <Text color={theme.warning}>{codeLines.join("\n")}</Text>
         </Box>,
       );
       continue;
@@ -344,7 +358,7 @@ function MarkdownText({ text }: { text: string }): React.ReactElement {
     const headerMatch = line.match(/^(#{1,3})\s+(.+)$/);
     if (headerMatch) {
       elements.push(
-        <Text key={`line-${elements.length}`} bold color="cyan">{headerMatch[2]!}</Text>,
+        <Text key={`line-${elements.length}`} bold color={theme.primary}>{headerMatch[2]!}</Text>,
       );
       i++;
       continue;
@@ -355,7 +369,7 @@ function MarkdownText({ text }: { text: string }): React.ReactElement {
     if (listMatch) {
       const indent = line.match(/^(\s*)/)?.[1] ?? "";
       elements.push(
-        <Text key={`line-${elements.length}`}>{indent}  {"• "}{renderInline(listMatch[1]!, `li-${elements.length}`)}</Text>,
+        <Text key={`line-${elements.length}`}>{indent}  {"• "}{renderInline(listMatch[1]!, `li-${elements.length}`, theme)}</Text>,
       );
       i++;
       continue;
@@ -366,7 +380,7 @@ function MarkdownText({ text }: { text: string }): React.ReactElement {
     if (numListMatch) {
       const indent = line.match(/^(\s*)/)?.[1] ?? "";
       elements.push(
-        <Text key={`line-${elements.length}`}>{indent}  {numListMatch[1]!}. {renderInline(numListMatch[2]!, `nl-${elements.length}`)}</Text>,
+        <Text key={`line-${elements.length}`}>{indent}  {numListMatch[1]!}. {renderInline(numListMatch[2]!, `nl-${elements.length}`, theme)}</Text>,
       );
       i++;
       continue;
@@ -375,7 +389,7 @@ function MarkdownText({ text }: { text: string }): React.ReactElement {
     // Regular line with inline formatting
     elements.push(
       <Box key={`line-${elements.length}`}>
-        {renderInline(line, `p-${elements.length}`)}
+        {renderInline(line, `p-${elements.length}`, theme)}
       </Box>,
     );
     i++;

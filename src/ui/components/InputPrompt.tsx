@@ -5,6 +5,7 @@ import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import { readdirSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
+import { useTheme } from "../ThemeContext.js";
 
 interface InputPromptProps {
   /** Called when the user submits input (Enter key) */
@@ -73,6 +74,7 @@ function commonPrefix(strings: string[]): string {
 }
 
 export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [] }: InputPromptProps) {
+  const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [history, setHistory] = useState<string[]>([]);
@@ -289,21 +291,21 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   }
 
   const promptChar = isQueuing ? "+" : "❯";
-  const promptColor = isQueuing ? "yellow" : "green";
+  const promptColor = isQueuing ? theme.warning : theme.success;
   const queueHint = isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
 
   return (
     <Box flexDirection="column">
       <Box gap={1}>
         {model && <Text color={promptColor}>{model}</Text>}
-        {shortCwd && <Text dimColor>{shortCwd}</Text>}
+        {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
         <Text bold color={promptColor}>{promptChar}</Text>
         <Text>
           {before}
           <Text inverse>{cursorChar}</Text>
           {after}
-          {hint && <Text dimColor>{hint}</Text>}
-          {queueHint && <Text color="yellow">{queueHint}</Text>}
+          {hint && <Text color={theme.dimmed}>{hint}</Text>}
+          {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
         </Text>
       </Box>
     </Box>

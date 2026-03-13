@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Text } from "ink";
+import { useTheme } from "../ThemeContext.js";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL = 80;
@@ -28,6 +29,7 @@ function formatTokens(n: number): string {
 }
 
 export default function Spinner({ message, tokens, startTime }: SpinnerProps) {
+  const { theme } = useTheme();
   const [frame, setFrame] = useState(0);
   const [elapsed, setElapsed] = useState(0);
 
@@ -47,11 +49,11 @@ export default function Spinner({ message, tokens, startTime }: SpinnerProps) {
   if (startTime && elapsed > 0) meta.push(formatElapsed(elapsed));
 
   return (
-    <Text dimColor>
-      <Text color="cyan">{SPINNER_FRAMES[frame]}</Text>
+    <Text color={theme.dimmed}>
+      <Text color={theme.primary}>{SPINNER_FRAMES[frame]}</Text>
       {parts.length > 0 ? ` ${parts.join(" ")}` : ""}
       {meta.length > 0 && (
-        <Text dimColor>{` ${meta.join(" · ")}`}</Text>
+        <Text color={theme.dimmed}>{` ${meta.join(" · ")}`}</Text>
       )}
     </Text>
   );

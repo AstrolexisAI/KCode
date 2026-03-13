@@ -3,6 +3,7 @@
 
 import React, { useState } from "react";
 import { Box, Text } from "ink";
+import { useTheme } from "../ThemeContext.js";
 
 interface ThinkingBlockProps {
   /** The thinking text content */
@@ -21,6 +22,7 @@ export default function ThinkingBlock({
   isStreaming,
   defaultExpanded = false,
 }: ThinkingBlockProps) {
+  const { theme } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const charCount = text.length;
@@ -36,7 +38,7 @@ export default function ThinkingBlock({
 
     return (
       <Box flexDirection="column" paddingLeft={2}>
-        <Text dimColor color="yellow">
+        <Text dimColor color={theme.warning}>
           {"💭 Thinking"}
           {charCount > 0 ? ` (${charCount} chars)...` : "..."}
         </Text>
@@ -55,7 +57,7 @@ export default function ThinkingBlock({
   if (!expanded) {
     return (
       <Box paddingLeft={2}>
-        <Text dimColor>
+        <Text color={theme.dimmed}>
           {"💭 Thinking ("}
           {charCount} chars, {lineCount} {lineCount === 1 ? "line" : "lines"}
           {") ▸ collapsed"}
@@ -69,7 +71,7 @@ export default function ThinkingBlock({
 
   return (
     <Box flexDirection="column" paddingLeft={2}>
-      <Text dimColor>
+      <Text color={theme.dimmed}>
         {"💭 Thinking ("}
         {charCount} chars{") ▾ expanded"}
       </Text>
@@ -81,7 +83,7 @@ export default function ThinkingBlock({
         borderRight={false}
         borderTop={false}
         borderBottom={false}
-        borderColor="gray"
+        borderColor={theme.dimmed}
       >
         {lines.map((line, i) => (
           <Text key={i} dimColor italic>
