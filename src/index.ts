@@ -3,6 +3,7 @@
 // AI-powered coding assistant for the terminal by Astrolexis (Kulvex Code)
 
 import { Command } from "commander";
+import { resolve } from "node:path";
 import { ConversationManager } from "./core/conversation";
 import { registerBuiltinTools } from "./tools";
 import { startUI } from "./ui/render";
@@ -24,6 +25,7 @@ import { runDiagnostics } from "./core/doctor";
 import { getNarrativeManager } from "./core/narrative";
 import { closeDb } from "./core/db";
 import { shutdownMcpManager } from "./core/mcp";
+import { getRulesManager } from "./core/rules";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
@@ -62,13 +64,17 @@ const program = new Command()
 program
   .argument("[prompt]", "Run a single prompt non-interactively and exit")
   .option("-m, --model <model>", "Override the AI model")
-  .option("-p, --permission <mode>", "Set permission mode (ask/auto/plan/deny)")
+  .option("-p, --permission <mode>", "Set permission mode (ask/auto/plan/deny/acceptEdits)")
   .option("-c, --continue", "Continue the last session")
   .option("--print", "Print mode: output only text, no UI (for piping)")
+  .option("--json-schema <schema>", "Validate output against JSON schema (inline JSON or file path)")
+  .option("--thinking", "Enable extended thinking mode")
+  .option("--worktree <name>", "Create and work in an isolated git worktree")
+  .option("--fork", "Fork the last session (new session with previous history)")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
     // Validate permission mode
-    const validPermissions = ["ask", "auto", "plan", "deny"];
+    const validPermissions = ["ask", "auto", "plan", "deny", "acceptEdits"];
     if (options.permission && !validPermissions.includes(options.permission)) {
       console.error(
         `Error: Invalid permission mode "${options.permission}". Must be one of: ${validPermissions.join(", ")}`,
@@ -218,12 +224,15 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean },
 ) {
   const cwd = process.cwd();
   const config = await buildConfig(cwd);
   config.version = VERSION;
   log.init();
+
+  // Load path-specific rules
+  getRulesManager().load(cwd);
 
   // Apply CLI overrides
   if (opts.model) {
@@ -232,6 +241,32 @@ async function runMain(
   }
   if (opts.permission) {
     config.permissionMode = opts.permission as PermissionMode;
+  }
+  if (opts.jsonSchema) {
+    config.jsonSchema = opts.jsonSchema;
+  }
+  if (opts.thinking) {
+    config.thinking = true;
+  }
+
+  // Create git worktree if --worktree flag is set
+  if (opts.worktree) {
+    const { execSync } = await import("node:child_process");
+    const worktreeName = opts.worktree;
+    const worktreePath = `.kcode-worktrees/${worktreeName}`;
+
+    try {
+      // Create worktree with a new branch
+      execSync(`git worktree add ${worktreePath} -b kcode/${worktreeName} 2>/dev/null || git worktree add ${worktreePath} kcode/${worktreeName}`, { cwd });
+      // Change working directory to worktree
+      process.chdir(resolve(cwd, worktreePath));
+      config.workingDirectory = process.cwd();
+      log.info("session", `Working in worktree: ${worktreePath} (branch: kcode/${worktreeName})`);
+      console.error(`Working in worktree: ${worktreePath}`);
+    } catch (err) {
+      console.error(`Failed to create worktree: ${err instanceof Error ? err.message : err}`);
+      process.exit(1);
+    }
   }
 
   // No API key required for local LLMs (llama-server).
@@ -260,6 +295,21 @@ async function runMain(
     } else {
       console.error("Warning: No previous session found, starting fresh.");
     }
+  }
+
+  // Fork previous session if --fork flag is set (new session with previous history)
+  if (opts.fork) {
+    const transcript = new TranscriptManager();
+    const latestFile = transcript.getLatestSession();
+    if (latestFile) {
+      const messages = transcript.loadSessionMessages(latestFile);
+      if (messages.length > 0) {
+        conversationManager.restoreMessages(messages);
+        console.error(`Forked session (${messages.length} messages from previous)`);
+        log.info("session", `Forked session from ${latestFile} with ${messages.length} messages`);
+      }
+    }
+    // Don't set opts.continue — this starts a NEW transcript file
   }
 
   // ─── Route to the appropriate mode ──────────────────────────

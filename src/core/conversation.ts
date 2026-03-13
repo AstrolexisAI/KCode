@@ -14,6 +14,7 @@ import type {
   OpenAIToolCall,
   OpenAIToolDefinition,
 } from "./types";
+import { readFileSync } from "node:fs";
 import { getModelBaseUrl } from "./models";
 import { routeToModel } from "./router";
 import { ToolRegistry } from "./tool-registry";
@@ -334,6 +335,7 @@ export class ConversationManager {
   private undoManager: UndoManager;
   private transcript: TranscriptManager;
   private abortController: AbortController | null = null;
+  private turnsSincePromptRebuild = 0;
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
@@ -474,6 +476,14 @@ export class ConversationManager {
 
     while (true) {
       turnCount++;
+
+      // Periodically rebuild system prompt (includes dynamic data like git status, user model)
+      this.turnsSincePromptRebuild++;
+      if (this.turnsSincePromptRebuild >= 5) {
+        this.systemPrompt = SystemPromptBuilder.build(this.config, this.config.version);
+        this.turnsSincePromptRebuild = 0;
+      }
+
       if (turnCount > MAX_AGENT_TURNS) {
         log.warn("session", `Agent loop exceeded ${MAX_AGENT_TURNS} turns, stopping`);
         yield { type: "turn_end", stopReason: "max_turns" };
@@ -921,6 +931,21 @@ export class ConversationManager {
         // Only include tools if we have any
         if (openAITools.length > 0) {
           body.tools = openAITools;
+        }
+
+        // Add JSON schema response format if configured
+        if (this.config.jsonSchema) {
+          try {
+            const schema = this.config.jsonSchema.startsWith("{")
+              ? JSON.parse(this.config.jsonSchema)
+              : JSON.parse(readFileSync(this.config.jsonSchema, "utf-8"));
+            body.response_format = {
+              type: "json_schema",
+              json_schema: { name: "output", schema },
+            };
+          } catch (e) {
+            log.warn("llm", `Invalid JSON schema, ignoring: ${e}`);
+          }
         }
 
         const headers: Record<string, string> = {
