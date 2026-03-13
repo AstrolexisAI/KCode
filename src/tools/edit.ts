@@ -28,7 +28,7 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
     if (old_string === new_string) {
       return {
         tool_use_id: "",
-        content: "Error: old_string and new_string are identical",
+        content: "Error: old_string and new_string are identical. STOP: Do NOT retry this Edit. If the file already contains the desired content, no edit is needed. Move on to the next task.",
         is_error: true,
       };
     }
