@@ -68,7 +68,15 @@ export const builtinSkills: SkillDefinition[] = [
     name: "diff",
     description: "Show git diff of current changes",
     aliases: [],
-    template: `Run \`git diff\` to show the current uncommitted changes. If there are staged changes, show both staged and unstaged. Summarize what changed.`,
+    args: ["file or path (optional)"],
+    template: `Show current git changes with stats. Run these commands:
+
+1. \`git diff --stat\` — overview of unstaged changes
+2. \`git diff --cached --stat\` — overview of staged changes
+3. \`git diff\` — full unstaged diff {{#if args}}filtered to: {{args}}{{/if}}
+4. \`git diff --cached\` — full staged diff {{#if args}}filtered to: {{args}}{{/if}}
+
+Summarize: how many files changed, lines added/removed, and a brief description of what changed. If a path was given, only show diffs for that path.`,
   },
   {
     name: "test",
@@ -146,6 +154,84 @@ export const builtinSkills: SkillDefinition[] = [
     template: `__builtin_template__`,
   },
   {
+    name: "batch",
+    description: "Apply a change across multiple files in parallel using subagents",
+    aliases: ["mass-edit", "bulk"],
+    args: ["description of the change"],
+    template: `Apply the following change across multiple files using parallel subagents.
+
+1. First, use Glob and Grep to identify ALL files that need this change.
+2. Group the files into batches of 3-5 files each.
+3. For each batch, spawn an Agent with a clear prompt describing exactly what to change in those specific files.
+4. Run all agents in parallel (background mode).
+5. After all agents complete, verify the changes by reading a sample of modified files.
+6. Report what was changed and any files that failed.
+
+Change to apply: {{args}}
+
+IMPORTANT:
+- Use Agent tool with run_in_background=true for parallelism
+- Each agent should receive the EXACT list of files it owns
+- No two agents should modify the same file
+- After all agents finish, run the project's test suite if one exists`,
+  },
+  {
+    name: "loop",
+    description: "Run a command or prompt repeatedly at an interval",
+    aliases: ["repeat", "watch"],
+    args: ["interval", "command or prompt"],
+    template: `Run the following repeatedly until the user stops you (Ctrl+C / Escape).
+
+Parse the arguments: {{args}}
+- First argument should be an interval (e.g., "5s", "1m", "30s")
+- Everything after is the command or prompt to run
+
+For each iteration:
+1. Run the command or process the prompt
+2. Show the result
+3. Wait for the specified interval using: Bash with command "sleep <seconds>"
+4. Repeat
+
+If the command fails 3 times in a row, stop and report the error.
+Show iteration count and elapsed time with each run.`,
+  },
+  {
+    name: "security-review",
+    description: "Scan code for security vulnerabilities",
+    aliases: ["sec", "vuln"],
+    args: ["file or directory path"],
+    template: `Perform a thorough security review of the specified code.
+
+Target: {{args}}
+
+1. Read the target file(s) — if a directory, scan all source files.
+2. Check for OWASP Top 10 vulnerabilities:
+   - Injection (SQL, command, LDAP, XSS)
+   - Broken authentication / session management
+   - Sensitive data exposure (hardcoded secrets, API keys, passwords)
+   - XXE (XML External Entities)
+   - Broken access control
+   - Security misconfiguration
+   - Insecure deserialization
+   - Using components with known vulnerabilities
+   - Insufficient logging & monitoring
+3. Check for language-specific issues:
+   - TypeScript/JS: eval(), innerHTML, dangerouslySetInnerHTML, prototype pollution
+   - Python: pickle, exec, shell=True, format string injection
+   - Go: sql.Query with string concat, unsafe pointer use
+4. Report findings with severity (CRITICAL/HIGH/MEDIUM/LOW), file:line, and fix recommendation.
+5. If no issues found, confirm the code is clean.
+
+Be thorough but avoid false positives. Only report real risks.`,
+  },
+  {
+    name: "context",
+    description: "Show context window usage",
+    aliases: ["ctx", "tokens"],
+    args: [],
+    template: `__builtin_context__`,
+  },
+  {
     name: "deps",
     description: "Check dependencies",
     aliases: ["dependencies"],
@@ -180,6 +266,13 @@ export const builtinSkills: SkillDefinition[] = [
     template: `Review and improve TypeScript types for: {{args}}. Add missing type annotations, fix any type errors, and ensure type safety. Use strict types, avoid 'any'.`,
   },
   {
+    name: "export",
+    description: "Export conversation to a file",
+    aliases: ["save"],
+    args: ["filename (default: kcode-export-<timestamp>.md)"],
+    template: `__builtin_export__`,
+  },
+  {
     name: "stats",
     description: "Show usage statistics",
     aliases: [],
@@ -208,5 +301,12 @@ export const builtinSkills: SkillDefinition[] = [
     description: "Compact conversation history",
     aliases: ["summarize"],
     template: `__builtin_compact__`,
+  },
+  {
+    name: "rewind",
+    description: "Undo recent file changes",
+    aliases: ["rew"],
+    args: ["number of actions to undo (default: 1)"],
+    template: `__builtin_rewind__`,
   },
 ];

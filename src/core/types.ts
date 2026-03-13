@@ -95,9 +95,11 @@ export interface KCodeConfig {
   modelExplicitlySet?: boolean; // true if user set model via -m flag
   rateLimit?: { maxPerMinute?: number; maxConcurrent?: number };
   version?: string;
+  jsonSchema?: string;
+  thinking?: boolean;
 }
 
-export type PermissionMode = "ask" | "auto" | "plan" | "deny";
+export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";
 
 // ─── Model Registry ─────────────────────────────────────────────
 // Models are configured dynamically via ~/.kcode/models.json

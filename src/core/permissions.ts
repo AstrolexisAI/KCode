@@ -276,6 +276,11 @@ const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep"]);
 /** Tools that modify the filesystem or environment */
 const WRITE_TOOLS = new Set(["Bash", "Write", "Edit"]);
 
+/** Tools auto-allowed in acceptEdits mode (everything except Bash) */
+const ACCEPT_EDITS_TOOLS = new Set([
+  "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch", "Learn", "Agent", "Tasks",
+]);
+
 // ─── Permission Manager ────────────────────────────────────────
 
 export class PermissionManager {
@@ -343,9 +348,22 @@ export class PermissionManager {
       };
     }
 
-    // For read-only tools, always allow (in ask or auto mode)
+    // For read-only tools, always allow (in ask, auto, or acceptEdits mode)
     if (READ_ONLY_TOOLS.has(tool.name)) {
       return { allowed: true };
+    }
+
+    // acceptEdits mode: auto-allow all tools except Bash, which requires prompting
+    if (this.mode === "acceptEdits") {
+      if (ACCEPT_EDITS_TOOLS.has(tool.name)) {
+        // Still enforce hard safety checks for Write/Edit
+        const safetyResult = this.analyzeToolSafety(tool);
+        if (!safetyResult.allowed && safetyResult.reason?.includes("must be absolute")) {
+          return safetyResult;
+        }
+        return { allowed: true };
+      }
+      // For Bash (and any unknown tools), fall through to ask-mode prompting below
     }
 
     // Run safety analysis for write tools

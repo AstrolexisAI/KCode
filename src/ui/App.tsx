@@ -4,7 +4,7 @@
 import React, { useState, useCallback, useRef } from "react";
 import { Box, useInput, useApp } from "ink";
 import type { ConversationManager } from "../core/conversation.js";
-import type { KCodeConfig, StreamEvent } from "../core/types.js";
+import type { KCodeConfig, StreamEvent, PermissionMode } from "../core/types.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
 import { SkillManager } from "../core/skills.js";
 import { collectStats, formatStats } from "../core/stats.js";
@@ -47,7 +47,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
       }
     }
     // Add built-in non-skill commands
-    names.push("/exit", "/quit", "/status", "/undo");
+    names.push("/exit", "/quit", "/status", "/undo", "/rewind");
     return names.sort();
   });
 
@@ -67,6 +67,9 @@ export default function App({ config, conversationManager, tools }: AppProps) {
   const [turnTokens, setTurnTokens] = useState(0);
   const [turnStartTime, setTurnStartTime] = useState(0);
   const [toolUseCount, setToolUseCount] = useState(0);
+
+  // Plan mode toggle state (Shift+Tab)
+  const [savedPermMode, setSavedPermMode] = useState<PermissionMode | null>(null);
 
   // Message queue — user can type while KCode is responding
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
@@ -114,6 +117,16 @@ export default function App({ config, conversationManager, tools }: AppProps) {
       return;
     }
 
+    // Alt+T: Toggle extended thinking
+    if (key.meta && input === "t" && mode === "input") {
+      config.thinking = !config.thinking;
+      setCompleted((prev) => [
+        ...prev,
+        { kind: "text", role: "assistant", text: `  Thinking mode: ${config.thinking ? "ON" : "OFF"}` },
+      ]);
+      return;
+    }
+
     // Ctrl+C: cancel response + clear queue if running, otherwise exit
     if (key.ctrl && input === "c") {
       if (mode === "responding") {
@@ -133,6 +146,30 @@ export default function App({ config, conversationManager, tools }: AppProps) {
         ]);
       } else {
         exit();
+      }
+      return;
+    }
+
+    // Shift+Tab: toggle plan mode
+    if (key.tab && key.shift) {
+      const perms = conversationManager.getPermissions();
+      const currentMode = perms.getMode();
+      if (currentMode === "plan") {
+        // Toggle back to previous mode
+        perms.setMode(savedPermMode ?? "ask");
+        setSavedPermMode(null);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "assistant", text: `  Mode: ${savedPermMode ?? "ask"} (exited plan mode)` },
+        ]);
+      } else {
+        // Enter plan mode
+        setSavedPermMode(currentMode);
+        perms.setMode("plan");
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "assistant", text: "  Mode: plan (read-only)" },
+        ]);
       }
       return;
     }
@@ -214,9 +251,9 @@ export default function App({ config, conversationManager, tools }: AppProps) {
             return;
           }
 
-          // Built-in action commands (stats, doctor, models, clear, compact)
+          // Built-in action commands (stats, doctor, models, clear, compact, rewind)
           if (expanded.builtinAction) {
-            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted, config.version);
+            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted, config, expanded.prompt);
             setCompleted((prev) => [
               ...prev,
               { kind: "text", role: "user", text: userInput },
@@ -553,7 +590,8 @@ async function handleBuiltinAction(
   action: string,
   conversationManager: ConversationManager,
   setCompleted: React.Dispatch<React.SetStateAction<MessageEntry[]>>,
-  version?: string,
+  appConfig: KCodeConfig,
+  args?: string,
 ): Promise<string> {
   switch (action) {
     case "stats": {
@@ -570,10 +608,10 @@ async function handleBuiltinAction(
     }
     case "models": {
       const models = await listModels();
-      const config = await loadModelsConfig();
+      const modelsConfig = await loadModelsConfig();
       if (models.length === 0) return "  No models registered. Use 'kcode models add' to register one.";
       const lines = models.map((m) => {
-        const def = m.name === config.defaultModel ? " (default)" : "";
+        const def = m.name === modelsConfig.defaultModel ? " (default)" : "";
         const ctx = m.contextSize ? `, ctx: ${m.contextSize.toLocaleString()}` : "";
         const gpu = m.gpu ? `, gpu: ${m.gpu}` : "";
         return `  ${m.name}${def} — ${m.baseUrl}${ctx}${gpu}`;
@@ -583,13 +621,92 @@ async function handleBuiltinAction(
     case "clear": {
       setCompleted([{
         kind: "banner",
-        title: `KCode v${version ?? "?"}`,
+        title: `KCode v${appConfig.version ?? "?"}`,
         subtitle: "Kulvex Code by Astrolexis",
       }]);
       return "  Conversation cleared.";
     }
     case "compact": {
-      return "  Use the LLM to compact conversation history. (Run /compact in a conversation with many messages.)";
+      const state = conversationManager.getState();
+      if (state.messages.length <= 4) return "  Nothing to compact (too few messages).";
+
+      const { CompactionManager } = await import("../core/compaction.js");
+      const compactor = new CompactionManager(appConfig.apiKey, appConfig.model, appConfig.apiBase);
+
+      const keepLast = 4;
+      const toPrune = state.messages.slice(0, -keepLast);
+      const kept = state.messages.slice(-keepLast);
+
+      const summary = await compactor.compact(toPrune);
+      if (summary) {
+        conversationManager.restoreMessages([summary, ...kept]);
+        return `  Compacted ${toPrune.length} messages into summary. ${kept.length} recent messages preserved.`;
+      }
+      return "  Compaction failed -- conversation unchanged.";
+    }
+    case "context": {
+      const state = conversationManager.getState();
+      const usage = conversationManager.getUsage();
+      const contextSize = appConfig.contextWindowSize ?? 200000;
+      const usedTokens = usage.inputTokens + usage.outputTokens;
+      const pct = Math.min(100, Math.round((usedTokens / contextSize) * 100));
+
+      // Build a visual bar
+      const barLen = 40;
+      const filled = Math.round(barLen * pct / 100);
+      const bar = "\u2588".repeat(filled) + "\u2591".repeat(barLen - filled);
+
+      const lines = [
+        `  Context: [${bar}] ${pct}%`,
+        `  Tokens:  ${usedTokens.toLocaleString()} / ${contextSize.toLocaleString()}`,
+        `  Input:   ${usage.inputTokens.toLocaleString()}`,
+        `  Output:  ${usage.outputTokens.toLocaleString()}`,
+        `  Messages: ${state.messages.length}`,
+        `  Tools:   ${state.toolUseCount} calls`,
+      ];
+      return lines.join("\n");
+    }
+    case "rewind": {
+      const undo = conversationManager.getUndo();
+      const count = parseInt(args || "") || 1;
+      const results: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const result = undo.undo();
+        if (result) {
+          results.push(result);
+        } else {
+          break;
+        }
+      }
+      if (results.length === 0) return "  Nothing to rewind.";
+      return results.join("\n");
+    }
+    case "export": {
+      const state = conversationManager.getState();
+      const filename = args?.trim() || `kcode-export-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, "-")}.md`;
+
+      const lines: string[] = [`# KCode Conversation Export\n`, `Date: ${new Date().toISOString()}\n`];
+
+      for (const msg of state.messages) {
+        if (typeof msg.content === "string") {
+          lines.push(`## ${msg.role === "user" ? "User" : "Assistant"}\n`, msg.content, "");
+        } else {
+          for (const block of msg.content) {
+            if (block.type === "text") {
+              lines.push(`## ${msg.role === "user" ? "User" : "Assistant"}\n`, block.text, "");
+            } else if (block.type === "tool_use") {
+              lines.push(`### Tool: ${block.name}\n`, "```json", JSON.stringify(block.input, null, 2), "```", "");
+            } else if (block.type === "tool_result") {
+              const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+              lines.push(`### Result${block.is_error ? " (Error)" : ""}\n`, "```", content.slice(0, 1000), "```", "");
+            }
+          }
+        }
+      }
+
+      const { writeFileSync } = await import("node:fs");
+      writeFileSync(filename, lines.join("\n"), "utf-8");
+      return `  Exported ${state.messages.length} messages to ${filename}`;
     }
     default:
       return `  Unknown built-in action: ${action}`;

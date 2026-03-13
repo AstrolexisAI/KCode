@@ -10,6 +10,7 @@ import { loadLearnings } from "../tools/learn";
 import { getUserModel } from "./user-model";
 import { getWorldModel } from "./world-model";
 import { getNarrativeManager } from "./narrative";
+import { getRulesManager } from "./rules";
 
 // ─── System Prompt Builder ──────────────────────────────────────
 
@@ -26,6 +27,9 @@ export class SystemPromptBuilder {
     sections.push(this.buildCodeGuidelines());
     sections.push(this.buildGitInstructions());
     sections.push(this.buildToneAndOutput());
+    if (config.thinking) {
+      sections.push("## Extended Thinking\nYou have extended thinking enabled. Use <thinking> blocks to reason through complex problems step by step before responding. Show your work.");
+    }
     sections.push(this.buildEnvironment(config));
     sections.push(this.buildSituationalAwareness(config));
     sections.push(this.buildMetacognition(config));
@@ -90,6 +94,12 @@ export class SystemPromptBuilder {
     try {
       const narrative = getNarrativeManager().loadNarrative(3);
       if (narrative) sections.push(narrative);
+    } catch { /* ignore */ }
+
+    // Path-specific rules
+    try {
+      const rulesPrompt = getRulesManager().formatForPrompt();
+      if (rulesPrompt) sections.push(rulesPrompt);
     } catch { /* ignore */ }
 
     return sections.filter(Boolean).join("\n\n");
