@@ -309,4 +309,11 @@ Be thorough but avoid false positives. Only report real risks.`,
     args: ["number of actions to undo (default: 1)"],
     template: `__builtin_rewind__`,
   },
+  {
+    name: "plugins",
+    description: "List installed plugins",
+    aliases: ["plugin"],
+    args: [],
+    template: `__builtin_plugins__`,
+  },
 ];

@@ -809,13 +809,34 @@ export class ConversationManager {
           input: effectiveInput,
         };
 
-        const result = await this.tools.execute(call.name, effectiveInput);
+        let result = await this.tools.execute(call.name, effectiveInput);
 
         // Layer 6: Compare prediction with actual result
         try { if (prediction) getWorldModel().compare(prediction, result.content, result.is_error); } catch { /* ignore */ }
 
         // Layer 9: Record action for post-task evaluation
         try { getIntentionEngine().recordAction(call.name, effectiveInput, result.content, result.is_error); } catch { /* ignore */ }
+
+        // LSP: notify file change and append diagnostics to result
+        if (!result.is_error && (call.name === "Write" || call.name === "Edit")) {
+          try {
+            const { getLspManager } = await import("./lsp.js");
+            const lsp = getLspManager();
+            if (lsp?.isActive()) {
+              const filePath = String(effectiveInput.file_path ?? "");
+              if (filePath) {
+                const { readFileSync } = await import("node:fs");
+                const content = readFileSync(filePath, "utf-8");
+                lsp.notifyFileChanged(filePath, content);
+                await new Promise(r => setTimeout(r, 500));
+                const diagMsg = lsp.formatDiagnosticsForFile(filePath);
+                if (diagMsg) {
+                  result = { ...result, content: result.content + "\n\n" + diagMsg };
+                }
+              }
+            }
+          } catch { /* LSP not available, ignore */ }
+        }
 
         // Record undo action if snapshot was captured and tool succeeded
         if (undoSnapshot && !result.is_error) {

@@ -681,6 +681,10 @@ async function handleBuiltinAction(
       if (results.length === 0) return "  Nothing to rewind.";
       return results.join("\n");
     }
+    case "plugins": {
+      const { getPluginManager } = await import("../core/plugins.js");
+      return getPluginManager().formatList();
+    }
     case "export": {
       const state = conversationManager.getState();
       const filename = args?.trim() || `kcode-export-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, "-")}.md`;
