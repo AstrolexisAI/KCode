@@ -253,4 +253,4 @@ Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+S
 
 ## License
 
-MIT — Astrolexis 2026
+Proprietary — Copyright (c) 2026 Astrolexis. All rights reserved.
