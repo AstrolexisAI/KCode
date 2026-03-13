@@ -38,7 +38,7 @@ const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
 const MAX_AGENT_TURNS = 50; // prevent infinite loops
-const MAX_CONSECUTIVE_DENIALS = 3; // stop after N permission denials in a row
+const MAX_CONSECUTIVE_DENIALS = 2; // stop after N permission denials in a row
 
 // ─── Retry Logic ─────────────────────────────────────────────────
 
@@ -901,11 +901,27 @@ export class ConversationManager {
       // Track consecutive permission denials to prevent infinite loops
       if (turnHadDenial) {
         consecutiveDenials++;
-        if (consecutiveDenials >= MAX_CONSECUTIVE_DENIALS) {
+
+        // In deny mode, ALL tools will be denied — stop immediately after first attempt
+        if (this.config.permissionMode === "deny") {
+          log.info("session", "Deny mode: stopping agent loop after first denial");
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] Permission mode is 'deny'. All tools are blocked. Do NOT attempt any tool calls. Reply with text only, explaining that you cannot perform this action because all tools are blocked. Suggest using -p auto or -p ask.",
+          });
+          // Allow one more turn for the text response, then hard stop
+          consecutiveDenials = MAX_CONSECUTIVE_DENIALS - 1;
+        } else if (consecutiveDenials >= MAX_CONSECUTIVE_DENIALS) {
           log.warn("session", `${MAX_CONSECUTIVE_DENIALS} consecutive permission denials, stopping agent loop`);
           yield { type: "turn_end", stopReason: "permission_denied" };
           this.abortController = null;
           return;
+        } else {
+          // Non-deny modes: inject guidance after first denial
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] Tool call was denied by the permission system. Do NOT retry the same tool. Reply with a text message explaining what happened.",
+          });
         }
       } else {
         consecutiveDenials = 0;
