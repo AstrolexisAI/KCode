@@ -26,6 +26,8 @@ import { getNarrativeManager } from "./core/narrative";
 import { closeDb } from "./core/db";
 import { shutdownMcpManager } from "./core/mcp";
 import { getRulesManager } from "./core/rules";
+import { getPluginManager } from "./core/plugins";
+import { getLspManager, shutdownLsp } from "./core/lsp";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
@@ -43,6 +45,7 @@ process.on("unhandledRejection", (reason) => {
 
 // Graceful cleanup on signals
 function cleanupAndExit() {
+  shutdownLsp();
   shutdownMcpManager();
   closeDb();
   log.shutdown();
@@ -234,6 +237,13 @@ async function runMain(
   // Load path-specific rules
   getRulesManager().load(cwd);
 
+  // Load plugins
+  getPluginManager().load(cwd);
+
+  // Auto-start LSP language servers (non-blocking)
+  const lsp = getLspManager(cwd);
+  if (lsp) lsp.autoStart().catch(() => {});
+
   // Apply CLI overrides
   if (opts.model) {
     config.model = opts.model;
@@ -339,6 +349,7 @@ async function runMain(
   } catch { /* ignore */ }
 
   log.info("session", "Session ended");
+  shutdownLsp();
   shutdownMcpManager();
   closeDb();
   log.shutdown();

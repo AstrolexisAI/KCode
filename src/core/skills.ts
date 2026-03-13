@@ -3,9 +3,10 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { builtinSkills, type SkillDefinition } from "./builtin-skills.js";
 import { TemplateManager } from "./templates.js";
+import { getPluginManager } from "./plugins.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -153,6 +154,15 @@ export class SkillManager {
     const userDir = join(homedir(), ".kcode", "skills");
     for (const skill of loadSkillsFromDirectory(userDir)) {
       byName.set(skill.name, skill);
+    }
+
+    // Plugin skills (between user and project priority)
+    for (const filePath of getPluginManager().getSkillPaths()) {
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        const skill = parseSkillFile(content);
+        if (skill) byName.set(skill.name, skill);
+      } catch { /* skip unreadable plugin skill files */ }
     }
 
     // Project-level skills (.kcode/skills/) - highest priority

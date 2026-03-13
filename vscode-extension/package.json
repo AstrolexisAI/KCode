@@ -1,0 +1,128 @@
+{
+  "name": "kcode",
+  "displayName": "KCode - AI Coding Assistant",
+  "description": "Local AI coding assistant powered by KCode and your own GPU",
+  "version": "0.1.0",
+  "publisher": "astrolexis",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kcode",
+          "title": "KCode",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "kcode": [
+        {
+          "type": "webview",
+          "id": "kcode.chat",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "kcode.sendPrompt",
+        "title": "KCode: Send Prompt"
+      },
+      {
+        "command": "kcode.newSession",
+        "title": "KCode: New Session"
+      },
+      {
+        "command": "kcode.explainSelection",
+        "title": "KCode: Explain Selection"
+      },
+      {
+        "command": "kcode.fixSelection",
+        "title": "KCode: Fix Selection"
+      },
+      {
+        "command": "kcode.testSelection",
+        "title": "KCode: Generate Tests"
+      },
+      {
+        "command": "kcode.openTerminal",
+        "title": "KCode: Open in Terminal"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "kcode.explainSelection",
+          "when": "editorHasSelection",
+          "group": "kcode@1"
+        },
+        {
+          "command": "kcode.fixSelection",
+          "when": "editorHasSelection",
+          "group": "kcode@2"
+        },
+        {
+          "command": "kcode.testSelection",
+          "when": "editorHasSelection",
+          "group": "kcode@3"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "kcode.sendPrompt",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k"
+      }
+    ],
+    "configuration": {
+      "title": "KCode",
+      "properties": {
+        "kcode.binaryPath": {
+          "type": "string",
+          "default": "kcode",
+          "description": "Path to the KCode binary"
+        },
+        "kcode.model": {
+          "type": "string",
+          "default": "",
+          "description": "Override the default model"
+        },
+        "kcode.permissionMode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "auto",
+            "plan",
+            "deny",
+            "acceptEdits"
+          ],
+          "default": "acceptEdits",
+          "description": "Permission mode for tool execution"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}
