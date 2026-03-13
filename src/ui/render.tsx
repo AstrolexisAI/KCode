@@ -4,6 +4,7 @@
 import React from "react";
 import { render } from "ink";
 import App from "./App.js";
+import { ThemeProvider } from "./ThemeContext.js";
 import type { ConversationManager } from "../core/conversation.js";
 import type { KCodeConfig } from "../core/types.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
@@ -16,7 +17,9 @@ interface StartUIOptions {
 
 export function startUI({ config, conversationManager, tools }: StartUIOptions) {
   const instance = render(
-    <App config={config} conversationManager={conversationManager} tools={tools} />,
+    <ThemeProvider>
+      <App config={config} conversationManager={conversationManager} tools={tools} />
+    </ThemeProvider>,
     {
       exitOnCtrlC: true,
     },

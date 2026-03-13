@@ -316,4 +316,11 @@ Be thorough but avoid false positives. Only report real risks.`,
     args: [],
     template: `__builtin_plugins__`,
   },
+  {
+    name: "theme",
+    description: "List or switch color themes",
+    aliases: ["skin"],
+    args: ["theme name (optional)"],
+    template: `__builtin_theme__`,
+  },
 ];

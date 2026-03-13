@@ -97,6 +97,7 @@ export interface KCodeConfig {
   version?: string;
   jsonSchema?: string;
   thinking?: boolean;
+  theme?: string;
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";

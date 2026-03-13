@@ -3,6 +3,7 @@
 
 import React from "react";
 import { Box, Text, useInput } from "ink";
+import { useTheme } from "../ThemeContext.js";
 
 export interface PermissionRequest {
   toolName: string;
@@ -22,6 +23,8 @@ export default function PermissionDialog({
   onChoice,
   isActive,
 }: PermissionDialogProps) {
+  const { theme } = useTheme();
+
   useInput(
     (input, _key) => {
       if (!isActive) return;
@@ -45,16 +48,16 @@ export default function PermissionDialog({
     <Box
       flexDirection="column"
       borderStyle="round"
-      borderColor="yellow"
+      borderColor={theme.warning}
       paddingX={1}
       marginY={1}
     >
-      <Text bold color="yellow">
+      <Text bold color={theme.warning}>
         {"⚠  Permission Required"}
       </Text>
       <Box marginTop={1}>
         <Text>
-          Tool: <Text bold color="cyan">{request.toolName}</Text>
+          Tool: <Text bold color={theme.primary}>{request.toolName}</Text>
         </Text>
       </Box>
       <Box>
@@ -64,15 +67,15 @@ export default function PermissionDialog({
       </Box>
       <Box marginTop={1} gap={2}>
         <Text>
-          <Text bold color="green">[y]</Text>
+          <Text bold color={theme.success}>[y]</Text>
           <Text> Allow</Text>
         </Text>
         <Text>
-          <Text bold color="blue">[a]</Text>
+          <Text bold color={theme.primary}>[a]</Text>
           <Text> Always</Text>
         </Text>
         <Text>
-          <Text bold color="red">[n]</Text>
+          <Text bold color={theme.error}>[n]</Text>
           <Text> Deny</Text>
         </Text>
       </Box>

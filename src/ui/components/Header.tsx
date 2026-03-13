@@ -3,6 +3,7 @@
 
 import React from "react";
 import { Box, Text } from "ink";
+import { useTheme } from "../ThemeContext.js";
 
 interface HeaderProps {
   model: string;
@@ -12,6 +13,8 @@ interface HeaderProps {
 }
 
 export default function Header({ model, workingDirectory, tokenCount, toolUseCount }: HeaderProps) {
+  const { theme } = useTheme();
+
   // Shorten the CWD for display
   const home = process.env.HOME ?? "";
   const shortCwd = home && workingDirectory.startsWith(home)
@@ -20,16 +23,16 @@ export default function Header({ model, workingDirectory, tokenCount, toolUseCou
 
   return (
     <Box gap={1} paddingX={1}>
-      <Text bold color="cyan">KCode</Text>
-      <Text dimColor>|</Text>
-      <Text color="green">{model}</Text>
-      <Text dimColor>|</Text>
-      <Text dimColor>{shortCwd}</Text>
+      <Text bold color={theme.primary}>KCode</Text>
+      <Text color={theme.dimmed}>|</Text>
+      <Text color={theme.success}>{model}</Text>
+      <Text color={theme.dimmed}>|</Text>
+      <Text color={theme.dimmed}>{shortCwd}</Text>
       {(tokenCount > 0 || toolUseCount > 0) && (
         <>
-          <Text dimColor>|</Text>
-          <Text dimColor>tok:{tokenCount.toLocaleString()}</Text>
-          <Text dimColor>tools:{toolUseCount}</Text>
+          <Text color={theme.dimmed}>|</Text>
+          <Text color={theme.dimmed}>tok:{tokenCount.toLocaleString()}</Text>
+          <Text color={theme.dimmed}>tools:{toolUseCount}</Text>
         </>
       )}
     </Box>

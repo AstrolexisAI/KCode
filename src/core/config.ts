@@ -22,6 +22,7 @@ export interface Settings {
   apiBase?: string;
   systemPromptExtra?: string;
   autoRoute?: boolean;
+  theme?: string;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────
@@ -77,6 +78,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
     systemPromptExtra: typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
     autoRoute: typeof raw.autoRoute === "boolean" ? raw.autoRoute : undefined,
+    theme: typeof raw.theme === "string" ? raw.theme : undefined,
   };
 }
 
@@ -100,6 +102,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.apiBase !== undefined) result.apiBase = layer.apiBase;
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
     if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
+    if (layer.theme !== undefined) result.theme = layer.theme;
   }
   return result;
 }
@@ -118,6 +121,9 @@ function envSettings(): Settings {
   }
   if (process.env.KCODE_PERMISSION_MODE && isPermissionMode(process.env.KCODE_PERMISSION_MODE)) {
     settings.permissionMode = process.env.KCODE_PERMISSION_MODE;
+  }
+  if (process.env.KCODE_THEME) {
+    settings.theme = process.env.KCODE_THEME;
   }
   return settings;
 }
@@ -172,6 +178,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     permissionMode: settings.permissionMode ?? "ask",
     contextWindowSize: contextSize,
     autoRoute: settings.autoRoute ?? true, // enabled by default
+    theme: settings.theme,
   };
 }
 

@@ -18,6 +18,7 @@ import {
   removeModel,
   setDefaultModel,
 } from "./core/models";
+import { setTheme } from "./core/theme";
 import { log } from "./core/logger";
 import { TranscriptManager } from "./core/transcript";
 import { collectStats, formatStats } from "./core/stats";
@@ -73,6 +74,7 @@ program
   .option("--json-schema <schema>", "Validate output against JSON schema (inline JSON or file path)")
   .option("--thinking", "Enable extended thinking mode")
   .option("--worktree <name>", "Create and work in an isolated git worktree")
+  .option("--theme <name>", "Set color theme (e.g. dracula, monokai, nord)")
   .option("--fork", "Fork the last session (new session with previous history)")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
@@ -227,7 +229,7 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string },
 ) {
   const cwd = process.cwd();
   const config = await buildConfig(cwd);
@@ -257,6 +259,12 @@ async function runMain(
   }
   if (opts.thinking) {
     config.thinking = true;
+  }
+
+  // Apply theme from CLI flag, env var, or config
+  const themeName = opts.theme ?? process.env.KCODE_THEME ?? config.theme;
+  if (themeName) {
+    setTheme(themeName);
   }
 
   // Create git worktree if --worktree flag is set

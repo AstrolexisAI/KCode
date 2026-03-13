@@ -10,6 +10,8 @@ import { SkillManager } from "../core/skills.js";
 import { collectStats, formatStats } from "../core/stats.js";
 import { runDiagnostics } from "../core/doctor.js";
 import { listModels, loadModelsConfig } from "../core/models.js";
+import { getAvailableThemes, getCurrentThemeName } from "../core/theme.js";
+import { useTheme } from "./ThemeContext.js";
 
 import Header from "./components/Header.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
@@ -29,6 +31,7 @@ type AppMode = "input" | "responding" | "permission";
 
 export default function App({ config, conversationManager, tools }: AppProps) {
   const { exit } = useApp();
+  const { switchTheme } = useTheme();
 
   // Skills manager - created once per component instance
   const [skillManager] = useState(() => {
@@ -253,7 +256,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
 
           // Built-in action commands (stats, doctor, models, clear, compact, rewind)
           if (expanded.builtinAction) {
-            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted, config, expanded.prompt);
+            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted, config, expanded.prompt, switchTheme);
             setCompleted((prev) => [
               ...prev,
               { kind: "text", role: "user", text: userInput },
@@ -592,6 +595,7 @@ async function handleBuiltinAction(
   setCompleted: React.Dispatch<React.SetStateAction<MessageEntry[]>>,
   appConfig: KCodeConfig,
   args?: string,
+  switchTheme?: (name: string) => void,
 ): Promise<string> {
   switch (action) {
     case "stats": {
@@ -711,6 +715,30 @@ async function handleBuiltinAction(
       const { writeFileSync } = await import("node:fs");
       writeFileSync(filename, lines.join("\n"), "utf-8");
       return `  Exported ${state.messages.length} messages to ${filename}`;
+    }
+    case "theme": {
+      const available = getAvailableThemes();
+      const current = getCurrentThemeName();
+      const themeName = args?.trim();
+
+      if (!themeName) {
+        // List all themes with the current one marked
+        const lines = ["  Available themes:"];
+        for (const name of available) {
+          const marker = name === current ? " (active)" : "";
+          lines.push(`  ${name}${marker}`);
+        }
+        lines.push("");
+        lines.push("  Usage: /theme <name>");
+        return lines.join("\n");
+      }
+
+      if (available.includes(themeName)) {
+        if (switchTheme) switchTheme(themeName);
+        return `  Theme switched to: ${themeName}`;
+      }
+
+      return `  Unknown theme "${themeName}". Available: ${available.join(", ")}`;
     }
     default:
       return `  Unknown built-in action: ${action}`;
