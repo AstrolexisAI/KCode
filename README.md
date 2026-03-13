@@ -2,14 +2,18 @@
 
 > AI-powered coding assistant for the terminal. Runs 100% local on your GPU.
 
-KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM, or any OpenAI-compatible API) to read, write, search, and refactor code directly on your machine. Your code never leaves your hardware. Built with Bun and TypeScript, it features a rich Ink-based TUI, 18 built-in tools, 31 slash commands, a 10-layer cognitive architecture, and SQLite-backed long-term memory.
+KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM, or any OpenAI-compatible API) to read, write, search, and refactor code directly on your machine. Your code never leaves your hardware. Built with Bun and TypeScript, it features a rich Ink-based TUI, 18 built-in tools, 32 slash commands, a 10-layer cognitive architecture, SQLite-backed long-term memory, 11 color themes, a plugin system, and LSP integration.
 
 ## Features
 
 - **18 built-in tools**: Bash, Read, Write, Edit, Glob, Grep, Agent, WebFetch, WebSearch, NotebookEdit, Tasks (create/list/get/update/stop), Learn, and MCP resource tools
-- **31 slash commands**: /commit, /review-pr, /simplify, /diff, /test, /build, /lint, /branch, /log, /stash, /explain, /find-bug, /security, /security-review, /batch, /loop, /template, /deps, /todo, /test-for, /doc, /type, /export, /stats, /doctor, /models, /context, /compact, /rewind, /clear, /help
+- **32 slash commands**: /commit, /review-pr, /simplify, /diff, /test, /build, /lint, /branch, /log, /stash, /explain, /find-bug, /security, /security-review, /batch, /loop, /template, /deps, /todo, /test-for, /doc, /type, /export, /stats, /doctor, /models, /context, /compact, /rewind, /clear, /theme, /help
+- **11 color themes**: default, dark, light, cyberpunk, monokai, solarized, dracula, gruvbox, nord, catppuccin, matrix
 - **5 permission modes**: ask, auto, plan, deny, acceptEdits
 - **10-layer cognitive architecture**: identity, tools, code guidelines, git awareness, environment sensing, situational awareness, metacognition, user model, world model, session narrative
+- **Plugin system**: Directory-based plugins with skills, hooks, and MCP server bundles
+- **LSP integration**: Auto-detects language servers (TypeScript, Pyright, gopls, rust-analyzer) for real-time diagnostics
+- **VS Code extension**: Sidebar chat, context menu commands, terminal integration
 - **Local LLM support**: Works with llama.cpp, Ollama, vLLM, or any OpenAI-compatible API
 - **Multi-GPU**: Distribute inference across multiple GPUs (e.g., RTX 5090 + 4090) via llama.cpp RPC
 - **MCP support**: Connect to external tools via Model Context Protocol
@@ -50,6 +54,7 @@ kcode -c                       # Continue last session
 kcode --fork                   # Fork last session into a new one
 kcode --worktree feature-x     # Work in an isolated git worktree
 kcode --thinking               # Enable extended thinking mode
+kcode --theme dracula          # Use a color theme
 ```
 
 ### Print mode (for piping)
@@ -79,6 +84,8 @@ kcode --print --json-schema '{"type":"object","properties":{"bugs":{"type":"arra
 /rewind              # Undo recent file changes
 /stats               # Usage statistics
 /doctor              # System health check
+/theme dracula       # Switch color theme
+/plugins             # List installed plugins
 /help                # Show all commands
 ```
 
@@ -95,8 +102,8 @@ kcode models rm oldmodel
 
 Settings are loaded in this order (highest priority first):
 
-1. CLI flags (`-m`, `-p`, `--thinking`, etc.)
-2. Environment variables (`KCODE_MODEL`, `KCODE_API_KEY`, `KCODE_API_BASE`, `KCODE_EFFORT_LEVEL`, `KCODE_MAX_TOKENS`, `KCODE_PERMISSION_MODE`)
+1. CLI flags (`-m`, `-p`, `--thinking`, `--theme`, etc.)
+2. Environment variables (`KCODE_MODEL`, `KCODE_API_KEY`, `KCODE_API_BASE`, `KCODE_EFFORT_LEVEL`, `KCODE_MAX_TOKENS`, `KCODE_PERMISSION_MODE`, `KCODE_THEME`)
 3. `.kcode/settings.local.json` (gitignored, per-machine overrides)
 4. `.kcode/settings.json` (project-level, committed)
 5. `~/.kcode/settings.json` (user-level defaults)
@@ -110,7 +117,8 @@ Settings are loaded in this order (highest priority first):
   "permissionMode": "ask",
   "autoMemory": true,
   "effortLevel": "high",
-  "autoRoute": true
+  "autoRoute": true,
+  "theme": "dracula"
 }
 ```
 
@@ -132,6 +140,43 @@ paths:
 All API routes must validate input with zod schemas.
 Always return proper HTTP status codes.
 ```
+
+### Themes
+
+KCode ships with 11 color themes. Switch with `/theme`, `--theme`, or `KCODE_THEME`:
+
+| Theme | Style |
+|-------|-------|
+| `default` | Tokyonight-inspired (blue/purple) |
+| `dark` | Blue/cyan dominant |
+| `light` | Muted colors for light terminals |
+| `cyberpunk` | Neon pink/cyan/yellow |
+| `monokai` | Classic Monokai |
+| `solarized` | Solarized Dark |
+| `dracula` | Dracula |
+| `gruvbox` | Gruvbox Dark |
+| `nord` | Nord |
+| `catppuccin` | Catppuccin Mocha |
+| `matrix` | All green hacker vibes |
+
+Custom themes: create `~/.kcode/theme.json` with your own hex colors.
+
+### Plugins
+
+Plugins live in `~/.kcode/plugins/` (global) or `.kcode/plugins/` (project-level). Each plugin is a directory with a `plugin.json` manifest:
+
+```json
+{
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "description": "My custom plugin",
+  "skills": ["skills/my-command.md"],
+  "hooks": { "PostToolUse": { "command": "notify-send", "args": ["KCode done"] } },
+  "mcpServers": { "my-server": { "command": "my-mcp-server", "args": ["--stdio"] } }
+}
+```
+
+Use `/plugins` to list installed plugins.
 
 ### Extensible awareness
 
@@ -182,13 +227,15 @@ src/
 | Escape | Cancel response |
 | Ctrl+C | Cancel or exit |
 | Tab | Autocomplete commands/paths |
+| Alt+T | Toggle extended thinking |
+| Shift+Tab | Toggle plan mode |
 
 ## Development
 
 ```bash
 bun run dev          # Watch mode
-bun test             # Run tests (13 test files)
-bun run build        # Build standalone binary
+bun test             # Run tests (16 test files, 294 tests)
+bun run build        # Build standalone binary (~101 MB)
 bun run build:dev    # Build without minification
 kcode doctor         # Check system health
 kcode stats          # Usage statistics
@@ -196,7 +243,13 @@ kcode stats          # Usage statistics
 
 ## VS Code Extension
 
-See [vscode-extension/](./vscode-extension/) for the VS Code integration.
+Install the extension:
+
+```bash
+code --install-extension vscode-extension/kcode-0.1.0.vsix
+```
+
+Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+Shift+K` keybinding, terminal integration. See [vscode-extension/](./vscode-extension/) for details.
 
 ## License
 
