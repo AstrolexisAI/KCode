@@ -54,6 +54,22 @@ export default function App({ config, conversationManager, tools }: AppProps) {
     return names.sort();
   });
 
+  const [commandDescriptions] = useState(() => {
+    const descs: Record<string, string> = {};
+    for (const skill of skillManager.listSkills()) {
+      descs["/" + skill.name] = skill.description;
+      for (const alias of skill.aliases) {
+        descs["/" + alias] = skill.description;
+      }
+    }
+    descs["/exit"] = "Exit KCode";
+    descs["/quit"] = "Exit KCode";
+    descs["/status"] = "Show session status";
+    descs["/undo"] = "Undo last file change";
+    descs["/rewind"] = "Undo recent file changes";
+    return descs;
+  });
+
   const [mode, setMode] = useState<AppMode>("input");
   const [completed, setCompleted] = useState<MessageEntry[]>([
     {
@@ -561,6 +577,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
         model={config.model}
         cwd={config.workingDirectory}
         completions={slashCompletions}
+        commandDescriptions={commandDescriptions}
       />
     </Box>
   );

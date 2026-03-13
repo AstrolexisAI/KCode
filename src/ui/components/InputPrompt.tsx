@@ -7,6 +7,11 @@ import { readdirSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 import { useTheme } from "../ThemeContext.js";
 
+interface CommandInfo {
+  name: string;
+  description: string;
+}
+
 interface InputPromptProps {
   /** Called when the user submits input (Enter key) */
   onSubmit: (value: string) => void;
@@ -22,6 +27,8 @@ interface InputPromptProps {
   cwd?: string;
   /** List of completable strings (slash commands, etc.) */
   completions?: string[];
+  /** Map of command name to description for preview dropdown */
+  commandDescriptions?: Record<string, string>;
 }
 
 /**
@@ -73,7 +80,7 @@ function commonPrefix(strings: string[]): string {
   return prefix;
 }
 
-export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [] }: InputPromptProps) {
+export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [], commandDescriptions = {} }: InputPromptProps) {
   const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -84,6 +91,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   const [tabMatches, setTabMatches] = useState<string[]>([]);
   const [tabIndex, setTabIndex] = useState(0);
   const [tabOriginal, setTabOriginal] = useState("");
+
+  // Command preview dropdown state
+  const [dropdownIndex, setDropdownIndex] = useState(0);
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
@@ -198,11 +208,35 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       if (!isActive) return;
 
       if (key.return) {
+        // If dropdown is visible and an item is selected, fill it and submit
+        if (dropdownItems.length > 0 && value.length > 1) {
+          const selected = dropdownItems[dropdownIndex];
+          if (selected) {
+            const completed = selected.name + " ";
+            setValue(completed);
+            setCursor(completed.length);
+            setDropdownIndex(0);
+            // Don't submit yet — let user add args
+            return;
+          }
+        }
         submit();
         return;
       }
 
       if (key.tab) {
+        // If dropdown is visible, fill the selected item
+        if (dropdownItems.length > 0) {
+          const selected = dropdownItems[dropdownIndex];
+          if (selected) {
+            const completed = selected.name + " ";
+            setValue(completed);
+            setCursor(completed.length);
+            setDropdownIndex(0);
+            resetTabState();
+            return;
+          }
+        }
         handleTab();
         return;
       }
@@ -220,7 +254,18 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         return;
       }
 
-      // History navigation
+      // Dropdown navigation when command preview is visible
+      if (key.upArrow && dropdownItems.length > 0) {
+        setDropdownIndex((prev) => Math.max(0, prev - 1));
+        return;
+      }
+
+      if (key.downArrow && dropdownItems.length > 0) {
+        setDropdownIndex((prev) => Math.min(dropdownItems.length - 1, prev + 1));
+        return;
+      }
+
+      // History navigation (when dropdown is not visible)
       if (key.upArrow) {
         if (history.length > 0 && historyIndex < history.length - 1) {
           const newIndex = historyIndex + 1;
@@ -262,10 +307,22 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       if (input && !key.ctrl && !key.meta) {
         setValue((prev) => prev.slice(0, cursor) + input + prev.slice(cursor));
         setCursor((prev) => prev + input.length);
+        setDropdownIndex(0); // Reset dropdown selection on typing
       }
     },
     { isActive },
   );
+
+  // Compute command dropdown matches
+  const showDropdown = value.startsWith("/") && !value.includes(" ") && value.length >= 1;
+  const dropdownItems: CommandInfo[] = showDropdown
+    ? completions
+        .filter((c) => c.toLowerCase().startsWith(value.toLowerCase()))
+        .sort()
+        .map((c) => ({ name: c, description: commandDescriptions[c] ?? "" }))
+    : [];
+  const maxDropdown = 12;
+  const visibleItems = dropdownItems.slice(0, maxDropdown);
 
   if (!isActive) {
     return null;
@@ -308,6 +365,29 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
           {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
         </Text>
       </Box>
+      {visibleItems.length > 0 && (
+        <Box flexDirection="column" marginLeft={2} marginTop={0}>
+          {visibleItems.map((item, i) => {
+            const isSelected = i === dropdownIndex;
+            return (
+              <Box key={item.name} gap={1}>
+                <Text color={isSelected ? theme.primary : theme.dimmed}>
+                  {isSelected ? "❯" : " "}
+                </Text>
+                <Text bold={isSelected} color={isSelected ? theme.primary : theme.secondary}>
+                  {item.name}
+                </Text>
+                {item.description && (
+                  <Text color={theme.dimmed}>{item.description}</Text>
+                )}
+              </Box>
+            );
+          })}
+          {dropdownItems.length > maxDropdown && (
+            <Text color={theme.dimmed}>  … {dropdownItems.length - maxDropdown} more</Text>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }
