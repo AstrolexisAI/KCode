@@ -14,8 +14,6 @@
     "dev": "bun --watch run src/index.ts",
     "build": "bun run build.ts",
     "build:dev": "bun run build.ts --dev",
-    "build:strip": "bun run build.ts --strip",
-    "build:small": "bun run build.ts --compress",
     "test": "bun test",
     "version:patch": "bun run --bun npm version patch",
     "version:minor": "bun run --bun npm version minor",
