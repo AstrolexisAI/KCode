@@ -473,6 +473,8 @@ export class ConversationManager {
     this.abortController = new AbortController();
     let turnCount = 0;
     let consecutiveDenials = 0;
+    let inlineWarningCount = 0;
+    const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
 
     while (true) {
       turnCount++;
@@ -744,6 +746,17 @@ export class ConversationManager {
           continue;
         }
 
+        // Cross-turn dedup: block identical tool calls repeated 4+ times across turns
+        const crossCount = crossTurnSigs.get(sig) ?? 0;
+        crossTurnSigs.set(sig, crossCount + 1);
+        if (crossCount >= 3) {
+          const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times across multiple turns. This is a loop. STOP and try a completely different approach or use Bash to read the file instead.`;
+          log.warn("tool", `Cross-turn dedup blocked: ${sig.slice(0, 80)} (attempt ${crossCount + 1})`);
+          yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
+          toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: skipMsg, is_error: true });
+          continue;
+        }
+
         // 1. Check permissions before executing
         const permResult = await this.permissions.checkPermission(call);
         if (!permResult.allowed) {
@@ -890,11 +903,24 @@ export class ConversationManager {
       try {
         const inlineWarning = getIntentionEngine().getInlineWarning();
         if (inlineWarning) {
-          log.warn("intentions", `Inline warning: ${inlineWarning.slice(0, 100)}`);
-          this.state.messages.push({
-            role: "user",
-            content: `⚠️ SYSTEM WARNING: ${inlineWarning}`,
-          });
+          inlineWarningCount++;
+          log.warn("intentions", `Inline warning #${inlineWarningCount}: ${inlineWarning.slice(0, 100)}`);
+
+          if (inlineWarningCount >= 2) {
+            // Hard stop — model is ignoring warnings and looping
+            log.warn("intentions", "Infinite loop detected: forcing agent loop stop after 2 inline warnings");
+            this.state.messages.push({
+              role: "user",
+              content: `[SYSTEM] FORCE STOP: You have been warned ${inlineWarningCount} times about repeating the same actions. The agent loop is being terminated. Reply with text only — summarize what you accomplished and what you could not complete.`,
+            });
+            // Allow one more turn for text response, then stop
+            consecutiveDenials = MAX_CONSECUTIVE_DENIALS - 1;
+          } else {
+            this.state.messages.push({
+              role: "user",
+              content: `⚠️ SYSTEM WARNING: ${inlineWarning}`,
+            });
+          }
         }
       } catch { /* ignore */ }
 
