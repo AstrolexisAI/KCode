@@ -37,7 +37,7 @@ const CONTEXT_WINDOW_MARGIN = 0.2; // prune when we reach 80% of context window
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
-const MAX_AGENT_TURNS = 50; // prevent infinite loops
+const MAX_AGENT_TURNS = 500; // prevent infinite loops
 const MAX_CONSECUTIVE_DENIALS = 2; // stop after N permission denials in a row
 
 // ─── Retry Logic ─────────────────────────────────────────────────
@@ -474,9 +474,18 @@ export class ConversationManager {
     let turnCount = 0;
     let consecutiveDenials = 0;
     let inlineWarningCount = 0;
+    let forceStopLoop = false; // set by inline warning force-stop; allows one final text turn then breaks
     const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
 
     while (true) {
+      // Hard break after force-stop allowed one final text turn
+      if (forceStopLoop) {
+        log.warn("session", "Force-stop: breaking agent loop after final text turn");
+        yield { type: "turn_end", stopReason: "force_stop" };
+        this.abortController = null;
+        return;
+      }
+
       turnCount++;
 
       // Periodically rebuild system prompt (includes dynamic data like git status, user model)
@@ -531,13 +540,19 @@ export class ConversationManager {
         return;
       }
 
+      let streamedOutputChars = 0; // track chars for estimated token count
+
       try {
         for await (const chunk of sseStream) {
           switch (chunk.type) {
             case "content_delta": {
               if (chunk.content) {
                 textChunks.push(chunk.content);
+                streamedOutputChars += chunk.content.length;
                 yield { type: "text_delta", text: chunk.content };
+                // Emit estimated token count (~4 chars per token) during streaming
+                const estimatedTokens = Math.round(streamedOutputChars / 4);
+                yield { type: "token_count", tokens: estimatedTokens };
               }
               break;
             }
@@ -596,11 +611,14 @@ export class ConversationManager {
               // Accumulate argument fragments
               if (active && chunk.functionArgDelta) {
                 active.argChunks.push(chunk.functionArgDelta);
+                streamedOutputChars += chunk.functionArgDelta.length;
                 yield {
                   type: "tool_input_delta",
                   toolUseId: active.id,
                   partialJson: chunk.functionArgDelta,
                 };
+                const estimatedTokens = Math.round(streamedOutputChars / 4);
+                yield { type: "token_count", tokens: estimatedTokens };
               }
               break;
             }
@@ -738,7 +756,7 @@ export class ConversationManager {
         const prevCount = executedSigs.get(sig) ?? 0;
         executedSigs.set(sig, prevCount + 1);
 
-        if (prevCount >= 2) {
+        if (prevCount >= 3) {
           const skipMsg = `BLOCKED: You already called ${call.name} with these exact parameters ${prevCount + 1} times in this response. You are in an infinite loop. STOP calling this tool and do something different.`;
           log.warn("tool", `Dedup blocked: ${sig.slice(0, 80)} (attempt ${prevCount + 1})`);
           yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
@@ -746,11 +764,24 @@ export class ConversationManager {
           continue;
         }
 
-        // Cross-turn dedup: block identical tool calls repeated 4+ times across turns
-        const crossCount = crossTurnSigs.get(sig) ?? 0;
-        crossTurnSigs.set(sig, crossCount + 1);
-        if (crossCount >= 3) {
-          const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times across multiple turns. This is a loop. STOP and try a completely different approach or use Bash to read the file instead.`;
+        // Cross-turn dedup: handle identical READ/OBSERVE calls repeated across turns
+        // Skip Write/Edit — rewriting same file with different content is normal iteration
+        const crossCount = (call.name !== "Write" && call.name !== "Edit") ? (crossTurnSigs.get(sig) ?? 0) : 0;
+        if (call.name !== "Write" && call.name !== "Edit") crossTurnSigs.set(sig, crossCount + 1);
+
+        // Smart redirect: auto-advance Read offset instead of blocking
+        if (crossCount >= 2 && call.name === "Read") {
+          const input = call.input as Record<string, unknown>;
+          const currentOffset = (input.offset as number) || 1;
+          const limit = (input.limit as number) || 200;
+          const newOffset = currentOffset + (limit * crossCount);
+          (call as any)._autoAdvancedInput = { ...input, offset: newOffset, limit: limit };
+          log.info("tool", `Auto-advancing Read offset to ${newOffset} (repeat #${crossCount + 1}): ${String(input.file_path ?? "").slice(0, 60)}`);
+        }
+
+        // Hard block after many repeats (genuine stuck loop)
+        if (crossCount >= 8) {
+          const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times. Try a completely different approach.`;
           log.warn("tool", `Cross-turn dedup blocked: ${sig.slice(0, 80)} (attempt ${crossCount + 1})`);
           yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
           toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: skipMsg, is_error: true });
@@ -779,7 +810,7 @@ export class ConversationManager {
         }
 
         // 2. Run PreToolUse hooks (may modify input or block)
-        let effectiveInput = permResult.updatedInput ?? call.input;
+        let effectiveInput = (call as any)._autoAdvancedInput ?? permResult.updatedInput ?? call.input;
         if (this.hooks.hasHooks("PreToolUse")) {
           const hookResult = await this.hooks.runPreToolUse(call);
           if (!hookResult.allowed) {
@@ -851,6 +882,19 @@ export class ConversationManager {
           } catch { /* LSP not available, ignore */ }
         }
 
+        // After successful Edit/Write, reset cross-turn dedup for Bash/Read
+        // This allows legitimate test-fix-test cycles (edit code, then re-run same curl/test)
+        if (!result.is_error && (call.name === "Edit" || call.name === "Write")) {
+          for (const [key] of crossTurnSigs) {
+            if (key.startsWith("Bash:") || key.startsWith("Read:")) {
+              crossTurnSigs.delete(key);
+            }
+          }
+          // Also reset intention engine's action history for Bash/Read
+          try { getIntentionEngine().resetTestFixCycle(); } catch { /* ignore */ }
+          inlineWarningCount = 0;
+        }
+
         // Record undo action if snapshot was captured and tool succeeded
         if (undoSnapshot && !result.is_error) {
           const desc = call.name === "Edit"
@@ -906,15 +950,22 @@ export class ConversationManager {
           inlineWarningCount++;
           log.warn("intentions", `Inline warning #${inlineWarningCount}: ${inlineWarning.slice(0, 100)}`);
 
-          if (inlineWarningCount >= 2) {
-            // Hard stop — model is ignoring warnings and looping
-            log.warn("intentions", "Infinite loop detected: forcing agent loop stop after 2 inline warnings");
+          if (inlineWarningCount >= 5) {
+            // Hard stop — model is genuinely stuck after many warnings
+            log.warn("intentions", "Infinite loop detected: forcing agent loop stop after 5 inline warnings");
             this.state.messages.push({
               role: "user",
               content: `[SYSTEM] FORCE STOP: You have been warned ${inlineWarningCount} times about repeating the same actions. The agent loop is being terminated. Reply with text only — summarize what you accomplished and what you could not complete.`,
             });
-            // Allow one more turn for text response, then stop
-            consecutiveDenials = MAX_CONSECUTIVE_DENIALS - 1;
+            // Allow one more turn for text response, then hard break
+            forceStopLoop = true;
+          } else if (inlineWarningCount >= 2) {
+            // Strong warning — but let the model continue working on other things
+            log.warn("intentions", `Inline warning #${inlineWarningCount}: model repeating actions, injecting strong redirect`);
+            this.state.messages.push({
+              role: "user",
+              content: `[SYSTEM] WARNING #${inlineWarningCount}: You are repeating the same tool calls. The repeated calls are being BLOCKED. MOVE ON to a different task or try a completely different approach. Do NOT keep reading the same file — use offset/limit to read different sections, or use Bash with sed/grep to find what you need.`,
+            });
           } else {
             this.state.messages.push({
               role: "user",

@@ -43,6 +43,11 @@ export class IntentionEngine {
     this.actions = [];
   }
 
+  /** Reset Bash/Read action counts after a successful Edit/Write (allows test-fix-test cycles) */
+  resetTestFixCycle(): void {
+    this.actions = this.actions.filter(a => a.name !== "Bash" && a.name !== "Read");
+  }
+
   /**
    * Rule: If tasks were created but not all completed, and only directories were made
    * (no actual code files written), the model stopped too early.
@@ -163,9 +168,11 @@ export class IntentionEngine {
    * This is called inline during the agent loop, not just at the end.
    */
   getInlineWarning(): string | null {
-    // ── Universal: detect ANY identical tool call repeated 3+ times ──
+    // ── Universal: detect identical READ/OBSERVE tool calls repeated 3+ times ──
+    // Skip Write/Edit — repeating writes to same file with different content is normal iteration
     const callCounts = new Map<string, number>();
     for (const a of this.actions) {
+      if (a.name === "Write" || a.name === "Edit") continue;
       // Create a signature from tool name + key input params
       const inputKey = a.name === "Bash"
         ? String(a.input.command ?? "").slice(0, 100)
@@ -174,7 +181,7 @@ export class IntentionEngine {
       callCounts.set(sig, (callCounts.get(sig) ?? 0) + 1);
     }
     for (const [sig, count] of callCounts) {
-      if (count >= 3) {
+      if (count >= 6) {
         return `STOP: You have called "${sig.slice(0, 80)}" ${count} times with identical parameters. You are in an infinite loop. Do something DIFFERENT — do not call this tool again with the same input. If you need to read a file, use offset/limit to read a different section. If you are stuck, tell the user.`;
       }
     }
