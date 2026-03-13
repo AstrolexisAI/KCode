@@ -9,7 +9,7 @@ import { appendFile } from "node:fs/promises";
 // ─── Types ──────────────────────────────────────────────────────
 
 type LogLevel = "debug" | "info" | "warn" | "error";
-type LogCategory = "llm" | "tool" | "permission" | "mcp" | "config" | "session" | "general";
+type LogCategory = "llm" | "tool" | "permission" | "mcp" | "config" | "session" | "general" | "db" | "narrative" | "indexer" | "intentions" | "learn" | "user-model" | "world-model" | "process";
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 0,
@@ -43,6 +43,7 @@ class Logger {
   private minLevel: LogLevel;
   private enabled: boolean;
   private initialized = false;
+  private lastLogDate: string = "";
 
   constructor() {
     this.minLevel = getConfiguredLevel();
@@ -124,6 +125,10 @@ class Logger {
 
   private getLogFilePath(): string {
     const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    if (date !== this.lastLogDate) {
+      this.lastLogDate = date;
+      this.cleanOldLogs();
+    }
     return join(LOG_DIR, `kcode-${date}.log`);
   }
 

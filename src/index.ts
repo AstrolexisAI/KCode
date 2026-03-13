@@ -21,10 +21,34 @@ import { log } from "./core/logger";
 import { TranscriptManager } from "./core/transcript";
 import { collectStats, formatStats } from "./core/stats";
 import { runDiagnostics } from "./core/doctor";
+import { getNarrativeManager } from "./core/narrative";
+import { closeDb } from "./core/db";
+import { shutdownMcpManager } from "./core/mcp";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
 const VERSION = pkg.version;
+
+// Prevent unhandled errors from background child processes from crashing kcode
+process.on("uncaughtException", (err) => {
+  log.error("process", `Uncaught exception: ${err.message}`);
+  log.shutdown();
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  log.error("process", `Unhandled rejection: ${reason}`);
+});
+
+// Graceful cleanup on signals
+function cleanupAndExit() {
+  shutdownMcpManager();
+  closeDb();
+  log.shutdown();
+  process.exit(0);
+}
+
+process.on("SIGINT", cleanupAndExit);
+process.on("SIGTERM", cleanupAndExit);
 
 // ─── CLI Setup ──────────────────────────────────────────────────
 
@@ -198,6 +222,7 @@ async function runMain(
 ) {
   const cwd = process.cwd();
   const config = await buildConfig(cwd);
+  config.version = VERSION;
   log.init();
 
   // Apply CLI overrides
@@ -254,7 +279,18 @@ async function runMain(
   // Interactive mode: start the Ink-based terminal UI
   const app = startUI({ config, conversationManager, tools });
   await app.waitUntilExit();
+
+  // Layer 10: Save session narrative before exiting
+  try {
+    const sessionData = conversationManager.collectSessionData();
+    if (sessionData.messagesCount > 1) {
+      getNarrativeManager().updateNarrative(sessionData);
+    }
+  } catch { /* ignore */ }
+
   log.info("session", "Session ended");
+  shutdownMcpManager();
+  closeDb();
   log.shutdown();
 }
 

@@ -24,6 +24,7 @@ import {
   listMcpResourcesDefinition, executeListMcpResources,
   readMcpResourceDefinition, executeReadMcpResource,
 } from "./mcp-tools";
+import { learnDefinition, executeLearn } from "./learn";
 
 /**
  * Register all built-in tools and optionally MCP-discovered tools.
@@ -49,6 +50,9 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
   registry.register("TaskGet", taskGetDefinition, executeTaskGet);
   registry.register("TaskUpdate", taskUpdateDefinition, executeTaskUpdate);
   registry.register("TaskStop", taskStopDefinition, executeTaskStop);
+
+  // Learning / long-term memory
+  registry.register("Learn", learnDefinition, executeLearn);
 
   // MCP resource tools (always available, gracefully handle no servers)
   registry.register("ListMcpResources", listMcpResourcesDefinition, executeListMcpResources);

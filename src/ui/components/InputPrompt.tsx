@@ -9,8 +9,12 @@ import { resolve, dirname, basename } from "node:path";
 interface InputPromptProps {
   /** Called when the user submits input (Enter key) */
   onSubmit: (value: string) => void;
-  /** Whether input is currently active (disabled during response streaming) */
+  /** Whether input is currently active */
   isActive: boolean;
+  /** Whether messages are being queued (KCode is responding) */
+  isQueuing?: boolean;
+  /** Number of messages in the queue */
+  queueSize?: number;
   /** Model name to show in prompt */
   model?: string;
   /** Working directory to show in prompt */
@@ -68,7 +72,7 @@ function commonPrefix(strings: string[]): string {
   return prefix;
 }
 
-export default function InputPrompt({ onSubmit, isActive, model, cwd, completions = [] }: InputPromptProps) {
+export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [] }: InputPromptProps) {
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
   const [history, setHistory] = useState<string[]>([]);
@@ -284,17 +288,22 @@ export default function InputPrompt({ onSubmit, isActive, model, cwd, completion
     hint = ` (${tabMatches.length} matches, Tab to cycle)`;
   }
 
+  const promptChar = isQueuing ? "+" : "❯";
+  const promptColor = isQueuing ? "yellow" : "green";
+  const queueHint = isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
+
   return (
     <Box flexDirection="column">
       <Box gap={1}>
-        {model && <Text color="green">{model}</Text>}
+        {model && <Text color={promptColor}>{model}</Text>}
         {shortCwd && <Text dimColor>{shortCwd}</Text>}
-        <Text bold color="green">{"❯"}</Text>
+        <Text bold color={promptColor}>{promptChar}</Text>
         <Text>
           {before}
           <Text inverse>{cursorChar}</Text>
           {after}
           {hint && <Text dimColor>{hint}</Text>}
+          {queueHint && <Text color="yellow">{queueHint}</Text>}
         </Text>
       </Box>
     </Box>

@@ -10,27 +10,110 @@ const DEFAULT_TIMEOUT = 120_000; // 2 minutes
 
 export const bashDefinition: ToolDefinition = {
   name: "Bash",
-  description: "Execute a shell command and return its output.",
+  description: "Execute a shell command and return its output. IMPORTANT: This is a non-interactive shell — there is no TTY. Always use non-interactive flags (--yes, -y, --no-input, --default, etc.) for commands that prompt for input (e.g. npx create-next-app --yes, npm init -y). If a command has no non-interactive flag, pipe defaults via echo or use heredocs.",
   input_schema: {
     type: "object",
     properties: {
       command: { type: "string", description: "The command to execute" },
       description: { type: "string", description: "Description of what the command does" },
       timeout: { type: "number", description: "Timeout in milliseconds (max 600000)" },
+      run_in_background: { type: "boolean", description: "Run in background, return after initial output" },
     },
     required: ["command"],
   },
 };
 
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
-  const { command, timeout } = input as BashInput;
+  const { command, timeout, run_in_background } = input as BashInput;
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
 
+  // Guard: block dangerous pkill/killall with broad patterns that could kill system services
+  // Matches: pkill -f "serve", pkill serve, killall node, etc. anywhere in the command
+  const dangerousKillMatch = command.match(/\b(pkill|killall)\s+(?:-\w+\s+)*["']?(serve|server|node|npx|npm|python|bun|java|ruby|llama)["']?/i);
+  if (dangerousKillMatch) {
+    const pattern = dangerousKillMatch[2];
+    log.warn("tool", `Blocked dangerous kill pattern "${pattern}": ${cmdPrefix}`);
+    return {
+      tool_use_id: "",
+      content: `BLOCKED: You used "${dangerousKillMatch[0]}" which matches too broadly and could kill critical system processes (e.g. "serve" matches "llama-server"). Instead use: kill $(lsof -ti :PORT) to kill by port, or pkill -f "python3 -m http.server" with the EXACT full command.`,
+      is_error: true,
+    };
+  }
+
+  // Detect background commands (ending with & OR run_in_background flag)
+  // Auto-detect server/daemon commands that would block forever
+  const isServerCommand = /\b(http\.server|SimpleHTTPServer|serve|live-server|nodemon|uvicorn|gunicorn|flask\s+run|php\s+-S|ruby\s+-run|caddy\s+run|nginx|apache)\b/.test(command)
+    && !/&\s*$/.test(command.trim()); // only if not already backgrounded
+  if (isServerCommand) {
+    log.info("tool", `Auto-backgrounding server command: ${cmdPrefix}`);
+  }
+  const isBackground = run_in_background || /&\s*$/.test(command.trim()) || isServerCommand;
+
+  // ─── Background commands ───────────────────────────────────────
+  // Strategy: wrap the command so bash itself handles backgrounding.
+  // We run: `( <command> ) > /dev/null 2>&1 &` via nohup-style detach,
+  // but first capture initial output for ~3 seconds via a temp file.
+  if (isBackground) {
+    return new Promise((resolve) => {
+      const tmpDir = '/tmp/kcode-bg';
+      const tmpLog = `${tmpDir}/bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`;
+
+      // Wrapper script:
+      // 1. Start the real command, teeing output to a temp file
+      // 2. After the command starts, the parent bash exits
+      // The real command keeps running because nohup + disown detaches it
+      const wrapper = `
+        mkdir -p ${tmpDir}
+        nohup bash -c ${shellEscape(command)} > ${tmpLog} 2>&1 &
+        BG_PID=$!
+        disown $BG_PID
+        echo "PID: $BG_PID"
+        sleep 3
+        cat ${tmpLog} 2>/dev/null
+        rm -f ${tmpLog}
+      `;
+
+      const proc = spawn("bash", ["-c", wrapper], {
+        cwd: process.cwd(),
+        env: { ...process.env },
+        timeout: 15_000, // 15s max for the wrapper itself
+      });
+
+      const chunks: Buffer[] = [];
+      const errChunks: Buffer[] = [];
+
+      proc.stdout.on("data", (data: Buffer) => chunks.push(data));
+      proc.stderr.on("data", (data: Buffer) => errChunks.push(data));
+
+      proc.on("close", (code) => {
+        const stdout = Buffer.concat(chunks).toString("utf-8").trim();
+        const stderr = Buffer.concat(errChunks).toString("utf-8").trim();
+        const output = stdout + (stderr ? `\n${stderr}` : "");
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        log.debug("tool", `Bash (background) returned in ${duration}s: ${cmdPrefix}`);
+        resolve({
+          tool_use_id: "",
+          content: output || "(background process started)",
+        });
+      });
+
+      proc.on("error", (err) => {
+        resolve({
+          tool_use_id: "",
+          content: `Error starting background command: ${err.message}`,
+          is_error: true,
+        });
+      });
+    });
+  }
+
+  // ─── Normal (foreground) commands ──────────────────────────────
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
+    let resolved = false;
 
     const proc = spawn("bash", ["-c", command], {
       cwd: process.cwd(),
@@ -42,6 +125,8 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     proc.stderr.on("data", (data: Buffer) => errChunks.push(data));
 
     proc.on("close", (code) => {
+      if (resolved) return;
+      resolved = true;
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       log.debug("tool", `Bash executed in ${duration}s (exit ${code}): ${cmdPrefix}`);
       const stdout = Buffer.concat(chunks).toString("utf-8");
@@ -56,6 +141,8 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     });
 
     proc.on("error", (err) => {
+      if (resolved) return;
+      resolved = true;
       resolve({
         tool_use_id: "",
         content: `Error: ${err.message}`,
@@ -63,4 +150,10 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       });
     });
   });
+}
+
+/** Escape a string for use inside single quotes in a shell command */
+function shellEscape(s: string): string {
+  // Replace ' with '\'' (end quote, escaped quote, start quote)
+  return "'" + s.replace(/'/g, "'\\''") + "'";
 }

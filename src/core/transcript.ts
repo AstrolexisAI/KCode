@@ -167,13 +167,25 @@ export class TranscriptManager {
         .sort(); // oldest first
 
       const excess = files.length - MAX_SESSIONS;
-      if (excess <= 0) return;
+      if (excess > 0) {
+        for (let i = 0; i < excess; i++) {
+          try {
+            unlinkSync(join(TRANSCRIPTS_DIR, files[i]));
+          } catch {
+            // Ignore individual deletion failures
+          }
+        }
+      }
 
-      for (let i = 0; i < excess; i++) {
-        try {
-          unlinkSync(join(TRANSCRIPTS_DIR, files[i]));
-        } catch {
-          // Ignore individual deletion failures
+      // Also delete sessions older than 30 days
+      const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      for (const f of files) {
+        const match = f.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (match) {
+          const fileDate = new Date(match[1]);
+          if (fileDate < cutoffDate) {
+            try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch {}
+          }
         }
       }
     } catch {

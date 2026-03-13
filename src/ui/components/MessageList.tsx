@@ -38,7 +38,17 @@ export interface BannerEntry {
   subtitle: string;
 }
 
-export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry;
+export interface LearnEntry {
+  kind: "learn";
+  text: string;
+}
+
+export interface SuggestionEntry {
+  kind: "suggestion";
+  suggestions: { type: string; message: string; priority: string }[];
+}
+
+export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry;
 
 interface MessageListProps {
   /** Completed message entries (rendered via <Static>) */
@@ -53,6 +63,10 @@ interface MessageListProps {
   streamingThinking?: string;
   /** Whether thinking is actively streaming */
   isThinking?: boolean;
+  /** Current token count for this turn */
+  turnTokens?: number;
+  /** Timestamp (Date.now()) when the current turn started */
+  turnStartTime?: number;
 }
 
 export default function MessageList({
@@ -62,6 +76,8 @@ export default function MessageList({
   loadingMessage,
   streamingThinking = "",
   isThinking = false,
+  turnTokens = 0,
+  turnStartTime,
 }: MessageListProps) {
   return (
     <Box flexDirection="column">
@@ -89,10 +105,14 @@ export default function MessageList({
         </Box>
       )}
 
-      {/* Loading spinner */}
+      {/* Loading spinner with tokens and elapsed time */}
       {isLoading && (
         <Box paddingLeft={2}>
-          <Spinner message={loadingMessage ?? "Thinking..."} />
+          <Spinner
+            message={loadingMessage ?? "Thinking..."}
+            tokens={turnTokens}
+            startTime={turnStartTime}
+          />
         </Box>
       )}
     </Box>
@@ -111,6 +131,10 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
       return <ThinkingMessage text={entry.text} />;
     case "banner":
       return <BannerMessage title={entry.title} subtitle={entry.subtitle} />;
+    case "learn":
+      return <LearnMessage text={entry.text} />;
+    case "suggestion":
+      return <SuggestionMessage suggestions={entry.suggestions} />;
   }
 }
 
@@ -180,6 +204,30 @@ function ThinkingMessage({ text }: { text: string }) {
       isStreaming={false}
       defaultExpanded={false}
     />
+  );
+}
+
+function LearnMessage({ text }: { text: string }) {
+  return (
+    <Box paddingLeft={2} marginTop={0} marginBottom={0}>
+      <Text color="magenta" bold>{"✧ "}</Text>
+      <Text color="magenta" italic>{text}</Text>
+    </Box>
+  );
+}
+
+function SuggestionMessage({ suggestions }: { suggestions: { type: string; message: string; priority: string }[] }) {
+  const icons: Record<string, string> = {
+    test: "⚗", verify: "🔍", commit: "📦", cleanup: "🧹", safety: "⚠", optimize: "⚡",
+  };
+  return (
+    <Box flexDirection="column" paddingLeft={2} marginTop={0}>
+      {suggestions.map((s, i) => (
+        <Text key={`sug-${i}`} color={s.priority === "high" ? "yellow" : "gray"} dimColor={s.priority === "low"}>
+          {icons[s.type] ?? "💡"} {s.message}
+        </Text>
+      ))}
+    </Box>
   );
 }
 
