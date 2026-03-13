@@ -487,6 +487,10 @@ export default function App({ config, conversationManager, tools }: AppProps) {
             setTurnTokens(event.usage.inputTokens + event.usage.outputTokens);
             break;
 
+          case "token_count":
+            setTurnTokens(event.tokens);
+            break;
+
           case "error":
             setCompleted((prev) => [
               ...prev,

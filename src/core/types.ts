@@ -133,6 +133,7 @@ export type StreamEvent =
   | { type: "tool_executing"; name: string; toolUseId: string; input: Record<string, unknown> }
   | { type: "tool_result"; name: string; toolUseId: string; result: string; isError?: boolean }
   | { type: "usage_update"; usage: TokenUsage }
+  | { type: "token_count"; tokens: number }
   | { type: "error"; error: Error; retryable: boolean; attempt?: number }
   | { type: "turn_start" }
   | { type: "suggestion"; suggestions: { type: string; message: string; priority: string }[] }

@@ -139,17 +139,41 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
     let resolved = false;
+    let timedOut = false;
 
     const proc = spawn("bash", ["-c", command], {
       cwd: process.cwd(),
-      timeout: timeoutMs,
       env: { ...process.env },
+      detached: true, // create process group so we can kill entire tree
     });
+
+    // Manual timeout that kills the entire process group (bash + all children)
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        // Kill entire process group with SIGKILL (negative PID = process group)
+        if (proc.pid) process.kill(-proc.pid, "SIGKILL");
+      } catch { /* already dead */ }
+      if (!resolved) {
+        resolved = true;
+        const stdout = Buffer.concat(chunks).toString("utf-8");
+        const stderr = Buffer.concat(errChunks).toString("utf-8");
+        const output = stdout + (stderr ? `\n${stderr}` : "");
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        log.warn("tool", `Bash timed out after ${duration}s: ${cmdPrefix}`);
+        resolve({
+          tool_use_id: "",
+          content: (output ? output + "\n\n" : "") + `TIMED OUT after ${duration}s. The command took too long. If running tests, check for infinite loops or hanging processes. Try adding a timeout flag or running fewer tests.`,
+          is_error: true,
+        });
+      }
+    }, timeoutMs);
 
     proc.stdout.on("data", (data: Buffer) => chunks.push(data));
     proc.stderr.on("data", (data: Buffer) => errChunks.push(data));
 
     proc.on("close", (code) => {
+      clearTimeout(timer);
       if (resolved) return;
       resolved = true;
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -166,6 +190,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     });
 
     proc.on("error", (err) => {
+      clearTimeout(timer);
       if (resolved) return;
       resolved = true;
       resolve({

@@ -225,6 +225,15 @@ Execute shell commands. Reserve for actual shell operations.
 ## Parallel Tool Calls
 When multiple independent pieces of information are needed, make multiple tool calls in a single response. Do not serialize independent operations.
 
+## Runtime — CRITICAL
+- **ALWAYS use Bun** as the runtime. Never use Node.js. Use \`bun run\`, \`bun test\`, \`bun install\`, \`bun build\`.
+- **ALWAYS use bun:sqlite** for SQLite. NEVER use better-sqlite3 (native bindings fail with Bun).
+- **ALWAYS use Bun built-ins** over npm packages when available: \`bun:sqlite\`, \`Bun.serve()\`, \`Bun.file()\`, \`Bun.write()\`, native WebSocket, \`bun:test\`.
+- **Bun does NOT support node-gyp native modules**. Prefer Bun built-ins or pure JS alternatives.
+- When using **ports**, always use 10000+ to avoid conflicts and Chrome-blocked ports.
+- **Before running tests or starting servers**, always kill any existing process on the port first: \`kill $(lsof -ti :PORT) 2>/dev/null; bun test\`
+- **Tests that start servers** must use \`afterAll\` to stop them and should use a random or unique port to avoid conflicts.
+
 ## Multi-File Projects — CRITICAL RULE
 **NEVER embed HTML, CSS, or JavaScript inside TypeScript template literals.** This ALWAYS causes parsing errors because backticks, \${}, and HTML attributes like class="" conflict with TypeScript syntax.
 
