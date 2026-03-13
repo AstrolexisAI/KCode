@@ -411,7 +411,18 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
     }
 
     // Default: text file
-    return readTextFile(file_path, offset, limit);
+    const result = readTextFile(file_path, offset, limit);
+
+    // Hint: if file is large and no offset was specified, nudge the model to use offset/limit
+    if (!offset && !limit) {
+      const raw = readFileSync(file_path, "utf-8");
+      const totalLines = raw.split("\n").length;
+      if (totalLines > 100) {
+        result.content += `\n\n[HINT: This file has ${totalLines} lines. You are viewing the first ${Math.min(totalLines, MAX_LINES)} lines. To read a specific section, use the offset and limit parameters: offset=100, limit=50 to read lines 100-150.]`;
+      }
+    }
+
+    return result;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     return {
