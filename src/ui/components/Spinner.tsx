@@ -1,17 +1,26 @@
 // KCode - Spinner component
-// Animated loading indicator with token count and elapsed time
+// Animated loading indicator with phase detection, token speed, and elapsed time
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Text } from "ink";
 import { useTheme } from "../ThemeContext.js";
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const INTERVAL = 80;
+// Different spinner styles for different phases
+const SPINNERS = {
+  thinking: ["◐", "◓", "◑", "◒"],           // circular — model is thinking
+  streaming: ["▁", "▃", "▅", "▇", "▅", "▃"], // wave — tokens flowing
+  tool: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"], // matrix — executing tool
+};
+
+const INTERVAL = 100;
+
+type SpinnerPhase = "thinking" | "streaming" | "tool";
 
 interface SpinnerProps {
   message?: string;
   tokens?: number;
   startTime?: number;
+  phase?: SpinnerPhase;
 }
 
 function formatElapsed(ms: number): string {
@@ -23,35 +32,73 @@ function formatElapsed(ms: number): string {
 }
 
 function formatTokens(n: number): string {
-  if (n < 1000) return String(n);
-  if (n < 10_000) return (n / 1000).toFixed(1) + "K";
-  return Math.round(n / 1000) + "K";
+  if (n < 1000) return `${n} tok`;
+  if (n < 10_000) return (n / 1000).toFixed(1) + "K tok";
+  return Math.round(n / 1000) + "K tok";
 }
 
-export default function Spinner({ message, tokens, startTime }: SpinnerProps) {
+function formatSpeed(tokPerSec: number): string {
+  if (tokPerSec < 1) return "<1 t/s";
+  if (tokPerSec < 10) return tokPerSec.toFixed(1) + " t/s";
+  return Math.round(tokPerSec) + " t/s";
+}
+
+export default function Spinner({ message, tokens, startTime, phase = "thinking" }: SpinnerProps) {
   const { theme } = useTheme();
   const [frame, setFrame] = useState(0);
   const [elapsed, setElapsed] = useState(0);
+  const prevTokensRef = useRef(0);
+  const prevTimeRef = useRef(Date.now());
+  const speedRef = useRef(0);
+
+  const frames = SPINNERS[phase] ?? SPINNERS.thinking;
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setFrame((prev) => (prev + 1) % SPINNER_FRAMES.length);
+      setFrame((prev) => (prev + 1) % frames.length);
       if (startTime) setElapsed(Date.now() - startTime);
+
+      // Calculate tokens/s using a rolling window
+      const now = Date.now();
+      const currentTokens = tokens ?? 0;
+      const dt = (now - prevTimeRef.current) / 1000;
+      if (dt >= 0.5 && currentTokens > prevTokensRef.current) {
+        const newSpeed = (currentTokens - prevTokensRef.current) / dt;
+        // Smooth: weighted average with previous speed
+        speedRef.current = speedRef.current > 0
+          ? speedRef.current * 0.3 + newSpeed * 0.7
+          : newSpeed;
+        prevTokensRef.current = currentTokens;
+        prevTimeRef.current = now;
+      }
     }, INTERVAL);
     return () => clearInterval(timer);
-  }, [startTime]);
+  }, [startTime, frames.length, tokens]);
 
-  const parts: string[] = [];
-  if (message) parts.push(message);
+  // Reset speed tracking when tokens reset (new turn)
+  useEffect(() => {
+    if (!tokens || tokens === 0) {
+      prevTokensRef.current = 0;
+      prevTimeRef.current = Date.now();
+      speedRef.current = 0;
+    }
+  }, [tokens === 0]);
 
+  // Build display parts
   const meta: string[] = [];
   if (tokens && tokens > 0) meta.push(formatTokens(tokens));
+  if (speedRef.current > 0 && phase === "streaming") meta.push(formatSpeed(speedRef.current));
   if (startTime && elapsed > 0) meta.push(formatElapsed(elapsed));
+
+  // Spinner color based on phase
+  const spinnerColor = phase === "streaming" ? theme.success
+    : phase === "tool" ? theme.warning
+    : theme.primary;
 
   return (
     <Text color={theme.dimmed}>
-      <Text color={theme.primary}>{SPINNER_FRAMES[frame]}</Text>
-      {parts.length > 0 ? ` ${parts.join(" ")}` : ""}
+      <Text color={spinnerColor}>{frames[frame % frames.length]}</Text>
+      {message ? ` ${message}` : ""}
       {meta.length > 0 && (
         <Text color={theme.dimmed}>{` ${meta.join(" · ")}`}</Text>
       )}
