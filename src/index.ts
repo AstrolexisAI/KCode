@@ -29,6 +29,8 @@ import { shutdownMcpManager } from "./core/mcp";
 import { getRulesManager } from "./core/rules";
 import { getPluginManager } from "./core/plugins";
 import { getLspManager, shutdownLsp } from "./core/lsp";
+import { runSetup, isSetupComplete, getAvailableModels } from "./core/model-manager";
+import { startServer, stopServer, getServerStatus, ensureServer, isServerRunning } from "./core/llama-server";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
@@ -221,6 +223,86 @@ program
     }
   });
 
+// ─── Setup subcommand ────────────────────────────────────────────
+
+program
+  .command("setup")
+  .description("Auto-detect hardware, download engine and AI model")
+  .option("--model <codename>", "Install a specific model (e.g. mnemo:mark5-14b)")
+  .option("--force", "Force re-download even if already installed")
+  .option("--list", "List available models")
+  .action(async (opts: { model?: string; force?: boolean; list?: boolean }) => {
+    if (opts.list) {
+      console.log("\nAvailable mnemo:mark5 models:\n");
+      for (const m of getAvailableModels()) {
+        console.log(`  ${m.codename.padEnd(20)} ${m.paramBillions}B params, ~${m.sizeGB} GB — ${m.description}`);
+        console.log(`  ${"".padEnd(20)} Min VRAM: ${(m.minVramMB / 1024).toFixed(0)} GB`);
+      }
+      console.log();
+      return;
+    }
+
+    try {
+      await runSetup({ model: opts.model, force: opts.force });
+    } catch (err) {
+      console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
+      process.exit(1);
+    }
+  });
+
+// ─── Server subcommand ──────────────────────────────────────────
+
+const serverCmd = program
+  .command("server")
+  .description("Manage the local inference server (llama-server)");
+
+serverCmd
+  .command("start")
+  .description("Start the llama-server")
+  .option("--port <port>", "Override server port", parseInt)
+  .action(async (opts: { port?: number }) => {
+    try {
+      console.log("Starting inference server...");
+      const { port, pid } = await startServer({ port: opts.port });
+      console.log(`\x1b[32m✓\x1b[0m Server running on port ${port} (PID: ${pid})`);
+    } catch (err) {
+      console.error(`\x1b[31m✗ ${err instanceof Error ? err.message : err}\x1b[0m`);
+      process.exit(1);
+    }
+  });
+
+serverCmd
+  .command("stop")
+  .description("Stop the llama-server")
+  .action(async () => {
+    await stopServer();
+    console.log("Server stopped.");
+  });
+
+serverCmd
+  .command("status")
+  .description("Show server status")
+  .action(async () => {
+    const status = await getServerStatus();
+    if (status.running) {
+      console.log(`\x1b[32m● Running\x1b[0m on port ${status.port} (PID: ${status.pid})`);
+      if (status.model) console.log(`  Model: ${status.model}`);
+    } else {
+      console.log("\x1b[2m○ Not running\x1b[0m");
+      console.log("  Start with: kcode server start");
+    }
+  });
+
+serverCmd
+  .command("restart")
+  .description("Restart the llama-server")
+  .action(async () => {
+    console.log("Restarting server...");
+    await stopServer();
+    const { port, pid } = await startServer();
+    console.log(`\x1b[32m✓\x1b[0m Server restarted on port ${port} (PID: ${pid})`);
+  });
+
 // ─── Parse ──────────────────────────────────────────────────────
 
 program.parse();
@@ -232,6 +314,29 @@ async function runMain(
   opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string },
 ) {
   const cwd = process.cwd();
+
+  // Auto-setup on first run if no models configured
+  if (!isSetupComplete()) {
+    console.log("\x1b[33mFirst run detected — running auto-setup...\x1b[0m\n");
+    try {
+      await runSetup();
+    } catch (err) {
+      console.error(`\x1b[31mAuto-setup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
+      console.error("You can run 'kcode setup' manually to configure.");
+    }
+  }
+
+  // Auto-start llama-server if configured and not running
+  if (isSetupComplete() && !(await isServerRunning())) {
+    try {
+      process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
+      const { port } = await startServer();
+      process.stderr.write(`\r\x1b[32m✓\x1b[0m Inference server on port ${port}\x1b[K\n`);
+    } catch (err) {
+      process.stderr.write(`\r\x1b[33m⚠ Server start failed: ${err instanceof Error ? err.message : err}\x1b[K\n\x1b[0m`);
+    }
+  }
+
   const config = await buildConfig(cwd);
   config.version = VERSION;
   log.init();
