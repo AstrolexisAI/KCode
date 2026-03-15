@@ -85,6 +85,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
   const [tokenCount, setTokenCount] = useState(0);
   const [turnTokens, setTurnTokens] = useState(0);
   const [turnStartTime, setTurnStartTime] = useState(0);
+  const [spinnerPhase, setSpinnerPhase] = useState<"thinking" | "streaming" | "tool">("thinking");
   const [toolUseCount, setToolUseCount] = useState(0);
 
   // Plan mode toggle state (Shift+Tab)
@@ -287,6 +288,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
           setStreamingText("");
           setTurnTokens(0);
           setTurnStartTime(Date.now());
+          setSpinnerPhase("thinking");
           setLoadingMessage("Thinking...");
 
           try {
@@ -332,6 +334,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
       setStreamingText("");
       setTurnTokens(0);
       setTurnStartTime(Date.now());
+      setSpinnerPhase("thinking");
       setLoadingMessage("Thinking...");
 
       try {
@@ -458,6 +461,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
               { kind: "tool_use", name: event.name, summary },
             ]);
             setLoadingMessage(`Running ${event.name}...`);
+            setSpinnerPhase("tool");
             break;
           }
 
@@ -480,6 +484,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
               ]);
             }
             setLoadingMessage("Thinking...");
+            setSpinnerPhase("thinking");
             break;
 
           case "usage_update":
@@ -489,6 +494,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
 
           case "token_count":
             setTurnTokens(event.tokens);
+            setSpinnerPhase("streaming");
             break;
 
           case "error":
@@ -563,6 +569,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
         isThinking={isThinking}
         turnTokens={turnTokens}
         turnStartTime={turnStartTime}
+        spinnerPhase={spinnerPhase}
       />
 
       {mode === "permission" && permissionRequest && (

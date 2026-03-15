@@ -68,6 +68,8 @@ interface MessageListProps {
   turnTokens?: number;
   /** Timestamp (Date.now()) when the current turn started */
   turnStartTime?: number;
+  /** Current spinner phase */
+  spinnerPhase?: "thinking" | "streaming" | "tool";
 }
 
 export default function MessageList({
@@ -79,6 +81,7 @@ export default function MessageList({
   isThinking = false,
   turnTokens = 0,
   turnStartTime,
+  spinnerPhase = "thinking",
 }: MessageListProps) {
   return (
     <Box flexDirection="column">
@@ -113,6 +116,7 @@ export default function MessageList({
             message={loadingMessage ?? "Thinking..."}
             tokens={turnTokens}
             startTime={turnStartTime}
+            phase={spinnerPhase}
           />
         </Box>
       )}
