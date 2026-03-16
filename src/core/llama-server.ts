@@ -86,8 +86,6 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
     "--host", "127.0.0.1",
     "--ctx-size", config.contextSize.toString(),
     "--n-gpu-layers", config.gpuLayers.toString(),
-    "--flash-attn",           // enable flash attention
-    "--cont-batching",        // continuous batching
     "--parallel", "1",        // single slot (one user)
     "--metrics",              // enable /metrics endpoint
   ];
@@ -105,9 +103,14 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
     // Open log file for server output
     const logFile = Bun.file(LOG_FILE).writer();
 
+    // Set LD_LIBRARY_PATH to include the engine directory and any subdirectories
+    // so llama-server can find its shared libraries (libggml, libllama, libmtmd, etc.)
+    const engineDir = join(config.enginePath, "..");
+    const ldPath = [engineDir, ...findLibDirs(engineDir), process.env.LD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+
     const proc = spawn(config.enginePath, args, {
       cwd: KCODE_HOME,
-      env: { ...process.env },
+      env: { ...process.env, LD_LIBRARY_PATH: ldPath },
       stdio: ["ignore", "pipe", "pipe"],
       detached: true, // Allow server to outlive KCode
     });
@@ -257,4 +260,16 @@ export async function getServerStatus(): Promise<{
 function cleanupPidFile(): void {
   try { unlinkSync(PID_FILE); } catch { /* ignore */ }
   try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
+}
+
+/** Find directories containing .so files under a given path */
+function findLibDirs(baseDir: string): string[] {
+  try {
+    const proc = Bun.spawnSync(["find", baseDir, "-name", "*.so", "-o", "-name", "*.so.*", "-type", "f"], {
+      stdout: "pipe", stderr: "pipe",
+    });
+    const paths = proc.stdout.toString().trim().split("\n").filter(Boolean);
+    const dirs = new Set(paths.map((p) => join(p, "..")));
+    return [...dirs];
+  } catch { return []; }
 }
