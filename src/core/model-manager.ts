@@ -236,15 +236,12 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
   }
 
   // Move all shared libraries (.so, .dylib, .dll) next to the binary
-  // so LD_LIBRARY_PATH / DYLD_LIBRARY_PATH can find them
+  // so LD_LIBRARY_PATH / DYLD_LIBRARY_PATH / PATH can find them
   progress("Installing libraries...");
   const binDir = join(serverBin, "..");
-  const libProc = Bun.spawnSync(
-    ["find", ENGINE_DIR, "-name", "*.so", "-o", "-name", "*.so.*", "-o", "-name", "*.dylib", "-o", "-name", "*.dll"],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  for (const libPath of libProc.stdout.toString().trim().split("\n").filter(Boolean)) {
-    const libName = libPath.split("/").pop()!;
+  const sep = process.platform === "win32" ? "\\" : "/";
+  for (const libPath of findLibraryFiles(ENGINE_DIR)) {
+    const libName = libPath.split(sep).pop() ?? libPath.split("/").pop()!;
     const dest = join(binDir, libName);
     if (libPath !== dest && !existsSync(dest)) {
       try { renameSync(libPath, dest); } catch { /* ignore */ }
@@ -366,66 +363,209 @@ export async function downloadModel(codename: string, onProgress?: (msg: string)
 
 // ─── Full Setup Flow ────────────────────────────────────────────
 
-/** Run the full auto-setup: detect hardware, download engine, download best model */
+/** Run the full auto-setup wizard: detect hardware, download engine, download best model */
 export async function runSetup(options?: { model?: string; force?: boolean }): Promise<{ model: string; enginePath: string; modelPath: string }> {
   const C = {
     reset: "\x1b[0m",
     bold: "\x1b[1m",
     dim: "\x1b[2m",
+    italic: "\x1b[3m",
+    underline: "\x1b[4m",
     cyan: "\x1b[36m",
     green: "\x1b[32m",
     yellow: "\x1b[33m",
     magenta: "\x1b[35m",
+    blue: "\x1b[34m",
+    red: "\x1b[31m",
+    white: "\x1b[97m",
+    bgCyan: "\x1b[46m",
+    bgBlue: "\x1b[44m",
+    bgGreen: "\x1b[42m",
+    bgMagenta: "\x1b[45m",
   };
 
-  console.log(`\n${C.bold}${C.cyan}KCode Setup${C.reset}\n`);
+  // Clear screen for the wizard
+  process.stdout.write("\x1b[2J\x1b[H");
 
-  // Step 1: Detect hardware
-  console.log(`${C.bold}1. Detecting hardware...${C.reset}`);
-  const hw = await detectHardware();
-  console.log(formatHardware(hw).split("\n").map((l) => `   ${l}`).join("\n"));
+  // ── Banner ──────────────────────────────────────────────────────
+  const banner = [
+    "",
+    `${C.bold}${C.cyan}    ██╗  ██╗ ██████╗ ██████╗ ██████╗ ███████╗`,
+    `    ██║ ██╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝`,
+    `    █████╔╝ ██║     ██║   ██║██║  ██║█████╗  `,
+    `    ██╔═██╗ ██║     ██║   ██║██║  ██║██╔══╝  `,
+    `    ██║  ██╗╚██████╗╚██████╔╝██████╔╝███████╗`,
+    `    ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝${C.reset}`,
+    "",
+    `    ${C.dim}Kulvex Code — AI Coding Assistant by Astrolexis${C.reset}`,
+    `    ${C.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`,
+    "",
+  ];
+  console.log(banner.join("\n"));
+
+  // ── Spinner helper ──────────────────────────────────────────────
+  const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  function createSpinner(label: string) {
+    let frame = 0;
+    let suffix = "";
+    const interval = setInterval(() => {
+      const spinner = `${C.cyan}${spinnerFrames[frame % spinnerFrames.length]}${C.reset}`;
+      process.stderr.write(`\r    ${spinner} ${label}${suffix}`.padEnd(80) + "\r");
+      frame++;
+    }, 80);
+    return {
+      update(msg: string) { suffix = ` ${C.dim}${msg}${C.reset}`; },
+      succeed(msg: string) {
+        clearInterval(interval);
+        process.stderr.write(`\r    ${C.green}✓${C.reset} ${msg}`.padEnd(80) + "\n");
+      },
+      fail(msg: string) {
+        clearInterval(interval);
+        process.stderr.write(`\r    ${C.red}✗${C.reset} ${msg}`.padEnd(80) + "\n");
+      },
+    };
+  }
+
+  // ── Progress bar helper ─────────────────────────────────────────
+  function renderProgressBar(pct: number, width: number = 30): string {
+    const filled = Math.round(pct / 100 * width);
+    const empty = width - filled;
+    const bar = `${C.cyan}${"█".repeat(filled)}${C.dim}${"░".repeat(empty)}${C.reset}`;
+    return `${bar} ${pct}%`;
+  }
+
+  // ── Step header ─────────────────────────────────────────────────
+  function stepHeader(num: number, title: string) {
+    console.log(`  ${C.bold}${C.bgCyan}${C.white} ${num} ${C.reset} ${C.bold}${title}${C.reset}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Step 1: Hardware Detection
+  // ═══════════════════════════════════════════════════════════════
+
+  stepHeader(1, "Scanning your hardware");
   console.log();
 
-  // Step 2: Select model
+  const hwSpinner = createSpinner("Detecting GPUs, VRAM, and platform...");
+  const hw = await detectHardware();
+  hwSpinner.succeed("Hardware detected");
+
+  // Display hardware info in a nice box
+  const hwLines = formatHardware(hw).split("\n");
+  console.log();
+  console.log(`    ${C.dim}┌─────────────────────────────────────────┐${C.reset}`);
+  for (const line of hwLines) {
+    console.log(`    ${C.dim}│${C.reset}  ${line.padEnd(39)}${C.dim}│${C.reset}`);
+  }
+  console.log(`    ${C.dim}└─────────────────────────────────────────┘${C.reset}`);
+  console.log();
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Step 2: Model Selection
+  // ═══════════════════════════════════════════════════════════════
+
+  stepHeader(2, "Selecting the best model for your system");
+  console.log();
+
   const recommended = recommendModel(hw);
   const targetCodename = options?.model ?? recommended.codename;
   const entry = findCatalogEntry(targetCodename) ?? recommended;
 
-  console.log(`${C.bold}2. Model selection${C.reset}`);
-  console.log(`   Recommended: ${C.green}${recommended.codename}${C.reset} (${recommended.paramBillions}B, ${recommended.sizeGB} GB)`);
-  if (targetCodename !== recommended.codename) {
-    console.log(`   Selected:    ${C.yellow}${entry.codename}${C.reset} (${entry.paramBillions}B, ${entry.sizeGB} GB)`);
+  // Show model catalog as a visual table
+  const availableVram = hw.totalVramMB > 0 ? hw.totalVramMB : hw.ramMB * 0.7;
+  console.log(`    ${C.dim}Model                Size      VRAM     Status${C.reset}`);
+  console.log(`    ${C.dim}${"─".repeat(52)}${C.reset}`);
+
+  for (const m of MODEL_CATALOG) {
+    const fits = m.minVramMB <= availableVram;
+    const isSelected = m.codename === entry.codename;
+    const icon = isSelected ? `${C.green}▸` : fits ? `${C.dim} ` : `${C.red} `;
+    const nameColor = isSelected ? C.bold + C.green : fits ? C.white : C.dim;
+    const sizeStr = `${m.sizeGB} GB`.padStart(8);
+    const vramStr = `${(m.minVramMB / 1024).toFixed(0)} GB`.padStart(6);
+    const statusStr = isSelected
+      ? `${C.green}${C.bold}← SELECTED${C.reset}`
+      : fits
+      ? `${C.green}compatible${C.reset}`
+      : `${C.red}too large${C.reset}`;
+
+    console.log(`    ${icon} ${nameColor}${m.codename.padEnd(20)}${C.reset}${sizeStr}  ${vramStr}    ${statusStr}`);
   }
-  console.log(`   ${C.dim}${entry.description}${C.reset}`);
+
+  console.log();
+  console.log(`    ${C.bold}Selected:${C.reset} ${C.green}${C.bold}${entry.codename}${C.reset} ${C.dim}— ${entry.description}${C.reset}`);
+  if (targetCodename !== recommended.codename) {
+    console.log(`    ${C.yellow}Note: Using manually selected model instead of recommended ${recommended.codename}${C.reset}`);
+  }
   console.log();
 
-  // Step 3: Download engine
-  console.log(`${C.bold}3. Installing inference engine...${C.reset}`);
+  // ═══════════════════════════════════════════════════════════════
+  //  Step 3: Engine Installation
+  // ═══════════════════════════════════════════════════════════════
+
+  stepHeader(3, "Installing inference engine (llama.cpp)");
+  console.log();
+
   let enginePath = getEnginePath();
   if (enginePath && !options?.force) {
-    console.log(`   Engine already installed\n`);
+    console.log(`    ${C.green}✓${C.reset} Engine already installed`);
+    console.log();
   } else {
+    const engineSpinner = createSpinner("Downloading llama.cpp...");
     enginePath = await downloadEngine(hw, (msg) => {
-      process.stderr.write(`\r   ${msg}`.padEnd(80));
+      // Parse percentage from progress message
+      const pctMatch = msg.match(/(\d+)%/);
+      if (pctMatch) {
+        const pct = parseInt(pctMatch[1], 10);
+        const bar = renderProgressBar(pct);
+        process.stderr.write(`\r    ${C.cyan}↓${C.reset} Engine: ${bar} ${C.dim}${msg.replace(/\d+%\s*/, "")}${C.reset}`.padEnd(90) + "\r");
+      } else {
+        engineSpinner.update(msg);
+      }
     });
+    process.stderr.write(`\r    ${C.green}✓${C.reset} Engine installed successfully`.padEnd(90) + "\n");
     console.log();
   }
 
-  // Step 4: Download model
-  console.log(`${C.bold}4. Downloading model...${C.reset}`);
+  // ═══════════════════════════════════════════════════════════════
+  //  Step 4: Model Download
+  // ═══════════════════════════════════════════════════════════════
+
+  stepHeader(4, `Downloading ${entry.codename}`);
+  console.log();
+
   let modelPath: string;
   if (isModelDownloaded(entry.codename) && !options?.force) {
-    console.log(`   ${entry.codename} already downloaded\n`);
+    console.log(`    ${C.green}✓${C.reset} Model already downloaded`);
+    console.log();
     modelPath = getModelPath(entry.codename)!;
   } else {
+    console.log(`    ${C.dim}Size: ${entry.sizeGB} GB — this may take a while...${C.reset}`);
+    console.log();
+
     modelPath = await downloadModel(entry.codename, (msg) => {
-      process.stderr.write(`\r   ${msg}`.padEnd(80));
+      const pctMatch = msg.match(/(\d+)%/);
+      if (pctMatch) {
+        const pct = parseInt(pctMatch[1], 10);
+        const bar = renderProgressBar(pct, 35);
+        const sizeInfo = msg.replace(/.*?(\d+%\s*)/, "").trim();
+        process.stderr.write(`\r    ${C.cyan}↓${C.reset} Model: ${bar} ${C.dim}${sizeInfo}${C.reset}`.padEnd(90) + "\r");
+      } else {
+        process.stderr.write(`\r    ${C.cyan}↓${C.reset} ${msg}`.padEnd(90) + "\r");
+      }
     });
+    process.stderr.write(`\r    ${C.green}✓${C.reset} Model downloaded successfully`.padEnd(90) + "\n");
     console.log();
   }
 
-  // Step 5: Register model in models.json
-  console.log(`${C.bold}5. Configuring KCode...${C.reset}`);
+  // ═══════════════════════════════════════════════════════════════
+  //  Step 5: Configuration
+  // ═══════════════════════════════════════════════════════════════
+
+  stepHeader(5, "Finalizing configuration");
+  console.log();
+
+  const configSpinner = createSpinner("Writing configuration...");
 
   // Default port for local llama-server
   const port = 10091;
@@ -458,17 +598,32 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   // Mark setup as complete
   await Bun.write(SETUP_MARKER, `${new Date().toISOString()}\n${entry.codename}\n`);
 
-  console.log(`   Default model: ${C.green}${entry.codename}${C.reset}`);
-  console.log(`   Server port: ${port}`);
-  console.log(`\n${C.bold}${C.green}Setup complete!${C.reset} Run ${C.cyan}kcode${C.reset} to start.\n`);
+  configSpinner.succeed("Configuration saved");
+  console.log();
 
-  // Show all available models
-  console.log(`${C.dim}Available models (use 'kcode setup --model <name>' to switch):${C.reset}`);
-  for (const m of MODEL_CATALOG) {
-    const fit = m.minVramMB <= (hw.totalVramMB || hw.ramMB * 0.7) ? C.green + "✓" : C.yellow + "⚠";
-    const current = m.codename === entry.codename ? ` ${C.cyan}← installed${C.reset}` : "";
-    console.log(`  ${fit} ${m.codename}${C.reset} (${m.paramBillions}B, ~${m.sizeGB} GB) — ${m.description}${current}`);
-  }
+  // ═══════════════════════════════════════════════════════════════
+  //  Complete!
+  // ═══════════════════════════════════════════════════════════════
+
+  const successBox = [
+    `    ${C.green}╔══════════════════════════════════════════════╗${C.reset}`,
+    `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}   ${C.bold}${C.green}Setup complete!${C.reset}                           ${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}   Model:  ${C.cyan}${entry.codename.padEnd(34)}${C.reset}${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}   Port:   ${C.cyan}${port.toString().padEnd(34)}${C.reset}${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}   Engine: ${C.dim}${"llama.cpp".padEnd(34)}${C.reset}${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}   Run ${C.bold}${C.cyan}kcode${C.reset} to start coding!               ${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
+    `    ${C.green}╚══════════════════════════════════════════════╝${C.reset}`,
+  ];
+  console.log(successBox.join("\n"));
+  console.log();
+
+  // Tip
+  console.log(`    ${C.dim}Tip: Use ${C.reset}kcode setup --model <name>${C.dim} to switch models${C.reset}`);
+  console.log(`    ${C.dim}     Use ${C.reset}kcode server status${C.dim} to check the inference server${C.reset}`);
   console.log();
 
   return { model: entry.codename, enginePath, modelPath };
@@ -532,9 +687,10 @@ async function downloadFile(url: string, destPath: string, onProgress: (pct: str
   await writer.end();
 }
 
-/** Extract a .tar.gz or .zip archive */
+/** Extract a .tar.gz or .zip archive (cross-platform) */
 async function extractArchive(archivePath: string, destDir: string): Promise<void> {
   if (archivePath.endsWith(".tar.gz") || archivePath.endsWith(".tgz")) {
+    // tar works on Linux, macOS, and modern Windows (tar is built-in since Win10 1803)
     const proc = Bun.spawnSync(["tar", "-xzf", archivePath, "-C", destDir], {
       stdout: "pipe",
       stderr: "pipe",
@@ -543,19 +699,30 @@ async function extractArchive(archivePath: string, destDir: string): Promise<voi
       throw new Error(`Failed to extract tar.gz: ${proc.stderr.toString()}`);
     }
   } else if (archivePath.endsWith(".zip")) {
-    const proc = Bun.spawnSync(["unzip", "-o", archivePath, "-d", destDir], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    if (proc.exitCode !== 0) {
-      throw new Error(`Failed to extract zip: ${proc.stderr.toString()}`);
+    if (process.platform === "win32") {
+      // PowerShell Expand-Archive on Windows
+      const proc = Bun.spawnSync([
+        "powershell", "-NoProfile", "-Command",
+        `Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force`,
+      ], { stdout: "pipe", stderr: "pipe" });
+      if (proc.exitCode !== 0) {
+        throw new Error(`Failed to extract zip: ${proc.stderr.toString()}`);
+      }
+    } else {
+      const proc = Bun.spawnSync(["unzip", "-o", archivePath, "-d", destDir], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      if (proc.exitCode !== 0) {
+        throw new Error(`Failed to extract zip: ${proc.stderr.toString()}`);
+      }
     }
   } else {
     throw new Error(`Unknown archive format: ${archivePath}`);
   }
 }
 
-/** Find a binary in a directory (recursively) */
+/** Find a binary in a directory (recursively, cross-platform) */
 function findBinaryInDir(dir: string, name: string): string | null {
   const isWin = process.platform === "win32";
   const target = isWin ? `${name}.exe` : name;
@@ -564,24 +731,44 @@ function findBinaryInDir(dir: string, name: string): string | null {
   const directPath = join(dir, target);
   if (existsSync(directPath)) return directPath;
 
-  // Search subdirectories (extracted archives often have a subfolder)
+  // Search subdirectories using Bun's Glob (cross-platform, no Unix find dependency)
   try {
-    const proc = Bun.spawnSync(["find", dir, "-name", target, "-type", "f"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const found = proc.stdout.toString().trim().split("\n")[0];
-    if (found && existsSync(found)) {
-      // Move to engine root for simplicity
-      const finalPath = join(dir, target);
-      if (found !== finalPath) {
-        renameSync(found, finalPath);
+    const glob = new Bun.Glob(`**/${target}`);
+    for (const match of glob.scanSync({ cwd: dir, onlyFiles: true })) {
+      const found = join(dir, match);
+      if (existsSync(found)) {
+        // Move to engine root for simplicity
+        const finalPath = join(dir, target);
+        if (found !== finalPath) {
+          renameSync(found, finalPath);
+        }
+        return finalPath;
       }
-      return finalPath;
     }
   } catch { /* ignore */ }
 
   return null;
+}
+
+/** Find all shared library files in a directory (cross-platform) */
+function findLibraryFiles(dir: string): string[] {
+  const results: string[] = [];
+  const patterns = process.platform === "darwin"
+    ? ["**/*.dylib"]
+    : process.platform === "win32"
+    ? ["**/*.dll"]
+    : ["**/*.so", "**/*.so.*"];
+
+  try {
+    for (const pattern of patterns) {
+      const glob = new Bun.Glob(pattern);
+      for (const match of glob.scanSync({ cwd: dir, onlyFiles: true })) {
+        results.push(join(dir, match));
+      }
+    }
+  } catch { /* ignore */ }
+
+  return results;
 }
 
 /** Get server config (saved during setup) */

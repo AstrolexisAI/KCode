@@ -315,14 +315,14 @@ async function runMain(
 ) {
   const cwd = process.cwd();
 
-  // Auto-setup on first run if no models configured
+  // Auto-setup on first run — launch the installation wizard
   if (!isSetupComplete()) {
-    console.log("\x1b[33mFirst run detected — running auto-setup...\x1b[0m\n");
+    console.log("\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n");
     try {
       await runSetup();
     } catch (err) {
-      console.error(`\x1b[31mAuto-setup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
-      console.error("You can run 'kcode setup' manually to configure.");
+      console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
+      console.error("You can run '\x1b[1mkcode setup\x1b[0m' manually to configure.");
     }
   }
 

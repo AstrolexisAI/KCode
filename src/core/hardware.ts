@@ -57,14 +57,20 @@ export async function detectHardware(): Promise<HardwareInfo> {
 /** Detect NVIDIA GPUs via nvidia-smi */
 async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boolean; cudaVersion?: string }> {
   try {
-    // Try common nvidia-smi paths (not always in PATH, especially via SSH)
-    const nvidiaSmiPaths = [
-      "nvidia-smi",
-      "/usr/bin/nvidia-smi",
-      "/usr/local/bin/nvidia-smi",
-      "/usr/local/cuda/bin/nvidia-smi",
-      "/opt/cuda/bin/nvidia-smi",
-    ];
+    // Try common nvidia-smi paths per platform (not always in PATH, especially via SSH)
+    const nvidiaSmiPaths: string[] = process.platform === "win32"
+      ? [
+          "nvidia-smi",
+          "C:\\Windows\\System32\\nvidia-smi.exe",
+          "C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe",
+        ]
+      : [
+          "nvidia-smi",
+          "/usr/bin/nvidia-smi",
+          "/usr/local/bin/nvidia-smi",
+          "/usr/local/cuda/bin/nvidia-smi",
+          "/opt/cuda/bin/nvidia-smi",
+        ];
 
     let proc: ReturnType<typeof Bun.spawnSync> | null = null;
     const env = { ...process.env, PATH: `/usr/bin:/usr/local/bin:/usr/local/cuda/bin:${process.env.PATH ?? ""}` };
