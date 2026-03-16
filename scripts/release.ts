@@ -54,14 +54,8 @@ const TARGETS: Target[] = [
     target: "bun-windows-x64",
     outFile: `kcode-${VERSION}-windows-x64.exe`,
     flag: "--windows",
-    windowsOpts: [
-      "--windows-hide-console",
-      `--windows-title=KCode`,
-      `--windows-publisher=Astrolexis`,
-      `--windows-version=${VERSION}.0`,
-      `--windows-description=KCode - Kulvex Code by Astrolexis`,
-      `--windows-copyright=Copyright 2026 Astrolexis. All rights reserved.`,
-    ],
+    // --windows-* flags only work when compiling ON Windows natively
+    // When building on Windows, add: --windows-hide-console --windows-title=KCode etc.
   },
 ];
 
@@ -80,7 +74,8 @@ async function buildTarget(t: Target): Promise<{ ok: boolean; size: string; time
       ...(t.windowsOpts ?? []),
     ];
 
-    const proc = Bun.spawnSync(["bun", ...args], { stdout: "pipe", stderr: "pipe" });
+    const bunBin = process.execPath; // use the same bun that's running this script
+    const proc = Bun.spawnSync([bunBin, ...args], { stdout: "pipe", stderr: "pipe" });
 
     if (proc.exitCode !== 0) {
       const err = proc.stderr.toString().trim();
