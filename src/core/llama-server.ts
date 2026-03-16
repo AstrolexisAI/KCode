@@ -103,16 +103,27 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
     // Open log file for server output
     const logFile = Bun.file(LOG_FILE).writer();
 
-    // Set LD_LIBRARY_PATH to include the engine directory and any subdirectories
-    // so llama-server can find its shared libraries (libggml, libllama, libmtmd, etc.)
+    // Set library path so llama-server can find its shared libraries (libggml, libllama, etc.)
     const engineDir = join(config.enginePath, "..");
-    const ldPath = [engineDir, ...findLibDirs(engineDir), process.env.LD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+    const libDirs = [engineDir, ...findLibDirs(engineDir)];
+    const envOverrides: Record<string, string> = {};
+
+    if (process.platform === "darwin") {
+      // macOS uses DYLD_LIBRARY_PATH
+      envOverrides.DYLD_LIBRARY_PATH = [...libDirs, process.env.DYLD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+    } else if (process.platform === "win32") {
+      // Windows finds DLLs via PATH
+      envOverrides.PATH = [...libDirs, process.env.PATH ?? ""].filter(Boolean).join(";");
+    } else {
+      // Linux uses LD_LIBRARY_PATH
+      envOverrides.LD_LIBRARY_PATH = [...libDirs, process.env.LD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+    }
 
     const proc = spawn(config.enginePath, args, {
       cwd: KCODE_HOME,
-      env: { ...process.env, LD_LIBRARY_PATH: ldPath },
+      env: { ...process.env, ...envOverrides },
       stdio: ["ignore", "pipe", "pipe"],
-      detached: true, // Allow server to outlive KCode
+      detached: process.platform !== "win32", // detached not needed on Windows
     });
 
     serverProcess = proc;
@@ -142,7 +153,9 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
     });
 
     // Detach: allow server to keep running after KCode exits
-    proc.unref();
+    if (process.platform !== "win32") {
+      proc.unref();
+    }
 
     // Wait for server to be ready (poll /health endpoint)
     const startTime = Date.now();
@@ -183,26 +196,32 @@ export async function stopServer(): Promise<void> {
   }
 
   try {
-    // Send SIGTERM first for graceful shutdown
-    process.kill(pid, "SIGTERM");
-    log.info("server", `Sent SIGTERM to llama-server (PID: ${pid})`);
+    if (process.platform === "win32") {
+      // Windows: use taskkill
+      Bun.spawnSync(["taskkill", "/PID", pid.toString(), "/F"], { stdout: "pipe", stderr: "pipe" });
+      log.info("server", `Killed llama-server (PID: ${pid})`);
+    } else {
+      // Unix: Send SIGTERM first for graceful shutdown
+      process.kill(pid, "SIGTERM");
+      log.info("server", `Sent SIGTERM to llama-server (PID: ${pid})`);
 
-    // Wait up to 5 seconds for graceful shutdown
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      try {
-        process.kill(pid, 0); // Check if still alive
-      } catch {
-        // Process is dead
-        break;
+      // Wait up to 5 seconds for graceful shutdown
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        try {
+          process.kill(pid, 0); // Check if still alive
+        } catch {
+          // Process is dead
+          break;
+        }
       }
-    }
 
-    // Force kill if still alive
-    try {
-      process.kill(pid, "SIGKILL");
-      log.warn("server", `Force-killed llama-server (PID: ${pid})`);
-    } catch { /* already dead */ }
+      // Force kill if still alive
+      try {
+        process.kill(pid, "SIGKILL");
+        log.warn("server", `Force-killed llama-server (PID: ${pid})`);
+      } catch { /* already dead */ }
+    }
   } catch (err) {
     // Process doesn't exist — clean up stale files
     log.debug("server", `Server PID ${pid} not found (already stopped)`);
@@ -262,14 +281,22 @@ function cleanupPidFile(): void {
   try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
 }
 
-/** Find directories containing .so files under a given path */
+/** Find directories containing shared library files under a given path (cross-platform) */
 function findLibDirs(baseDir: string): string[] {
+  const patterns = process.platform === "darwin"
+    ? ["**/*.dylib"]
+    : process.platform === "win32"
+    ? ["**/*.dll"]
+    : ["**/*.so", "**/*.so.*"];
+
   try {
-    const proc = Bun.spawnSync(["find", baseDir, "-name", "*.so", "-o", "-name", "*.so.*", "-type", "f"], {
-      stdout: "pipe", stderr: "pipe",
-    });
-    const paths = proc.stdout.toString().trim().split("\n").filter(Boolean);
-    const dirs = new Set(paths.map((p) => join(p, "..")));
+    const dirs = new Set<string>();
+    for (const pattern of patterns) {
+      const glob = new Bun.Glob(pattern);
+      for (const match of glob.scanSync({ cwd: baseDir, onlyFiles: true })) {
+        dirs.add(join(baseDir, join(match, "..")));
+      }
+    }
     return [...dirs];
   } catch { return []; }
 }
