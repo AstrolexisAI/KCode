@@ -57,6 +57,8 @@ export async function detectHardware(): Promise<HardwareInfo> {
 /** Detect NVIDIA GPUs via nvidia-smi */
 async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boolean; cudaVersion?: string }> {
   try {
+    const { execSync } = require("node:child_process");
+
     // Try common nvidia-smi paths per platform (not always in PATH, especially via SSH)
     const nvidiaSmiPaths: string[] = process.platform === "win32"
       ? [
@@ -65,31 +67,47 @@ async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boo
           "C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe",
         ]
       : [
-          "nvidia-smi",
           "/usr/bin/nvidia-smi",
+          "nvidia-smi",
           "/usr/local/bin/nvidia-smi",
           "/usr/local/cuda/bin/nvidia-smi",
           "/opt/cuda/bin/nvidia-smi",
         ];
 
-    let proc: ReturnType<typeof Bun.spawnSync> | null = null;
-    const env = { ...process.env, PATH: `/usr/bin:/usr/local/bin:/usr/local/cuda/bin:${process.env.PATH ?? ""}` };
+    const queryArgs = "--query-gpu=index,name,memory.total --format=csv,noheader,nounits";
+    let output = "";
+
+    // Try execSync first (more reliable in standalone binaries)
     for (const smiPath of nvidiaSmiPaths) {
-      const attempt = Bun.spawnSync(
-        [smiPath, "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
-        { stdout: "pipe", stderr: "pipe", env },
-      );
-      if (attempt.exitCode === 0) {
-        proc = attempt;
-        break;
+      try {
+        output = execSync(`${smiPath} ${queryArgs}`, {
+          encoding: "utf-8",
+          timeout: 10000,
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
+        if (output) break;
+      } catch { /* try next path */ }
+    }
+
+    if (!output) {
+      // Fallback to Bun.spawnSync
+      const env = { ...process.env, PATH: `/usr/bin:/usr/local/bin:/usr/local/cuda/bin:${process.env.PATH ?? ""}` };
+      for (const smiPath of nvidiaSmiPaths) {
+        const attempt = Bun.spawnSync(
+          [smiPath, "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
+          { stdout: "pipe", stderr: "pipe", env },
+        );
+        if (attempt.exitCode === 0) {
+          output = attempt.stdout.toString().trim();
+          if (output) break;
+        }
       }
     }
 
-    if (!proc || proc.exitCode !== 0) {
+    if (!output) {
       return { gpus: [], cudaAvailable: false };
     }
 
-    const output = proc.stdout.toString().trim();
     const gpus: GpuInfo[] = [];
 
     for (const line of output.split("\n")) {
@@ -105,19 +123,15 @@ async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boo
 
     // Get CUDA version
     let cudaVersion: string | undefined;
-    const cudaProc = Bun.spawnSync(
-      ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
-    if (cudaProc.exitCode === 0) {
-      // Also check nvcc for CUDA toolkit version
-      const nvccProc = Bun.spawnSync(["nvcc", "--version"], { stdout: "pipe", stderr: "pipe" });
-      if (nvccProc.exitCode === 0) {
-        const nvccOut = nvccProc.stdout.toString();
-        const vMatch = nvccOut.match(/release (\d+\.\d+)/);
-        if (vMatch) cudaVersion = vMatch[1];
-      }
-    }
+    try {
+      const nvccOut = execSync("nvcc --version 2>/dev/null || /usr/local/cuda/bin/nvcc --version 2>/dev/null", {
+        encoding: "utf-8",
+        timeout: 5000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      const vMatch = nvccOut.match(/release (\d+\.\d+)/);
+      if (vMatch) cudaVersion = vMatch[1];
+    } catch { /* no nvcc */ }
 
     return { gpus, cudaAvailable: gpus.length > 0, cudaVersion };
   } catch {

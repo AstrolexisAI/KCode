@@ -31,6 +31,7 @@ import { getPluginManager } from "./core/plugins";
 import { getLspManager, shutdownLsp } from "./core/lsp";
 import { runSetup, isSetupComplete, getAvailableModels } from "./core/model-manager";
 import { startServer, stopServer, getServerStatus, ensureServer, isServerRunning } from "./core/llama-server";
+import { activateLicense, checkLicense, hasLicense, getLicenseInfo, clearLicense } from "./core/license";
 
 // Read version from package.json at build time (Bun supports JSON imports)
 import pkg from "../package.json";
@@ -303,6 +304,66 @@ serverCmd
     console.log(`\x1b[32m✓\x1b[0m Server restarted on port ${port} (PID: ${pid})`);
   });
 
+// ─── Activate subcommand ────────────────────────────────────────
+
+program
+  .command("activate <license-key>")
+  .description("Activate a license key for this machine")
+  .action(async (licenseKey: string) => {
+    console.log("\nActivating license...\n");
+
+    const result = await activateLicense(licenseKey);
+
+    if (result.valid) {
+      console.log(`\x1b[32m✓\x1b[0m License activated successfully!`);
+      console.log(`  Tier: ${result.tier}`);
+      console.log(`  This license is now bound to this machine.\n`);
+    } else {
+      console.error(`\x1b[31m✗\x1b[0m ${result.message}\n`);
+      process.exit(1);
+    }
+  });
+
+// ─── License subcommand ─────────────────────────────────────────
+
+const licenseCmd = program
+  .command("license")
+  .description("Manage your KCode license");
+
+licenseCmd
+  .command("status")
+  .description("Show current license status")
+  .action(async () => {
+    const info = getLicenseInfo();
+    if (!info) {
+      console.log("\x1b[2m○ No license\x1b[0m");
+      console.log("  Activate with: kcode activate <license-key>");
+      return;
+    }
+
+    const result = await checkLicense();
+    if (result.valid) {
+      console.log(`\x1b[32m● Licensed\x1b[0m`);
+      console.log(`  Tier:      ${info.tier}`);
+      console.log(`  Activated: ${new Date(info.activatedAt).toLocaleDateString()}`);
+      console.log(`  Validated: ${new Date(info.lastValidated).toLocaleDateString()}`);
+      if (result.grace) {
+        console.log(`  \x1b[33m⚠ Offline mode — connect to re-validate\x1b[0m`);
+      }
+    } else {
+      console.log(`\x1b[31m● Invalid\x1b[0m`);
+      console.log(`  ${result.message}`);
+    }
+  });
+
+licenseCmd
+  .command("deactivate")
+  .description("Remove license from this machine")
+  .action(() => {
+    clearLicense();
+    console.log("License removed from this machine.");
+  });
+
 // ─── Parse ──────────────────────────────────────────────────────
 
 program.parse();
@@ -316,6 +377,7 @@ async function runMain(
   const cwd = process.cwd();
 
   // Auto-setup on first run — launch the installation wizard
+  // The wizard handles license activation and PATH installation
   if (!isSetupComplete()) {
     console.log("\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n");
     try {
@@ -324,6 +386,24 @@ async function runMain(
       console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
       console.error("You can run '\x1b[1mkcode setup\x1b[0m' manually to configure.");
     }
+  }
+
+  // ─── License check ─────────────────────────────────────────
+  if (!hasLicense()) {
+    console.log("\n\x1b[33m⚠  KCode requires a license key to run.\x1b[0m");
+    console.log("  Activate with: \x1b[1mkcode activate <license-key>\x1b[0m");
+    console.log("  Purchase at:   \x1b[36mhttps://kulvex.ai\x1b[0m\n");
+    process.exit(1);
+  }
+
+  const licenseCheck = await checkLicense();
+  if (!licenseCheck.valid) {
+    console.log(`\n\x1b[31m✗  License error: ${licenseCheck.message}\x1b[0m\n`);
+    process.exit(1);
+  }
+
+  if (licenseCheck.grace) {
+    process.stderr.write("\x1b[33m⚠ Offline mode — connect to the internet to re-validate your license\x1b[0m\n");
   }
 
   // Auto-start llama-server if configured and not running
