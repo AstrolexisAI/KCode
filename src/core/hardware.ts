@@ -57,12 +57,29 @@ export async function detectHardware(): Promise<HardwareInfo> {
 /** Detect NVIDIA GPUs via nvidia-smi */
 async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boolean; cudaVersion?: string }> {
   try {
-    const proc = Bun.spawnSync(
-      ["nvidia-smi", "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
+    // Try common nvidia-smi paths (not always in PATH, especially via SSH)
+    const nvidiaSmiPaths = [
+      "nvidia-smi",
+      "/usr/bin/nvidia-smi",
+      "/usr/local/bin/nvidia-smi",
+      "/usr/local/cuda/bin/nvidia-smi",
+      "/opt/cuda/bin/nvidia-smi",
+    ];
 
-    if (proc.exitCode !== 0) {
+    let proc: ReturnType<typeof Bun.spawnSync> | null = null;
+    const env = { ...process.env, PATH: `/usr/bin:/usr/local/bin:/usr/local/cuda/bin:${process.env.PATH ?? ""}` };
+    for (const smiPath of nvidiaSmiPaths) {
+      const attempt = Bun.spawnSync(
+        [smiPath, "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
+        { stdout: "pipe", stderr: "pipe", env },
+      );
+      if (attempt.exitCode === 0) {
+        proc = attempt;
+        break;
+      }
+    }
+
+    if (!proc || proc.exitCode !== 0) {
       return { gpus: [], cudaAvailable: false };
     }
 

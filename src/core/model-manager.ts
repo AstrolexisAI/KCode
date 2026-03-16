@@ -235,6 +235,22 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
     chmodSync(serverBin, 0o755);
   }
 
+  // Move all shared libraries (.so, .dylib, .dll) next to the binary
+  // so LD_LIBRARY_PATH / DYLD_LIBRARY_PATH can find them
+  progress("Installing libraries...");
+  const binDir = join(serverBin, "..");
+  const libProc = Bun.spawnSync(
+    ["find", ENGINE_DIR, "-name", "*.so", "-o", "-name", "*.so.*", "-o", "-name", "*.dylib", "-o", "-name", "*.dll"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  for (const libPath of libProc.stdout.toString().trim().split("\n").filter(Boolean)) {
+    const libName = libPath.split("/").pop()!;
+    const dest = join(binDir, libName);
+    if (libPath !== dest && !existsSync(dest)) {
+      try { renameSync(libPath, dest); } catch { /* ignore */ }
+    }
+  }
+
   // Save version info
   await Bun.write(join(ENGINE_DIR, "version.txt"), `${tag}\n${assetName}\n`);
 
@@ -496,9 +512,16 @@ async function downloadFile(url: string, destPath: string, onProgress: (pct: str
       const pct = Math.round((downloaded / contentLength) * 100);
       if (pct > lastReport) {
         lastReport = pct;
-        const downloadedGB = (downloaded / (1024 * 1024 * 1024)).toFixed(1);
-        const totalGB = (contentLength / (1024 * 1024 * 1024)).toFixed(1);
-        onProgress(`${pct}% (${downloadedGB}/${totalGB} GB)`);
+        const useMB = contentLength < 1024 * 1024 * 1024; // < 1 GB
+        if (useMB) {
+          const dlMB = (downloaded / (1024 * 1024)).toFixed(0);
+          const totalMB = (contentLength / (1024 * 1024)).toFixed(0);
+          onProgress(`${pct}% (${dlMB}/${totalMB} MB)`);
+        } else {
+          const dlGB = (downloaded / (1024 * 1024 * 1024)).toFixed(1);
+          const totalGB = (contentLength / (1024 * 1024 * 1024)).toFixed(1);
+          onProgress(`${pct}% (${dlGB}/${totalGB} GB)`);
+        }
       }
     } else {
       const downloadedMB = (downloaded / (1024 * 1024)).toFixed(0);
