@@ -1,5 +1,8 @@
-// KCode - Llama Server Manager
-// Manages the llama-server process lifecycle (start, stop, health check)
+// KCode - Inference Server Manager
+// Manages the inference server process lifecycle (start, stop, health check)
+// Supports two engines:
+//   - llama.cpp (llama-server) on Linux/Windows
+//   - MLX (mlx_lm.server) on macOS Apple Silicon
 
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -15,21 +18,24 @@ const LOG_FILE = join(KCODE_HOME, "server.log");
 
 let serverProcess: ChildProcess | null = null;
 
-/** Check if llama-server is running (by PID or port) */
+/** Check if the inference server is running (by PID or port) */
 export async function isServerRunning(): Promise<boolean> {
   const port = getServerPort();
   if (!port) return false;
 
-  try {
-    const resp = await fetch(`http://localhost:${port}/health`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return resp.ok;
-  } catch {
-    // Server not responding — clean up stale PID file
-    cleanupPidFile();
-    return false;
+  // Try llama.cpp /health first, then MLX /v1/models
+  for (const endpoint of ["/health", "/v1/models"]) {
+    try {
+      const resp = await fetch(`http://localhost:${port}${endpoint}`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (resp.ok) return true;
+    } catch { /* try next */ }
   }
+
+  // Server not responding — clean up stale PID file
+  cleanupPidFile();
+  return false;
 }
 
 /** Get the port of the running server */
@@ -54,13 +60,13 @@ function getServerPid(): number | null {
   return null;
 }
 
-/** Start the llama-server with the configured model */
+/** Start the inference server with the configured model */
 export async function startServer(options?: { port?: number }): Promise<{ port: number; pid: number }> {
   // Check if already running
   if (await isServerRunning()) {
     const port = getServerPort()!;
     const pid = getServerPid() ?? 0;
-    log.info("server", `llama-server already running on port ${port}`);
+    log.info("server", `Server already running on port ${port}`);
     return { port, pid };
   }
 
@@ -70,60 +76,78 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
   }
 
   if (!existsSync(config.enginePath)) {
-    throw new Error(`Engine binary not found: ${config.enginePath}. Run 'kcode setup' to reinstall.`);
-  }
-
-  if (!existsSync(config.modelPath)) {
-    throw new Error(`Model file not found: ${config.modelPath}. Run 'kcode setup' to redownload.`);
+    throw new Error(`Engine not found: ${config.enginePath}. Run 'kcode setup' to reinstall.`);
   }
 
   const port = options?.port ?? config.port;
+  const isMlx = config.engine === "mlx";
 
-  // Build llama-server arguments
-  const args: string[] = [
-    "--model", config.modelPath,
-    "--port", port.toString(),
-    "--host", "127.0.0.1",
-    "--ctx-size", config.contextSize.toString(),
-    "--n-gpu-layers", config.gpuLayers.toString(),
-    "--parallel", "1",        // single slot (one user)
-    "--metrics",              // enable /metrics endpoint
-  ];
+  // Build command and args based on engine type
+  let cmd: string;
+  let args: string[];
 
-  // Multi-GPU tensor split
-  if (config.gpus.length > 1) {
-    const totalVram = config.gpus.reduce((s, g) => s + g.vramMB, 0);
-    const splits = config.gpus.map((g) => (g.vramMB / totalVram).toFixed(2));
-    args.push("--tensor-split", splits.join(","));
+  if (isMlx) {
+    // MLX: python3 -m mlx_lm.server --model <repo> --port <port> --host 127.0.0.1
+    cmd = config.enginePath; // venv python3
+    args = [
+      "-m", "mlx_lm.server",
+      "--model", config.mlxRepo ?? config.modelPath,
+      "--port", port.toString(),
+      "--host", "127.0.0.1",
+    ];
+    log.info("server", `Starting MLX server on port ${port}: ${cmd} ${args.join(" ")}`);
+  } else {
+    // llama.cpp
+    if (!existsSync(config.modelPath)) {
+      throw new Error(`Model file not found: ${config.modelPath}. Run 'kcode setup' to redownload.`);
+    }
+
+    cmd = config.enginePath;
+    args = [
+      "--model", config.modelPath,
+      "--port", port.toString(),
+      "--host", "127.0.0.1",
+      "--ctx-size", config.contextSize.toString(),
+      "--n-gpu-layers", config.gpuLayers.toString(),
+      "--parallel", "1",
+      "--metrics",
+    ];
+
+    // Multi-GPU tensor split
+    if (config.gpus.length > 1) {
+      const totalVram = config.gpus.reduce((s, g) => s + g.vramMB, 0);
+      const splits = config.gpus.map((g) => (g.vramMB / totalVram).toFixed(2));
+      args.push("--tensor-split", splits.join(","));
+    }
+
+    log.info("server", `Starting llama-server on port ${port}: ${cmd} ${args.join(" ")}`);
   }
-
-  log.info("server", `Starting llama-server on port ${port}: ${config.enginePath} ${args.join(" ")}`);
 
   return new Promise((resolve, reject) => {
     // Open log file for server output
     const logFile = Bun.file(LOG_FILE).writer();
 
-    // Set library path so llama-server can find its shared libraries (libggml, libllama, etc.)
-    const engineDir = join(config.enginePath, "..");
-    const libDirs = [engineDir, ...findLibDirs(engineDir)];
+    // Set library paths (only needed for llama.cpp)
     const envOverrides: Record<string, string> = {};
 
-    if (process.platform === "darwin") {
-      // macOS uses DYLD_LIBRARY_PATH
-      envOverrides.DYLD_LIBRARY_PATH = [...libDirs, process.env.DYLD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
-    } else if (process.platform === "win32") {
-      // Windows finds DLLs via PATH
-      envOverrides.PATH = [...libDirs, process.env.PATH ?? ""].filter(Boolean).join(";");
-    } else {
-      // Linux uses LD_LIBRARY_PATH
-      envOverrides.LD_LIBRARY_PATH = [...libDirs, process.env.LD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+    if (!isMlx) {
+      const engineDir = join(config.enginePath, "..");
+      const libDirs = [engineDir, ...findLibDirs(engineDir)];
+
+      if (process.platform === "darwin") {
+        envOverrides.DYLD_LIBRARY_PATH = [...libDirs, process.env.DYLD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+      } else if (process.platform === "win32") {
+        envOverrides.PATH = [...libDirs, process.env.PATH ?? ""].filter(Boolean).join(";");
+      } else {
+        envOverrides.LD_LIBRARY_PATH = [...libDirs, process.env.LD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+      }
     }
 
-    const proc = spawn(config.enginePath, args, {
+    const proc = spawn(cmd, args, {
       cwd: KCODE_HOME,
       env: { ...process.env, ...envOverrides },
       stdio: ["ignore", "pipe", "pipe"],
-      detached: process.platform !== "win32", // detached not needed on Windows
+      detached: process.platform !== "win32",
     });
 
     serverProcess = proc;
@@ -141,13 +165,13 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
     });
 
     proc.on("error", (err) => {
-      log.error("server", `Failed to start llama-server: ${err.message}`);
+      log.error("server", `Failed to start server: ${err.message}`);
       cleanupPidFile();
-      reject(new Error(`Failed to start llama-server: ${err.message}`));
+      reject(new Error(`Failed to start server: ${err.message}`));
     });
 
     proc.on("exit", (code) => {
-      log.info("server", `llama-server exited with code ${code}`);
+      log.info("server", `Server exited with code ${code}`);
       cleanupPidFile();
       serverProcess = null;
     });
@@ -157,7 +181,9 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
       proc.unref();
     }
 
-    // Wait for server to be ready (poll /health endpoint)
+    // Wait for server to be ready
+    // llama.cpp exposes /health, MLX exposes /v1/models
+    const healthEndpoint = isMlx ? "/v1/models" : "/health";
     const startTime = Date.now();
     const maxWait = 120_000; // 2 minutes max for model loading
     const pollInterval = 500;
@@ -165,12 +191,12 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
     const poll = async () => {
       while (Date.now() - startTime < maxWait) {
         try {
-          const resp = await fetch(`http://localhost:${port}/health`, {
+          const resp = await fetch(`http://localhost:${port}${healthEndpoint}`, {
             signal: AbortSignal.timeout(1000),
           });
           if (resp.ok) {
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            log.info("server", `llama-server ready in ${elapsed}s (PID: ${proc.pid})`);
+            log.info("server", `Server ready in ${elapsed}s (PID: ${proc.pid}, engine: ${isMlx ? "mlx" : "llama.cpp"})`);
             resolve({ port, pid: proc.pid! });
             return;
           }
@@ -180,7 +206,7 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
       }
 
       // Timed out
-      reject(new Error(`llama-server did not become ready within ${maxWait / 1000}s. Check ${LOG_FILE}`));
+      reject(new Error(`Server did not become ready within ${maxWait / 1000}s. Check ${LOG_FILE}`));
     };
 
     poll();
@@ -262,6 +288,7 @@ export async function getServerStatus(): Promise<{
   const pid = getServerPid();
 
   if (running && port) {
+    // Try llama.cpp /props first, then MLX /v1/models
     try {
       const resp = await fetch(`http://localhost:${port}/props`, {
         signal: AbortSignal.timeout(2000),
@@ -269,6 +296,17 @@ export async function getServerStatus(): Promise<{
       if (resp.ok) {
         const props = await resp.json() as any;
         return { running, port, pid, model: props.default_generation_settings?.model };
+      }
+    } catch { /* try MLX */ }
+
+    try {
+      const resp = await fetch(`http://localhost:${port}/v1/models`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (resp.ok) {
+        const data = await resp.json() as any;
+        const model = data?.data?.[0]?.id;
+        return { running, port, pid, model };
       }
     } catch { /* ignore */ }
   }
