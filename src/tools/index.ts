@@ -25,6 +25,10 @@ import {
   readMcpResourceDefinition, executeReadMcpResource,
 } from "./mcp-tools";
 import { learnDefinition, executeLearn } from "./learn";
+import { kulvexDefinition, executeKulvex } from "./kulvex";
+import { browserDefinition, executeBrowser } from "./browser";
+import { imageGenDefinition, executeImageGen } from "./image-gen";
+import { planDefinition, executePlan } from "./plan";
 
 /**
  * Register all built-in tools and optionally MCP-discovered tools.
@@ -53,6 +57,18 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
 
   // Learning / long-term memory
   registry.register("Learn", learnDefinition, executeLearn);
+
+  // Kulvex bridge (Jarvis backend integration)
+  registry.register("Kulvex", kulvexDefinition, executeKulvex);
+
+  // Browser automation (Playwright)
+  registry.register("Browser", browserDefinition, executeBrowser);
+
+  // Image generation (ComfyUI)
+  registry.register("ImageGen", imageGenDefinition, executeImageGen);
+
+  // Structured planning
+  registry.register("Plan", planDefinition, executePlan);
 
   // MCP resource tools (always available, gracefully handle no servers)
   registry.register("ListMcpResources", listMcpResourcesDefinition, executeListMcpResources);

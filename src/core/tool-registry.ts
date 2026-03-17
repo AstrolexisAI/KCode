@@ -43,6 +43,26 @@ export class ToolRegistry {
   has(name: string): boolean {
     return this.tools.has(name);
   }
+
+  /** Read-only tools that are safe to execute in parallel. */
+  static readonly PARALLEL_SAFE = new Set(["Read", "Glob", "Grep", "WebFetch", "WebSearch", "TaskList", "TaskGet"]);
+
+  /**
+   * Check if a tool is safe to run in parallel with other tools.
+   */
+  isParallelSafe(name: string): boolean {
+    return ToolRegistry.PARALLEL_SAFE.has(name);
+  }
+
+  /**
+   * Execute multiple tool calls in parallel (only for parallel-safe tools).
+   * Returns results in the same order as the input calls.
+   */
+  async executeParallel(
+    calls: Array<{ name: string; input: Record<string, unknown> }>,
+  ): Promise<ToolResult[]> {
+    return Promise.all(calls.map((c) => this.execute(c.name, c.input)));
+  }
 }
 
 interface RegisteredTool {

@@ -1,0 +1,84 @@
+// KCode - Model Pricing Registry
+// Per-model cost calculation for remote API providers
+
+export interface ModelPricing {
+  inputPer1M: number;   // USD per 1M input tokens
+  outputPer1M: number;  // USD per 1M output tokens
+  name?: string;        // Display name
+}
+
+// Known provider pricing (as of 2026)
+const KNOWN_PRICING: Record<string, ModelPricing> = {
+  // Anthropic
+  "claude-sonnet-4-6": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "claude-opus-4-6": { inputPer1M: 15.0, outputPer1M: 75.0 },
+  "claude-haiku-4-5": { inputPer1M: 0.80, outputPer1M: 4.0 },
+  // OpenAI
+  "gpt-4o": { inputPer1M: 2.5, outputPer1M: 10.0 },
+  "gpt-4o-mini": { inputPer1M: 0.15, outputPer1M: 0.60 },
+  "gpt-4.1": { inputPer1M: 2.0, outputPer1M: 8.0 },
+  "gpt-4.1-mini": { inputPer1M: 0.40, outputPer1M: 1.60 },
+  "o3": { inputPer1M: 10.0, outputPer1M: 40.0 },
+  "o4-mini": { inputPer1M: 1.10, outputPer1M: 4.40 },
+  // Google
+  "gemini-2.5-pro": { inputPer1M: 1.25, outputPer1M: 10.0 },
+  "gemini-2.5-flash": { inputPer1M: 0.15, outputPer1M: 0.60 },
+  // DeepSeek
+  "deepseek-chat": { inputPer1M: 0.27, outputPer1M: 1.10 },
+  "deepseek-reasoner": { inputPer1M: 0.55, outputPer1M: 2.19 },
+};
+
+// Custom pricing from ~/.kcode/pricing.json
+let customPricing: Record<string, ModelPricing> = {};
+let customLoaded = false;
+
+async function loadCustomPricing(): Promise<void> {
+  if (customLoaded) return;
+  customLoaded = true;
+  try {
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const file = Bun.file(join(homedir(), ".kcode", "pricing.json"));
+    if (await file.exists()) {
+      customPricing = await file.json();
+    }
+  } catch { /* ignore */ }
+}
+
+/**
+ * Get pricing for a model. Returns null for local/unknown models (= free).
+ */
+export async function getModelPricing(modelName: string): Promise<ModelPricing | null> {
+  await loadCustomPricing();
+
+  // Check custom pricing first (user overrides)
+  if (customPricing[modelName]) return customPricing[modelName];
+
+  // Check known pricing (exact match)
+  if (KNOWN_PRICING[modelName]) return KNOWN_PRICING[modelName];
+
+  // Fuzzy match: check if model name contains a known key
+  for (const [key, pricing] of Object.entries(KNOWN_PRICING)) {
+    if (modelName.includes(key) || key.includes(modelName)) {
+      return pricing;
+    }
+  }
+
+  return null; // Local model = free
+}
+
+/**
+ * Calculate cost for given token counts.
+ */
+export function calculateCost(pricing: ModelPricing, inputTokens: number, outputTokens: number): number {
+  return (inputTokens / 1_000_000) * pricing.inputPer1M + (outputTokens / 1_000_000) * pricing.outputPer1M;
+}
+
+/**
+ * Format cost as USD string.
+ */
+export function formatCost(cost: number): string {
+  if (cost === 0) return "$0.00 (local inference)";
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}

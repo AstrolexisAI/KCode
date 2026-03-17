@@ -29,6 +29,8 @@ import { getWorldModel } from "./world-model";
 import { getUserModel } from "./user-model";
 import { getIntentionEngine } from "./intentions";
 import type { Suggestion } from "./intentions";
+import { extractExample, saveExample } from "./distillation";
+import { scoreResponse, saveBenchmark, initBenchmarkSchema } from "./benchmarks";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -37,8 +39,188 @@ const CONTEXT_WINDOW_MARGIN = 0.2; // prune when we reach 80% of context window
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
-const MAX_AGENT_TURNS = 500; // prevent infinite loops
+const MAX_AGENT_TURNS = 25; // prevent infinite loops — 25 tool turns is plenty for any task
 const MAX_CONSECUTIVE_DENIALS = 2; // stop after N permission denials in a row
+const MAX_OUTPUT_TOKENS_PER_TURN = 4096; // Hard cap on output tokens per API call
+const MAX_TOTAL_OUTPUT_TOKENS = 50_000; // Hard cap on total output tokens per agent loop
+
+// ─── Lightweight JSON Schema Validator ───────────────────────────
+// Validates basic JSON Schema constraints without pulling in Ajv (~150KB).
+// Covers: type, required, properties, enum, minimum, maximum, minLength, maxLength, pattern, items.
+
+function validateJsonSchema(data: unknown, schema: Record<string, unknown>, path = "$"): string[] {
+  const errors: string[] = [];
+
+  // type check
+  if (schema.type) {
+    const schemaType = schema.type as string;
+    const actualType = Array.isArray(data) ? "array" : data === null ? "null" : typeof data;
+    if (schemaType === "integer") {
+      if (typeof data !== "number" || !Number.isInteger(data)) {
+        errors.push(`${path}: expected integer, got ${actualType}`);
+        return errors;
+      }
+    } else if (actualType !== schemaType) {
+      errors.push(`${path}: expected ${schemaType}, got ${actualType}`);
+      return errors;
+    }
+  }
+
+  // enum
+  if (schema.enum && Array.isArray(schema.enum)) {
+    if (!(schema.enum as unknown[]).includes(data)) {
+      errors.push(`${path}: value must be one of [${(schema.enum as unknown[]).join(", ")}]`);
+    }
+  }
+
+  // string constraints
+  if (typeof data === "string") {
+    if (typeof schema.minLength === "number" && data.length < schema.minLength) {
+      errors.push(`${path}: string length ${data.length} < minLength ${schema.minLength}`);
+    }
+    if (typeof schema.maxLength === "number" && data.length > schema.maxLength) {
+      errors.push(`${path}: string length ${data.length} > maxLength ${schema.maxLength}`);
+    }
+    if (typeof schema.pattern === "string") {
+      if (!new RegExp(schema.pattern).test(data)) {
+        errors.push(`${path}: string does not match pattern "${schema.pattern}"`);
+      }
+    }
+  }
+
+  // number constraints
+  if (typeof data === "number") {
+    if (typeof schema.minimum === "number" && data < schema.minimum) {
+      errors.push(`${path}: ${data} < minimum ${schema.minimum}`);
+    }
+    if (typeof schema.maximum === "number" && data > schema.maximum) {
+      errors.push(`${path}: ${data} > maximum ${schema.maximum}`);
+    }
+  }
+
+  // object constraints
+  if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+    const obj = data as Record<string, unknown>;
+    if (schema.required && Array.isArray(schema.required)) {
+      for (const key of schema.required as string[]) {
+        if (!(key in obj)) {
+          errors.push(`${path}: missing required property "${key}"`);
+        }
+      }
+    }
+    if (schema.properties && typeof schema.properties === "object") {
+      for (const [key, propSchema] of Object.entries(schema.properties as Record<string, Record<string, unknown>>)) {
+        if (key in obj) {
+          errors.push(...validateJsonSchema(obj[key], propSchema, `${path}.${key}`));
+        }
+      }
+    }
+  }
+
+  // array constraints
+  if (Array.isArray(data)) {
+    if (typeof schema.minItems === "number" && data.length < schema.minItems) {
+      errors.push(`${path}: array length ${data.length} < minItems ${schema.minItems}`);
+    }
+    if (typeof schema.maxItems === "number" && data.length > schema.maxItems) {
+      errors.push(`${path}: array length ${data.length} > maxItems ${schema.maxItems}`);
+    }
+    if (schema.items && typeof schema.items === "object") {
+      for (let i = 0; i < data.length; i++) {
+        errors.push(...validateJsonSchema(data[i], schema.items as Record<string, unknown>, `${path}[${i}]`));
+      }
+    }
+  }
+
+  return errors;
+}
+
+// ─── Text-based Tool Call Extraction ─────────────────────────────
+// Local models (Qwen, etc.) often emit tool calls as JSON in text content
+// instead of using OpenAI's native tool_calls format. This extracts them.
+
+interface ExtractedToolCall {
+  name: string;
+  input: Record<string, unknown>;
+  prefixText: string;
+}
+
+function extractToolCallsFromText(text: string, tools: ToolRegistry): ExtractedToolCall[] {
+  const results: ExtractedToolCall[] = [];
+  const toolDefs = tools.getDefinitions();
+  const knownTools = new Set(toolDefs.map((t) => t.name));
+  // Case-insensitive lookup: "bash" → "Bash"
+  const toolNameMap = new Map(toolDefs.map((t) => [t.name.toLowerCase(), t.name]));
+  let match: RegExpExecArray | null;
+  let firstMatchIndex = text.length;
+
+  // Pattern 1: ```json\n{"name": "ToolName", "arguments": {...}}\n```
+  const codeBlockRe = /```(?:json)?\s*\n?\s*(\{[\s\S]*?\})\s*\n?\s*```/g;
+  while ((match = codeBlockRe.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      const rawName = parsed.name ?? parsed.function ?? parsed.tool;
+      const toolName = typeof rawName === "string" ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
+      const args = parsed.arguments ?? parsed.parameters ?? parsed.input ?? {};
+      if (toolName && knownTools.has(toolName)) {
+        if (match.index < firstMatchIndex) firstMatchIndex = match.index;
+        results.push({ name: toolName, input: typeof args === "object" ? args : {}, prefixText: text.slice(0, firstMatchIndex) });
+      }
+    } catch { /* not valid JSON */ }
+  }
+  if (results.length > 0) return results;
+
+  // Pattern 2: Raw JSON {"name": "ToolName", "arguments": {...}} anywhere in text
+  const rawJsonRe = /\{\s*"(?:name|function|tool)"\s*:\s*"(\w+)"\s*,\s*"(?:arguments|parameters|input)"\s*:\s*(\{[^}]*\})\s*\}/g;
+  while ((match = rawJsonRe.exec(text)) !== null) {
+    const rawName = match[1];
+    const toolName = rawName ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
+    if (toolName && knownTools.has(toolName)) {
+      try {
+        const args = JSON.parse(match[2]);
+        if (match.index < firstMatchIndex) firstMatchIndex = match.index;
+        results.push({ name: toolName, input: typeof args === "object" ? args : {}, prefixText: text.slice(0, firstMatchIndex) });
+      } catch { /* bad args JSON */ }
+    }
+  }
+  if (results.length > 0) return results;
+
+  // Pattern 3: Code block containing a shell command — common with small models
+  // ```bash\nsome command\n``` or ```\nsome command\n```
+  const bashBlockRe = /```(?:bash|sh|shell)?\s*\n([\s\S]*?)\n\s*```/g;
+  while ((match = bashBlockRe.exec(text)) !== null) {
+    const cmd = match[1].trim();
+    // Only extract if it looks like a real command (not multiline explanation)
+    if (cmd && !cmd.includes("\n") && cmd.length < 500 && !cmd.startsWith("#") && !cmd.startsWith("//")) {
+      if (match.index < firstMatchIndex) firstMatchIndex = match.index;
+      results.push({
+        name: "Bash",
+        input: { command: cmd, description: `Execute: ${cmd.slice(0, 60)}` },
+        prefixText: text.slice(0, firstMatchIndex),
+      });
+    }
+  }
+  if (results.length > 0) return results;
+
+  // Pattern 4: ToolName "arg1" "arg2" format (Qwen-style)
+  // e.g. Bash "mkdir foo" "description" 20000
+  for (const def of toolDefs) {
+    const namePattern = new RegExp(`(?:^|\\n)\\s*${def.name}\\s+"([^"]+)"`, "g");
+    while ((match = namePattern.exec(text)) !== null) {
+      const firstArg = match[1];
+      if (def.name === "Bash" || def.name === "bash") {
+        if (match.index < firstMatchIndex) firstMatchIndex = match.index;
+        results.push({
+          name: "Bash",
+          input: { command: firstArg, description: `Execute: ${firstArg.slice(0, 60)}` },
+          prefixText: text.slice(0, firstMatchIndex),
+        });
+      }
+    }
+  }
+
+  return results;
+}
 
 // ─── Retry Logic ─────────────────────────────────────────────────
 
@@ -336,14 +518,17 @@ export class ConversationManager {
   private transcript: TranscriptManager;
   private abortController: AbortController | null = null;
   private turnsSincePromptRebuild = 0;
+  private systemPromptHash = "";
+  private sessionStartTime = Date.now();
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
     this.tools = tools;
     this.systemPrompt = SystemPromptBuilder.build(config, config.version);
+    this.systemPromptHash = this.hashString(this.systemPrompt);
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
-    this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory);
+    this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory, config.additionalDirs);
     this.hooks = new HookManager(config.workingDirectory);
     this.rateLimiter = new RateLimiter(
       config.rateLimit?.maxPerMinute ?? 60,
@@ -416,6 +601,20 @@ export class ConversationManager {
     // Layer 9: Reset intention engine for new turn
     try { getIntentionEngine().reset(); } catch { /* ignore */ }
 
+    // Smart context: inject relevant file hints based on the user's query
+    try {
+      const { getCodebaseIndex } = await import("./codebase-index.js");
+      const idx = getCodebaseIndex(this.config.workingDirectory);
+      const contextHint = idx.formatRelevantContext(userMessage);
+      if (contextHint && this.state.messages.length <= 6) {
+        // Only inject on early messages to avoid noise in long conversations
+        this.state.messages.push({
+          role: "user",
+          content: `[SYSTEM CONTEXT] ${contextHint}`,
+        });
+      }
+    } catch { /* non-critical */ }
+
     // Wrap the agent loop to record events to transcript
     for await (const event of this.runAgentLoop()) {
       this.recordTranscriptEvent(event);
@@ -475,6 +674,7 @@ export class ConversationManager {
     let consecutiveDenials = 0;
     let inlineWarningCount = 0;
     let forceStopLoop = false; // set by inline warning force-stop; allows one final text turn then breaks
+    const turnStartMs = Date.now();
     const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
 
     while (true) {
@@ -489,17 +689,38 @@ export class ConversationManager {
       turnCount++;
 
       // Periodically rebuild system prompt (includes dynamic data like git status, user model)
+      // Uses hash-based caching to skip rebuild if nothing changed
       this.turnsSincePromptRebuild++;
       if (this.turnsSincePromptRebuild >= 5) {
-        this.systemPrompt = SystemPromptBuilder.build(this.config, this.config.version);
+        const candidate = SystemPromptBuilder.build(this.config, this.config.version);
+        const candidateHash = this.hashString(candidate);
+        if (candidateHash !== this.systemPromptHash) {
+          this.systemPrompt = candidate;
+          this.systemPromptHash = candidateHash;
+          log.info("session", "System prompt rebuilt (content changed)");
+        }
         this.turnsSincePromptRebuild = 0;
       }
 
-      if (turnCount > MAX_AGENT_TURNS) {
-        log.warn("session", `Agent loop exceeded ${MAX_AGENT_TURNS} turns, stopping`);
-        yield { type: "turn_end", stopReason: "max_turns" };
+      if (turnCount > MAX_AGENT_TURNS + 1) {
+        // Hard kill — model ignored the stop instruction, break immediately
+        log.warn("session", `Agent loop hard-killed at turn ${turnCount} — model refused to stop`);
+        yield { type: "turn_end", stopReason: "force_stop" };
         this.abortController = null;
         return;
+      } else if (turnCount > MAX_AGENT_TURNS) {
+        log.warn("session", `Agent loop exceeded ${MAX_AGENT_TURNS} turns, forcing stop`);
+        this.state.messages.push({
+          role: "user",
+          content: `[SYSTEM] STOP. You have used ${turnCount} consecutive tool turns. Summarize what you accomplished and stop. Do NOT make any more tool calls.`,
+        });
+        forceStopLoop = true;
+      } else if (turnCount === 15) {
+        // Nudge the model to wrap up — it's been going for a while
+        this.state.messages.push({
+          role: "user",
+          content: "[SYSTEM] You have been running tools for 15 turns. Please wrap up your current task soon and report your progress. Only continue if you are close to finishing.",
+        });
       }
       // Check if aborted
       if (this.abortController?.signal.aborted) {
@@ -508,8 +729,8 @@ export class ConversationManager {
         return;
       }
 
-      // Prune context if approaching the limit
-      this.pruneMessagesIfNeeded();
+      // Prune context if approaching the limit (auto-compacts via LLM when possible)
+      await this.pruneMessagesIfNeeded();
 
       yield { type: "turn_start" };
 
@@ -665,7 +886,31 @@ export class ConversationManager {
 
       // Finalize text content
       const fullText = textChunks.join("");
-      if (fullText.length > 0) {
+
+      // Extract tool calls from text when the model doesn't use native tool_calls
+      // (common with local models like Qwen2.5-Coder that output JSON in content)
+      if (activeToolCalls.size === 0 && fullText.length > 0) {
+        const extracted = extractToolCallsFromText(fullText, this.tools);
+        if (extracted.length > 0) {
+          // Add remaining non-tool text
+          if (extracted[0].prefixText.trim()) {
+            assistantContent.push({ type: "text", text: extracted[0].prefixText.trim() });
+          }
+          for (const ext of extracted) {
+            const toolBlock: ToolUseBlock = {
+              type: "tool_use",
+              id: `toolu_text_${crypto.randomUUID().slice(0, 8)}`,
+              name: ext.name,
+              input: ext.input,
+            };
+            assistantContent.push(toolBlock);
+            toolCalls.push(toolBlock);
+          }
+          stopReason = "tool_use";
+        } else if (fullText.length > 0) {
+          assistantContent.push({ type: "text", text: fullText });
+        }
+      } else if (fullText.length > 0) {
         assistantContent.push({ type: "text", text: fullText });
       }
 
@@ -701,6 +946,54 @@ export class ConversationManager {
         content: assistantContent,
       });
 
+      // If force-stop is set, refuse to execute any more tools regardless of what the model wants
+      if (forceStopLoop && toolCalls.length > 0) {
+        log.warn("session", `Force-stop active but model returned ${toolCalls.length} tool calls — dropping them`);
+        // Strip tool calls from assistant content, keep only text
+        const textOnly = assistantContent.filter(b => b.type === "text");
+        if (textOnly.length > 0) {
+          this.state.messages[this.state.messages.length - 1] = {
+            role: "assistant",
+            content: textOnly,
+          };
+        }
+        yield { type: "turn_end", stopReason: "force_stop" };
+        this.abortController = null;
+        return;
+      }
+
+      // Client-side JSON schema validation
+      if (this.config.jsonSchema && toolCalls.length === 0 && fullText.length > 0) {
+        try {
+          const schema = this.config.jsonSchema.startsWith("{")
+            ? JSON.parse(this.config.jsonSchema)
+            : JSON.parse(readFileSync(this.config.jsonSchema, "utf-8"));
+          const parsed = JSON.parse(fullText);
+          const errors = validateJsonSchema(parsed, schema);
+          if (errors.length > 0) {
+            log.warn("llm", `JSON schema validation failed: ${errors.join(", ")}`);
+            // Ask model to fix the output
+            this.state.messages.push({
+              role: "user",
+              content: `[SYSTEM] Your JSON output failed schema validation:\n${errors.join("\n")}\n\nFix the output to match the required schema. Return ONLY valid JSON.`,
+            });
+            yield { type: "turn_end", stopReason: "tool_use" };
+            continue; // retry with validation feedback
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) {
+            log.warn("llm", `JSON parse failed for schema validation: ${e.message}`);
+            this.state.messages.push({
+              role: "user",
+              content: `[SYSTEM] Your output is not valid JSON: ${e.message}\n\nReturn ONLY valid JSON matching the required schema.`,
+            });
+            yield { type: "turn_end", stopReason: "tool_use" };
+            continue;
+          }
+          // Schema parsing error — skip validation
+        }
+      }
+
       // If no tool calls or stop reason is not tool_use, we're done
       if (toolCalls.length === 0 || stopReason !== "tool_use") {
         // Layer 9: Evaluate intentions and emit suggestions
@@ -726,6 +1019,48 @@ export class ConversationManager {
           continue;
         }
 
+        // Knowledge distillation: capture successful interaction pattern
+        if (stopReason === "end_turn" && turnCount >= 1) {
+          try {
+            const example = extractExample(this.state.messages, this.config.workingDirectory);
+            if (example) saveExample(example);
+          } catch { /* distillation is non-critical */ }
+
+          // Benchmark: score this interaction
+          try {
+            initBenchmarkSchema();
+            const lastAssistant = this.state.messages.filter(m => m.role === "assistant").pop();
+            const responseText = lastAssistant
+              ? (typeof lastAssistant.content === "string" ? lastAssistant.content : lastAssistant.content.filter(b => b.type === "text").map(b => (b as any).text).join(""))
+              : "";
+            const errorCount = this.state.messages.filter(m =>
+              m.role === "assistant" && Array.isArray(m.content) &&
+              m.content.some(b => b.type === "tool_result" && b.is_error)
+            ).length;
+            const score = scoreResponse({
+              response: responseText,
+              toolsUsed: this.state.toolUseCount,
+              errorsEncountered: errorCount,
+              taskCompleted: stopReason === "end_turn",
+              turnCount,
+            });
+            saveBenchmark({
+              model: this.config.model,
+              taskType: "general",
+              score,
+              tokensUsed: this.state.tokenCount,
+              latencyMs: 0,
+              details: { turns: turnCount, tools: this.state.toolUseCount },
+            });
+          } catch { /* benchmarking is non-critical */ }
+        }
+
+        // Desktop notification for long-running tasks (>30s or 3+ tool turns)
+        const elapsedMs = Date.now() - turnStartMs;
+        if (elapsedMs > 30_000 || turnCount >= 3) {
+          this.sendNotification("KCode", `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`);
+        }
+
         yield { type: "turn_end", stopReason };
         this.abortController = null;
         break;
@@ -741,6 +1076,35 @@ export class ConversationManager {
       // Execute tool calls with permission checks and hooks
       const toolResultBlocks: ContentBlock[] = [];
       let turnHadDenial = false;
+
+      // Parallel fast-path: if ALL tool calls are read-only, execute them concurrently
+      const allParallelSafe = toolCalls.length > 1 && toolCalls.every((c) => this.tools.isParallelSafe(c.name));
+      if (allParallelSafe && this.permissions.getMode() === "auto") {
+        log.info("tool", `Parallel execution: ${toolCalls.length} read-only tools`);
+
+        // Emit tool_executing events
+        for (const call of toolCalls) {
+          yield { type: "tool_executing", name: call.name, toolUseId: call.id, input: call.input };
+        }
+
+        // Execute all in parallel
+        const results = await this.tools.executeParallel(
+          toolCalls.map((c) => ({ name: c.name, input: c.input })),
+        );
+
+        // Emit results and build tool_result blocks
+        for (let i = 0; i < toolCalls.length; i++) {
+          const call = toolCalls[i];
+          const result = results[i];
+          this.state.toolUseCount++;
+
+          yield { type: "tool_result", name: call.name, toolUseId: call.id, result: result.content, isError: result.is_error };
+          toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: result.content, is_error: result.is_error });
+        }
+
+        this.state.messages.push({ role: "user", content: toolResultBlocks });
+        continue;
+      }
 
       // Dedup: track executed tool signatures to skip identical calls in same batch
       const executedSigs = new Map<string, number>(); // sig -> count executed
@@ -936,6 +1300,27 @@ export class ConversationManager {
             is_error: result.is_error,
           });
         }
+
+        // 6. Auto-test suggestion: if Edit/Write succeeded, check for related tests
+        if ((call.name === "Edit" || call.name === "Write") && !result.is_error) {
+          try {
+            const { getTestSuggestion } = await import("./auto-test.js");
+            const fp = String((call.input as any)?.file_path ?? "");
+            if (fp) {
+              const suggestion = getTestSuggestion(fp, this.config.workingDirectory);
+              if (suggestion) {
+                yield {
+                  type: "suggestion",
+                  suggestions: [{
+                    type: "test",
+                    message: `Related test: ${suggestion.testFile} -- run with: ${suggestion.command}`,
+                    priority: "low",
+                  }],
+                };
+              }
+            }
+          } catch { /* auto-test is non-critical */ }
+        }
       }
 
       this.state.messages.push({
@@ -1047,6 +1432,12 @@ export class ConversationManager {
           body.tools = openAITools;
         }
 
+        // Qwen3 models default to "thinking" mode which wastes tokens on internal
+        // reasoning. Disable it unless the user explicitly requested --thinking.
+        if (!this.config.thinking) {
+          body.chat_template_kwargs = { enable_thinking: false };
+        }
+
         // Add JSON schema response format if configured
         if (this.config.jsonSchema) {
           try {
@@ -1119,7 +1510,7 @@ export class ConversationManager {
    * Prune older messages when approaching the context window limit.
    * Keeps the system prompt, first user message, and recent messages.
    */
-  private pruneMessagesIfNeeded(): void {
+  private async pruneMessagesIfNeeded(): Promise<void> {
     // Use the higher of: tracked token count or estimated from message content
     const estimatedTokens = this.estimateContextTokens();
     const effectiveCount = Math.max(this.state.tokenCount, estimatedTokens);
@@ -1168,7 +1559,7 @@ export class ConversationManager {
       return;
     }
 
-    // Phase 2: Drop old messages if still over threshold
+    // Phase 2: Auto-compact via LLM summary instead of blind pruning
     const keepFirst = 1;
     const keepLast = 6;
 
@@ -1182,6 +1573,23 @@ export class ConversationManager {
     );
 
     if (pruneCount > 0) {
+      // Try LLM-based compaction first, fall back to simple pruning
+      const toPrune = messages.slice(keepFirst, keepFirst + pruneCount);
+      try {
+        const { CompactionManager } = await import("./compaction.js");
+        const compactor = new CompactionManager(this.config.apiKey, this.config.model, this.config.apiBase);
+        const summary = await compactor.compact(toPrune);
+        if (summary) {
+          messages.splice(keepFirst, pruneCount, summary);
+          this.state.tokenCount = this.estimateContextTokens();
+          log.info("session", `Auto-compacted ${pruneCount} messages into summary, ~${this.state.tokenCount} tokens remaining`);
+          return;
+        }
+      } catch (err) {
+        log.error("session", `Auto-compaction failed, falling back to pruning: ${err}`);
+      }
+
+      // Fallback: simple pruning
       messages.splice(keepFirst, pruneCount);
       this.state.tokenCount = this.estimateContextTokens();
       log.info("session", `Pruned ${pruneCount} old messages, ~${this.state.tokenCount} tokens remaining`);
@@ -1296,6 +1704,24 @@ export class ConversationManager {
   }
 
   /**
+   * Fork the conversation: keep current messages but start a new transcript.
+   * Optionally truncate to a specific message count (fork from a point in history).
+   */
+  forkConversation(keepMessages?: number): { messageCount: number; sessionId: string } {
+    const msgs = keepMessages
+      ? this.state.messages.slice(0, keepMessages)
+      : [...this.state.messages];
+    // Start a new transcript
+    this.transcript = new TranscriptManager();
+    const summary = msgs.length > 0
+      ? (typeof msgs[0].content === "string" ? msgs[0].content : "[forked session]").slice(0, 80)
+      : "forked session";
+    this.transcript.startSession(`[FORK] ${summary}`);
+    this.state.messages = msgs;
+    return { messageCount: msgs.length, sessionId: "forked" };
+  }
+
+  /**
    * Collect session data for the narrative system (Layer 10).
    */
   collectSessionData(): {
@@ -1354,5 +1780,49 @@ export class ConversationManager {
       cacheCreationInputTokens: 0,
       cacheReadInputTokens: 0,
     };
+  }
+
+  /** Fast string hash for cache comparison (djb2). */
+  private hashString(str: string): string {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+    }
+    return hash.toString(36);
+  }
+
+  /** Get session start time for elapsed time tracking. */
+  getSessionStartTime(): number {
+    return this.sessionStartTime;
+  }
+
+  /** Send a desktop notification (Linux: notify-send, macOS: osascript). */
+  sendNotification(title: string, body: string): void {
+    try {
+      const { execSync } = require("node:child_process");
+      if (process.platform === "linux") {
+        execSync(`notify-send "${title.replace(/"/g, '\\"')}" "${body.replace(/"/g, '\\"')}" 2>/dev/null`, { timeout: 3000 });
+      } else if (process.platform === "darwin") {
+        execSync(`osascript -e 'display notification "${body.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"' 2>/dev/null`, { timeout: 3000 });
+      }
+    } catch {
+      // Silent failure — notifications are best-effort
+    }
+  }
+
+  /** Get list of files modified in this session (from undo manager). */
+  getModifiedFiles(): string[] {
+    const files: string[] = [];
+    for (const msg of this.state.messages) {
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === "tool_use" && (block.name === "Write" || block.name === "Edit")) {
+            const fp = String((block.input as any)?.file_path ?? "");
+            if (fp && !files.includes(fp)) files.push(fp);
+          }
+        }
+      }
+    }
+    return files;
   }
 }

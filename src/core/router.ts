@@ -1,9 +1,13 @@
-// KCode - Model Router
-// Auto-routes requests to the best model based on message content.
-// Currently: images → vision/ocr model, everything else → default model.
+// KCode - Multi-Model Router
+// Routes requests to the best model based on message content and task type.
+// Supports mid-session model switching for vision, code, and chat tasks.
 
 import { listModels } from "./models";
 import { log } from "./logger";
+
+// ─── Task Types ─────────────────────────────────────────────────
+
+export type TaskType = "code" | "vision" | "chat" | "general";
 
 // Image file extensions (mirrors IMAGE_EXTENSIONS from tools/read.ts)
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
@@ -16,23 +20,26 @@ const IMAGE_INDICATORS = [
   "[image/jpeg output]",   // notebook image output
 ];
 
+// Patterns that indicate code-heavy tasks
+const CODE_INDICATORS = [
+  /\b(refactor|debug|fix bug|implement|write code|create function|unit test|test for)\b/i,
+  /\b(compile|build|deploy|migration|schema|endpoint|API)\b/i,
+  /```[a-z]+\n/,  // code blocks with language
+];
+
+// ─── Detection ──────────────────────────────────────────────────
+
 /**
  * Check whether a string contains signs of image content.
- * Uses simple string matching — no ML, no parsing.
  */
 function detectImageContent(text: string): boolean {
-  // Check for base64 data URIs or image tool output markers
   for (const indicator of IMAGE_INDICATORS) {
     if (text.includes(indicator)) return true;
   }
 
-  // Check for image file paths with known extensions
   for (const ext of IMAGE_EXTENSIONS) {
-    // Match common path patterns like /foo/bar.png or "screenshot.jpg"
     if (text.includes(ext)) {
-      // Rough heuristic: extension appears near a path-like or filename-like string
       const idx = text.indexOf(ext);
-      // Make sure it looks like a file extension (preceded by a non-space char)
       if (idx > 0 && text[idx - 1] !== " " && text[idx - 1] !== "\n") {
         return true;
       }
@@ -43,7 +50,33 @@ function detectImageContent(text: string): boolean {
 }
 
 /**
+ * Detect whether the user message is primarily a code task.
+ */
+function detectCodeTask(text: string): boolean {
+  for (const pattern of CODE_INDICATORS) {
+    if (pattern instanceof RegExp ? pattern.test(text) : text.includes(pattern)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Classify the task type from a user message.
+ */
+export function classifyTask(userMessage: string): TaskType {
+  if (detectImageContent(userMessage)) return "vision";
+  if (detectCodeTask(userMessage)) return "code";
+
+  // Default to general
+  return "general";
+}
+
+// ─── Router ─────────────────────────────────────────────────────
+
+/**
  * Route a request to the most appropriate model based on content.
+ * Supports multi-model routing within a single session.
  *
  * @param defaultModel - The currently configured model name
  * @param userMessage  - The latest user message text
@@ -55,24 +88,60 @@ export async function routeToModel(
   userMessage: string,
   hasImageContent?: boolean,
 ): Promise<string> {
-  const isImage = hasImageContent ?? detectImageContent(userMessage);
+  const taskType = hasImageContent ? "vision" : classifyTask(userMessage);
 
-  if (!isImage) {
+  if (taskType === "general" || taskType === "code") {
+    // For code and general tasks, use the default model (typically the most capable)
     return defaultModel;
   }
 
-  // Look for a model with "vision" or "ocr" capability
   const models = await listModels();
-  const visionModel = models.find(
-    (m) =>
-      m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"),
-  );
 
-  if (!visionModel) {
-    log.debug("router", "Image content detected but no vision/ocr model registered, using default");
-    return defaultModel;
+  if (taskType === "vision") {
+    // Look for a model with "vision" or "ocr" capability
+    const visionModel = models.find(
+      (m) => m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"),
+    );
+
+    if (!visionModel) {
+      log.debug("router", "Image content detected but no vision/ocr model registered, using default");
+      return defaultModel;
+    }
+
+    log.info("router", `Routing to ${visionModel.name} (image content detected)`);
+    return visionModel.name;
   }
 
-  log.info("router", `Routing to ${visionModel.name} (image content detected)`);
-  return visionModel.name;
+  return defaultModel;
+}
+
+/**
+ * Get all available models grouped by capability.
+ * Useful for showing the user what models are available for what tasks.
+ */
+export async function getModelCapabilities(): Promise<Record<string, string[]>> {
+  const models = await listModels();
+  const capabilities: Record<string, string[]> = {
+    code: [],
+    vision: [],
+    chat: [],
+    general: [],
+  };
+
+  for (const m of models) {
+    const caps = m.capabilities ?? [];
+    if (caps.includes("vision") || caps.includes("ocr")) {
+      capabilities.vision.push(m.name);
+    }
+    if (caps.includes("code")) {
+      capabilities.code.push(m.name);
+    }
+    if (caps.includes("chat")) {
+      capabilities.chat.push(m.name);
+    }
+    // All models are general-purpose
+    capabilities.general.push(m.name);
+  }
+
+  return capabilities;
 }

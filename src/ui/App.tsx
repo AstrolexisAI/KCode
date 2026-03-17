@@ -50,7 +50,7 @@ export default function App({ config, conversationManager, tools }: AppProps) {
       }
     }
     // Add built-in non-skill commands
-    names.push("/exit", "/quit", "/status", "/undo", "/rewind");
+    names.push("/exit", "/quit", "/status", "/undo", "/rewind", "/usage", "/plan", "/hooks", "/changes", "/fork", "/memory");
     return names.sort();
   });
 
@@ -466,6 +466,26 @@ export default function App({ config, conversationManager, tools }: AppProps) {
           }
 
           case "tool_result":
+            // Plan tool gets a visual checklist display
+            if (event.name === "Plan" && !event.isError) {
+              try {
+                const { getActivePlan } = await import("../tools/plan.js");
+                const plan = getActivePlan();
+                if (plan) {
+                  setCompleted((prev) => [
+                    ...prev,
+                    {
+                      kind: "plan" as const,
+                      title: plan.title,
+                      steps: plan.steps.map((s) => ({ id: s.id, title: s.title, status: s.status })),
+                    },
+                  ]);
+                  break;
+                }
+              } catch {
+                // fallthrough to default rendering
+              }
+            }
             // Learn tool gets a special visual treatment
             if (event.name === "Learn" && !event.isError && event.result.startsWith("✧")) {
               setCompleted((prev) => [
@@ -767,6 +787,248 @@ async function handleBuiltinAction(
       }
 
       return `  Unknown theme "${themeName}". Available: ${available.join(", ")}`;
+    }
+    case "usage": {
+      const usage = conversationManager.getUsage();
+      const state = conversationManager.getState();
+      const contextSize = appConfig.contextWindowSize ?? 200000;
+      const totalTokens = usage.inputTokens + usage.outputTokens;
+
+      const { getModelPricing, calculateCost, formatCost } = await import("../core/pricing.js");
+      const pricing = await getModelPricing(appConfig.model);
+      const cost = pricing ? calculateCost(pricing, usage.inputTokens, usage.outputTokens) : 0;
+
+      const lines = [
+        `  Session Token Usage`,
+        ``,
+        `  Input tokens:   ${usage.inputTokens.toLocaleString()}`,
+        `  Output tokens:  ${usage.outputTokens.toLocaleString()}`,
+        `  Total tokens:   ${totalTokens.toLocaleString()}`,
+        `  Cache created:  ${usage.cacheCreationInputTokens.toLocaleString()}`,
+        `  Cache read:     ${usage.cacheReadInputTokens.toLocaleString()}`,
+        ``,
+        `  Messages:       ${state.messages.length}`,
+        `  Tool calls:     ${state.toolUseCount}`,
+        `  Context window: ${totalTokens.toLocaleString()} / ${contextSize.toLocaleString()} (${Math.round((totalTokens / contextSize) * 100)}%)`,
+        ``,
+        `  Model:  ${appConfig.model}`,
+        `  Cost:   ${formatCost(cost)}`,
+      ];
+      if (pricing) {
+        lines.push(`  Rate:   $${pricing.inputPer1M}/M in, $${pricing.outputPer1M}/M out`);
+      }
+      return lines.join("\n");
+    }
+    case "plan": {
+      const { getActivePlan, formatPlan, executePlan: execPlan } = await import("../tools/plan.js");
+
+      if (args?.trim() === "clear") {
+        await execPlan({ mode: "clear" });
+        return "  Plan cleared.";
+      }
+
+      const plan = getActivePlan();
+      if (!plan) return "  No active plan. The AI will create one when tackling multi-step tasks.";
+      return "  " + formatPlan(plan).split("\n").join("\n  ");
+    }
+    case "changes": {
+      const files = conversationManager.getModifiedFiles();
+      if (files.length === 0) return "  No files modified in this session.";
+
+      const { execSync } = await import("node:child_process");
+      const lines = [`  Files modified this session (${files.length}):\n`];
+
+      for (const f of files) {
+        // Try to get a short git diff stat for each file
+        let diffStat = "";
+        try {
+          diffStat = execSync(`git diff --stat -- "${f}" 2>/dev/null`, {
+            cwd: appConfig.workingDirectory,
+            timeout: 3000,
+          }).toString().trim();
+        } catch { /* not in git or no changes */ }
+
+        if (diffStat) {
+          lines.push(`  ${f}`);
+          for (const dl of diffStat.split("\n")) {
+            lines.push(`    ${dl}`);
+          }
+        } else {
+          lines.push(`  ${f}`);
+        }
+      }
+
+      // Overall summary if in a git repo
+      try {
+        const summary = execSync("git diff --stat 2>/dev/null", {
+          cwd: appConfig.workingDirectory,
+          timeout: 3000,
+        }).toString().trim();
+        if (summary) {
+          lines.push("");
+          lines.push(`  ${summary.split("\n").pop() ?? ""}`);
+        }
+      } catch { /* ignore */ }
+
+      return lines.join("\n");
+    }
+    case "pin": {
+      const { resolve } = await import("node:path");
+      const { pinFile, listPinnedFiles } = await import("../core/context-pin.js");
+
+      if (!args?.trim()) {
+        const pinned = listPinnedFiles();
+        if (pinned.length === 0) return "  No pinned files. Usage: /pin <file-path>";
+        const lines = ["  Pinned files:"];
+        for (const p of pinned) {
+          lines.push(`    ${p.path} (${p.size} chars)`);
+        }
+        return lines.join("\n");
+      }
+
+      const filePath = resolve(appConfig.workingDirectory, args.trim());
+      const result = pinFile(filePath, appConfig.workingDirectory);
+      return `  ${result.message}`;
+    }
+    case "unpin": {
+      const { resolve } = await import("node:path");
+      const { unpinFile, clearPinnedFiles } = await import("../core/context-pin.js");
+
+      if (args?.trim() === "all") {
+        clearPinnedFiles();
+        return "  All files unpinned.";
+      }
+
+      if (!args?.trim()) return "  Usage: /unpin <file-path> or /unpin all";
+
+      const filePath = resolve(appConfig.workingDirectory, args.trim());
+      const result = unpinFile(filePath, appConfig.workingDirectory);
+      return `  ${result.message}`;
+    }
+    case "index": {
+      const { getCodebaseIndex } = await import("../core/codebase-index.js");
+      const idx = getCodebaseIndex(appConfig.workingDirectory);
+
+      if (!args?.trim()) {
+        const count = idx.build();
+        const stats = idx.getStats();
+        const extLines = Object.entries(stats.extensions)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 8)
+          .map(([ext, n]) => `${ext}: ${n}`)
+          .join(", ");
+        return `  Indexed ${count} files (${stats.exportCount} exports). Types: ${extLines}`;
+      }
+
+      const results = idx.search(args.trim());
+      if (results.length === 0) return `  No results for "${args.trim()}"`;
+
+      const lines = [`  Results for "${args.trim()}" (${results.length}):`];
+      for (const r of results.slice(0, 10)) {
+        const exports = r.exports.length > 0 ? ` [${r.exports.slice(0, 3).join(", ")}]` : "";
+        lines.push(`    ${r.relativePath}${exports}`);
+      }
+      return lines.join("\n");
+    }
+    case "hooks": {
+      const { readFileSync, existsSync } = await import("node:fs");
+      const { join } = await import("node:path");
+
+      const settingsPath = join(appConfig.workingDirectory, ".kcode", "settings.json");
+      if (!existsSync(settingsPath)) return "  No hooks configured. Add hooks to .kcode/settings.json";
+
+      try {
+        const raw = JSON.parse(readFileSync(settingsPath, "utf-8"));
+        const hooks = raw.hooks;
+        if (!hooks || Object.keys(hooks).length === 0) return "  No hooks configured.";
+
+        const lines = ["  Configured hooks:"];
+        for (const [event, configs] of Object.entries(hooks)) {
+          if (!Array.isArray(configs)) continue;
+          for (const config of configs as any[]) {
+            const hookCount = config.hooks?.length ?? 0;
+            lines.push(`  ${event} [${config.matcher}] - ${hookCount} action(s)`);
+            for (const h of config.hooks ?? []) {
+              lines.push(`    ${h.type}: ${h.command}`);
+            }
+          }
+        }
+        return lines.join("\n");
+      } catch {
+        return "  Error reading hooks config.";
+      }
+    }
+    case "fork": {
+      const keepCount = args?.trim() ? parseInt(args.trim()) : undefined;
+      if (keepCount !== undefined && (isNaN(keepCount) || keepCount < 1)) {
+        return "  Usage: /fork [message-number]. Number must be a positive integer.";
+      }
+      const result = conversationManager.forkConversation(keepCount);
+      return `  Forked conversation with ${result.messageCount} messages. New transcript started.`;
+    }
+    case "memory": {
+      const { getMemoryDir, loadAllMemories, searchMemories, readMemoryFile, deleteMemoryFile, readMemoryIndex } = await import("../core/memory.js");
+      const cwd = appConfig.workingDirectory;
+      const arg = args?.trim() ?? "list";
+
+      if (arg === "list") {
+        const memories = await loadAllMemories(cwd);
+        if (memories.length === 0) return "  No memories found. The AI creates memories during conversations.";
+
+        const lines = [`  Memories (${memories.length}):\n`];
+        for (const m of memories) {
+          const typeTag = `[${m.meta.type}]`;
+          lines.push(`  ${typeTag.padEnd(12)} ${m.meta.title}  (${m.filename})`);
+        }
+        return lines.join("\n");
+      }
+
+      if (arg.startsWith("search ")) {
+        const query = arg.slice(7).trim();
+        if (!query) return "  Usage: /memory search <query>";
+
+        const results = await searchMemories(cwd, query);
+        if (results.length === 0) return `  No memories matching "${query}"`;
+
+        const lines = [`  Search results for "${query}" (${results.length}):\n`];
+        for (const m of results) {
+          lines.push(`  [${m.meta.type}] ${m.meta.title}  (${m.filename})`);
+        }
+        return lines.join("\n");
+      }
+
+      if (arg.startsWith("show ")) {
+        const filename = arg.slice(5).trim();
+        const { join } = await import("node:path");
+        const dir = getMemoryDir(cwd);
+        const entry = await readMemoryFile(join(dir, filename));
+        if (!entry) return `  Memory file "${filename}" not found.`;
+
+        const lines = [
+          `  ${entry.meta.title}`,
+          `  Type: ${entry.meta.type}`,
+          entry.meta.tags ? `  Tags: ${entry.meta.tags.join(", ")}` : null,
+          entry.meta.created ? `  Created: ${entry.meta.created}` : null,
+          ``,
+          entry.content,
+        ].filter(Boolean);
+        return (lines as string[]).join("\n");
+      }
+
+      if (arg.startsWith("delete ")) {
+        const filename = arg.slice(7).trim();
+        const { join } = await import("node:path");
+        const dir = getMemoryDir(cwd);
+        const deleted = await deleteMemoryFile(join(dir, filename));
+        return deleted ? `  Deleted: ${filename}` : `  File "${filename}" not found.`;
+      }
+
+      if (arg === "index") {
+        const index = await readMemoryIndex(cwd);
+        return index ? `  MEMORY.md:\n\n${index}` : "  No MEMORY.md index found.";
+      }
+
+      return "  Usage: /memory list | search <query> | show <file> | delete <file> | index";
     }
     default:
       return `  Unknown built-in action: ${action}`;

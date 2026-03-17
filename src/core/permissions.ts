@@ -237,7 +237,7 @@ export function analyzeBashCommand(command: string): {
 
 // ─── Write Validation ───────────────────────────────────────────
 
-export function validateFileWritePath(filePath: string, workingDirectory: string): PermissionResult {
+export function validateFileWritePath(filePath: string, workingDirectory: string, additionalDirs?: string[]): PermissionResult {
   if (!isAbsolute(filePath)) {
     return {
       allowed: false,
@@ -247,8 +247,9 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
 
   const resolved = resolve(filePath);
 
-  // Block writes outside the working directory (unless explicitly to /tmp)
-  if (!resolved.startsWith(workingDirectory) && !resolved.startsWith("/tmp")) {
+  // Block writes outside the working directory (unless explicitly to /tmp or an additional dir)
+  const inAdditionalDir = additionalDirs?.some((d) => resolved.startsWith(d)) ?? false;
+  if (!resolved.startsWith(workingDirectory) && !resolved.startsWith("/tmp") && !inAdditionalDir) {
     return {
       allowed: false,
       reason: `Write blocked: path "${resolved}" is outside working directory "${workingDirectory}"`,
@@ -286,14 +287,16 @@ const ACCEPT_EDITS_TOOLS = new Set([
 export class PermissionManager {
   private mode: PermissionMode;
   private workingDirectory: string;
+  private additionalDirs?: string[];
   private promptFn: PermissionPromptFn | null = null;
 
   /** Allowlist of previously approved tool+pattern combos: "ToolName:pattern" */
   private allowlist = new Set<string>();
 
-  constructor(mode: PermissionMode, workingDirectory: string) {
+  constructor(mode: PermissionMode, workingDirectory: string, additionalDirs?: string[]) {
     this.mode = mode;
     this.workingDirectory = workingDirectory;
+    this.additionalDirs = additionalDirs;
   }
 
   /** Set the callback used to prompt the user in "ask" mode. */
@@ -434,12 +437,12 @@ export class PermissionManager {
 
       case "Write": {
         const input = tool.input as unknown as FileWriteInput;
-        return validateFileWritePath(input.file_path, this.workingDirectory);
+        return validateFileWritePath(input.file_path, this.workingDirectory, this.additionalDirs);
       }
 
       case "Edit": {
         const input = tool.input as unknown as FileEditInput;
-        return validateFileWritePath(input.file_path, this.workingDirectory);
+        return validateFileWritePath(input.file_path, this.workingDirectory, this.additionalDirs);
       }
 
       default:

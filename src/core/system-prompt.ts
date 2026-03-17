@@ -7,10 +7,14 @@ import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { loadLearnings } from "../tools/learn";
+import { loadDistilledExamples } from "./distillation";
 import { getUserModel } from "./user-model";
 import { getWorldModel } from "./world-model";
 import { getNarrativeManager } from "./narrative";
 import { getRulesManager } from "./rules";
+import { TokenBudgetManager, SectionPriority, type PromptSection } from "./token-budget";
+import { formatPlanForPrompt, loadLatestPlan } from "../tools/plan";
+import { formatPinnedForPrompt } from "./context-pin";
 
 // ─── System Prompt Builder ──────────────────────────────────────
 
@@ -20,65 +24,83 @@ export class SystemPromptBuilder {
    * Each section is independently generated and can be toggled.
    */
   static build(config: KCodeConfig, version?: string): string {
-    const sections: string[] = [];
+    const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000);
+    const sections: PromptSection[] = [];
 
-    sections.push(this.buildIdentity(version ?? "unknown"));
-    sections.push(this.buildToolInstructions());
-    sections.push(this.buildCodeGuidelines());
-    sections.push(this.buildGitInstructions());
-    sections.push(this.buildToneAndOutput());
+    // ─── Critical sections (never truncated) ───────────────────
+    sections.push({ content: this.buildIdentity(version ?? "unknown"), priority: SectionPriority.CRITICAL, label: "identity" });
+    sections.push({ content: this.buildToolInstructions(), priority: SectionPriority.CRITICAL, label: "tools" });
+
+    // ─── High priority ─────────────────────────────────────────
+    sections.push({ content: this.buildCodeGuidelines(), priority: SectionPriority.HIGH, label: "code-guidelines" });
+    sections.push({ content: this.buildGitInstructions(), priority: SectionPriority.HIGH, label: "git" });
+    sections.push({ content: this.buildToneAndOutput(), priority: SectionPriority.HIGH, label: "tone" });
     if (config.thinking) {
-      sections.push("## Extended Thinking\nYou have extended thinking enabled. Use <thinking> blocks to reason through complex problems step by step before responding. Show your work.");
+      sections.push({ content: "## Extended Thinking\nYou have extended thinking enabled. Use <thinking> blocks to reason through complex problems step by step before responding. Show your work.", priority: SectionPriority.HIGH, label: "thinking" });
     }
-    sections.push(this.buildEnvironment(config));
-    sections.push(this.buildSituationalAwareness(config));
-    sections.push(this.buildMetacognition(config));
+    sections.push({ content: this.buildEnvironment(config), priority: SectionPriority.HIGH, label: "environment" });
 
-    // ─── Extensible consciousness ────────────────────────────────
+    // ─── Medium priority ───────────────────────────────────────
+    sections.push({ content: this.buildSituationalAwareness(config), priority: SectionPriority.MEDIUM, label: "situational" });
+    sections.push({ content: this.buildMetacognition(config), priority: SectionPriority.MEDIUM, label: "metacognition" });
+
     // User-defined identity extensions (~/.kcode/identity.md)
     const identityExt = this.loadExtensibleIdentity();
     if (identityExt) {
-      sections.push(identityExt);
+      sections.push({ content: identityExt, priority: SectionPriority.MEDIUM, label: "ext-identity" });
     }
 
     // User-defined awareness modules (~/.kcode/awareness/*.md)
-    const awarenessModules = this.loadAwarenessModules();
-    for (const mod of awarenessModules) {
-      sections.push(mod);
+    for (const mod of this.loadAwarenessModules()) {
+      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-global" });
     }
 
     // Project-level awareness (.kcode/awareness/*.md in project)
-    const projectAwareness = this.loadAwarenessModules(config.workingDirectory);
-    for (const mod of projectAwareness) {
-      sections.push(mod);
+    for (const mod of this.loadAwarenessModules(config.workingDirectory)) {
+      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-project" });
     }
 
     // Project-specific instructions
     const projectInstructions = this.loadProjectInstructions(config.workingDirectory);
     if (projectInstructions) {
-      sections.push(projectInstructions);
+      sections.push({ content: projectInstructions, priority: SectionPriority.MEDIUM, label: "project-instructions" });
     }
 
     // Memory system
     const memory = this.loadMemoryInstructions();
     if (memory) {
-      sections.push(memory);
+      sections.push({ content: memory, priority: SectionPriority.MEDIUM, label: "memory" });
     }
 
-    // Long-term memory from Learn tool (SQLite) — filtered by selective attention
+    // ─── Active plan (injected if present) ─────────────────────
+    loadLatestPlan(); // restore from DB if not already loaded
+    const planPrompt = formatPlanForPrompt();
+    if (planPrompt) {
+      sections.push({ content: planPrompt, priority: SectionPriority.HIGH, label: "active-plan" });
+    }
+
+    // ─── Pinned files (user-pinned, always included) ───────────
+    const pinnedPrompt = formatPinnedForPrompt(config.workingDirectory);
+    if (pinnedPrompt) {
+      sections.push({ content: pinnedPrompt, priority: SectionPriority.HIGH, label: "pinned-files" });
+    }
+
+    // ─── Low priority (first to be dropped) ────────────────────
     const keywords = this.extractContextKeywords(config);
     const learnings = loadLearnings(config.workingDirectory, keywords);
     if (learnings) {
-      sections.push(learnings);
+      sections.push({ content: learnings, priority: SectionPriority.LOW, label: "learnings" });
     }
 
-    // Layer 7: User Model — dynamic profiling
+    // Knowledge distillation
     try {
-      const userPrompt = getUserModel().formatForPrompt();
-      if (userPrompt) sections.push(userPrompt);
-    } catch { /* ignore on first run */ }
+      const distilled = loadDistilledExamples(undefined, keywords, config.workingDirectory);
+      if (distilled) {
+        sections.push({ content: distilled, priority: SectionPriority.LOW, label: "distillation" });
+      }
+    } catch { /* non-critical */ }
 
-    // Layer 6: World Model — recent discrepancies
+    // World Model — recent discrepancies
     try {
       const discrepancies = getWorldModel().loadRecentDiscrepancies(3);
       if (discrepancies.length > 0) {
@@ -86,23 +108,37 @@ export class SystemPromptBuilder {
         for (const d of discrepancies) {
           lines.push(`- **${d.action}**: expected "${d.expected}" but got different result`);
         }
-        sections.push(lines.join("\n"));
+        sections.push({ content: lines.join("\n"), priority: SectionPriority.LOW, label: "world-model" });
       }
     } catch { /* ignore */ }
 
-    // Layer 10: Inner Narrative — session continuity
+    // Inner Narrative — session continuity
     try {
       const narrative = getNarrativeManager().loadNarrative(3);
-      if (narrative) sections.push(narrative);
+      if (narrative) {
+        sections.push({ content: narrative, priority: SectionPriority.LOW, label: "narrative" });
+      }
     } catch { /* ignore */ }
+
+    // ─── Optional (dropped first) ──────────────────────────────
+    // User Model — dynamic profiling
+    try {
+      const userPrompt = getUserModel().formatForPrompt();
+      if (userPrompt) {
+        sections.push({ content: userPrompt, priority: SectionPriority.OPTIONAL, label: "user-model" });
+      }
+    } catch { /* ignore on first run */ }
 
     // Path-specific rules
     try {
       const rulesPrompt = getRulesManager().formatForPrompt();
-      if (rulesPrompt) sections.push(rulesPrompt);
+      if (rulesPrompt) {
+        sections.push({ content: rulesPrompt, priority: SectionPriority.OPTIONAL, label: "rules" });
+      }
     } catch { /* ignore */ }
 
-    return sections.filter(Boolean).join("\n\n");
+    // Apply token budget — drops low-priority sections if over limit
+    return budgetManager.apply(sections.filter((s) => s.content));
   }
 
   // ─── Section: Identity ──────────────────────────────────────────
@@ -171,7 +207,18 @@ You have the ability to research, learn, and remember — on your own initiative
   // ─── Section: Tool Instructions ─────────────────────────────────
 
   static buildToolInstructions(): string {
-    return `# Tool Usage
+    return `# Tool Usage — CRITICAL
+
+You MUST use tools to take action. NEVER show tool calls as text, code blocks, or JSON to the user. When you need to run a command, read a file, or make changes, you MUST call the tool directly — do NOT write out the JSON, do NOT suggest commands for the user to run, do NOT show step-by-step plans.
+
+**WRONG** (never do this):
+\`\`\`json
+{"name": "Bash", "arguments": {"command": "mkdir foo"}}
+\`\`\`
+
+**RIGHT**: Just call the Bash tool directly with command "mkdir foo".
+
+Be autonomous: when the user asks you to do something, DO IT immediately using your tools. Don't ask for confirmation, don't show plans, don't list steps. Just execute.
 
 You have access to the following tools. Always prefer the dedicated tool over Bash equivalents:
 
@@ -221,6 +268,26 @@ Execute shell commands. Reserve for actual shell operations.
 - For long-running commands, use run_in_background: true
 - **NEVER use pkill/killall with broad patterns** like "serve", "server", "node", "python". Always use specific PIDs: \`kill $(lsof -ti :PORT)\` or \`pkill -f "exact-command-name"\` with the full command.
 - **NEVER kill processes you didn't start.** Only kill processes that YOU launched during this session.
+
+## Plan
+Create structured plans for multi-step tasks.
+- Use mode="create" with a title and steps array when starting a complex task (3+ steps)
+- Use mode="update" with step IDs and statuses to track progress as you work
+- The plan is displayed visually to the user as a checklist with a progress bar
+- Mark steps "in_progress" when starting, "done" when finished, "skipped" if unnecessary
+- Plans persist across sessions — they'll be restored on next launch
+
+## Hooks
+KCode supports lifecycle hooks configured in .kcode/settings.json:
+- PreToolUse: runs before a tool executes (can block or modify input)
+- PostToolUse: runs after a tool executes (for logging/notifications)
+- UserPromptSubmit: runs when the user sends a message
+- Stop: runs when the session ends
+
+Use /hooks to see configured hooks. Example .kcode/settings.json:
+\`\`\`json
+{"hooks":{"PostToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"eslint --fix $FILE"}]}]}}
+\`\`\`
 
 ## Parallel Tool Calls
 When multiple independent pieces of information are needed, make multiple tool calls in a single response. Do not serialize independent operations.
@@ -332,7 +399,7 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
 3. **NEVER use box-drawing characters** (┌ ─ ┐ │ └ ┘ ╔ ═ ╗ ║ ╚ ╝) or ASCII art of any kind.
 4. **NEVER list "next steps", "recommendations", "suggestions", or "what you could do next"** unless the user explicitly asks "what should I do next?" or similar.
 5. **After completing a task, say ONLY what was done in 1-2 sentences.** Do NOT summarize the project, list files touched, show a status table, or provide a "here's what we accomplished" recap. Just say what you did. Done.
-6. **When asked to "do everything" or handle multiple tasks, just DO them silently.** Do NOT first create a numbered plan, visual roadmap, or checklist. Execute the work, then report completion in 1-2 sentences.
+6. **When asked to "do everything" or handle multiple tasks:** If the task has 3+ distinct steps, use the Plan tool to create a structured plan, then execute each step updating the plan as you go. For simple tasks (1-2 steps), just do them without a plan.
 7. **Maximum response length for non-code responses:** 5 sentences for status updates and confirmations. Unlimited length is allowed ONLY for actual code output that the user requested.
 8. **NEVER repeat back what the user just said** ("You want me to..." / "I understand you need..."). Just do it.
 9. **NEVER create formatted sections with headers** (## / ### / ####) in conversational responses. Headers are for code comments and documentation files only.`;
@@ -350,9 +417,14 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
     const lines = [
       "# Environment",
       `- Working directory: ${config.workingDirectory}`,
-      `- Platform: ${platform}`,
-      `- Shell: ${shell}`,
     ];
+
+    if (config.additionalDirs && config.additionalDirs.length > 0) {
+      lines.push(`- Additional directories: ${config.additionalDirs.join(", ")}`);
+    }
+
+    lines.push(`- Platform: ${platform}`);
+    lines.push(`- Shell: ${shell}`);
 
     if (osVersion) {
       lines.push(`- OS: ${osVersion}`);
@@ -422,7 +494,6 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
 
   static loadMemoryInstructions(): string | null {
     const memoryPaths = [
-      join(homedir(), ".kcode", "memory.md"),
       join(homedir(), ".kcode", "memory.md"),
     ];
 

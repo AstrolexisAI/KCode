@@ -323,4 +323,87 @@ Be thorough but avoid false positives. Only report real risks.`,
     args: ["theme name (optional)"],
     template: `__builtin_theme__`,
   },
+  {
+    name: "usage",
+    description: "Show token usage and cost for this session",
+    aliases: ["cost"],
+    args: [],
+    template: `__builtin_usage__`,
+  },
+  {
+    name: "plan",
+    description: "Show or manage the active plan",
+    aliases: [],
+    args: ["clear (optional)"],
+    template: `__builtin_plan__`,
+  },
+  {
+    name: "hooks",
+    description: "Show configured hooks",
+    aliases: ["hook"],
+    args: [],
+    template: `__builtin_hooks__`,
+  },
+  {
+    name: "changes",
+    description: "Show all files modified in this session",
+    aliases: ["changed", "modified"],
+    args: [],
+    template: `__builtin_changes__`,
+  },
+  {
+    name: "pin",
+    description: "Pin a file to always be in context",
+    aliases: [],
+    args: ["file path"],
+    template: `__builtin_pin__`,
+  },
+  {
+    name: "unpin",
+    description: "Unpin a file from context",
+    aliases: [],
+    args: ["file path (or 'all')"],
+    template: `__builtin_unpin__`,
+  },
+  {
+    name: "index",
+    description: "Build or query the codebase index",
+    aliases: ["idx"],
+    args: ["query (optional, builds index if empty)"],
+    template: `__builtin_index__`,
+  },
+  {
+    name: "fork",
+    description: "Fork the conversation at a specific point",
+    aliases: ["branch"],
+    args: ["message number (optional, forks at current point if empty)"],
+    template: `__builtin_fork__`,
+  },
+  {
+    name: "memory",
+    description: "List, search, or manage memories",
+    aliases: ["mem", "remember"],
+    args: ["list | search <query> | show <filename> | delete <filename>"],
+    template: `__builtin_memory__`,
+  },
+  {
+    name: "resolve",
+    description: "Detect and resolve git merge conflicts",
+    aliases: ["conflicts", "merge"],
+    args: ["file path (optional)"],
+    template: `Detect and resolve git merge conflicts.
+
+1. Run \`git diff --name-only --diff-filter=U\` to find files with unresolved conflicts.
+2. If no conflicts found, report that the working tree is clean.
+3. For each conflicted file{{#if args}} (or just: {{args}}){{/if}}:
+   a. Read the file to see the conflict markers (<<<<<<< / ======= / >>>>>>>)
+   b. Analyze both sides of each conflict
+   c. Determine the best resolution by understanding the intent of each change
+   d. Apply the resolution using Edit tool — remove conflict markers and keep the correct code
+   e. Explain what was resolved and why
+4. After resolving, run \`git diff\` on the resolved files to confirm changes look correct.
+5. Suggest: \`git add <files>\` to stage the resolutions.
+
+IMPORTANT: Always prefer combining both changes when they don't conflict semantically. Only pick one side when they are truly incompatible.`,
+  },
 ];
