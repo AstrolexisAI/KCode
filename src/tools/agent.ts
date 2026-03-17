@@ -4,10 +4,11 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { ToolDefinition, ToolResult } from "../core/types";
+import { findCustomAgent, type CustomAgentDef } from "../core/custom-agents";
 
 export interface AgentInput {
   task: string;
-  type?: "general" | "explore" | "plan";
+  type?: string; // "general" | "explore" | "plan" | custom agent name
   run_in_background?: boolean;
   resume?: string;
   isolation?: "none" | "worktree";
@@ -38,9 +39,8 @@ export const agentDefinition: ToolDefinition = {
       },
       type: {
         type: "string",
-        enum: ["general", "explore", "plan"],
         description:
-          "Agent type: general (all tools), explore (read-only), plan (read-only + plan output). Default: general",
+          "Agent type: general (all tools), explore (read-only), plan (read-only + plan output), or a custom agent name from ~/.kcode/agents/. Default: general",
       },
       run_in_background: {
         type: "boolean",
@@ -102,12 +102,31 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
   const agentType = opts.type ?? "general";
   const startTime = Date.now();
 
+  // Check for custom agent definition
+  let customAgent: CustomAgentDef | null = null;
+  if (agentType !== "general" && agentType !== "explore" && agentType !== "plan") {
+    customAgent = findCustomAgent(agentType, process.cwd());
+  }
+
   // Build the subagent command
   // The subagent runs the same CLI with a special flag
   const args: string[] = ["run", "src/index.ts", "--agent"];
 
-  // Restrict tools based on agent type
-  if (agentType === "explore") {
+  if (customAgent) {
+    // Apply custom agent config
+    if (customAgent.permissionMode) {
+      args.push("--permission", customAgent.permissionMode);
+    }
+    if (customAgent.model) {
+      args.push("-m", customAgent.model);
+    }
+    if (customAgent.maxTurns) {
+      args.push("--max-turns", String(customAgent.maxTurns));
+    }
+    if (customAgent.tools && customAgent.tools.length > 0) {
+      args.push("--tools", customAgent.tools.join(","));
+    }
+  } else if (agentType === "explore") {
     args.push("--read-only");
   } else if (agentType === "plan") {
     args.push("--read-only", "--plan");
@@ -143,7 +162,11 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
   });
 
   // Send the task to the subagent via stdin
-  proc.stdin.write(opts.task + "\n");
+  // Prepend custom agent system prompt if defined
+  const taskPayload = customAgent?.systemPrompt
+    ? `[Agent Context]\n${customAgent.systemPrompt}\n\n[Task]\n${opts.task}`
+    : opts.task;
+  proc.stdin.write(taskPayload + "\n");
   proc.stdin.end();
 
   const record: AgentRecord = {

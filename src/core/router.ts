@@ -7,7 +7,7 @@ import { log } from "./logger";
 
 // ─── Task Types ─────────────────────────────────────────────────
 
-export type TaskType = "code" | "vision" | "chat" | "simple" | "general";
+export type TaskType = "code" | "vision" | "chat" | "simple" | "reasoning" | "general";
 
 // Image file extensions (mirrors IMAGE_EXTENSIONS from tools/read.ts)
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
@@ -43,6 +43,13 @@ const CODE_INDICATORS = [
   /\b(refactor|debug|fix bug|implement|write code|create function|unit test|test for)\b/i,
   /\b(compile|build|deploy|migration|schema|endpoint|API)\b/i,
   /```[a-z]+\n/,  // code blocks with language
+];
+
+// Patterns that indicate deep reasoning tasks
+const REASONING_INDICATORS = [
+  /\b(analyz|architect|design|plan|compar|trade.?off|pros?\s+(?:and|&)\s+cons?)\b/i,
+  /\b(why does|explain why|root cause|investig|diagnos)\b/i,
+  /\b(security audit|code review|performance review|audit)\b/i,
 ];
 
 // ─── Detection ──────────────────────────────────────────────────
@@ -82,9 +89,20 @@ function detectCodeTask(text: string): boolean {
 /**
  * Classify the task type from a user message.
  */
+/**
+ * Detect whether the user message requires deep reasoning.
+ */
+function detectReasoningTask(text: string): boolean {
+  for (const pattern of REASONING_INDICATORS) {
+    if (pattern.test(text)) return true;
+  }
+  return false;
+}
+
 export function classifyTask(userMessage: string): TaskType {
   if (detectImageContent(userMessage)) return "vision";
   if (detectSimpleTask(userMessage)) return "simple";
+  if (detectReasoningTask(userMessage)) return "reasoning";
   if (detectCodeTask(userMessage)) return "code";
 
   // Default to general
@@ -109,8 +127,7 @@ export async function routeToModel(
 ): Promise<string> {
   const taskType = hasImageContent ? "vision" : classifyTask(userMessage);
 
-  if (taskType === "general" || taskType === "code") {
-    // For code and general tasks, use the default model (typically the most capable)
+  if (taskType === "general") {
     return defaultModel;
   }
 
@@ -125,8 +142,25 @@ export async function routeToModel(
     return defaultModel;
   }
 
+  if (taskType === "code") {
+    const codeModel = models.find(m => m.capabilities?.includes("code"));
+    if (codeModel && codeModel.name !== defaultModel) {
+      log.info("router", `Routing code task to ${codeModel.name}`);
+      return codeModel.name;
+    }
+    return defaultModel;
+  }
+
+  if (taskType === "reasoning") {
+    const reasoningModel = models.find(m => m.capabilities?.includes("reasoning"));
+    if (reasoningModel && reasoningModel.name !== defaultModel) {
+      log.info("router", `Routing reasoning task to ${reasoningModel.name}`);
+      return reasoningModel.name;
+    }
+    return defaultModel;
+  }
+
   if (taskType === "vision") {
-    // Look for a model with "vision" or "ocr" capability
     const visionModel = models.find(
       (m) => m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"),
     );
@@ -154,6 +188,7 @@ export async function getModelCapabilities(): Promise<Record<string, string[]>> 
     vision: [],
     chat: [],
     fast: [],
+    reasoning: [],
     general: [],
   };
 
@@ -170,6 +205,9 @@ export async function getModelCapabilities(): Promise<Record<string, string[]>> 
     }
     if (caps.includes("fast")) {
       capabilities.fast.push(m.name);
+    }
+    if (caps.includes("reasoning")) {
+      capabilities.reasoning.push(m.name);
     }
     // All models are general-purpose
     capabilities.general.push(m.name);

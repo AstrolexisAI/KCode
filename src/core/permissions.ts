@@ -1,7 +1,7 @@
 // KCode - Permission System
 // Gates tool execution based on permission mode and safety analysis
 
-import type { PermissionMode, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
+import type { PermissionMode, PermissionRule, PermissionRuleAction, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
 import { resolve, isAbsolute } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { log } from "./logger";
@@ -282,6 +282,108 @@ const ACCEPT_EDITS_TOOLS = new Set([
   "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch", "Learn", "Agent", "Tasks",
 ]);
 
+// ─── Permission Rules Engine ────────────────────────────────────
+
+/**
+ * Parse a rule pattern like "Bash(npm run *)" into { tool, innerPattern }.
+ * Plain tool names like "Read" match with innerPattern = "*".
+ * MCP-style patterns like "mcp__server__*" match tool name directly.
+ */
+function parseRulePattern(pattern: string): { tool: string; innerPattern: string } | null {
+  // ToolName(pattern) format
+  const m = pattern.match(/^(\w+)\((.+)\)$/);
+  if (m) return { tool: m[1]!, innerPattern: m[2]! };
+
+  // Plain tool name or wildcard like "mcp__*"
+  if (/^[\w*_]+$/.test(pattern)) return { tool: pattern, innerPattern: "*" };
+
+  return null;
+}
+
+/**
+ * Simple glob match supporting * and ** wildcards.
+ * - "*" matches any sequence except "/"
+ * - "**" matches any sequence including "/"
+ */
+function globMatch(pattern: string, value: string): boolean {
+  // Escape regex special chars except * and ?
+  let regex = pattern.replace(/([.+^${}()|[\]\\])/g, "\\$1");
+  // ** → match everything including /
+  regex = regex.replace(/\*\*/g, "<<GLOBSTAR>>");
+  // * → match everything except /
+  regex = regex.replace(/\*/g, "[^/]*");
+  regex = regex.replace(/<<GLOBSTAR>>/g, ".*");
+  return new RegExp(`^${regex}$`).test(value);
+}
+
+/**
+ * Extract the matchable value from a tool call for rule comparison.
+ * - Bash → the full command string
+ * - Edit/Write → the file_path
+ * - WebFetch → "domain:<hostname>" or the full URL
+ * - Others → the tool name
+ */
+function getToolMatchValue(tool: ToolUseBlock): string {
+  switch (tool.name) {
+    case "Bash": {
+      const input = tool.input as unknown as BashInput;
+      return input.command;
+    }
+    case "Write": {
+      const input = tool.input as unknown as FileWriteInput;
+      return input.file_path;
+    }
+    case "Edit": {
+      const input = tool.input as unknown as FileEditInput;
+      return input.file_path;
+    }
+    case "WebFetch": {
+      const input = tool.input as { url?: string };
+      if (input.url) {
+        try {
+          const u = new URL(input.url);
+          return u.hostname;
+        } catch { return input.url; }
+      }
+      return "";
+    }
+    default:
+      return tool.name;
+  }
+}
+
+/**
+ * Evaluate permission rules against a tool call. First match wins.
+ * Returns the action if a rule matches, or null for fallback to mode-based logic.
+ */
+export function evaluateRules(rules: PermissionRule[], tool: ToolUseBlock): PermissionRuleAction | null {
+  const matchValue = getToolMatchValue(tool);
+
+  for (const rule of rules) {
+    const parsed = parseRulePattern(rule.pattern);
+    if (!parsed) continue;
+
+    // Check tool name match (supports wildcards for MCP tools)
+    const toolMatches = parsed.tool === tool.name || globMatch(parsed.tool, tool.name);
+    if (!toolMatches) continue;
+
+    // Check inner pattern
+    if (parsed.innerPattern === "*") return rule.action;
+
+    // For WebFetch, inner pattern can be "domain:example.com"
+    if (tool.name === "WebFetch" && parsed.innerPattern.startsWith("domain:")) {
+      const domain = parsed.innerPattern.slice(7);
+      if (globMatch(domain, matchValue)) return rule.action;
+      continue;
+    }
+
+    // Match inner pattern against value
+    if (globMatch(parsed.innerPattern, matchValue)) return rule.action;
+  }
+
+  return null;
+}
+
 // ─── Permission Manager ────────────────────────────────────────
 
 export class PermissionManager {
@@ -289,14 +391,26 @@ export class PermissionManager {
   private workingDirectory: string;
   private additionalDirs?: string[];
   private promptFn: PermissionPromptFn | null = null;
+  private rules: PermissionRule[] = [];
 
   /** Allowlist of previously approved tool+pattern combos: "ToolName:pattern" */
   private allowlist = new Set<string>();
 
-  constructor(mode: PermissionMode, workingDirectory: string, additionalDirs?: string[]) {
+  constructor(mode: PermissionMode, workingDirectory: string, additionalDirs?: string[], rules?: PermissionRule[]) {
     this.mode = mode;
     this.workingDirectory = workingDirectory;
     this.additionalDirs = additionalDirs;
+    this.rules = rules ?? [];
+  }
+
+  /** Get the current permission rules. */
+  getRules(): PermissionRule[] {
+    return this.rules;
+  }
+
+  /** Add a permission rule at runtime. */
+  addRule(rule: PermissionRule): void {
+    this.rules.push(rule);
   }
 
   /** Set the callback used to prompt the user in "ask" mode. */
@@ -349,6 +463,23 @@ export class PermissionManager {
         allowed: false,
         reason: `Permission mode is 'plan': only read-only tools are allowed (tried: ${tool.name})`,
       };
+    }
+
+    // Evaluate per-tool rules (first match wins, before mode-based logic)
+    if (this.rules.length > 0) {
+      const ruleAction = evaluateRules(this.rules, tool);
+      if (ruleAction === "deny") {
+        return { allowed: false, reason: "Blocked by permission rule" };
+      }
+      if (ruleAction === "allow") {
+        // Still enforce hard safety checks for write tools
+        const safetyResult = this.analyzeToolSafety(tool);
+        if (!safetyResult.allowed && safetyResult.reason?.includes("must be absolute")) {
+          return safetyResult;
+        }
+        return { allowed: true };
+      }
+      // ruleAction === "ask" falls through to normal mode-based logic
     }
 
     // For read-only tools, always allow (in ask, auto, or acceptEdits mode)
