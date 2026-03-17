@@ -87,9 +87,6 @@ function detectCodeTask(text: string): boolean {
 }
 
 /**
- * Classify the task type from a user message.
- */
-/**
  * Detect whether the user message requires deep reasoning.
  */
 function detectReasoningTask(text: string): boolean {
