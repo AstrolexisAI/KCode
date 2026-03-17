@@ -7,7 +7,7 @@ import { log } from "./logger";
 
 // ─── Task Types ─────────────────────────────────────────────────
 
-export type TaskType = "code" | "vision" | "chat" | "general";
+export type TaskType = "code" | "vision" | "chat" | "simple" | "general";
 
 // Image file extensions (mirrors IMAGE_EXTENSIONS from tools/read.ts)
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
@@ -19,6 +19,24 @@ const IMAGE_INDICATORS = [
   "[image/png output]",    // notebook image output
   "[image/jpeg output]",   // notebook image output
 ];
+
+// Patterns that indicate simple tasks (can use a faster model)
+const SIMPLE_TASK_INDICATORS = [
+  /^(show|list|find|search|grep|glob|read|cat|ls)\b/i,
+  /^(what is|where is|how many)\b/i,
+  /^(git status|git log|git diff|git show)\b/i,
+];
+
+/**
+ * Detect whether the user message is a simple task that can use a faster model.
+ */
+function detectSimpleTask(text: string): boolean {
+  if (text.length > 200) return false; // Long prompts are likely complex
+  for (const pattern of SIMPLE_TASK_INDICATORS) {
+    if (pattern.test(text.trim())) return true;
+  }
+  return false;
+}
 
 // Patterns that indicate code-heavy tasks
 const CODE_INDICATORS = [
@@ -66,6 +84,7 @@ function detectCodeTask(text: string): boolean {
  */
 export function classifyTask(userMessage: string): TaskType {
   if (detectImageContent(userMessage)) return "vision";
+  if (detectSimpleTask(userMessage)) return "simple";
   if (detectCodeTask(userMessage)) return "code";
 
   // Default to general
@@ -97,6 +116,15 @@ export async function routeToModel(
 
   const models = await listModels();
 
+  if (taskType === "simple") {
+    const fastModel = models.find(m => m.capabilities?.includes("fast"));
+    if (fastModel) {
+      log.info("router", `Routing simple task to ${fastModel.name}`);
+      return fastModel.name;
+    }
+    return defaultModel;
+  }
+
   if (taskType === "vision") {
     // Look for a model with "vision" or "ocr" capability
     const visionModel = models.find(
@@ -125,6 +153,7 @@ export async function getModelCapabilities(): Promise<Record<string, string[]>> 
     code: [],
     vision: [],
     chat: [],
+    fast: [],
     general: [],
   };
 
@@ -138,6 +167,9 @@ export async function getModelCapabilities(): Promise<Record<string, string[]>> 
     }
     if (caps.includes("chat")) {
       capabilities.chat.push(m.name);
+    }
+    if (caps.includes("fast")) {
+      capabilities.fast.push(m.name);
     }
     // All models are general-purpose
     capabilities.general.push(m.name);

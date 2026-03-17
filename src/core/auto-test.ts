@@ -94,3 +94,24 @@ export function getTestSuggestion(
 
   return { testFile, command };
 }
+
+/**
+ * Check multiple modified files and return all test suggestions.
+ */
+export function getTestSuggestionsForFiles(
+  files: string[],
+  cwd: string,
+): Array<{ testFile: string; command: string; sourceFile: string }> {
+  const seen = new Set<string>();
+  const suggestions: Array<{ testFile: string; command: string; sourceFile: string }> = [];
+
+  for (const file of files) {
+    const result = getTestSuggestion(file, cwd);
+    if (result && !seen.has(result.testFile)) {
+      seen.add(result.testFile);
+      suggestions.push({ ...result, sourceFile: file });
+    }
+  }
+
+  return suggestions;
+}
