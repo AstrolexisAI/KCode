@@ -108,4 +108,59 @@ function initSchema(db: Database): void {
     INSERT INTO learnings_fts(learnings_fts, rowid, topic, content, tags) VALUES ('delete', old.id, old.topic, old.content, old.tags);
     INSERT INTO learnings_fts(rowid, topic, content, tags) VALUES (new.id, new.topic, new.content, new.tags);
   END`);
+
+  // distillation.ts tables — knowledge distillation (RAG-based few-shot learning)
+  db.exec(`CREATE TABLE IF NOT EXISTS distilled_examples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_query TEXT NOT NULL,
+    assistant_response TEXT NOT NULL,
+    tool_chain TEXT DEFAULT '[]',
+    tool_count INTEGER DEFAULT 0,
+    success INTEGER NOT NULL DEFAULT 1,
+    project TEXT DEFAULT '',
+    tags TEXT DEFAULT '',
+    quality REAL NOT NULL DEFAULT 1.0,
+    use_count INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS distilled_fts USING fts5(
+    user_query, assistant_response, tags, content='distilled_examples', content_rowid='id'
+  )`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS distilled_ai AFTER INSERT ON distilled_examples BEGIN
+    INSERT INTO distilled_fts(rowid, user_query, assistant_response, tags)
+    VALUES (new.id, new.user_query, new.assistant_response, new.tags);
+  END`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS distilled_ad AFTER DELETE ON distilled_examples BEGIN
+    INSERT INTO distilled_fts(distilled_fts, rowid, user_query, assistant_response, tags)
+    VALUES ('delete', old.id, old.user_query, old.assistant_response, old.tags);
+  END`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS distilled_au AFTER UPDATE ON distilled_examples BEGIN
+    INSERT INTO distilled_fts(distilled_fts, rowid, user_query, assistant_response, tags)
+    VALUES ('delete', old.id, old.user_query, old.assistant_response, old.tags);
+    INSERT INTO distilled_fts(rowid, user_query, assistant_response, tags)
+    VALUES (new.id, new.user_query, new.assistant_response, new.tags);
+  END`);
+
+  // benchmarks.ts tables — model quality tracking
+  db.exec(`CREATE TABLE IF NOT EXISTS benchmarks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model TEXT NOT NULL,
+    task_type TEXT NOT NULL DEFAULT 'general',
+    score REAL NOT NULL,
+    tokens_used INTEGER DEFAULT 0,
+    latency_ms INTEGER DEFAULT 0,
+    details TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bench_model ON benchmarks(model)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_bench_date ON benchmarks(created_at)`);
+
+  // plan.ts tables — structured plan persistence
+  db.exec(`CREATE TABLE IF NOT EXISTS plans (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    steps TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
 }

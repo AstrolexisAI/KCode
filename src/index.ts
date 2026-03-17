@@ -30,12 +30,16 @@ import { getRulesManager } from "./core/rules";
 import { getPluginManager } from "./core/plugins";
 import { getLspManager, shutdownLsp } from "./core/lsp";
 import { runSetup, isSetupComplete, getAvailableModels } from "./core/model-manager";
-import { startServer, stopServer, getServerStatus, ensureServer, isServerRunning } from "./core/llama-server";
+import { startServer, stopServer, getServerStatus, ensureServer, isServerRunning, getServerPort } from "./core/llama-server";
 import { activateLicense, checkLicense, hasLicense, getLicenseInfo, clearLicense } from "./core/license";
+import { performUpdate, checkForUpdate } from "./core/updater";
+import { setSandboxMode } from "./tools/bash";
+import { getSandboxCapabilities } from "./core/sandbox";
+import { voiceToText, isVoiceAvailable } from "./core/voice";
+import { getBenchmarkSummary, formatBenchmarks, initBenchmarkSchema } from "./core/benchmarks";
 
-// Read version from package.json at build time (Bun supports JSON imports)
-import pkg from "../package.json";
-const VERSION = pkg.version;
+// Version — hardcoded to avoid Bun bundler resolving wrong package.json
+const VERSION = "0.7.0";
 
 // Prevent unhandled errors from background child processes from crashing kcode
 process.on("uncaughtException", (err) => {
@@ -79,6 +83,10 @@ program
   .option("--worktree <name>", "Create and work in an isolated git worktree")
   .option("--theme <name>", "Set color theme (e.g. dracula, monokai, nord)")
   .option("--fork", "Fork the last session (new session with previous history)")
+  .option("--sandbox [mode]", "Run bash commands in a sandbox (light or strict)")
+  .option("--voice", "Enable voice input (record from microphone)")
+  .option("--add-dir <dirs...>", "Add additional working directories")
+  .option("--no-tools", "Chat-only mode without tool calling")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
     // Validate permission mode
@@ -364,6 +372,844 @@ licenseCmd
     console.log("License removed from this machine.");
   });
 
+// ─── Teach subcommand ──────────────────────────────────────────
+
+const teachCmd = program
+  .command("teach")
+  .description("Teach KCode about your environment (awareness modules)");
+
+teachCmd
+  .command("add <name>")
+  .description("Create a new awareness module (opens in $EDITOR)")
+  .option("-g, --global", "Create in ~/.kcode/awareness/ instead of project")
+  .action(async (name: string, opts: { global?: boolean }) => {
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const { mkdirSync, existsSync, writeFileSync } = await import("node:fs");
+    const { execSync } = await import("node:child_process");
+
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
+    const dir = opts.global
+      ? join(homedir(), ".kcode", "awareness")
+      : join(process.cwd(), ".kcode", "awareness");
+
+    mkdirSync(dir, { recursive: true });
+    const filePath = join(dir, `${slug}.md`);
+
+    if (existsSync(filePath)) {
+      console.log(`\x1b[33m!\x1b[0m Already exists: ${filePath}`);
+      console.log("  Edit it with: $EDITOR " + filePath);
+      return;
+    }
+
+    const template = `# ${name}
+
+<!-- KCode loads this file into every session automatically. -->
+<!-- Write anything you want KCode to always know about. -->
+<!-- Examples: API endpoints, device IPs, project conventions, team rules. -->
+
+`;
+    writeFileSync(filePath, template, "utf-8");
+    console.log(`\x1b[32m+\x1b[0m Created: ${filePath}`);
+
+    const editor = process.env.EDITOR || process.env.VISUAL || "nano";
+    try {
+      execSync(`${editor} "${filePath}"`, { stdio: "inherit" });
+    } catch {
+      console.log(`  Edit it with: ${editor} ${filePath}`);
+    }
+  });
+
+teachCmd
+  .command("list")
+  .description("List all awareness modules")
+  .action(async () => {
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const { readdirSync, existsSync, readFileSync, statSync } = await import("node:fs");
+
+    const globalDir = join(homedir(), ".kcode", "awareness");
+    const projectDir = join(process.cwd(), ".kcode", "awareness");
+
+    let found = false;
+
+    for (const [label, dir] of [["Global", globalDir], ["Project", projectDir]] as const) {
+      if (!existsSync(dir)) continue;
+      const files = readdirSync(dir).filter(f => f.endsWith(".md")).sort();
+      if (files.length === 0) continue;
+
+      found = true;
+      console.log(`\n\x1b[1m${label}\x1b[0m \x1b[2m(${dir})\x1b[0m`);
+      for (const f of files) {
+        const content = readFileSync(join(dir, f), "utf-8");
+        const firstLine = content.split("\n").find(l => l.startsWith("# "))?.replace("# ", "") || f;
+        const size = statSync(join(dir, f)).size;
+        console.log(`  \x1b[36m${f}\x1b[0m — ${firstLine} \x1b[2m(${size} bytes)\x1b[0m`);
+      }
+    }
+
+    if (!found) {
+      console.log("\nNo awareness modules found.");
+      console.log("Create one with: \x1b[1mkcode teach add <name>\x1b[0m");
+      console.log("\nExamples:");
+      console.log("  kcode teach add sonoff       # Teach about IoT devices");
+      console.log("  kcode teach add deploy        # Teach deployment steps");
+      console.log("  kcode teach add team-rules    # Teach coding conventions");
+    }
+  });
+
+teachCmd
+  .command("remove <name>")
+  .description("Remove an awareness module")
+  .option("-g, --global", "Remove from ~/.kcode/awareness/")
+  .action(async (name: string, opts: { global?: boolean }) => {
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const { existsSync, unlinkSync } = await import("node:fs");
+
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
+    const dir = opts.global
+      ? join(homedir(), ".kcode", "awareness")
+      : join(process.cwd(), ".kcode", "awareness");
+
+    const filePath = join(dir, `${slug}.md`);
+    if (!existsSync(filePath)) {
+      console.log(`\x1b[31m!\x1b[0m Not found: ${filePath}`);
+      return;
+    }
+
+    unlinkSync(filePath);
+    console.log(`\x1b[32m-\x1b[0m Removed: ${filePath}`);
+  });
+
+teachCmd
+  .command("edit <name>")
+  .description("Edit an existing awareness module")
+  .option("-g, --global", "Edit from ~/.kcode/awareness/")
+  .action(async (name: string, opts: { global?: boolean }) => {
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const { existsSync } = await import("node:fs");
+    const { execSync } = await import("node:child_process");
+
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
+    const dir = opts.global
+      ? join(homedir(), ".kcode", "awareness")
+      : join(process.cwd(), ".kcode", "awareness");
+
+    const filePath = join(dir, `${slug}.md`);
+    if (!existsSync(filePath)) {
+      console.log(`\x1b[31m!\x1b[0m Not found: ${filePath}`);
+      console.log("  Create it with: kcode teach add " + name);
+      return;
+    }
+
+    const editor = process.env.EDITOR || process.env.VISUAL || "nano";
+    try {
+      execSync(`${editor} "${filePath}"`, { stdio: "inherit" });
+      console.log(`\x1b[32m*\x1b[0m Updated: ${filePath}`);
+    } catch {
+      console.log(`  Edit manually: ${editor} ${filePath}`);
+    }
+  });
+
+// ─── Init subcommand ──────────────────────────────────────────
+
+program
+  .command("init")
+  .description("Initialize KCode in the current project")
+  .option("--force", "Overwrite existing files")
+  .action(async (opts: { force?: boolean }) => {
+    const { mkdirSync, existsSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const cwd = process.cwd();
+
+    const created: string[] = [];
+    const skipped: string[] = [];
+
+    // 1. Create KCODE.md
+    const kcodeMdPath = join(cwd, "KCODE.md");
+    if (!existsSync(kcodeMdPath) || opts.force) {
+      const dirName = cwd.split("/").pop() ?? "project";
+      writeFileSync(kcodeMdPath, `# KCODE.md
+
+## Project: ${dirName}
+
+<!-- KCode reads this file at the start of every session. -->
+<!-- Add project-specific instructions, conventions, and context here. -->
+
+## Build & Development
+
+\`\`\`bash
+# Add your build/test/dev commands here
+\`\`\`
+
+## Key Conventions
+
+- <!-- Add coding conventions, naming patterns, etc. -->
+
+## Architecture
+
+- <!-- Describe the high-level architecture, key files, modules -->
+`, "utf-8");
+      created.push("KCODE.md");
+    } else {
+      skipped.push("KCODE.md (exists)");
+    }
+
+    // 2. Create .kcode/ directory structure
+    const kcodeDir = join(cwd, ".kcode");
+    mkdirSync(kcodeDir, { recursive: true });
+
+    // 3. Create settings.json
+    const settingsPath = join(kcodeDir, "settings.json");
+    if (!existsSync(settingsPath) || opts.force) {
+      writeFileSync(settingsPath, JSON.stringify({
+        hooks: {
+          PostToolUse: [],
+          PreToolUse: [],
+        },
+      }, null, 2) + "\n", "utf-8");
+      created.push(".kcode/settings.json");
+    } else {
+      skipped.push(".kcode/settings.json (exists)");
+    }
+
+    // 4. Create awareness directory
+    const awarenessDir = join(kcodeDir, "awareness");
+    mkdirSync(awarenessDir, { recursive: true });
+
+    const exampleAwareness = join(awarenessDir, "project.md");
+    if (!existsSync(exampleAwareness) || opts.force) {
+      writeFileSync(exampleAwareness, `# Project Context
+
+<!-- Add anything KCode should always know about this project. -->
+<!-- Examples: API endpoints, environment setup, team conventions. -->
+`, "utf-8");
+      created.push(".kcode/awareness/project.md");
+    } else {
+      skipped.push(".kcode/awareness/project.md (exists)");
+    }
+
+    // 5. Create rules directory
+    const rulesDir = join(kcodeDir, "rules");
+    mkdirSync(rulesDir, { recursive: true });
+
+    // 6. Add .kcode to .gitignore if not already there
+    const gitignorePath = join(cwd, ".gitignore");
+    if (existsSync(gitignorePath)) {
+      const gitignore = (await import("node:fs")).readFileSync(gitignorePath, "utf-8");
+      if (!gitignore.includes(".kcode/")) {
+        (await import("node:fs")).appendFileSync(gitignorePath, "\n# KCode local config\n.kcode/\n", "utf-8");
+        created.push(".gitignore (appended .kcode/)");
+      }
+    }
+
+    // Report
+    if (created.length > 0) {
+      console.log("\x1b[32m✓\x1b[0m KCode initialized:");
+      for (const f of created) console.log(`  + ${f}`);
+    }
+    if (skipped.length > 0) {
+      for (const f of skipped) console.log(`  \x1b[2m- ${f}\x1b[0m`);
+    }
+    console.log("\nEdit \x1b[1mKCODE.md\x1b[0m to teach KCode about this project.");
+    console.log("Add awareness modules: \x1b[1mkcode teach add <name>\x1b[0m");
+  });
+
+// ─── New subcommand (project scaffolding) ───────────────────────
+
+program
+  .command("new <template> [name]")
+  .description("Create a new project from a template (api, cli, web, library)")
+  .action(async (template: string, name?: string) => {
+    const { mkdirSync, writeFileSync, existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    const projectName = name ?? template;
+    const projectDir = join(process.cwd(), projectName);
+
+    if (existsSync(projectDir)) {
+      console.error(`\x1b[31mDirectory "${projectName}" already exists.\x1b[0m`);
+      process.exit(1);
+    }
+
+    mkdirSync(projectDir, { recursive: true });
+
+    const templates: Record<string, () => void> = {
+      api: () => {
+        mkdirSync(join(projectDir, "src"), { recursive: true });
+        mkdirSync(join(projectDir, "src", "routes"), { recursive: true });
+        writeFileSync(join(projectDir, "package.json"), JSON.stringify({
+          name: projectName,
+          version: "0.1.0",
+          type: "module",
+          scripts: { start: "bun run src/index.ts", dev: "bun --watch run src/index.ts", test: "bun test" },
+          devDependencies: { "@types/bun": "latest" },
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({
+          compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "bundler", strict: true, outDir: "dist" },
+          include: ["src"],
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "src", "index.ts"), `const server = Bun.serve({
+  port: 10080,
+  fetch(req) {
+    const url = new URL(req.url);
+    if (url.pathname === "/health") return Response.json({ status: "ok" });
+    return new Response("Not found", { status: 404 });
+  },
+});
+
+console.log(\`Server running at http://localhost:\${server.port}\`);
+`);
+        writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun API project. Run with \`bun run dev\`.\n`);
+      },
+      cli: () => {
+        mkdirSync(join(projectDir, "src"), { recursive: true });
+        writeFileSync(join(projectDir, "package.json"), JSON.stringify({
+          name: projectName,
+          version: "0.1.0",
+          type: "module",
+          bin: { [projectName]: "src/index.ts" },
+          scripts: { start: "bun run src/index.ts", build: "bun build src/index.ts --compile --outfile dist/" + projectName, test: "bun test" },
+          devDependencies: { "@types/bun": "latest" },
+          dependencies: { commander: "^14.0.0" },
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({
+          compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "bundler", strict: true },
+          include: ["src"],
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "src", "index.ts"), `#!/usr/bin/env bun
+import { Command } from "commander";
+
+const program = new Command()
+  .name("${projectName}")
+  .description("A CLI tool")
+  .version("0.1.0")
+  .argument("[input]", "Input to process")
+  .action((input?: string) => {
+    console.log(\`Hello from ${projectName}!\`, input ?? "");
+  });
+
+program.parse();
+`);
+        writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun CLI project. Run with \`bun run start\`, build with \`bun run build\`.\n`);
+      },
+      web: () => {
+        mkdirSync(join(projectDir, "src"), { recursive: true });
+        mkdirSync(join(projectDir, "public"), { recursive: true });
+        writeFileSync(join(projectDir, "package.json"), JSON.stringify({
+          name: projectName,
+          version: "0.1.0",
+          type: "module",
+          scripts: { start: "bun run src/server.ts", dev: "bun --watch run src/server.ts", test: "bun test" },
+          devDependencies: { "@types/bun": "latest" },
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "src", "server.ts"), `const server = Bun.serve({
+  port: 10080,
+  fetch(req) {
+    const url = new URL(req.url);
+    if (url.pathname === "/") return new Response(Bun.file("public/index.html"));
+    const file = Bun.file("public" + url.pathname);
+    return new Response(file);
+  },
+});
+console.log(\`Server running at http://localhost:\${server.port}\`);
+`);
+        writeFileSync(join(projectDir, "public", "index.html"), `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>${projectName}</title><link rel="stylesheet" href="/styles.css"></head>
+<body><h1>${projectName}</h1><script src="/app.js"></script></body>
+</html>
+`);
+        writeFileSync(join(projectDir, "public", "styles.css"), "body { font-family: system-ui; max-width: 800px; margin: 2rem auto; }\n");
+        writeFileSync(join(projectDir, "public", "app.js"), "console.log('Ready');\n");
+        writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun web project. Run with \`bun run dev\`.\n`);
+      },
+      library: () => {
+        mkdirSync(join(projectDir, "src"), { recursive: true });
+        mkdirSync(join(projectDir, "tests"), { recursive: true });
+        writeFileSync(join(projectDir, "package.json"), JSON.stringify({
+          name: projectName,
+          version: "0.1.0",
+          type: "module",
+          main: "src/index.ts",
+          scripts: { test: "bun test", build: "bun build src/index.ts --outdir dist" },
+          devDependencies: { "@types/bun": "latest" },
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({
+          compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "bundler", strict: true, declaration: true, outDir: "dist" },
+          include: ["src"],
+        }, null, 2) + "\n");
+        writeFileSync(join(projectDir, "src", "index.ts"), `export function hello(name: string): string {
+  return \`Hello, \${name}!\`;
+}
+`);
+        writeFileSync(join(projectDir, "tests", "index.test.ts"), `import { test, expect } from "bun:test";
+import { hello } from "../src/index";
+
+test("hello returns greeting", () => {
+  expect(hello("World")).toBe("Hello, World!");
+});
+`);
+        writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun library project. Test with \`bun test\`.\n`);
+      },
+    };
+
+    if (!templates[template]) {
+      console.error(`\x1b[31mUnknown template "${template}". Available: ${Object.keys(templates).join(", ")}\x1b[0m`);
+      process.exit(1);
+    }
+
+    templates[template]();
+
+    // Initialize KCode in the new project
+    const kcodeDir = join(projectDir, ".kcode");
+    mkdirSync(join(kcodeDir, "awareness"), { recursive: true });
+    writeFileSync(join(kcodeDir, "settings.json"), JSON.stringify({ hooks: {} }, null, 2) + "\n");
+
+    // Add .gitignore
+    writeFileSync(join(projectDir, ".gitignore"), "node_modules/\ndist/\n.kcode/\n");
+
+    console.log(`\x1b[32m✓\x1b[0m Created ${template} project: ${projectName}/`);
+    console.log(`\n  cd ${projectName}`);
+    console.log("  bun install");
+    console.log("  kcode\n");
+  });
+
+// ─── Resume subcommand ──────────────────────────────────────────
+
+program
+  .command("resume")
+  .description("List and resume previous sessions")
+  .option("-l, --list", "List recent sessions")
+  .option("-n, --number <n>", "Number of sessions to show", parseInt, 10)
+  .action(async (opts: { list?: boolean; number?: number }) => {
+    const transcript = new TranscriptManager();
+    const sessions = transcript.listSessions();
+
+    if (sessions.length === 0) {
+      console.log("No previous sessions found.");
+      return;
+    }
+
+    const count = Math.min(opts.number ?? 10, sessions.length);
+    console.log(`\nRecent sessions (${count} of ${sessions.length}):\n`);
+
+    for (let i = 0; i < count; i++) {
+      const s = sessions[i];
+      const date = s.startedAt.replace("T", " ");
+      const prompt = s.prompt.slice(0, 60);
+      console.log(`  \x1b[36m${i + 1}.\x1b[0m ${date}  ${prompt}`);
+    }
+
+    console.log("\nTo resume a session:");
+    console.log("  \x1b[1mkcode --continue\x1b[0m         Resume the most recent session");
+    console.log("  \x1b[1mkcode --fork\x1b[0m             Fork the most recent session (new transcript)");
+  });
+
+// ─── Search subcommand ──────────────────────────────────────────
+
+program
+  .command("search <query>")
+  .description("Search through past session transcripts")
+  .option("-n, --number <n>", "Max results to show", parseInt, 10)
+  .option("-d, --days <days>", "Limit search to last N days", parseInt, 30)
+  .action(async (query: string, opts: { number?: number; days?: number }) => {
+    const transcript = new TranscriptManager();
+    const sessions = transcript.listSessions();
+    const cutoff = Date.now() - (opts.days ?? 30) * 24 * 60 * 60 * 1000;
+    const queryLower = query.toLowerCase();
+    const maxResults = opts.number ?? 10;
+
+    interface SearchResult {
+      session: string;
+      date: string;
+      role: string;
+      content: string;
+      lineNum: number;
+    }
+
+    const results: SearchResult[] = [];
+
+    for (const session of sessions) {
+      // Check date cutoff from filename
+      const dateStr = session.filename.slice(0, 10);
+      const fileDate = new Date(dateStr).getTime();
+      if (!isNaN(fileDate) && fileDate < cutoff) continue;
+
+      const entries = transcript.loadSession(session.filename);
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        if (entry.content.toLowerCase().includes(queryLower)) {
+          results.push({
+            session: session.filename,
+            date: session.startedAt,
+            role: entry.role,
+            content: entry.content,
+            lineNum: i + 1,
+          });
+          if (results.length >= maxResults) break;
+        }
+      }
+      if (results.length >= maxResults) break;
+    }
+
+    if (results.length === 0) {
+      console.log(`No matches for "${query}" in last ${opts.days ?? 30} days.`);
+      return;
+    }
+
+    console.log(`\nFound ${results.length} match(es) for "${query}":\n`);
+    for (const r of results) {
+      const preview = r.content.slice(0, 120).replace(/\n/g, " ");
+      console.log(`  \x1b[36m${r.date}\x1b[0m [${r.role}]`);
+      console.log(`    ${preview}${r.content.length > 120 ? "..." : ""}`);
+      console.log(`    \x1b[2mSession: ${r.session}:${r.lineNum}\x1b[0m`);
+      console.log();
+    }
+  });
+
+// ─── Watch subcommand ───────────────────────────────────────────
+
+program
+  .command("watch")
+  .description("Watch for file changes and report them")
+  .option("-p, --pattern <glob>", "Glob pattern to watch", "**/*.{ts,js,tsx,jsx,py,rs,go}")
+  .option("-i, --ignore <dirs>", "Directories to ignore (comma-separated)", "node_modules,dist,build,.git,__pycache__")
+  .action(async (opts: { pattern?: string; ignore?: string }) => {
+    const { watch } = await import("node:fs");
+    const { join, relative } = await import("node:path");
+    const { readdirSync, statSync } = await import("node:fs");
+    const cwd = process.cwd();
+    const ignoreDirs = new Set((opts.ignore ?? "").split(",").map((d) => d.trim()));
+
+    console.log(`\x1b[36mWatching for changes...\x1b[0m (Ctrl+C to stop)`);
+    console.log(`  Pattern: ${opts.pattern}`);
+    console.log(`  Ignoring: ${Array.from(ignoreDirs).join(", ")}\n`);
+
+    // Collect directories to watch
+    function getDirs(dir: string): string[] {
+      const dirs = [dir];
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue;
+          if (entry.name.startsWith(".") || ignoreDirs.has(entry.name)) continue;
+          dirs.push(...getDirs(join(dir, entry.name)));
+        }
+      } catch { /* ignore */ }
+      return dirs;
+    }
+
+    const watchDirs = getDirs(cwd);
+    const watchers: ReturnType<typeof watch>[] = [];
+    const recentChanges = new Map<string, number>();
+
+    for (const dir of watchDirs) {
+      try {
+        const watcher = watch(dir, { recursive: false }, (eventType, filename) => {
+          if (!filename) return;
+          const fullPath = join(dir, filename);
+          const relPath = relative(cwd, fullPath);
+
+          // Deduplicate rapid-fire events (debounce 500ms)
+          const now = Date.now();
+          const last = recentChanges.get(relPath) ?? 0;
+          if (now - last < 500) return;
+          recentChanges.set(relPath, now);
+
+          // Check pattern match (simple extension check)
+          const ext = filename.split(".").pop() ?? "";
+          const allowedExts = (opts.pattern ?? "")
+            .replace(/\*\*\/\*\.\{?/g, "")
+            .replace(/\}$/g, "")
+            .split(",");
+          if (allowedExts.length > 0 && !allowedExts.includes(ext)) return;
+
+          const time = new Date().toLocaleTimeString("en-US", { hour12: false });
+          const icon = eventType === "rename" ? "+" : "*";
+          console.log(`  \x1b[33m${time}\x1b[0m ${icon} ${relPath}`);
+        });
+        watchers.push(watcher);
+      } catch { /* skip unwatchable dirs */ }
+    }
+
+    console.log(`  Watching ${watchDirs.length} directories\n`);
+
+    // Keep process alive
+    await new Promise(() => {
+      process.on("SIGINT", () => {
+        for (const w of watchers) w.close();
+        console.log("\n  Watch stopped.");
+        process.exit(0);
+      });
+    });
+  });
+
+// ─── Update subcommand ──────────────────────────────────────────
+
+program
+  .command("update")
+  .description("Check for updates and self-update KCode")
+  .option("--check", "Only check, don't download")
+  .option("--url <url>", "Custom update URL")
+  .action(async (opts: { check?: boolean; url?: string }) => {
+    if (opts.check) {
+      const newVersion = await checkForUpdate(VERSION);
+      if (newVersion) {
+        console.log(`\x1b[33mUpdate available: v${VERSION} → v${newVersion}\x1b[0m`);
+        console.log("Run \x1b[1mkcode update\x1b[0m to install.");
+      } else {
+        console.log(`\x1b[32m✓\x1b[0m KCode v${VERSION} is up to date.`);
+      }
+      return;
+    }
+
+    const result = await performUpdate(VERSION, opts.url);
+    if (result.error) {
+      console.error(`\x1b[31m✗ ${result.error}\x1b[0m`);
+      process.exit(1);
+    }
+  });
+
+// ─── Benchmark subcommand ───────────────────────────────────────
+
+program
+  .command("benchmark")
+  .alias("bench")
+  .description("Show model quality benchmark results")
+  .option("-m, --model <model>", "Filter by model name")
+  .option("-d, --days <days>", "Number of days to look back", parseInt, 30)
+  .action(async (opts: { model?: string; days?: number }) => {
+    try { initBenchmarkSchema(); } catch { /* ignore */ }
+    const summaries = getBenchmarkSummary(opts.model, opts.days ?? 30);
+    console.log(formatBenchmarks(summaries));
+  });
+
+// ─── Completions subcommand ──────────────────────────────────────
+
+program
+  .command("completions <shell>")
+  .description("Generate shell completion script (bash or zsh)")
+  .action((shell: string) => {
+    if (shell === "bash") {
+      console.log(`# KCode bash completion - add to ~/.bashrc:
+# eval "$(kcode completions bash)"
+
+_kcode_completions() {
+  local cur prev commands subcommands
+  COMPREPLY=()
+  cur="\${COMP_WORDS[COMP_CWORD]}"
+  prev="\${COMP_WORDS[COMP_CWORD-1]}"
+
+  commands="models setup server activate license stats doctor teach init resume search watch new update benchmark completions serve history"
+
+  if [ $COMP_CWORD -eq 1 ]; then
+    COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
+    return
+  fi
+
+  case "$prev" in
+    models)
+      COMPREPLY=( $(compgen -W "list add remove set-default" -- "$cur") )
+      ;;
+    new)
+      COMPREPLY=( $(compgen -W "api cli web library" -- "$cur") )
+      ;;
+    completions)
+      COMPREPLY=( $(compgen -W "bash zsh" -- "$cur") )
+      ;;
+    *)
+      COMPREPLY=( $(compgen -f -- "$cur") )
+      ;;
+  esac
+}
+complete -F _kcode_completions kcode`);
+    } else if (shell === "zsh") {
+      console.log(`#compdef kcode
+# KCode zsh completion - add to ~/.zshrc:
+# eval "$(kcode completions zsh)"
+
+_kcode() {
+  local -a commands
+  commands=(
+    'models:Manage registered LLM models'
+    'setup:Run the setup wizard'
+    'server:Manage local inference server'
+    'init:Initialize a new project'
+    'resume:List and resume sessions'
+    'search:Search session transcripts'
+    'watch:Watch for file changes'
+    'new:Create project from template'
+    'update:Check for updates'
+    'benchmark:Show benchmark results'
+    'completions:Generate shell completions'
+    'serve:Start HTTP API server'
+    'history:Browse session history'
+  )
+
+  _arguments -C \\
+    '1:command:->cmd' \\
+    '*::arg:->args'
+
+  case $state in
+    cmd)
+      _describe 'command' commands
+      ;;
+    args)
+      case $words[1] in
+        models)
+          _values 'subcommand' list add remove set-default
+          ;;
+        new)
+          _values 'template' api cli web library
+          ;;
+        completions)
+          _values 'shell' bash zsh
+          ;;
+        *)
+          _files
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_kcode`);
+    } else {
+      console.error(`Unsupported shell: ${shell}. Use 'bash' or 'zsh'.`);
+      process.exit(1);
+    }
+  });
+
+// ─── History subcommand ──────────────────────────────────────────
+
+program
+  .command("history")
+  .description("Browse and manage session history")
+  .option("-n, --limit <count>", "Number of sessions to show", parseInt, 20)
+  .option("--load <filename>", "Load a specific session by filename")
+  .option("--delete <filename>", "Delete a specific session")
+  .option("--clear", "Delete all sessions")
+  .action(async (opts: { limit?: number; load?: string; delete?: string; clear?: boolean }) => {
+    const { readdirSync, unlinkSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+    const transcriptsDir = join(homedir(), ".kcode", "transcripts");
+
+    if (opts.clear) {
+      try {
+        const files = readdirSync(transcriptsDir).filter(f => f.endsWith(".jsonl"));
+        for (const f of files) unlinkSync(join(transcriptsDir, f));
+        console.log(`Deleted ${files.length} sessions.`);
+      } catch { console.log("No sessions to delete."); }
+      return;
+    }
+
+    if (opts.delete) {
+      try {
+        unlinkSync(join(transcriptsDir, opts.delete));
+        console.log(`Deleted: ${opts.delete}`);
+      } catch { console.error(`Session not found: ${opts.delete}`); process.exit(1); }
+      return;
+    }
+
+    if (opts.load) {
+      // Load and display session contents
+      try {
+        const { readFileSync } = await import("node:fs");
+        const content = readFileSync(join(transcriptsDir, opts.load), "utf-8");
+        const entries = content.trim().split("\n").filter(Boolean).map(line => {
+          try { return JSON.parse(line); } catch { return null; }
+        }).filter(Boolean);
+
+        console.log(`\n\x1b[1mSession: ${opts.load}\x1b[0m`);
+        console.log(`Entries: ${entries.length}\n`);
+
+        for (const entry of entries) {
+          const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString("en-US", { hour12: false }) : "??:??";
+          const role = entry.role ?? "?";
+          const type = entry.type ?? "?";
+          const content = (entry.content ?? "").slice(0, 120);
+
+          if (type === "user_message") {
+            console.log(`  \x1b[36m${time}\x1b[0m \x1b[1m❯\x1b[0m ${content}`);
+          } else if (type === "assistant_text") {
+            console.log(`  \x1b[36m${time}\x1b[0m   ${content}`);
+          } else if (type === "tool_use") {
+            try {
+              const parsed = JSON.parse(content);
+              console.log(`  \x1b[36m${time}\x1b[0m \x1b[33m⚡ ${parsed.name}\x1b[0m`);
+            } catch {
+              console.log(`  \x1b[36m${time}\x1b[0m \x1b[33m⚡ tool\x1b[0m`);
+            }
+          }
+        }
+        console.log();
+      } catch {
+        console.error(`Could not read session: ${opts.load}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // List recent sessions
+    try {
+      const files = readdirSync(transcriptsDir)
+        .filter(f => f.endsWith(".jsonl"))
+        .sort()
+        .reverse()
+        .slice(0, opts.limit ?? 20);
+
+      if (files.length === 0) {
+        console.log("No session history found.");
+        return;
+      }
+
+      console.log(`\n\x1b[1mRecent sessions\x1b[0m (${files.length}):\n`);
+      for (const f of files) {
+        try {
+          const stat = statSync(join(transcriptsDir, f));
+          const sizeKB = Math.round(stat.size / 1024);
+          // Extract date and slug from filename: 2026-03-17T12-30-45-slug.jsonl
+          const match = f.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})-(.+)\.jsonl$/);
+          if (match) {
+            const date = match[1];
+            const time = match[2].replace(/-/g, ":");
+            const slug = match[3].replace(/-/g, " ");
+            console.log(`  \x1b[36m${date} ${time}\x1b[0m  ${slug.slice(0, 50).padEnd(52)} \x1b[2m${sizeKB}KB\x1b[0m`);
+          } else {
+            console.log(`  ${f}  \x1b[2m${sizeKB}KB\x1b[0m`);
+          }
+        } catch {
+          console.log(`  ${f}`);
+        }
+      }
+      console.log(`\n  Load a session: \x1b[1mkcode history --load <filename>\x1b[0m`);
+      console.log(`  Continue it:    \x1b[1mkcode --continue\x1b[0m\n`);
+    } catch {
+      console.log("No session history found.");
+    }
+  });
+
+// ─── Serve subcommand (HTTP API) ─────────────────────────────────
+
+program
+  .command("serve")
+  .description("Start KCode as an HTTP API server")
+  .option("-p, --port <port>", "Port to listen on", parseInt, 10101)
+  .option("-h, --host <host>", "Host to bind to", "127.0.0.1")
+  .option("--api-key <key>", "Require this API key for authentication")
+  .action(async (opts: { port?: number; host?: string; apiKey?: string }) => {
+    const { startHttpServer } = await import("./core/http-server.js");
+    process.env.KCODE_VERSION = VERSION;
+    await startHttpServer({
+      port: opts.port ?? 10101,
+      host: opts.host ?? "127.0.0.1",
+      apiKey: opts.apiKey,
+    });
+  });
+
 // ─── Parse ──────────────────────────────────────────────────────
 
 program.parse();
@@ -372,48 +1218,103 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; noTools?: boolean },
 ) {
   const cwd = process.cwd();
 
-  // Auto-setup on first run — launch the installation wizard
-  // The wizard handles license activation and PATH installation
-  if (!isSetupComplete()) {
-    console.log("\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n");
-    try {
-      await runSetup();
-    } catch (err) {
-      console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
-      console.error("You can run '\x1b[1mkcode setup\x1b[0m' manually to configure.");
+  // ─── Managed mode (launched by Kulvex WebUI) ──────────────
+  // When KCODE_MANAGED=1, an external server (Jarvis) manages the llama-server.
+  // Skip wizard, license check, and server auto-start — just connect to KCODE_API_BASE.
+  const isManaged = process.env.KCODE_MANAGED === "1";
+
+  if (!isManaged) {
+    // Auto-setup on first run — launch the installation wizard
+    // The wizard handles license activation and PATH installation
+    if (!isSetupComplete()) {
+      console.log("\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n");
+      try {
+        await runSetup();
+      } catch (err) {
+        console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
+        console.error("You can run '\x1b[1mkcode setup\x1b[0m' manually to configure.");
+      }
     }
-  }
 
-  // ─── License check ─────────────────────────────────────────
-  if (!hasLicense()) {
-    console.log("\n\x1b[33m⚠  KCode requires a license key to run.\x1b[0m");
-    console.log("  Activate with: \x1b[1mkcode activate <license-key>\x1b[0m");
-    console.log("  Purchase at:   \x1b[36mhttps://kulvex.ai\x1b[0m\n");
-    process.exit(1);
-  }
+    // ─── License check ─────────────────────────────────────────
+    if (!hasLicense()) {
+      console.log("\n\x1b[33m⚠  KCode requires a license key to run.\x1b[0m");
+      console.log("  Activate with: \x1b[1mkcode activate <license-key>\x1b[0m");
+      console.log("  Purchase at:   \x1b[36mhttps://kulvex.ai\x1b[0m\n");
+      process.exit(1);
+    }
 
-  const licenseCheck = await checkLicense();
-  if (!licenseCheck.valid) {
-    console.log(`\n\x1b[31m✗  License error: ${licenseCheck.message}\x1b[0m\n`);
-    process.exit(1);
-  }
+    const licenseCheck = await checkLicense();
+    if (!licenseCheck.valid) {
+      console.log(`\n\x1b[31m✗  License error: ${licenseCheck.message}\x1b[0m\n`);
+      process.exit(1);
+    }
 
-  if (licenseCheck.grace) {
-    process.stderr.write("\x1b[33m⚠ Offline mode — connect to the internet to re-validate your license\x1b[0m\n");
-  }
+    if (licenseCheck.grace) {
+      process.stderr.write("\x1b[33m⚠ Offline mode — connect to the internet to re-validate your license\x1b[0m\n");
+    }
 
-  // Auto-start llama-server if configured and not running
-  if (isSetupComplete() && !(await isServerRunning())) {
-    try {
-      process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
-      const { port } = await startServer();
-      process.stderr.write(`\r\x1b[32m✓\x1b[0m Inference server on port ${port}\x1b[K\n`);
-    } catch (err) {
-      process.stderr.write(`\r\x1b[33m⚠ Server start failed: ${err instanceof Error ? err.message : err}\x1b[K\n\x1b[0m`);
+    // Auto-start llama-server and wait for model to be fully loaded
+    if (isSetupComplete()) {
+      const serverRunning = await isServerRunning();
+      let port: number;
+
+      if (!serverRunning) {
+        try {
+          process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
+          const result = await startServer();
+          port = result.port;
+          process.stderr.write(`\r\x1b[2mLoading model into VRAM...\x1b[0m\x1b[K`);
+        } catch (err) {
+          console.error(`\n\x1b[31m✗ Server start failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
+          process.exit(1);
+        }
+      } else {
+        port = getServerPort()!;
+      }
+
+      // Wait until model is fully loaded and ready — do NOT proceed without this
+      const maxWait = 180_000;
+      const start = Date.now();
+      let ready = false;
+      while (Date.now() - start < maxWait) {
+        try {
+          const healthResp = await fetch(`http://localhost:${port}/health`, {
+            signal: AbortSignal.timeout(3000),
+          });
+          if (healthResp.ok) {
+            const health = await healthResp.json() as any;
+            if (health.status === "ok") {
+              const modelsResp = await fetch(`http://localhost:${port}/v1/models`, {
+                signal: AbortSignal.timeout(3000),
+              });
+              if (modelsResp.ok) {
+                ready = true;
+                break;
+              }
+            }
+          }
+        } catch { /* not ready yet */ }
+
+        const elapsed = Math.round((Date.now() - start) / 1000);
+        if (!serverRunning) {
+          process.stderr.write(`\r\x1b[2mLoading model into VRAM... (${elapsed}s)\x1b[0m\x1b[K`);
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      if (ready) {
+        if (!serverRunning) {
+          process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
+        }
+      } else {
+        console.error(`\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s. Check ~/.kcode/server.log\x1b[0m`);
+        process.exit(1);
+      }
     }
   }
 
@@ -452,6 +1353,33 @@ async function runMain(
     setTheme(themeName);
   }
 
+  // Apply sandbox mode
+  if (opts.sandbox) {
+    const mode = typeof opts.sandbox === "string" ? opts.sandbox : "light";
+    if (mode === "light" || mode === "strict") {
+      setSandboxMode(mode);
+      process.stderr.write(`\x1b[33m🛡 Sandbox: ${mode}\x1b[0m\n`);
+    }
+  }
+
+  // Voice input: record and transcribe before starting
+  if (opts.voice && !promptText) {
+    try {
+      const voiceStatus = isVoiceAvailable();
+      if (!voiceStatus.available) {
+        console.error("\x1b[31mVoice input not available. Install arecord/sox and faster-whisper.\x1b[0m");
+      } else {
+        const text = await voiceToText();
+        if (text) {
+          promptText = text;
+          console.error(`\x1b[36mVoice:\x1b[0m ${text}`);
+        }
+      }
+    } catch (err) {
+      console.error(`\x1b[31mVoice error: ${err instanceof Error ? err.message : err}\x1b[0m`);
+    }
+  }
+
   // Create git worktree if --worktree flag is set
   if (opts.worktree) {
     const { execSync } = await import("node:child_process");
@@ -472,15 +1400,28 @@ async function runMain(
     }
   }
 
+  // Additional directories
+  if (opts.addDir && opts.addDir.length > 0) {
+    const { resolve } = await import("node:path");
+    config.additionalDirs = opts.addDir.map((d: string) => resolve(d));
+    log.info("session", `Additional directories: ${config.additionalDirs.join(", ")}`);
+  }
+
   // No API key required for local LLMs (llama-server).
   // If ASTROLEXIS_API_KEY is set, it will be sent as a Bearer token.
 
-  // Register tools
-  const tools = registerBuiltinTools();
+  // Register tools (empty registry in --no-tools chat mode)
+  const tools = opts.noTools
+    ? new (await import("./core/tool-registry.js")).ToolRegistry()
+    : registerBuiltinTools();
+
+  if (opts.noTools) {
+    console.error("\x1b[33mChat-only mode (no tools)\x1b[0m");
+  }
 
   // Create conversation manager
   const conversationManager = new ConversationManager(config, tools);
-  log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}`);
+  log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}, noTools=${!!opts.noTools}`);
 
   // Resume previous session if --continue flag is set
   if (opts.continue) {

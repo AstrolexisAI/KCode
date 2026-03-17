@@ -49,7 +49,19 @@ export interface SuggestionEntry {
   suggestions: { type: string; message: string; priority: string }[];
 }
 
-export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry;
+export interface PlanEntry {
+  kind: "plan";
+  title: string;
+  steps: Array<{ id: string; title: string; status: string }>;
+}
+
+export interface DiffEntry {
+  kind: "diff";
+  filePath: string;
+  hunks: string;
+}
+
+export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry | PlanEntry | DiffEntry;
 
 interface MessageListProps {
   /** Completed message entries (rendered via <Static>) */
@@ -140,6 +152,10 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
       return <LearnMessage text={entry.text} />;
     case "suggestion":
       return <SuggestionMessage suggestions={entry.suggestions} />;
+    case "plan":
+      return <PlanMessage title={entry.title} steps={entry.steps} />;
+    case "diff":
+      return <DiffMessage filePath={entry.filePath} hunks={entry.hunks} />;
   }
 }
 
@@ -240,6 +256,45 @@ function SuggestionMessage({ suggestions }: { suggestions: { type: string; messa
       {suggestions.map((s, i) => (
         <Text key={`sug-${i}`} color={s.priority === "high" ? theme.warning : theme.dimmed} dimColor={s.priority === "low"}>
           {icons[s.type] ?? "💡"} {s.message}
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+function PlanMessage({ title, steps }: { title: string; steps: Array<{ id: string; title: string; status: string }> }) {
+  const { theme } = useTheme();
+
+  const statusIcons: Record<string, string> = {
+    pending: "[ ]",
+    in_progress: "[~]",
+    done: "[x]",
+    skipped: "[-]",
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: theme.dimmed,
+    in_progress: theme.warning,
+    done: theme.success,
+    skipped: theme.dimmed,
+  };
+
+  const done = steps.filter((s) => s.status === "done").length;
+  const total = steps.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  // Progress bar
+  const barLen = 20;
+  const filled = Math.round((done / total) * barLen);
+  const bar = "=".repeat(filled) + " ".repeat(barLen - filled);
+
+  return (
+    <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
+      <Text bold color={theme.primary}>{title} ({done}/{total} - {pct}%)</Text>
+      <Text color={theme.dimmed}>  [{bar}]</Text>
+      {steps.map((step, i) => (
+        <Text key={`plan-step-${i}`} color={statusColors[step.status] ?? theme.dimmed}>
+          {"  "}{statusIcons[step.status] ?? "[ ]"} {step.id}. {step.title}
         </Text>
       ))}
     </Box>
@@ -402,6 +457,44 @@ function MarkdownText({ text }: { text: string }): React.ReactElement {
   return (
     <Box flexDirection="column">
       {elements}
+    </Box>
+  );
+}
+
+function DiffMessage({ filePath, hunks }: { filePath: string; hunks: string }) {
+  const { theme } = useTheme();
+
+  const lines = hunks.split("\n");
+
+  return (
+    <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
+      <Text bold color={theme.primary}>{"  "}{filePath}</Text>
+      <Box flexDirection="column" paddingLeft={2}>
+        {lines.map((line, i) => {
+          let color = theme.dimmed;
+          let prefix = " ";
+
+          if (line.startsWith("+") && !line.startsWith("+++")) {
+            color = theme.success;
+            prefix = "+";
+          } else if (line.startsWith("-") && !line.startsWith("---")) {
+            color = theme.error;
+            prefix = "-";
+          } else if (line.startsWith("@@")) {
+            color = theme.accent;
+            prefix = "@";
+          } else if (line.startsWith("diff ") || line.startsWith("index ")) {
+            color = theme.dimmed;
+            prefix = " ";
+          }
+
+          return (
+            <Text key={`diff-${i}`} color={color}>
+              {line}
+            </Text>
+          );
+        })}
+      </Box>
     </Box>
   );
 }

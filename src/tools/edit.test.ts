@@ -35,7 +35,7 @@ describe("edit tool", () => {
     });
 
     expect(result.is_error).toBeUndefined();
-    expect(result.content).toContain("replaced 1 occurrence");
+    expect(result.content).toContain("1 replacement");
 
     const updated = readFileSync(filePath, "utf-8");
     expect(updated).toBe("Goodbye world, welcome to the world.");
@@ -93,7 +93,7 @@ describe("edit tool", () => {
     });
 
     expect(result.is_error).toBeUndefined();
-    expect(result.content).toContain("replaced 3 occurrence");
+    expect(result.content).toContain("3 replacements");
 
     const updated = readFileSync(filePath, "utf-8");
     expect(updated).toBe("zzz bbb zzz ccc zzz");

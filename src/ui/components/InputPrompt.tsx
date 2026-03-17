@@ -6,6 +6,7 @@ import { Box, Text, useInput } from "ink";
 import { readdirSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 import { useTheme } from "../ThemeContext.js";
+import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 
 interface CommandInfo {
   name: string;
@@ -94,6 +95,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   // Command preview dropdown state
   const [dropdownIndex, setDropdownIndex] = useState(0);
+
+  // Vim mode state (enabled via ~/.kcode/keybindings.json)
+  const [vimMode, setVimMode] = useState<VimMode>(isVimModeEnabled() ? "normal" : "insert");
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
@@ -207,6 +211,26 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     (input, key) => {
       if (!isActive) return;
 
+      // Vim normal mode handling
+      if (vimMode === "normal") {
+        if (input === "i") { setVimMode("insert"); return; }
+        if (input === "a") { setCursor(c => Math.min(value.length, c + 1)); setVimMode("insert"); return; }
+        if (input === "A") { setCursor(value.length); setVimMode("insert"); return; }
+        if (input === "I") { setCursor(0); setVimMode("insert"); return; }
+        if (input === "h" || key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return; }
+        if (input === "l" || key.rightArrow) { setCursor(c => Math.min(value.length - 1, c + 1)); return; }
+        if (input === "0") { setCursor(0); return; }
+        if (input === "$") { setCursor(value.length); return; }
+        if (input === "w") { const m = value.slice(cursor).match(/^\s*\S+\s*/); setCursor(c => m ? c + m[0].length : value.length); return; }
+        if (input === "b") { const m = value.slice(0, cursor).match(/\S+\s*$/); setCursor(c => m ? c - m[0].length : 0); return; }
+        if (input === "x") { setValue(v => v.slice(0, cursor) + v.slice(cursor + 1)); return; }
+        if (input === "d" && key.ctrl) { setCursor(0); setValue(""); return; } // dd-like clear
+        return; // Block all other input in normal mode
+      }
+
+      // Escape enters vim normal mode (if vim mode is enabled)
+      if (key.escape && isVimModeEnabled()) { setVimMode("normal"); return; }
+
       if (key.return) {
         // If dropdown is visible and an item is selected, fill it and submit
         if (dropdownItems.length > 0 && value.length > 1) {
@@ -250,6 +274,18 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         if (cursor > 0) {
           setValue((prev) => prev.slice(0, cursor - 1) + prev.slice(cursor));
           setCursor((prev) => prev - 1);
+        }
+        return;
+      }
+
+      // Ctrl+D: delete char under cursor, or exit if empty
+      if (key.ctrl && input === "d") {
+        if (value.length === 0) {
+          // Will be handled by App.tsx global handler
+          return;
+        }
+        if (cursor < value.length) {
+          setValue(value.slice(0, cursor) + value.slice(cursor + 1));
         }
         return;
       }
@@ -303,6 +339,71 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         return;
       }
 
+      // ─── Readline shortcuts ───────────────────────────────
+      // Ctrl+A: Move cursor to beginning
+      if (key.ctrl && input === "a") {
+        setCursor(0);
+        return;
+      }
+
+      // Ctrl+E: Move cursor to end
+      if (key.ctrl && input === "e") {
+        setCursor(value.length);
+        return;
+      }
+
+      // Ctrl+U: Delete from cursor to beginning
+      if (key.ctrl && input === "u") {
+        setValue(value.slice(cursor));
+        setCursor(0);
+        return;
+      }
+
+      // Ctrl+K: Delete from cursor to end
+      if (key.ctrl && input === "k") {
+        setValue(value.slice(0, cursor));
+        return;
+      }
+
+      // Ctrl+W: Delete word backwards
+      if (key.ctrl && input === "w") {
+        const before = value.slice(0, cursor);
+        const after = value.slice(cursor);
+        // Find the start of the previous word
+        const trimmed = before.trimEnd();
+        const lastSpace = trimmed.lastIndexOf(" ");
+        const newBefore = lastSpace === -1 ? "" : before.slice(0, lastSpace + 1);
+        setValue(newBefore + after);
+        setCursor(newBefore.length);
+        return;
+      }
+
+      // Alt+B: Move cursor back one word
+      if (key.meta && input === "b") {
+        const before = value.slice(0, cursor);
+        const match = before.match(/\S+\s*$/);
+        setCursor(match ? cursor - match[0].length : 0);
+        return;
+      }
+
+      // Alt+F: Move cursor forward one word
+      if (key.meta && input === "f") {
+        const after = value.slice(cursor);
+        const match = after.match(/^\s*\S+/);
+        setCursor(match ? cursor + match[0].length : value.length);
+        return;
+      }
+
+      // Alt+D: Delete word forward
+      if (key.meta && input === "d") {
+        const after = value.slice(cursor);
+        const match = after.match(/^\s*\S+/);
+        if (match) {
+          setValue(value.slice(0, cursor) + after.slice(match[0].length));
+        }
+        return;
+      }
+
       // Regular character input
       if (input && !key.ctrl && !key.meta) {
         setValue((prev) => prev.slice(0, cursor) + input + prev.slice(cursor));
@@ -347,8 +448,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     hint = ` (${tabMatches.length} matches, Tab to cycle)`;
   }
 
+  const vimIndicator = isVimModeEnabled() ? (vimMode === "normal" ? "[N] " : "[I] ") : "";
   const promptChar = isQueuing ? "+" : "❯";
-  const promptColor = isQueuing ? theme.warning : theme.success;
+  const promptColor = isQueuing ? theme.warning : (vimMode === "normal" ? theme.accent : theme.success);
   const queueHint = isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
 
   return (
@@ -356,7 +458,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       <Box gap={1}>
         {model && <Text color={promptColor}>{model}</Text>}
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
-        <Text bold color={promptColor}>{promptChar}</Text>
+        <Text bold color={promptColor}>{vimIndicator}{promptChar}</Text>
         <Text>
           {before}
           <Text inverse>{cursorChar}</Text>

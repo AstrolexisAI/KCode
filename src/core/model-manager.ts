@@ -39,84 +39,59 @@ interface CatalogEntry {
   localFile: string;       // filename on CDN and locally (codename-based, no real names)
   description: string;     // user-facing description
   split?: number;          // number of split files (for >50GB models)
+  cdnUrl?: string;         // override CDN URL (for HuggingFace direct downloads before CDN upload)
   mlxRepo?: string;        // MLX HuggingFace repo for macOS (INTERNAL — never shown to user)
   mlxQuant?: string;       // MLX quantization (4bit, 8bit)
   // NOTE: real model identity is NEVER stored. Files are pre-renamed on the CDN.
-  // The CDN URL is: ${MODEL_CDN}/${localFile}
+  // The CDN URL is: ${MODEL_CDN}/${localFile} (or cdnUrl if set)
 }
 
+// ── Model Catalog ────────────────────────────────────────────────────────
+// mark5-nano: Qwen3-8B dense — fast, fits 12GB GPUs, native tool calling
+// mark5-mini to mark5-max: Qwen3-Coder-30B-A3B MoE (30B total, 3.3B active)
+//   MoE models need 16GB+ because all experts must be in VRAM even though
+//   only 3.3B params are active per token.
+// mark5-80b: Qwen3-Coder-Next (dense 80B) — flagship
 const MODEL_CATALOG: CatalogEntry[] = [
   {
-    codename: "mnemo:mark5-0.5b",
-    paramBillions: 0.5,
-    quant: "Q8_0",
-    sizeGB: 0.5,
-    minVramMB: 1024,
-    contextSize: 32768,
-    localFile: "mark5-0.5b.gguf",
-    description: "Ultra-light model for basic tasks",
-    mlxRepo: "mlx-community/Qwen2.5-Coder-0.5B-Instruct-8bit",
-    mlxQuant: "8bit",
-  },
-  {
-    codename: "mnemo:mark5-1.5b",
-    paramBillions: 1.5,
-    quant: "Q8_0",
-    sizeGB: 1.6,
-    minVramMB: 2048,
-    contextSize: 32768,
-    localFile: "mark5-1.5b.gguf",
-    description: "Light model for simple coding",
-    mlxRepo: "mlx-community/Qwen2.5-Coder-1.5B-Instruct-8bit",
-    mlxQuant: "8bit",
-  },
-  {
-    codename: "mnemo:mark5-3b",
-    paramBillions: 3,
-    quant: "Q6_K",
-    sizeGB: 2.5,
-    minVramMB: 4096,
-    contextSize: 32768,
-    localFile: "mark5-3b.gguf",
-    description: "Compact model for everyday coding",
-    mlxRepo: "mlx-community/Qwen2.5-Coder-3B-Instruct-8bit",
-    mlxQuant: "8bit",
-  },
-  {
-    codename: "mnemo:mark5-7b",
-    paramBillions: 7,
+    codename: "mnemo:mark5-nano",
+    paramBillions: 8,
     quant: "Q5_K_M",
-    sizeGB: 5.5,
-    minVramMB: 8192,
+    sizeGB: 6,
+    minVramMB: 10240,
     contextSize: 32768,
-    localFile: "mark5-7b.gguf",
-    description: "Balanced model for most coding tasks",
-    mlxRepo: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
-    mlxQuant: "4bit",
+    localFile: "mark5-nano.gguf",
+    description: "Fast dense 8B — fits 12GB GPUs, native tool calling",
   },
   {
-    codename: "mnemo:mark5-14b",
-    paramBillions: 14,
-    quant: "Q5_K_M",
-    sizeGB: 10.5,
-    minVramMB: 14336,
+    codename: "mnemo:mark5-mini",
+    paramBillions: 30,
+    quant: "IQ3_M",
+    sizeGB: 13.5,
+    minVramMB: 16384,
     contextSize: 32768,
-    localFile: "mark5-14b.gguf",
-    description: "Strong model for complex coding",
-    mlxRepo: "mlx-community/Qwen2.5-Coder-14B-Instruct-4bit",
-    mlxQuant: "4bit",
+    localFile: "mark5-mini.gguf",
+    description: "MoE 30B — fits 16GB GPUs (3.3B active per token)",
   },
   {
-    codename: "mnemo:mark5-32b",
-    paramBillions: 32,
+    codename: "mnemo:mark5-mid",
+    paramBillions: 30,
     quant: "Q4_K_M",
-    sizeGB: 19,
-    minVramMB: 22528,
+    sizeGB: 18.6,
+    minVramMB: 24576,
     contextSize: 32768,
-    localFile: "mark5-32b.gguf",
-    description: "Elite model for advanced coding",
-    mlxRepo: "mlx-community/Qwen2.5-Coder-32B-Instruct-4bit",
-    mlxQuant: "4bit",
+    localFile: "mark5-mid.gguf",
+    description: "MoE 30B — fits 24GB GPUs (3.3B active per token)",
+  },
+  {
+    codename: "mnemo:mark5-max",
+    paramBillions: 30,
+    quant: "Q6_K",
+    sizeGB: 25,
+    minVramMB: 32768,
+    contextSize: 32768,
+    localFile: "mark5-max.gguf",
+    description: "Best quality MoE — fits 32GB GPUs (3.3B active per token)",
   },
   {
     codename: "mnemo:mark5-80b",
@@ -126,9 +101,7 @@ const MODEL_CATALOG: CatalogEntry[] = [
     minVramMB: 53248,
     contextSize: 40960,
     localFile: "mark5-80b.gguf",
-    description: "Maximum power — flagship model",
-    split: 2,
-    // No MLX version — 80b is too large for most Macs
+    description: "Maximum power — flagship dense 80B model",
   },
 ];
 
@@ -157,13 +130,11 @@ export function recommendModel(hw: HardwareInfo): CatalogEntry {
     ? hw.totalVramMB
     : hw.ramMB * 0.7; // CPU mode: use ~70% of RAM
 
-  // Find the largest model that fits, leaving 2GB headroom for KV cache
-  const headroomMB = 2048;
-  const usableMB = availableMB - headroomMB;
-
+  // Find the largest model that fits.
+  // minVramMB already represents the minimum GPU VRAM needed (includes KV cache overhead).
   let best = MODEL_CATALOG[0]; // smallest as default
   for (const entry of MODEL_CATALOG) {
-    if (entry.minVramMB <= usableMB) {
+    if (entry.minVramMB <= availableMB) {
       best = entry;
     }
   }
@@ -522,8 +493,8 @@ export async function downloadModel(codename: string, onProgress?: (msg: string)
     return join(MODELS_DIR, firstPart);
   }
 
-  // Single file download from Kulvex CDN
-  const url = `${MODEL_CDN}/${entry.localFile}`;
+  // Single file download — use cdnUrl override if set, otherwise Kulvex CDN
+  const url = entry.cdnUrl ?? `${MODEL_CDN}/${entry.localFile}`;
   progress(`Downloading ${entry.codename} (${entry.sizeGB} GB)...`);
 
   await downloadFile(url, localPath, (pct) => {
@@ -898,6 +869,60 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
+  //  Step 8: Start server & load model into VRAM
+  // ═══════════════════════════════════════════════════════════════
+
+  stepHeader(8, "Loading model into VRAM");
+  console.log();
+
+  const serverSpinner = createSpinner("Starting inference server...");
+
+  try {
+    const { startServer } = await import("./llama-server");
+    const { port: srvPort } = await startServer({ port });
+
+    serverSpinner.update("Model loading into VRAM...");
+
+    // Wait for model to be fully loaded and ready to serve
+    const maxWait = 180_000; // 3 minutes for large models
+    const startTime = Date.now();
+    let ready = false;
+    while (Date.now() - startTime < maxWait) {
+      try {
+        const healthResp = await fetch(`http://localhost:${srvPort}/health`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (healthResp.ok) {
+          const health = await healthResp.json() as any;
+          if (health.status === "ok") {
+            const modelsResp = await fetch(`http://localhost:${srvPort}/v1/models`, {
+              signal: AbortSignal.timeout(3000),
+            });
+            if (modelsResp.ok) {
+              ready = true;
+              break;
+            }
+          }
+        }
+      } catch { /* not ready yet */ }
+
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      serverSpinner.update(`Loading model into VRAM... ${C.dim}(${elapsed}s)${C.reset}`);
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    if (ready) {
+      serverSpinner.succeed(`Model loaded on port ${C.cyan}${srvPort}${C.reset} — ready to serve`);
+    } else {
+      serverSpinner.fail("Server started but model may not be fully loaded");
+    }
+  } catch (err) {
+    serverSpinner.fail(`Server failed: ${err instanceof Error ? err.message : err}`);
+  }
+
+  console.log();
+
+  // ═══════════════════════════════════════════════════════════════
   //  Complete!
   // ═══════════════════════════════════════════════════════════════
 
@@ -910,16 +935,9 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
     `    ${C.green}║${C.reset}   Port:    ${C.cyan}${port.toString().padEnd(33)}${C.reset}${C.green}║${C.reset}`,
     `    ${C.green}║${C.reset}   Engine:  ${C.dim}${engineLabel.padEnd(33)}${C.reset}${C.green}║${C.reset}`,
     `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
-    `    ${C.green}║${C.reset}   Run ${C.bold}${C.cyan}kcode${C.reset} to start coding!               ${C.green}║${C.reset}`,
-    `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
     `    ${C.green}╚══════════════════════════════════════════════╝${C.reset}`,
   ];
   console.log(successBox.join("\n"));
-  console.log();
-
-  // Tip
-  console.log(`    ${C.dim}Tip: Use ${C.reset}kcode setup --model <name>${C.dim} to switch models${C.reset}`);
-  console.log(`    ${C.dim}     Use ${C.reset}kcode server status${C.dim} to check the inference server${C.reset}`);
   console.log();
 
   return { model: entry.codename, enginePath, modelPath };

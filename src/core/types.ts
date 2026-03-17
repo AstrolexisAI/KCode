@@ -88,6 +88,7 @@ export interface KCodeConfig {
   maxTokens: number;
   systemPrompt: string;
   workingDirectory: string;
+  additionalDirs?: string[]; // Additional directories the AI can read/write
   permissionMode: PermissionMode;
   contextWindowSize?: number; // model's context window size in tokens
   maxRetries?: number;

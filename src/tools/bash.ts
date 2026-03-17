@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import type { ToolDefinition, ToolResult, BashInput } from "../core/types";
 import { log } from "../core/logger";
+import { wrapWithSandbox, getDefaultSandboxConfig, type SandboxMode } from "../core/sandbox";
 
 const MAX_TIMEOUT = 600_000; // 10 minutes
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
@@ -22,6 +23,18 @@ export const bashDefinition: ToolDefinition = {
     required: ["command"],
   },
 };
+
+// Sandbox mode — set via KCODE_SANDBOX env var or --sandbox flag
+let _sandboxMode: SandboxMode = (process.env.KCODE_SANDBOX as SandboxMode) ?? "off";
+
+export function setSandboxMode(mode: SandboxMode): void {
+  _sandboxMode = mode;
+  log.info("sandbox", `Sandbox mode set to: ${mode}`);
+}
+
+export function getSandboxMode(): SandboxMode {
+  return _sandboxMode;
+}
 
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
   const { command, timeout, run_in_background } = input as BashInput;
@@ -134,6 +147,16 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     });
   }
 
+  // ─── Apply sandbox wrapping ────────────────────────────────────
+  let finalCommand = command;
+  let sandboxEnv: Record<string, string> | undefined;
+  if (_sandboxMode !== "off") {
+    const sandboxConfig = getDefaultSandboxConfig(_sandboxMode, process.cwd());
+    const wrapped = wrapWithSandbox(command, sandboxConfig);
+    finalCommand = wrapped.command;
+    sandboxEnv = wrapped.env;
+  }
+
   // ─── Normal (foreground) commands ──────────────────────────────
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -141,9 +164,9 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     let resolved = false;
     let timedOut = false;
 
-    const proc = spawn("bash", ["-c", command], {
+    const proc = spawn("bash", ["-c", finalCommand], {
       cwd: process.cwd(),
-      env: { ...process.env },
+      env: { ...process.env, ...sandboxEnv },
       detached: true, // create process group so we can kill entire tree
     });
 

@@ -1,5 +1,5 @@
 // KCode - Edit Tool
-// Performs exact string replacements in files
+// Performs exact string replacements in files with visual diff output
 
 import { readFileSync, writeFileSync } from "node:fs";
 import type { ToolDefinition, ToolResult, FileEditInput } from "../core/types";
@@ -18,6 +18,50 @@ export const editDefinition: ToolDefinition = {
     required: ["file_path", "old_string", "new_string"],
   },
 };
+
+/**
+ * Generate a compact visual diff showing what changed.
+ * Shows removed lines (prefixed with -) and added lines (prefixed with +)
+ * with surrounding context.
+ */
+function generateDiff(oldStr: string, newStr: string, filePath: string): string {
+  const oldLines = oldStr.split("\n");
+  const newLines = newStr.split("\n");
+
+  const diffLines: string[] = [];
+
+  // Find the first line where the actual change starts in the file
+  // This is a simplified diff — just show old vs new
+  if (oldLines.length <= 10 && newLines.length <= 10) {
+    // Small edit: show full diff
+    for (const line of oldLines) {
+      diffLines.push(`  - ${line}`);
+    }
+    for (const line of newLines) {
+      diffLines.push(`  + ${line}`);
+    }
+  } else {
+    // Large edit: show summary
+    const removedCount = oldLines.length;
+    const addedCount = newLines.length;
+
+    // Show first 3 and last 3 lines of each
+    const showLines = (lines: string[], prefix: string) => {
+      if (lines.length <= 6) {
+        for (const line of lines) diffLines.push(`  ${prefix} ${line}`);
+      } else {
+        for (let i = 0; i < 3; i++) diffLines.push(`  ${prefix} ${lines[i]}`);
+        diffLines.push(`  ${prefix} ... (${lines.length - 6} more lines)`);
+        for (let i = lines.length - 3; i < lines.length; i++) diffLines.push(`  ${prefix} ${lines[i]}`);
+      }
+    };
+
+    showLines(oldLines, "-");
+    showLines(newLines, "+");
+  }
+
+  return diffLines.join("\n");
+}
 
 export async function executeEdit(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, old_string, new_string, replace_all } = input as FileEditInput;
@@ -55,10 +99,18 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
 
     writeFileSync(file_path, updated, "utf-8");
 
+    // Find the line number where the change starts
+    const beforeChange = content.indexOf(old_string);
+    const lineNumber = content.slice(0, beforeChange).split("\n").length;
+
     const replacements = replace_all ? occurrences : 1;
+    const diff = generateDiff(old_string, new_string, file_path);
+    const linesChanged = new_string.split("\n").length - old_string.split("\n").length;
+    const linesDelta = linesChanged > 0 ? `+${linesChanged}` : linesChanged === 0 ? "±0" : `${linesChanged}`;
+
     return {
       tool_use_id: "",
-      content: `Edited ${file_path}: replaced ${replacements} occurrence(s)`,
+      content: `Edited ${file_path}:${lineNumber} (${replacements} replacement${replacements > 1 ? "s" : ""}, ${linesDelta} lines)\n${diff}`,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

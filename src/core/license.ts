@@ -138,6 +138,11 @@ export async function checkLicense(): Promise<{ valid: boolean; tier?: string; m
     return { valid: false, message: "No license found. Run 'kcode activate <license-key>' to activate." };
   }
 
+  // Owner tier: permanent license, no phone-home, no machine binding
+  if (stored.tier === "owner") {
+    return { valid: true, tier: stored.tier };
+  }
+
   // Check machine ID matches
   const currentMachineId = generateMachineId();
   if (stored.machineId !== currentMachineId) {
