@@ -15,6 +15,7 @@
 //   which reuses the system-installed Bun runtime (0 MB overhead).
 
 import { join } from "node:path";
+import { homedir } from "node:os";
 import pkg from "./package.json";
 
 const ENTRY = "src/index.ts";
@@ -76,6 +77,25 @@ async function build() {
     console.log(`  Note: ~99 MB is the embedded Bun runtime. For a lightweight`);
     console.log(`  alternative, use: bun run src/index.ts (0 MB overhead)`);
     console.log();
+
+    // Deploy to install locations (rm -f first to avoid "text file busy")
+    if (!isDev) {
+      const targets = [
+        join(homedir(), ".bun", "bin", "kcode"),
+        join(homedir(), ".local", "bin", "kcode"),
+        join(import.meta.dir, "release", "kcode"),
+      ];
+      console.log(`Deploying to ${targets.length} locations...`);
+      for (const target of targets) {
+        try {
+          await Bun.$`rm -f ${target} && cp ${OUT_FILE} ${target}`.quiet();
+          console.log(`  ✓ ${target}`);
+        } catch {
+          console.log(`  ✗ ${target} (skipped)`);
+        }
+      }
+      console.log();
+    }
   } catch (err) {
     console.error("Build error:", err);
     process.exit(1);

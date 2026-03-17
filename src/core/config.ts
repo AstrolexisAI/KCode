@@ -4,7 +4,7 @@
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { readdirSync, statSync } from "node:fs";
-import type { KCodeConfig, PermissionMode } from "./types";
+import type { KCodeConfig, PermissionMode, PermissionRule, PermissionRuleAction } from "./types";
 import { getGitRoot } from "./git";
 import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models";
 
@@ -23,6 +23,7 @@ export interface Settings {
   systemPromptExtra?: string;
   autoRoute?: boolean;
   theme?: string;
+  permissionRules?: PermissionRule[];
 }
 
 // ─── Paths ──────────────────────────────────────────────────────
@@ -79,6 +80,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     systemPromptExtra: typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
     autoRoute: typeof raw.autoRoute === "boolean" ? raw.autoRoute : undefined,
     theme: typeof raw.theme === "string" ? raw.theme : undefined,
+    permissionRules: parsePermissionRules(raw.permissionRules),
   };
 }
 
@@ -88,6 +90,25 @@ function isPermissionMode(v: unknown): v is PermissionMode {
 
 function isEffortLevel(v: unknown): v is EffortLevel {
   return v === "low" || v === "medium" || v === "high";
+}
+
+function isRuleAction(v: unknown): v is PermissionRuleAction {
+  return v === "allow" || v === "deny" || v === "ask";
+}
+
+function parsePermissionRules(raw: unknown): PermissionRule[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const rules: PermissionRule[] = [];
+  for (const item of raw) {
+    if (
+      item && typeof item === "object" &&
+      typeof item.pattern === "string" &&
+      isRuleAction(item.action)
+    ) {
+      rules.push({ pattern: item.pattern, action: item.action });
+    }
+  }
+  return rules.length > 0 ? rules : undefined;
 }
 
 function mergeSettings(...layers: Settings[]): Settings {
@@ -103,6 +124,10 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
     if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
     if (layer.theme !== undefined) result.theme = layer.theme;
+    if (layer.permissionRules !== undefined) {
+      // Merge rules: later layers append (higher priority evaluated first)
+      result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
+    }
   }
   return result;
 }
@@ -179,6 +204,8 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     contextWindowSize: contextSize,
     autoRoute: settings.autoRoute ?? true, // enabled by default
     theme: settings.theme,
+    permissionRules: settings.permissionRules,
+    effortLevel: settings.effortLevel,
   };
 }
 

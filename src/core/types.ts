@@ -100,9 +100,31 @@ export interface KCodeConfig {
   thinking?: boolean;
   theme?: string;
   compactThreshold?: number; // 0.0 to 1.0, default 0.8 — trigger auto-compact at this % of context window
+  permissionRules?: PermissionRule[]; // Granular per-tool rules (first match wins)
+  effortLevel?: "low" | "medium" | "high"; // Reasoning effort: adjusts maxTokens, temperature, prompt depth
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";
+
+// ─── Permission Rules ───────────────────────────────────────────
+
+export type PermissionRuleAction = "allow" | "deny" | "ask";
+
+/**
+ * Granular per-tool permission rules.
+ * Evaluated in order: first match wins. If no rule matches, falls back to permission mode.
+ *
+ * Pattern formats:
+ *   "Bash(npm run *)"              — match Bash commands starting with "npm run "
+ *   "Edit(/src/**/*.ts)"           — match Edit/Write on paths matching glob
+ *   "WebFetch(domain:example.com)" — match WebFetch to specific domain
+ *   "Bash(*)"                      — match ALL bash commands
+ *   "mcp__server__*"               — match MCP tool calls by prefix
+ */
+export interface PermissionRule {
+  pattern: string;
+  action: PermissionRuleAction;
+}
 
 // ─── Model Registry ─────────────────────────────────────────────
 // Models are configured dynamically via ~/.kcode/models.json

@@ -530,7 +530,7 @@ export class ConversationManager {
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
     this.compactThreshold = config.compactThreshold ?? 0.8;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
-    this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory, config.additionalDirs);
+    this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory, config.additionalDirs, config.permissionRules);
     this.hooks = new HookManager(config.workingDirectory);
     this.rateLimiter = new RateLimiter(
       config.rateLimit?.maxPerMinute ?? 60,
@@ -564,6 +564,16 @@ export class ConversationManager {
   /** Access the undo manager (e.g., for /undo command). */
   getUndo(): UndoManager {
     return this.undoManager;
+  }
+
+  /** Access the rate limiter (e.g., for /ratelimit dashboard). */
+  getRateLimiter(): RateLimiter {
+    return this.rateLimiter;
+  }
+
+  /** Access the config (e.g., for /config inspector). */
+  getConfig(): KCodeConfig {
+    return this.config;
   }
 
   /** Abort the current LLM request / agent loop. */
@@ -1422,12 +1432,23 @@ export class ConversationManager {
         );
         const openAITools = convertToOpenAITools(this.tools.getDefinitions());
 
+        // Adjust parameters based on effort level
+        const effort = this.config.effortLevel ?? "medium";
+        const effortMaxTokens = effort === "low" ? Math.min(this.config.maxTokens, 4096)
+          : effort === "high" ? Math.max(this.config.maxTokens, 32768)
+          : this.config.maxTokens;
+        const effortTemperature = effort === "low" ? 0.3 : effort === "high" ? 0.7 : undefined;
+
         const body: Record<string, unknown> = {
           model: effectiveModel,
           messages: openAIMessages,
-          max_tokens: this.config.maxTokens,
+          max_tokens: effortMaxTokens,
           stream: true,
         };
+
+        if (effortTemperature !== undefined) {
+          body.temperature = effortTemperature;
+        }
 
         // Only include tools if we have any
         if (openAITools.length > 0) {
