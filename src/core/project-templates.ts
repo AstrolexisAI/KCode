@@ -125,7 +125,10 @@ function loadUserTemplates(): ProjectTemplate[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       try {
-        const raw = JSON.parse(readFileSync(join(dir, entry.name), "utf-8"));
+        const filePath = join(dir, entry.name);
+        const stat = require("node:fs").statSync(filePath);
+        if (stat.size > 512 * 1024) continue; // Skip files > 512KB
+        const raw = JSON.parse(readFileSync(filePath, "utf-8"));
         if (raw.name && raw.files && typeof raw.files === "object") {
           templates.push({
             name: raw.name,
@@ -162,7 +165,15 @@ export function createFromTemplate(
   mkdirSync(targetDir, { recursive: true });
 
   for (const [relPath, content] of Object.entries(template.files)) {
+    // Prevent path traversal: ensure resolved path stays within targetDir
     const fullPath = join(targetDir, relPath);
+    const { resolve: resolvePath } = require("node:path");
+    const resolvedFull = resolvePath(fullPath);
+    const resolvedTarget = resolvePath(targetDir);
+    if (!resolvedFull.startsWith(resolvedTarget + "/") && resolvedFull !== resolvedTarget) {
+      continue; // Skip paths that escape the target directory
+    }
+
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
     if (dir) mkdirSync(dir, { recursive: true });
 
