@@ -172,14 +172,14 @@ describe("IntentionEngine", () => {
 
   // ─── getInlineWarning ──────────────────────────────────────────
 
-  test("getInlineWarning detects 3+ identical tool calls", () => {
-    for (let i = 0; i < 3; i++) {
+  test("getInlineWarning detects 6+ identical tool calls", () => {
+    for (let i = 0; i < 6; i++) {
       engine.recordAction("Read", { file_path: "/src/same-file.ts" });
     }
     const warning = engine.getInlineWarning();
     expect(warning).not.toBeNull();
     expect(warning).toContain("STOP");
-    expect(warning).toContain("3 times");
+    expect(warning).toContain("6 times");
     expect(warning).toContain("infinite loop");
   });
 
@@ -199,8 +199,7 @@ describe("IntentionEngine", () => {
     }
     const warning = engine.getInlineWarning();
     expect(warning).not.toBeNull();
-    // Might be caught by identical-tool-call check (3+) before the glob check (5+)
-    expect(warning).toContain("STOP") ;
+    expect(warning).toContain("checked the same directory");
   });
 
   test("getInlineWarning returns null for clean session", () => {

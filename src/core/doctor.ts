@@ -1,10 +1,12 @@
 // KCode - Doctor / Health Check
 // Diagnoses setup issues and verifies dependencies.
 
-import { existsSync, accessSync, constants } from "node:fs";
+import { existsSync, accessSync, constants, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { createServer } from "node:net";
 import { loadModelsConfig, getDefaultModel, getModelBaseUrl } from "./models";
+import { getUserMemoryDir } from "./memory";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -153,7 +155,95 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
     results.push({ name: "Logs dir", status: "warn", message: `${logsDir} not found — will be created on first use` });
   }
 
-  // 10. Disk space
+  // 10. Codebase index
+  try {
+    const { getCodebaseIndex } = await import("./codebase-index.js");
+    const cwd = process.cwd();
+    const idx = getCodebaseIndex(cwd);
+    await idx.build();
+    results.push({ name: "Codebase index", status: "ok", message: `Index built successfully for ${cwd}` });
+  } catch (err: any) {
+    results.push({ name: "Codebase index", status: "warn", message: `Index build failed — ${err?.message ?? "unknown error"}` });
+  }
+
+  // 11. Memory system
+  try {
+    const memDir = getUserMemoryDir();
+    if (existsSync(memDir)) {
+      if (dirWritable(memDir)) {
+        results.push({ name: "Memory system", status: "ok", message: `${memDir} is writable` });
+      } else {
+        results.push({ name: "Memory system", status: "fail", message: `${memDir} exists but is not writable` });
+      }
+    } else {
+      // Try creating it to verify writability
+      try {
+        mkdirSync(memDir, { recursive: true });
+        results.push({ name: "Memory system", status: "ok", message: `${memDir} created and writable` });
+      } catch {
+        results.push({ name: "Memory system", status: "fail", message: `Cannot create memory directory at ${memDir}` });
+      }
+    }
+  } catch (err: any) {
+    results.push({ name: "Memory system", status: "fail", message: `Memory system error — ${err?.message ?? "unknown"}` });
+  }
+
+  // 12. Shell completions (kcode in PATH)
+  const whichResult = await runCommand(["which", "kcode"]);
+  if (whichResult.ok) {
+    results.push({ name: "Shell completions", status: "ok", message: `kcode found at ${whichResult.output}` });
+  } else {
+    results.push({ name: "Shell completions", status: "warn", message: "kcode not found in PATH — shell completions may not work" });
+  }
+
+  // 13. HTTP server port (10101)
+  try {
+    const portAvailable = await new Promise<boolean>((resolve) => {
+      const server = createServer();
+      server.once("error", () => resolve(false));
+      server.once("listening", () => {
+        server.close(() => resolve(true));
+      });
+      server.listen(10101, "127.0.0.1");
+    });
+    if (portAvailable) {
+      results.push({ name: "HTTP server port", status: "ok", message: "Port 10101 is available" });
+    } else {
+      results.push({ name: "HTTP server port", status: "warn", message: "Port 10101 is in use — server subcommand may fail" });
+    }
+  } catch {
+    results.push({ name: "HTTP server port", status: "warn", message: "Could not check port 10101 availability" });
+  }
+
+  // 14. Keybindings (info-level)
+  const keybindingsPath = join(kcodeDir, "keybindings.json");
+  if (existsSync(keybindingsPath)) {
+    try {
+      const file = Bun.file(keybindingsPath);
+      await file.json();
+      results.push({ name: "Keybindings", status: "ok", message: `${keybindingsPath} is valid JSON` });
+    } catch {
+      results.push({ name: "Keybindings", status: "warn", message: `${keybindingsPath} exists but is not valid JSON` });
+    }
+  } else {
+    results.push({ name: "Keybindings", status: "ok", message: "No custom keybindings (using defaults)" });
+  }
+
+  // 15. Pricing data (info-level)
+  const pricingPath = join(kcodeDir, "pricing.json");
+  if (existsSync(pricingPath)) {
+    try {
+      const file = Bun.file(pricingPath);
+      await file.json();
+      results.push({ name: "Pricing data", status: "ok", message: `${pricingPath} is valid JSON` });
+    } catch {
+      results.push({ name: "Pricing data", status: "warn", message: `${pricingPath} exists but is not valid JSON` });
+    }
+  } else {
+    results.push({ name: "Pricing data", status: "ok", message: "No custom pricing data (using defaults)" });
+  }
+
+  // 16. Disk space
   if (existsSync(kcodeDir)) {
     const bytes = await dirSizeBytes(kcodeDir);
     const mb = bytes / (1024 * 1024);
