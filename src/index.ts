@@ -86,6 +86,7 @@ program
   .option("--sandbox [mode]", "Run bash commands in a sandbox (light or strict)")
   .option("--voice", "Enable voice input (record from microphone)")
   .option("--add-dir <dirs...>", "Add additional working directories")
+  .option("--compact-threshold <pct>", "Auto-compact threshold as percentage of context window (50-95, default 80)")
   .option("--no-tools", "Chat-only mode without tool calling")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
@@ -190,6 +191,52 @@ modelsCmd
   .action(async (name: string) => {
     await setDefaultModel(name);
     console.log(`Default model set to "${name}".`);
+  });
+
+// ─── Plugin subcommand ──────────────────────────────────────
+
+const pluginCmd = program
+  .command("plugin")
+  .description("Manage KCode plugins");
+
+pluginCmd
+  .command("search [query]")
+  .description("Search the plugin registry")
+  .action(async (query?: string) => {
+    const { fetchRegistry, searchRegistry } = await import("./core/plugin-registry");
+    const entries = await fetchRegistry();
+    const results = query ? searchRegistry(entries, query) : entries;
+
+    if (results.length === 0) {
+      console.log("No plugins found.");
+      return;
+    }
+
+    console.log(`\nAvailable plugins${query ? ` matching "${query}"` : ""}:\n`);
+    for (const p of results) {
+      console.log(`  ${p.name} v${p.version} \u2014 ${p.description}`);
+      console.log(`    by ${p.author} [${p.tags.join(", ")}]`);
+    }
+  });
+
+pluginCmd
+  .command("install <name>")
+  .alias("add")
+  .description("Install a plugin from the registry")
+  .action(async (name: string) => {
+    const { installPlugin } = await import("./core/plugin-registry");
+    const result = await installPlugin(name);
+    console.log(result.success ? `\u2713 ${result.message}` : `\u2717 ${result.message}`);
+  });
+
+pluginCmd
+  .command("uninstall <name>")
+  .alias("rm")
+  .description("Uninstall a plugin")
+  .action(async (name: string) => {
+    const { uninstallPlugin } = await import("./core/plugin-registry");
+    const result = await uninstallPlugin(name);
+    console.log(result.success ? `\u2713 ${result.message}` : `\u2717 ${result.message}`);
   });
 
 // ─── Stats subcommand ────────────────────────────────────────────
@@ -873,20 +920,63 @@ program
 // ─── Watch subcommand ───────────────────────────────────────────
 
 program
-  .command("watch")
-  .description("Watch for file changes and report them")
+  .command("watch [glob]")
+  .description("Watch files for changes and auto-run commands")
   .option("-p, --pattern <glob>", "Glob pattern to watch", "**/*.{ts,js,tsx,jsx,py,rs,go}")
   .option("-i, --ignore <dirs>", "Directories to ignore (comma-separated)", "node_modules,dist,build,.git,__pycache__")
-  .action(async (opts: { pattern?: string; ignore?: string }) => {
+  .option("--run <command>", "Command to run on file change (default: auto-detect test runner)")
+  .option("--debounce <ms>", "Debounce interval in milliseconds", parseInt, 500)
+  .action(async (glob: string | undefined, opts: { pattern?: string; ignore?: string; run?: string; debounce?: number }) => {
     const { watch } = await import("node:fs");
-    const { join, relative } = await import("node:path");
-    const { readdirSync, statSync } = await import("node:fs");
+    const { join, relative, resolve: resolvePath } = await import("node:path");
+    const { readdirSync, existsSync } = await import("node:fs");
+    const { execSync } = await import("node:child_process");
     const cwd = process.cwd();
     const ignoreDirs = new Set((opts.ignore ?? "").split(",").map((d) => d.trim()));
+    const debounceMs = opts.debounce ?? 500;
 
-    console.log(`\x1b[36mWatching for changes...\x1b[0m (Ctrl+C to stop)`);
-    console.log(`  Pattern: ${opts.pattern}`);
-    console.log(`  Ignoring: ${Array.from(ignoreDirs).join(", ")}\n`);
+    // Detect test runner if no --run provided
+    let command = opts.run;
+    if (!command) {
+      if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bunfig.toml"))) command = "bun test";
+      else if (existsSync(join(cwd, "package.json"))) command = "npm test";
+      else if (existsSync(join(cwd, "pytest.ini")) || existsSync(join(cwd, "pyproject.toml"))) command = "pytest";
+      else if (existsSync(join(cwd, "go.mod"))) command = "go test ./...";
+      else if (existsSync(join(cwd, "Cargo.toml"))) command = "cargo test";
+    }
+
+    const watchPattern = glob ?? opts.pattern ?? "**/*.{ts,js,tsx,jsx,py,rs,go}";
+
+    if (command) {
+      console.log(`\x1b[36mWatching:\x1b[0m ${watchPattern}`);
+      console.log(`\x1b[36mCommand:\x1b[0m ${command}`);
+      console.log(`\x1b[2mPress Ctrl+C to stop\x1b[0m\n`);
+    } else {
+      console.log(`\x1b[36mWatching for changes...\x1b[0m (Ctrl+C to stop)`);
+      console.log(`  Pattern: ${watchPattern}`);
+      console.log(`  Ignoring: ${Array.from(ignoreDirs).join(", ")}\n`);
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let runCount = 0;
+
+    const runCommand = (changedFile: string) => {
+      if (!command) return;
+      runCount++;
+      const rel = relative(cwd, changedFile);
+      console.log(`\x1b[33m[${runCount}]\x1b[0m ${rel} changed — running: ${command}`);
+
+      try {
+        const output = execSync(command!, { cwd, timeout: 60000, stdio: "pipe" }).toString();
+        const lines = output.trim().split("\n");
+        const lastLines = lines.slice(-5).join("\n");
+        console.log(`\x1b[32m✓\x1b[0m ${lastLines}\n`);
+      } catch (err: any) {
+        const stderr = err.stderr?.toString() || err.stdout?.toString() || err.message;
+        const lines = stderr.trim().split("\n").slice(-8).join("\n");
+        console.log(`\x1b[31m✗\x1b[0m ${lines}\n`);
+      }
+    };
 
     // Collect directories to watch
     function getDirs(dir: string): string[] {
@@ -912,23 +1002,33 @@ program
           const fullPath = join(dir, filename);
           const relPath = relative(cwd, fullPath);
 
-          // Deduplicate rapid-fire events (debounce 500ms)
+          // Ignore node_modules, dist, .git
+          if (relPath.includes("node_modules") || relPath.includes("dist/") || relPath.includes(".git/")) return;
+
+          // Deduplicate rapid-fire events (debounce)
           const now = Date.now();
           const last = recentChanges.get(relPath) ?? 0;
-          if (now - last < 500) return;
+          if (now - last < debounceMs) return;
           recentChanges.set(relPath, now);
 
           // Check pattern match (simple extension check)
           const ext = filename.split(".").pop() ?? "";
-          const allowedExts = (opts.pattern ?? "")
+          const allowedExts = (watchPattern)
             .replace(/\*\*\/\*\.\{?/g, "")
             .replace(/\}$/g, "")
             .split(",");
           if (allowedExts.length > 0 && !allowedExts.includes(ext)) return;
 
-          const time = new Date().toLocaleTimeString("en-US", { hour12: false });
-          const icon = eventType === "rename" ? "+" : "*";
-          console.log(`  \x1b[33m${time}\x1b[0m ${icon} ${relPath}`);
+          if (command) {
+            // Auto-run mode: debounce and run command
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(() => runCommand(resolvePath(cwd, relPath)), debounceMs);
+          } else {
+            // Report mode: just print the change
+            const time = new Date().toLocaleTimeString("en-US", { hour12: false });
+            const icon = eventType === "rename" ? "+" : "*";
+            console.log(`  \x1b[33m${time}\x1b[0m ${icon} ${relPath}`);
+          }
         });
         watchers.push(watcher);
       } catch { /* skip unwatchable dirs */ }
@@ -940,7 +1040,11 @@ program
     await new Promise(() => {
       process.on("SIGINT", () => {
         for (const w of watchers) w.close();
-        console.log("\n  Watch stopped.");
+        if (command) {
+          console.log(`\n\x1b[2mStopped watching. ${runCount} runs total.\x1b[0m`);
+        } else {
+          console.log("\n  Watch stopped.");
+        }
         process.exit(0);
       });
     });
@@ -968,6 +1072,56 @@ program
     const result = await performUpdate(VERSION, opts.url);
     if (result.error) {
       console.error(`\x1b[31m✗ ${result.error}\x1b[0m`);
+      process.exit(1);
+    }
+  });
+
+// ─── Warmup subcommand ─────────────────────────────────────────
+
+program
+  .command("warmup")
+  .description("Warm up the model with a probe request")
+  .option("-m, --model <model>", "Model to warm up")
+  .action(async (opts: { model?: string }) => {
+    const config = await buildConfig(process.cwd());
+    const model = opts.model ?? config.model;
+    const { getModelBaseUrl } = await import("./core/models");
+    const baseUrl = await getModelBaseUrl(model, config.apiBase);
+
+    console.log(`Warming up ${model} at ${baseUrl}...`);
+    const start = Date.now();
+
+    try {
+      const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: "Say OK" }],
+          max_tokens: 8,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      const data = await resp.json() as any;
+      const elapsed = Date.now() - start;
+      const text = data.choices?.[0]?.message?.content ?? "(no response)";
+      const tokens = data.usage?.total_tokens ?? 0;
+
+      console.log(`\x1b[32m✓\x1b[0m Model ready (${elapsed}ms, ${tokens} tok)`);
+      console.log(`  Response: ${text.slice(0, 50)}`);
+
+      if (elapsed > 5000) {
+        console.log(`\x1b[33m⚠\x1b[0m Slow response — model may still be loading into VRAM`);
+      }
+    } catch (err) {
+      const elapsed = Date.now() - start;
+      console.error(`\x1b[31m✗\x1b[0m Warmup failed after ${elapsed}ms`);
+      console.error(`  ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);
     }
   });
@@ -1218,7 +1372,7 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; noTools?: boolean },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean },
 ) {
   const cwd = process.cwd();
 
@@ -1345,6 +1499,14 @@ async function runMain(
   }
   if (opts.thinking) {
     config.thinking = true;
+  }
+  if (opts.compactThreshold) {
+    const pct = parseInt(opts.compactThreshold);
+    if (pct >= 50 && pct <= 95) {
+      config.compactThreshold = pct / 100;
+    } else {
+      console.error("Warning: --compact-threshold must be between 50 and 95. Using default (80).");
+    }
   }
 
   // Apply theme from CLI flag, env var, or config

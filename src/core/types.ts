@@ -99,6 +99,7 @@ export interface KCodeConfig {
   jsonSchema?: string;
   thinking?: boolean;
   theme?: string;
+  compactThreshold?: number; // 0.0 to 1.0, default 0.8 — trigger auto-compact at this % of context window
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";

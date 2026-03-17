@@ -516,6 +516,7 @@ export class ConversationManager {
   private rateLimiter: RateLimiter;
   private undoManager: UndoManager;
   private transcript: TranscriptManager;
+  private compactThreshold: number;
   private abortController: AbortController | null = null;
   private turnsSincePromptRebuild = 0;
   private systemPromptHash = "";
@@ -527,6 +528,7 @@ export class ConversationManager {
     this.systemPrompt = SystemPromptBuilder.build(config, config.version);
     this.systemPromptHash = this.hashString(this.systemPrompt);
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
+    this.compactThreshold = config.compactThreshold ?? 0.8;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
     this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory, config.additionalDirs);
     this.hooks = new HookManager(config.workingDirectory);
@@ -1514,7 +1516,7 @@ export class ConversationManager {
     // Use the higher of: tracked token count or estimated from message content
     const estimatedTokens = this.estimateContextTokens();
     const effectiveCount = Math.max(this.state.tokenCount, estimatedTokens);
-    const threshold = this.contextWindowSize * (1 - CONTEXT_WINDOW_MARGIN);
+    const threshold = this.contextWindowSize * this.compactThreshold;
     if (effectiveCount < threshold) {
       return;
     }
