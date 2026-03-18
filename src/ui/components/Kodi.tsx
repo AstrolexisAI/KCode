@@ -33,71 +33,155 @@ interface KodiProps {
   sessionStartTime?: number;
 }
 
-// ─── ASCII Art Faces ────────────────────────────────────────────
+// ─── ASCII Art Sprites (5 lines tall, ~10 chars wide) ───────────
+// Each sprite is an array of 5 lines
 
-const FACES: Record<KodiMood, string[]> = {
-  idle:        ["(• ◡ •)"],
-  happy:       ["(^ ◡ ^)"],
-  excited:     ["(★ ◡ ★)", "(✧ ◡ ✧)", "(◕ ◡ ◕)"],
-  thinking:    ["(• _ •)", "(• ‿ •)", "(◦ _ ◦)"],
-  working:     ["(• ‸ •)", "(◦ ‸ ◦)"],
-  worried:     ["(• ~ •)", "(° △ °)"],
-  sleeping:    ["(- _ -)zzz"],
-  celebrating: ["\\(★ ▽ ★)/", "\\(◕ ▽ ◕)/", "♪(^ ◡ ^)♪"],
-  curious:     ["(• ᵕ •)?", "(◦ ‿ ◦)?"],
+const SPRITES: Record<KodiMood, string[][]> = {
+  idle: [[
+    "   ╭───╮   ",
+    "   │• ◡•│   ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
+  ]],
+  happy: [[
+    "   ╭───╮   ",
+    "   │^ ◡^│   ",
+    "   ╰─┬─╯   ",
+    "   \\|/    ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮   ",
+    "   │◕ ◡◕│   ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
+  ]],
+  excited: [[
+    "  ╭─────╮  ",
+    "  │★ ◡ ★│  ",
+    "  ╰──┬──╯  ",
+    "  \\(|)/   ",
+    "    / \\    ",
+  ], [
+    "  ╭─────╮  ",
+    "  │✧ ▽ ✧│  ",
+    "  ╰──┬──╯  ",
+    "   \\|/    ",
+    "    / \\    ",
+  ]],
+  thinking: [[
+    "   ╭───╮ ? ",
+    "   │• _ •│  ",
+    "   ╰─┬─╯   ",
+    "    /|     ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮   ",
+    "   │◦ ‿ ◦│ …",
+    "   ╰─┬─╯   ",
+    "     |\\    ",
+    "    / \\    ",
+  ]],
+  working: [[
+    "   ╭───╮ ⚡",
+    "   │• ‸ •│  ",
+    "   ╰─┬─╯   ",
+    "    /|\\  ▌ ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮ ⚙ ",
+    "   │◦ ‸ ◦│  ",
+    "   ╰─┬─╯   ",
+    "    /|\\  ▌ ",
+    "    / \\    ",
+  ]],
+  worried: [[
+    "   ╭───╮   ",
+    "   │° △ °│  ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮ ! ",
+    "   │• ~ •│  ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
+  ]],
+  sleeping: [[
+    "   ╭───╮   ",
+    "   │- _ -│ z",
+    "   ╰─┬─╯ z ",
+    "    /|  z   ",
+    "    / \\    ",
+  ]],
+  celebrating: [[
+    " ✦╭─────╮✦ ",
+    "  │★ ▽ ★│  ",
+    "  ╰──┬──╯  ",
+    " ♪\\(|)/♪  ",
+    "    / \\    ",
+  ], [
+    " ♪╭─────╮♪ ",
+    "  │◕ ▽ ◕│  ",
+    "  ╰──┬──╯  ",
+    "  \\(|)/   ",
+    "   _/ \\_   ",
+  ]],
+  curious: [[
+    "   ╭───╮   ",
+    "   │• ᵕ •│ ?",
+    "   ╰─┬─╯   ",
+    "    /|     ",
+    "    / \\    ",
+  ]],
 };
 
 // ─── Reaction Lines ─────────────────────────────────────────────
-// Kodi picks from these based on events. Short, punchy, personality-driven.
 
 const REACTIONS: Record<string, string[]> = {
-  // Tool events
-  tool_Bash:       ["running your command...", "shell time!", "executing...", "let me run that"],
-  tool_Read:       ["reading...", "let me see that file", "peeking inside..."],
-  tool_Write:      ["writing code!", "creating...", "crafting that file"],
-  tool_Edit:       ["editing...", "surgical precision!", "tweaking..."],
-  tool_Grep:       ["searching...", "hunting patterns...", "scanning the codebase"],
-  tool_Glob:       ["finding files...", "file detective mode"],
-  tool_GitCommit:  ["committing!", "saving progress!", "snapshot time!"],
-  tool_GitStatus:  ["checking git...", "repo status check"],
-  tool_TestRunner: ["running tests...", "fingers crossed!", "test time!"],
-  tool_WebSearch:  ["searching the web...", "browsing...", "googling..."],
-  tool_WebFetch:   ["fetching page...", "downloading..."],
-  tool_Agent:      ["spawning agent!", "clone deployed!", "teamwork!"],
-  tool_MultiEdit:  ["multi-edit!", "refactoring...", "bulk changes!"],
-  tool_default:    ["working on it...", "processing...", "on it!"],
+  tool_Bash:       ["Running your command...", "Shell time!", "Executing...", "Let me run that!"],
+  tool_Read:       ["Reading that file...", "Let me peek inside...", "Checking the code..."],
+  tool_Write:      ["Writing code!", "Creating file...", "Crafting something new!"],
+  tool_Edit:       ["Editing... surgical precision!", "Tweaking the code...", "Making changes..."],
+  tool_Grep:       ["Searching the codebase...", "Hunting patterns...", "Scanning files..."],
+  tool_Glob:       ["Finding files...", "File detective mode!", "Globbing away..."],
+  tool_GitCommit:  ["Committing changes!", "Saving progress!", "Snapshot time!"],
+  tool_GitStatus:  ["Checking git status...", "Repo health check!"],
+  tool_TestRunner: ["Running tests... fingers crossed!", "Test time!", "Validating..."],
+  tool_WebSearch:  ["Searching the web...", "Browsing...", "Let me look that up!"],
+  tool_WebFetch:   ["Fetching that page...", "Downloading content..."],
+  tool_Agent:      ["Spawning agent!", "Clone deployed!", "Teamwork activated!"],
+  tool_MultiEdit:  ["Multi-edit mode!", "Refactoring...", "Bulk changes incoming!"],
+  tool_default:    ["Working on it...", "Processing...", "On it, boss!"],
 
-  // Tool results
-  done_success:    ["done!", "nailed it!", "got it!", "✓ done", "all good!", "there ya go"],
-  done_error:      ["oops!", "hmm, that failed", "uh oh...", "error!", "yikes"],
+  done_success:    ["Done! Nailed it!", "Got it! ✓", "All good!", "There ya go!", "Easy peasy!"],
+  done_error:      ["Oops! Something failed...", "Uh oh... let me check", "Error! But we'll fix it", "Yikes! That didn't work"],
 
-  // States
-  thinking:        ["hmm...", "let me think...", "pondering...", "processing...", "analyzing..."],
-  streaming:       ["writing...", "composing...", "generating..."],
-  idle_short:      ["ready!", "what's next?", "standing by", "at your service", "sup?"],
-  idle_long:       ["still here...", "waiting patiently", "take your time", "*stretches*"],
-  idle_very_long:  ["*yawns*", "getting sleepy...", "you there?", "*whistles*"],
+  thinking:        ["Hmm... let me think...", "Pondering this one...", "Processing... give me a sec", "Analyzing the situation..."],
+  streaming:       ["Composing a response...", "Writing my thoughts...", "Here's what I think..."],
+  idle_short:      ["Ready for action!", "What's next?", "Standing by!", "At your service!", "Awaiting orders!"],
+  idle_long:       ["Still here... take your time!", "Waiting patiently...", "*stretches*", "No rush, I'm here!"],
+  idle_very_long:  ["*yawns* getting sleepy...", "You there? I'm still here!", "*whistles a tune*", "Maybe a coffee break?"],
 
-  // Special events
-  test_pass:       ["tests passed!", "all green!", "victory!", "ship it!"],
-  test_fail:       ["tests failed!", "bugs detected!", "back to it!"],
-  commit:          ["committed!", "progress saved!", "milestone!"],
-  compaction:      ["compacting memory...", "cleaning up...", "making room..."],
-  agent_spawn:     ["agent deployed!", "team growing!", "divide & conquer"],
-  error:           ["something broke!", "error encountered", "we'll fix it"],
+  test_pass:       ["ALL TESTS PASSED! Ship it!", "Green across the board!", "Victory is ours!", "Tests: CRUSHED IT!"],
+  test_fail:       ["Tests failed! Back to debugging!", "Bugs detected! Let's hunt them!", "Not quite... let's fix this!"],
+  commit:          ["Committed! Progress saved!", "Another milestone!", "Checkpoint reached!"],
+  compaction:      ["Compacting memory... brb!", "Making room in my brain...", "Spring cleaning!"],
+  agent_spawn:     ["Agent deployed! Divide & conquer!", "Team is growing!", "More hands on deck!"],
+  error:           ["Something broke! Don't panic!", "Error encountered... we got this!", "Ouch! Let's figure this out"],
 
-  // Session milestones
-  tools_10:        ["10 tools used!", "productive session!"],
-  tools_50:        ["50 tools! beast mode!", "unstoppable!"],
-  tools_100:       ["100 tools! legendary!", "coding machine!"],
-  tokens_50k:      ["50k tokens deep!", "deep session!"],
-  tokens_100k:     ["100k tokens! marathon!", "epic session!"],
+  tools_10:        ["10 tools used! Productive session!", "Getting warmed up!"],
+  tools_50:        ["50 tools! We're in BEAST MODE!", "Unstoppable!"],
+  tools_100:       ["100 TOOLS! LEGENDARY SESSION!", "Absolute coding machine!"],
+  tokens_50k:      ["50k tokens deep! Epic journey!", "Deep in the code mines!"],
+  tokens_100k:     ["100k tokens! MARATHON SESSION!", "We've written a novel!"],
 
-  // Startup
-  startup:         ["let's code!", "ready to roll!", "hello, world!", "let's build something!", "booting up..."],
+  startup:         ["Let's code!", "Ready to roll!", "Hello, world!", "Let's build something amazing!", "Booting up... systems online!"],
 };
 
-// ─── Helper ─────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
@@ -124,10 +208,9 @@ export default function KodiCompanion({
   const { theme } = useTheme();
   const [mood, setMood] = useState<KodiMood>("idle");
   const [reaction, setReaction] = useState(pick(REACTIONS.startup!));
-  const [face, setFace] = useState(pick(FACES.idle));
-  const lastToolCountRef = useRef(0);
-  const lastTokenMilestone = useRef(0);
+  const [sprite, setSprite] = useState(SPRITES.idle[0]!);
   const lastToolMilestone = useRef(0);
+  const lastTokenMilestone = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [elapsed, setElapsed] = useState(0);
 
@@ -138,11 +221,17 @@ export default function KodiCompanion({
     return () => clearInterval(timer);
   }, [sessionStartTime]);
 
+  // Helper to set mood + sprite + reaction together
+  const react = (newMood: KodiMood, reactionKey: string) => {
+    setMood(newMood);
+    setSprite(pick(SPRITES[newMood]));
+    setReaction(pick(REACTIONS[reactionKey] ?? REACTIONS.tool_default!));
+  };
+
   // React to events
   useEffect(() => {
     if (!lastEvent) return;
 
-    // Clear idle timer
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
@@ -150,84 +239,48 @@ export default function KodiCompanion({
 
     switch (lastEvent.type) {
       case "tool_start": {
-        const toolName = lastEvent.detail ?? "default";
-        const key = `tool_${toolName}`;
-        const reactions = REACTIONS[key] ?? REACTIONS.tool_default!;
-        setMood("working");
-        setReaction(pick(reactions));
-        setFace(pick(FACES.working));
+        const key = `tool_${lastEvent.detail ?? "default"}`;
+        react("working", REACTIONS[key] ? key : "tool_default");
         break;
       }
       case "tool_done": {
-        const isTest = lastEvent.detail === "TestRunner";
-        const isCommit = lastEvent.detail === "GitCommit";
-        if (isTest) {
-          setMood("celebrating");
-          setReaction(pick(REACTIONS.test_pass!));
-          setFace(pick(FACES.celebrating));
-        } else if (isCommit) {
-          setMood("celebrating");
-          setReaction(pick(REACTIONS.commit!));
-          setFace(pick(FACES.celebrating));
-        } else {
-          setMood("happy");
-          setReaction(pick(REACTIONS.done_success!));
-          setFace(pick(FACES.happy));
-        }
+        if (lastEvent.detail === "TestRunner") react("celebrating", "test_pass");
+        else if (lastEvent.detail === "GitCommit") react("celebrating", "commit");
+        else react("happy", "done_success");
         break;
       }
       case "tool_error":
       case "test_fail":
-        setMood("worried");
-        setReaction(pick(REACTIONS.done_error!));
-        setFace(pick(FACES.worried));
+        react("worried", "done_error");
         break;
       case "thinking":
-        setMood("thinking");
-        setReaction(pick(REACTIONS.thinking!));
-        setFace(pick(FACES.thinking));
+        react("thinking", "thinking");
         break;
       case "streaming":
-        setMood("happy");
-        setReaction(pick(REACTIONS.streaming!));
-        setFace(pick(FACES.happy));
+        react("happy", "streaming");
         break;
       case "compaction":
-        setMood("thinking");
-        setReaction(pick(REACTIONS.compaction!));
-        setFace(pick(FACES.thinking));
+        react("thinking", "compaction");
         break;
       case "agent_spawn":
-        setMood("excited");
-        setReaction(pick(REACTIONS.agent_spawn!));
-        setFace(pick(FACES.excited));
+        react("excited", "agent_spawn");
         break;
       case "error":
-        setMood("worried");
-        setReaction(pick(REACTIONS.error!));
-        setFace(pick(FACES.worried));
+        react("worried", "error");
         break;
       case "turn_end":
       case "idle":
-        setMood("idle");
-        setReaction(pick(REACTIONS.idle_short!));
-        setFace(pick(FACES.idle));
+        react("idle", "idle_short");
         break;
     }
 
-    // Set idle timer for personality idle messages
+    // Idle progression timers
     idleTimerRef.current = setTimeout(() => {
-      setMood("idle");
-      setReaction(pick(REACTIONS.idle_long!));
-      setFace(pick(FACES.idle));
-
-      // Deeper idle
+      react("idle", "idle_long");
       idleTimerRef.current = setTimeout(() => {
-        setMood("sleeping");
-        setReaction(pick(REACTIONS.idle_very_long!));
-        setFace(pick(FACES.sleeping));
-      }, 120_000); // 2 min → sleeping
-    }, 30_000); // 30s → long idle
+        react("sleeping", "idle_very_long");
+      }, 120_000);
+    }, 30_000);
 
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
@@ -238,41 +291,33 @@ export default function KodiCompanion({
   useEffect(() => {
     if (toolUseCount >= 100 && lastToolMilestone.current < 100) {
       lastToolMilestone.current = 100;
-      setMood("celebrating");
-      setReaction(pick(REACTIONS.tools_100!));
-      setFace(pick(FACES.celebrating));
+      react("celebrating", "tools_100");
     } else if (toolUseCount >= 50 && lastToolMilestone.current < 50) {
       lastToolMilestone.current = 50;
-      setMood("excited");
-      setReaction(pick(REACTIONS.tools_50!));
-      setFace(pick(FACES.excited));
+      react("excited", "tools_50");
     } else if (toolUseCount >= 10 && lastToolMilestone.current < 10) {
       lastToolMilestone.current = 10;
-      setMood("happy");
-      setReaction(pick(REACTIONS.tools_10!));
-      setFace(pick(FACES.happy));
+      react("happy", "tools_10");
     }
   }, [toolUseCount]);
 
   useEffect(() => {
     if (tokenCount >= 100_000 && lastTokenMilestone.current < 100_000) {
       lastTokenMilestone.current = 100_000;
-      setMood("excited");
-      setReaction(pick(REACTIONS.tokens_100k!));
-      setFace(pick(FACES.excited));
+      react("excited", "tokens_100k");
     } else if (tokenCount >= 50_000 && lastTokenMilestone.current < 50_000) {
       lastTokenMilestone.current = 50_000;
-      setReaction(pick(REACTIONS.tokens_50k!));
+      react("happy", "tokens_50k");
     }
   }, [tokenCount]);
 
-  // Shorten CWD
+  // ─── Computed values ────────────────────────────────────────
+
   const home = process.env.HOME ?? "";
   const shortCwd = home && workingDirectory.startsWith(home)
     ? "~" + workingDirectory.slice(home.length)
     : workingDirectory;
 
-  // Mood color
   const moodColor = mood === "happy" || mood === "celebrating" || mood === "excited"
     ? theme.success
     : mood === "worried" ? theme.error
@@ -280,78 +325,110 @@ export default function KodiCompanion({
     : mood === "sleeping" ? theme.dimmed
     : theme.primary;
 
-  // Context bar
   const ctxPct = contextWindowSize && contextWindowSize > 0 && tokenCount > 0
     ? Math.min(100, Math.round((tokenCount / contextWindowSize) * 100))
     : 0;
-  const ctxBarLen = 8;
+  const ctxBarLen = 10;
   const ctxFilled = Math.round(ctxBarLen * ctxPct / 100);
   const ctxBar = "\u2588".repeat(ctxFilled) + "\u2591".repeat(ctxBarLen - ctxFilled);
   const ctxColor = ctxPct > 85 ? theme.error : ctxPct > 60 ? theme.warning : theme.success;
 
-  // Permission mode color
   const pmColor = permissionMode === "auto" ? theme.warning
     : permissionMode === "deny" ? theme.error
     : permissionMode === "plan" ? (theme.info ?? theme.primary)
     : theme.dimmed;
 
+  // ─── Render ─────────────────────────────────────────────────
+  // Layout: Kodi sprite on the left, info panel on the right
+  //
+  // ╭───────────────────────────────────────────────────────────╮
+  // │    ╭───╮      KCode v1.0.0 — Kulvex Code by Astrolexis  │
+  // │    │• ◡•│     mnemo:mark5-80b • auto • ~/project         │
+  // │    ╰─┬─╯      tok:1,234 • tools:5 • [████░░░░░░] 12%    │
+  // │     /|\       "Ready for action!"                         │
+  // │     / \                                                   │
+  // ╰───────────────────────────────────────────────────────────╯
+
   return (
     <Box flexDirection="column">
-      {/* Top line: Brand + Kodi face + reaction */}
-      <Box gap={1} paddingX={1}>
-        <Text bold color={theme.primary}>KCode</Text>
-        <Text color={theme.dimmed}>v{version}</Text>
-        <Text color={theme.dimmed}>•</Text>
-        <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
-        <Text color={theme.dimmed}>│</Text>
-        <Text color={moodColor}>{face}</Text>
-        <Text color={theme.dimmed} italic>{reaction}</Text>
+      <Box paddingX={1}>
+        <Text color={theme.dimmed}>{"╭" + "─".repeat(72) + "╮"}</Text>
       </Box>
-      {/* Bottom line: Status bar */}
-      <Box gap={1} paddingX={1}>
-        <Text color={theme.success}>{model}</Text>
-        {permissionMode && (
-          <>
+      <Box flexDirection="row" paddingX={1}>
+        {/* Kodi sprite */}
+        <Box flexDirection="column" width={14}>
+          {sprite.map((line, i) => (
+            <Box key={i} paddingX={1}>
+              <Text color={moodColor}>{line}</Text>
+            </Box>
+          ))}
+        </Box>
+        {/* Info panel */}
+        <Box flexDirection="column" flexGrow={1}>
+          {/* Line 1: Brand */}
+          <Box gap={1}>
+            <Text bold color={theme.primary}>KCode</Text>
+            <Text color={theme.dimmed}>v{version}</Text>
+            <Text color={theme.dimmed}>—</Text>
+            <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
+          </Box>
+          {/* Line 2: Model + mode + cwd */}
+          <Box gap={1}>
+            <Text color={theme.success}>{model}</Text>
+            {permissionMode && (
+              <>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={pmColor}>{permissionMode}</Text>
+              </>
+            )}
             <Text color={theme.dimmed}>•</Text>
-            <Text color={pmColor}>{permissionMode}</Text>
-          </>
-        )}
-        <Text color={theme.dimmed}>•</Text>
-        <Text color={theme.dimmed}>{shortCwd}</Text>
-        {(tokenCount > 0 || toolUseCount > 0) && (
-          <>
-            <Text color={theme.dimmed}>•</Text>
-            <Text color={theme.dimmed}>tok:{tokenCount.toLocaleString()}</Text>
-            <Text color={theme.dimmed}>tools:{toolUseCount}</Text>
-          </>
-        )}
-        {runningAgents > 0 && (
-          <>
-            <Text color={theme.dimmed}>•</Text>
-            <Text color={theme.warning}>agents:{runningAgents}</Text>
-          </>
-        )}
-        {contextWindowSize && contextWindowSize > 0 && tokenCount > 0 && (
-          <>
-            <Text color={theme.dimmed}>•</Text>
-            <Text color={ctxColor}>[{ctxBar}] {ctxPct}%</Text>
-          </>
-        )}
-        {sessionName && (
-          <>
-            <Text color={theme.dimmed}>•</Text>
-            <Text color={theme.warning}>{sessionName}</Text>
-          </>
-        )}
-        {sessionStartTime && elapsed > 0 && (
-          <>
-            <Text color={theme.dimmed}>•</Text>
-            <Text color={theme.dimmed}>{formatTime(elapsed)}</Text>
-          </>
-        )}
+            <Text color={theme.dimmed}>{shortCwd}</Text>
+          </Box>
+          {/* Line 3: Metrics */}
+          <Box gap={1}>
+            {(tokenCount > 0 || toolUseCount > 0) && (
+              <>
+                <Text color={theme.dimmed}>tok:{tokenCount.toLocaleString()}</Text>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={theme.dimmed}>tools:{toolUseCount}</Text>
+              </>
+            )}
+            {runningAgents > 0 && (
+              <>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={theme.warning}>agents:{runningAgents}</Text>
+              </>
+            )}
+            {contextWindowSize && contextWindowSize > 0 && tokenCount > 0 && (
+              <>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={ctxColor}>[{ctxBar}] {ctxPct}%</Text>
+              </>
+            )}
+            {sessionName && (
+              <>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={theme.warning}>{sessionName}</Text>
+              </>
+            )}
+            {sessionStartTime && elapsed > 0 && (
+              <>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={theme.dimmed}>{formatTime(elapsed)}</Text>
+              </>
+            )}
+          </Box>
+          {/* Line 4: Kodi's reaction speech bubble */}
+          <Box>
+            <Text color={moodColor}>{"💬 "}</Text>
+            <Text color={moodColor} italic>{reaction}</Text>
+          </Box>
+          {/* Line 5: empty for spacing */}
+          <Text> </Text>
+        </Box>
       </Box>
       <Box paddingX={1}>
-        <Text color={theme.dimmed}>{"─".repeat(70)}</Text>
+        <Text color={theme.dimmed}>{"╰" + "─".repeat(72) + "╯"}</Text>
       </Box>
     </Box>
   );
