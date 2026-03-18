@@ -30,7 +30,7 @@ const WATCH_EXTENSIONS = new Set([
 const IGNORE_DIRS = new Set([
   "node_modules", "dist", "build", ".git", "__pycache__",
   "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", "coverage",
+  ".kcode", "coverage", "data",
 ]);
 
 // Debounce interval in ms — batch rapid changes
@@ -76,7 +76,7 @@ export class FileWatcher {
 
         // Ignore watched directories (check path segments, not substring)
         const segments = filename.split("/");
-        if (segments.some((seg) => IGNORE_DIRS.has(seg))) return;
+        if (segments.some((seg) => IGNORE_DIRS.has(seg) || seg.startsWith("."))) return;
 
         const relPath = filename;
         // Distinguish create vs delete on rename events by checking if file exists
@@ -97,6 +97,11 @@ export class FileWatcher {
         // Debounce: batch rapid changes
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
         this.debounceTimer = setTimeout(() => this.flush(), DEBOUNCE_MS);
+      });
+
+      // Handle async errors from recursive watch (e.g. EACCES on restricted subdirectories)
+      this.watcher.on("error", (err) => {
+        log.warn("watcher", `Watch error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
       });
 
       log.info("watcher", `File watcher started for ${this.cwd}`);
