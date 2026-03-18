@@ -1,6 +1,7 @@
 // KCode - Kodi Companion
 // An intelligent AI companion that lives in the terminal header.
-// Reacts to events (tool use, errors, idle time, etc.) with personality.
+// Uses the LLM to generate contextual, unique reactions in real-time.
+// Falls back to hardcoded reactions when the LLM is unavailable or busy.
 
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Text } from "ink";
@@ -33,13 +34,18 @@ interface KodiProps {
   sessionStartTime?: number;
 }
 
-// ─── ASCII Art Sprites (5 lines tall, ~10 chars wide) ───────────
-// Each sprite is an array of 5 lines
+// ─── ASCII Art Sprites (5 lines tall) ───────────────────────────
 
 const SPRITES: Record<KodiMood, string[][]> = {
   idle: [[
     "   ╭───╮   ",
     "   │• ◡•│   ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮   ",
+    "   │◦ ◡◦│   ",
     "   ╰─┬─╯   ",
     "    /|\\    ",
     "    / \\    ",
@@ -56,6 +62,12 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "   ╰─┬─╯   ",
     "    /|\\    ",
     "    / \\    ",
+  ], [
+    "   ╭───╮ ♥ ",
+    "   │^ ‿^│   ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
   ]],
   excited: [[
     "  ╭─────╮  ",
@@ -69,6 +81,12 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "  ╰──┬──╯  ",
     "   \\|/    ",
     "    / \\    ",
+  ], [
+    "  ╭─────╮ !",
+    "  │◕ ◡ ◕│  ",
+    "  ╰──┬──╯  ",
+    "   \\|/    ",
+    "   _/ \\_   ",
   ]],
   thinking: [[
     "   ╭───╮ ? ",
@@ -81,6 +99,12 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "   │◦ ‿ ◦│ …",
     "   ╰─┬─╯   ",
     "     |\\    ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮ 💭",
+    "   │• ‿ •│  ",
+    "   ╰─┬─╯   ",
+    "    /|     ",
     "    / \\    ",
   ]],
   working: [[
@@ -95,6 +119,12 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "   ╰─┬─╯   ",
     "    /|\\  ▌ ",
     "    / \\    ",
+  ], [
+    "   ╭───╮ ▶ ",
+    "   │- ‸ -│  ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
   ]],
   worried: [[
     "   ╭───╮   ",
@@ -108,12 +138,24 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "   ╰─┬─╯   ",
     "    /|\\    ",
     "    / \\    ",
+  ], [
+    "   ╭───╮ ✗ ",
+    "   │; _ ;│  ",
+    "   ╰─┬─╯   ",
+    "    /|\\    ",
+    "    / \\    ",
   ]],
   sleeping: [[
     "   ╭───╮   ",
     "   │- _ -│ z",
     "   ╰─┬─╯ z ",
     "    /|  z   ",
+    "    / \\    ",
+  ], [
+    "   ╭───╮   ",
+    "   │_ _ _│ Z",
+    "   ╰─┬─╯ Z ",
+    "    /|  Z   ",
     "    / \\    ",
   ]],
   celebrating: [[
@@ -128,6 +170,12 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "  ╰──┬──╯  ",
     "  \\(|)/   ",
     "   _/ \\_   ",
+  ], [
+    " 🎉╭────╮🎉",
+    "  │^ ▽ ^│  ",
+    "  ╰──┬──╯  ",
+    "  \\(|)/   ",
+    "    / \\    ",
   ]],
   curious: [[
     "   ╭───╮   ",
@@ -135,51 +183,112 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "   ╰─┬─╯   ",
     "    /|     ",
     "    / \\    ",
+  ], [
+    "   ╭───╮ ❓",
+    "   │◦ ‿ ◦│  ",
+    "   ╰─┬─╯   ",
+    "     |\\    ",
+    "    / \\    ",
   ]],
 };
 
-// ─── Reaction Lines ─────────────────────────────────────────────
+// ─── Fallback Reactions (used instantly while LLM generates) ────
 
-const REACTIONS: Record<string, string[]> = {
-  tool_Bash:       ["Running your command...", "Shell time!", "Executing...", "Let me run that!"],
-  tool_Read:       ["Reading that file...", "Let me peek inside...", "Checking the code..."],
-  tool_Write:      ["Writing code!", "Creating file...", "Crafting something new!"],
-  tool_Edit:       ["Editing... surgical precision!", "Tweaking the code...", "Making changes..."],
-  tool_Grep:       ["Searching the codebase...", "Hunting patterns...", "Scanning files..."],
-  tool_Glob:       ["Finding files...", "File detective mode!", "Globbing away..."],
-  tool_GitCommit:  ["Committing changes!", "Saving progress!", "Snapshot time!"],
-  tool_GitStatus:  ["Checking git status...", "Repo health check!"],
-  tool_TestRunner: ["Running tests... fingers crossed!", "Test time!", "Validating..."],
-  tool_WebSearch:  ["Searching the web...", "Browsing...", "Let me look that up!"],
-  tool_WebFetch:   ["Fetching that page...", "Downloading content..."],
-  tool_Agent:      ["Spawning agent!", "Clone deployed!", "Teamwork activated!"],
-  tool_MultiEdit:  ["Multi-edit mode!", "Refactoring...", "Bulk changes incoming!"],
-  tool_default:    ["Working on it...", "Processing...", "On it, boss!"],
-
-  done_success:    ["Done! Nailed it!", "Got it! ✓", "All good!", "There ya go!", "Easy peasy!"],
-  done_error:      ["Oops! Something failed...", "Uh oh... let me check", "Error! But we'll fix it", "Yikes! That didn't work"],
-
-  thinking:        ["Hmm... let me think...", "Pondering this one...", "Processing... give me a sec", "Analyzing the situation..."],
-  streaming:       ["Composing a response...", "Writing my thoughts...", "Here's what I think..."],
-  idle_short:      ["Ready for action!", "What's next?", "Standing by!", "At your service!", "Awaiting orders!"],
-  idle_long:       ["Still here... take your time!", "Waiting patiently...", "*stretches*", "No rush, I'm here!"],
-  idle_very_long:  ["*yawns* getting sleepy...", "You there? I'm still here!", "*whistles a tune*", "Maybe a coffee break?"],
-
-  test_pass:       ["ALL TESTS PASSED! Ship it!", "Green across the board!", "Victory is ours!", "Tests: CRUSHED IT!"],
-  test_fail:       ["Tests failed! Back to debugging!", "Bugs detected! Let's hunt them!", "Not quite... let's fix this!"],
-  commit:          ["Committed! Progress saved!", "Another milestone!", "Checkpoint reached!"],
-  compaction:      ["Compacting memory... brb!", "Making room in my brain...", "Spring cleaning!"],
-  agent_spawn:     ["Agent deployed! Divide & conquer!", "Team is growing!", "More hands on deck!"],
-  error:           ["Something broke! Don't panic!", "Error encountered... we got this!", "Ouch! Let's figure this out"],
-
-  tools_10:        ["10 tools used! Productive session!", "Getting warmed up!"],
-  tools_50:        ["50 tools! We're in BEAST MODE!", "Unstoppable!"],
-  tools_100:       ["100 TOOLS! LEGENDARY SESSION!", "Absolute coding machine!"],
-  tokens_50k:      ["50k tokens deep! Epic journey!", "Deep in the code mines!"],
-  tokens_100k:     ["100k tokens! MARATHON SESSION!", "We've written a novel!"],
-
-  startup:         ["Let's code!", "Ready to roll!", "Hello, world!", "Let's build something amazing!", "Booting up... systems online!"],
+const FALLBACKS: Record<string, string[]> = {
+  tool_start:    ["On it!", "Working...", "Let me handle that!"],
+  tool_done:     ["Done!", "Got it!", "All good!"],
+  tool_error:    ["Oops!", "That didn't work...", "Let me check..."],
+  thinking:      ["Hmm...", "Thinking...", "Let me ponder..."],
+  streaming:     ["Writing...", "Here goes...", "Composing..."],
+  idle:          ["Ready!", "What's next?", "Standing by!"],
+  turn_end:      ["All done!", "Back to you!", "Your turn!"],
+  compaction:    ["Cleaning up memory...", "Making room..."],
+  agent_spawn:   ["Agent deployed!", "Teamwork!", "Reinforcements!"],
+  error:         ["Something broke!", "We'll fix it!", "Uh oh..."],
+  commit:        ["Committed!", "Saved!", "Progress!"],
+  test_pass:     ["Tests passed!", "All green!", "Ship it!"],
+  test_fail:     ["Tests failed!", "Bugs found!", "Back to it!"],
+  milestone:     ["Milestone!", "Level up!", "Amazing!"],
+  startup:       ["Let's code!", "Ready to roll!", "Hello, world!"],
 };
+
+// ─── LLM Reaction Generator ────────────────────────────────────
+
+const KODI_SYSTEM = `You are Kodi, a tiny ASCII companion living inside a coding terminal (KCode).
+You have a playful, witty personality. You're encouraging but not cheesy.
+You react to coding events with short, punchy commentary.
+You can be sarcastic, funny, nerdy, supportive, or dramatic — mix it up!
+You occasionally reference coding memes, pop culture, or make puns.
+You're self-aware that you're a tiny ASCII character watching someone code.
+
+Rules:
+- Reply with ONLY your reaction text (no quotes, no prefix, no explanation)
+- MAX 10 words. Shorter is better. Aim for 3-8 words.
+- Be creative — never repeat yourself
+- Match the energy: celebrations should be hype, errors should be empathetic
+- You can use *actions* like *flexes* or *hides behind monitor*
+- You can use unicode symbols sparingly: ⚡ ✨ 🔥 💀 ☕ etc.`;
+
+let _llmBaseUrl: string | null = null;
+
+async function getLlmBaseUrl(): Promise<string> {
+  if (_llmBaseUrl) return _llmBaseUrl;
+  try {
+    const { getModelBaseUrl, getDefaultModel } = await import("../../core/models.js");
+    const defaultModel = await getDefaultModel();
+    _llmBaseUrl = await getModelBaseUrl(defaultModel);
+    return _llmBaseUrl;
+  } catch {
+    return "http://localhost:10091";
+  }
+}
+
+let _pendingRequest: AbortController | null = null;
+let _lastLlmCall = 0;
+const LLM_COOLDOWN_MS = 5000; // Don't call LLM more than once every 5 seconds
+
+async function generateReaction(context: string): Promise<string | null> {
+  const now = Date.now();
+  if (now - _lastLlmCall < LLM_COOLDOWN_MS) return null;
+
+  // Abort previous pending request
+  if (_pendingRequest) {
+    _pendingRequest.abort();
+  }
+
+  _lastLlmCall = now;
+  const controller = new AbortController();
+  _pendingRequest = controller;
+
+  try {
+    const baseUrl = await getLlmBaseUrl();
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        messages: [
+          { role: "system", content: KODI_SYSTEM },
+          { role: "user", content: context },
+        ],
+        max_tokens: 30,
+        temperature: 1.0,
+        top_p: 0.95,
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text || text.length > 80) return null;
+    // Strip quotes if the model wrapped them
+    return text.replace(/^["']|["']$/g, "");
+  } catch {
+    return null;
+  } finally {
+    if (_pendingRequest === controller) _pendingRequest = null;
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -197,6 +306,53 @@ function formatTime(ms: number): string {
   return `${hours}h${remMins.toString().padStart(2, "0")}m`;
 }
 
+function buildContext(event: KodiEvent, stats: { tools: number; tokens: number; elapsed: number; agents: number }): string {
+  const parts: string[] = [];
+
+  switch (event.type) {
+    case "tool_start":
+      parts.push(`User just triggered the ${event.detail ?? "a"} tool.`);
+      break;
+    case "tool_done":
+      parts.push(`The ${event.detail ?? "a"} tool just finished successfully.`);
+      if (event.detail === "TestRunner") parts.push("All tests passed!");
+      if (event.detail === "GitCommit") parts.push("Code was committed!");
+      break;
+    case "tool_error":
+      parts.push(`The ${event.detail ?? "a"} tool just FAILED with an error.`);
+      break;
+    case "thinking":
+      parts.push("The AI is now deep in thought, processing the user's request.");
+      break;
+    case "streaming":
+      parts.push("The AI is writing its response to the user.");
+      break;
+    case "turn_end":
+      parts.push("The AI just finished responding. Waiting for user input.");
+      break;
+    case "compaction":
+      parts.push("Context window is getting full — conversation is being compacted/summarized.");
+      break;
+    case "agent_spawn":
+      parts.push("A sub-agent was just spawned to work on a parallel task!");
+      break;
+    case "error":
+      parts.push(`An error occurred: ${event.detail ?? "unknown error"}`);
+      break;
+    case "idle":
+      if (stats.elapsed > 120_000) parts.push("User has been idle for over 2 minutes. You're getting sleepy.");
+      else if (stats.elapsed > 30_000) parts.push("User has been idle for a while. You're waiting patiently.");
+      else parts.push("Waiting for the user to do something.");
+      break;
+    default:
+      parts.push(`Event: ${event.type}`);
+  }
+
+  parts.push(`Session stats: ${stats.tools} tools used, ${Math.round(stats.tokens / 1000)}k tokens, ${stats.agents} agents running.`);
+
+  return parts.join(" ");
+}
+
 // ─── Component ──────────────────────────────────────────────────
 
 export default function KodiCompanion({
@@ -207,12 +363,13 @@ export default function KodiCompanion({
 }: KodiProps) {
   const { theme } = useTheme();
   const [mood, setMood] = useState<KodiMood>("idle");
-  const [reaction, setReaction] = useState(pick(REACTIONS.startup!));
+  const [reaction, setReaction] = useState(pick(FALLBACKS.startup!));
   const [sprite, setSprite] = useState(SPRITES.idle[0]!);
   const lastToolMilestone = useRef(0);
   const lastTokenMilestone = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const eventCountRef = useRef(0);
 
   // Update elapsed time every 10s
   useEffect(() => {
@@ -221,16 +378,30 @@ export default function KodiCompanion({
     return () => clearInterval(timer);
   }, [sessionStartTime]);
 
-  // Helper to set mood + sprite + reaction together
-  const react = (newMood: KodiMood, reactionKey: string) => {
+  // Helper to set mood + sprite + fallback, then try LLM
+  const react = (newMood: KodiMood, fallbackKey: string, event?: KodiEvent) => {
     setMood(newMood);
     setSprite(pick(SPRITES[newMood]));
-    setReaction(pick(REACTIONS[reactionKey] ?? REACTIONS.tool_default!));
+    setReaction(pick(FALLBACKS[fallbackKey] ?? FALLBACKS.idle!));
+
+    // Try to get an LLM-generated reaction (async, non-blocking)
+    if (event) {
+      const ctx = buildContext(event, {
+        tools: toolUseCount,
+        tokens: tokenCount,
+        elapsed: sessionElapsedMs,
+        agents: runningAgents,
+      });
+      generateReaction(ctx).then((llmReaction) => {
+        if (llmReaction) setReaction(llmReaction);
+      });
+    }
   };
 
   // React to events
   useEffect(() => {
     if (!lastEvent) return;
+    eventCountRef.current++;
 
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current);
@@ -238,47 +409,49 @@ export default function KodiCompanion({
     }
 
     switch (lastEvent.type) {
-      case "tool_start": {
-        const key = `tool_${lastEvent.detail ?? "default"}`;
-        react("working", REACTIONS[key] ? key : "tool_default");
+      case "tool_start":
+        react("working", "tool_start", lastEvent);
         break;
-      }
-      case "tool_done": {
-        if (lastEvent.detail === "TestRunner") react("celebrating", "test_pass");
-        else if (lastEvent.detail === "GitCommit") react("celebrating", "commit");
-        else react("happy", "done_success");
+      case "tool_done":
+        if (lastEvent.detail === "TestRunner") react("celebrating", "test_pass", lastEvent);
+        else if (lastEvent.detail === "GitCommit") react("celebrating", "commit", lastEvent);
+        else react("happy", "tool_done", lastEvent);
         break;
-      }
       case "tool_error":
       case "test_fail":
-        react("worried", "done_error");
+        react("worried", "tool_error", lastEvent);
         break;
       case "thinking":
-        react("thinking", "thinking");
+        react("thinking", "thinking", lastEvent);
         break;
       case "streaming":
-        react("happy", "streaming");
+        react("happy", "streaming", lastEvent);
         break;
       case "compaction":
-        react("thinking", "compaction");
+        react("thinking", "compaction", lastEvent);
         break;
       case "agent_spawn":
-        react("excited", "agent_spawn");
+        react("excited", "agent_spawn", lastEvent);
         break;
       case "error":
-        react("worried", "error");
+        react("worried", "error", lastEvent);
         break;
       case "turn_end":
+        react("idle", "turn_end", lastEvent);
+        break;
       case "idle":
-        react("idle", "idle_short");
+        react("idle", "idle", lastEvent);
         break;
     }
 
-    // Idle progression timers
+    // Idle progression timers with LLM reactions
     idleTimerRef.current = setTimeout(() => {
-      react("idle", "idle_long");
+      const idleEvent: KodiEvent = { type: "idle", detail: "long" };
+      react("idle", "idle", idleEvent);
+
       idleTimerRef.current = setTimeout(() => {
-        react("sleeping", "idle_very_long");
+        const sleepEvent: KodiEvent = { type: "idle", detail: "very_long" };
+        react("sleeping", "idle", sleepEvent);
       }, 120_000);
     }, 30_000);
 
@@ -291,23 +464,28 @@ export default function KodiCompanion({
   useEffect(() => {
     if (toolUseCount >= 100 && lastToolMilestone.current < 100) {
       lastToolMilestone.current = 100;
-      react("celebrating", "tools_100");
+      const ev: KodiEvent = { type: "tool_done", detail: `milestone_100_tools` };
+      react("celebrating", "milestone", ev);
     } else if (toolUseCount >= 50 && lastToolMilestone.current < 50) {
       lastToolMilestone.current = 50;
-      react("excited", "tools_50");
+      const ev: KodiEvent = { type: "tool_done", detail: `milestone_50_tools` };
+      react("excited", "milestone", ev);
     } else if (toolUseCount >= 10 && lastToolMilestone.current < 10) {
       lastToolMilestone.current = 10;
-      react("happy", "tools_10");
+      const ev: KodiEvent = { type: "tool_done", detail: `milestone_10_tools` };
+      react("happy", "milestone", ev);
     }
   }, [toolUseCount]);
 
   useEffect(() => {
     if (tokenCount >= 100_000 && lastTokenMilestone.current < 100_000) {
       lastTokenMilestone.current = 100_000;
-      react("excited", "tokens_100k");
+      const ev: KodiEvent = { type: "tool_done", detail: "milestone_100k_tokens" };
+      react("excited", "milestone", ev);
     } else if (tokenCount >= 50_000 && lastTokenMilestone.current < 50_000) {
       lastTokenMilestone.current = 50_000;
-      react("happy", "tokens_50k");
+      const ev: KodiEvent = { type: "tool_done", detail: "milestone_50k_tokens" };
+      react("happy", "milestone", ev);
     }
   }, [tokenCount]);
 
@@ -339,15 +517,6 @@ export default function KodiCompanion({
     : theme.dimmed;
 
   // ─── Render ─────────────────────────────────────────────────
-  // Layout: Kodi sprite on the left, info panel on the right
-  //
-  // ╭───────────────────────────────────────────────────────────╮
-  // │    ╭───╮      KCode v1.0.0 — Kulvex Code by Astrolexis  │
-  // │    │• ◡•│     mnemo:mark5-80b • auto • ~/project         │
-  // │    ╰─┬─╯      tok:1,234 • tools:5 • [████░░░░░░] 12%    │
-  // │     /|\       "Ready for action!"                         │
-  // │     / \                                                   │
-  // ╰───────────────────────────────────────────────────────────╯
 
   return (
     <Box flexDirection="column">
@@ -423,7 +592,7 @@ export default function KodiCompanion({
             <Text color={moodColor}>{"💬 "}</Text>
             <Text color={moodColor} italic>{reaction}</Text>
           </Box>
-          {/* Line 5: empty for spacing */}
+          {/* Line 5: spacing */}
           <Text> </Text>
         </Box>
       </Box>
