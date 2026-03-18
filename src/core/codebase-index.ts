@@ -38,7 +38,7 @@ const INDEXABLE_EXTENSIONS = new Set([
 const IGNORE_DIRS = new Set([
   "node_modules", "dist", "build", ".git", "__pycache__",
   "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", ".vscode", ".idea", "coverage",
+  ".kcode", ".vscode", ".idea", "coverage", "data",
 ]);
 
 const MAX_FILE_SIZE = 100_000; // skip files > 100KB for indexing
