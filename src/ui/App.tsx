@@ -38,7 +38,6 @@ type AppMode = "input" | "responding" | "permission";
 export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
   const { exit } = useApp();
   const { switchTheme } = useTheme();
-
   // Skills manager - created once per component instance
   const [skillManager] = useState(() => {
     const sm = new SkillManager(config.workingDirectory);
@@ -1027,6 +1026,78 @@ export default function App({ config, conversationManager, tools, initialSession
 
   return (
     <Box flexDirection="column">
+      <MessageList
+          completed={completed}
+          streamingText={streamingText}
+          isLoading={mode === "responding"}
+          loadingMessage={loadingMessage}
+          streamingThinking={streamingThinking}
+          isThinking={isThinking}
+          turnTokens={turnTokens}
+          turnStartTime={turnStartTime}
+          spinnerPhase={spinnerPhase}
+          bashStreamOutput={bashStreamOutput}
+        />
+
+        {watcherSuggestions.length > 0 && mode === "input" && (
+          <Box marginLeft={2} marginBottom={1} flexDirection="column">
+            {watcherSuggestions.map((s, i) => (
+              <Text key={i} dimColor>{"  ✱ "}{s}</Text>
+            ))}
+          </Box>
+        )}
+
+        {mode === "permission" && permissionRequest && (
+          <PermissionDialog
+            request={permissionRequest}
+            onChoice={handlePermissionChoice}
+            isActive={mode === "permission"}
+          />
+        )}
+
+        {activeTabs.length > 0 && (
+          <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />
+        )}
+
+        {showContextGrid && config.contextWindowSize && config.contextWindowSize > 0 && (() => {
+          const state = conversationManager.getState();
+          let systemTokens = 0;
+          let messageTokens = 0;
+          let toolTokens = 0;
+          for (const msg of state.messages) {
+            if (typeof msg.content === "string") {
+              const est = Math.round(msg.content.length / 4);
+              if (msg.role === "user") messageTokens += est;
+              else messageTokens += est;
+            } else if (Array.isArray(msg.content)) {
+              for (const block of msg.content) {
+                if (block.type === "text") {
+                  messageTokens += Math.round(block.text.length / 4);
+                } else if (block.type === "tool_result") {
+                  const c = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+                  toolTokens += Math.round(c.length / 4);
+                } else if (block.type === "tool_use") {
+                  toolTokens += Math.round(JSON.stringify(block.input).length / 4);
+                }
+              }
+            }
+          }
+          // Estimate system prompt tokens from the difference
+          systemTokens = Math.max(0, tokenCount - messageTokens - toolTokens);
+          return (
+            <ContextGrid
+              breakdown={{
+                totalTokens: tokenCount,
+                contextWindowSize: config.contextWindowSize,
+                systemTokens,
+                messageTokens,
+                toolTokens,
+              }}
+            />
+          );
+        })()}
+
+      {/* Kodi companion — pinned above input, always visible */}
       <KodiCompanion
         mode={mode}
         toolUseCount={toolUseCount}
@@ -1044,77 +1115,6 @@ export default function App({ config, conversationManager, tools, initialSession
         sessionName={sessionName}
         sessionStartTime={sessionStart}
       />
-      <MessageList
-        completed={completed}
-        streamingText={streamingText}
-        isLoading={mode === "responding"}
-        loadingMessage={loadingMessage}
-        streamingThinking={streamingThinking}
-        isThinking={isThinking}
-        turnTokens={turnTokens}
-        turnStartTime={turnStartTime}
-        spinnerPhase={spinnerPhase}
-        bashStreamOutput={bashStreamOutput}
-      />
-
-      {watcherSuggestions.length > 0 && mode === "input" && (
-        <Box marginLeft={2} marginBottom={1} flexDirection="column">
-          {watcherSuggestions.map((s, i) => (
-            <Text key={i} dimColor>{"  \u2731 "}{s}</Text>
-          ))}
-        </Box>
-      )}
-
-      {mode === "permission" && permissionRequest && (
-        <PermissionDialog
-          request={permissionRequest}
-          onChoice={handlePermissionChoice}
-          isActive={mode === "permission"}
-        />
-      )}
-
-      {activeTabs.length > 0 && (
-        <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />
-      )}
-
-      {showContextGrid && config.contextWindowSize && config.contextWindowSize > 0 && (() => {
-        const state = conversationManager.getState();
-        let systemTokens = 0;
-        let messageTokens = 0;
-        let toolTokens = 0;
-        for (const msg of state.messages) {
-          if (typeof msg.content === "string") {
-            const est = Math.round(msg.content.length / 4);
-            if (msg.role === "user") messageTokens += est;
-            else messageTokens += est;
-          } else if (Array.isArray(msg.content)) {
-            for (const block of msg.content) {
-              if (block.type === "text") {
-                messageTokens += Math.round(block.text.length / 4);
-              } else if (block.type === "tool_result") {
-                const c = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
-                toolTokens += Math.round(c.length / 4);
-              } else if (block.type === "tool_use") {
-                toolTokens += Math.round(JSON.stringify(block.input).length / 4);
-              }
-            }
-          }
-        }
-        // Estimate system prompt tokens from the difference
-        systemTokens = Math.max(0, tokenCount - messageTokens - toolTokens);
-        return (
-          <ContextGrid
-            breakdown={{
-              totalTokens: tokenCount,
-              contextWindowSize: config.contextWindowSize,
-              systemTokens,
-              messageTokens,
-              toolTokens,
-            }}
-          />
-        );
-      })()}
-
       <InputPrompt
         onSubmit={handleSubmit}
         isActive={mode !== "permission"}
