@@ -46,8 +46,8 @@ const MAX_AGENT_TURNS = 25; // prevent infinite loops — 25 tool turns is plent
 const MAX_CONSECUTIVE_DENIALS = 2; // stop after N permission denials in a row
 const MAX_OUTPUT_TOKENS_PER_TURN = 4096; // Hard cap on output tokens per API call
 const MAX_TOTAL_OUTPUT_TOKENS = 50_000; // Hard cap on total output tokens per agent loop
-const LOOP_PATTERN_THRESHOLD = 4; // trigger loop redirect after N similar Bash commands
-const LOOP_PATTERN_HARD_STOP = 7; // force stop after N similar commands — model is stuck
+const LOOP_PATTERN_THRESHOLD = 3; // trigger loop redirect after N similar Bash commands
+const LOOP_PATTERN_HARD_STOP = 5; // force stop + block after N similar commands — model is stuck
 
 /**
  * Extract a semantic "pattern key" from a Bash command to detect loops.
@@ -79,14 +79,34 @@ function extractBashLoopPattern(command: string): string | null {
 
   // Group related tools into categories
   const SCAN_TOOLS = new Set(["nmap", "masscan", "zmap", "netcat", "nc", "nbtscan", "nmblookup"]);
-  const SMB_TOOLS = new Set(["smbclient", "smbmap", "rpcclient", "enum4linux", "crackmapexec"]);
+  const SMB_TOOLS = new Set(["smbclient", "smbmap", "rpcclient", "enum4linux", "crackmapexec", "impacket-smbclient"]);
   const HTTP_TOOLS = new Set(["curl", "wget", "httpie", "http"]);
   const SSH_TOOLS = new Set(["ssh", "sshpass", "scp", "sftp"]);
+  const EXPLOIT_TOOLS = new Set(["dcomexec", "psexec", "wmiexec", "atexec", "smbexec", "secretsdump", "msfconsole", "hydra", "medusa",
+    "impacket-smbexec", "impacket-psexec", "impacket-wmiexec", "impacket-dcomexec", "impacket-atexec", "impacket-secretsdump"]);
 
-  if (SCAN_TOOLS.has(baseCmd)) return "network-scan";
-  if (SMB_TOOLS.has(baseCmd)) return "smb-probe";
-  if (HTTP_TOOLS.has(baseCmd)) return "http-request";
-  if (SSH_TOOLS.has(baseCmd)) return "ssh-access";
+  // Extract target host/IP for more specific pattern grouping
+  const ipMatch = inner.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/);
+  const targetSuffix = ipMatch ? `@${ipMatch[1]}` : "";
+
+  if (SCAN_TOOLS.has(baseCmd)) return `network-scan${targetSuffix}`;
+  if (SMB_TOOLS.has(baseCmd)) return `smb-probe${targetSuffix}`;
+  if (HTTP_TOOLS.has(baseCmd)) return `http-request${targetSuffix}`;
+  if (SSH_TOOLS.has(baseCmd)) return `ssh-access${targetSuffix}`;
+  if (EXPLOIT_TOOLS.has(baseCmd)) return `exploit-attempt${targetSuffix}`;
+
+  // For python3/python scripts, use the script name instead of "python3"
+  if ((baseCmd === "python3" || baseCmd === "python") && words.length > 1) {
+    for (const w of words.slice(1)) {
+      if (w.startsWith("-")) continue;
+      // Extract script name from path (e.g. ~/.local/bin/dcomexec.py → dcomexec)
+      const scriptName = w.replace(/^.*\//, "").replace(/\.py$/, "");
+      if (scriptName) {
+        if (EXPLOIT_TOOLS.has(scriptName)) return "exploit-attempt";
+        return `bash:${scriptName}`;
+      }
+    }
+  }
 
   // For other tools, just use the binary name
   return `bash:${baseCmd}`;
@@ -1465,10 +1485,13 @@ export class ConversationManager {
             loopPatterns.set(pattern, entry);
 
             if (entry.count >= LOOP_PATTERN_HARD_STOP) {
-              // Hard redirect: execute the call but inject a mandatory strategy change
-              log.warn("tool", `Loop pattern HARD redirect (${pattern}): ${entry.count} similar calls`);
-              // Let this call execute but queue a redirect message after all tool results
+              // Hard stop: BLOCK the call, don't execute it
+              log.warn("tool", `Loop pattern HARD BLOCK (${pattern}): ${entry.count} similar calls`);
               entry.warned = true;
+              const blockMsg = `BLOCKED: You have run ${entry.count} similar "${pattern}" commands that are not making progress. This call was NOT executed. You MUST stop this approach entirely. Summarize what you tried, what failed, and either try a completely different technique or ask the user for guidance.`;
+              yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockMsg, isError: true };
+              toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockMsg, is_error: true });
+              continue;
             } else if (entry.count >= LOOP_PATTERN_THRESHOLD && !entry.warned) {
               // Soft redirect: inject a strategy hint as a system note in the tool result
               entry.warned = true;
@@ -1766,12 +1789,11 @@ export class ConversationManager {
       for (const [pattern, entry] of loopPatterns) {
         if (entry.count >= LOOP_PATTERN_HARD_STOP) {
           const examples = entry.examples.join("\n  - ");
-          const redirectMsg = `[SYSTEM — LOOP DETECTED] You have run ${entry.count} similar "${pattern}" commands:\n  - ${examples}\n\nYou are stuck in a loop repeating the same approach. MANDATORY: You MUST now try a COMPLETELY DIFFERENT technique to solve this task. Think step by step:\n1. What have you tried so far? (${pattern})\n2. Why didn't it work?\n3. What is an alternative approach that does NOT use ${pattern}?\n\nDo NOT run another ${pattern} command. Use a different tool or strategy entirely. If no alternative exists, summarize your findings and present them to the user.`;
+          const redirectMsg = `[SYSTEM — LOOP DETECTED — FORCE STOP] You have run ${entry.count} similar "${pattern}" commands:\n  - ${examples}\n\nYou are stuck in a loop. Further "${pattern}" commands will be BLOCKED. Reply with text only: summarize what you accomplished, what failed, and ask the user how to proceed. Do NOT call any more tools.`;
           this.state.messages.push({ role: "user", content: redirectMsg });
-          log.warn("session", `Loop redirect HARD injected for pattern "${pattern}" (${entry.count} calls)`);
-          // Reset count so we don't spam (but keep warned=true)
-          entry.count = 0;
-          entry.examples = [];
+          log.warn("session", `Loop redirect HARD + forceStop for pattern "${pattern}" (${entry.count} calls)`);
+          // Force the agent loop to stop after one more text response
+          forceStopLoop = true;
           break; // only inject one redirect per turn
         } else if (entry.count >= LOOP_PATTERN_THRESHOLD && entry.warned) {
           // Soft redirect — nudge, don't force
