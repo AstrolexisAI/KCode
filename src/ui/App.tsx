@@ -18,6 +18,7 @@ import { setTrustPromptCallback } from "../core/hooks.js";
 import Header from "./components/Header.js";
 import ToolTabs from "./components/ToolTabs.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
+import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import InputPrompt from "./components/InputPrompt.js";
 import PermissionDialog, {
   type PermissionRequest,
@@ -77,13 +78,7 @@ export default function App({ config, conversationManager, tools, initialSession
   });
 
   const [mode, setMode] = useState<AppMode>("input");
-  const [completed, setCompleted] = useState<MessageEntry[]>([
-    {
-      kind: "banner",
-      title: `KCode v${config.version ?? "?"}`,
-      subtitle: "Kulvex Code by Astrolexis",
-    },
-  ]);
+  const [completed, setCompleted] = useState<MessageEntry[]>([]);
   const [streamingText, setStreamingText] = useState("");
   const [streamingThinking, setStreamingThinking] = useState("");
   const [isThinking, setIsThinking] = useState(false);
@@ -104,6 +99,7 @@ export default function App({ config, conversationManager, tools, initialSession
   const [sessionName, setSessionName] = useState<string>(initialSessionName ?? "");
   const [sessionTags, setSessionTags] = useState<string[]>([]);
   const [showContextGrid, setShowContextGrid] = useState(false);
+  const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
   const lastUserPromptRef = useRef<string>("");
   const commandDepthRef = useRef<number>(0);
   const telemetryPromptShownRef = useRef<boolean>(false);
@@ -762,6 +758,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "text_delta":
+            if (currentText.length === 0) setLastKodiEvent({ type: "streaming" });
             // Finalize any accumulated thinking when text starts
             if (currentThinking.length > 0) {
               const thinking = currentThinking;
@@ -778,6 +775,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "thinking_delta":
+            if (currentThinking.length === 0) setLastKodiEvent({ type: "thinking" });
             currentThinking += event.thinking;
             setIsThinking(true);
             setStreamingThinking(currentThinking);
@@ -813,6 +811,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "tool_executing": {
+            setLastKodiEvent({ type: "tool_start", detail: event.name });
             const summary = summarizeInput(event.name, event.input);
             setCompleted((prev) => [
               ...prev,
@@ -844,6 +843,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "tool_result":
+            setLastKodiEvent({ type: event.isError ? "tool_error" : "tool_done", detail: event.name });
             // Clear Bash stream output when any Bash result arrives
             if (event.name === "Bash") {
               setBashStreamOutput("");
@@ -919,6 +919,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "error":
+            setLastKodiEvent({ type: "error", detail: event.error.message });
             setCompleted((prev) => [
               ...prev,
               {
@@ -939,6 +940,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "compaction_start":
+            setLastKodiEvent({ type: "compaction" });
             setCompleted((prev) => [
               ...prev,
               { kind: "banner", title: "Compacting context...", subtitle: `Summarizing ${event.messageCount} messages (~${Math.round(event.tokensBefore / 1000)}k tokens)` },
@@ -974,6 +976,7 @@ export default function App({ config, conversationManager, tools, initialSession
             break;
 
           case "turn_end":
+            setLastKodiEvent({ type: "turn_end" });
             // Finalize any remaining thinking
             if (currentThinking.length > 0) {
               const thinking = currentThinking;
@@ -1024,6 +1027,23 @@ export default function App({ config, conversationManager, tools, initialSession
 
   return (
     <Box flexDirection="column">
+      <KodiCompanion
+        mode={mode}
+        toolUseCount={toolUseCount}
+        tokenCount={tokenCount}
+        activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
+        isThinking={isThinking}
+        runningAgents={runningAgentCount}
+        sessionElapsedMs={Date.now() - sessionStart}
+        lastEvent={lastKodiEvent}
+        model={config.model}
+        version={config.version ?? "?"}
+        workingDirectory={config.workingDirectory}
+        permissionMode={conversationManager.getPermissions().getMode()}
+        contextWindowSize={config.contextWindowSize}
+        sessionName={sessionName}
+        sessionStartTime={sessionStart}
+      />
       <MessageList
         completed={completed}
         streamingText={streamingText}
@@ -1055,20 +1075,6 @@ export default function App({ config, conversationManager, tools, initialSession
 
       {activeTabs.length > 0 && (
         <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />
-      )}
-
-      {tokenCount > 0 && config.contextWindowSize && config.contextWindowSize > 0 && (
-        <Header
-          model={config.model}
-          workingDirectory={config.workingDirectory}
-          tokenCount={tokenCount}
-          toolUseCount={toolUseCount}
-          contextWindowSize={config.contextWindowSize}
-          runningAgents={runningAgentCount}
-          sessionName={sessionName}
-          sessionStartTime={sessionStart}
-          permissionMode={conversationManager.getPermissions().getMode()}
-        />
       )}
 
       {showContextGrid && config.contextWindowSize && config.contextWindowSize > 0 && (() => {
