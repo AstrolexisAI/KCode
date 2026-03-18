@@ -996,6 +996,12 @@ export default function App({ config, conversationManager, tools, initialSession
               ]);
               currentText = "";
               setStreamingText("");
+            } else if (event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue") {
+              // Model returned empty response — show a fallback so the user knows
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: "  (empty response — the model returned no text. Try rephrasing or use a different model.)" },
+              ]);
             }
             // Show any pending file change suggestions
             {
