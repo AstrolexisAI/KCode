@@ -46,7 +46,8 @@ const VERSION = "1.0.0";
 // from child processes or system sockets should be logged but not kill the TUI.
 process.on("uncaughtException", (err) => {
   const msg = err.message ?? String(err);
-  const code = (err as NodeJS.ErrnoException).code;
+  const code = (err as NodeJS.ErrnoException).code
+    ?? msg.match(/^(E[A-Z]+):/)?.[1]; // fallback: extract code from message (Bun compat)
 
   // Non-fatal system errors from background I/O — log and continue
   const nonFatalCodes = new Set(["ENXIO", "ECONNREFUSED", "ECONNRESET", "EPIPE", "ENOENT", "ETIMEDOUT", "EACCES", "ENODEV", "EISDIR", "EMFILE", "ENFILE", "ENOSPC", "EROFS", "ENOTCONN", "EHOSTUNREACH", "ENETUNREACH"]);
@@ -178,7 +179,7 @@ modelsCmd
 modelsCmd
   .command("add <name> <baseUrl>")
   .description("Add or update a model")
-  .option("--context <size>", "Context window size in tokens", parseInt)
+  .option("--context <size>", "Context window size in tokens", (v: string) => parseInt(v, 10))
   .option("--gpu <gpu>", "GPU identifier (informational)")
   .option("--caps <capabilities>", "Comma-separated capabilities (e.g. code,vision)")
   .option("--desc <description>", "Description of the model")
@@ -508,7 +509,7 @@ const serverCmd = program
 serverCmd
   .command("start")
   .description("Start the llama-server")
-  .option("--port <port>", "Override server port", parseInt)
+  .option("--port <port>", "Override server port", (v: string) => parseInt(v, 10))
   .action(async (opts: { port?: number }) => {
     try {
       console.log("Starting inference server...");
@@ -1669,7 +1670,7 @@ program
 program
   .command("serve")
   .description("Start KCode as an HTTP API server")
-  .option("-p, --port <port>", "Port to listen on", parseInt, 10101)
+  .option("-p, --port <port>", "Port to listen on", (v: string) => parseInt(v, 10), 10101)
   .option("-h, --host <host>", "Host to bind to", "127.0.0.1")
   .option("--api-key <key>", "Require this API key for authentication")
   .action(async (opts: { port?: number; host?: string; apiKey?: string }) => {
