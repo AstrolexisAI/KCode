@@ -10,6 +10,7 @@ import type {
   ConversationState,
   StreamEvent,
   TokenUsage,
+  TurnCostEntry,
   OpenAIMessage,
   OpenAIToolCall,
   OpenAIToolDefinition,
@@ -27,10 +28,12 @@ import { TranscriptManager } from "./transcript";
 import { log } from "./logger";
 import { getWorldModel } from "./world-model";
 import { getUserModel } from "./user-model";
+import { generateCacheKey, getCachedResponse, setCachedResponse } from "./response-cache";
 import { getIntentionEngine } from "./intentions";
 import type { Suggestion } from "./intentions";
 import { extractExample, saveExample } from "./distillation";
 import { scoreResponse, saveBenchmark, initBenchmarkSchema } from "./benchmarks";
+import { getBranchManager } from "./branch-manager";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -43,6 +46,51 @@ const MAX_AGENT_TURNS = 25; // prevent infinite loops — 25 tool turns is plent
 const MAX_CONSECUTIVE_DENIALS = 2; // stop after N permission denials in a row
 const MAX_OUTPUT_TOKENS_PER_TURN = 4096; // Hard cap on output tokens per API call
 const MAX_TOTAL_OUTPUT_TOKENS = 50_000; // Hard cap on total output tokens per agent loop
+const LOOP_PATTERN_THRESHOLD = 4; // trigger loop redirect after N similar Bash commands
+const LOOP_PATTERN_HARD_STOP = 7; // force stop after N similar commands — model is stuck
+
+/**
+ * Extract a semantic "pattern key" from a Bash command to detect loops.
+ * Groups commands by their base tool/binary (e.g., all nmap calls → "nmap",
+ * all smbclient calls → "smbclient"). This catches cases where the model
+ * keeps running the same type of scan with slightly different IPs or flags.
+ */
+function extractBashLoopPattern(command: string): string | null {
+  const trimmed = command.trim();
+  // Strip leading "for ... do" loops — extract the inner command
+  let inner = trimmed;
+  const forMatch = trimmed.match(/^for\s+\w+\s+in\s+[^;]+;\s*do\s+(.+?)\s*;\s*done/s);
+  if (forMatch) inner = forMatch[1]!;
+  // Also handle: for ... ; do echo "==="; <command> ... done
+  const forMatch2 = inner.match(/echo\s+["'][^"']*["'];\s*(.+)/);
+  if (forMatch2) inner = forMatch2[1]!;
+
+  // Extract the base binary/command (first word that looks like a tool)
+  const words = inner.trim().split(/\s+/);
+  const skipPrefixes = new Set(["sudo", "nohup", "env", "bash", "-c", "sh"]);
+  let baseCmd = "";
+  for (const w of words) {
+    if (skipPrefixes.has(w) || w.startsWith("-") || w.startsWith("$") || w.startsWith("\"") || w.startsWith("'")) continue;
+    baseCmd = w.replace(/^.*\//, ""); // strip path prefix
+    break;
+  }
+
+  if (!baseCmd) return null;
+
+  // Group related tools into categories
+  const SCAN_TOOLS = new Set(["nmap", "masscan", "zmap", "netcat", "nc", "nbtscan", "nmblookup"]);
+  const SMB_TOOLS = new Set(["smbclient", "smbmap", "rpcclient", "enum4linux", "crackmapexec"]);
+  const HTTP_TOOLS = new Set(["curl", "wget", "httpie", "http"]);
+  const SSH_TOOLS = new Set(["ssh", "sshpass", "scp", "sftp"]);
+
+  if (SCAN_TOOLS.has(baseCmd)) return "network-scan";
+  if (SMB_TOOLS.has(baseCmd)) return "smb-probe";
+  if (HTTP_TOOLS.has(baseCmd)) return "http-request";
+  if (SSH_TOOLS.has(baseCmd)) return "ssh-access";
+
+  // For other tools, just use the binary name
+  return `bash:${baseCmd}`;
+}
 
 // ─── Lightweight JSON Schema Validator ───────────────────────────
 // Validates basic JSON Schema constraints without pulling in Ajv (~150KB).
@@ -517,10 +565,14 @@ export class ConversationManager {
   private undoManager: UndoManager;
   private transcript: TranscriptManager;
   private compactThreshold: number;
+  private checkpoints: Array<{ label: string; messageIndex: number; undoSize: number; timestamp: number }> = [];
+  private static MAX_CHECKPOINTS = 10;
   private abortController: AbortController | null = null;
   private turnsSincePromptRebuild = 0;
   private systemPromptHash = "";
   private sessionStartTime = Date.now();
+  private sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  private turnCosts: TurnCostEntry[] = [];
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
@@ -549,6 +601,24 @@ export class ConversationManager {
       cacheCreationInputTokens: 0,
       cacheReadInputTokens: 0,
     };
+
+    // Initialize audit logging if enabled by managed policy
+    if (config.auditLog) {
+      try {
+        const { initAuditLogger, auditLog } = require("./audit-logger.js");
+        initAuditLogger({ enabled: true, orgId: config.orgId });
+        auditLog({
+          eventType: "session_start",
+          action: `Session started (model: ${config.model})`,
+          status: "success",
+          model: config.model,
+          sessionId: this.sessionId,
+          orgId: config.orgId,
+        });
+      } catch {
+        // Audit logger not available, continue without it
+      }
+    }
   }
 
   /** Access the permission manager (e.g., to set the prompt callback from the UI). */
@@ -576,6 +646,21 @@ export class ConversationManager {
     return this.config;
   }
 
+  /** Override the session ID (e.g., from --session-id flag). */
+  setSessionId(id: string): void {
+    this.sessionId = id;
+  }
+
+  /** Get the effective max agent turns based on effort level. */
+  private getEffectiveMaxTurns(): number {
+    switch (this.config.effortLevel) {
+      case "low": return 5;
+      case "high": return 40;
+      case "max": return 60;
+      default: return MAX_AGENT_TURNS; // "medium" or unset = 25
+    }
+  }
+
   /** Abort the current LLM request / agent loop. */
   abort(): void {
     if (this.abortController) {
@@ -595,11 +680,31 @@ export class ConversationManager {
    * The generator runs the full agent loop: streaming response, tool execution, repeat.
    */
   async *sendMessage(userMessage: string): AsyncGenerator<StreamEvent> {
-    // Start transcript session on first message
-    if (!this.transcript.isActive) {
-      this.transcript.startSession(userMessage);
-    } else {
-      this.transcript.append("user", "user_message", userMessage);
+    // Budget guard: check if session has exceeded max budget
+    if (this.config.maxBudgetUsd && this.config.maxBudgetUsd > 0) {
+      try {
+        const { getModelPricing, calculateCost } = await import("./pricing.js");
+        const pricing = await getModelPricing(this.config.model);
+        if (pricing) {
+          const cost = calculateCost(pricing, this.cumulativeUsage.inputTokens, this.cumulativeUsage.outputTokens);
+          if (cost >= this.config.maxBudgetUsd) {
+            yield { type: "error", error: new Error(`Budget limit reached: $${cost.toFixed(2)} >= $${this.config.maxBudgetUsd.toFixed(2)}. Use --max-budget-usd to increase.`), retryable: false };
+            yield { type: "turn_end", stopReason: "error" };
+            return;
+          }
+        } else {
+          log.warn("budget", `No pricing data for model "${this.config.model}" — budget limit ($${this.config.maxBudgetUsd}) cannot be enforced`);
+        }
+      } catch { /* non-critical, continue */ }
+    }
+
+    // Start transcript session on first message (skip if --no-session-persistence)
+    if (!this.config.noSessionPersistence) {
+      if (!this.transcript.isActive) {
+        this.transcript.startSession(userMessage, this.config.sessionName);
+      } else {
+        this.transcript.append("user", "user_message", userMessage);
+      }
     }
 
     this.state.messages.push({
@@ -613,18 +718,35 @@ export class ConversationManager {
     // Layer 9: Reset intention engine for new turn
     try { getIntentionEngine().reset(); } catch { /* ignore */ }
 
-    // Smart context: inject relevant file hints based on the user's query
+    // Smart context: inject relevant file hints + code snippets based on user query
     try {
       const { getCodebaseIndex } = await import("./codebase-index.js");
       const idx = getCodebaseIndex(this.config.workingDirectory);
-      const contextHint = idx.formatRelevantContext(userMessage);
-      if (contextHint && this.state.messages.length <= 6) {
-        // Only inject on early messages to avoid noise in long conversations
-        this.state.messages.push({
-          role: "user",
-          content: `[SYSTEM CONTEXT] ${contextHint}`,
-        });
+
+      if (this.state.messages.length <= 6) {
+        // Early messages: inject rich snippets with actual code
+        const snippets = idx.formatRelevantSnippets(userMessage, 60);
+        if (snippets) {
+          this.state.messages.push({
+            role: "user",
+            content: `[SYSTEM CONTEXT] ${snippets}`,
+          });
+        }
+      } else if (this.state.messages.length <= 20) {
+        // Later messages: inject lighter file hints only
+        const contextHint = idx.formatRelevantContext(userMessage);
+        if (contextHint) {
+          this.state.messages.push({
+            role: "user",
+            content: `[SYSTEM CONTEXT] ${contextHint}`,
+          });
+        }
       }
+    } catch { /* non-critical */ }
+
+    // Auto-save checkpoint before each agent loop starts
+    try {
+      this.saveCheckpoint("auto:agent-loop-start");
     } catch { /* non-critical */ }
 
     // Wrap the agent loop to record events to transcript
@@ -686,8 +808,11 @@ export class ConversationManager {
     let consecutiveDenials = 0;
     let inlineWarningCount = 0;
     let forceStopLoop = false; // set by inline warning force-stop; allows one final text turn then breaks
+    let maxTokensContinuations = 0; // track how many times we auto-continued after max_tokens
+    let emptyEndTurnCount = 0; // track empty end_turn retries to avoid infinite loop
     const turnStartMs = Date.now();
     const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
+    const loopPatterns = new Map<string, { count: number; warned: boolean; examples: string[] }>(); // semantic loop detection
 
     while (true) {
       // Hard break after force-stop allowed one final text turn
@@ -714,14 +839,15 @@ export class ConversationManager {
         this.turnsSincePromptRebuild = 0;
       }
 
-      if (turnCount > MAX_AGENT_TURNS + 1) {
+      const effectiveMaxTurns = this.getEffectiveMaxTurns();
+      if (turnCount > effectiveMaxTurns + 1) {
         // Hard kill — model ignored the stop instruction, break immediately
         log.warn("session", `Agent loop hard-killed at turn ${turnCount} — model refused to stop`);
         yield { type: "turn_end", stopReason: "force_stop" };
         this.abortController = null;
         return;
-      } else if (turnCount > MAX_AGENT_TURNS) {
-        log.warn("session", `Agent loop exceeded ${MAX_AGENT_TURNS} turns, forcing stop`);
+      } else if (turnCount > effectiveMaxTurns) {
+        log.warn("session", `Agent loop exceeded ${effectiveMaxTurns} turns, forcing stop`);
         this.state.messages.push({
           role: "user",
           content: `[SYSTEM] STOP. You have used ${turnCount} consecutive tool turns. Summarize what you accomplished and stop. Do NOT make any more tool calls.`,
@@ -742,13 +868,15 @@ export class ConversationManager {
       }
 
       // Prune context if approaching the limit (auto-compacts via LLM when possible)
-      await this.pruneMessagesIfNeeded();
+      yield* this.pruneMessagesIfNeeded();
 
       yield { type: "turn_start" };
 
       const assistantContent: ContentBlock[] = [];
-      const toolCalls: ToolUseBlock[] = [];
+      let toolCalls: ToolUseBlock[] = [];
       let stopReason = "end_turn";
+      let turnInputTokens = 0;
+      let turnOutputTokens = 0;
 
       // Track in-progress tool calls by index
       const activeToolCalls = new Map<
@@ -756,6 +884,27 @@ export class ConversationManager {
         { id: string; name: string; argChunks: string[] }
       >();
       let textChunks: string[] = [];
+
+      // Check response cache before making API call
+      const cacheKey = generateCacheKey(this.config.model, this.state.messages.map(m => ({
+        role: m.role,
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      })));
+      const cachedText = getCachedResponse(cacheKey);
+      if (cachedText) {
+        // Replay cached response
+        log.info("cache", "Cache hit — replaying response");
+        const words = cachedText.split(" ");
+        for (let wi = 0; wi < words.length; wi++) {
+          const chunk = (wi > 0 ? " " : "") + words[wi];
+          yield { type: "text", text: chunk };
+          textChunks.push(chunk);
+        }
+        assistantContent.push({ type: "text", text: cachedText });
+        this.state.messages.push({ role: "assistant", content: cachedText });
+        yield { type: "turn_end", stopReason: "end_turn" };
+        break;
+      }
 
       // Stream the API response with retry logic
       let sseStream: AsyncGenerator<SSEChunk>;
@@ -877,6 +1026,8 @@ export class ConversationManager {
                 cacheCreationInputTokens: 0,
                 cacheReadInputTokens: 0,
               };
+              turnInputTokens += usage.inputTokens;
+              turnOutputTokens += usage.outputTokens;
               this.accumulateUsage(usage);
               yield { type: "usage_update", usage: { ...this.cumulativeUsage } };
               break;
@@ -974,6 +1125,24 @@ export class ConversationManager {
         return;
       }
 
+      // Record per-turn cost entry
+      if (turnInputTokens > 0 || turnOutputTokens > 0) {
+        try {
+          const { getModelPricing, calculateCost } = await import("./pricing.js");
+          const pricing = await getModelPricing(this.config.model);
+          const costUsd = pricing ? calculateCost(pricing, turnInputTokens, turnOutputTokens) : 0;
+          this.turnCosts.push({
+            turnIndex: this.turnCosts.length + 1,
+            model: this.config.model,
+            inputTokens: turnInputTokens,
+            outputTokens: turnOutputTokens,
+            costUsd,
+            toolCalls: toolCalls.map(tc => tc.name),
+            timestamp: Date.now(),
+          });
+        } catch { /* cost tracking is non-critical */ }
+      }
+
       // Client-side JSON schema validation
       if (this.config.jsonSchema && toolCalls.length === 0 && fullText.length > 0) {
         try {
@@ -1008,6 +1177,19 @@ export class ConversationManager {
 
       // If no tool calls or stop reason is not tool_use, we're done
       if (toolCalls.length === 0 || stopReason !== "tool_use") {
+        // Auto-continue on max_tokens: the model was cut off mid-response
+        if (stopReason === "max_tokens" && maxTokensContinuations < 3) {
+          maxTokensContinuations++;
+          log.info("session", `Model hit output token limit (continuation ${maxTokensContinuations}/3) — injecting continue prompt`);
+          // Assistant message already stored at line 1018 — just inject the continue prompt
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] Your previous response was cut off because you hit the output token limit. Continue EXACTLY where you left off. Do not repeat what you already said — pick up mid-sentence if needed.",
+          });
+          yield { type: "turn_end", stopReason: "max_tokens_continue" };
+          continue;
+        }
+
         // Layer 9: Evaluate intentions and emit suggestions
         let hasHighPrioritySuggestion = false;
         try {
@@ -1029,6 +1211,18 @@ export class ConversationManager {
           // Don't break — loop continues to next turn
           yield { type: "turn_end", stopReason };
           continue;
+        }
+
+        // Cache text-only responses (no tool calls = deterministic enough to cache)
+        if (stopReason === "end_turn" && toolCalls.length === 0 && textChunks.length > 0) {
+          try {
+            const fullText = textChunks.join("");
+            const lastUserMsg = this.state.messages.filter(m => m.role === "user").pop();
+            const preview = lastUserMsg
+              ? (typeof lastUserMsg.content === "string" ? lastUserMsg.content : "")
+              : "";
+            setCachedResponse(cacheKey, this.config.model, preview, fullText, this.state.tokenCount);
+          } catch { /* caching is non-critical */ }
         }
 
         // Knowledge distillation: capture successful interaction pattern
@@ -1067,6 +1261,19 @@ export class ConversationManager {
           } catch { /* benchmarking is non-critical */ }
         }
 
+        // Safety net: if the model stops with no text after 3+ tool turns, push it to summarize
+        const hasTextOutput = textChunks.join("").trim().length > 0;
+        if (!hasTextOutput && turnCount >= 3 && stopReason === "end_turn" && emptyEndTurnCount < 2) {
+          emptyEndTurnCount++;
+          log.info("session", `Model ended turn ${turnCount} with no text output — pushing for summary (attempt ${emptyEndTurnCount}/2)`);
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] You executed tools but didn't provide any response to the user. Summarize your findings and report the results. The user is waiting for your answer.",
+          });
+          yield { type: "turn_end", stopReason: "empty_response_retry" };
+          continue;
+        }
+
         // Desktop notification for long-running tasks (>30s or 3+ tool turns)
         const elapsedMs = Date.now() - turnStartMs;
         if (elapsedMs > 30_000 || turnCount >= 3) {
@@ -1089,31 +1296,99 @@ export class ConversationManager {
       const toolResultBlocks: ContentBlock[] = [];
       let turnHadDenial = false;
 
+      // Pre-filter by managed policy (org-level, immutable)
+      if (this.config.managedDisallowedTools?.length || this.config.disableWebAccess) {
+        const filtered: typeof toolCalls = [];
+        for (const call of toolCalls) {
+          // Org-level tool blocklist
+          if (this.config.managedDisallowedTools?.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+            toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: `Tool '${call.name}' is blocked by organization policy`, is_error: true });
+            continue;
+          }
+          // Disable web access tools if policy says so
+          if (this.config.disableWebAccess && (call.name === "WebFetch" || call.name === "WebSearch")) {
+            toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: `Web access tools are disabled by organization policy`, is_error: true });
+            continue;
+          }
+          filtered.push(call);
+        }
+        if (filtered.length === 0) {
+          this.state.messages.push({ role: "user", content: toolResultBlocks });
+          continue;
+        }
+        toolCalls = filtered;
+      }
+
+      // Pre-filter tool calls by allowed/disallowed lists
+      if (this.config.allowedTools?.length || this.config.disallowedTools?.length) {
+        const filtered: typeof toolCalls = [];
+        for (const call of toolCalls) {
+          if (this.config.allowedTools?.length && !this.config.allowedTools.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+            const blockedContent = `Tool '${call.name}' is not in the allowed tools list`;
+            toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
+          } else if (this.config.disallowedTools?.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+            const blockedContent = `Tool '${call.name}' is in the disallowed tools list`;
+            toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
+          } else {
+            filtered.push(call);
+          }
+        }
+        if (filtered.length === 0) {
+          this.state.messages.push({ role: "user", content: toolResultBlocks });
+          continue;
+        }
+        toolCalls = filtered;
+      }
+
       // Parallel fast-path: if ALL tool calls are read-only, execute them concurrently
       const allParallelSafe = toolCalls.length > 1 && toolCalls.every((c) => this.tools.isParallelSafe(c.name));
       if (allParallelSafe && this.permissions.getMode() === "auto") {
         log.info("tool", `Parallel execution: ${toolCalls.length} read-only tools`);
 
-        // Emit tool_executing events
-        for (const call of toolCalls) {
+        // Emit tool_executing + queued progress events
+        for (let i = 0; i < toolCalls.length; i++) {
+          const call = toolCalls[i];
           yield { type: "tool_executing", name: call.name, toolUseId: call.id, input: call.input };
+          yield { type: "tool_progress", toolUseId: call.id, name: call.name, status: "queued" as const, index: i, total: toolCalls.length };
         }
 
-        // Execute all in parallel
-        const results = await this.tools.executeParallel(
-          toolCalls.map((c) => ({ name: c.name, input: c.input })),
-        );
+        // Execute all in parallel with individual timing
+        const parallelStart = Date.now();
+        const promises = toolCalls.map(async (c, i) => {
+          const start = Date.now();
+          const result = await this.tools.execute(c.name, c.input);
+          return { result, durationMs: Date.now() - start, index: i };
+        });
+
+        const settled = await Promise.allSettled(promises);
 
         // Emit results and build tool_result blocks
         for (let i = 0; i < toolCalls.length; i++) {
           const call = toolCalls[i];
-          const result = results[i];
+          const outcome = settled[i];
           this.state.toolUseCount++;
 
-          yield { type: "tool_result", name: call.name, toolUseId: call.id, result: result.content, isError: result.is_error };
-          toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: result.content, is_error: result.is_error });
+          if (outcome.status === "fulfilled") {
+            const { result, durationMs } = outcome.value;
+
+            // Record to persistent analytics
+            try {
+              const { recordToolEvent } = await import("./analytics.js");
+              recordToolEvent({ sessionId: this.sessionId, toolName: call.name, model: this.config.model, durationMs, isError: !!result.is_error });
+            } catch { /* non-critical */ }
+
+            yield { type: "tool_progress", toolUseId: call.id, name: call.name, status: (result.is_error ? "error" : "done") as "done" | "error", index: i, total: toolCalls.length, durationMs };
+            yield { type: "tool_result", name: call.name, toolUseId: call.id, result: result.content, isError: result.is_error, durationMs };
+            toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: result.content, is_error: result.is_error });
+          } else {
+            const errMsg = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+            yield { type: "tool_progress", toolUseId: call.id, name: call.name, status: "error" as const, index: i, total: toolCalls.length };
+            yield { type: "tool_result", name: call.name, toolUseId: call.id, result: `Error: ${errMsg}`, isError: true };
+            toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: `Error: ${errMsg}`, is_error: true });
+          }
         }
 
+        log.info("tool", `Parallel batch completed in ${Date.now() - parallelStart}ms`);
         this.state.messages.push({ role: "user", content: toolResultBlocks });
         continue;
       }
@@ -1156,11 +1431,49 @@ export class ConversationManager {
         }
 
         // Hard block after many repeats (genuine stuck loop)
-        if (crossCount >= 8) {
-          const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times. Try a completely different approach.`;
+        if (crossCount >= 6) {
+          const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times. STOP this approach entirely. Tell the user what you've tried, what failed, and ask if they want you to try something different. Do NOT retry this same call.`;
           log.warn("tool", `Cross-turn dedup blocked: ${sig.slice(0, 80)} (attempt ${crossCount + 1})`);
           yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
           toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: skipMsg, is_error: true });
+          continue;
+        }
+
+        // Semantic loop detector: catch "similar but not identical" tool calls
+        // e.g. repeating nmap with different IP ranges, smbclient with different hosts
+        if (call.name === "Bash") {
+          const command = String((call.input as Record<string, unknown>).command ?? "");
+          const pattern = extractBashLoopPattern(command);
+          if (pattern) {
+            const entry = loopPatterns.get(pattern) ?? { count: 0, warned: false, examples: [] };
+            entry.count++;
+            if (entry.examples.length < 3) entry.examples.push(command.slice(0, 80));
+            loopPatterns.set(pattern, entry);
+
+            if (entry.count >= LOOP_PATTERN_HARD_STOP) {
+              // Hard redirect: execute the call but inject a mandatory strategy change
+              log.warn("tool", `Loop pattern HARD redirect (${pattern}): ${entry.count} similar calls`);
+              // Let this call execute but queue a redirect message after all tool results
+              entry.warned = true;
+            } else if (entry.count >= LOOP_PATTERN_THRESHOLD && !entry.warned) {
+              // Soft redirect: inject a strategy hint as a system note in the tool result
+              entry.warned = true;
+              log.info("tool", `Loop pattern detected (${pattern}): ${entry.count} similar calls, injecting redirect`);
+            }
+          }
+        }
+
+        // 0b. Check allowed/disallowed tools filter
+        if (this.config.allowedTools && this.config.allowedTools.length > 0 && !this.config.allowedTools.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+          const blockedContent = `Tool '${call.name}' is not in the allowed tools list`;
+          yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockedContent, isError: true };
+          toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
+          continue;
+        }
+        if (this.config.disallowedTools && this.config.disallowedTools.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+          const blockedContent = `Tool '${call.name}' is in the disallowed tools list`;
+          yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockedContent, isError: true };
+          toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
           continue;
         }
 
@@ -1211,10 +1524,32 @@ export class ConversationManager {
           }
         }
 
-        // 3. Capture undo snapshot for file-modifying tools
+        // 3a. Auto-checkpoint conversation state before file modifications
+        if (call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit") {
+          try {
+            this.saveCheckpoint(`auto:before-${call.name}`);
+          } catch { /* non-critical */ }
+        }
+
+        // 3b. Capture undo snapshot for file-modifying tools
         let undoSnapshot: import("./undo").FileSnapshot | null = null;
+        let undoSnapshots: import("./undo").FileSnapshot[] | null = null;
         if ((call.name === "Edit" || call.name === "Write") && typeof effectiveInput.file_path === "string") {
           undoSnapshot = this.undoManager.captureSnapshot(effectiveInput.file_path as string);
+        } else if (call.name === "MultiEdit" && Array.isArray(effectiveInput.edits)) {
+          // Capture snapshots for all files in a multi-edit
+          const seen = new Set<string>();
+          undoSnapshots = [];
+          for (const edit of effectiveInput.edits as Array<{ file_path?: string }>) {
+            const fp = edit.file_path;
+            if (typeof fp === "string" && !seen.has(fp)) {
+              seen.add(fp);
+              undoSnapshots.push(this.undoManager.captureSnapshot(fp));
+            }
+          }
+        } else if ((call.name === "Rename" || call.name === "GrepReplace") && !effectiveInput.dry_run) {
+          // For Rename/GrepReplace, we can't pre-capture all files (list unknown until execution)
+          // These tools handle many files — undo relies on git for bulk revert
         }
 
         // 4. Layer 6: World Model — predict outcome before executing
@@ -1229,7 +1564,54 @@ export class ConversationManager {
           input: effectiveInput,
         };
 
-        let result = await this.tools.execute(call.name, effectiveInput);
+        const toolStartMs = Date.now();
+        let result: import("./types").ToolResult;
+
+        // Stream Bash output in real-time via tool_stream events
+        if (call.name === "Bash" && !(effectiveInput as Record<string, unknown>).run_in_background) {
+          const streamQueue: string[] = [];
+          const { setBashStreamCallback } = await import("../tools/bash.js");
+          setBashStreamCallback((chunk) => { streamQueue.push(chunk); });
+          const toolPromise = this.tools.execute(call.name, effectiveInput);
+
+          // Poll for stream chunks while the tool is running
+          let done = false;
+          let toolResult: import("./types").ToolResult | undefined;
+          toolPromise.then((r) => { toolResult = r; done = true; });
+
+          while (!done) {
+            // Drain any queued stream chunks
+            while (streamQueue.length > 0) {
+              const chunk = streamQueue.shift()!;
+              yield { type: "tool_stream" as const, toolUseId: call.id, name: call.name, chunk };
+            }
+            // Wait a short interval before checking again
+            await new Promise((r) => setTimeout(r, 50));
+          }
+          // Drain remaining chunks after completion
+          while (streamQueue.length > 0) {
+            const chunk = streamQueue.shift()!;
+            yield { type: "tool_stream" as const, toolUseId: call.id, name: call.name, chunk };
+          }
+          setBashStreamCallback(undefined);
+          result = toolResult!;
+        } else {
+          result = await this.tools.execute(call.name, effectiveInput);
+        }
+
+        const toolDurationMs = Date.now() - toolStartMs;
+
+        // Record to persistent analytics
+        try {
+          const { recordToolEvent } = await import("./analytics.js");
+          recordToolEvent({
+            sessionId: this.sessionId,
+            toolName: call.name,
+            model: this.config.model,
+            durationMs: toolDurationMs,
+            isError: !!result.is_error,
+          });
+        } catch { /* non-critical */ }
 
         // Layer 6: Compare prediction with actual result
         try { if (prediction) getWorldModel().compare(prediction, result.content, result.is_error); } catch { /* ignore */ }
@@ -1269,6 +1651,23 @@ export class ConversationManager {
           // Also reset intention engine's action history for Bash/Read
           try { getIntentionEngine().resetTestFixCycle(); } catch { /* ignore */ }
           inlineWarningCount = 0;
+
+          // Invalidate tool cache for modified files
+          try {
+            const { getToolCache } = await import("./tool-cache.js");
+            const filePath = String(effectiveInput.file_path ?? "");
+            if (filePath) getToolCache().invalidate(filePath);
+          } catch { /* non-critical */ }
+        } else if (!result.is_error && call.name === "MultiEdit") {
+          try {
+            const { getToolCache } = await import("./tool-cache.js");
+            const edits = effectiveInput.edits as Array<{ file_path?: string }> | undefined;
+            if (edits) {
+              for (const edit of edits) {
+                if (edit.file_path) getToolCache().invalidate(edit.file_path);
+              }
+            }
+          } catch { /* non-critical */ }
         }
 
         // Record undo action if snapshot was captured and tool succeeded
@@ -1277,6 +1676,8 @@ export class ConversationManager {
             ? `Edit ${effectiveInput.file_path}`
             : `Write ${effectiveInput.file_path}`;
           this.undoManager.pushAction(call.name, [undoSnapshot], desc);
+        } else if (undoSnapshots && undoSnapshots.length > 0 && !result.is_error) {
+          this.undoManager.pushAction("MultiEdit", undoSnapshots, `MultiEdit ${undoSnapshots.length} file(s)`);
         }
 
         yield {
@@ -1285,6 +1686,7 @@ export class ConversationManager {
           toolUseId: call.id,
           result: result.content,
           isError: result.is_error,
+          durationMs: toolDurationMs,
         };
 
         // Truncate large tool results to protect context window
@@ -1313,19 +1715,24 @@ export class ConversationManager {
           });
         }
 
-        // 6. Auto-test suggestion: if Edit/Write succeeded, check for related tests
-        if ((call.name === "Edit" || call.name === "Write") && !result.is_error) {
+        // 6. Auto-test suggestion: if Edit/Write/MultiEdit succeeded, suggest related tests
+        if ((call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit") && !result.is_error) {
           try {
             const { getTestSuggestion } = await import("./auto-test.js");
-            const fp = String((call.input as any)?.file_path ?? "");
+            const fp = String((call.input as any)?.file_path ?? (call.input as any)?.edits?.[0]?.file_path ?? "");
             if (fp) {
               const suggestion = getTestSuggestion(fp, this.config.workingDirectory);
               if (suggestion) {
+                // Suggest running tests — the LLM can call TestRunner explicitly
+                // (which goes through the permission system properly)
+                const useRunner = this.tools.has("TestRunner");
                 yield {
                   type: "suggestion",
                   suggestions: [{
                     type: "test",
-                    message: `Related test: ${suggestion.testFile} -- run with: ${suggestion.command}`,
+                    message: useRunner
+                      ? `Related test found: ${suggestion.testFile} — use TestRunner tool to run it`
+                      : `Related test: ${suggestion.testFile} -- run with: ${suggestion.command}`,
                     priority: "low",
                   }],
                 };
@@ -1339,6 +1746,49 @@ export class ConversationManager {
         role: "user",
         content: toolResultBlocks,
       });
+
+      // ── Semantic loop redirect ──────────────────────────────────
+      // Check if any pattern has crossed the threshold and inject a redirect
+      for (const [pattern, entry] of loopPatterns) {
+        if (entry.count >= LOOP_PATTERN_HARD_STOP) {
+          const examples = entry.examples.join("\n  - ");
+          const redirectMsg = `[SYSTEM — LOOP DETECTED] You have run ${entry.count} similar "${pattern}" commands:\n  - ${examples}\n\nYou are stuck in a loop repeating the same approach. MANDATORY: You MUST now try a COMPLETELY DIFFERENT technique to solve this task. Think step by step:\n1. What have you tried so far? (${pattern})\n2. Why didn't it work?\n3. What is an alternative approach that does NOT use ${pattern}?\n\nDo NOT run another ${pattern} command. Use a different tool or strategy entirely. If no alternative exists, summarize your findings and present them to the user.`;
+          this.state.messages.push({ role: "user", content: redirectMsg });
+          log.warn("session", `Loop redirect HARD injected for pattern "${pattern}" (${entry.count} calls)`);
+          // Reset count so we don't spam (but keep warned=true)
+          entry.count = 0;
+          entry.examples = [];
+          break; // only inject one redirect per turn
+        } else if (entry.count >= LOOP_PATTERN_THRESHOLD && entry.warned) {
+          // Soft redirect — nudge, don't force
+          const redirectMsg = `[SYSTEM — PATTERN NOTICE] You have run ${entry.count} similar "${pattern}" commands. Consider whether you are making progress or repeating yourself. If the current approach is not yielding results, try a different strategy. You can still use ${pattern} if you have a genuinely new angle, but avoid repeating failed variations.`;
+          this.state.messages.push({ role: "user", content: redirectMsg });
+          log.info("session", `Loop redirect SOFT injected for pattern "${pattern}" (${entry.count} calls)`);
+          // Only inject soft redirect once per threshold crossing
+          entry.warned = false; // will re-trigger, but count keeps incrementing toward HARD_STOP
+          break;
+        }
+      }
+
+      // Mid-loop budget guard: warn at 80%, stop at 100%
+      if (this.config.maxBudgetUsd && this.config.maxBudgetUsd > 0) {
+        try {
+          const { getModelPricing, calculateCost } = await import("./pricing.js");
+          const pricing = await getModelPricing(this.config.model);
+          if (pricing) {
+            const cost = calculateCost(pricing, this.cumulativeUsage.inputTokens, this.cumulativeUsage.outputTokens);
+            const pct = Math.round((cost / this.config.maxBudgetUsd) * 100);
+            if (cost >= this.config.maxBudgetUsd) {
+              yield { type: "budget_warning", costUsd: cost, limitUsd: this.config.maxBudgetUsd, pct: 100 };
+              yield { type: "error", error: new Error(`Budget exhausted mid-loop: $${cost.toFixed(2)} >= $${this.config.maxBudgetUsd.toFixed(2)}`), retryable: false };
+              yield { type: "turn_end", stopReason: "budget_exceeded" };
+              return;
+            } else if (pct >= 80) {
+              yield { type: "budget_warning", costUsd: cost, limitUsd: this.config.maxBudgetUsd, pct };
+            }
+          }
+        } catch { /* non-critical */ }
+      }
 
       // Layer 9: Inline warning — detect wasted context mid-loop
       try {
@@ -1435,9 +1885,10 @@ export class ConversationManager {
         // Adjust parameters based on effort level
         const effort = this.config.effortLevel ?? "medium";
         const effortMaxTokens = effort === "low" ? Math.min(this.config.maxTokens, 4096)
+          : effort === "max" ? Math.max(this.config.maxTokens, 65536)
           : effort === "high" ? Math.max(this.config.maxTokens, 32768)
           : this.config.maxTokens;
-        const effortTemperature = effort === "low" ? 0.3 : effort === "high" ? 0.7 : undefined;
+        const effortTemperature = effort === "low" ? 0.3 : effort === "max" ? 0.9 : effort === "high" ? 0.7 : undefined;
 
         const body: Record<string, unknown> = {
           model: effectiveModel,
@@ -1519,6 +1970,134 @@ export class ConversationManager {
           continue;
         }
 
+        // Fallback model: if primary exhausted retries, try the fallback
+        if (this.config.fallbackModel && this.config.fallbackModel !== this.config.model) {
+          log.warn("llm", `Primary model failed, switching to fallback: ${this.config.fallbackModel}`);
+          try {
+            const fallbackBase = await getModelBaseUrl(this.config.fallbackModel, this.config.apiBase);
+            const fallbackUrl = `${fallbackBase}/v1/chat/completions`;
+            const openAIMessages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
+            const openAITools = convertToOpenAITools(this.tools.getDefinitions());
+
+            const fallbackBody: Record<string, unknown> = {
+              model: this.config.fallbackModel,
+              messages: openAIMessages,
+              max_tokens: this.config.maxTokens,
+              stream: true,
+            };
+            if (openAITools.length > 0) fallbackBody.tools = openAITools;
+
+            const fallbackHeaders: Record<string, string> = { "Content-Type": "application/json" };
+            // Only send API key to fallback if it's on the same base URL (avoid credential leak)
+            const primaryBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
+            if (this.config.apiKey && fallbackBase === primaryBase) {
+              fallbackHeaders["Authorization"] = `Bearer ${this.config.apiKey}`;
+            }
+
+            const fallbackResp = await fetch(fallbackUrl, {
+              method: "POST",
+              headers: fallbackHeaders,
+              body: JSON.stringify(fallbackBody),
+              signal: this.abortController?.signal,
+            });
+
+            if (fallbackResp.ok && fallbackResp.body) {
+              log.info("llm", `Fallback model ${this.config.fallbackModel} connected`);
+              return parseSSEStream(fallbackResp);
+            }
+          } catch (fallbackErr) {
+            log.error("llm", `Fallback model also failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`);
+          }
+        }
+
+        // Tertiary model: ultra-lightweight last resort
+        if (this.config.tertiaryModel && this.config.tertiaryModel !== this.config.model && this.config.tertiaryModel !== this.config.fallbackModel) {
+          log.warn("llm", `Primary + fallback failed, trying tertiary model: ${this.config.tertiaryModel}`);
+          try {
+            const tertiaryBase = await getModelBaseUrl(this.config.tertiaryModel, this.config.apiBase);
+            const tertiaryUrl = `${tertiaryBase}/v1/chat/completions`;
+            // Rebuild messages for tertiary (fallback block vars are out of scope)
+            const tertiaryMessages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
+            // Tertiary model: skip tools for maximum compatibility with small models
+            const tertiaryBody: Record<string, unknown> = {
+              model: this.config.tertiaryModel,
+              messages: tertiaryMessages,
+              max_tokens: Math.min(this.config.maxTokens, 4096),
+              stream: true,
+            };
+
+            const tertiaryHeaders: Record<string, string> = { "Content-Type": "application/json" };
+            const tertiaryPrimaryBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
+            if (this.config.apiKey && tertiaryBase === tertiaryPrimaryBase) {
+              tertiaryHeaders["Authorization"] = `Bearer ${this.config.apiKey}`;
+            }
+
+            const tertiaryResp = await fetch(tertiaryUrl, {
+              method: "POST",
+              headers: tertiaryHeaders,
+              body: JSON.stringify(tertiaryBody),
+              signal: this.abortController?.signal,
+            });
+
+            if (tertiaryResp.ok && tertiaryResp.body) {
+              log.info("llm", `Tertiary model ${this.config.tertiaryModel} connected (no tools)`);
+              return parseSSEStream(tertiaryResp);
+            }
+          } catch (tertiaryErr) {
+            log.error("llm", `Tertiary model also failed: ${tertiaryErr instanceof Error ? tertiaryErr.message : tertiaryErr}`);
+          }
+        }
+
+        // Fallback chain: try each model in fallbackModels[] once
+        if (this.config.fallbackModels && this.config.fallbackModels.length > 0) {
+          const triedModels = new Set([
+            this.config.model,
+            this.config.fallbackModel,
+            this.config.tertiaryModel,
+          ].filter(Boolean));
+
+          for (const chainModel of this.config.fallbackModels) {
+            if (triedModels.has(chainModel)) continue;
+            triedModels.add(chainModel);
+
+            log.warn("llm", `Falling back to model: ${chainModel}`);
+            try {
+              const chainBase = await getModelBaseUrl(chainModel, this.config.apiBase);
+              const chainUrl = `${chainBase}/v1/chat/completions`;
+              const chainMessages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
+              const chainTools = convertToOpenAITools(this.tools.getDefinitions());
+
+              const chainBody: Record<string, unknown> = {
+                model: chainModel,
+                messages: chainMessages,
+                max_tokens: this.config.maxTokens,
+                stream: true,
+              };
+              if (chainTools.length > 0) chainBody.tools = chainTools;
+
+              const chainHeaders: Record<string, string> = { "Content-Type": "application/json" };
+              const primaryBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
+              if (this.config.apiKey && chainBase === primaryBase) {
+                chainHeaders["Authorization"] = `Bearer ${this.config.apiKey}`;
+              }
+
+              const chainResp = await fetch(chainUrl, {
+                method: "POST",
+                headers: chainHeaders,
+                body: JSON.stringify(chainBody),
+                signal: this.abortController?.signal,
+              });
+
+              if (chainResp.ok && chainResp.body) {
+                log.info("llm", `Fallback chain model ${chainModel} connected`);
+                return parseSSEStream(chainResp);
+              }
+            } catch (chainErr) {
+              log.error("llm", `Fallback chain model ${chainModel} failed: ${chainErr instanceof Error ? chainErr.message : chainErr}`);
+            }
+          }
+        }
+
         log.error("llm", `Request failed: ${lastError.message}`, lastError);
         throw lastError;
       }
@@ -1533,7 +2112,7 @@ export class ConversationManager {
    * Prune older messages when approaching the context window limit.
    * Keeps the system prompt, first user message, and recent messages.
    */
-  private async pruneMessagesIfNeeded(): Promise<void> {
+  private async *pruneMessagesIfNeeded(): AsyncGenerator<StreamEvent> {
     // Use the higher of: tracked token count or estimated from message content
     const estimatedTokens = this.estimateContextTokens();
     const effectiveCount = Math.max(this.state.tokenCount, estimatedTokens);
@@ -1549,8 +2128,8 @@ export class ConversationManager {
 
     log.info("session", `Context pruning triggered: ~${estimatedTokens} tokens, threshold ${Math.floor(threshold)}`);
 
-    // Phase 1: Compress large tool results in older messages (keep last 6 messages intact)
-    const compressibleEnd = Math.max(0, messages.length - 6);
+    // Phase 1: Compress large tool results in older messages (keep last 10 messages intact)
+    const compressibleEnd = Math.max(0, messages.length - 10);
     let compressed = 0;
     for (let i = 0; i < compressibleEnd; i++) {
       const msg = messages[i];
@@ -1573,6 +2152,8 @@ export class ConversationManager {
 
     if (compressed > 0) {
       log.info("session", `Compressed ${compressed} tool results`);
+      yield { type: "compaction_start", messageCount: compressed, tokensBefore: effectiveCount };
+      yield { type: "compaction_end", tokensAfter: this.estimateContextTokens(), method: "compressed" };
     }
 
     // Re-check after compression
@@ -1584,7 +2165,7 @@ export class ConversationManager {
 
     // Phase 2: Auto-compact via LLM summary instead of blind pruning
     const keepFirst = 1;
-    const keepLast = 6;
+    const keepLast = 10; // Keep enough recent messages to preserve tool call/result pairs
 
     if (messages.length <= keepFirst + keepLast) {
       return;
@@ -1596,16 +2177,25 @@ export class ConversationManager {
     );
 
     if (pruneCount > 0) {
+      // Notify UI that compaction is starting
+      yield { type: "compaction_start", messageCount: pruneCount, tokensBefore: effectiveCount };
+
       // Try LLM-based compaction first, fall back to simple pruning
       const toPrune = messages.slice(keepFirst, keepFirst + pruneCount);
       try {
         const { CompactionManager } = await import("./compaction.js");
-        const compactor = new CompactionManager(this.config.apiKey, this.config.model, this.config.apiBase);
+        // Use tertiary/fallback model for compaction to avoid competing with the main model for GPU
+        const compactModel = this.config.tertiaryModel ?? this.config.fallbackModel ?? this.config.model;
+        if (compactModel === this.config.model) {
+          log.warn("session", "No tertiary/fallback model configured — compaction uses the primary model (may compete for GPU)");
+        }
+        const compactor = new CompactionManager(this.config.apiKey, compactModel, this.config.apiBase);
         const summary = await compactor.compact(toPrune);
         if (summary) {
           messages.splice(keepFirst, pruneCount, summary);
           this.state.tokenCount = this.estimateContextTokens();
           log.info("session", `Auto-compacted ${pruneCount} messages into summary, ~${this.state.tokenCount} tokens remaining`);
+          yield { type: "compaction_end", tokensAfter: this.state.tokenCount, method: "llm" };
           return;
         }
       } catch (err) {
@@ -1616,6 +2206,7 @@ export class ConversationManager {
       messages.splice(keepFirst, pruneCount);
       this.state.tokenCount = this.estimateContextTokens();
       log.info("session", `Pruned ${pruneCount} old messages, ~${this.state.tokenCount} tokens remaining`);
+      yield { type: "compaction_end", tokensAfter: this.state.tokenCount, method: "pruned" };
     }
   }
 
@@ -1692,8 +2283,132 @@ export class ConversationManager {
     return { ...this.state };
   }
 
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
   getUsage(): TokenUsage {
     return { ...this.cumulativeUsage };
+  }
+
+  getCompactThreshold(): number {
+    return this.compactThreshold;
+  }
+
+  setCompactThreshold(value: number): void {
+    this.compactThreshold = Math.max(0, Math.min(0.99, value));
+  }
+
+  getTurnCosts(): TurnCostEntry[] {
+    return [...this.turnCosts];
+  }
+
+  formatCostBreakdown(): string {
+    if (this.turnCosts.length === 0) return "";
+    const lines: string[] = ["", "Turn-by-turn breakdown:"];
+    for (const t of this.turnCosts) {
+      const toolSuffix = t.toolCalls.length > 0 ? ` (${t.toolCalls.length} tool${t.toolCalls.length !== 1 ? "s" : ""})` : "";
+      const costStr = t.costUsd > 0
+        ? (t.costUsd < 0.01 ? `$${t.costUsd.toFixed(4)}` : `$${t.costUsd.toFixed(2)}`)
+        : "$0.00";
+      lines.push(
+        `  Turn ${t.turnIndex}: ${t.model}${toolSuffix} — ${t.inputTokens.toLocaleString()} in / ${t.outputTokens.toLocaleString()} out — ${costStr}`,
+      );
+    }
+    return lines.join("\n");
+  }
+
+  /**
+   * Save a checkpoint of the current conversation state.
+   * @param label Optional label for the checkpoint (defaults to auto-generated)
+   */
+  saveCheckpoint(label?: string): void {
+    const cpLabel = label ?? `checkpoint-${this.checkpoints.length + 1}`;
+    // Only checkpoint if message count is reasonable (avoid OOM)
+    if (this.state.messages.length > 500) return;
+
+    this.checkpoints.push({
+      label: cpLabel,
+      messageIndex: this.state.messages.length,
+      undoSize: this.undoManager.size,
+      timestamp: Date.now(),
+    });
+    if (this.checkpoints.length > ConversationManager.MAX_CHECKPOINTS) {
+      this.checkpoints.shift();
+    }
+  }
+
+  /**
+   * Rewind conversation to a specific checkpoint by index.
+   * If no index is provided, rewinds to the most recent checkpoint.
+   * Also undoes file changes back to that point.
+   * Returns a description of what was rewound, or null if no checkpoints.
+   */
+  rewindToCheckpoint(index?: number): string | null {
+    if (this.checkpoints.length === 0) return null;
+
+    // Determine which checkpoint to rewind to
+    let cpIndex: number;
+    if (index === undefined) {
+      cpIndex = this.checkpoints.length - 1;
+    } else if (index < 0 || index >= this.checkpoints.length) {
+      return `Invalid checkpoint index ${index}. Available: 0-${this.checkpoints.length - 1}`;
+    } else {
+      cpIndex = index;
+    }
+
+    const cp = this.checkpoints[cpIndex]!;
+
+    // Remove this checkpoint and all after it
+    this.checkpoints = this.checkpoints.slice(0, cpIndex);
+
+    // Undo file changes back to checkpoint's undo stack size
+    const undosNeeded = this.undoManager.size - cp.undoSize;
+    const undone: string[] = [];
+    for (let i = 0; i < undosNeeded; i++) {
+      const result = this.undoManager.undo();
+      if (result) undone.push(result);
+    }
+
+    // Truncate messages back to checkpoint's message index (clamped to current length in case pruning shortened the array)
+    const safeIndex = Math.min(cp.messageIndex, this.state.messages.length);
+    this.state.messages = this.state.messages.slice(0, safeIndex);
+    const age = Math.round((Date.now() - cp.timestamp) / 1000);
+
+    return [
+      `Rewound to checkpoint "${cp.label}" (${age}s ago, message index ${cp.messageIndex})`,
+      undone.length > 0 ? `File changes undone:\n${undone.join("\n")}` : "No file changes to undo.",
+      `Remaining checkpoints: ${this.checkpoints.length}`,
+    ].join("\n");
+  }
+
+  /**
+   * List all saved checkpoints with their labels and timestamps.
+   */
+  listCheckpoints(): Array<{ index: number; label: string; messageIndex: number; timestamp: number; age: string }> {
+    return this.checkpoints.map((cp, i) => {
+      const ageMs = Date.now() - cp.timestamp;
+      const ageSec = Math.round(ageMs / 1000);
+      let age: string;
+      if (ageSec < 60) age = `${ageSec}s ago`;
+      else if (ageSec < 3600) age = `${Math.round(ageSec / 60)}m ago`;
+      else age = `${Math.round(ageSec / 3600)}h ago`;
+
+      return {
+        index: i,
+        label: cp.label,
+        messageIndex: cp.messageIndex,
+        timestamp: cp.timestamp,
+        age,
+      };
+    });
+  }
+
+  /**
+   * Get number of available checkpoints.
+   */
+  getCheckpointCount(): number {
+    return this.checkpoints.length;
   }
 
   /**
@@ -1731,17 +2446,40 @@ export class ConversationManager {
    * Optionally truncate to a specific message count (fork from a point in history).
    */
   forkConversation(keepMessages?: number): { messageCount: number; sessionId: string } {
+    const previousSessionId = this.sessionId;
     const msgs = keepMessages
       ? this.state.messages.slice(0, keepMessages)
       : [...this.state.messages];
-    // Start a new transcript
+    // Start a new transcript (only if session persistence is enabled)
     this.transcript = new TranscriptManager();
     const summary = msgs.length > 0
       ? (typeof msgs[0].content === "string" ? msgs[0].content : "[forked session]").slice(0, 80)
       : "forked session";
-    this.transcript.startSession(`[FORK] ${summary}`);
+    if (!this.config.noSessionPersistence) {
+      this.transcript.startSession(`[FORK] ${summary}`);
+    }
     this.state.messages = msgs;
-    return { messageCount: msgs.length, sessionId: "forked" };
+
+    // Generate new session ID for the fork
+    const newSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.sessionId = newSessionId;
+
+    // Persist branch relationship (only if session persistence is enabled)
+    if (!this.config.noSessionPersistence) {
+      try {
+        const bm = getBranchManager();
+        // Ensure parent branch is registered (if not already)
+        const parentBranch = bm.getBranch(previousSessionId);
+        if (!parentBranch) {
+          bm.saveBranch(previousSessionId, null, summary, `session-${previousSessionId}`, msgs.length);
+        }
+        bm.saveBranch(newSessionId, previousSessionId, `[FORK] ${summary}`, `session-${newSessionId}`, msgs.length);
+      } catch {
+        // Branch persistence is best-effort; don't break fork if db fails
+      }
+    }
+
+    return { messageCount: msgs.length, sessionId: newSessionId };
   }
 
   /**
@@ -1803,6 +2541,7 @@ export class ConversationManager {
       cacheCreationInputTokens: 0,
       cacheReadInputTokens: 0,
     };
+    this.turnCosts = [];
   }
 
   /** Fast string hash for cache comparison (djb2). */
@@ -1822,11 +2561,14 @@ export class ConversationManager {
   /** Send a desktop notification (Linux: notify-send, macOS: osascript). */
   sendNotification(title: string, body: string): void {
     try {
+      // Strip anything that could break shell quoting
+      const safeTitle = title.replace(/[^a-zA-Z0-9 _.!?-]/g, "");
+      const safeBody = body.replace(/[^a-zA-Z0-9 _.!?:,()-]/g, "");
       const { execSync } = require("node:child_process");
       if (process.platform === "linux") {
-        execSync(`notify-send "${title.replace(/"/g, '\\"')}" "${body.replace(/"/g, '\\"')}" 2>/dev/null`, { timeout: 3000 });
+        execSync(`notify-send "${safeTitle}" "${safeBody}" 2>/dev/null`, { timeout: 3000 });
       } else if (process.platform === "darwin") {
-        execSync(`osascript -e 'display notification "${body.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"' 2>/dev/null`, { timeout: 3000 });
+        execSync(`osascript -e 'display notification "${safeBody}" with title "${safeTitle}"' 2>/dev/null`, { timeout: 3000 });
       }
     } catch {
       // Silent failure — notifications are best-effort

@@ -114,6 +114,13 @@ export class UndoManager {
   }
 
   /**
+   * List all actions in the stack (most recent first).
+   */
+  list(): UndoAction[] {
+    return [...this.stack].reverse();
+  }
+
+  /**
    * Clear the entire undo stack.
    */
   clear(): void {

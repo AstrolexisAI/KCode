@@ -88,19 +88,12 @@ function wrapWithLight(
   // - Read-only HOME (commands can read configs but not modify dotfiles)
   // - Writable only in cwd and /tmp
   // - No access to sensitive dirs
-  const guards: string[] = [];
-
-  // Block writes to critical system paths
-  const blockedPaths = [
-    "/etc", "/usr", "/bin", "/sbin", "/boot", "/root",
-    "$HOME/.ssh", "$HOME/.gnupg", "$HOME/.bashrc", "$HOME/.zshrc",
-    "$HOME/.profile", "$HOME/.bash_profile",
-  ];
 
   // Create a wrapper that sets umask and traps dangerous operations
+  const safeTmpDir = shellQuote(config.tmpDir);
   const wrapper = `
 set -u
-export TMPDIR="${config.tmpDir}"
+export TMPDIR=${safeTmpDir}
 export SANDBOX=1
 # Block rm -rf / and similar catastrophic commands
 __kcode_guard() {
@@ -182,8 +175,8 @@ function wrapWithBwrap(
     bwrapArgs.push("--unshare-net");
   }
 
-  // Set working directory
-  bwrapArgs.push("--chdir", process.cwd());
+  // Set working directory to the first writable path (project dir)
+  bwrapArgs.push("--chdir", config.allowWritePaths[0] ?? process.cwd());
 
   // The actual command
   bwrapArgs.push("--", "bash", "-c", command);

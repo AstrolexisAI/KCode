@@ -5,6 +5,7 @@ import React from "react";
 import { Box, Text, Static } from "ink";
 import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
+import MarkdownRenderer from "./MarkdownRenderer.js";
 import { useTheme } from "../ThemeContext.js";
 
 // --- Types for rendered message entries ---
@@ -26,6 +27,7 @@ export interface ToolResultEntry {
   name: string;
   result: string;
   isError?: boolean;
+  durationMs?: number;
 }
 
 export interface ThinkingEntry {
@@ -82,6 +84,8 @@ interface MessageListProps {
   turnStartTime?: number;
   /** Current spinner phase */
   spinnerPhase?: "thinking" | "streaming" | "tool";
+  /** Live streaming output from a running Bash command */
+  bashStreamOutput?: string;
 }
 
 export default function MessageList({
@@ -94,6 +98,7 @@ export default function MessageList({
   turnTokens = 0,
   turnStartTime,
   spinnerPhase = "thinking",
+  bashStreamOutput = "",
 }: MessageListProps) {
   return (
     <Box flexDirection="column">
@@ -117,8 +122,13 @@ export default function MessageList({
       {/* Currently streaming text */}
       {streamingText.length > 0 && (
         <Box paddingLeft={0}>
-          <MarkdownText text={streamingText} />
+          <MarkdownRenderer text={streamingText} />
         </Box>
+      )}
+
+      {/* Live streaming Bash output */}
+      {bashStreamOutput.length > 0 && (
+        <BashStreamDisplay output={bashStreamOutput} />
       )}
 
       {/* Loading spinner with tokens and elapsed time */}
@@ -143,7 +153,7 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
     case "tool_use":
       return <ToolUseMessage name={entry.name} summary={entry.summary} />;
     case "tool_result":
-      return <ToolResultMessage name={entry.name} result={entry.result} isError={entry.isError} />;
+      return <ToolResultMessage name={entry.name} result={entry.result} isError={entry.isError} durationMs={entry.durationMs} />;
     case "thinking":
       return <ThinkingMessage text={entry.text} />;
     case "banner":
@@ -171,10 +181,10 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
     );
   }
 
-  // Assistant text - render with markdown formatting
+  // Assistant text - render with streaming markdown renderer
   return (
     <Box paddingLeft={0}>
-      <MarkdownText text={text} />
+      <MarkdownRenderer text={text} />
     </Box>
   );
 }
@@ -193,21 +203,30 @@ function ToolUseMessage({ name, summary }: { name: string; summary: string }) {
   );
 }
 
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms / 60000)}m${Math.round((ms % 60000) / 1000)}s`;
+}
+
 function ToolResultMessage({
   name,
   result,
   isError,
+  durationMs,
 }: {
   name: string;
   result: string;
   isError?: boolean;
+  durationMs?: number;
 }) {
   const { theme } = useTheme();
+  const durationStr = durationMs != null && durationMs > 100 ? ` (${formatDuration(durationMs)})` : "";
 
   if (isError) {
     return (
       <Box flexDirection="column" paddingLeft={2}>
-        <Text color={theme.error}>{"✗ "}{name} failed</Text>
+        <Text color={theme.error}>{"✗ "}{name} failed{durationStr}</Text>
         <Text dimColor color={theme.error}>{"    "}{result.slice(0, 200)}</Text>
       </Box>
     );
@@ -216,7 +235,7 @@ function ToolResultMessage({
   const preview = result.split("\n").slice(0, 3).join("\n    ");
   return (
     <Box flexDirection="column" paddingLeft={2}>
-      <Text color={theme.toolResult} dimColor>{"✓ "}{name}</Text>
+      <Text color={theme.toolResult} dimColor>{"✓ "}{name}{durationStr}</Text>
       {preview.length > 0 && preview.length < 500 && (
         <Text dimColor>{"    "}{preview}</Text>
       )}
@@ -314,149 +333,23 @@ function BannerMessage({ title, subtitle }: { title: string; subtitle: string })
   );
 }
 
-/** Render inline markdown formatting (bold, code, links) within a single line */
-function renderInline(line: string, keyPrefix: string, theme: import("../../core/theme.js").Theme): React.ReactElement {
-  // Split by inline patterns: **bold**, `code`, [text](url)
-  const parts: React.ReactElement[] = [];
-  let remaining = line;
-  let partIndex = 0;
-
-  while (remaining.length > 0) {
-    // Find the earliest match among our patterns
-    const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-    const codeMatch = remaining.match(/`([^`]+)`/);
-    const linkMatch = remaining.match(/\[([^\]]+)\]\(([^)]+)\)/);
-
-    // Determine which match comes first
-    type MatchInfo = { type: "bold" | "code" | "link"; index: number; fullMatch: string };
-    const candidates: MatchInfo[] = [];
-    if (boldMatch?.index !== undefined) candidates.push({ type: "bold", index: boldMatch.index, fullMatch: boldMatch[0] });
-    if (codeMatch?.index !== undefined) candidates.push({ type: "code", index: codeMatch.index, fullMatch: codeMatch[0] });
-    if (linkMatch?.index !== undefined) candidates.push({ type: "link", index: linkMatch.index, fullMatch: linkMatch[0] });
-
-    if (candidates.length === 0) {
-      // No more patterns - emit the rest as plain text
-      if (remaining.length > 0) {
-        parts.push(<Text key={`${keyPrefix}-${partIndex++}`}>{remaining}</Text>);
-      }
-      break;
-    }
-
-    // Pick the earliest match
-    candidates.sort((a, b) => a.index - b.index);
-    const first = candidates[0]!;
-
-    // Emit text before the match
-    if (first.index > 0) {
-      parts.push(<Text key={`${keyPrefix}-${partIndex++}`}>{remaining.slice(0, first.index)}</Text>);
-    }
-
-    // Emit the formatted match
-    if (first.type === "bold") {
-      const content = boldMatch![1]!;
-      parts.push(<Text key={`${keyPrefix}-${partIndex++}`} bold>{content}</Text>);
-    } else if (first.type === "code") {
-      const content = codeMatch![1]!;
-      parts.push(<Text key={`${keyPrefix}-${partIndex++}`} color={theme.warning}>{content}</Text>);
-    } else if (first.type === "link") {
-      const linkText = linkMatch![1]!;
-      const linkUrl = linkMatch![2]!;
-      parts.push(
-        <Text key={`${keyPrefix}-${partIndex++}`}>{linkText} </Text>,
-      );
-      parts.push(
-        <Text key={`${keyPrefix}-${partIndex++}`} color={theme.dimmed}>({linkUrl})</Text>,
-      );
-    }
-
-    remaining = remaining.slice(first.index + first.fullMatch.length);
-  }
-
-  if (parts.length === 0) {
-    return <Text key={keyPrefix}>{""}</Text>;
-  }
-  if (parts.length === 1) {
-    return parts[0]!;
-  }
-  return <Text key={keyPrefix}>{parts}</Text>;
-}
-
-/** Markdown text renderer for assistant messages */
-function MarkdownText({ text }: { text: string }): React.ReactElement {
+function BashStreamDisplay({ output }: { output: string }) {
   const { theme } = useTheme();
-  const lines = text.split("\n");
-  const elements: React.ReactElement[] = [];
-  let i = 0;
 
-  while (i < lines.length) {
-    const line = lines[i]!;
-
-    // Code block: ```lang ... ```
-    const codeBlockStart = line.match(/^```(\w*)$/);
-    if (codeBlockStart) {
-      const lang = codeBlockStart[1] || "";
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i]!.match(/^```\s*$/)) {
-        codeLines.push(lines[i]!);
-        i++;
-      }
-      // Skip closing ```
-      i++;
-
-      elements.push(
-        <Box key={`block-${elements.length}`} flexDirection="column" borderStyle="single" borderColor={theme.dimmed} paddingLeft={1} paddingRight={1} marginTop={0} marginBottom={0}>
-          {lang && <Text color={theme.dimmed}>{lang}</Text>}
-          <Text color={theme.warning}>{codeLines.join("\n")}</Text>
-        </Box>,
-      );
-      continue;
-    }
-
-    // Headers: # ## ###
-    const headerMatch = line.match(/^(#{1,3})\s+(.+)$/);
-    if (headerMatch) {
-      elements.push(
-        <Text key={`line-${elements.length}`} bold color={theme.primary}>{headerMatch[2]!}</Text>,
-      );
-      i++;
-      continue;
-    }
-
-    // List items: - item or * item
-    const listMatch = line.match(/^[\s]*[-*]\s+(.+)$/);
-    if (listMatch) {
-      const indent = line.match(/^(\s*)/)?.[1] ?? "";
-      elements.push(
-        <Text key={`line-${elements.length}`}>{indent}  {"• "}{renderInline(listMatch[1]!, `li-${elements.length}`, theme)}</Text>,
-      );
-      i++;
-      continue;
-    }
-
-    // Numbered list items: 1. item
-    const numListMatch = line.match(/^[\s]*(\d+)\.\s+(.+)$/);
-    if (numListMatch) {
-      const indent = line.match(/^(\s*)/)?.[1] ?? "";
-      elements.push(
-        <Text key={`line-${elements.length}`}>{indent}  {numListMatch[1]!}. {renderInline(numListMatch[2]!, `nl-${elements.length}`, theme)}</Text>,
-      );
-      i++;
-      continue;
-    }
-
-    // Regular line with inline formatting
-    elements.push(
-      <Box key={`line-${elements.length}`}>
-        {renderInline(line, `p-${elements.length}`, theme)}
-      </Box>,
-    );
-    i++;
-  }
+  // Show only the last 10 lines of output for a compact live view
+  const lines = output.split("\n");
+  const displayLines = lines.length > 10 ? lines.slice(-10) : lines;
+  const truncated = lines.length > 10;
 
   return (
-    <Box flexDirection="column">
-      {elements}
+    <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
+      <Text color={theme.warning} bold>{"  streaming"}</Text>
+      {truncated && (
+        <Text dimColor color={theme.dimmed}>{"    "}...({lines.length - 10} lines above)</Text>
+      )}
+      {displayLines.map((line, i) => (
+        <Text key={`stream-${i}`} dimColor>{"    "}{line}</Text>
+      ))}
     </Box>
   );
 }

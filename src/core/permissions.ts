@@ -3,7 +3,7 @@
 
 import type { PermissionMode, PermissionRule, PermissionRuleAction, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
 import { resolve, isAbsolute } from "node:path";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { log } from "./logger";
 import { generateDiff, formatDiffPreview } from "./diff";
 
@@ -245,7 +245,51 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
     };
   }
 
-  const resolved = resolve(filePath);
+  let resolved = resolve(filePath);
+
+  // Resolve symlinks to prevent directory traversal via symlink chains
+  try {
+    // Only resolve symlinks if the parent directory exists
+    const dir = resolved.split("/").slice(0, -1).join("/");
+    if (dir && existsSync(dir)) {
+      const realDir = realpathSync(dir);
+      const basename = resolved.split("/").pop() ?? "";
+      resolved = realDir + "/" + basename;
+    }
+  } catch {
+    // If realpath fails, continue with resolved path
+  }
+
+  // Block writes to system directories (checked first for specific error messages)
+  const PROTECTED_DIRS = [
+    "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64",
+    "/boot", "/proc", "/sys", "/dev", "/var/run", "/var/lock",
+  ];
+  for (const dir of PROTECTED_DIRS) {
+    if (resolved.startsWith(dir + "/") || resolved === dir) {
+      return {
+        allowed: false,
+        reason: `Write blocked: "${resolved}" is in a protected system directory`,
+      };
+    }
+  }
+
+  // Block writes to sensitive home directory dotfiles/dirs
+  const home = process.env.HOME ?? "/root";
+  const SENSITIVE_HOME_PATTERNS = [
+    ".ssh", ".gnupg", ".gpg", ".aws", ".azure", ".kube", ".docker",
+    ".config/gcloud", ".config/gh",
+    ".npmrc", ".pypirc", ".netrc", ".git-credentials",
+  ];
+  for (const pattern of SENSITIVE_HOME_PATTERNS) {
+    const fullPath = `${home}/${pattern}`;
+    if (resolved.startsWith(fullPath + "/") || resolved === fullPath) {
+      return {
+        allowed: false,
+        reason: `Write blocked: "${pattern}" contains sensitive credentials`,
+      };
+    }
+  }
 
   // Block writes outside the working directory (unless explicitly to /tmp or an additional dir)
   const inAdditionalDir = additionalDirs?.some((d) => resolved.startsWith(d)) ?? false;
@@ -256,9 +300,13 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
     };
   }
 
-  // Block writes to dotfiles that control tool behavior
+  // Block writes to dotfiles that control shell/tool behavior
   const basename = resolved.split("/").pop() ?? "";
-  const sensitiveFiles = [".env", ".bashrc", ".zshrc", ".profile", ".bash_profile"];
+  const sensitiveFiles = [
+    ".env", ".env.local", ".env.production",
+    ".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile",
+    ".gitconfig", ".gitignore_global",
+  ];
   if (sensitiveFiles.includes(basename)) {
     return {
       allowed: false,
@@ -279,7 +327,8 @@ const WRITE_TOOLS = new Set(["Bash", "Write", "Edit"]);
 
 /** Tools auto-allowed in acceptEdits mode (everything except Bash) */
 const ACCEPT_EDITS_TOOLS = new Set([
-  "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch", "Learn", "Agent", "Tasks",
+  "Read", "Write", "Edit", "MultiEdit", "GrepReplace", "Rename",
+  "Glob", "Grep", "WebFetch", "WebSearch", "Learn", "Agent", "Tasks",
 ]);
 
 // ─── Permission Rules Engine ────────────────────────────────────
@@ -337,6 +386,20 @@ function getToolMatchValue(tool: ToolUseBlock): string {
       const input = tool.input as unknown as FileEditInput;
       return input.file_path;
     }
+    case "MultiEdit": {
+      // Match against all files in the edits array — rule must match every path
+      const input = tool.input as { edits?: Array<{ file_path?: string }> };
+      const paths = (input.edits ?? []).map(e => e.file_path ?? "").filter(Boolean);
+      return paths.join("\n") || "";
+    }
+    case "GrepReplace": {
+      const input = tool.input as { path?: string };
+      return input.path ?? "";
+    }
+    case "Rename": {
+      const input = tool.input as { scope?: string; symbol?: string };
+      return input.scope ?? input.symbol ?? "";
+    }
     case "WebFetch": {
       const input = tool.input as { url?: string };
       if (input.url) {
@@ -346,6 +409,22 @@ function getToolMatchValue(tool: ToolUseBlock): string {
         } catch { return input.url; }
       }
       return "";
+    }
+    case "Read": {
+      const input = tool.input as { file_path?: string };
+      return input.file_path ?? "";
+    }
+    case "Glob": {
+      const input = tool.input as { pattern?: string; path?: string };
+      return input.path ?? input.pattern ?? "";
+    }
+    case "Grep": {
+      const input = tool.input as { path?: string; pattern?: string };
+      return input.path ?? input.pattern ?? "";
+    }
+    case "WebSearch": {
+      const input = tool.input as { query?: string };
+      return input.query ?? "";
     }
     default:
       return tool.name;
@@ -374,6 +453,13 @@ export function evaluateRules(rules: PermissionRule[], tool: ToolUseBlock): Perm
     if (tool.name === "WebFetch" && parsed.innerPattern.startsWith("domain:")) {
       const domain = parsed.innerPattern.slice(7);
       if (globMatch(domain, matchValue)) return rule.action;
+      continue;
+    }
+
+    // For MultiEdit, matchValue contains newline-separated paths — rule must match ALL
+    if (matchValue.includes("\n")) {
+      const allMatch = matchValue.split("\n").every(v => globMatch(parsed.innerPattern, v));
+      if (allMatch) return rule.action;
       continue;
     }
 
@@ -449,6 +535,19 @@ export class PermissionManager {
    * and actually executing the tool.
    */
   async checkPermission(tool: ToolUseBlock): Promise<PermissionResult> {
+    // Dynamic plan mode (via EnterPlanMode tool) — blocks write tools
+    try {
+      const { isPlanModeActive, PLAN_MODE_ALLOWED_TOOLS } = await import("../tools/plan-mode.js");
+      if (isPlanModeActive() && !PLAN_MODE_ALLOWED_TOOLS.has(tool.name)) {
+        return {
+          allowed: false,
+          reason: `Plan mode active: "${tool.name}" is blocked. Only read-only and planning tools are allowed. Use ExitPlanMode to return to normal mode.`,
+        };
+      }
+    } catch {
+      // plan-mode module not loaded yet, skip
+    }
+
     // Deny mode blocks everything
     if (this.mode === "deny") {
       return { allowed: false, reason: "Permission mode is 'deny': all tool use is blocked" };
@@ -472,9 +571,9 @@ export class PermissionManager {
         return { allowed: false, reason: "Blocked by permission rule" };
       }
       if (ruleAction === "allow") {
-        // Still enforce hard safety checks for write tools
+        // Run full safety analysis even for "allow" rules — only skip the permission prompt
         const safetyResult = this.analyzeToolSafety(tool);
-        if (!safetyResult.allowed && safetyResult.reason?.includes("must be absolute")) {
+        if (!safetyResult.allowed) {
           return safetyResult;
         }
         return { allowed: true };
@@ -576,6 +675,83 @@ export class PermissionManager {
         return validateFileWritePath(input.file_path, this.workingDirectory, this.additionalDirs);
       }
 
+      case "MultiEdit": {
+        const edits = (tool.input.edits ?? []) as Array<{ file_path?: string }>;
+        for (const edit of edits) {
+          if (!edit.file_path) continue;
+          const result = validateFileWritePath(edit.file_path, this.workingDirectory, this.additionalDirs);
+          if (!result.allowed) return result;
+        }
+        return { allowed: true };
+      }
+
+      // Cron tools modify system state — always require safety check
+      case "CronCreate":
+      case "CronDelete":
+        return { allowed: true }; // Safe but will be prompted via permission mode
+
+      // Worktree tools are safe (they use git internals)
+      case "EnterWorktree":
+      case "ExitWorktree":
+        return { allowed: true };
+
+      // Skill execution — safe (just expands templates)
+      case "Skill":
+        return { allowed: true };
+
+      // Plan mode tools — always safe
+      case "EnterPlanMode":
+      case "ExitPlanMode":
+        return { allowed: true };
+
+      // Diff viewer — read-only, safe
+      case "DiffView":
+        return { allowed: true };
+
+      // Test runner — executes tests, treated like Bash
+      case "TestRunner":
+        return { allowed: true }; // Safe but will be prompted via permission mode
+
+      // Rename — modifies files, needs confirmation
+      case "Rename":
+        return { allowed: true }; // Will be prompted via permission mode like Write/Edit
+
+      // Clipboard — safe, copies to clipboard
+      case "Clipboard":
+        return { allowed: true };
+
+      // Undo — modifies files (restores previous state), needs confirmation
+      case "Undo":
+        return { allowed: true };
+
+      // Git tools
+      case "GitStatus":
+      case "GitLog":
+        return { allowed: true }; // Read-only, safe
+
+      case "GitCommit":
+        return { allowed: true }; // Write operation, prompted via permission mode
+
+      // GrepReplace — modifies files, needs confirmation
+      case "GrepReplace":
+        return { allowed: true };
+
+      // Stash — saves/restores conversation context (safe, in-memory only)
+      case "Stash":
+        return { allowed: true };
+
+      // AskUser — prompts user for input (safe, no side effects)
+      case "AskUser":
+        return { allowed: true };
+
+      // LSP — read-only code intelligence queries (safe)
+      case "LSP":
+        return { allowed: true };
+
+      // ToolSearch — read-only tool schema lookup (safe)
+      case "ToolSearch":
+        return { allowed: true };
+
       default:
         return { allowed: true };
     }
@@ -587,6 +763,13 @@ export class PermissionManager {
       case "Bash": {
         const input = tool.input as unknown as BashInput;
         return extractCommandPrefix(input.command);
+      }
+      case "MultiEdit": {
+        const edits = ((tool.input as any).edits ?? []) as Array<{ file_path?: string }>;
+        const firstPath = edits[0]?.file_path ?? "";
+        const parts = firstPath.split("/");
+        parts.pop();
+        return parts.join("/") || "/";
       }
       case "Write":
       case "Edit": {

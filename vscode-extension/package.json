@@ -1,8 +1,8 @@
 {
-  "name": "kcode",
+  "name": "kcode-vscode",
   "displayName": "KCode - AI Coding Assistant",
-  "description": "Local AI coding assistant powered by KCode and your own GPU",
-  "version": "0.1.0",
+  "description": "Local AI coding assistant powered by KCode",
+  "version": "1.0.0",
   "publisher": "astrolexis",
   "engines": {
     "vscode": "^1.85.0"
@@ -32,85 +32,163 @@
           "type": "webview",
           "id": "kcode.chat",
           "name": "Chat"
+        },
+        {
+          "id": "kcode.sessions",
+          "name": "Sessions"
+        },
+        {
+          "id": "kcode.mcp",
+          "name": "MCP Servers"
         }
       ]
     },
     "commands": [
       {
-        "command": "kcode.sendPrompt",
-        "title": "KCode: Send Prompt"
+        "command": "kcode.startChat",
+        "title": "KCode: Open Chat"
       },
       {
-        "command": "kcode.newSession",
-        "title": "KCode: New Session"
+        "command": "kcode.askQuestion",
+        "title": "KCode: Ask Question"
       },
       {
-        "command": "kcode.explainSelection",
+        "command": "kcode.explainCode",
         "title": "KCode: Explain Selection"
       },
       {
-        "command": "kcode.fixSelection",
+        "command": "kcode.fixCode",
         "title": "KCode: Fix Selection"
       },
       {
-        "command": "kcode.testSelection",
+        "command": "kcode.refactorCode",
+        "title": "KCode: Refactor Selection"
+      },
+      {
+        "command": "kcode.generateTests",
         "title": "KCode: Generate Tests"
       },
       {
-        "command": "kcode.openTerminal",
-        "title": "KCode: Open in Terminal"
+        "command": "kcode.askAboutFile",
+        "title": "KCode: Ask About Current File"
+      },
+      {
+        "command": "kcode.showPlan",
+        "title": "KCode: Show Task Plan"
+      },
+      {
+        "command": "kcode.showAgents",
+        "title": "KCode: Show Agents"
+      },
+      {
+        "command": "kcode.refreshSessions",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kcode.refreshMcp",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kcode.viewSession",
+        "title": "View Session"
+      },
+      {
+        "command": "kcode.startServer",
+        "title": "KCode: Start Server"
+      },
+      {
+        "command": "kcode.stopServer",
+        "title": "KCode: Stop Server"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "kcode.explainSelection",
+          "command": "kcode.explainCode",
           "when": "editorHasSelection",
           "group": "kcode@1"
         },
         {
-          "command": "kcode.fixSelection",
+          "command": "kcode.fixCode",
           "when": "editorHasSelection",
           "group": "kcode@2"
         },
         {
-          "command": "kcode.testSelection",
+          "command": "kcode.refactorCode",
           "when": "editorHasSelection",
           "group": "kcode@3"
+        },
+        {
+          "command": "kcode.generateTests",
+          "when": "editorHasSelection",
+          "group": "kcode@4"
+        },
+        {
+          "command": "kcode.askAboutFile",
+          "group": "kcode@5"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "kcode.refreshSessions",
+          "when": "view == kcode.sessions",
+          "group": "navigation"
+        },
+        {
+          "command": "kcode.refreshMcp",
+          "when": "view == kcode.mcp",
+          "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "kcode.sendPrompt",
+        "command": "kcode.startChat",
         "key": "ctrl+shift+k",
         "mac": "cmd+shift+k"
+      },
+      {
+        "command": "kcode.explainCode",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "kcode.askAboutFile",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorFocus"
+      },
+      {
+        "command": "kcode.askQuestion",
+        "key": "ctrl+shift+i",
+        "mac": "cmd+shift+i"
       }
     ],
     "configuration": {
       "title": "KCode",
       "properties": {
-        "kcode.binaryPath": {
+        "kcode.serverUrl": {
           "type": "string",
-          "default": "kcode",
-          "description": "Path to the KCode binary"
+          "default": "http://localhost:10091",
+          "description": "URL of the KCode HTTP API server"
         },
         "kcode.model": {
           "type": "string",
           "default": "",
           "description": "Override the default model"
         },
-        "kcode.permissionMode": {
-          "type": "string",
-          "enum": [
-            "ask",
-            "auto",
-            "plan",
-            "deny",
-            "acceptEdits"
-          ],
-          "default": "acceptEdits",
-          "description": "Permission mode for tool execution"
+        "kcode.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start the KCode server on extension activation"
+        },
+        "kcode.autoAttachFile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically include the current file as context when sending prompts"
         }
       }
     }

@@ -1,7 +1,8 @@
 // KCode - Task Management Tools
-// In-memory task store with dependencies and background process tracking
+// SQLite-backed persistent task store with dependencies and background process tracking
 
 import type { ToolDefinition, ToolResult } from "../core/types";
+import { getDb } from "../core/db";
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
 
@@ -16,10 +17,60 @@ export interface Task {
   createdAt: number;
   updatedAt: number;
   pid?: number;
+  sessionId?: string;
+  completedAt?: number;
 }
 
-const taskStore = new Map<string, Task>();
-let nextTaskId = 1;
+/** Safely parse a JSON array, returning [] on any error */
+function safeParseArray(json: string): string[] {
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// In-memory PID tracking for running processes only (not persisted)
+const runningPids = new Map<string, number>();
+
+// Session ID for this process instance
+const currentSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+/** Generate a unique task ID using max existing + 1, wrapped in a transaction for safety */
+function nextId(): string {
+  const db = getDb();
+  // Use a transaction to prevent race conditions on concurrent inserts
+  const row = db.query("SELECT MAX(CAST(id AS INTEGER)) as max_id FROM tasks").get() as { max_id: number | null } | null;
+  const next = (row?.max_id ?? 0) + 1;
+  // Double-check the ID doesn't already exist (belt-and-suspenders)
+  const exists = db.query("SELECT 1 FROM tasks WHERE id = ?").get(String(next));
+  if (exists) {
+    return String(next + 1);
+  }
+  return String(next);
+}
+
+/** Convert a DB row to a Task object */
+function rowToTask(row: Record<string, unknown>): Task {
+  const task: Task = {
+    id: row.id as string,
+    title: row.title as string,
+    description: (row.description as string) ?? "",
+    status: (row.status as TaskStatus) ?? "pending",
+    owner: (row.owner as string) || undefined,
+    blocks: safeParseArray((row.blocks as string) ?? "[]"),
+    blockedBy: safeParseArray((row.blocked_by as string) ?? "[]"),
+    createdAt: new Date(row.created_at as string).getTime(),
+    updatedAt: new Date(row.updated_at as string).getTime(),
+    sessionId: (row.session_id as string) || undefined,
+    completedAt: row.completed_at ? new Date(row.completed_at as string).getTime() : undefined,
+  };
+  // Attach in-memory PID if this task has a running process
+  const pid = runningPids.get(task.id);
+  if (pid !== undefined) task.pid = pid;
+  return task;
+}
 
 // ─── TaskCreate ─────────────────────────────────────────────
 
@@ -56,43 +107,54 @@ export async function executeTaskCreate(input: Record<string, unknown>): Promise
     blockedBy?: string[];
   };
 
-  const id = String(nextTaskId++);
-  const now = Date.now();
+  const db = getDb();
+  const id = nextId();
+  const now = new Date().toISOString();
+  const blocksArr = blocks ?? [];
+  const blockedByArr = blockedBy ?? [];
 
-  const task: Task = {
+  db.query(
+    `INSERT INTO tasks (id, title, description, status, owner, blocks, blocked_by, created_at, updated_at, session_id)
+     VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
+  ).run(
     id,
     title,
-    description: description ?? "",
-    status: "pending",
-    owner,
-    blocks: blocks ?? [],
-    blockedBy: blockedBy ?? [],
-    createdAt: now,
-    updatedAt: now,
-  };
+    description ?? "",
+    owner ?? "",
+    JSON.stringify(blocksArr),
+    JSON.stringify(blockedByArr),
+    now,
+    now,
+    currentSessionId,
+  );
 
-  taskStore.set(id, task);
-
-  // Update reverse dependencies
-  for (const blockedId of task.blocks) {
-    const blocked = taskStore.get(blockedId);
-    if (blocked && !blocked.blockedBy.includes(id)) {
-      blocked.blockedBy.push(id);
-      blocked.updatedAt = now;
+  // Update reverse dependencies for tasks that this task blocks
+  for (const blockedId of blocksArr) {
+    const row = db.query("SELECT blocked_by FROM tasks WHERE id = ?").get(blockedId) as { blocked_by: string } | null;
+    if (row) {
+      const existing: string[] = JSON.parse(row.blocked_by);
+      if (!existing.includes(id)) {
+        existing.push(id);
+        db.query("UPDATE tasks SET blocked_by = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(existing), now, blockedId);
+      }
     }
   }
 
-  for (const blockerId of task.blockedBy) {
-    const blocker = taskStore.get(blockerId);
-    if (blocker && !blocker.blocks.includes(id)) {
-      blocker.blocks.push(id);
-      blocker.updatedAt = now;
+  // Update reverse dependencies for tasks that block this task
+  for (const blockerId of blockedByArr) {
+    const row = db.query("SELECT blocks FROM tasks WHERE id = ?").get(blockerId) as { blocks: string } | null;
+    if (row) {
+      const existing: string[] = JSON.parse(row.blocks);
+      if (!existing.includes(id)) {
+        existing.push(id);
+        db.query("UPDATE tasks SET blocks = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(existing), now, blockerId);
+      }
     }
   }
 
   return {
     tool_use_id: "",
-    content: JSON.stringify({ id, title, status: task.status }),
+    content: JSON.stringify({ id, title, status: "pending" }),
   };
 }
 
@@ -110,34 +172,47 @@ export const taskListDefinition: ToolDefinition = {
         description: "Filter by status",
       },
       owner: { type: "string", description: "Filter by owner" },
+      session_id: { type: "string", description: "Filter by session ID" },
     },
   },
 };
 
 export async function executeTaskList(input: Record<string, unknown>): Promise<ToolResult> {
-  const { status, owner } = input as { status?: TaskStatus; owner?: string };
+  const { status, owner, session_id } = input as { status?: TaskStatus; owner?: string; session_id?: string };
 
-  let tasks = Array.from(taskStore.values());
+  const db = getDb();
+  const conditions: string[] = [];
+  const params: unknown[] = [];
 
   if (status) {
-    tasks = tasks.filter((t) => t.status === status);
+    conditions.push("status = ?");
+    params.push(status);
   }
   if (owner) {
-    tasks = tasks.filter((t) => t.owner === owner);
+    conditions.push("owner = ?");
+    params.push(owner);
+  }
+  if (session_id) {
+    conditions.push("session_id = ?");
+    params.push(session_id);
   }
 
-  if (tasks.length === 0) {
+  const where = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
+  const rows = db.query(`SELECT * FROM tasks${where} ORDER BY CAST(id AS INTEGER)`).all(...params) as Record<string, unknown>[];
+
+  if (rows.length === 0) {
     return { tool_use_id: "", content: "No tasks found." };
   }
 
-  const formatted = tasks
-    .map((t) => {
-      const deps = t.blockedBy.length > 0 ? ` (blocked by: ${t.blockedBy.join(", ")})` : "";
-      return `[${t.id}] ${t.status.toUpperCase()} - ${t.title}${deps}`;
+  const formatted = rows
+    .map((row) => {
+      const task = rowToTask(row);
+      const deps = task.blockedBy.length > 0 ? ` (blocked by: ${task.blockedBy.join(", ")})` : "";
+      return `[${task.id}] ${task.status.toUpperCase()} - ${task.title}${deps}`;
     })
     .join("\n");
 
-  return { tool_use_id: "", content: `Tasks (${tasks.length}):\n${formatted}` };
+  return { tool_use_id: "", content: `Tasks (${rows.length}):\n${formatted}` };
 }
 
 // ─── TaskGet ────────────────────────────────────────────────
@@ -156,9 +231,10 @@ export const taskGetDefinition: ToolDefinition = {
 
 export async function executeTaskGet(input: Record<string, unknown>): Promise<ToolResult> {
   const { id } = input as { id: string };
-  const task = taskStore.get(id);
+  const db = getDb();
+  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown> | null;
 
-  if (!task) {
+  if (!row) {
     return {
       tool_use_id: "",
       content: `Error: Task "${id}" not found`,
@@ -166,6 +242,7 @@ export async function executeTaskGet(input: Record<string, unknown>): Promise<To
     };
   }
 
+  const task = rowToTask(row);
   return {
     tool_use_id: "",
     content: JSON.stringify(task, null, 2),
@@ -203,8 +280,10 @@ export async function executeTaskUpdate(input: Record<string, unknown>): Promise
     owner?: string;
   };
 
-  const task = taskStore.get(id);
-  if (!task) {
+  const db = getDb();
+  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown> | null;
+
+  if (!row) {
     return {
       tool_use_id: "",
       content: `Error: Task "${id}" not found`,
@@ -212,11 +291,40 @@ export async function executeTaskUpdate(input: Record<string, unknown>): Promise
     };
   }
 
-  if (title !== undefined) task.title = title;
-  if (description !== undefined) task.description = description;
-  if (status !== undefined) task.status = status;
-  if (owner !== undefined) task.owner = owner;
-  task.updatedAt = Date.now();
+  const now = new Date().toISOString();
+  const sets: string[] = ["updated_at = ?"];
+  const params: unknown[] = [now];
+
+  if (title !== undefined) {
+    sets.push("title = ?");
+    params.push(title);
+  }
+  if (description !== undefined) {
+    sets.push("description = ?");
+    params.push(description);
+  }
+  if (status !== undefined) {
+    sets.push("status = ?");
+    params.push(status);
+    if (status === "completed") {
+      sets.push("completed_at = ?");
+      params.push(now);
+    } else {
+      // Clear completed_at when reverting from completed
+      sets.push("completed_at = NULL");
+    }
+  }
+  if (owner !== undefined) {
+    sets.push("owner = ?");
+    params.push(owner);
+  }
+
+  params.push(id);
+  db.query(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+
+  // Re-read the updated row
+  const updated = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown>;
+  const task = rowToTask(updated);
 
   return {
     tool_use_id: "",
@@ -240,9 +348,10 @@ export const taskStopDefinition: ToolDefinition = {
 
 export async function executeTaskStop(input: Record<string, unknown>): Promise<ToolResult> {
   const { id } = input as { id: string };
-  const task = taskStore.get(id);
+  const db = getDb();
+  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown> | null;
 
-  if (!task) {
+  if (!row) {
     return {
       tool_use_id: "",
       content: `Error: Task "${id}" not found`,
@@ -250,21 +359,32 @@ export async function executeTaskStop(input: Record<string, unknown>): Promise<T
     };
   }
 
-  // Kill associated process if it exists
-  if (task.pid) {
+  // Kill associated process if it exists in memory
+  const pid = runningPids.get(id);
+  if (pid) {
     try {
-      process.kill(task.pid, "SIGTERM");
+      process.kill(pid, "SIGTERM");
     } catch {
       // Process may already be dead
     }
-    task.pid = undefined;
+    runningPids.delete(id);
   }
 
-  task.status = "completed";
-  task.updatedAt = Date.now();
+  const now = new Date().toISOString();
+  db.query("UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
 
   return {
     tool_use_id: "",
     content: `Task "${id}" stopped. Status set to completed.`,
   };
+}
+
+// ─── Utility: attach a PID to a task (used by background execution) ───
+
+export function attachPidToTask(taskId: string, pid: number): void {
+  runningPids.set(taskId, pid);
+}
+
+export function getSessionId(): string {
+  return currentSessionId;
 }

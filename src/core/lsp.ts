@@ -1,5 +1,5 @@
 // KCode - LSP Integration
-// Lightweight LSP client for diagnostics (type errors, lint warnings)
+// Lightweight LSP client for diagnostics and code intelligence queries
 
 import { spawn, type Subprocess } from "bun";
 import { log } from "./logger";
@@ -19,6 +19,12 @@ interface LspServerConfig {
   args: string[];
   languages: string[];  // file extensions like ".ts", ".py"
   rootPatterns: string[]; // files that indicate project root: "tsconfig.json", "pyproject.toml"
+}
+
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (reason: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 // Well-known language servers
@@ -53,10 +59,18 @@ const KNOWN_SERVERS: LspServerConfig[] = [
   },
 ];
 
+interface ServerEntry {
+  process: Subprocess;
+  config: LspServerConfig;
+  requestId: number;
+  pendingRequests: Map<number, PendingRequest>;
+}
+
 export class LspManager {
-  private servers = new Map<string, { process: Subprocess; config: LspServerConfig; requestId: number }>();
+  private servers = new Map<string, ServerEntry>();
   private diagnosticsCache = new Map<string, LspDiagnostic[]>();
   private cwd: string;
+  private openedFiles = new Set<string>();
 
   constructor(cwd: string) {
     this.cwd = cwd;
@@ -104,16 +118,23 @@ export class LspManager {
       cwd: this.cwd,
     });
 
-    const entry = { process: proc, config, requestId: 0 };
+    const entry: ServerEntry = { process: proc, config, requestId: 0, pendingRequests: new Map() };
     this.servers.set(config.name, entry);
 
     // Read stdout for responses
-    this.readResponses(config.name, proc);
+    this.readResponses(config.name, proc, entry);
 
     // Send initialize request
     await this.sendRequest(config.name, "initialize", {
       processId: process.pid,
-      capabilities: {},
+      capabilities: {
+        textDocument: {
+          definition: { dynamicRegistration: false },
+          references: { dynamicRegistration: false },
+          hover: { contentFormat: ["plaintext", "markdown"] },
+          documentSymbol: { dynamicRegistration: false },
+        },
+      },
       rootUri: `file://${this.cwd}`,
       workspaceFolders: [{ uri: `file://${this.cwd}`, name: "workspace" }],
     });
@@ -122,7 +143,7 @@ export class LspManager {
     this.sendNotification(config.name, "initialized", {});
   }
 
-  private async readResponses(serverName: string, proc: Subprocess): Promise<void> {
+  private async readResponses(serverName: string, proc: Subprocess, entry: ServerEntry): Promise<void> {
     if (!proc.stdout) return;
     const reader = proc.stdout.getReader();
     const decoder = new TextDecoder();
@@ -155,14 +176,28 @@ export class LspManager {
 
           try {
             const msg = JSON.parse(body);
-            this.handleMessage(serverName, msg);
+            this.handleMessage(serverName, msg, entry);
           } catch { /* skip malformed */ }
         }
       }
     } catch { /* stream closed */ }
   }
 
-  private handleMessage(serverName: string, msg: any): void {
+  private handleMessage(serverName: string, msg: any, entry: ServerEntry): void {
+    // Handle responses to our requests
+    if (msg.id !== undefined && entry.pendingRequests.has(msg.id)) {
+      const pending = entry.pendingRequests.get(msg.id)!;
+      clearTimeout(pending.timer);
+      entry.pendingRequests.delete(msg.id);
+
+      if (msg.error) {
+        pending.reject(new Error(`LSP error: ${msg.error.message} (code: ${msg.error.code})`));
+      } else {
+        pending.resolve(msg.result);
+      }
+      return;
+    }
+
     // Handle publishDiagnostics notification
     if (msg.method === "textDocument/publishDiagnostics") {
       const params = msg.params;
@@ -179,19 +214,31 @@ export class LspManager {
     }
   }
 
-  private sendRequest(serverName: string, method: string, params: any): Promise<void> {
+  private sendRequest(serverName: string, method: string, params: any): Promise<unknown> {
     const entry = this.servers.get(serverName);
-    if (!entry?.process.stdin) return Promise.resolve();
+    if (!entry?.process.stdin) return Promise.reject(new Error(`Server ${serverName} not running`));
 
     entry.requestId++;
-    const msg = JSON.stringify({ jsonrpc: "2.0", id: entry.requestId, method, params });
+    const id = entry.requestId;
+    const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
     const header = `Content-Length: ${Buffer.byteLength(msg)}\r\n\r\n`;
 
-    try {
-      entry.process.stdin.write(header + msg);
-    } catch { /* ignore write errors */ }
+    return new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        entry.pendingRequests.delete(id);
+        reject(new Error(`LSP request "${method}" timed out after 10s`));
+      }, 10_000);
 
-    return Promise.resolve();
+      entry.pendingRequests.set(id, { resolve, reject, timer });
+
+      try {
+        entry.process.stdin!.write(header + msg);
+      } catch (err) {
+        clearTimeout(timer);
+        entry.pendingRequests.delete(id);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
   }
 
   private sendNotification(serverName: string, method: string, params: any): void {
@@ -207,6 +254,66 @@ export class LspManager {
   }
 
   /**
+   * Ensure a file is opened in the language server before querying it.
+   */
+  private ensureFileOpen(serverName: string, filePath: string, content: string): void {
+    const key = `${serverName}:${filePath}`;
+    if (this.openedFiles.has(key)) {
+      // Send didChange instead
+      this.sendNotification(serverName, "textDocument/didChange", {
+        textDocument: { uri: `file://${filePath}`, version: Date.now() },
+        contentChanges: [{ text: content }],
+      });
+    } else {
+      this.openedFiles.add(key);
+      this.sendNotification(serverName, "textDocument/didOpen", {
+        textDocument: {
+          uri: `file://${filePath}`,
+          languageId: this.getLanguageId(filePath.slice(filePath.lastIndexOf("."))),
+          version: Date.now(),
+          text: content,
+        },
+      });
+    }
+  }
+
+  // ─── Public Query API (used by LSP tool) ────────────────────────
+
+  /**
+   * Send an LSP request for a given file. Auto-detects the right server.
+   * Opens the file in the server if not already open.
+   */
+  async query(filePath: string, method: string, position?: { line: number; character: number }): Promise<unknown> {
+    const ext = filePath.slice(filePath.lastIndexOf("."));
+
+    for (const [name, entry] of this.servers) {
+      if (!entry.config.languages.includes(ext)) continue;
+
+      // Ensure the file is open
+      try {
+        const { readFileSync } = await import("node:fs");
+        const content = readFileSync(filePath, "utf-8");
+        const key = `${name}:${filePath}`;
+        const isNewFile = !this.openedFiles.has(key);
+        this.ensureFileOpen(name, filePath, content);
+        // Only delay on first open — server needs time to parse the file
+        if (isNewFile) await new Promise(r => setTimeout(r, 200));
+      } catch { /* file might not exist */ }
+
+      const params: Record<string, unknown> = {
+        textDocument: { uri: `file://${filePath}` },
+      };
+      if (position) {
+        params.position = position;
+      }
+
+      return this.sendRequest(name, method, params);
+    }
+
+    throw new Error(`No language server available for ${filePath} (running: ${this.getServerNames().join(", ") || "none"})`);
+  }
+
+  /**
    * Notify language server that a file was changed (after Write/Edit).
    */
   notifyFileChanged(filePath: string, content: string): void {
@@ -214,18 +321,7 @@ export class LspManager {
 
     for (const [, entry] of this.servers) {
       if (!entry.config.languages.includes(ext)) continue;
-
-      const uri = `file://${filePath}`;
-
-      // Send didOpen or didChange
-      this.sendNotification(entry.config.name, "textDocument/didOpen", {
-        textDocument: {
-          uri,
-          languageId: this.getLanguageId(ext),
-          version: Date.now(),
-          text: content,
-        },
-      });
+      this.ensureFileOpen(entry.config.name, filePath, content);
     }
   }
 
@@ -301,15 +397,26 @@ export class LspManager {
    */
   shutdown(): void {
     for (const [name, entry] of this.servers) {
+      // Reject all pending requests
+      for (const [, pending] of entry.pendingRequests) {
+        clearTimeout(pending.timer);
+        pending.reject(new Error(`LSP server "${name}" shutting down`));
+      }
+      entry.pendingRequests.clear();
+
+      // Send shutdown notification (not request — no response expected during teardown)
       try {
-        this.sendRequest(name, "shutdown", null);
-        setTimeout(() => {
-          try { entry.process.kill(); } catch {}
-        }, 3000);
+        this.sendNotification(name, "shutdown", null);
       } catch {}
+      // Kill after brief grace period
+      const proc = entry.process;
+      setTimeout(() => {
+        try { proc.kill(); } catch {}
+      }, 1000);
     }
     this.servers.clear();
     this.diagnosticsCache.clear();
+    this.openedFiles.clear();
   }
 }
 

@@ -10,7 +10,7 @@ import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models"
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type EffortLevel = "low" | "medium" | "high";
+export type EffortLevel = "low" | "medium" | "high" | "max";
 
 export interface Settings {
   model?: string;
@@ -24,12 +24,56 @@ export interface Settings {
   autoRoute?: boolean;
   theme?: string;
   permissionRules?: PermissionRule[];
+  fallbackModel?: string;
+  tertiaryModel?: string;
+  fallbackModels?: string[];
+  maxBudgetUsd?: number;
+  compactThreshold?: number; // 0.5–0.95, default 0.8 — trigger auto-compact at this % of context window
+  telemetry?: boolean; // Opt-in/out for local analytics tracking
+}
+
+// ─── Managed Policy ──────────────────────────────────────────────
+// Organization-level policies that cannot be overridden by users or projects.
+// Loaded from ~/.kcode/managed-settings.json or /etc/kcode/policy.json.
+
+export interface ManagedPolicy {
+  /** Settings that are enforced and cannot be overridden */
+  locked?: Partial<Settings>;
+  /** Models users are allowed to use (glob patterns). Empty = no restriction. */
+  allowedModels?: string[];
+  /** Models explicitly blocked */
+  blockedModels?: string[];
+  /** Tools that are always blocked at the org level (cannot be overridden) */
+  disallowedTools?: string[];
+  /** Tools that are always allowed (bypass permission prompts) */
+  allowedTools?: string[];
+  /** Force a specific permission mode (users cannot change it) */
+  permissionMode?: PermissionMode;
+  /** Permission rules enforced at org level (prepended, highest priority) */
+  permissionRules?: PermissionRule[];
+  /** Max session budget (cannot be raised by users) */
+  maxBudgetUsd?: number;
+  /** Disable web access tools (WebFetch, WebSearch) */
+  disableWebAccess?: boolean;
+  /** Require audit logging */
+  auditLog?: boolean;
+  /** Organization identifier for audit trail */
+  orgId?: string;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────
 
 const KCODE_HOME = join(homedir(), ".kcode");
 const USER_SETTINGS_PATH = join(KCODE_HOME, "settings.json");
+const MANAGED_SETTINGS_PATHS = [
+  "/etc/kcode/policy.json",                  // System-wide admin policy
+  join(KCODE_HOME, "managed-settings.json"),  // Per-user admin-deployed policy
+];
+
+// Cached managed policy with mtime tracking for invalidation
+let _managedPolicy: ManagedPolicy | null = null;
+let _managedPolicyMtime: number = 0;
+let _managedPolicyPath: string = "";
 
 function projectSettingsPath(cwd: string): string {
   return join(cwd, ".kcode", "settings.json");
@@ -80,16 +124,27 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     systemPromptExtra: typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
     autoRoute: typeof raw.autoRoute === "boolean" ? raw.autoRoute : undefined,
     theme: typeof raw.theme === "string" ? raw.theme : undefined,
-    permissionRules: parsePermissionRules(raw.permissionRules),
+    permissionRules: mergePermissionRules(
+      parsePermissionRules(raw.permissionRules),
+      parsePermissionsConfig(raw.permissions),
+    ),
+    fallbackModel: typeof raw.fallbackModel === "string" ? raw.fallbackModel : undefined,
+    tertiaryModel: typeof raw.tertiaryModel === "string" ? raw.tertiaryModel : undefined,
+    fallbackModels: Array.isArray(raw.fallbackModels) && raw.fallbackModels.every((m: unknown) => typeof m === "string")
+      ? (raw.fallbackModels as string[])
+      : undefined,
+    maxBudgetUsd: typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0 ? raw.maxBudgetUsd : undefined,
+    compactThreshold: typeof raw.compactThreshold === "number" && raw.compactThreshold >= 0.5 && raw.compactThreshold <= 0.95 ? raw.compactThreshold : undefined,
+    telemetry: typeof raw.telemetry === "boolean" ? raw.telemetry : undefined,
   };
 }
 
 function isPermissionMode(v: unknown): v is PermissionMode {
-  return v === "ask" || v === "auto" || v === "plan" || v === "deny";
+  return v === "ask" || v === "auto" || v === "plan" || v === "deny" || v === "acceptEdits";
 }
 
 function isEffortLevel(v: unknown): v is EffortLevel {
-  return v === "low" || v === "medium" || v === "high";
+  return v === "low" || v === "medium" || v === "high" || v === "max";
 }
 
 function isRuleAction(v: unknown): v is PermissionRuleAction {
@@ -111,6 +166,59 @@ function parsePermissionRules(raw: unknown): PermissionRule[] | undefined {
   return rules.length > 0 ? rules : undefined;
 }
 
+/**
+ * Parse the new `permissions` config format:
+ * ```json
+ * { "permissions": { "allow": ["Read(*)", ...], "deny": ["Bash(rm -rf *)"], "ask": ["Edit(*)"] } }
+ * ```
+ * Converts to PermissionRule[] with deny rules first (deny takes precedence).
+ */
+function parsePermissionsConfig(raw: unknown): PermissionRule[] | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const config = raw as Record<string, unknown>;
+  const rules: PermissionRule[] = [];
+
+  // Deny rules are added first so they take precedence (first match wins)
+  if (Array.isArray(config.deny)) {
+    for (const pattern of config.deny) {
+      if (typeof pattern === "string") {
+        rules.push({ pattern, action: "deny" });
+      }
+    }
+  }
+
+  // Ask rules come next
+  if (Array.isArray(config.ask)) {
+    for (const pattern of config.ask) {
+      if (typeof pattern === "string") {
+        rules.push({ pattern, action: "ask" });
+      }
+    }
+  }
+
+  // Allow rules last
+  if (Array.isArray(config.allow)) {
+    for (const pattern of config.allow) {
+      if (typeof pattern === "string") {
+        rules.push({ pattern, action: "allow" });
+      }
+    }
+  }
+
+  return rules.length > 0 ? rules : undefined;
+}
+
+/** Merge two optional rule arrays, filtering out undefined. */
+function mergePermissionRules(
+  ...sources: (PermissionRule[] | undefined)[]
+): PermissionRule[] | undefined {
+  const merged: PermissionRule[] = [];
+  for (const src of sources) {
+    if (src) merged.push(...src);
+  }
+  return merged.length > 0 ? merged : undefined;
+}
+
 function mergeSettings(...layers: Settings[]): Settings {
   const result: Settings = {};
   for (const layer of layers) {
@@ -124,6 +232,12 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
     if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
     if (layer.theme !== undefined) result.theme = layer.theme;
+    if (layer.fallbackModel !== undefined) result.fallbackModel = layer.fallbackModel;
+    if (layer.tertiaryModel !== undefined) result.tertiaryModel = layer.tertiaryModel;
+    if (layer.fallbackModels !== undefined) result.fallbackModels = layer.fallbackModels;
+    if (layer.maxBudgetUsd !== undefined) result.maxBudgetUsd = layer.maxBudgetUsd;
+    if (layer.compactThreshold !== undefined) result.compactThreshold = layer.compactThreshold;
+    if (layer.telemetry !== undefined) result.telemetry = layer.telemetry;
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
       result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
@@ -137,8 +251,9 @@ function envSettings(): Settings {
   if (process.env.KCODE_MODEL) settings.model = process.env.KCODE_MODEL;
   if (process.env.KCODE_API_KEY) settings.apiKey = process.env.KCODE_API_KEY;
   if (process.env.KCODE_API_BASE) settings.apiBase = process.env.KCODE_API_BASE;
-  if (process.env.KCODE_EFFORT_LEVEL && isEffortLevel(process.env.KCODE_EFFORT_LEVEL)) {
-    settings.effortLevel = process.env.KCODE_EFFORT_LEVEL;
+  const effortEnv = process.env.KCODE_EFFORT ?? process.env.KCODE_EFFORT_LEVEL;
+  if (effortEnv && isEffortLevel(effortEnv)) {
+    settings.effortLevel = effortEnv;
   }
   if (process.env.KCODE_MAX_TOKENS) {
     const n = parseInt(process.env.KCODE_MAX_TOKENS, 10);
@@ -155,11 +270,220 @@ function envSettings(): Settings {
 
 // ─── Load All Settings ──────────────────────────────────────────
 
+// ─── Managed Policy Loading ────────────────────────────────────
+
+/**
+ * Load managed policy from system or user-deployed policy files.
+ * /etc/kcode/policy.json takes precedence over ~/.kcode/managed-settings.json.
+ */
+export async function loadManagedPolicy(): Promise<ManagedPolicy> {
+  // Check cache validity via mtime (invalidate if policy file changed)
+  if (_managedPolicy && _managedPolicyPath) {
+    try {
+      const stat = statSync(_managedPolicyPath);
+      if (stat.mtimeMs === _managedPolicyMtime) return _managedPolicy;
+      // File changed, reload
+      _managedPolicy = null;
+    } catch {
+      // File gone, reload
+      _managedPolicy = null;
+    }
+  }
+  if (_managedPolicy) return _managedPolicy;
+
+  for (const path of MANAGED_SETTINGS_PATHS) {
+    try {
+      const file = Bun.file(path);
+      if (!(await file.exists())) continue;
+      // Reject symlinks to prevent policy injection
+      try {
+        const { lstatSync, realpathSync } = await import("node:fs");
+        const lstat = lstatSync(path);
+        if (lstat.isSymbolicLink()) {
+          console.error(`[config] Managed policy ${path} is a symlink, skipping for security`);
+          continue;
+        }
+      } catch { /* File stat failed, continue cautiously */ }
+      // Size check: reject policy files > 1 MB
+      if (file.size > 1024 * 1024) {
+        console.error(`[config] Managed policy file ${path} exceeds 1MB limit, skipping`);
+        continue;
+      }
+      const raw = await file.json();
+      if (!raw || typeof raw !== "object") continue;
+
+      const policy: ManagedPolicy = {};
+
+      // Parse locked settings
+      if (raw.locked && typeof raw.locked === "object") {
+        policy.locked = parseSettings(raw.locked as Record<string, unknown>);
+      }
+
+      // Parse model restrictions
+      if (Array.isArray(raw.allowedModels) && raw.allowedModels.every((m: unknown) => typeof m === "string")) {
+        policy.allowedModels = raw.allowedModels;
+      }
+      if (Array.isArray(raw.blockedModels) && raw.blockedModels.every((m: unknown) => typeof m === "string")) {
+        policy.blockedModels = raw.blockedModels;
+      }
+
+      // Parse tool restrictions
+      if (Array.isArray(raw.disallowedTools) && raw.disallowedTools.every((t: unknown) => typeof t === "string")) {
+        policy.disallowedTools = raw.disallowedTools;
+      }
+      if (Array.isArray(raw.allowedTools) && raw.allowedTools.every((t: unknown) => typeof t === "string")) {
+        policy.allowedTools = raw.allowedTools;
+      }
+
+      // Parse simple fields
+      if (isPermissionMode(raw.permissionMode)) policy.permissionMode = raw.permissionMode;
+      if (typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0) policy.maxBudgetUsd = raw.maxBudgetUsd;
+      if (typeof raw.disableWebAccess === "boolean") policy.disableWebAccess = raw.disableWebAccess;
+      if (typeof raw.auditLog === "boolean") policy.auditLog = raw.auditLog;
+      if (typeof raw.orgId === "string") policy.orgId = raw.orgId;
+
+      // Parse org-level permission rules
+      const orgRules = parsePermissionRules(raw.permissionRules);
+      if (orgRules) policy.permissionRules = orgRules;
+
+      _managedPolicy = policy;
+      _managedPolicyPath = path;
+      try { _managedPolicyMtime = statSync(path).mtimeMs; } catch { _managedPolicyMtime = 0; }
+      console.error(`[config] Loaded managed policy from ${path}`);
+      return policy;
+    } catch (err) {
+      console.error(`[config] Warning: failed to parse managed policy ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  _managedPolicy = {};
+  return _managedPolicy;
+}
+
+/** Check if a model name is allowed by managed policy */
+export function isModelAllowedByPolicy(model: string, policy: ManagedPolicy): boolean {
+  // Check blocklist first
+  if (policy.blockedModels && policy.blockedModels.length > 0) {
+    for (const pattern of policy.blockedModels) {
+      if (simpleGlob(pattern, model)) return false;
+    }
+  }
+  // Check allowlist
+  if (policy.allowedModels && policy.allowedModels.length > 0) {
+    for (const pattern of policy.allowedModels) {
+      if (simpleGlob(pattern, model)) return true;
+    }
+    return false; // Not in allowlist
+  }
+  return true; // No restrictions
+}
+
+/** Simple glob matching for model names */
+function simpleGlob(pattern: string, value: string): boolean {
+  const regex = pattern.replace(/([.+^${}()|[\]\\])/g, "\\$1").replace(/\*/g, ".*");
+  return new RegExp(`^${regex}$`, "i").test(value);
+}
+
+/**
+ * Apply managed policy enforcement to final settings.
+ * Locked settings override everything; org restrictions are enforced.
+ */
+function applyManagedPolicy(settings: Settings, policy: ManagedPolicy): Settings {
+  const result = { ...settings };
+
+  // Override locked settings (highest priority, cannot be changed)
+  if (policy.locked) {
+    for (const [key, value] of Object.entries(policy.locked)) {
+      if (value !== undefined) {
+        (result as any)[key] = value;
+      }
+    }
+  }
+
+  // Force permission mode if policy sets it
+  if (policy.permissionMode) {
+    result.permissionMode = policy.permissionMode;
+  }
+
+  // Enforce max budget (user can only set lower, not higher)
+  if (policy.maxBudgetUsd !== undefined) {
+    if (!result.maxBudgetUsd || result.maxBudgetUsd > policy.maxBudgetUsd) {
+      result.maxBudgetUsd = policy.maxBudgetUsd;
+    }
+  }
+
+  // Prepend org-level permission rules (highest priority)
+  if (policy.permissionRules && policy.permissionRules.length > 0) {
+    result.permissionRules = [...policy.permissionRules, ...(result.permissionRules ?? [])];
+  }
+
+  // Validate model against policy
+  if (result.model && !isModelAllowedByPolicy(result.model, policy)) {
+    console.error(`[config] Model "${result.model}" is not allowed by managed policy. Reverting to default.`);
+    result.model = undefined;
+  }
+
+  // Validate fallback models against policy
+  if (result.fallbackModel && !isModelAllowedByPolicy(result.fallbackModel, policy)) {
+    console.error(`[config] Fallback model "${result.fallbackModel}" is not allowed by managed policy. Removing.`);
+    result.fallbackModel = undefined;
+  }
+  if (result.tertiaryModel && !isModelAllowedByPolicy(result.tertiaryModel, policy)) {
+    console.error(`[config] Tertiary model "${result.tertiaryModel}" is not allowed by managed policy. Removing.`);
+    result.tertiaryModel = undefined;
+  }
+  if (result.fallbackModels) {
+    const allowed = result.fallbackModels.filter(m => isModelAllowedByPolicy(m, policy));
+    if (allowed.length < result.fallbackModels.length) {
+      const blocked = result.fallbackModels.filter(m => !isModelAllowedByPolicy(m, policy));
+      console.error(`[config] Blocked fallback models removed by policy: ${blocked.join(", ")}`);
+    }
+    result.fallbackModels = allowed.length > 0 ? allowed : undefined;
+  }
+
+  return result;
+}
+
+/**
+ * Load dedicated permissions file: ~/.kcode/permissions.json or .kcode/permissions.json
+ * Format: { "allow": ["Read(*)"], "deny": ["Bash(rm -rf *)"], "ask": ["Edit(*)"] }
+ * or: { "rules": [{ "pattern": "Bash(git *)", "action": "allow" }] }
+ */
+async function loadPermissionsFile(cwd: string): Promise<PermissionRule[]> {
+  const paths = [
+    join(KCODE_HOME, "permissions.json"),
+    join(cwd, ".kcode", "permissions.json"),
+  ];
+  const rules: PermissionRule[] = [];
+  for (const path of paths) {
+    try {
+      const file = Bun.file(path);
+      if (!(await file.exists())) continue;
+      const raw = await file.json();
+      if (!raw || typeof raw !== "object") {
+        console.error(`[config] Warning: ${path} is not a valid JSON object, skipping`);
+        continue;
+      }
+      // Support { rules: [...] } format
+      const fromRules = parsePermissionRules(raw.rules);
+      if (fromRules) rules.push(...fromRules);
+      // Support { allow: [...], deny: [...], ask: [...] } format
+      const fromConfig = parsePermissionsConfig(raw);
+      if (fromConfig) rules.push(...fromConfig);
+    } catch (err) {
+      console.error(`[config] Warning: failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return rules;
+}
+
 export async function loadSettings(cwd: string): Promise<Settings> {
-  const [userRaw, projectRaw, localRaw] = await Promise.all([
+  const [userRaw, projectRaw, localRaw, permissionFileRules, policy] = await Promise.all([
     readJsonFile(USER_SETTINGS_PATH),
     readJsonFile(projectSettingsPath(cwd)),
     readJsonFile(localSettingsPath(cwd)),
+    loadPermissionsFile(cwd),
+    loadManagedPolicy(),
   ]);
 
   const user = parseSettings(userRaw);
@@ -168,7 +492,17 @@ export async function loadSettings(cwd: string): Promise<Settings> {
   const env = envSettings();
 
   // Precedence: env > local > project > user
-  return mergeSettings(user, project, local, env);
+  let merged = mergeSettings(user, project, local, env);
+
+  // Merge permission file rules (prepended so they take precedence)
+  if (permissionFileRules.length > 0) {
+    merged.permissionRules = [...permissionFileRules, ...(merged.permissionRules ?? [])];
+  }
+
+  // Apply managed policy enforcement (highest priority, overrides everything)
+  merged = applyManagedPolicy(merged, policy);
+
+  return merged;
 }
 
 export async function saveUserSettings(settings: Settings): Promise<void> {
@@ -188,13 +522,19 @@ export async function saveProjectSettings(cwd: string, settings: Settings): Prom
 
 export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   const settings = await loadSettings(cwd);
+  const policy = await loadManagedPolicy();
   const defaultModel = await getDefaultModel();
   const model = settings.model ?? defaultModel;
-  const apiBase = await getModelBaseUrl(model, settings.apiBase ?? process.env.KCODE_API_BASE);
+
+  // Respect locked settings: don't let env vars override policy-locked values
+  const lockedApiBase = policy.locked?.apiBase;
+  const lockedApiKey = policy.locked?.apiKey;
+  const apiBase = await getModelBaseUrl(model,
+    lockedApiBase ?? settings.apiBase ?? process.env.KCODE_API_BASE);
   const contextSize = await getModelContextSize(model);
 
   return {
-    apiKey: settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
+    apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,
@@ -206,6 +546,18 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     theme: settings.theme,
     permissionRules: settings.permissionRules,
     effortLevel: settings.effortLevel,
+    fallbackModel: settings.fallbackModel,
+    tertiaryModel: settings.tertiaryModel,
+    fallbackModels: settings.fallbackModels,
+    maxBudgetUsd: settings.maxBudgetUsd,
+    compactThreshold: settings.compactThreshold,
+    telemetry: settings.telemetry,
+    // Managed policy fields
+    managedDisallowedTools: policy.disallowedTools,
+    managedAllowedTools: policy.allowedTools,
+    disableWebAccess: policy.disableWebAccess,
+    auditLog: policy.auditLog,
+    orgId: policy.orgId,
   };
 }
 

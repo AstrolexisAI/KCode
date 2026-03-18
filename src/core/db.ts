@@ -163,4 +163,71 @@ function initSchema(db: Database): void {
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
+
+  // analytics.ts tables — persistent tool usage analytics
+  db.exec(`CREATE TABLE IF NOT EXISTS tool_analytics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL DEFAULT '',
+    tool_name TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    duration_ms INTEGER DEFAULT 0,
+    is_error INTEGER DEFAULT 0,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_tool ON tool_analytics(tool_name)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_date ON tool_analytics(created_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_analytics_session ON tool_analytics(session_id)`);
+
+  // tasks.ts tables — persistent task management
+  db.exec(`CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    owner TEXT DEFAULT '',
+    blocks TEXT DEFAULT '[]',
+    blocked_by TEXT DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    session_id TEXT DEFAULT '',
+    completed_at TEXT DEFAULT NULL
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id)`);
+
+  // transcript-search.ts tables — FTS5 over transcripts for instant search
+  db.exec(`CREATE TABLE IF NOT EXISTS transcript_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_file TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT '',
+    entry_type TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS transcript_fts USING fts5(
+    content, session_file, role, content='transcript_entries', content_rowid='id'
+  )`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS transcript_ai AFTER INSERT ON transcript_entries BEGIN
+    INSERT INTO transcript_fts(rowid, content, session_file, role) VALUES (new.id, new.content, new.session_file, new.role);
+  END`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS transcript_ad AFTER DELETE ON transcript_entries BEGIN
+    INSERT INTO transcript_fts(transcript_fts, rowid, content, session_file, role) VALUES ('delete', old.id, old.content, old.session_file, old.role);
+  END`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_transcript_session ON transcript_entries(session_file)`);
+
+  // branch-manager.ts tables — persistent conversation branch tracking
+  db.exec(`CREATE TABLE IF NOT EXISTS conversation_branches (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT,
+    label TEXT DEFAULT '',
+    session_file TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    message_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active'
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_branches_parent ON conversation_branches(parent_id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_branches_status ON conversation_branches(status)`);
 }

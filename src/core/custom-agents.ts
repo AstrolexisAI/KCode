@@ -1,10 +1,40 @@
-// KCode - Custom Agent Definitions
+// KCode - Custom Agent Definitions (Rich Agent System)
 // Load user-defined agents from ~/.kcode/agents/ and .kcode/agents/
 // Each agent is a .md file with YAML frontmatter configuration.
+//
+// Supported frontmatter fields:
+//   name, description, model, tools, disallowedTools, permissionMode,
+//   maxTurns, effort, apiKey, apiBase, mcpServers (inline JSON or multi-line),
+//   hooks (inline JSON or multi-line), memory (boolean — agent-scoped memory),
+//   skills (whitelist of slash commands the agent can use)
+//
+// The markdown body becomes the agent's system prompt.
 
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
+
+// ─── Types ──────────────────────────────────────────────────────
+
+export interface AgentMcpServer {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+}
+
+export interface AgentHookAction {
+  type: "command" | "http";
+  command?: string;
+  url?: string;
+  timeout?: number;
+}
+
+export interface AgentHookEntry {
+  event: string;
+  matcher?: string;
+  actions: AgentHookAction[];
+}
 
 export interface CustomAgentDef {
   /** Agent name (from frontmatter or filename) */
@@ -15,21 +45,40 @@ export interface CustomAgentDef {
   model?: string;
   /** Allowed tools (whitelist). If empty/undefined, all tools allowed */
   tools?: string[];
+  /** Disallowed tools (blacklist). Complements the whitelist. */
+  disallowedTools?: string[];
   /** Permission mode override */
   permissionMode?: string;
   /** Max tool turns before stopping */
   maxTurns?: number;
+  /** Effort level override (low/medium/high/max) */
+  effort?: string;
+  /** API key override (for this agent to use a different provider) */
+  apiKey?: string;
+  /** API base URL override */
+  apiBase?: string;
+  /** MCP servers to connect (agent-scoped) */
+  mcpServers?: Record<string, AgentMcpServer>;
+  /** Lifecycle hooks scoped to this agent */
+  hooks?: AgentHookEntry[];
+  /** Enable agent-scoped persistent memory (stored in ~/.kcode/agents/<name>/memory/) */
+  memory?: boolean;
+  /** Whitelist of slash command skills this agent can invoke */
+  skills?: string[];
   /** System prompt prepended to the agent's context */
   systemPrompt?: string;
   /** Source file path */
   sourcePath: string;
 }
 
+// ─── Frontmatter Parser ──────────────────────────────────────────
+
 /**
  * Parse YAML frontmatter from a markdown file.
- * Simple parser — handles string, number, boolean, and string[] values.
+ * Handles: string, number, boolean, string[] (inline and multi-line),
+ * and JSON values for complex structures (mcpServers, hooks).
  */
-function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } {
+export function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } {
   const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
   if (!match) return { meta: {}, body: content };
 
@@ -37,40 +86,205 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
   const body = match[2]!;
   const meta: Record<string, unknown> = {};
 
-  for (const line of yamlBlock.split("\n")) {
+  const lines = yamlBlock.split("\n");
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
     const trimmed = line.trim();
+    i++;
+
     if (!trimmed || trimmed.startsWith("#")) continue;
 
     const colonIdx = trimmed.indexOf(":");
     if (colonIdx < 0) continue;
 
     const key = trimmed.slice(0, colonIdx).trim();
-    let value: string | number | boolean | string[] = trimmed.slice(colonIdx + 1).trim();
+    let rawValue = trimmed.slice(colonIdx + 1).trim();
 
-    // Parse arrays: [item1, item2]
-    if (typeof value === "string" && value.startsWith("[") && value.endsWith("]")) {
-      meta[key] = value.slice(1, -1).split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+    // Multi-line YAML array (lines starting with "  -")
+    if (rawValue === "" || rawValue === "|") {
+      // Look ahead: multi-line array or multi-line string?
+      const collected: string[] = [];
+      let isArray = false;
+
+      while (i < lines.length) {
+        const nextLine = lines[i]!;
+        // Continuation line: starts with whitespace
+        if (nextLine.match(/^\s+/)) {
+          const nextTrimmed = nextLine.trim();
+          if (nextTrimmed.startsWith("- ")) {
+            isArray = true;
+            collected.push(nextTrimmed.slice(2).trim().replace(/^["']|["']$/g, ""));
+          } else if (nextTrimmed.startsWith("{") || nextTrimmed.startsWith("[")) {
+            // Inline JSON continuation
+            collected.push(nextTrimmed);
+          } else {
+            collected.push(nextTrimmed);
+          }
+          i++;
+        } else {
+          break;
+        }
+      }
+
+      if (isArray) {
+        meta[key] = collected.filter(Boolean);
+      } else if (collected.length > 0) {
+        // Try parsing as JSON (for mcpServers, hooks)
+        const joined = collected.join("\n");
+        if (joined.length > 100 * 1024) continue; // Skip JSON > 100KB
+        try {
+          meta[key] = JSON.parse(joined);
+        } catch {
+          meta[key] = joined;
+        }
+      }
+      continue;
+    }
+
+    // Inline JSON object or array
+    if (rawValue.startsWith("{") || (rawValue.startsWith("[") && rawValue.includes("{"))) {
+      try {
+        meta[key] = JSON.parse(rawValue);
+        continue;
+      } catch {
+        // Fall through to normal parsing
+      }
+    }
+
+    // Inline array: [item1, item2]
+    if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
+      meta[key] = rawValue.slice(1, -1).split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
       continue;
     }
 
     // Parse booleans
-    if (value === "true") { meta[key] = true; continue; }
-    if (value === "false") { meta[key] = false; continue; }
+    if (rawValue === "true") { meta[key] = true; continue; }
+    if (rawValue === "false") { meta[key] = false; continue; }
 
     // Parse numbers
-    const num = Number(value);
-    if (value !== "" && !isNaN(num)) { meta[key] = num; continue; }
+    const num = Number(rawValue);
+    if (rawValue !== "" && !isNaN(num)) { meta[key] = num; continue; }
 
     // Strip quotes
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
+    if ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"))) {
+      rawValue = rawValue.slice(1, -1);
     }
 
-    meta[key] = value;
+    meta[key] = rawValue;
   }
 
   return { meta, body };
 }
+
+// ─── Validation Helpers ──────────────────────────────────────────
+
+const VALID_EFFORT_LEVELS = new Set(["low", "medium", "high", "max"]);
+const VALID_PERMISSION_MODES = new Set(["ask", "auto", "plan", "deny", "acceptEdits"]);
+const MODEL_NAME_PATTERN = /^[a-zA-Z0-9._:/@-]{1,200}$/;
+
+function validateEffort(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return VALID_EFFORT_LEVELS.has(value) ? value : undefined;
+}
+
+function validatePermissionMode(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return VALID_PERMISSION_MODES.has(value) ? value : undefined;
+}
+
+function validateModel(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return MODEL_NAME_PATTERN.test(value) ? value : undefined;
+}
+
+function validateApiBase(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validateEnvValue(value: string): boolean {
+  return !/[\n\r\0]/.test(value) && value.length < 10000;
+}
+
+function validateMcpServers(value: unknown): Record<string, AgentMcpServer> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result: Record<string, AgentMcpServer> = {};
+  for (const [name, config] of Object.entries(value as Record<string, unknown>)) {
+    if (!config || typeof config !== "object") continue;
+    const c = config as Record<string, unknown>;
+    result[name] = {
+      command: typeof c.command === "string" ? c.command : undefined,
+      args: Array.isArray(c.args) ? c.args.map(String) : undefined,
+      env: c.env && typeof c.env === "object" ? c.env as Record<string, string> : undefined,
+      url: typeof c.url === "string" ? c.url : undefined,
+    };
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function validateHooks(value: unknown): AgentHookEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const result: AgentHookEntry[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const h = item as Record<string, unknown>;
+    if (typeof h.event !== "string") continue;
+    const actions: AgentHookAction[] = [];
+    if (Array.isArray(h.actions)) {
+      for (const a of h.actions) {
+        if (!a || typeof a !== "object") continue;
+        const act = a as Record<string, unknown>;
+        if (act.type !== "command" && act.type !== "http") continue;
+        actions.push({
+          type: act.type as "command" | "http",
+          command: typeof act.command === "string" ? act.command : undefined,
+          url: typeof act.url === "string" ? act.url : undefined,
+          timeout: typeof act.timeout === "number" ? act.timeout : undefined,
+        });
+      }
+    }
+    if (actions.length > 0) {
+      result.push({
+        event: h.event,
+        matcher: typeof h.matcher === "string" ? h.matcher : undefined,
+        actions,
+      });
+    }
+  }
+  return result.length > 0 ? result : undefined;
+}
+
+// ─── Agent Builder ───────────────────────────────────────────────
+
+function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile: string, sourcePath: string): CustomAgentDef {
+  return {
+    name: typeof meta.name === "string" ? meta.name : nameFromFile,
+    description: typeof meta.description === "string" ? meta.description : `Custom agent: ${nameFromFile}`,
+    model: validateModel(meta.model),
+    tools: Array.isArray(meta.tools) ? meta.tools as string[] : undefined,
+    disallowedTools: Array.isArray(meta.disallowedTools) ? meta.disallowedTools as string[] : undefined,
+    permissionMode: validatePermissionMode(meta.permissionMode),
+    maxTurns: typeof meta.maxTurns === "number" ? Math.min(Math.max(meta.maxTurns, 1), 100) : undefined,
+    effort: validateEffort(meta.effort),
+    apiKey: typeof meta.apiKey === "string" && validateEnvValue(meta.apiKey) ? meta.apiKey : undefined,
+    apiBase: validateApiBase(meta.apiBase),
+    mcpServers: validateMcpServers(meta.mcpServers),
+    hooks: validateHooks(meta.hooks),
+    memory: meta.memory === true,
+    skills: Array.isArray(meta.skills) ? meta.skills as string[] : undefined,
+    systemPrompt: body.trim() || undefined,
+    sourcePath,
+  };
+}
+
+// ─── Agent Loading ───────────────────────────────────────────────
 
 /**
  * Load agent definitions from a directory.
@@ -90,17 +304,7 @@ function loadAgentsFromDir(dir: string): CustomAgentDef[] {
 
         const { meta, body } = parseFrontmatter(content);
         const nameFromFile = entry.name.replace(/\.md$/, "");
-
-        agents.push({
-          name: typeof meta.name === "string" ? meta.name : nameFromFile,
-          description: typeof meta.description === "string" ? meta.description : `Custom agent: ${nameFromFile}`,
-          model: typeof meta.model === "string" ? meta.model : undefined,
-          tools: Array.isArray(meta.tools) ? meta.tools as string[] : undefined,
-          permissionMode: typeof meta.permissionMode === "string" ? meta.permissionMode : undefined,
-          maxTurns: typeof meta.maxTurns === "number" ? Math.min(Math.max(meta.maxTurns, 1), 100) : undefined,
-          systemPrompt: body.trim() || undefined,
-          sourcePath: filePath,
-        });
+        agents.push(buildAgentDef(meta, body, nameFromFile, filePath));
       } catch {
         // Skip unreadable files
       }
@@ -131,10 +335,71 @@ export function loadCustomAgents(cwd: string): CustomAgentDef[] {
   return [...byName.values()];
 }
 
+// ─── Inline Agent Definitions (from --agents CLI flag) ──────────
+
+const inlineAgents = new Map<string, CustomAgentDef>();
+
 /**
- * Find a custom agent by name.
+ * Register agent definitions from inline JSON (--agents CLI flag).
+ * These are merged with file-based agents, with inline taking priority.
+ */
+export function registerInlineAgents(defs: Array<Record<string, unknown>>): void {
+  for (const def of defs) {
+    const name = def.name;
+    if (!name || typeof name !== "string") continue;
+    inlineAgents.set(name, buildAgentDef(def, typeof def.systemPrompt === "string" ? def.systemPrompt : "", name, "(inline)"));
+  }
+}
+
+/**
+ * Find a custom agent by name (case-insensitive).
  */
 export function findCustomAgent(name: string, cwd: string): CustomAgentDef | null {
+  // Inline agents take priority
+  const inline = inlineAgents.get(name);
+  if (inline) return inline;
+
+  // Case-insensitive search through inline agents
+  const nameLower = name.toLowerCase();
+  for (const [key, agent] of inlineAgents) {
+    if (key.toLowerCase() === nameLower) return agent;
+  }
+
   const agents = loadCustomAgents(cwd);
-  return agents.find(a => a.name === name) ?? null;
+  return agents.find(a => a.name === name || a.name.toLowerCase() === nameLower) ?? null;
+}
+
+/**
+ * List all available agents (inline + file-based).
+ */
+export function listAllAgents(cwd: string): CustomAgentDef[] {
+  const fileAgents = loadCustomAgents(cwd);
+  const byName = new Map<string, CustomAgentDef>();
+
+  // File agents first (lower priority)
+  for (const agent of fileAgents) byName.set(agent.name, agent);
+  // Inline agents override
+  for (const [, agent] of inlineAgents) byName.set(agent.name, agent);
+
+  return [...byName.values()];
+}
+
+// ─── Agent Memory ────────────────────────────────────────────────
+
+/**
+ * Get the memory directory for an agent-scoped memory store.
+ * Located at ~/.kcode/agents/<name>/memory/
+ */
+export function getAgentMemoryDir(agentName: string): string {
+  // Sanitize agent name for use as directory
+  const safe = agentName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+  return join(homedir(), ".kcode", "agents", safe, "memory");
+}
+
+/**
+ * Check if an agent has memory enabled and return its memory directory.
+ */
+export function getAgentMemoryPath(agent: CustomAgentDef): string | null {
+  if (!agent.memory) return null;
+  return getAgentMemoryDir(agent.name);
 }

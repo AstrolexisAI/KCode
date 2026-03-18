@@ -101,7 +101,26 @@ export interface KCodeConfig {
   theme?: string;
   compactThreshold?: number; // 0.0 to 1.0, default 0.8 — trigger auto-compact at this % of context window
   permissionRules?: PermissionRule[]; // Granular per-tool rules (first match wins)
-  effortLevel?: "low" | "medium" | "high"; // Reasoning effort: adjusts maxTokens, temperature, prompt depth
+  effortLevel?: "low" | "medium" | "high" | "max"; // Reasoning effort: adjusts maxTokens, temperature, prompt depth
+  fallbackModel?: string; // Auto-switch to this model if primary fails
+  tertiaryModel?: string; // Ultra-lightweight fallback if both primary and fallback fail
+  fallbackModels?: string[]; // Ordered fallback chain — tried sequentially after primary + retries fail
+  maxBudgetUsd?: number; // Max spend per session in USD
+  outputFormat?: "text" | "json" | "stream-json"; // Output format for print mode
+  telemetry?: boolean; // Opt-in/out for local analytics tracking
+  systemPromptOverride?: string; // Override the entire system prompt
+  systemPromptAppend?: string; // Append text to the system prompt
+  sessionName?: string; // Named session (used in UI and transcript filename)
+  allowedTools?: string[]; // Whitelist of allowed tool names
+  disallowedTools?: string[]; // Blacklist of blocked tool names
+  noSessionPersistence?: boolean; // Do not save session transcript to disk
+  tmux?: boolean; // Open worktree agents in separate tmux panes
+  // Managed policy fields (org-level, immutable)
+  managedDisallowedTools?: string[]; // Org-level blocked tools (cannot be overridden)
+  managedAllowedTools?: string[]; // Org-level allowed tools (bypass permission prompts)
+  disableWebAccess?: boolean; // Org-level: disable WebFetch/WebSearch
+  auditLog?: boolean; // Org-level: require audit logging
+  orgId?: string; // Organization identifier for audit trail
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";
@@ -147,6 +166,18 @@ export interface TokenUsage {
   cacheReadInputTokens: number;
 }
 
+// ─── Per-Turn Cost Tracking ─────────────────────────────────────
+
+export interface TurnCostEntry {
+  turnIndex: number;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  toolCalls: string[];  // tool names used in this turn
+  timestamp: number;
+}
+
 // ─── Stream Events ───────────────────────────────────────────────
 
 export type StreamEvent =
@@ -155,13 +186,18 @@ export type StreamEvent =
   | { type: "tool_use_start"; toolUseId: string; name: string }
   | { type: "tool_input_delta"; toolUseId: string; partialJson: string }
   | { type: "tool_executing"; name: string; toolUseId: string; input: Record<string, unknown> }
-  | { type: "tool_result"; name: string; toolUseId: string; result: string; isError?: boolean }
+  | { type: "tool_result"; name: string; toolUseId: string; result: string; isError?: boolean; durationMs?: number }
   | { type: "usage_update"; usage: TokenUsage }
   | { type: "token_count"; tokens: number }
   | { type: "error"; error: Error; retryable: boolean; attempt?: number }
   | { type: "turn_start" }
   | { type: "suggestion"; suggestions: { type: string; message: string; priority: string }[] }
-  | { type: "turn_end"; stopReason: string };
+  | { type: "turn_end"; stopReason: string }
+  | { type: "compaction_start"; messageCount: number; tokensBefore: number }
+  | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }
+  | { type: "budget_warning"; costUsd: number; limitUsd: number; pct: number }
+  | { type: "tool_progress"; toolUseId: string; name: string; status: "queued" | "running" | "done" | "error"; index: number; total: number; durationMs?: number }
+  | { type: "tool_stream"; toolUseId: string; name: string; chunk: string };
 
 // ─── Tool Input/Output Schemas ───────────────────────────────────
 
