@@ -410,7 +410,17 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
       return readNotebook(file_path);
     }
 
-    // Default: text file
+    // Default: text file — check cache first
+    try {
+      const { getToolCache } = await import("../core/tool-cache.js");
+      const cache = getToolCache();
+      const cacheKey = cache.makeKey("Read", file_path, `${offset ?? 0}:${limit ?? 0}`);
+      const cached = cache.get(cacheKey, file_path);
+      if (cached) {
+        return { tool_use_id: "", content: cached };
+      }
+    } catch { /* cache not critical */ }
+
     const result = readTextFile(file_path, offset, limit);
 
     // Hint: if file is large and no offset was specified, nudge the model to use offset/limit
@@ -421,6 +431,14 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
         result.content += `\n\n[HINT: This file has ${totalLines} lines. You are viewing the first ${Math.min(totalLines, MAX_LINES)} lines. To read a specific section, use the offset and limit parameters: offset=100, limit=50 to read lines 100-150.]`;
       }
     }
+
+    // Cache the result for text files
+    try {
+      const { getToolCache } = await import("../core/tool-cache.js");
+      const cache = getToolCache();
+      const cacheKey = cache.makeKey("Read", file_path, `${offset ?? 0}:${limit ?? 0}`);
+      cache.set(cacheKey, file_path, result.content);
+    } catch { /* cache not critical */ }
 
     return result;
   } catch (error) {

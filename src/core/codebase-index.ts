@@ -1,12 +1,19 @@
 // KCode - Codebase Index
 // Builds and queries a persistent index of project files for fast lookup
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, extname } from "node:path";
+import { homedir } from "node:os";
 import { getDb } from "./db";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
+
+export interface SymbolDef {
+  name: string;
+  line: number; // 1-based line number
+  kind: "function" | "class" | "const" | "type" | "interface" | "enum" | "variable" | "method" | "struct" | "trait" | "other";
+}
 
 export interface IndexEntry {
   path: string;
@@ -15,6 +22,7 @@ export interface IndexEntry {
   size: number;
   exports: string[];
   imports: string[];
+  definitions: SymbolDef[];
   modifiedAt: number;
 }
 
@@ -52,6 +60,14 @@ export class CodebaseIndex {
    * Walks the project tree and extracts exports/imports from source files.
    */
   build(): number {
+    // Safety: don't index home directory, root, or non-project dirs
+    const home = homedir();
+    if (this.cwd === home || this.cwd === "/" || this.cwd === "/tmp") {
+      log.info("indexer", `Skipping index — "${this.cwd}" is not a project directory`);
+      this.indexed = true;
+      return 0;
+    }
+
     const startMs = Date.now();
     this.entries = [];
     this.walkDir(this.cwd, 0);
@@ -94,7 +110,8 @@ export class CodebaseIndex {
         if (stat.size > MAX_FILE_SIZE) continue;
 
         const content = readFileSync(fullPath, "utf-8");
-        const exports = this.extractExports(content, ext);
+        const definitions = this.extractDefinitions(content, ext);
+        const exports = definitions.map((d) => d.name);
         const imports = this.extractImports(content, ext);
 
         this.entries.push({
@@ -104,6 +121,7 @@ export class CodebaseIndex {
           size: stat.size,
           exports,
           imports,
+          definitions,
           modifiedAt: stat.mtimeMs,
         });
       } catch {
@@ -112,39 +130,57 @@ export class CodebaseIndex {
     }
   }
 
-  private extractExports(content: string, ext: string): string[] {
-    const exports: string[] = [];
+  private extractDefinitions(content: string, ext: string): SymbolDef[] {
+    const defs: SymbolDef[] = [];
+
+    // Pre-build line offset table: lineStarts[i] = char offset where line i+1 begins
+    const lineStarts = [0];
+    for (let i = 0; i < content.length; i++) {
+      if (content[i] === "\n") lineStarts.push(i + 1);
+    }
+    // Binary search for the 1-based line number at a given char offset
+    const offsetToLine = (offset: number): number => {
+      let lo = 0, hi = lineStarts.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (lineStarts[mid] <= offset) lo = mid; else hi = mid - 1;
+      }
+      return lo + 1; // 1-based
+    };
+
+    const kindMap: Record<string, SymbolDef["kind"]> = {
+      function: "function", class: "class", const: "const", let: "variable",
+      var: "variable", type: "type", interface: "interface", enum: "enum",
+      fn: "function", struct: "struct", trait: "trait", def: "function",
+    };
 
     if ([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"].includes(ext)) {
-      // export function/class/const/type/interface
-      const re = /export\s+(?:default\s+)?(?:function|class|const|let|var|type|interface|enum)\s+(\w+)/g;
+      const re = /export\s+(?:default\s+)?(?:(function|class|const|let|var|type|interface|enum))\s+(\w+)/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        exports.push(m[1]);
+        defs.push({ name: m[2], line: offsetToLine(m.index), kind: kindMap[m[1]] ?? "other" });
       }
     } else if (ext === ".py") {
-      // def/class at module level
-      const re = /^(?:def|class)\s+(\w+)/gm;
+      const re = /^(def|class)\s+(\w+)/gm;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        exports.push(m[1]);
+        defs.push({ name: m[2], line: offsetToLine(m.index), kind: m[1] === "class" ? "class" : "function" });
       }
     } else if (ext === ".go") {
-      // Exported = capitalized
-      const re = /^func\s+(\w*\s+)?([A-Z]\w*)/gm;
+      const re = /^func\s+(?:\(\w+\s+\*?\w+\)\s+)?([A-Z]\w*)/gm;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        exports.push(m[2]);
+        defs.push({ name: m[1], line: offsetToLine(m.index), kind: "function" });
       }
     } else if (ext === ".rs") {
-      const re = /pub\s+(?:fn|struct|enum|trait|type)\s+(\w+)/g;
+      const re = /pub\s+(fn|struct|enum|trait|type)\s+(\w+)/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        exports.push(m[1]);
+        defs.push({ name: m[2], line: offsetToLine(m.index), kind: kindMap[m[1]] ?? "other" });
       }
     }
 
-    return exports;
+    return defs;
   }
 
   private extractImports(content: string, ext: string): string[] {
@@ -179,20 +215,26 @@ export class CodebaseIndex {
         size INTEGER NOT NULL,
         exports TEXT DEFAULT '[]',
         imports TEXT DEFAULT '[]',
+        definitions TEXT DEFAULT '[]',
         modified_at REAL NOT NULL,
         indexed_at TEXT NOT NULL DEFAULT (datetime('now'))
       )`);
 
+      // Add definitions column if missing (migration for existing DBs)
+      try {
+        db.exec(`ALTER TABLE codebase_index ADD COLUMN definitions TEXT DEFAULT '[]'`);
+      } catch { /* column already exists */ }
+
       const stmt = db.prepare(
-        `INSERT OR REPLACE INTO codebase_index (path, relative_path, ext, size, exports, imports, modified_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO codebase_index (path, relative_path, ext, size, exports, imports, definitions, modified_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
 
       db.exec("BEGIN");
       // Clear old entries for this project
       db.run(`DELETE FROM codebase_index WHERE path LIKE ?`, [`${this.cwd}%`]);
       for (const e of this.entries) {
-        stmt.run(e.path, e.relativePath, e.ext, e.size, JSON.stringify(e.exports), JSON.stringify(e.imports), e.modifiedAt);
+        stmt.run(e.path, e.relativePath, e.ext, e.size, JSON.stringify(e.exports), JSON.stringify(e.imports), JSON.stringify(e.definitions), e.modifiedAt);
       }
       db.exec("COMMIT");
     } catch (err) {
@@ -208,7 +250,7 @@ export class CodebaseIndex {
     try {
       const db = getDb();
       const rows = db.query(
-        `SELECT path, relative_path, ext, size, exports, imports, modified_at
+        `SELECT path, relative_path, ext, size, exports, imports, definitions, modified_at
          FROM codebase_index WHERE path LIKE ? ORDER BY relative_path`,
       ).all(`${this.cwd}%`) as any[];
 
@@ -221,6 +263,7 @@ export class CodebaseIndex {
         size: r.size,
         exports: JSON.parse(r.exports),
         imports: JSON.parse(r.imports),
+        definitions: r.definitions ? JSON.parse(r.definitions) : [],
         modifiedAt: r.modified_at,
       }));
       this.indexed = true;
@@ -260,6 +303,33 @@ export class CodebaseIndex {
     return this.entries.filter((e) =>
       e.exports.some((exp) => exp.toLowerCase() === sym),
     );
+  }
+
+  /**
+   * Find the definition of a symbol with file path and line number.
+   */
+  findDefinition(symbol: string): Array<{ path: string; relativePath: string; line: number; kind: SymbolDef["kind"] }> {
+    if (!this.indexed) {
+      if (!this.loadFromDb()) this.build();
+    }
+
+    const sym = symbol.toLowerCase();
+    const results: Array<{ path: string; relativePath: string; line: number; kind: SymbolDef["kind"] }> = [];
+
+    for (const entry of this.entries) {
+      for (const def of entry.definitions) {
+        if (def.name.toLowerCase() === sym) {
+          results.push({
+            path: entry.path,
+            relativePath: entry.relativePath,
+            line: def.line,
+            kind: def.kind,
+          });
+        }
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -344,14 +414,87 @@ export class CodebaseIndex {
     ];
 
     for (const f of relevant) {
-      const exports = f.exports.length > 0 ? ` — exports: ${f.exports.slice(0, 5).join(", ")}` : "";
-      lines.push(`- \`${f.relativePath}\` (${f.size} bytes)${exports}`);
+      const defs = f.definitions.length > 0
+        ? ` — ${f.definitions.slice(0, 5).map((d) => `${d.name}:${d.line}`).join(", ")}`
+        : f.exports.length > 0
+          ? ` — exports: ${f.exports.slice(0, 5).join(", ")}`
+          : "";
+      lines.push(`- \`${f.relativePath}\` (${f.size} bytes)${defs}`);
     }
 
     lines.push("");
     lines.push("Consider reading these files if they are relevant to the current task.");
 
     return lines.join("\n");
+  }
+
+  /**
+   * Format relevant files with actual code snippets around matched definitions.
+   * Returns richer context than formatRelevantContext() by including source code.
+   * Used for enhanced smart context injection.
+   */
+  formatRelevantSnippets(query: string, maxTotalLines = 60): string | null {
+    const relevant = this.getRelevantFiles(query, 3);
+    if (relevant.length === 0) return null;
+
+    const words = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const sections: string[] = ["# Relevant Code Context (auto-detected)"];
+    let totalLines = 0;
+    const linesPerFile = Math.floor(maxTotalLines / Math.max(relevant.length, 1));
+
+    for (const f of relevant) {
+      if (totalLines >= maxTotalLines) break;
+
+      // Find definitions matching query words
+      const matchingDefs = f.definitions.filter((d) =>
+        words.some((w) => d.name.toLowerCase().includes(w)),
+      );
+
+      if (matchingDefs.length === 0 && f.definitions.length === 0) {
+        // No definitions — just list the file
+        sections.push(`\n## ${f.relativePath}`);
+        sections.push(`(${f.size} bytes, exports: ${f.exports.slice(0, 5).join(", ") || "none"})`);
+        totalLines += 2;
+        continue;
+      }
+
+      // Read actual file content for snippets
+      let fileContent: string;
+      try {
+        fileContent = readFileSync(f.path, "utf-8");
+      } catch {
+        continue;
+      }
+
+      const fileLines = fileContent.split("\n");
+      sections.push(`\n## ${f.relativePath}`);
+      totalLines += 1;
+
+      // Show snippets around matching definitions (or first few defs if no match)
+      const defsToShow = matchingDefs.length > 0
+        ? matchingDefs.slice(0, 3)
+        : f.definitions.slice(0, 2);
+
+      for (const def of defsToShow) {
+        if (totalLines >= maxTotalLines) break;
+
+        const startLine = Math.max(0, def.line - 1); // 0-based
+        const snippetLen = Math.min(8, linesPerFile, maxTotalLines - totalLines);
+        const endLine = Math.min(fileLines.length, startLine + snippetLen);
+
+        const snippet = fileLines.slice(startLine, endLine)
+          .map((l, i) => `${startLine + i + 1}│ ${l}`)
+          .join("\n");
+
+        sections.push(`\`${def.kind} ${def.name}\` (line ${def.line}):`);
+        sections.push("```");
+        sections.push(snippet);
+        sections.push("```");
+        totalLines += (endLine - startLine) + 3;
+      }
+    }
+
+    return totalLines > 3 ? sections.join("\n") : null;
   }
 }
 

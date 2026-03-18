@@ -3,10 +3,50 @@
 
 import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
-import { readdirSync } from "node:fs";
-import { resolve, dirname, basename } from "node:path";
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { resolve, dirname, basename, join } from "node:path";
+import { homedir } from "node:os";
 import { useTheme } from "../ThemeContext.js";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
+
+// ─── Persistent Input History ──────────────────────────────────
+
+const HISTORY_FILE = join(homedir(), ".kcode", "input_history");
+const MAX_HISTORY = 500;
+
+function loadPersistentHistory(): string[] {
+  try {
+    if (!existsSync(HISTORY_FILE)) return [];
+    const content = readFileSync(HISTORY_FILE, "utf-8");
+    // Each line is a JSON-encoded string to handle multi-line inputs safely
+    const entries: string[] = [];
+    for (const line of content.split("\n")) {
+      if (line.length === 0) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (typeof parsed === "string") entries.push(parsed);
+      } catch {
+        // Legacy plain-text line — import as-is
+        entries.push(line);
+      }
+    }
+    return entries.slice(0, MAX_HISTORY);
+  } catch {
+    return [];
+  }
+}
+
+function savePersistentHistory(entries: string[]): void {
+  try {
+    const dir = dirname(HISTORY_FILE);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    // JSON-encode each entry to safely handle newlines and special chars
+    const lines = entries.slice(0, MAX_HISTORY).map(e => JSON.stringify(e));
+    writeFileSync(HISTORY_FILE, lines.join("\n") + "\n", "utf-8");
+  } catch {
+    // Silently ignore write failures
+  }
+}
 
 interface CommandInfo {
   name: string;
@@ -85,7 +125,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = useState<string[]>(() => loadPersistentHistory());
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   // Tab completion state
@@ -109,7 +149,13 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     const trimmed = value.trim();
     if (trimmed.length === 0) return;
 
-    setHistory((prev) => [trimmed, ...prev]);
+    setHistory((prev) => {
+      // Deduplicate: remove if already at top
+      const deduped = prev[0] === trimmed ? prev : [trimmed, ...prev];
+      const clamped = deduped.slice(0, MAX_HISTORY);
+      savePersistentHistory(clamped);
+      return clamped;
+    });
     setHistoryIndex(-1);
     setValue("");
     setCursor(0);

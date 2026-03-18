@@ -282,7 +282,7 @@ describe("validateFileWritePath", () => {
   });
 
   test("blocks write outside working directory", () => {
-    const result = validateFileWritePath("/etc/passwd", "/home/user/project");
+    const result = validateFileWritePath("/other/project/file.txt", "/home/user/project");
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("outside working directory");
   });
@@ -533,5 +533,158 @@ describe("PermissionManager", () => {
       const result = await pm.checkPermission(makeToolUse("CustomTool", { arg: "value" }));
       expect(result.allowed).toBe(true);
     });
+  });
+});
+
+// ─── Protected Directory Patterns ──────────────────────────────
+
+describe("validateFileWritePath - protected directories", () => {
+  // Using /tmp/workdir as working directory so system dirs are outside
+  const cwd = "/tmp/workdir";
+
+  test("blocks write to /etc", () => {
+    const result = validateFileWritePath("/etc/hosts", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("protected system directory");
+  });
+
+  test("blocks write to /usr", () => {
+    const result = validateFileWritePath("/usr/local/bin/foo", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("protected system directory");
+  });
+
+  test("blocks write to /bin", () => {
+    const result = validateFileWritePath("/bin/malicious", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("protected system directory");
+  });
+
+  test("blocks write to /boot", () => {
+    const result = validateFileWritePath("/boot/grub.cfg", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("protected system directory");
+  });
+
+  test("blocks write to ~/.ssh", () => {
+    const home = process.env.HOME ?? "/root";
+    const result = validateFileWritePath(`${home}/.ssh/authorized_keys`, cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive credentials");
+  });
+
+  test("blocks write to ~/.aws", () => {
+    const home = process.env.HOME ?? "/root";
+    const result = validateFileWritePath(`${home}/.aws/credentials`, cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive credentials");
+  });
+
+  test("blocks write to ~/.gnupg", () => {
+    const home = process.env.HOME ?? "/root";
+    const result = validateFileWritePath(`${home}/.gnupg/secring.gpg`, cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive credentials");
+  });
+
+  test("blocks write to ~/.kube", () => {
+    const home = process.env.HOME ?? "/root";
+    const result = validateFileWritePath(`${home}/.kube/config`, cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive credentials");
+  });
+
+  test("blocks write to .env.local", () => {
+    const result = validateFileWritePath("/tmp/workdir/.env.local", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive");
+  });
+
+  test("blocks write to .env.production", () => {
+    const result = validateFileWritePath("/tmp/workdir/.env.production", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive");
+  });
+
+  test("blocks write to .gitconfig", () => {
+    const result = validateFileWritePath("/tmp/workdir/.gitconfig", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("sensitive");
+  });
+
+  test("allows write to normal file in /tmp/workdir", () => {
+    const result = validateFileWritePath("/tmp/workdir/src/main.ts", cwd);
+    expect(result.allowed).toBe(true);
+  });
+});
+
+// ─── WebFetch SSRF Protection ──────────────────────────────────
+
+import { validateFetchUrl } from "../tools/web-fetch.ts";
+
+describe("validateFetchUrl - SSRF protection", () => {
+  test("allows normal HTTPS URLs", () => {
+    expect(validateFetchUrl("https://example.com")).toBeNull();
+    expect(validateFetchUrl("https://api.github.com/repos")).toBeNull();
+  });
+
+  test("blocks localhost", () => {
+    const result = validateFetchUrl("https://localhost:8080/api");
+    expect(result).toContain("internal");
+  });
+
+  test("blocks 127.0.0.1", () => {
+    const result = validateFetchUrl("http://127.0.0.1/admin");
+    expect(result).toContain("private");
+  });
+
+  test("blocks 10.x private range", () => {
+    const result = validateFetchUrl("http://10.0.0.1/internal");
+    expect(result).toContain("private");
+  });
+
+  test("blocks 172.16.x private range", () => {
+    const result = validateFetchUrl("http://172.16.0.1/api");
+    expect(result).toContain("private");
+  });
+
+  test("blocks 192.168.x private range", () => {
+    const result = validateFetchUrl("http://192.168.1.1/admin");
+    expect(result).toContain("private");
+  });
+
+  test("blocks AWS metadata endpoint", () => {
+    const result = validateFetchUrl("http://169.254.169.254/latest/meta-data/");
+    expect(result).toContain("private");
+  });
+
+  test("blocks 0.0.0.0", () => {
+    const result = validateFetchUrl("http://0.0.0.0:3000");
+    expect(result).toContain("private");
+  });
+
+  test("blocks cloud metadata hostname", () => {
+    const result = validateFetchUrl("http://metadata.google.internal/computeMetadata/v1/");
+    expect(result).toContain("internal");
+  });
+
+  test("blocks non-http protocols", () => {
+    const result = validateFetchUrl("ftp://files.example.com/secret.txt");
+    expect(result).toContain("unsupported protocol");
+  });
+
+  test("blocks javascript: protocol", () => {
+    const result = validateFetchUrl("javascript:alert(1)");
+    expect(result).toContain("unsupported protocol");
+  });
+
+  test("blocks invalid URLs", () => {
+    const result = validateFetchUrl("not-a-url");
+    expect(result).toContain("invalid");
+  });
+
+  test("allows public IPs", () => {
+    expect(validateFetchUrl("https://8.8.8.8/dns-query")).toBeNull();
+    expect(validateFetchUrl("https://1.1.1.1")).toBeNull();
   });
 });

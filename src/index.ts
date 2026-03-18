@@ -39,16 +39,31 @@ import { voiceToText, isVoiceAvailable } from "./core/voice";
 import { getBenchmarkSummary, formatBenchmarks, initBenchmarkSchema } from "./core/benchmarks";
 
 // Version — hardcoded to avoid Bun bundler resolving wrong package.json
-const VERSION = "0.8.0";
+const VERSION = "1.0.0";
 
-// Prevent unhandled errors from background child processes from crashing kcode
+// Prevent unhandled errors from background child processes from crashing kcode.
+// Only exit on truly fatal errors — background I/O errors (ENXIO, ECONNREFUSED, etc.)
+// from child processes or system sockets should be logged but not kill the TUI.
 process.on("uncaughtException", (err) => {
-  log.error("process", `Uncaught exception: ${err.message}`);
+  const msg = err.message ?? String(err);
+  const code = (err as NodeJS.ErrnoException).code;
+
+  // Non-fatal system errors from background I/O — log and continue
+  const nonFatalCodes = new Set(["ENXIO", "ECONNREFUSED", "ECONNRESET", "EPIPE", "ENOENT", "ETIMEDOUT", "EACCES", "ENODEV", "EISDIR", "EMFILE", "ENFILE", "ENOSPC", "EROFS", "ENOTCONN", "EHOSTUNREACH", "ENETUNREACH"]);
+  if (code && nonFatalCodes.has(code)) {
+    log.error("process", `Non-fatal uncaught exception (${code}): ${msg}`);
+    return; // Don't exit
+  }
+
+  // Fatal errors — log to stderr synchronously and exit
+  process.stderr.write(`\n[KCode CRASH] ${err.stack ?? msg}\n`);
+  log.error("process", `Uncaught exception: ${msg}`);
   log.shutdown();
   process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
-  log.error("process", `Unhandled rejection: ${reason}`);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  log.error("process", `Unhandled rejection: ${msg}`);
 });
 
 // Graceful cleanup on signals
@@ -88,6 +103,23 @@ program
   .option("--add-dir <dirs...>", "Add additional working directories")
   .option("--compact-threshold <pct>", "Auto-compact threshold as percentage of context window (50-95, default 80)")
   .option("--no-tools", "Chat-only mode without tool calling")
+  .option("--fallback-model <model>", "Auto-switch to this model if primary fails")
+  .option("--max-budget-usd <amount>", "Max spend per session in USD")
+  .option("--output-format <format>", "Output format: text, json, stream-json (print mode only)")
+  .option("--effort <level>", "Reasoning effort level (low, medium, high, max)")
+  .option("--system-prompt <prompt>", "Override the system prompt entirely")
+  .option("--append-system-prompt <text>", "Append text to the system prompt")
+  .option("-n, --name <name>", "Name for this session")
+  .option("--from-pr <number>", "Resume or start a session linked to a GitHub PR (number or URL)")
+  .option("--allowed-tools <tools>", "Comma-separated list of allowed tool names")
+  .option("--disallowed-tools <tools>", "Comma-separated list of blocked tool names")
+  .option("--session-id <id>", "Use a specific session ID instead of generating one")
+  .option("--agent <name>", "Use a named agent definition")
+  .option("--no-session-persistence", "Do not save session transcript to disk")
+  .option("--mcp-config <path>", "Load MCP server configuration from a JSON file")
+  .option("--agents <json>", "Inline agent definitions as JSON array")
+  .option("--tmux", "Open worktree agents in separate tmux panes")
+  .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
     // Validate permission mode
@@ -237,6 +269,167 @@ pluginCmd
     const { uninstallPlugin } = await import("./core/plugin-registry");
     const result = await uninstallPlugin(name);
     console.log(result.success ? `\u2713 ${result.message}` : `\u2717 ${result.message}`);
+  });
+
+// ─── MCP subcommand ────────────────────────────────────────────
+
+const mcpCmd = program
+  .command("mcp")
+  .description("Manage MCP (Model Context Protocol) servers");
+
+mcpCmd
+  .command("list")
+  .alias("ls")
+  .description("List configured MCP servers and their status")
+  .action(async () => {
+    const cwd = process.cwd();
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+
+    // Read configs directly (don't start servers for a listing)
+    const paths = [
+      { path: join(homedir(), ".kcode", "settings.json"), scope: "user" },
+      { path: join(cwd, ".kcode", "settings.json"), scope: "project" },
+    ];
+
+    let found = false;
+    for (const { path, scope } of paths) {
+      try {
+        const file = Bun.file(path);
+        if (!(await file.exists())) continue;
+        const data = await file.json();
+        if (!data?.mcpServers || typeof data.mcpServers !== "object") continue;
+        const entries = Object.entries(data.mcpServers);
+        if (entries.length === 0) continue;
+
+        found = true;
+        console.log(`\n  ${scope === "user" ? "User" : "Project"} servers (${path}):`);
+        for (const [name, config] of entries) {
+          const cfg = config as any;
+          const cmd = cfg.command ?? "(unknown)";
+          const args = cfg.args ? ` ${cfg.args.join(" ")}` : "";
+          console.log(`    ${name} — ${cmd}${args}`);
+        }
+      } catch { /* skip */ }
+    }
+
+    if (!found) {
+      console.log("\n  No MCP servers configured.");
+      console.log("  Add one with: kcode mcp add <name> <command> [args...]\n");
+    }
+  });
+
+mcpCmd
+  .command("add <name> <command> [args...]")
+  .description("Add an MCP server to project settings")
+  .option("--user", "Add to user-level settings instead of project")
+  .action(async (name: string, command: string, args: string[], opts: { user?: boolean }) => {
+    // Validate server name
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
+      console.error("\u2717 Invalid server name. Use only letters, digits, hyphens, and underscores (max 64 chars).");
+      return;
+    }
+
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+
+    const settingsPath = opts.user
+      ? join(homedir(), ".kcode", "settings.json")
+      : join(process.cwd(), ".kcode", "settings.json");
+
+    let data: Record<string, any> = {};
+    try {
+      const file = Bun.file(settingsPath);
+      if (await file.exists()) data = await file.json();
+    } catch { /* start fresh */ }
+
+    if (!data.mcpServers) data.mcpServers = {};
+
+    if (data.mcpServers[name]) {
+      console.log(`\u2717 MCP server "${name}" already exists. Remove it first with: kcode mcp remove ${name}`);
+      return;
+    }
+
+    const entry: Record<string, unknown> = { command };
+    if (args.length > 0) entry.args = args;
+
+    data.mcpServers[name] = entry;
+
+    // Ensure directory exists
+    const { mkdirSync } = await import("node:fs");
+    const { dirname } = await import("node:path");
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    await Bun.write(settingsPath, JSON.stringify(data, null, 2) + "\n");
+
+    console.log(`\u2713 Added MCP server "${name}" (${command}${args.length > 0 ? " " + args.join(" ") : ""})`);
+    console.log(`  Config: ${settingsPath}`);
+  });
+
+mcpCmd
+  .command("remove <name>")
+  .alias("rm")
+  .description("Remove an MCP server from settings")
+  .option("--user", "Remove from user-level settings")
+  .action(async (name: string, opts: { user?: boolean }) => {
+    const { join } = await import("node:path");
+    const { homedir } = await import("node:os");
+
+    const settingsPath = opts.user
+      ? join(homedir(), ".kcode", "settings.json")
+      : join(process.cwd(), ".kcode", "settings.json");
+
+    try {
+      const file = Bun.file(settingsPath);
+      if (!(await file.exists())) {
+        console.log(`\u2717 No settings file at ${settingsPath}`);
+        return;
+      }
+      const data = await file.json();
+      if (!data?.mcpServers?.[name]) {
+        console.log(`\u2717 MCP server "${name}" not found in ${settingsPath}`);
+        return;
+      }
+
+      delete data.mcpServers[name];
+      if (Object.keys(data.mcpServers).length === 0) delete data.mcpServers;
+
+      await Bun.write(settingsPath, JSON.stringify(data, null, 2) + "\n");
+      console.log(`\u2713 Removed MCP server "${name}" from ${settingsPath}`);
+    } catch (err) {
+      console.error(`\u2717 Error: ${err instanceof Error ? err.message : err}`);
+    }
+  });
+
+mcpCmd
+  .command("tools [server]")
+  .description("List tools from running MCP servers")
+  .action(async (server?: string) => {
+    const { getMcpManager } = await import("./core/mcp");
+    const manager = getMcpManager();
+    try {
+      await manager.loadAndStart(process.cwd());
+      const tools = await manager.discoverTools();
+
+      const filtered = server
+        ? tools.filter(t => t.name.startsWith(`mcp__${server}__`))
+        : tools;
+
+      if (filtered.length === 0) {
+        console.log(server ? `  No tools from server "${server}".` : "  No MCP tools discovered.");
+        return;
+      }
+
+      console.log(`\n  MCP Tools (${filtered.length}):\n`);
+      for (const tool of filtered) {
+        console.log(`    ${tool.name}`);
+        if (tool.description) console.log(`      ${tool.description.slice(0, 100)}`);
+      }
+    } catch (err) {
+      console.error(`\u2717 Error: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      const { shutdownMcpManager } = await import("./core/mcp");
+      shutdownMcpManager();
+    }
   });
 
 // ─── Stats subcommand ────────────────────────────────────────────
@@ -566,7 +759,8 @@ program
   .command("init")
   .description("Initialize KCode in the current project")
   .option("--force", "Overwrite existing files")
-  .action(async (opts: { force?: boolean }) => {
+  .option("--hooks", "Install git hooks (pre-commit, pre-push)")
+  .action(async (opts: { force?: boolean; hooks?: boolean }) => {
     const { mkdirSync, existsSync, writeFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const cwd = process.cwd();
@@ -652,6 +846,78 @@ program
       }
     }
 
+    // 7. Install git hooks if --hooks flag is set
+    if (opts.hooks) {
+      const gitDir = join(cwd, ".git");
+      if (existsSync(gitDir)) {
+        const hooksDir = join(gitDir, "hooks");
+        mkdirSync(hooksDir, { recursive: true });
+
+        const preCommitPath = join(hooksDir, "pre-commit");
+        if (!existsSync(preCommitPath) || opts.force) {
+          writeFileSync(preCommitPath, `#!/bin/sh
+# KCode pre-commit hook — runs lint/typecheck on staged files
+# To skip: git commit --no-verify
+
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\\.(ts|tsx|js|jsx)$')
+if [ -n "$STAGED_TS" ]; then
+  echo "[kcode] Checking staged TypeScript/JS files..."
+  if command -v bunx >/dev/null 2>&1; then
+    bunx tsc --noEmit 2>/dev/null
+    if [ $? -ne 0 ]; then
+      echo "[kcode] TypeScript errors found. Fix them or commit with --no-verify."
+      exit 1
+    fi
+  fi
+fi
+`, "utf-8");
+          const { chmodSync } = await import("node:fs");
+          chmodSync(preCommitPath, 0o755);
+          created.push(".git/hooks/pre-commit");
+        } else {
+          skipped.push(".git/hooks/pre-commit (exists)");
+        }
+
+        const prePushPath = join(hooksDir, "pre-push");
+        if (!existsSync(prePushPath) || opts.force) {
+          writeFileSync(prePushPath, `#!/bin/sh
+# KCode pre-push hook — runs tests before pushing
+# To skip: git push --no-verify
+
+echo "[kcode] Running tests before push..."
+if [ -f "package.json" ]; then
+  if command -v bun >/dev/null 2>&1; then
+    bun test
+    STATUS=$?
+  elif command -v npm >/dev/null 2>&1; then
+    npm test
+    STATUS=$?
+  else
+    STATUS=0
+  fi
+  if [ "$STATUS" -ne 0 ]; then
+    echo "[kcode] Tests failed. Fix them or push with --no-verify."
+    exit 1
+  fi
+elif [ -f "Makefile" ] && grep -q "^test:" Makefile; then
+  make test
+  if [ $? -ne 0 ]; then
+    echo "[kcode] Tests failed."
+    exit 1
+  fi
+fi
+`, "utf-8");
+          const { chmodSync } = await import("node:fs");
+          chmodSync(prePushPath, 0o755);
+          created.push(".git/hooks/pre-push");
+        } else {
+          skipped.push(".git/hooks/pre-push (exists)");
+        }
+      } else {
+        console.log("  \x1b[33m⚠\x1b[0m Not a git repository — skipping hooks installation.");
+      }
+    }
+
     // Report
     if (created.length > 0) {
       console.log("\x1b[32m✓\x1b[0m KCode initialized:");
@@ -662,6 +928,9 @@ program
     }
     console.log("\nEdit \x1b[1mKCODE.md\x1b[0m to teach KCode about this project.");
     console.log("Add awareness modules: \x1b[1mkcode teach add <name>\x1b[0m");
+    if (!opts.hooks) {
+      console.log("Install git hooks:    \x1b[1mkcode init --hooks\x1b[0m");
+    }
   });
 
 // ─── New subcommand (project scaffolding) ───────────────────────
@@ -859,60 +1128,78 @@ program
 
 program
   .command("search <query>")
-  .description("Search through past session transcripts")
+  .description("Search through past session transcripts (FTS-powered)")
   .option("-n, --number <n>", "Max results to show", parseInt, 10)
   .option("-d, --days <days>", "Limit search to last N days", parseInt, 30)
-  .action(async (query: string, opts: { number?: number; days?: number }) => {
-    const transcript = new TranscriptManager();
-    const sessions = transcript.listSessions();
-    const cutoff = Date.now() - (opts.days ?? 30) * 24 * 60 * 60 * 1000;
-    const queryLower = query.toLowerCase();
+  .option("--reindex", "Rebuild the FTS search index")
+  .action(async (query: string, opts: { number?: number; days?: number; reindex?: boolean }) => {
+    const { indexAllTranscripts, searchTranscripts, getIndexStats } = await import("./core/transcript-search");
     const maxResults = opts.number ?? 10;
 
-    interface SearchResult {
-      session: string;
-      date: string;
-      role: string;
-      content: string;
-      lineNum: number;
+    // Auto-index on first use or when --reindex is passed
+    const doReindex = opts.reindex ?? false;
+    if (doReindex) {
+      console.log("Rebuilding search index...");
     }
 
-    const results: SearchResult[] = [];
-
-    for (const session of sessions) {
-      // Check date cutoff from filename
-      const dateStr = session.filename.slice(0, 10);
-      const fileDate = new Date(dateStr).getTime();
-      if (!isNaN(fileDate) && fileDate < cutoff) continue;
-
-      const entries = transcript.loadSession(session.filename);
-      for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
-        if (entry.content.toLowerCase().includes(queryLower)) {
-          results.push({
-            session: session.filename,
-            date: session.startedAt,
-            role: entry.role,
-            content: entry.content,
-            lineNum: i + 1,
-          });
-          if (results.length >= maxResults) break;
-        }
-      }
-      if (results.length >= maxResults) break;
+    const { indexed, entries } = indexAllTranscripts(doReindex);
+    if (indexed > 0) {
+      console.log(`Indexed ${indexed} new sessions (${entries} entries).`);
     }
 
-    if (results.length === 0) {
-      console.log(`No matches for "${query}" in last ${opts.days ?? 30} days.`);
+    const stats = getIndexStats();
+    if (stats.entries === 0) {
+      console.log("No transcripts to search. Start a conversation first.");
       return;
     }
 
-    console.log(`\nFound ${results.length} match(es) for "${query}":\n`);
+    // Use FTS search
+    const results = searchTranscripts(query, maxResults);
+
+    if (results.length === 0) {
+      // Fallback: try linear search for partial matches
+      const transcript = new TranscriptManager();
+      const sessions = transcript.listSessions();
+      const cutoff = Date.now() - (opts.days ?? 30) * 24 * 60 * 60 * 1000;
+      const queryLower = query.toLowerCase();
+      let found = 0;
+
+      console.log(`\nNo FTS matches for "${query}". Trying substring search...\n`);
+
+      for (const session of sessions) {
+        const dateStr = session.filename.slice(0, 10);
+        const fileDate = new Date(dateStr).getTime();
+        if (!isNaN(fileDate) && fileDate < cutoff) continue;
+
+        const entries = transcript.loadSession(session.filename);
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          if (entry.content.toLowerCase().includes(queryLower)) {
+            const preview = entry.content.slice(0, 120).replace(/\n/g, " ");
+            console.log(`  \x1b[36m${session.startedAt}\x1b[0m [${entry.role}]`);
+            console.log(`    ${preview}${entry.content.length > 120 ? "..." : ""}`);
+            console.log(`    \x1b[2mSession: ${session.filename}:${i + 1}\x1b[0m`);
+            console.log();
+            found++;
+            if (found >= maxResults) break;
+          }
+        }
+        if (found >= maxResults) break;
+      }
+
+      if (found === 0) {
+        console.log(`No matches for "${query}" in last ${opts.days ?? 30} days.`);
+      }
+      return;
+    }
+
+    console.log(`\nFound ${results.length} match(es) for "${query}" (${stats.sessions} sessions indexed):\n`);
     for (const r of results) {
       const preview = r.content.slice(0, 120).replace(/\n/g, " ");
-      console.log(`  \x1b[36m${r.date}\x1b[0m [${r.role}]`);
+      const dateStr = r.timestamp ? new Date(r.timestamp).toLocaleString() : "";
+      console.log(`  \x1b[36m${dateStr}\x1b[0m [${r.role}]`);
       console.log(`    ${preview}${r.content.length > 120 ? "..." : ""}`);
-      console.log(`    \x1b[2mSession: ${r.session}:${r.lineNum}\x1b[0m`);
+      console.log(`    \x1b[2mSession: ${r.sessionFile}\x1b[0m`);
       console.log();
     }
   });
@@ -926,7 +1213,8 @@ program
   .option("-i, --ignore <dirs>", "Directories to ignore (comma-separated)", "node_modules,dist,build,.git,__pycache__")
   .option("--run <command>", "Command to run on file change (default: auto-detect test runner)")
   .option("--debounce <ms>", "Debounce interval in milliseconds", parseInt, 500)
-  .action(async (glob: string | undefined, opts: { pattern?: string; ignore?: string; run?: string; debounce?: number }) => {
+  .option("--auto-fix", "On failure, invoke KCode to auto-fix errors and re-run")
+  .action(async (glob: string | undefined, opts: { pattern?: string; ignore?: string; run?: string; debounce?: number; autoFix?: boolean }) => {
     const { watch } = await import("node:fs");
     const { join, relative, resolve: resolvePath } = await import("node:path");
     const { readdirSync, existsSync } = await import("node:fs");
@@ -950,6 +1238,7 @@ program
     if (command) {
       console.log(`\x1b[36mWatching:\x1b[0m ${watchPattern}`);
       console.log(`\x1b[36mCommand:\x1b[0m ${command}`);
+      if (opts.autoFix) console.log(`\x1b[36mAuto-fix:\x1b[0m enabled (KCode will attempt to fix errors)`);
       console.log(`\x1b[2mPress Ctrl+C to stop\x1b[0m\n`);
     } else {
       console.log(`\x1b[36mWatching for changes...\x1b[0m (Ctrl+C to stop)`);
@@ -960,8 +1249,11 @@ program
     let timeout: ReturnType<typeof setTimeout> | null = null;
     let runCount = 0;
 
-    const runCommand = (changedFile: string) => {
+    let autoFixRunning = false;
+
+    const runCommand = async (changedFile: string) => {
       if (!command) return;
+      if (autoFixRunning) return; // Don't trigger while auto-fix is in progress
       runCount++;
       const rel = relative(cwd, changedFile);
       console.log(`\x1b[33m[${runCount}]\x1b[0m ${rel} changed — running: ${command}`);
@@ -973,8 +1265,34 @@ program
         console.log(`\x1b[32m✓\x1b[0m ${lastLines}\n`);
       } catch (err: any) {
         const stderr = err.stderr?.toString() || err.stdout?.toString() || err.message;
-        const lines = stderr.trim().split("\n").slice(-8).join("\n");
-        console.log(`\x1b[31m✗\x1b[0m ${lines}\n`);
+        const errorLines = stderr.trim().split("\n").slice(-8).join("\n");
+        console.log(`\x1b[31m✗\x1b[0m ${errorLines}\n`);
+
+        // Auto-fix: invoke KCode to analyze and fix the errors
+        if (opts.autoFix && !autoFixRunning) {
+          autoFixRunning = true;
+          console.log(`\x1b[36m⚡ Auto-fix: invoking KCode to fix errors...\x1b[0m`);
+          const truncatedErr = stderr.trim().slice(-3000);
+          const fixPrompt = `The command "${command}" failed. Error output:\n\`\`\`\n${truncatedErr}\n\`\`\`\nAnalyze the errors, read the failing files, apply minimal fixes, then run "${command}" again to verify.`;
+          try {
+            const { execFileSync } = await import("node:child_process");
+            const kcodeArgs = ["--print", "--permission", "acceptEdits", fixPrompt];
+            const { homedir } = await import("node:os");
+            const kcodeBin = [join(homedir(), ".local", "bin", "kcode"), "/usr/local/bin/kcode"].find(p => existsSync(p)) ?? "kcode";
+            const fixOutput = execFileSync(kcodeBin, kcodeArgs, {
+              cwd,
+              timeout: 120000,
+              stdio: "pipe",
+              env: { ...process.env },
+            }).toString();
+            const fixLines = fixOutput.trim().split("\n").slice(-10).join("\n");
+            console.log(`\x1b[32m⚡ Auto-fix result:\x1b[0m\n${fixLines}\n`);
+          } catch (fixErr: any) {
+            const fixStderr = fixErr.stderr?.toString() || fixErr.message || "";
+            console.log(`\x1b[31m⚡ Auto-fix failed:\x1b[0m ${fixStderr.trim().split("\n").slice(-3).join("\n")}\n`);
+          }
+          autoFixRunning = false;
+        }
       }
     };
 
@@ -1372,7 +1690,7 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; file?: string },
 ) {
   const cwd = process.cwd();
 
@@ -1486,13 +1804,26 @@ async function runMain(
   const lsp = getLspManager(cwd);
   if (lsp) lsp.autoStart().catch(() => {});
 
-  // Apply CLI overrides
+  // Apply CLI overrides (respecting managed policy)
   if (opts.model) {
-    config.model = opts.model;
-    config.modelExplicitlySet = true;
+    const { loadManagedPolicy, isModelAllowedByPolicy } = await import("./core/config");
+    const policy = await loadManagedPolicy();
+    if (isModelAllowedByPolicy(opts.model, policy)) {
+      config.model = opts.model;
+      config.modelExplicitlySet = true;
+    } else {
+      console.error(`\x1b[33mWarning: model "${opts.model}" is blocked by managed policy. Using "${config.model}" instead.\x1b[0m`);
+    }
   }
   if (opts.permission) {
-    config.permissionMode = opts.permission as PermissionMode;
+    // Check if managed policy forces a permission mode
+    const { loadManagedPolicy } = await import("./core/config");
+    const policy = await loadManagedPolicy();
+    if (policy.permissionMode) {
+      console.error(`\x1b[33mWarning: permission mode is locked to "${policy.permissionMode}" by managed policy.\x1b[0m`);
+    } else {
+      config.permissionMode = opts.permission as PermissionMode;
+    }
   }
   if (opts.jsonSchema) {
     config.jsonSchema = opts.jsonSchema;
@@ -1515,6 +1846,59 @@ async function runMain(
     setTheme(themeName);
   }
 
+  // Apply fallback model
+  if (opts.fallbackModel) {
+    config.fallbackModel = opts.fallbackModel;
+  }
+
+  // Apply budget limit
+  if (opts.maxBudgetUsd) {
+    const budget = parseFloat(opts.maxBudgetUsd);
+    if (budget > 0 && isFinite(budget)) {
+      config.maxBudgetUsd = budget;
+    } else {
+      console.error("Warning: --max-budget-usd must be a positive number. Ignoring.");
+    }
+  }
+
+  // Apply output format
+  if (opts.outputFormat) {
+    const valid = ["text", "json", "stream-json"];
+    if (valid.includes(opts.outputFormat)) {
+      config.outputFormat = opts.outputFormat as "text" | "json" | "stream-json";
+    } else {
+      console.error(`Warning: --output-format must be one of: ${valid.join(", ")}. Using text.`);
+    }
+  }
+
+  // Apply effort level
+  if (opts.effort) {
+    const validEffort = ["low", "medium", "high", "max"];
+    if (validEffort.includes(opts.effort)) {
+      config.effortLevel = opts.effort as "low" | "medium" | "high" | "max";
+    } else {
+      console.error(`Warning: --effort must be one of: ${validEffort.join(", ")}. Using default.`);
+    }
+  }
+
+  // Apply system prompt override
+  if (opts.systemPrompt) {
+    config.systemPromptOverride = opts.systemPrompt;
+    // When both --system-prompt and --append-system-prompt are set,
+    // append the extra text to the override so it is not silently dropped.
+    if (opts.appendSystemPrompt) {
+      config.systemPromptOverride += "\n\n" + opts.appendSystemPrompt;
+    }
+  } else if (opts.appendSystemPrompt) {
+    // Apply system prompt append (only when there's no override)
+    config.systemPromptAppend = opts.appendSystemPrompt;
+  }
+
+  // Apply session name
+  if (opts.name) {
+    config.sessionName = opts.name;
+  }
+
   // Apply sandbox mode
   if (opts.sandbox) {
     const mode = typeof opts.sandbox === "string" ? opts.sandbox : "light";
@@ -1522,6 +1906,67 @@ async function runMain(
       setSandboxMode(mode);
       process.stderr.write(`\x1b[33m🛡 Sandbox: ${mode}\x1b[0m\n`);
     }
+  }
+
+  // Apply allowed/disallowed tools
+  if (opts.allowedTools) {
+    config.allowedTools = opts.allowedTools.split(",").map((s: string) => s.trim()).filter(Boolean);
+  }
+  if (opts.disallowedTools) {
+    config.disallowedTools = opts.disallowedTools.split(",").map((s: string) => s.trim()).filter(Boolean);
+  }
+
+  // Validate and apply session ID
+  if (opts.sessionId) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(opts.sessionId)) {
+      console.error("Error: --session-id must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000)");
+      process.exit(1);
+    }
+  }
+
+  // Apply --agent: load a named agent definition
+  if (opts.agent) {
+    const { findCustomAgent } = await import("./core/custom-agents");
+    const agentDef = findCustomAgent(opts.agent, cwd);
+    if (!agentDef) {
+      console.error(`Error: Agent '${opts.agent}' not found. Place agent definitions in ~/.kcode/agents/${opts.agent}.md or .kcode/agents/${opts.agent}.md`);
+      process.exit(1);
+    }
+    if (agentDef.model) {
+      config.model = agentDef.model;
+      config.modelExplicitlySet = true;
+    }
+    if (agentDef.systemPrompt) {
+      config.systemPromptOverride = agentDef.systemPrompt;
+    }
+    if (agentDef.tools && config.allowedTools) {
+      // Intersect: only allow tools that are in BOTH the CLI --allowed-tools and agent's tools
+      config.allowedTools = config.allowedTools.filter((t: string) => agentDef.tools!.includes(t));
+    } else if (agentDef.tools) {
+      config.allowedTools = agentDef.tools;
+    }
+    if (agentDef.permissionMode) {
+      const validPerms = ["ask", "auto", "plan", "deny", "acceptEdits"];
+      if (validPerms.includes(agentDef.permissionMode)) {
+        config.permissionMode = agentDef.permissionMode as import("./core/types").PermissionMode;
+      } else {
+        console.error(`Warning: Agent '${agentDef.name}' has invalid permissionMode '${agentDef.permissionMode}'. Ignoring.`);
+      }
+    }
+    log.info("session", `Using agent '${agentDef.name}' from ${agentDef.sourcePath}`);
+    console.error(`Using agent: ${agentDef.name}`);
+  }
+
+  // Apply --no-session-persistence
+  if (opts.sessionPersistence === false) {
+    config.noSessionPersistence = true;
+  }
+
+  // Initialize telemetry state from config
+  if (config.telemetry !== undefined) {
+    const { setTelemetryEnabled } = await import("./core/analytics");
+    setTelemetryEnabled(config.telemetry);
   }
 
   // Voice input: record and transcribe before starting
@@ -1581,8 +2026,83 @@ async function runMain(
     console.error("\x1b[33mChat-only mode (no tools)\x1b[0m");
   }
 
+  // Load MCP servers from --mcp-config JSON file
+  if (opts.mcpConfig) {
+    try {
+      const mcpConfigPath = resolve(opts.mcpConfig);
+      const file = Bun.file(mcpConfigPath);
+      if (!(await file.exists())) {
+        console.error(`Error: MCP config file not found: ${mcpConfigPath}`);
+        process.exit(1);
+      }
+      const data = await file.json() as Record<string, unknown>;
+      if (data?.mcpServers && typeof data.mcpServers === "object") {
+        const { getMcpManager } = await import("./core/mcp");
+        const manager = getMcpManager();
+        await manager.loadFromConfigs(data.mcpServers as import("./core/mcp").McpServersConfig);
+        manager.registerTools(tools);
+        const serverNames = manager.getServerNames();
+        if (serverNames.length > 0) {
+          const toolCount = tools.getToolNames().filter((n: string) => n.startsWith("mcp__")).length;
+          console.error(`[MCP] Loaded ${serverNames.length} server(s) from ${mcpConfigPath}, registered ${toolCount} tool(s)`);
+        }
+      } else {
+        console.error(`Warning: --mcp-config file has no "mcpServers" key. Expected format: { "mcpServers": { ... } }`);
+      }
+    } catch (err) {
+      console.error(`Warning: Failed to load MCP config: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Parse --agents inline JSON definitions
+  if (opts.agents) {
+    try {
+      const agentDefs = JSON.parse(opts.agents) as Array<{ name: string; model?: string; systemPrompt?: string; tools?: string[]; maxTurns?: number }>;
+      if (!Array.isArray(agentDefs)) {
+        console.error("Error: --agents must be a JSON array of agent objects.");
+        process.exit(1);
+      }
+      const { registerInlineAgents } = await import("./core/custom-agents");
+      registerInlineAgents(agentDefs);
+      console.error(`[Agents] Registered ${agentDefs.length} inline agent definition(s)`);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        console.error(`Error: --agents JSON is invalid: ${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
+  }
+
+  // Store --tmux flag for agent tool to use
+  if (opts.tmux) {
+    const { setTmuxMode } = await import("./tools/agent");
+    setTmuxMode(true);
+  }
+
   // Create conversation manager
   const conversationManager = new ConversationManager(config, tools);
+
+  // Apply explicit session ID if provided
+  if (opts.sessionId) {
+    conversationManager.setSessionId(opts.sessionId);
+  }
+
+  // Wire the undo manager into the Undo tool
+  try {
+    const { setUndoManager } = await import("./tools/undo.js");
+    setUndoManager(conversationManager.getUndo());
+  } catch { /* non-critical */ }
+
+  // Wire stash callbacks for conversation context snapshots
+  try {
+    const { setStashCallbacks } = await import("./tools/stash.js");
+    setStashCallbacks(
+      () => conversationManager.getState().messages,
+      (msgs) => { conversationManager.restoreMessages(msgs); },
+    );
+  } catch { /* non-critical */ }
+
   log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}, noTools=${!!opts.noTools}`);
 
   // Resume previous session if --continue flag is set
@@ -1618,6 +2138,169 @@ async function runMain(
     // Don't set opts.continue — this starts a NEW transcript file
   }
 
+  // Resume or start session linked to a GitHub PR if --from-pr is set
+  if (opts.fromPr) {
+    try {
+      // Parse PR number from argument (supports "123", "#123", or full URL)
+      const prArg = opts.fromPr.replace(/^#/, "");
+      const prMatch = prArg.match(/\/pull\/(\d+)/);
+      const prNumber = prMatch ? prMatch[1] : prArg;
+
+      if (!/^\d+$/.test(prNumber!)) {
+        console.error(`Error: Invalid PR reference "${opts.fromPr}". Use a number, #number, or GitHub PR URL.`);
+        process.exit(1);
+      }
+
+      // Fetch PR details using gh CLI
+      console.error(`Fetching PR #${prNumber} details...`);
+      const { execSync } = await import("node:child_process");
+      let prData: { title: string; body: string; files: Array<{ path: string }>; comments: Array<{ body: string; author: { login: string } }> };
+      try {
+        const raw = execSync(
+          `gh pr view ${prNumber} --json title,body,files,comments`,
+          { encoding: "utf-8", timeout: 15_000 },
+        ).trim();
+        prData = JSON.parse(raw);
+      } catch (err) {
+        console.error(`Error: Could not fetch PR #${prNumber}. Make sure 'gh' CLI is installed and authenticated.`);
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+
+      // Search transcript history for sessions related to this PR
+      let resumedFromTranscript = false;
+      try {
+        const transcript = new TranscriptManager();
+        const sessions = transcript.listSessions();
+        const prSearchTerms = [`PR #${prNumber}`, `#${prNumber}`, prData.title.toLowerCase()];
+
+        for (const session of sessions) {
+          // Check if session prompt mentions this PR
+          const promptLower = session.prompt.toLowerCase();
+          const isRelated = prSearchTerms.some(term => promptLower.includes(term.toLowerCase()));
+
+          if (isRelated) {
+            const messages = transcript.loadSessionMessages(session.filename);
+            if (messages.length > 0) {
+              conversationManager.restoreMessages(messages);
+              console.error(`Resumed session linked to PR #${prNumber} (${messages.length} messages from ${session.startedAt})`);
+              log.info("session", `Resumed PR-linked session from ${session.filename} for PR #${prNumber}`);
+              resumedFromTranscript = true;
+              break;
+            }
+          }
+        }
+      } catch { /* transcript search is best-effort */ }
+
+      // If no related session found, inject PR context into the conversation
+      if (!resumedFromTranscript) {
+        const fileList = prData.files?.map((f: { path: string }) => f.path).join("\n  ") ?? "(none)";
+        const commentSummary = prData.comments?.length
+          ? prData.comments.slice(0, 5).map((c: { author: { login: string }; body: string }) => `  @${c.author.login}: ${c.body.slice(0, 200)}`).join("\n")
+          : "(no comments)";
+
+        const prContext = [
+          `[PR CONTEXT] Starting session linked to PR #${prNumber}`,
+          ``,
+          `Title: ${prData.title}`,
+          ``,
+          `Description:`,
+          prData.body?.slice(0, 1500) ?? "(no description)",
+          ``,
+          `Files changed:`,
+          `  ${fileList}`,
+          ``,
+          `Recent comments:`,
+          commentSummary,
+        ].join("\n");
+
+        // Inject as a system-like user message so the LLM has PR context
+        conversationManager.restoreMessages([
+          { role: "user", content: prContext },
+          { role: "assistant", content: [{ type: "text", text: `I have the context for PR #${prNumber}: "${prData.title}". I can see the changed files and comments. How can I help with this PR?` }] },
+        ]);
+        console.error(`Started new session with PR #${prNumber} context: "${prData.title}"`);
+        log.info("session", `New session with PR #${prNumber} context injected`);
+      }
+    } catch (err) {
+      if (!(err instanceof Error && err.message.includes("process.exit"))) {
+        console.error(`Warning: --from-pr failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.error("Starting session without PR context.");
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  // ─── Download --file content and inject into context ──────
+  if (opts.file) {
+    try {
+      let fileContent: string;
+      const fileArg = opts.file as string;
+
+      if (fileArg.startsWith("http://") || fileArg.startsWith("https://")) {
+        // Block private/internal URLs to prevent SSRF
+        const url = new URL(fileArg);
+        const hostname = url.hostname.toLowerCase();
+        if (
+          hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" ||
+          hostname.startsWith("169.254.") || hostname.startsWith("10.") ||
+          hostname.startsWith("192.168.") || hostname.match(/^172\.(1[6-9]|2\d|3[01])\./) ||
+          hostname === "metadata.google.internal" || hostname.endsWith(".internal")
+        ) {
+          throw new Error(`Blocked: cannot fetch from private/internal URL: ${fileArg}`);
+        }
+
+        // Download from URL
+        console.error(`Downloading ${fileArg}...`);
+        const resp = await fetch(fileArg, { signal: AbortSignal.timeout(30_000) });
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+        }
+
+        // Size guard: check content-length before reading body
+        const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
+        const contentLength = parseInt(resp.headers.get("content-length") || "0");
+        if (contentLength > MAX_FILE_SIZE) {
+          throw new Error(`File too large (${contentLength} bytes). Max: ${MAX_FILE_SIZE} bytes.`);
+        }
+
+        fileContent = await resp.text();
+
+        // Enforce size limit on actual content (content-length may be absent or wrong)
+        if (fileContent.length > MAX_FILE_SIZE) {
+          fileContent = fileContent.slice(0, MAX_FILE_SIZE);
+          console.error(`Warning: --file content truncated to ${MAX_FILE_SIZE} bytes.`);
+        }
+      } else {
+        // Read local file using Bun.file()
+        const filePath = resolve(fileArg);
+        const file = Bun.file(filePath);
+        if (!(await file.exists())) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+        fileContent = await file.text();
+      }
+
+      if (fileContent.trim()) {
+        // Inject as context messages in the conversation
+        const truncated = fileContent.length > 500_000
+          ? fileContent.slice(0, 500_000) + "\n\n[... truncated at 500K characters ...]"
+          : fileContent;
+        conversationManager.restoreMessages([
+          ...conversationManager.getState().messages,
+          { role: "user", content: `<file source="${fileArg}">\n${truncated}\n</file>` },
+          { role: "assistant", content: [{ type: "text", text: `I have the contents of ${fileArg} in context. How can I help?` }] },
+        ]);
+        console.error(`Added file to context: ${fileArg} (${fileContent.length.toLocaleString()} chars)`);
+        log.info("session", `--file loaded: ${fileArg} (${fileContent.length} chars)`);
+      }
+    } catch (err) {
+      console.error(`Warning: --file failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("Starting session without file context.");
+    }
+  }
+
   // ─── Read piped stdin if available ─────────────────────────
 
   if (promptText && !process.stdin.isTTY) {
@@ -1637,7 +2320,7 @@ async function runMain(
 
   if (promptText && opts.print) {
     // Print mode: output only text, suitable for piping
-    const exitCode = await runPrintMode(conversationManager, promptText);
+    const exitCode = await runPrintMode(conversationManager, promptText, config.outputFormat ?? "text");
     process.exit(exitCode);
   }
 
@@ -1647,9 +2330,28 @@ async function runMain(
     return;
   }
 
+  // Start file watcher for codebase index auto-refresh
+  let fileWatcher: import("./core/file-watcher").FileWatcher | null = null;
+  try {
+    const { getFileWatcher } = await import("./core/file-watcher.js");
+    const { getCodebaseIndex } = await import("./core/codebase-index.js");
+    fileWatcher = getFileWatcher(cwd);
+    fileWatcher.start((changes) => {
+      // Rebuild codebase index when files change externally
+      try {
+        const idx = getCodebaseIndex(cwd);
+        idx.build();
+        log.info("watcher", `Re-indexed after ${changes.length} external file change(s)`);
+      } catch { /* non-critical */ }
+    });
+  } catch { /* file watcher is optional */ }
+
   // Interactive mode: start the Ink-based terminal UI
   const app = startUI({ config, conversationManager, tools });
   await app.waitUntilExit();
+
+  // Stop file watcher
+  fileWatcher?.stop();
 
   // Layer 10: Save session narrative before exiting
   try {

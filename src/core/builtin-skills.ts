@@ -155,25 +155,55 @@ Summarize: how many files changed, lines added/removed, and a brief description 
   },
   {
     name: "batch",
-    description: "Apply a change across multiple files in parallel using subagents",
+    description: "Orchestrate parallel multi-file edits using subagents",
     aliases: ["mass-edit", "bulk"],
     args: ["description of the change"],
-    template: `Apply the following change across multiple files using parallel subagents.
+    template: `Orchestrate parallel multi-file edits using subagents for the following instruction:
 
-1. First, use Glob and Grep to identify ALL files that need this change.
-2. Group the files into batches of 3-5 files each.
-3. For each batch, spawn an Agent with a clear prompt describing exactly what to change in those specific files.
-4. Run all agents in parallel (background mode).
-5. After all agents complete, verify the changes by reading a sample of modified files.
-6. Report what was changed and any files that failed.
+{{args}}
 
-Change to apply: {{args}}
+Follow this exact workflow:
 
-IMPORTANT:
-- Use Agent tool with run_in_background=true for parallelism
-- Each agent should receive the EXACT list of files it owns
-- No two agents should modify the same file
-- After all agents finish, run the project's test suite if one exists`,
+## Phase 1: Analysis
+1. Use Glob and Grep to identify ALL files that need changes based on the instruction above.
+2. Read a representative sample of matching files to understand the codebase patterns.
+3. Determine the exact transformation needed for each file.
+
+## Phase 2: Work Splitting
+4. Split the identified files into independent chunks of 1-3 files each.
+   - Files that depend on each other MUST go in the same chunk.
+   - Aim for roughly equal work per chunk.
+   - Maximum 5 chunks to run in parallel.
+5. For each chunk, write a SPECIFIC prompt that includes:
+   - The exact file paths to modify
+   - The exact change to make (not vague instructions)
+   - Any context from other files needed to make the change correctly
+
+## Phase 3: Parallel Execution
+6. Spawn one Agent per chunk using the Agent tool with these settings:
+   - run_in_background: true
+   - teamId: use a single team ID for all agents in this batch (e.g., "batch-<short-uuid>")
+   - agentName: descriptive name like "edit-auth-files" or "update-api-endpoints"
+   - shareResults: true
+   - task: the specific prompt from Phase 2
+7. Wait briefly, then poll each agent using resume with their agentId.
+8. Continue polling until ALL agents have completed or failed.
+
+## Phase 4: Verification & Summary
+9. Read a sample of modified files to verify changes were applied correctly.
+10. Run the project's test suite if one exists (bun test, npm test, pytest, etc.).
+11. Present a summary table:
+    - Agent name | Files modified | Status (success/failed) | Duration
+    - Total files changed
+    - Any errors or files that could not be modified
+    - Test results if tests were run
+
+IMPORTANT RULES:
+- No two agents may modify the same file — deduplicate before spawning.
+- Each agent receives the EXACT list of files it owns — no ambiguity.
+- If fewer than 3 files need changes, use a single agent (no need for parallelism).
+- If an agent fails, report which files were affected and what went wrong.
+- Always verify at least one file from each agent's batch after completion.`,
   },
   {
     name: "loop",
@@ -267,9 +297,9 @@ Be thorough but avoid false positives. Only report real risks.`,
   },
   {
     name: "export",
-    description: "Export conversation to file (md/json/html)",
-    aliases: ["save"],
-    args: ["filename or format (md/json/html, default: md)"],
+    description: "Export conversation to file (md/json/html/txt)",
+    aliases: ["save", "save-chat", "transcript"],
+    args: ["filename or format (md/json/html/txt, default: md)"],
     template: `__builtin_export__`,
   },
   {
@@ -283,6 +313,12 @@ Be thorough but avoid false positives. Only report real risks.`,
     description: "Check system health",
     aliases: ["health"],
     template: `__builtin_doctor__`,
+  },
+  {
+    name: "telemetry",
+    description: "Show or toggle anonymous analytics opt-in",
+    aliases: [],
+    template: `__builtin_telemetry__`,
   },
   {
     name: "models",
@@ -304,9 +340,9 @@ Be thorough but avoid false positives. Only report real risks.`,
   },
   {
     name: "rewind",
-    description: "Undo recent file changes",
+    description: "Manage conversation checkpoints and rewind state",
     aliases: ["rew"],
-    args: ["number of actions to undo (default: 1)"],
+    args: ["list | <number> | last"],
     template: `__builtin_rewind__`,
   },
   {
@@ -394,6 +430,13 @@ Be thorough but avoid false positives. Only report real risks.`,
     template: `__builtin_branches__`,
   },
   {
+    name: "conv-branch",
+    description: "Label or manage the current conversation branch",
+    aliases: [],
+    args: ["label <name>", "delete"],
+    template: `__builtin_branch__`,
+  },
+  {
     name: "compare",
     description: "Compare responses from two models side-by-side",
     aliases: ["ab", "versus"],
@@ -413,6 +456,48 @@ Be thorough but avoid false positives. Only report real risks.`,
     aliases: ["metrics"],
     args: [],
     template: `__builtin_analytics__`,
+  },
+  {
+    name: "insights",
+    description: "Generate a comprehensive session analysis report",
+    aliases: ["session-report", "analysis"],
+    args: [],
+    template: `Analyze the current conversation session and generate a comprehensive insights report. Review ALL messages in the conversation history and produce a structured report with these sections:
+
+## Session Insights Report
+
+1. **Summary Statistics**
+   - Total conversation turns (count user messages and assistant responses)
+   - Total tool calls made (count all tool_use blocks)
+   - Session duration (note the time elapsed)
+
+2. **Tool Usage Breakdown**
+   - List each tool used and how many times
+   - Identify the most frequently used tools
+   - Note any tools that were called but returned errors
+
+3. **Files Modified**
+   - List all files that were created, edited, or written to
+   - Note which files were modified most frequently
+
+4. **Key Decisions Made**
+   - Summarize the major decisions or changes made during the session
+   - Note any architectural or design choices
+
+5. **Errors Encountered**
+   - List any errors that occurred (tool errors, build failures, etc.)
+   - For each error, describe how it was resolved
+
+6. **Workflow Patterns**
+   - Note any repeated patterns (e.g., edit-test-fix cycles)
+   - Identify if there were any stuck loops or retries
+
+7. **Suggestions for Improvement**
+   - Based on the session, suggest ways to be more efficient
+   - Note any potential issues that weren't addressed
+   - Recommend follow-up tasks
+
+Format the report clearly with headers and bullet points. Be concise but thorough.`,
   },
   {
     name: "consensus",
@@ -614,7 +699,11 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     description: "List project-related running processes",
     aliases: ["ps", "procs"],
     args: [],
-    template: `__builtin_processes__`,
+    template: `Show running processes filtered by developer-relevant programs.
+
+Run: ps aux | grep -E '(node|bun|python|deno|java|go |ruby|cargo|docker|nginx|postgres|mysql|redis|mongod|ollama|llama)' | grep -v grep
+
+Format the output as a clean table showing PID, CPU%, MEM%, and command. Highlight any processes using high CPU or memory.`,
   },
   {
     name: "filediff",
@@ -705,7 +794,12 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     description: "Show current weather in terminal",
     aliases: ["wttr"],
     args: ["city (optional)"],
-    template: `__builtin_weather__`,
+    template: `Show weather for: {{args}}. IMPORTANT: The city name must contain only letters, spaces, hyphens, and periods. Sanitize before using in any command. Reject input containing shell metacharacters.
+
+{{#if args}}After validating the city name, run: curl -s "wttr.in/<sanitized city>?format=3"{{/if}}
+{{^if args}}Run: curl -s "wttr.in/?format=3"{{/if}}
+
+If the user wants more detail, also run: curl -s "wttr.in/<sanitized city>" for the full forecast. Display the result as-is since wttr.in outputs nicely formatted text.`,
   },
   {
     name: "lorem",
@@ -719,7 +813,14 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     description: "Generate random UUIDs (v4)",
     aliases: ["guid", "id"],
     args: ["count (default: 1)"],
-    template: `__builtin_uuid__`,
+    template: `Generate random UUID(s).
+
+{{#if args}}Generate {{args}} UUIDs.{{/if}}
+{{^if args}}Generate 1 UUID.{{/if}}
+
+Try: uuidgen (run it N times, one per line). If uuidgen is not available, use: node -e "for(let i=0;i<N;i++) console.log(crypto.randomUUID())"
+
+Display each UUID on its own line.`,
   },
   {
     name: "color",
@@ -775,7 +876,17 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     description: "Serve current directory as static HTTP",
     aliases: ["preview", "static"],
     args: ["port (default: 10080)"],
-    template: `__builtin_serve__`,
+    template: `Start a static HTTP server for the current directory.
+
+{{#if args}}Use port {{args}}.{{/if}}
+{{^if args}}Use port 10080.{{/if}}
+
+Try in order:
+1. python3 -m http.server PORT (most commonly available)
+2. npx serve -l PORT (if Node.js/npm available)
+3. bun serve (if in a Bun project)
+
+Run the server in the background. Report the URL (http://localhost:PORT) to the user.`,
   },
   {
     name: "open",
@@ -789,28 +900,54 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     description: "Generate QR code in terminal",
     aliases: ["qrcode"],
     args: ["text or URL"],
-    template: `__builtin_qr__`,
+    template: `Generate a QR code in the terminal for: {{args}}. IMPORTANT: Validate the input contains only alphanumeric characters, common URL characters (:/.-_~?&=%+#@), and spaces. Strip or reject any shell metacharacters before using in commands.
+
+Try in order:
+1. qrencode -t ANSI "<sanitized input>" (if qrencode is installed)
+2. node -e "..." using a simple QR generation approach with the sanitized input
+3. curl "https://qrencode.org/api/?text=<url-encoded sanitized input>" as last resort
+
+Display the QR code directly in the terminal output.`,
   },
   {
     name: "calc",
     description: "Evaluate math expressions safely",
     aliases: ["math", "eval"],
     args: ["expression"],
-    template: `__builtin_calc__`,
+    template: `Evaluate: {{args}}. IMPORTANT: Validate the expression contains only numbers, operators (+, -, *, /, %, **), parentheses, decimal points, and math functions (Math.sqrt, Math.PI, etc.) before executing. Never pass raw user input to shell commands.
+
+Use: node -e "console.log(<sanitized expression>)" for basic arithmetic.
+For more complex math, use: python3 -c "import math; print(<sanitized expression>)"
+
+Display the result clearly. If the expression is invalid or contains non-math characters, explain the error instead of executing.`,
   },
   {
     name: "stopwatch",
     description: "Start a countdown timer",
     aliases: ["timer", "sw"],
     args: ["duration (e.g., 30s, 5m, 1h)"],
-    template: `__builtin_stopwatch__`,
+    template: `Start a timer/stopwatch.
+
+{{#if args}}Parse the duration "{{args}}" (e.g., 30s, 5m, 1h) and run a countdown using: sleep <seconds> then notify the user when time is up.{{/if}}
+{{^if args}}Start a stopwatch by recording the start time. Use: date +%s to get epoch. Show elapsed time when the user asks to stop.{{/if}}
+
+Display the duration clearly when complete. Use terminal bell (echo -e '\\a') to alert when the timer finishes.`,
   },
   {
     name: "password",
     description: "Generate secure random passwords",
     aliases: ["passwd", "pwgen"],
     args: ["[length] [--no-symbols] [--count N]"],
-    template: `__builtin_password__`,
+    template: `Generate secure random password(s).
+
+{{#if args}}Parse options from: {{args}} — look for length (number), --no-symbols, --count N.{{/if}}
+{{^if args}}Default: 1 password, 20 characters, with symbols.{{/if}}
+
+Use: node -e "const crypto=require('crypto');const c='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%^&*';let p='';const bytes=crypto.randomBytes(LENGTH);for(let i=0;i<LENGTH;i++)p+=c[bytes[i]%c.length];console.log(p)"
+
+Or use: openssl rand -base64 LENGTH | head -c LENGTH
+
+Display each password on its own line. Warn that passwords are shown in plain text.`,
   },
   {
     name: "diff-branch",
@@ -967,6 +1104,20 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     template: `__builtin_char_info__`,
   },
   {
+    name: "run-benchmark",
+    description: "Run active benchmark on current model (speed + quality)",
+    aliases: ["bench", "speed-test"],
+    args: [],
+    template: `__builtin_run_benchmark__`,
+  },
+  {
+    name: "gpu",
+    description: "Show GPU status, VRAM usage, and temperature",
+    aliases: ["vram", "nvidia"],
+    args: [],
+    template: `__builtin_gpu__`,
+  },
+  {
     name: "new-project",
     description: "Create a project from a template",
     aliases: ["scaffold", "init-project"],
@@ -982,9 +1133,9 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
   },
   {
     name: "effort",
-    description: "Set reasoning effort level (low/medium/high)",
+    description: "Set reasoning effort level (low/medium/high/max)",
     aliases: ["reasoning", "depth"],
-    args: ["low | medium | high"],
+    args: ["low | medium | high | max"],
     template: `__builtin_effort__`,
   },
   {
@@ -1035,5 +1186,122 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     aliases: ["toc", "headings"],
     args: ["file path"],
     template: `__builtin_markdown_toc__`,
+  },
+  {
+    name: "swarm",
+    description: "Run N agents in parallel on a task",
+    aliases: ["multi-agent", "parallel-agents"],
+    args: ["prompt [--agents N] [--files glob]"],
+    template: `__builtin_swarm__`,
+  },
+  {
+    name: "sandbox",
+    description: "Show sandbox status or toggle sandbox mode",
+    aliases: ["bwrap", "isolate"],
+    args: ["status | on | off"],
+    template: `__builtin_sandbox__`,
+  },
+  {
+    name: "btw",
+    description: "Ask a side question without contaminating context",
+    aliases: ["aside"],
+    args: ["question"],
+    template: `__builtin_btw__`,
+  },
+  {
+    name: "dry-run",
+    description: "Preview changes without modifying files",
+    aliases: ["simulate"],
+    args: ["description of changes to preview"],
+    template: `__builtin_dry_run__`,
+  },
+  {
+    name: "auto-fix",
+    description: "Detect build/test errors and auto-generate fixes",
+    aliases: ["fix-errors", "fixup"],
+    args: ["build | test | <custom command>"],
+    template: `__builtin_auto_fix__`,
+  },
+  {
+    name: "suggest-files",
+    description: "Suggest relevant files for the current task",
+    aliases: ["relevant", "files-for"],
+    args: ["description of what you're working on"],
+    template: `__builtin_suggest_files__`,
+  },
+  {
+    name: "fast",
+    description: "Toggle between primary and fallback (faster/cheaper) model",
+    aliases: ["quick"],
+    args: [],
+    template: `Toggle fast mode — switch between the primary model and the fallback (faster/cheaper) model.
+
+1. Read the current config to determine the active model and the fallback model.
+2. If currently using the primary model, switch to the fallback model.
+3. If currently using the fallback model, switch back to the primary model.
+4. Report which model is now active and confirm the switch.
+
+This lets the user trade quality for speed on simpler tasks.`,
+  },
+  {
+    name: "release-notes",
+    description: "View recent changelog and version info",
+    aliases: ["changelog", "whatsnew"],
+    args: [],
+    template: `Show the project's recent release notes and version.
+
+1. Read the CHANGELOG.md file in the project root (if it exists).
+2. Also read the "version" field from package.json.
+3. Display the current version and the most recent changelog entries (last 2-3 releases).
+4. If no CHANGELOG.md exists, show the version from package.json and suggest checking git tags with: git tag --sort=-version:refname | head -5`,
+  },
+  {
+    name: "rename",
+    description: "Rename the current session",
+    aliases: ["session-name", "title"],
+    args: ["session name"],
+    template: `__builtin_rename__`,
+  },
+  {
+    name: "style",
+    description: "Show or switch output style",
+    aliases: ["output-style"],
+    args: ["style name (optional)"],
+    template: `__builtin_style__`,
+  },
+  {
+    name: "profile",
+    description: "Show user profile and usage statistics",
+    aliases: ["user-stats", "me"],
+    args: [],
+    template: `__builtin_profile__`,
+  },
+  {
+    name: "session-tags",
+    description: "Manage session tags/labels",
+    aliases: ["label", "session-tag"],
+    args: ["add <tag> | remove <tag> (no args to list)"],
+    template: `__builtin_session_tags__`,
+  },
+  {
+    name: "auto-compact",
+    description: "Configure auto-compaction threshold",
+    aliases: ["compact-threshold"],
+    args: ["percentage (e.g. 70) or 'off'"],
+    template: `__builtin_auto_compact__`,
+  },
+  {
+    name: "mcp",
+    description: "Manage MCP (Model Context Protocol) servers",
+    aliases: ["mcp-servers"],
+    args: ["list | tools | add <name> <command> | remove <name>"],
+    template: `__builtin_mcp__`,
+  },
+  {
+    name: "agents",
+    description: "List available custom agent definitions",
+    aliases: ["agent-list"],
+    args: ["[name]"],
+    template: `__builtin_agents__`,
   },
 ];

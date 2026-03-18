@@ -31,13 +31,15 @@ bun test src/core/config.test.ts   # Run a single test file
 
 `src/index.ts` — Commander.js CLI with subcommands (`models`, `setup`, `server`, `activate`, `license`, `stats`, `doctor`, `teach`, `init`, `resume`, `search`, `watch`, `new`, `update`, `benchmark`, `completions`, `history`, `serve`). The default command launches the interactive TUI or single-prompt mode.
 
+**CLI Flags**: `--model`, `--api-key`, `--api-base`, `--max-turns`, `--no-tools`, `--print`, `--verbose`, `--effort` (low/medium/high), `--system-prompt`, `--append-system-prompt`, `--name`, `--allowed-tools`, `--disallowed-tools`, `--session-id`, `--agent`, `--agents` (multi-agent swarm), `--no-session-persistence`, `--mcp-config`, `--tmux`, `--file`, `--from-pr`.
+
 ### Core Engine (`src/core/`)
 
-- **`conversation.ts`** (~57 KB) — Main conversation loop. Handles SSE streaming from OpenAI-compatible APIs, tool call extraction (native format + text-based patterns for local models), context window pruning at 80% capacity with auto-compaction, retry with exponential backoff, max 25 tool turns per agent loop. Supports parallel tool execution, JSON schema validation of tool inputs, smart context injection, desktop notifications on completion, and prompt caching for supported providers.
+- **`conversation.ts`** (~57 KB) — Main conversation loop. Handles SSE streaming from OpenAI-compatible APIs, tool call extraction (native format + text-based patterns for local models), context window pruning at 80% capacity with auto-compaction, retry with exponential backoff, max 25 tool turns per agent loop. Supports parallel tool execution, JSON schema validation of tool inputs, smart context injection, desktop notifications on completion, prompt caching for supported providers, checkpoint/rewind system for reverting to previous states, loop detector to break repetitive tool cycles, model fallback chain (tries alternative models on failure), and effort levels (low/medium/high) that control reasoning depth and tool filtering via `allowedTools`/`disallowedTools`.
 - **`system-prompt.ts`** (~37 KB) — Assembles a 10-layer system prompt: Identity → Tools → Code Guidelines → Git → Environment → Situational Awareness → Metacognition → User Model → World Model → Session Narrative. Loads extensible sections from `~/.kcode/identity.md`, `~/.kcode/awareness/*.md`, `.kcode/awareness/*.md`, `KCODE.md`, `.kcode/rules/*.md`. Injects active plan context and pinned files into the prompt.
 - **`config.ts`** — Settings hierarchy (highest priority first): CLI flags → env vars (`KCODE_MODEL`, `KCODE_API_KEY`, etc.) → `.kcode/settings.local.json` → `.kcode/settings.json` → `~/.kcode/settings.json`.
 - **`models.ts`** (~166 KB) — Dynamic model registry stored in `~/.kcode/models.json`. Fallback: `KCODE_API_BASE` env var or `http://localhost:10091`.
-- **`permissions.ts`** — 5 permission modes (ask/auto/plan/deny/acceptEdits). Safety analysis detects command injection, pipe-to-shell, dangerous redirections, quote desync.
+- **`permissions.ts`** — 5 permission modes (ask/auto/plan/deny/acceptEdits). Safety analysis detects command injection, pipe-to-shell, dangerous redirections, quote desync. Supports glob pattern rules for fine-grained file/command matching. AcceptEdits mode fix ensures edit-only operations bypass confirmation correctly.
 - **`db.ts`** — Shared SQLite connection (`~/.kcode/awareness.db`) with WAL mode. Tables: `narrative`, `user_model`, `user_interests`, `predictions`, `learnings` (FTS5), `distilled_examples`.
 - **`model-manager.ts`** (~47 KB) — Hardware-aware setup wizard. Detects CPU/GPU/RAM, recommends models, manages downloads. Supports llama.cpp (Linux/Windows) and MLX (macOS Apple Silicon).
 - **`llama-server.ts`** — Manages local inference server lifecycle (start/stop/health check). State files: `~/.kcode/server.pid`, `server.port`, `server.log`.
@@ -51,10 +53,34 @@ bun test src/core/config.test.ts   # Run a single test file
 - **`http-server.ts`** — HTTP API server for IDE integrations (VS Code, JetBrains, etc.).
 - **`compaction.ts`** — LLM-based conversation summarization when context window fills up.
 - **`memory.ts`** — Persistent memory system with YAML frontmatter for cross-session recall.
+- **`hooks.ts`** — 25 hook events for lifecycle customization (pre/post tool execution, session start/end, compaction, errors, etc.) with workspace trust enforcement.
+- **`output-styles.ts`** — Configurable output styles (concise, detailed, markdown, plain) for controlling response formatting.
+- **`swarm.ts`** — Multi-agent swarm orchestration: spawn parallel sub-agents (`--agents`) for divide-and-conquer workflows.
+- **`analytics.ts`** — Session analytics tracking: tool usage frequency, token consumption, timing, and cost breakdowns.
+- **`transcript-search.ts`** — Full-text search across past conversation transcripts for finding previous solutions and context.
+- **`tool-cache.ts`** — Caches tool results (e.g., file reads, grep) within a session to avoid redundant I/O operations.
 
 ### Tools (`src/tools/`)
 
-22 built-in tools registered in `src/tools/index.ts`. Each tool exports a definition object with name, description, parameters schema, and execute function. MCP tools are dynamically merged at startup.
+46 built-in tools registered in `src/tools/index.ts`. Each tool exports a definition object with name, description, parameters schema, and execute function. MCP tools are dynamically merged at startup.
+
+**Core tools**: Read, Write, Edit, MultiEdit, Bash, Glob, Grep, GrepReplace, Rename, DiffView, LS.
+
+**Git tools**: GitStatus, GitCommit, GitLog.
+
+**Testing**: TestRunner.
+
+**Worktree**: Enter/Exit (isolated git worktree operations).
+
+**Scheduling**: CronCreate, CronList, CronDelete.
+
+**Session management**: Clipboard, Undo, Stash.
+
+**LSP**: Language Server Protocol integration for go-to-definition, references, diagnostics.
+
+**Planning**: PlanMode (Enter/Exit) for structured multi-step task execution.
+
+**Agent tools**: Skill (invoke registered skills), ToolSearch (discover deferred/available tools), AskUser (request clarification), SendMessage (inter-agent communication in swarm mode).
 
 ### Terminal UI (`src/ui/`)
 
@@ -71,7 +97,7 @@ React 19 + Ink 6 for terminal rendering. `App.tsx` (~26 KB) is the main interact
 
 ### Slash Commands
 
-43 slash commands total (22 builtin + 21 LLM-powered). Key examples:
+152+ slash commands total (builtin + LLM-powered). Key examples:
 - `/plan` — Create or view a structured task plan
 - `/pin <file>` — Pin a file to persistent context
 - `/memory` — View or edit persistent memory
@@ -82,3 +108,13 @@ React 19 + Ink 6 for terminal rendering. `App.tsx` (~26 KB) is the main interact
 - `/resume` — Resume a previous conversation
 - `/benchmark` — Run model benchmarks
 - `/doctor` — Diagnose environment issues
+- `/profile` — View/switch user profiles
+- `/export` — Export conversation transcript
+- `/mcp` — Manage MCP server connections
+- `/style` — Switch output style (concise/detailed/markdown/plain)
+- `/rewind` — Revert to a previous checkpoint in the conversation
+- `/insights` — Show analytics and usage insights for the session
+- `/session-tags` — Tag sessions for organization and search
+- `/auto-compact` — Toggle automatic compaction on/off
+- `/batch` — Run multiple prompts from a file
+- `/fast` — Toggle low-effort mode for quick responses

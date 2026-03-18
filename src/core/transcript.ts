@@ -51,12 +51,12 @@ export class TranscriptManager {
 
   /**
    * Start a new transcript session.
-   * Filename: {timestamp}-{first-words-of-prompt}.jsonl
+   * Filename: {timestamp}-{sessionName-or-first-words-of-prompt}.jsonl
    */
-  startSession(prompt: string): void {
+  startSession(prompt: string, sessionName?: string): void {
     const now = new Date();
     const timestamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const slug = prompt
+    const slug = (sessionName || prompt)
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -307,5 +307,76 @@ export class TranscriptManager {
     }
 
     return messages;
+  }
+
+  // ─── Phase 12: Enhanced resume ─────────────────────────────
+
+  /**
+   * Search sessions by keyword across prompts and content.
+   * Returns matching sessions with context snippets.
+   */
+  searchSessions(query: string, maxResults = 10): Array<SessionMeta & { snippet: string }> {
+    const sessions = this.listSessions();
+    const queryLower = query.toLowerCase();
+    const results: Array<SessionMeta & { snippet: string }> = [];
+
+    for (const session of sessions) {
+      if (results.length >= maxResults) break;
+
+      // Check filename/prompt first (fast)
+      if (session.prompt.toLowerCase().includes(queryLower)) {
+        results.push({ ...session, snippet: session.prompt });
+        continue;
+      }
+
+      // Search content (slower, only if prompt didn't match)
+      try {
+        const entries = this.loadSession(session.filename);
+        for (const entry of entries) {
+          if (entry.content.toLowerCase().includes(queryLower)) {
+            // Extract snippet around match
+            const idx = entry.content.toLowerCase().indexOf(queryLower);
+            const start = Math.max(0, idx - 40);
+            const end = Math.min(entry.content.length, idx + query.length + 40);
+            const snippet = (start > 0 ? "..." : "") +
+              entry.content.slice(start, end).replace(/\n/g, " ") +
+              (end < entry.content.length ? "..." : "");
+            results.push({ ...session, snippet });
+            break;
+          }
+        }
+      } catch {
+        // Skip unreadable sessions
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get a summary of a session (first user message + message count + tool count).
+   */
+  getSessionSummary(filename: string): { prompt: string; messageCount: number; toolUseCount: number; duration: string } | null {
+    const entries = this.loadSession(filename);
+    if (entries.length === 0) return null;
+
+    const firstUser = entries.find(e => e.type === "user_message");
+    const lastEntry = entries[entries.length - 1];
+    const toolUseCount = entries.filter(e => e.type === "tool_use").length;
+
+    let duration = "unknown";
+    try {
+      const startTime = new Date(entries[0].timestamp).getTime();
+      const endTime = new Date(lastEntry.timestamp).getTime();
+      const mins = Math.round((endTime - startTime) / 60_000);
+      duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    } catch { /* ignore */ }
+
+    return {
+      prompt: firstUser?.content.slice(0, 100) ?? "(empty)",
+      messageCount: entries.length,
+      toolUseCount,
+      duration,
+    };
   }
 }

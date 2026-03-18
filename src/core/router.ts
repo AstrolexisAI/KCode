@@ -4,6 +4,9 @@
 
 import { listModels } from "./models";
 import { log } from "./logger";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 // ─── Task Types ─────────────────────────────────────────────────
 
@@ -117,11 +120,73 @@ export function classifyTask(userMessage: string): TaskType {
  * @param hasImageContent - Optional explicit flag for image content
  * @returns The model name to use (may be the default if no routing needed)
  */
+// ─── Custom Routing Rules ─────────────────────────────────────
+
+interface RoutingRule {
+  /** Regex pattern to match user message */
+  pattern: string;
+  /** Pre-compiled regex (cached) */
+  compiled: RegExp;
+  /** Model name to route to */
+  model: string;
+  /** Optional description for logging */
+  description?: string;
+}
+
+const MAX_PATTERN_LENGTH = 200;
+let customRules: RoutingRule[] | null = null;
+let customRulesLoadedAt = 0;
+const RULES_TTL_MS = 30_000; // Re-read settings every 30 seconds
+
+function loadRoutingRules(): RoutingRule[] {
+  // Re-read if cache is stale (TTL expired)
+  if (customRules !== null && Date.now() - customRulesLoadedAt < RULES_TTL_MS) {
+    return customRules;
+  }
+  customRules = [];
+  customRulesLoadedAt = Date.now();
+
+  // Load from ~/.kcode/settings.json → routing.rules
+  const settingsPath = join(homedir(), ".kcode", "settings.json");
+  try {
+    if (existsSync(settingsPath)) {
+      const data = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      if (Array.isArray(data?.routing?.rules)) {
+        for (const rule of data.routing.rules) {
+          if (rule.pattern && rule.model && typeof rule.pattern === "string" && rule.pattern.length <= MAX_PATTERN_LENGTH) {
+            try {
+              const compiled = new RegExp(rule.pattern, "i");
+              customRules.push({ ...rule, compiled });
+            } catch {
+              log.warn("router", `Invalid regex in routing rule: "${rule.pattern}"`);
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    log.warn("router", `Failed to load routing rules: ${e instanceof Error ? e.message : e}`);
+  }
+
+  return customRules;
+}
+
+// ─── Router ─────────────────────────────────────────────────
+
 export async function routeToModel(
   defaultModel: string,
   userMessage: string,
   hasImageContent?: boolean,
 ): Promise<string> {
+  // Phase 12: Check custom routing rules first (pre-compiled, cached with TTL)
+  const rules = loadRoutingRules();
+  for (const rule of rules) {
+    if (rule.compiled.test(userMessage)) {
+      log.info("router", `Custom rule matched: "${rule.description ?? rule.pattern}" → ${rule.model}`);
+      return rule.model;
+    }
+  }
+
   const taskType = hasImageContent ? "vision" : classifyTask(userMessage);
 
   if (taskType === "general") {
@@ -130,48 +195,34 @@ export async function routeToModel(
 
   const models = await listModels();
 
-  if (taskType === "simple") {
-    const fastModel = models.find(m => m.capabilities?.includes("fast"));
-    if (fastModel) {
-      log.info("router", `Routing simple task to ${fastModel.name}`);
-      return fastModel.name;
-    }
-    return defaultModel;
-  }
+  // Map task type to capability
+  const capabilityMap: Record<string, string[]> = {
+    simple: ["fast"],
+    code: ["code"],
+    reasoning: ["reasoning"],
+    vision: ["vision", "ocr"],
+  };
 
-  if (taskType === "code") {
-    const codeModel = models.find(m => m.capabilities?.includes("code"));
-    if (codeModel && codeModel.name !== defaultModel) {
-      log.info("router", `Routing code task to ${codeModel.name}`);
-      return codeModel.name;
-    }
-    return defaultModel;
-  }
-
-  if (taskType === "reasoning") {
-    const reasoningModel = models.find(m => m.capabilities?.includes("reasoning"));
-    if (reasoningModel && reasoningModel.name !== defaultModel) {
-      log.info("router", `Routing reasoning task to ${reasoningModel.name}`);
-      return reasoningModel.name;
-    }
-    return defaultModel;
-  }
-
-  if (taskType === "vision") {
-    const visionModel = models.find(
-      (m) => m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"),
+  const caps = capabilityMap[taskType];
+  if (caps) {
+    const matched = models.find(m =>
+      caps.some(cap => m.capabilities?.includes(cap))
     );
-
-    if (!visionModel) {
-      log.debug("router", "Image content detected but no vision/ocr model registered, using default");
-      return defaultModel;
+    if (matched && (taskType === "vision" || matched.name !== defaultModel)) {
+      log.info("router", `Routing ${taskType} task to ${matched.name}`);
+      return matched.name;
     }
-
-    log.info("router", `Routing to ${visionModel.name} (image content detected)`);
-    return visionModel.name;
+    if (taskType === "vision" && !matched) {
+      log.debug("router", "Image content detected but no vision model registered");
+    }
   }
 
   return defaultModel;
+}
+
+/** Reset cached routing rules (for testing or after config change). */
+export function resetRoutingRules(): void {
+  customRules = null;
 }
 
 /**

@@ -18,7 +18,7 @@ interface StartUIOptions {
 export function startUI({ config, conversationManager, tools }: StartUIOptions) {
   const instance = render(
     <ThemeProvider>
-      <App config={config} conversationManager={conversationManager} tools={tools} />
+      <App config={config} conversationManager={conversationManager} tools={tools} initialSessionName={config.sessionName} />
     </ThemeProvider>,
     {
       exitOnCtrlC: true,

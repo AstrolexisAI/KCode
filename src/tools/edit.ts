@@ -63,6 +63,68 @@ function generateDiff(oldStr: string, newStr: string, filePath: string): string 
   return diffLines.join("\n");
 }
 
+/**
+ * Compute character-level similarity between two strings (0 to 1).
+ * Uses a simple ratio of matching characters to total length.
+ */
+function lineSimilarity(a: string, b: string): number {
+  if (a === b) return 1;
+  // Cap comparison length to avoid perf issues on minified/long lines
+  const capA = a.length > 500 ? a.slice(0, 500) : a;
+  const capB = b.length > 500 ? b.slice(0, 500) : b;
+  const maxLen = Math.max(capA.length, capB.length);
+  if (maxLen === 0) return 1;
+  const minLen = Math.min(capA.length, capB.length);
+  let matches = 0;
+  for (let i = 0; i < minLen; i++) {
+    if (capA[i] === capB[i]) matches++;
+  }
+  return matches / maxLen;
+}
+
+/**
+ * Find the closest matching substring in the file content when old_string is not found.
+ * Compares line-by-line similarity for candidate blocks of the same line count.
+ * Returns the best match and its similarity score, or null if nothing is close enough.
+ */
+function findClosestMatch(
+  content: string,
+  oldString: string,
+  threshold = 0.6,
+): { match: string; similarity: number; lineNumber: number } | null {
+  const oldLines = oldString.split("\n");
+  const oldLineCount = oldLines.length;
+  const fileLines = content.split("\n");
+  const searchLines = fileLines.slice(0, 2000);
+  const candidateCount = searchLines.length - oldLineCount + 1;
+
+  if (candidateCount <= 0) return null;
+
+  let bestScore = 0;
+  let bestIndex = 0;
+
+  for (let i = 0; i < candidateCount; i++) {
+    let totalSim = 0;
+    for (let j = 0; j < oldLineCount; j++) {
+      totalSim += lineSimilarity(oldLines[j], searchLines[i + j]);
+    }
+    const avgSim = totalSim / oldLineCount;
+    if (avgSim > bestScore) {
+      bestScore = avgSim;
+      bestIndex = i;
+    }
+  }
+
+  if (bestScore < threshold) return null;
+
+  const matchLines = searchLines.slice(bestIndex, bestIndex + oldLineCount);
+  return {
+    match: matchLines.join("\n"),
+    similarity: Math.round(bestScore * 100),
+    lineNumber: bestIndex + 1,
+  };
+}
+
 export async function executeEdit(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, old_string, new_string, replace_all } = input as FileEditInput;
 
@@ -80,9 +142,14 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
     const occurrences = content.split(old_string).length - 1;
 
     if (occurrences === 0) {
+      let errorMsg = `Error: old_string not found in ${file_path}`;
+      const closest = findClosestMatch(content, old_string);
+      if (closest) {
+        errorMsg += `\n\nDid you mean this? (${closest.similarity}% similar, line ${closest.lineNumber}):\n\`\`\`\n${closest.match}\n\`\`\``;
+      }
       return {
         tool_use_id: "",
-        content: `Error: old_string not found in ${file_path}`,
+        content: errorMsg,
         is_error: true,
       };
     }

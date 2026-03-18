@@ -29,6 +29,24 @@ import { kulvexDefinition, executeKulvex } from "./kulvex";
 import { browserDefinition, executeBrowser } from "./browser";
 import { imageGenDefinition, executeImageGen } from "./image-gen";
 import { planDefinition, executePlan } from "./plan";
+import { multiEditDefinition, executeMultiEdit } from "./multi-edit";
+import { skillDefinition, executeSkill } from "./skill";
+import { cronListDefinition, executeCronList, cronCreateDefinition, executeCronCreate, cronDeleteDefinition, executeCronDelete } from "./cron";
+import { enterPlanModeDefinition, executeEnterPlanMode, exitPlanModeDefinition, executeExitPlanMode } from "./plan-mode";
+import { enterWorktreeDefinition, executeEnterWorktree, exitWorktreeDefinition, executeExitWorktree } from "./worktree";
+import { diffViewerDefinition, executeDiffViewer } from "./diff-viewer";
+import { testRunnerDefinition, executeTestRunner } from "./test-runner";
+import { renameDefinition, executeRename } from "./rename";
+import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
+import { undoDefinition, executeUndo } from "./undo";
+import { gitStatusDefinition, executeGitStatus, gitCommitDefinition, executeGitCommit, gitLogDefinition, executeGitLog } from "./git-tools";
+import { grepReplaceDefinition, executeGrepReplace } from "./grep-replace";
+import { stashDefinition, executeStash } from "./stash";
+import { lspDefinition, executeLsp } from "./lsp-tool";
+import { askUserDefinition, executeAskUser } from "./ask-user";
+import { sendMessageDefinition, executeSendMessage } from "./send-message";
+import { lsDefinition, executeLs } from "./ls";
+import { toolSearchDefinition, executeToolSearch } from "./tool-search";
 
 /**
  * Register all built-in tools and optionally MCP-discovered tools.
@@ -69,6 +87,66 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
 
   // Structured planning
   registry.register("Plan", planDefinition, executePlan);
+
+  // Atomic multi-file editing
+  registry.register("MultiEdit", multiEditDefinition, executeMultiEdit);
+
+  // Skill execution (invoke slash commands programmatically)
+  registry.register("Skill", skillDefinition, executeSkill);
+
+  // Cron job management
+  registry.register("CronList", cronListDefinition, executeCronList);
+  registry.register("CronCreate", cronCreateDefinition, executeCronCreate);
+  registry.register("CronDelete", cronDeleteDefinition, executeCronDelete);
+
+  // Plan mode (read-only restriction)
+  registry.register("EnterPlanMode", enterPlanModeDefinition, executeEnterPlanMode);
+  registry.register("ExitPlanMode", exitPlanModeDefinition, executeExitPlanMode);
+
+  // Worktree isolation
+  registry.register("EnterWorktree", enterWorktreeDefinition, executeEnterWorktree);
+  registry.register("ExitWorktree", exitWorktreeDefinition, executeExitWorktree);
+
+  // Diff viewer
+  registry.register("DiffView", diffViewerDefinition, executeDiffViewer);
+
+  // Test runner
+  registry.register("TestRunner", testRunnerDefinition, executeTestRunner);
+
+  // Rename refactoring
+  registry.register("Rename", renameDefinition, executeRename);
+
+  // Clipboard
+  registry.register("Clipboard", clipboardDefinition, executeClipboard);
+
+  // Undo
+  registry.register("Undo", undoDefinition, executeUndo);
+
+  // Git tools
+  registry.register("GitStatus", gitStatusDefinition, executeGitStatus);
+  registry.register("GitCommit", gitCommitDefinition, executeGitCommit);
+  registry.register("GitLog", gitLogDefinition, executeGitLog);
+
+  // GrepReplace
+  registry.register("GrepReplace", grepReplaceDefinition, executeGrepReplace);
+
+  // Stash (conversation context snapshots)
+  registry.register("Stash", stashDefinition, executeStash);
+
+  // LSP code intelligence (go-to-definition, references, hover, symbols)
+  registry.register("LSP", lspDefinition, executeLsp);
+
+  // AskUser — structured user prompts
+  registry.register("AskUser", askUserDefinition, executeAskUser);
+
+  // SendMessage — one-way status messages to the user
+  registry.register("SendMessage", sendMessageDefinition, executeSendMessage);
+
+  // LS — fast directory listing
+  registry.register("LS", lsDefinition, executeLs);
+
+  // ToolSearch — deferred tool loading
+  registry.register("ToolSearch", toolSearchDefinition, executeToolSearch);
 
   // MCP resource tools (always available, gracefully handle no servers)
   registry.register("ListMcpResources", listMcpResourcesDefinition, executeListMcpResources);

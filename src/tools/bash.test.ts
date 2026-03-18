@@ -1,7 +1,11 @@
 import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { executeBash, bashDefinition } from "./bash.ts";
 
-describe("bash tool", () => {
+let hasBash = false;
+try { execFileSync("bash", ["--version"], { stdio: "pipe" }); hasBash = true; } catch {}
+
+(hasBash ? describe : describe.skip)("bash tool", () => {
   // ─── Definition ───
 
   test("bashDefinition has correct name and required fields", () => {

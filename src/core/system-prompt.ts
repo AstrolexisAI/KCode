@@ -8,6 +8,7 @@ import { execSync } from "node:child_process";
 import { homedir } from "node:os";
 import { loadLearnings } from "../tools/learn";
 import { loadDistilledExamples } from "./distillation";
+import { getStyleInstructions, getCurrentStyle } from "./output-styles";
 import { getUserModel } from "./user-model";
 import { getWorldModel } from "./world-model";
 import { getNarrativeManager } from "./narrative";
@@ -24,6 +25,11 @@ export class SystemPromptBuilder {
    * Each section is independently generated and can be toggled.
    */
   static build(config: KCodeConfig, version?: string): string {
+    // If the user overrides the entire system prompt, return it directly
+    if (config.systemPromptOverride) {
+      return config.systemPromptOverride;
+    }
+
     const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000);
     const sections: PromptSection[] = [];
 
@@ -136,6 +142,30 @@ export class SystemPromptBuilder {
         sections.push({ content: rulesPrompt, priority: SectionPriority.OPTIONAL, label: "rules" });
       }
     } catch { /* ignore */ }
+
+    // ─── Output Style (user-selected formatting override) ──────
+    const styleInstructions = getStyleInstructions();
+    if (styleInstructions) {
+      sections.push({
+        content: `# Output Style Override (${getCurrentStyle()})\n\n${styleInstructions}`,
+        priority: SectionPriority.HIGH,
+        label: "output-style",
+      });
+    }
+
+    // Effort-level prompt additions
+    if (config.effortLevel === "low") {
+      sections.push({ content: "Be brief and concise.", priority: SectionPriority.HIGH, label: "effort-low" });
+    } else if (config.effortLevel === "high") {
+      sections.push({ content: "Be thorough and detailed.", priority: SectionPriority.HIGH, label: "effort-high" });
+    } else if (config.effortLevel === "max") {
+      sections.push({ content: "Be exhaustive. Consider all edge cases. Take as many steps as needed.", priority: SectionPriority.HIGH, label: "effort-max" });
+    }
+
+    // User-appended system prompt text (--append-system-prompt)
+    if (config.systemPromptAppend) {
+      sections.push({ content: config.systemPromptAppend, priority: SectionPriority.HIGH, label: "user-append" });
+    }
 
     // Apply token budget — drops low-priority sections if over limit
     return budgetManager.apply(sections.filter((s) => s.content));
@@ -434,8 +464,35 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
     if (gitInfo.isRepo && gitInfo.branch) {
       lines.push(`- Git branch: ${gitInfo.branch}`);
     }
+    if (gitInfo.isRepo && gitInfo.mainBranch) {
+      lines.push(`- Main branch: ${gitInfo.mainBranch}`);
+    }
     if (gitInfo.isRepo && gitInfo.dirty !== undefined) {
       lines.push(`- Uncommitted changes: ${gitInfo.dirty ? "Yes" : "No"}`);
+    }
+    if (gitInfo.isRepo && gitInfo.recentCommits) {
+      lines.push("- Recent commits:");
+      for (const line of gitInfo.recentCommits.split("\n")) {
+        lines.push(`  ${line}`);
+      }
+    }
+    if (gitInfo.isRepo && gitInfo.changedFiles) {
+      lines.push("- Changed files:");
+      for (const line of gitInfo.changedFiles.split("\n")) {
+        lines.push(`  ${line}`);
+      }
+    }
+
+    // Cap total git context to avoid bloating the system prompt
+    // "- Model:" is added after this block, so end is always lines.length
+    const gitStartIdx = lines.findIndex(l => l.startsWith("- Git repo:"));
+    if (gitStartIdx >= 0) {
+      const gitSection = lines.slice(gitStartIdx).join("\n");
+      if (gitSection.length > 2000) {
+        const truncated = gitSection.slice(0, 1950) + "\n  ... (git context truncated)";
+        const truncatedLines = truncated.split("\n");
+        lines.splice(gitStartIdx, lines.length - gitStartIdx, ...truncatedLines);
+      }
     }
 
     lines.push(`- Model: ${config.model}`);
@@ -806,16 +863,16 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
   private static getGitInfo(cwd: string): GitInfo {
     try {
       // Check if directory is a git repo
-      execSync("git rev-parse --git-dir", { cwd, stdio: "pipe" });
+      execSync("git rev-parse --git-dir", { cwd, stdio: "pipe", timeout: 3000 });
 
       let branch: string | undefined;
       try {
-        branch = execSync("git branch --show-current", { cwd, stdio: "pipe" })
+        branch = execSync("git branch --show-current", { cwd, stdio: "pipe", timeout: 3000 })
           .toString()
           .trim();
         if (!branch) {
           // Detached HEAD - get short SHA
-          branch = execSync("git rev-parse --short HEAD", { cwd, stdio: "pipe" })
+          branch = execSync("git rev-parse --short HEAD", { cwd, stdio: "pipe", timeout: 3000 })
             .toString()
             .trim();
           branch = `detached at ${branch}`;
@@ -824,17 +881,60 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
         branch = undefined;
       }
 
-      let dirty: boolean | undefined;
+      // Main branch detection
+      let mainBranch: string | undefined;
       try {
-        const status = execSync("git status --porcelain", { cwd, stdio: "pipe" })
-          .toString()
-          .trim();
-        dirty = status.length > 0;
+        for (const name of ["main", "master"]) {
+          try {
+            execSync(`git rev-parse --verify refs/heads/${name}`, { cwd, stdio: "pipe", timeout: 3000 });
+            mainBranch = name;
+            break;
+          } catch { /* try next */ }
+        }
+        if (!mainBranch) {
+          try {
+            const ref = execSync("git symbolic-ref refs/remotes/origin/HEAD --short", { cwd, stdio: "pipe", timeout: 3000 })
+              .toString().trim();
+            mainBranch = ref.replace("origin/", "");
+          } catch {
+            mainBranch = "main";
+          }
+        }
       } catch {
-        dirty = undefined;
+        mainBranch = undefined;
       }
 
-      return { isRepo: true, branch, dirty };
+      // Recent commits (last 5)
+      let recentCommits: string | undefined;
+      try {
+        const commits = execSync("git log --oneline -n 5 --no-decorate", { cwd, stdio: "pipe", timeout: 3000 })
+          .toString().trim();
+        if (commits) recentCommits = commits;
+      } catch {
+        recentCommits = undefined;
+      }
+
+      // Changed files + dirty state (single git status call)
+      let dirty: boolean | undefined;
+      let changedFiles: string | undefined;
+      try {
+        const statusOutput = execSync("git status --short", { cwd, stdio: "pipe", timeout: 3000 })
+          .toString().trim();
+        dirty = statusOutput.length > 0;
+        if (statusOutput) {
+          const statusLines = statusOutput.split("\n");
+          if (statusLines.length > 20) {
+            changedFiles = statusLines.slice(0, 20).join("\n") + `\n  ... (+${statusLines.length - 20} more)`;
+          } else {
+            changedFiles = statusOutput;
+          }
+        }
+      } catch {
+        dirty = undefined;
+        changedFiles = undefined;
+      }
+
+      return { isRepo: true, branch, dirty, mainBranch, recentCommits, changedFiles };
     } catch {
       return { isRepo: false };
     }
@@ -863,4 +963,7 @@ interface GitInfo {
   isRepo: boolean;
   branch?: string;
   dirty?: boolean;
+  mainBranch?: string;
+  recentCommits?: string;
+  changedFiles?: string;
 }
