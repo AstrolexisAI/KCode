@@ -809,6 +809,7 @@ export class ConversationManager {
     let inlineWarningCount = 0;
     let forceStopLoop = false; // set by inline warning force-stop; allows one final text turn then breaks
     let maxTokensContinuations = 0; // track how many times we auto-continued after max_tokens
+    let jsonSchemaRetries = 0; // track JSON schema validation retries to prevent infinite loops
     let emptyEndTurnCount = 0; // track empty end_turn retries to avoid infinite loop
     const turnStartMs = Date.now();
     const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
@@ -1149,27 +1150,40 @@ export class ConversationManager {
           const schema = this.config.jsonSchema.startsWith("{")
             ? JSON.parse(this.config.jsonSchema)
             : JSON.parse(readFileSync(this.config.jsonSchema, "utf-8"));
-          const parsed = JSON.parse(fullText);
+          // Strip markdown code fences that models often wrap JSON in
+          let jsonText = fullText.trim();
+          const fenceMatch = jsonText.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+          if (fenceMatch) jsonText = fenceMatch[1]!.trim();
+          const parsed = JSON.parse(jsonText);
           const errors = validateJsonSchema(parsed, schema);
           if (errors.length > 0) {
-            log.warn("llm", `JSON schema validation failed: ${errors.join(", ")}`);
-            // Ask model to fix the output
-            this.state.messages.push({
-              role: "user",
-              content: `[SYSTEM] Your JSON output failed schema validation:\n${errors.join("\n")}\n\nFix the output to match the required schema. Return ONLY valid JSON.`,
-            });
-            yield { type: "turn_end", stopReason: "tool_use" };
-            continue; // retry with validation feedback
+            if (jsonSchemaRetries >= 3) {
+              log.warn("llm", `JSON schema validation failed after ${jsonSchemaRetries} retries, accepting output as-is`);
+            } else {
+              jsonSchemaRetries++;
+              log.warn("llm", `JSON schema validation failed (attempt ${jsonSchemaRetries}/3): ${errors.join(", ")}`);
+              this.state.messages.push({
+                role: "user",
+                content: `[SYSTEM] Your JSON output failed schema validation:\n${errors.join("\n")}\n\nFix the output to match the required schema. Return ONLY valid JSON, no markdown fences.`,
+              });
+              yield { type: "turn_end", stopReason: "tool_use" };
+              continue;
+            }
           }
         } catch (e) {
           if (e instanceof SyntaxError) {
-            log.warn("llm", `JSON parse failed for schema validation: ${e.message}`);
-            this.state.messages.push({
-              role: "user",
-              content: `[SYSTEM] Your output is not valid JSON: ${e.message}\n\nReturn ONLY valid JSON matching the required schema.`,
-            });
-            yield { type: "turn_end", stopReason: "tool_use" };
-            continue;
+            if (jsonSchemaRetries >= 3) {
+              log.warn("llm", `JSON parse failed after ${jsonSchemaRetries} retries, accepting output as-is`);
+            } else {
+              jsonSchemaRetries++;
+              log.warn("llm", `JSON parse failed (attempt ${jsonSchemaRetries}/3): ${e.message}`);
+              this.state.messages.push({
+                role: "user",
+                content: `[SYSTEM] Your output is not valid JSON: ${e.message}\n\nReturn ONLY valid JSON matching the required schema. Do NOT wrap in markdown code fences.`,
+              });
+              yield { type: "turn_end", stopReason: "tool_use" };
+              continue;
+            }
           }
           // Schema parsing error — skip validation
         }
