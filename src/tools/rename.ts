@@ -51,7 +51,7 @@ const SOURCE_EXTENSIONS = new Set([
 const IGNORE_DIRS = new Set([
   "node_modules", "dist", "build", ".git", "__pycache__",
   "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", ".vscode", ".idea", "coverage",
+  ".kcode", ".vscode", ".idea", "coverage", "data",
 ]);
 
 const MAX_FILE_SIZE = 500_000; // 500KB
