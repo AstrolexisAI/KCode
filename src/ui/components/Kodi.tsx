@@ -36,159 +36,160 @@ interface KodiProps {
 
 // ─── ASCII Art Sprites (5 lines tall) ───────────────────────────
 
+// Each sprite line must be exactly 11 chars wide to fit in the 14-col box (with 1-char padding each side + 1 spare)
 const SPRITES: Record<KodiMood, string[][]> = {
   idle: [[
-    "   ╭───╮   ",
-    "   │• ◡•│   ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │• ◡•│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮   ",
-    "   │◦ ◡◦│   ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │◦ ◡◦│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ]],
   happy: [[
-    "   ╭───╮   ",
-    "   │^ ◡^│   ",
-    "   ╰─┬─╯   ",
-    "   \\|/    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │^ ◡^│  ",
+    "  ╰─┬─╯  ",
+    "  \\|/   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮   ",
-    "   │◕ ◡◕│   ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │◕ ◡◕│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ ♥ ",
-    "   │^ ‿^│   ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮ ♥",
+    "  │^ ‿^│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ]],
   excited: [[
-    "  ╭─────╮  ",
-    "  │★ ◡ ★│  ",
-    "  ╰──┬──╯  ",
-    "  \\(|)/   ",
-    "    / \\    ",
+    " ╭─────╮ ",
+    " │★ ◡ ★│ ",
+    " ╰──┬──╯ ",
+    " \\(|)/  ",
+    "   / \\   ",
   ], [
-    "  ╭─────╮  ",
-    "  │✧ ▽ ✧│  ",
-    "  ╰──┬──╯  ",
-    "   \\|/    ",
-    "    / \\    ",
+    " ╭─────╮ ",
+    " │✧ ▽ ✧│ ",
+    " ╰──┬──╯ ",
+    "  \\|/   ",
+    "   / \\   ",
   ], [
-    "  ╭─────╮ !",
-    "  │◕ ◡ ◕│  ",
-    "  ╰──┬──╯  ",
-    "   \\|/    ",
-    "   _/ \\_   ",
+    " ╭─────╮!",
+    " │◕ ◡ ◕│ ",
+    " ╰──┬──╯ ",
+    "  \\|/   ",
+    "  _/ \\_  ",
   ]],
   thinking: [[
-    "   ╭───╮ ? ",
-    "   │• _ •│  ",
-    "   ╰─┬─╯   ",
-    "    /|     ",
-    "    / \\    ",
+    "  ╭───╮ ?",
+    "  │• _ •│ ",
+    "  ╰─┬─╯  ",
+    "   /|    ",
+    "   / \\   ",
   ], [
-    "   ╭───╮   ",
-    "   │◦ ‿ ◦│ …",
-    "   ╰─┬─╯   ",
-    "     |\\    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │◦ ‿◦│…",
+    "  ╰─┬─╯  ",
+    "    |\\   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ 💭",
-    "   │• ‿ •│  ",
-    "   ╰─┬─╯   ",
-    "    /|     ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │• ‿•│  ",
+    "  ╰─┬─╯  ",
+    "   /|    ",
+    "   / \\   ",
   ]],
   working: [[
-    "   ╭───╮ ⚡",
-    "   │• ‸ •│  ",
-    "   ╰─┬─╯   ",
-    "    /|\\  ▌ ",
-    "    / \\    ",
+    "  ╭───╮ ⚡",
+    "  │• ‸•│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\ ▌ ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ ⚙ ",
-    "   │◦ ‸ ◦│  ",
-    "   ╰─┬─╯   ",
-    "    /|\\  ▌ ",
-    "    / \\    ",
+    "  ╭───╮ ⚙",
+    "  │◦ ‸◦│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\ ▌ ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ ▶ ",
-    "   │- ‸ -│  ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮ ▶",
+    "  │- ‸-│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ]],
   worried: [[
-    "   ╭───╮   ",
-    "   │° △ °│  ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │° △°│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ ! ",
-    "   │• ~ •│  ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮ !",
+    "  │• ~•│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ ✗ ",
-    "   │; _ ;│  ",
-    "   ╰─┬─╯   ",
-    "    /|\\    ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │; _;│  ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ]],
   sleeping: [[
-    "   ╭───╮   ",
-    "   │- _ -│ z",
-    "   ╰─┬─╯ z ",
-    "    /|  z   ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │- _-│z ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ], [
-    "   ╭───╮   ",
-    "   │_ _ _│ Z",
-    "   ╰─┬─╯ Z ",
-    "    /|  Z   ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │_ __│Z ",
+    "  ╰─┬─╯  ",
+    "   /|\\   ",
+    "   / \\   ",
   ]],
   celebrating: [[
-    " ✦╭─────╮✦ ",
-    "  │★ ▽ ★│  ",
-    "  ╰──┬──╯  ",
-    " ♪\\(|)/♪  ",
-    "    / \\    ",
+    " ╭─────╮ ",
+    " │★ ▽ ★│ ",
+    " ╰──┬──╯ ",
+    " \\(|)/♪ ",
+    "   / \\   ",
   ], [
-    " ♪╭─────╮♪ ",
-    "  │◕ ▽ ◕│  ",
-    "  ╰──┬──╯  ",
-    "  \\(|)/   ",
-    "   _/ \\_   ",
+    " ╭─────╮ ",
+    " │◕ ▽ ◕│ ",
+    " ╰──┬──╯ ",
+    " \\(|)/  ",
+    "  _/ \\_  ",
   ], [
-    " 🎉╭────╮🎉",
-    "  │^ ▽ ^│  ",
-    "  ╰──┬──╯  ",
-    "  \\(|)/   ",
-    "    / \\    ",
+    " ╭─────╮ ",
+    " │^ ▽ ^│ ",
+    " ╰──┬──╯ ",
+    " \\(|)/  ",
+    "   / \\   ",
   ]],
   curious: [[
-    "   ╭───╮   ",
-    "   │• ᵕ •│ ?",
-    "   ╰─┬─╯   ",
-    "    /|     ",
-    "    / \\    ",
+    "  ╭───╮  ",
+    "  │• ᵕ•│?",
+    "  ╰─┬─╯  ",
+    "   /|    ",
+    "   / \\   ",
   ], [
-    "   ╭───╮ ❓",
-    "   │◦ ‿ ◦│  ",
-    "   ╰─┬─╯   ",
-    "     |\\    ",
-    "    / \\    ",
+    "  ╭───╮ ?",
+    "  │◦ ‿◦│  ",
+    "  ╰─┬─╯  ",
+    "    |\\   ",
+    "   / \\   ",
   ]],
 };
 
@@ -519,85 +520,75 @@ export default function KodiCompanion({
   // ─── Render ─────────────────────────────────────────────────
 
   return (
-    <Box flexDirection="column">
-      <Box paddingX={1}>
-        <Text color={theme.dimmed}>{"╭" + "─".repeat(72) + "╮"}</Text>
+    <Box flexDirection="row" borderStyle="round" borderColor={theme.dimmed} paddingX={1}>
+      {/* Kodi sprite */}
+      <Box flexDirection="column" width={12}>
+        {sprite.map((line, i) => (
+          <Text key={i} color={moodColor}>{line}</Text>
+        ))}
       </Box>
-      <Box flexDirection="row" paddingX={1}>
-        {/* Kodi sprite */}
-        <Box flexDirection="column" width={14}>
-          {sprite.map((line, i) => (
-            <Box key={i} paddingX={1}>
-              <Text color={moodColor}>{line}</Text>
-            </Box>
-          ))}
+      {/* Info panel */}
+      <Box flexDirection="column" flexGrow={1} marginLeft={1}>
+        {/* Line 1: Brand */}
+        <Box gap={1}>
+          <Text bold color={theme.primary}>KCode</Text>
+          <Text color={theme.dimmed}>v{version}</Text>
+          <Text color={theme.dimmed}>—</Text>
+          <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
         </Box>
-        {/* Info panel */}
-        <Box flexDirection="column" flexGrow={1}>
-          {/* Line 1: Brand */}
-          <Box gap={1}>
-            <Text bold color={theme.primary}>KCode</Text>
-            <Text color={theme.dimmed}>v{version}</Text>
-            <Text color={theme.dimmed}>—</Text>
-            <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
-          </Box>
-          {/* Line 2: Model + mode + cwd */}
-          <Box gap={1}>
-            <Text color={theme.success}>{model}</Text>
-            {permissionMode && (
-              <>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={pmColor}>{permissionMode}</Text>
-              </>
-            )}
-            <Text color={theme.dimmed}>•</Text>
-            <Text color={theme.dimmed}>{shortCwd}</Text>
-          </Box>
-          {/* Line 3: Metrics */}
-          <Box gap={1}>
-            {(tokenCount > 0 || toolUseCount > 0) && (
-              <>
-                <Text color={theme.dimmed}>tok:{tokenCount.toLocaleString()}</Text>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={theme.dimmed}>tools:{toolUseCount}</Text>
-              </>
-            )}
-            {runningAgents > 0 && (
-              <>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={theme.warning}>agents:{runningAgents}</Text>
-              </>
-            )}
-            {contextWindowSize && contextWindowSize > 0 && tokenCount > 0 && (
-              <>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={ctxColor}>[{ctxBar}] {ctxPct}%</Text>
-              </>
-            )}
-            {sessionName && (
-              <>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={theme.warning}>{sessionName}</Text>
-              </>
-            )}
-            {sessionStartTime && elapsed > 0 && (
-              <>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={theme.dimmed}>{formatTime(elapsed)}</Text>
-              </>
-            )}
-          </Box>
-          {/* Line 4: Kodi's reaction speech bubble */}
-          <Box>
-            <Text color={moodColor}>{"💬 "}</Text>
-            <Text color={moodColor} italic>{reaction}</Text>
-          </Box>
-          {/* Line 5: spacing */}
-          <Text> </Text>
+        {/* Line 2: Model + mode + cwd */}
+        <Box gap={1}>
+          <Text color={theme.success}>{model}</Text>
+          {permissionMode && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={pmColor}>{permissionMode}</Text>
+            </>
+          )}
+          <Text color={theme.dimmed}>•</Text>
+          <Text color={theme.dimmed}>{shortCwd}</Text>
         </Box>
-      </Box>
-      <Box paddingX={1}>
-        <Text color={theme.dimmed}>{"╰" + "─".repeat(72) + "╯"}</Text>
+        {/* Line 3: Metrics */}
+        <Box gap={1}>
+          {(tokenCount > 0 || toolUseCount > 0) && (
+            <>
+              <Text color={theme.dimmed}>tok:{tokenCount.toLocaleString()}</Text>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={theme.dimmed}>tools:{toolUseCount}</Text>
+            </>
+          )}
+          {runningAgents > 0 && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={theme.warning}>agents:{runningAgents}</Text>
+            </>
+          )}
+          {contextWindowSize && contextWindowSize > 0 && tokenCount > 0 && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={ctxColor}>[{ctxBar}] {ctxPct}%</Text>
+            </>
+          )}
+          {sessionName && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={theme.warning}>{sessionName}</Text>
+            </>
+          )}
+          {sessionStartTime && elapsed > 0 && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={theme.dimmed}>{formatTime(elapsed)}</Text>
+            </>
+          )}
+        </Box>
+        {/* Line 4: Kodi's reaction speech bubble */}
+        <Box>
+          <Text color={moodColor}>{"💬 "}</Text>
+          <Text color={moodColor} italic>{reaction}</Text>
+        </Box>
+        {/* Line 5: spacer */}
+        <Text> </Text>
       </Box>
     </Box>
   );
