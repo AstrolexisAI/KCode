@@ -43,6 +43,7 @@ const SKIP_DIRS = new Set([
   "coverage", ".coverage", ".nyc_output",
   ".cache", ".parcel-cache", ".turbo",
   "target", // Rust/Java
+  "data", // data directories (databases, backups, models)
 ]);
 
 // File extensions to index
