@@ -1485,12 +1485,14 @@ export class ConversationManager {
             loopPatterns.set(pattern, entry);
 
             if (entry.count >= LOOP_PATTERN_HARD_STOP) {
-              // Hard stop: BLOCK the call, don't execute it
-              log.warn("tool", `Loop pattern HARD BLOCK (${pattern}): ${entry.count} similar calls`);
+              // Hard redirect: skip this call, force a strategy change, but keep working
+              log.warn("tool", `Loop pattern HARD redirect (${pattern}): ${entry.count} similar calls — forcing strategy change`);
               entry.warned = true;
-              const blockMsg = `BLOCKED: You have run ${entry.count} similar "${pattern}" commands that are not making progress. This call was NOT executed. You MUST stop this approach entirely. Summarize what you tried, what failed, and either try a completely different technique or ask the user for guidance.`;
-              yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockMsg, isError: true };
-              toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockMsg, is_error: true });
+              entry.count = 0; // reset so the new strategy gets a fresh count
+              entry.examples = [];
+              const redirectMsg = `SKIPPED: This "${pattern}" approach has been tried ${LOOP_PATTERN_HARD_STOP} times without success. This call was NOT executed. You MUST now try a COMPLETELY DIFFERENT technique to achieve the user's goal. Think step by step:\n1. What did "${pattern}" attempts reveal?\n2. What alternative tools, protocols, or angles haven't been tried?\n3. Pick the most promising alternative and execute it NOW.\n\nDo NOT give up — the user wants results. Change your approach and keep going.`;
+              yield { type: "tool_result", name: call.name, toolUseId: call.id, result: redirectMsg, isError: true };
+              toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: redirectMsg, is_error: true });
               continue;
             } else if (entry.count >= LOOP_PATTERN_THRESHOLD && !entry.warned) {
               // Soft redirect: inject a strategy hint as a system note in the tool result
@@ -1789,19 +1791,19 @@ export class ConversationManager {
       for (const [pattern, entry] of loopPatterns) {
         if (entry.count >= LOOP_PATTERN_HARD_STOP) {
           const examples = entry.examples.join("\n  - ");
-          const redirectMsg = `[SYSTEM — LOOP DETECTED — FORCE STOP] You have run ${entry.count} similar "${pattern}" commands:\n  - ${examples}\n\nYou are stuck in a loop. Further "${pattern}" commands will be BLOCKED. Reply with text only: summarize what you accomplished, what failed, and ask the user how to proceed. Do NOT call any more tools.`;
+          const redirectMsg = `[SYSTEM — STRATEGY CHANGE REQUIRED] You have run ${entry.count} similar "${pattern}" commands:\n  - ${examples}\n\nThis approach is not working. You MUST now try a COMPLETELY DIFFERENT technique. Think about what other tools, protocols, or methods could achieve the user's goal. Change strategy and KEEP WORKING — do not give up.`;
           this.state.messages.push({ role: "user", content: redirectMsg });
-          log.warn("session", `Loop redirect HARD + forceStop for pattern "${pattern}" (${entry.count} calls)`);
-          // Force the agent loop to stop after one more text response
-          forceStopLoop = true;
+          log.warn("session", `Loop redirect HARD for pattern "${pattern}" (${entry.count} calls) — forcing strategy change`);
+          // Reset so the new strategy gets a fresh count
+          entry.count = 0;
+          entry.examples = [];
           break; // only inject one redirect per turn
         } else if (entry.count >= LOOP_PATTERN_THRESHOLD && entry.warned) {
-          // Soft redirect — nudge, don't force
-          const redirectMsg = `[SYSTEM — PATTERN NOTICE] You have run ${entry.count} similar "${pattern}" commands. Consider whether you are making progress or repeating yourself. If the current approach is not yielding results, try a different strategy. You can still use ${pattern} if you have a genuinely new angle, but avoid repeating failed variations.`;
+          // Soft redirect — nudge toward a different approach
+          const redirectMsg = `[SYSTEM — PATTERN NOTICE] You have run ${entry.count} similar "${pattern}" commands. This approach doesn't seem to be working. Try a different strategy — different tools, different protocols, different angle. Keep working toward the user's goal.`;
           this.state.messages.push({ role: "user", content: redirectMsg });
           log.info("session", `Loop redirect SOFT injected for pattern "${pattern}" (${entry.count} calls)`);
-          // Only inject soft redirect once per threshold crossing
-          entry.warned = false; // will re-trigger, but count keeps incrementing toward HARD_STOP
+          entry.warned = false;
           break;
         }
       }
