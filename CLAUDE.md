@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-KCode (Kulvex Code) by Astrolexis — a terminal-based AI coding assistant that runs 100% locally via llama.cpp, Ollama, vLLM, or any OpenAI-compatible API. Built with Bun and TypeScript, using React/Ink for the terminal UI.
+KCode (Kulvex Code) by Astrolexis — a terminal-based AI coding assistant supporting local LLMs (llama.cpp, Ollama, vLLM) and cloud APIs (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI). Built with Bun and TypeScript, using React/Ink for the terminal UI.
 
 ## Build & Development Commands
 
@@ -35,10 +35,10 @@ bun test src/core/config.test.ts   # Run a single test file
 
 ### Core Engine (`src/core/`)
 
-- **`conversation.ts`** (~57 KB) — Main conversation loop. Handles SSE streaming from OpenAI-compatible APIs, tool call extraction (native format + text-based patterns for local models), context window pruning at 80% capacity with auto-compaction, retry with exponential backoff, max 25 tool turns per agent loop. Supports parallel tool execution, JSON schema validation of tool inputs, smart context injection, desktop notifications on completion, prompt caching for supported providers, checkpoint/rewind system for reverting to previous states, loop detector to break repetitive tool cycles, model fallback chain (tries alternative models on failure), and effort levels (low/medium/high) that control reasoning depth and tool filtering via `allowedTools`/`disallowedTools`.
+- **`conversation.ts`** (~57 KB) — Main conversation loop. Handles SSE streaming from both OpenAI-compatible APIs and native Anthropic Messages API (`/v1/messages`), tool call extraction (native format + text-based patterns for local models), context window pruning at 80% capacity with auto-compaction, retry with exponential backoff, max 25 tool turns per agent loop. Supports parallel tool execution, JSON schema validation of tool inputs, smart context injection, desktop notifications on completion, prompt caching for supported providers, checkpoint/rewind system for reverting to previous states, loop detector to break repetitive tool cycles, model fallback chain (tries alternative models on failure), and effort levels (low/medium/high) that control reasoning depth and tool filtering via `allowedTools`/`disallowedTools`. Unified `buildRequestForModel()`/`executeModelRequest()` helpers handle provider-specific request formatting.
 - **`system-prompt.ts`** (~37 KB) — Assembles a 10-layer system prompt: Identity → Tools → Code Guidelines → Git → Environment → Situational Awareness → Metacognition → User Model → World Model → Session Narrative. Loads extensible sections from `~/.kcode/identity.md`, `~/.kcode/awareness/*.md`, `.kcode/awareness/*.md`, `KCODE.md`, `.kcode/rules/*.md`. Injects active plan context and pinned files into the prompt.
 - **`config.ts`** — Settings hierarchy (highest priority first): CLI flags → env vars (`KCODE_MODEL`, `KCODE_API_KEY`, etc.) → `.kcode/settings.local.json` → `.kcode/settings.json` → `~/.kcode/settings.json`.
-- **`models.ts`** (~166 KB) — Dynamic model registry stored in `~/.kcode/models.json`. Fallback: `KCODE_API_BASE` env var or `http://localhost:10091`.
+- **`models.ts`** (~166 KB) — Dynamic model registry stored in `~/.kcode/models.json`. Each entry has `provider` field (`"openai"` | `"anthropic"`, auto-detected from name if not set). Registry entries take priority over `configBase` for URL resolution. Fallback: `KCODE_API_BASE` env var or `http://localhost:10091`.
 - **`permissions.ts`** — 5 permission modes (ask/auto/plan/deny/acceptEdits). Safety analysis detects command injection, pipe-to-shell, dangerous redirections, quote desync. Supports glob pattern rules for fine-grained file/command matching. AcceptEdits mode fix ensures edit-only operations bypass confirmation correctly.
 - **`db.ts`** — Shared SQLite connection (`~/.kcode/awareness.db`) with WAL mode. Tables: `narrative`, `user_model`, `user_interests`, `predictions`, `learnings` (FTS5), `distilled_examples`.
 - **`model-manager.ts`** (~47 KB) — Hardware-aware setup wizard. Detects CPU/GPU/RAM, recommends models, manages downloads. Supports llama.cpp (Linux/Windows) and MLX (macOS Apple Silicon).
@@ -118,3 +118,5 @@ React 19 + Ink 6 for terminal rendering. `App.tsx` (~26 KB) is the main interact
 - `/auto-compact` — Toggle automatic compaction on/off
 - `/batch` — Run multiple prompts from a file
 - `/fast` — Toggle low-effort mode for quick responses
+- `/cloud` — Configure cloud API providers (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together)
+- `/toggle` — Switch between local and cloud models interactively
