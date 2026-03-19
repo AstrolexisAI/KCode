@@ -25,6 +25,8 @@ import PermissionDialog, {
   type PermissionChoice,
 } from "./components/PermissionDialog.js";
 import ContextGrid from "./components/ContextGrid.js";
+import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
+import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
 
 interface AppProps {
   config: KCodeConfig;
@@ -33,7 +35,7 @@ interface AppProps {
   initialSessionName?: string;
 }
 
-type AppMode = "input" | "responding" | "permission";
+type AppMode = "input" | "responding" | "permission" | "cloud" | "toggle";
 
 export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
   const { exit } = useApp();
@@ -59,6 +61,12 @@ export default function App({ config, conversationManager, tools, initialSession
     names.add("/exit");
     names.add("/quit");
     names.add("/status");
+    names.add("/cloud");
+    names.add("/api-key");
+    names.add("/provider");
+    names.add("/toggle");
+    names.add("/model");
+    names.add("/switch");
     return [...names].sort();
   });
 
@@ -73,6 +81,12 @@ export default function App({ config, conversationManager, tools, initialSession
     descs["/exit"] = "Exit KCode";
     descs["/quit"] = "Exit KCode";
     descs["/status"] = "Show session status";
+    descs["/cloud"] = "Configure cloud API providers (Anthropic, OpenAI, Gemini, etc.)";
+    descs["/api-key"] = "Configure cloud API providers";
+    descs["/provider"] = "Configure cloud API providers";
+    descs["/toggle"] = "Switch between local and cloud models";
+    descs["/model"] = "Switch between local and cloud models";
+    descs["/switch"] = "Switch between local and cloud models";
     return descs;
   });
 
@@ -391,6 +405,20 @@ export default function App({ config, conversationManager, tools, initialSession
       }
       if (lower === "/workspace" || lower === "/cwd" || lower === "/cd") {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Current: ${config.workingDirectory}\n  Usage: /workspace <path>` }]);
+        return;
+      }
+
+      // /cloud — interactive cloud provider setup
+      if (lower === "/cloud" || lower === "/api-key" || lower === "/apikey" || lower === "/provider") {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        setMode("cloud");
+        return;
+      }
+
+      // /toggle — switch between local and cloud models
+      if (lower === "/toggle" || lower === "/model" || lower === "/switch") {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        setMode("toggle");
         return;
       }
 
@@ -845,6 +873,7 @@ export default function App({ config, conversationManager, tools, initialSession
 
           case "tool_result":
             setLastKodiEvent({ type: event.isError ? "tool_error" : "tool_done", detail: event.name });
+            setToolUseCount(conversationManager.getState().toolUseCount);
             // Clear Bash stream output when any Bash result arrives
             if (event.name === "Bash") {
               setBashStreamOutput("");
@@ -1032,6 +1061,126 @@ export default function App({ config, conversationManager, tools, initialSession
     [permissionResolver],
   );
 
+  const handleCloudDone = useCallback(
+    async (result: CloudResult | null) => {
+      if (!result) {
+        setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Cloud setup cancelled." }]);
+        setMode("input");
+        return;
+      }
+
+      try {
+        const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../core/config.js");
+        const { addModel } = await import("../core/models.js");
+        const provider = result.provider;
+
+        // Save API key to settings (raw to preserve extra fields)
+        const settings = await loadUserSettingsRaw();
+        settings[provider.settingsKey] = result.apiKey;
+        await saveUserSettingsRaw(settings);
+
+        // Set env var for current session
+        process.env[provider.envVar] = result.apiKey;
+
+        // Update current config
+        if (provider.id === "anthropic") {
+          config.anthropicApiKey = result.apiKey;
+        } else {
+          config.apiKey = result.apiKey;
+        }
+
+        // Register default models for this provider
+        const modelProvider = provider.id === "anthropic" ? "anthropic" as const : "openai" as const;
+        const modelsToRegister = provider.models.split(",").map((m) => m.trim());
+        for (const modelName of modelsToRegister) {
+          await addModel({
+            name: modelName,
+            baseUrl: provider.baseUrl,
+            provider: modelProvider,
+            description: `${provider.name} cloud model`,
+          });
+        }
+
+        // Switch active model to the first model of this provider
+        const newModel = modelsToRegister[0]!;
+        config.model = newModel;
+        config.modelExplicitlySet = true;
+        conversationManager.getConfig().model = newModel;
+        conversationManager.getConfig().modelExplicitlySet = true;
+
+        // Update context window size from registry
+        const { getModelContextSize } = await import("../core/models.js");
+        const ctxSize = await getModelContextSize(newModel);
+        if (ctxSize) {
+          config.contextWindowSize = ctxSize;
+          conversationManager.getConfig().contextWindowSize = ctxSize;
+        }
+
+        setCompleted((prev) => [
+          ...prev,
+          {
+            kind: "text",
+            role: "assistant",
+            text: `  ☁  ${provider.name} configured!\n  API key saved to ~/.kcode/settings.json\n  Registered models: ${provider.models}\n  Active model switched to: ${newModel}`,
+          },
+        ]);
+      } catch (err) {
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "assistant", text: `  Error saving config: ${err instanceof Error ? err.message : err}` },
+        ]);
+      }
+
+      setMode("input");
+    },
+    [config],
+  );
+
+  const handleToggleDone = useCallback(
+    async (result: ModelToggleResult | null) => {
+      if (!result) {
+        setMode("input");
+        return;
+      }
+
+      const newModel = result.model.name;
+      config.model = newModel;
+      config.modelExplicitlySet = true;
+      conversationManager.getConfig().model = newModel;
+      conversationManager.getConfig().modelExplicitlySet = true;
+
+      // Update context window size
+      const { getModelContextSize } = await import("../core/models.js");
+      const ctxSize = await getModelContextSize(newModel);
+      if (ctxSize) {
+        config.contextWindowSize = ctxSize;
+        conversationManager.getConfig().contextWindowSize = ctxSize;
+      }
+
+      // Update API key if switching to a cloud provider
+      const { getModelProvider } = await import("../core/models.js");
+      const provider = await getModelProvider(newModel);
+      if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+        config.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+      }
+
+      const isLocal = result.model.baseUrl.includes("localhost") || result.model.baseUrl.includes("127.0.0.1");
+      const label = isLocal ? "🖥  Local" : "☁  Cloud";
+
+      setCompleted((prev) => [
+        ...prev,
+        {
+          kind: "text",
+          role: "assistant",
+          text: `  ${label}: Switched to ${newModel}${result.model.description ? ` — ${result.model.description}` : ""}`,
+        },
+      ]);
+
+      setMode("input");
+    },
+    [config],
+  );
+
   return (
     <Box flexDirection="column">
       <MessageList
@@ -1060,6 +1209,21 @@ export default function App({ config, conversationManager, tools, initialSession
             request={permissionRequest}
             onChoice={handlePermissionChoice}
             isActive={mode === "permission"}
+          />
+        )}
+
+        {mode === "cloud" && (
+          <CloudMenu
+            isActive={mode === "cloud"}
+            onDone={handleCloudDone}
+          />
+        )}
+
+        {mode === "toggle" && (
+          <ModelToggle
+            isActive={mode === "toggle"}
+            currentModel={config.model}
+            onDone={handleToggleDone}
           />
         )}
 
@@ -1125,7 +1289,7 @@ export default function App({ config, conversationManager, tools, initialSession
       />
       <InputPrompt
         onSubmit={handleSubmit}
-        isActive={mode !== "permission"}
+        isActive={mode !== "permission" && mode !== "cloud" && mode !== "toggle"}
         isQueuing={mode === "responding"}
         queueSize={messageQueue.length}
         model={config.model}

@@ -511,6 +511,18 @@ export async function saveUserSettings(settings: Settings): Promise<void> {
   await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
 }
 
+/** Load raw user settings JSON (preserves extra fields like provider-specific API keys). */
+export async function loadUserSettingsRaw(): Promise<Record<string, unknown>> {
+  return (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+}
+
+/** Save raw user settings JSON (preserves extra fields). */
+export async function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void> {
+  const dir = KCODE_HOME;
+  await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
+  await Bun.write(USER_SETTINGS_PATH, JSON.stringify(raw, null, 2) + "\n");
+}
+
 export async function saveProjectSettings(cwd: string, settings: Settings): Promise<void> {
   const path = projectSettingsPath(cwd);
   const dir = dirname(path);
@@ -535,6 +547,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
 
   return {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? (await loadUserSettingsRaw()).anthropicApiKey as string | undefined,
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,
