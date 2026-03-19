@@ -672,9 +672,11 @@ export default function App({ config, conversationManager, tools, initialSession
       setIsThinking(false);
       setLoadingMessage("");
 
-      // Update stats
+      // Update stats — use API-reported tokens, or estimate from context if unavailable
       const state = conversationManager.getState();
-      setTokenCount(state.tokenCount);
+      const usage = conversationManager.getUsage();
+      const apiTokens = usage.inputTokens + usage.outputTokens;
+      setTokenCount(apiTokens > 0 ? apiTokens : state.tokenCount);
       setToolUseCount(state.toolUseCount);
     },
     [conversationManager, tools, skillManager, exit],
