@@ -3,10 +3,11 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { builtinSkills, type SkillDefinition } from "./builtin-skills.js";
 import { TemplateManager } from "./templates.js";
 import { getPluginManager } from "./plugins.js";
+import { matchSkills, type SkillTrigger } from "./skill-matcher.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -55,8 +56,18 @@ function parseSkillFile(content: string): SkillDefinition | null {
   const description = extractYamlString(frontmatter, "description") ?? "";
   const aliases = extractYamlArray(frontmatter, "aliases");
   const args = extractYamlArray(frontmatter, "args");
+  const autoInvoke = extractYamlString(frontmatter, "auto_invoke") === "true";
+  const triggers = extractYamlTriggers(frontmatter);
 
-  return { name, description, aliases, args: args.length > 0 ? args : undefined, template };
+  return {
+    name,
+    description,
+    aliases,
+    args: args.length > 0 ? args : undefined,
+    template,
+    triggers: triggers.length > 0 ? triggers : undefined,
+    autoInvoke: autoInvoke || undefined,
+  };
 }
 
 function extractYamlString(yaml: string, key: string): string | null {
@@ -77,6 +88,18 @@ function extractYamlArray(yaml: string, key: string): string[] {
     .filter(Boolean);
 }
 
+function extractYamlTriggers(yaml: string): SkillTrigger[] {
+  const triggers: SkillTrigger[] = [];
+  const triggerBlock = yaml.match(/^triggers:\s*\n((?:\s+-\s+.*\n?)*)/m);
+  if (!triggerBlock) return triggers;
+
+  const entries = triggerBlock[1].matchAll(/pattern:\s*["']?([^"'\n]+)["']?\s*\n\s*type:\s*["']?(regex|contains|startsWith)["']?/g);
+  for (const entry of entries) {
+    triggers.push({ pattern: entry[1].trim(), type: entry[2].trim() as SkillTrigger["type"] });
+  }
+  return triggers;
+}
+
 // ─── Skill Discovery ───────────────────────────────────────────
 
 function loadSkillsFromDirectory(dir: string): SkillDefinition[] {
@@ -86,11 +109,12 @@ function loadSkillsFromDirectory(dir: string): SkillDefinition[] {
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
       try {
-        const file = Bun.file(join(dir, entry.name));
-        // Use synchronous approach: read via node fs
-        const content = require("node:fs").readFileSync(join(dir, entry.name), "utf-8");
+        const content = readFileSync(join(dir, entry.name), "utf-8");
         const skill = parseSkillFile(content);
-        if (skill) skills.push(skill);
+        if (skill) {
+          skill.sourceDir = dir;
+          skills.push(skill);
+        }
       } catch {
         // Skip unreadable files
       }
@@ -147,6 +171,12 @@ export class SkillManager {
     // Start with built-in skills (lowest priority)
     const byName = new Map<string, SkillDefinition>();
     for (const skill of builtinSkills) {
+      byName.set(skill.name, skill);
+    }
+
+    // Bundled skills (src/skills/) — ship with KCode, between built-in and user
+    const bundledDir = join(import.meta.dir, "..", "skills");
+    for (const skill of loadSkillsFromDirectory(bundledDir)) {
       byName.set(skill.name, skill);
     }
 
@@ -359,4 +389,66 @@ export class SkillManager {
 
     return lines.join("\n");
   }
+
+  // ─── Feature 2: Auto-Invocation Matching ────────────────────
+
+  matchAutoInvoke(userMessage: string): SkillDefinition[] {
+    this.load();
+    return matchSkills(userMessage, this.skills);
+  }
+
+  // ─── Feature 3: Progressive Skill Disclosure ────────────────
+
+  getLevel1Metadata(): string {
+    this.load();
+    const lines: string[] = ["Available skills:"];
+    for (const skill of this.skills) {
+      if (skill.template.startsWith("__builtin_")) continue;
+      lines.push(`- /${skill.name}: ${skill.description}`);
+    }
+    return lines.join("\n");
+  }
+
+  getLevel2Body(skillName: string): string | null {
+    this.load();
+    const skill = this.find(skillName);
+    if (!skill) return null;
+    if (skill.template.startsWith("__builtin_")) return null;
+    return skill.template;
+  }
+
+  getLevel3Resources(skillName: string): string | null {
+    this.load();
+    return loadSkillResources(skillName, this.skills);
+  }
+}
+
+// ─── Level 3 Resource Loading ─────────────────────────────────
+
+function loadSkillResources(skillName: string, skills: SkillDefinition[]): string | null {
+  const skill = skills.find(
+    (s) => s.name.toLowerCase() === skillName.toLowerCase(),
+  );
+  if (!skill?.sourceDir) return null;
+
+  const resourceDir = join(skill.sourceDir, skillName);
+  if (!existsSync(resourceDir)) return null;
+
+  const parts: string[] = [];
+  try {
+    const entries = readdirSync(resourceDir).sort();
+    for (const entry of entries) {
+      const filePath = join(resourceDir, entry);
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        parts.push(`--- ${entry} ---\n${content}`);
+      } catch {
+        // Skip unreadable resource files
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return parts.length > 0 ? parts.join("\n\n") : null;
 }

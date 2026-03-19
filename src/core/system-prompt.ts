@@ -167,6 +167,16 @@ export class SystemPromptBuilder {
       sections.push({ content: config.systemPromptAppend, priority: SectionPriority.HIGH, label: "user-append" });
     }
 
+    // Level 1 skill metadata — lightweight listing always in prompt
+    try {
+      const { SkillManager } = require("./skills.js");
+      const sm = new SkillManager(config.workingDirectory);
+      const metadata = sm.getLevel1Metadata();
+      if (metadata) {
+        sections.push({ content: `## Skills\n${metadata}`, priority: SectionPriority.LOW, label: "skill-metadata" });
+      }
+    } catch { /* non-critical */ }
+
     // Apply token budget — drops low-priority sections if over limit
     return budgetManager.apply(sections.filter((s) => s.content));
   }

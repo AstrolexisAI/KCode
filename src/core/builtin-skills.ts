@@ -1,12 +1,18 @@
 // KCode - Built-in skill definitions
 // Default skills that ship with KCode
 
+import type { SkillTrigger } from "./skill-matcher";
+
 export interface SkillDefinition {
   name: string;
   description: string;
   aliases: string[];
   args?: string[];
   template: string;
+  triggers?: SkillTrigger[];
+  autoInvoke?: boolean;
+  /** Source directory for Level 3 resource loading */
+  sourceDir?: string;
 }
 
 export const builtinSkills: SkillDefinition[] = [
@@ -431,10 +437,17 @@ Be thorough but avoid false positives. Only report real risks.`,
   },
   {
     name: "conv-branch",
-    description: "Label or manage the current conversation branch",
-    aliases: [],
-    args: ["label <name>", "delete"],
+    description: "Create, label, or manage conversation branches",
+    aliases: ["fork"],
+    args: ["[name]", "label <name>", "delete"],
     template: `__builtin_branch__`,
+  },
+  {
+    name: "continue",
+    description: "Load a conversation branch and continue from it",
+    aliases: ["load-branch"],
+    args: ["branchId"],
+    template: `__builtin_continue__`,
   },
   {
     name: "compare",

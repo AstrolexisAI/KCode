@@ -1,27 +1,22 @@
 // KCode - MCP OAuth 2.0 Client
 // Implements OAuth 2.0 Authorization Code flow with PKCE for MCP server authentication.
-// Supports: authorization URL generation, callback handling, token storage/refresh.
+// Supports: authorization URL generation, callback handling, token storage/refresh,
+// token encryption, browser-based auth flow, and token revocation.
 
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, createCipheriv, createDecipheriv } from "node:crypto";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 import { createServer, type Server } from "node:http";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface OAuthConfig {
-  /** OAuth 2.0 client ID */
   clientId: string;
-  /** OAuth 2.0 client secret (optional for public clients) */
   clientSecret?: string;
-  /** Authorization endpoint URL */
   authorizationUrl: string;
-  /** Token endpoint URL */
   tokenUrl: string;
-  /** Scopes to request */
   scopes?: string[];
-  /** Redirect URI (default: http://localhost with dynamic port) */
   redirectUri?: string;
 }
 
@@ -35,9 +30,19 @@ export interface OAuthTokens {
 
 interface TokenStorageEntry {
   serverName: string;
-  tokens: OAuthTokens;
+  tokens: EncryptedTokens | OAuthTokens;
   config: { clientId: string; tokenUrl: string };
+  encrypted?: boolean;
 }
+
+interface EncryptedTokens {
+  iv: string;
+  data: string;
+  tag: string;
+}
+
+const DEFAULT_CALLBACK_PORT = 19876;
+const DEFAULT_REDIRECT_URI = `http://localhost:${DEFAULT_CALLBACK_PORT}/callback`;
 
 // ─── PKCE Helpers ────────────────────────────────────────────────
 
@@ -53,24 +58,75 @@ function generateState(): string {
   return randomBytes(16).toString("hex");
 }
 
+// ─── Encryption ─────────────────────────────────────────────────
+
+function deriveEncryptionKey(): Buffer {
+  const machineId = `${homedir()}:${process.env.USER ?? "kcode"}:mcp-oauth-enc`;
+  return createHash("sha256").update(machineId).digest();
+}
+
+function encryptTokens(tokens: OAuthTokens): EncryptedTokens {
+  const key = deriveEncryptionKey();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const plaintext = JSON.stringify(tokens);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    iv: iv.toString("base64"),
+    data: encrypted.toString("base64"),
+    tag: tag.toString("base64"),
+  };
+}
+
+function decryptTokens(encrypted: EncryptedTokens): OAuthTokens {
+  const key = deriveEncryptionKey();
+  const iv = Buffer.from(encrypted.iv, "base64");
+  const data = Buffer.from(encrypted.data, "base64");
+  const tag = Buffer.from(encrypted.tag, "base64");
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+  return JSON.parse(decrypted.toString("utf8"));
+}
+
 // ─── Token Storage ───────────────────────────────────────────────
 
-const TOKEN_FILE = join(homedir(), ".kcode", "mcp-tokens.json");
+const TOKEN_FILE = join(homedir(), ".kcode", "oauth-tokens.json");
+const LEGACY_TOKEN_FILE = join(homedir(), ".kcode", "mcp-tokens.json");
 
 async function loadTokenStore(): Promise<Map<string, TokenStorageEntry>> {
   const store = new Map<string, TokenStorageEntry>();
-  try {
-    const file = Bun.file(TOKEN_FILE);
-    if (await file.exists()) {
-      const data = await file.json() as Record<string, TokenStorageEntry>;
-      for (const [key, entry] of Object.entries(data)) {
-        if (entry?.tokens?.accessToken) {
-          store.set(key, entry);
+
+  // Try new file first, then legacy
+  for (const path of [TOKEN_FILE, LEGACY_TOKEN_FILE]) {
+    try {
+      const file = Bun.file(path);
+      if (await file.exists()) {
+        const data = await file.json() as Record<string, TokenStorageEntry>;
+        for (const [key, entry] of Object.entries(data)) {
+          if (store.has(key)) continue;
+          if (entry?.encrypted) {
+            try {
+              const tokens = decryptTokens(entry.tokens as EncryptedTokens);
+              if (tokens.accessToken) {
+                store.set(key, { ...entry, tokens });
+              }
+            } catch {
+              // Decryption failed, skip
+            }
+          } else {
+            const tokens = entry?.tokens as OAuthTokens;
+            if (tokens?.accessToken) {
+              store.set(key, entry);
+            }
+          }
         }
+        break;
       }
+    } catch {
+      // No stored tokens or corrupt file
     }
-  } catch {
-    // No stored tokens or corrupt file
   }
   return store;
 }
@@ -78,11 +134,36 @@ async function loadTokenStore(): Promise<Map<string, TokenStorageEntry>> {
 async function saveTokenStore(store: Map<string, TokenStorageEntry>): Promise<void> {
   const data: Record<string, TokenStorageEntry> = {};
   for (const [key, entry] of store) {
-    data[key] = entry;
+    data[key] = {
+      ...entry,
+      tokens: encryptTokens(entry.tokens as OAuthTokens),
+      encrypted: true,
+    };
   }
   const { mkdirSync } = await import("node:fs");
   mkdirSync(join(homedir(), ".kcode"), { recursive: true });
   await Bun.write(TOKEN_FILE, JSON.stringify(data, null, 2), { mode: 0o600 } as never);
+}
+
+// ─── Browser Opening ─────────────────────────────────────────────
+
+async function openBrowser(url: string): Promise<void> {
+  const { spawn } = await import("bun");
+  const os = platform();
+  let cmd: string[];
+  if (os === "darwin") {
+    cmd = ["open", url];
+  } else if (os === "win32") {
+    cmd = ["cmd", "/c", "start", url];
+  } else {
+    cmd = ["xdg-open", url];
+  }
+  try {
+    const proc = spawn({ cmd, stdout: "ignore", stderr: "ignore" });
+    await proc.exited;
+  } catch {
+    log.warn("mcp-oauth", `Could not open browser automatically. Visit: ${url}`);
+  }
 }
 
 // ─── OAuth Flow ──────────────────────────────────────────────────
@@ -97,20 +178,17 @@ export class McpOAuthClient {
     this.config = config;
   }
 
-  /**
-   * Get stored tokens for this server (if any, and if not expired).
-   */
   async getStoredTokens(): Promise<OAuthTokens | null> {
     const store = await loadTokenStore();
     const entry = store.get(this.serverName);
     if (!entry) return null;
 
-    // Check expiry (with 60s buffer)
-    if (entry.tokens.expiresAt && Date.now() >= entry.tokens.expiresAt - 60_000) {
-      // Try refresh
-      if (entry.tokens.refreshToken) {
+    const tokens = entry.tokens as OAuthTokens;
+
+    if (tokens.expiresAt && Date.now() >= tokens.expiresAt - 60_000) {
+      if (tokens.refreshToken) {
         try {
-          const refreshed = await this.refreshTokens(entry.tokens.refreshToken);
+          const refreshed = await this.refreshTokens(tokens.refreshToken);
           await this.storeTokens(refreshed);
           return refreshed;
         } catch (err) {
@@ -121,12 +199,9 @@ export class McpOAuthClient {
       return null;
     }
 
-    return entry.tokens;
+    return tokens;
   }
 
-  /**
-   * Store tokens for this server.
-   */
   async storeTokens(tokens: OAuthTokens): Promise<void> {
     const store = await loadTokenStore();
     store.set(this.serverName, {
@@ -140,29 +215,21 @@ export class McpOAuthClient {
     await saveTokenStore(store);
   }
 
-  /**
-   * Remove stored tokens for this server.
-   */
   async clearTokens(): Promise<void> {
     const store = await loadTokenStore();
     store.delete(this.serverName);
     await saveTokenStore(store);
   }
 
-  /**
-   * Build the authorization URL for the OAuth flow.
-   * Returns the URL and the local callback server port.
-   */
   async startAuthFlow(): Promise<{ url: string; port: number; waitForCallback: () => Promise<OAuthTokens> }> {
-    // Use local variables for PKCE to support concurrent flows safely
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
     const state = generateState();
-    // Store for exchangeCode — last-wins is acceptable for single-user CLI
     this.codeVerifier = codeVerifier;
 
-    // Start a local HTTP server to receive the callback
-    const { server, port } = await startCallbackServer();
+    const { server, port } = await startCallbackServer(
+      this.config.redirectUri ? undefined : DEFAULT_CALLBACK_PORT
+    );
     const redirectUri = this.config.redirectUri ?? `http://localhost:${port}/callback`;
 
     const params = new URLSearchParams({
@@ -235,9 +302,6 @@ export class McpOAuthClient {
     return { url: authUrl, port, waitForCallback };
   }
 
-  /**
-   * Exchange an authorization code for tokens.
-   */
   private async exchangeCode(code: string, redirectUri: string): Promise<OAuthTokens> {
     if (!this.codeVerifier) {
       throw new Error("No code verifier available — startAuthFlow must be called first");
@@ -271,10 +335,7 @@ export class McpOAuthClient {
     return this.parseTokenResponse(data);
   }
 
-  /**
-   * Refresh an expired access token.
-   */
-  private async refreshTokens(refreshToken: string): Promise<OAuthTokens> {
+  async refreshTokens(refreshToken: string): Promise<OAuthTokens> {
     const body = new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -298,7 +359,6 @@ export class McpOAuthClient {
 
     const data = await response.json() as Record<string, unknown>;
     const tokens = this.parseTokenResponse(data);
-    // Preserve the refresh token if the server didn't return a new one
     if (!tokens.refreshToken) {
       tokens.refreshToken = refreshToken;
     }
@@ -332,34 +392,127 @@ export class McpOAuthClient {
   }
 }
 
+// ─── McpOAuthManager ─────────────────────────────────────────────
+
+export class McpOAuthManager {
+  private tokenStorePath: string;
+
+  constructor(tokenStorePath: string = TOKEN_FILE) {
+    this.tokenStorePath = tokenStorePath;
+  }
+
+  async authorize(serverName: string, config: OAuthConfig): Promise<OAuthTokens> {
+    const client = new McpOAuthClient(serverName, {
+      ...config,
+      redirectUri: config.redirectUri ?? DEFAULT_REDIRECT_URI,
+    });
+
+    const { url, waitForCallback } = await client.startAuthFlow();
+    log.info("mcp-oauth", `Opening browser for "${serverName}" OAuth authorization...`);
+    await openBrowser(url);
+
+    return waitForCallback();
+  }
+
+  async getToken(serverName: string): Promise<string | null> {
+    const store = await loadTokenStore();
+    const entry = store.get(serverName);
+    if (!entry) return null;
+
+    const tokens = entry.tokens as OAuthTokens;
+
+    if (tokens.expiresAt && Date.now() >= tokens.expiresAt - 60_000) {
+      if (tokens.refreshToken && entry.config) {
+        try {
+          const client = new McpOAuthClient(serverName, {
+            clientId: entry.config.clientId,
+            authorizationUrl: "",
+            tokenUrl: entry.config.tokenUrl,
+          });
+          const refreshed = await client.refreshTokens(tokens.refreshToken);
+          await client.storeTokens(refreshed);
+          return refreshed.accessToken;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    return tokens.accessToken;
+  }
+
+  async refreshToken(serverName: string, config: OAuthConfig): Promise<OAuthTokens> {
+    const store = await loadTokenStore();
+    const entry = store.get(serverName);
+    if (!entry) {
+      throw new Error(`No stored tokens for server "${serverName}"`);
+    }
+
+    const tokens = entry.tokens as OAuthTokens;
+    if (!tokens.refreshToken) {
+      throw new Error(`No refresh token available for server "${serverName}"`);
+    }
+
+    const client = new McpOAuthClient(serverName, config);
+    const refreshed = await client.refreshTokens(tokens.refreshToken);
+    await client.storeTokens(refreshed);
+    return refreshed;
+  }
+
+  async revokeToken(serverName: string): Promise<void> {
+    const client = new McpOAuthClient(serverName, {
+      clientId: "",
+      authorizationUrl: "",
+      tokenUrl: "",
+    });
+    await client.clearTokens();
+    log.info("mcp-oauth", `Revoked tokens for "${serverName}"`);
+  }
+
+  async isAuthenticated(serverName: string): Promise<boolean> {
+    const token = await this.getToken(serverName);
+    return token !== null;
+  }
+}
+
 // ─── Callback Server ─────────────────────────────────────────────
 
-function startCallbackServer(): Promise<{ server: Server; port: number }> {
+function startCallbackServer(preferredPort?: number): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
     const server = createServer();
-    // Listen on dynamic port (0 = OS picks a free port)
-    server.listen(0, "127.0.0.1", () => {
-      const addr = server.address();
-      if (!addr || typeof addr === "string") {
-        server.close();
-        reject(new Error("Failed to start callback server"));
-        return;
+    const port = preferredPort ?? 0;
+
+    const tryListen = (p: number) => {
+      server.listen(p, "127.0.0.1", () => {
+        const addr = server.address();
+        if (!addr || typeof addr === "string") {
+          server.close();
+          reject(new Error("Failed to start callback server"));
+          return;
+        }
+        log.info("mcp-oauth", `OAuth callback server listening on port ${addr.port}`);
+        resolve({ server, port: addr.port });
+      });
+    };
+
+    server.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE" && preferredPort) {
+        log.warn("mcp-oauth", `Port ${preferredPort} in use, falling back to dynamic port`);
+        server.removeAllListeners("error");
+        server.on("error", reject);
+        tryListen(0);
+      } else {
+        reject(err);
       }
-      log.info("mcp-oauth", `OAuth callback server listening on port ${addr.port}`);
-      resolve({ server, port: addr.port });
     });
-    server.on("error", (err) => {
-      reject(err);
-    });
+
+    tryListen(port);
   });
 }
 
 // ─── MCP OAuth Discovery ────────────────────────────────────────
 
-/**
- * Discover OAuth configuration from an MCP server's well-known endpoint.
- * Per the MCP spec, servers may expose /.well-known/oauth-authorization-server
- */
 export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfig | null> {
   try {
     const url = new URL(serverUrl);
@@ -381,7 +534,7 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
     }
 
     return {
-      clientId: "", // Must be configured by user
+      clientId: "",
       authorizationUrl,
       tokenUrl,
       scopes: Array.isArray(data.scopes_supported) ? data.scopes_supported as string[] : undefined,
@@ -391,10 +544,6 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
   }
 }
 
-/**
- * Try to get a valid access token for an MCP server.
- * Returns null if no OAuth is configured or tokens are unavailable.
- */
 export async function getAccessToken(serverName: string, oauthConfig?: OAuthConfig): Promise<string | null> {
   if (!oauthConfig) return null;
 
