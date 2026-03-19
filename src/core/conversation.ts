@@ -38,7 +38,7 @@ import { getBranchManager } from "./branch-manager";
 // ─── Constants ───────────────────────────────────────────────────
 
 const DEFAULT_CONTEXT_WINDOW = 32_000;
-const CONTEXT_WINDOW_MARGIN = 0.2; // prune when we reach 80% of context window
+const CONTEXT_WINDOW_MARGIN = 0.25; // prune when we reach 75% of context window
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
@@ -600,7 +600,7 @@ export class ConversationManager {
     this.systemPrompt = SystemPromptBuilder.build(config, config.version);
     this.systemPromptHash = this.hashString(this.systemPrompt);
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
-    this.compactThreshold = config.compactThreshold ?? 0.8;
+    this.compactThreshold = config.compactThreshold ?? 0.75;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
     this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory, config.additionalDirs, config.permissionRules);
     this.hooks = new HookManager(config.workingDirectory);
@@ -890,6 +890,21 @@ export class ConversationManager {
 
       // Prune context if approaching the limit (auto-compacts via LLM when possible)
       yield* this.pruneMessagesIfNeeded();
+
+      // Hard safety: if still over 95% after compaction, emergency prune oldest messages
+      const postPruneTokens = this.estimateContextTokens();
+      const hardLimit = this.contextWindowSize * 0.95;
+      if (postPruneTokens >= hardLimit && this.state.messages.length > 6) {
+        const dropCount = Math.max(2, Math.floor(this.state.messages.length * 0.3));
+        log.warn("session", `Emergency prune: ~${postPruneTokens} tokens >= 95% of ${this.contextWindowSize}. Dropping ${dropCount} oldest messages.`);
+        const kept = this.state.messages.slice(0, 1); // keep system/first message
+        const rest = this.state.messages.slice(1);
+        const remaining = rest.slice(dropCount);
+        this.state.messages = [...kept, { role: "user" as const, content: `[SYSTEM] Context was emergency-pruned to avoid exceeding the ${this.contextWindowSize}-token limit. ${dropCount} older messages were removed. Continue with the current task.` }, ...remaining];
+        this.state.tokenCount = this.estimateContextTokens();
+        yield { type: "compaction_start", messageCount: dropCount, tokensBefore: postPruneTokens };
+        yield { type: "compaction_end", tokensAfter: this.state.tokenCount, method: "pruned" };
+      }
 
       yield { type: "turn_start" };
 
@@ -2151,11 +2166,12 @@ export class ConversationManager {
    * Keeps the system prompt, first user message, and recent messages.
    */
   private async *pruneMessagesIfNeeded(): AsyncGenerator<StreamEvent> {
-    // Use the higher of: tracked token count or estimated from message content
+    // Estimate current context window usage from actual message content
+    // NOTE: state.tokenCount is cumulative (total session), NOT current context size.
+    // We must use estimateContextTokens() which counts actual message chars.
     const estimatedTokens = this.estimateContextTokens();
-    const effectiveCount = Math.max(this.state.tokenCount, estimatedTokens);
     const threshold = this.contextWindowSize * this.compactThreshold;
-    if (effectiveCount < threshold) {
+    if (estimatedTokens < threshold) {
       return;
     }
 
@@ -2190,7 +2206,7 @@ export class ConversationManager {
 
     if (compressed > 0) {
       log.info("session", `Compressed ${compressed} tool results`);
-      yield { type: "compaction_start", messageCount: compressed, tokensBefore: effectiveCount };
+      yield { type: "compaction_start", messageCount: compressed, tokensBefore: estimatedTokens };
       yield { type: "compaction_end", tokensAfter: this.estimateContextTokens(), method: "compressed" };
     }
 
@@ -2216,7 +2232,7 @@ export class ConversationManager {
 
     if (pruneCount > 0) {
       // Notify UI that compaction is starting
-      yield { type: "compaction_start", messageCount: pruneCount, tokensBefore: effectiveCount };
+      yield { type: "compaction_start", messageCount: pruneCount, tokensBefore: estimatedTokens };
 
       // Try LLM-based compaction first, fall back to simple pruning
       const toPrune = messages.slice(keepFirst, keepFirst + pruneCount);
