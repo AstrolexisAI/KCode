@@ -1948,6 +1948,7 @@ export class ConversationManager {
           messages: openAIMessages,
           max_tokens: effortMaxTokens,
           stream: true,
+          stream_options: { include_usage: true },
         };
 
         if (effortTemperature !== undefined) {
