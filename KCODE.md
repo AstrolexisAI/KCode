@@ -8,6 +8,6 @@ Default to using Bun instead of Node.js.
 ## Project
 
 - This is KCode (Kulvex Code) by Astrolexis
-- Local LLMs only via llama-server (OpenAI-compatible API)
+- Local LLMs via llama-server (OpenAI-compatible API) + cloud providers via native APIs
 - Never reference competing products in code or docs
 - Ports below 10000 are reserved — use 10000+ for any new defaults

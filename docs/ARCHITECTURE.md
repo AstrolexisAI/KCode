@@ -21,17 +21,28 @@ reference-source
 - **Also works as**: Node.js >=18 (via npm install)
 - **Bundle**: Single `cli.js` file, minified with Bun's bundler
 - **UI Framework**: Ink (React for terminals)
-- **API Client**: OpenAI-compatible API (local llama-server)
+- **API Client**: OpenAI-compatible API (local llama-server) + native Anthropic Messages API
 - **Search**: Bundled ripgrep binary
 - **Parsing**: tree-sitter for Bash syntax analysis
 
 ### Streaming & API Layer
 
+**OpenAI-compatible** (local models, OpenAI, Gemini, Groq, DeepSeek, Together):
 - SSE streaming via `/v1/chat/completions` with `stream: true`
+- Delta types: text_delta, input_json_delta, thinking_delta
+- Tool calls via `tool_calls` array in message deltas
+
+**Anthropic native** (Claude models):
+- SSE streaming via `/v1/messages` with `x-api-key` + `anthropic-version: 2023-06-01`
+- System prompt as top-level `system` field (not a message)
+- Strict user/assistant message alternation (consecutive same-role messages merged)
 - Event types: message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop
-- Delta types: text_delta, input_json_delta, thinking_delta, citations_delta, signature_delta
+- Tool use as content blocks (`tool_use`/`tool_result`) inside messages
+- Provider auto-detection from model registry `provider` field or name heuristic (`claude-*` → anthropic)
+
+**Common**:
 - Retry: exponential backoff 0.5s→8s, max 2 retries, 75-100% jitter
-- Context management is caller responsibility (no auto-compression in SDK)
+- `buildRequestForModel()` + `executeModelRequest()` unified helpers handle both providers
 - Extended thinking with budget_tokens
 
 ### Permission & Security System
@@ -133,6 +144,8 @@ src/
 │       ├── ThinkingBlock.tsx(94)  # Collapsible thinking block (streaming/collapsed/expanded)
 │       ├── InputPrompt.tsx(302)   # Input with history, cursor, tab completion
 │       ├── PermissionDialog.tsx(81)# Allow/deny/always prompt
+│       ├── CloudMenu.tsx  (232)   # Cloud provider API key configuration
+│       ├── ModelToggle.tsx(160)   # Interactive model switcher (local/cloud)
 │       └── Spinner.tsx    (30)    # Animated braille spinner
 │
 ├── index.ts             (279)     # CLI entry point (models, stats, doctor subcommands)
@@ -175,6 +188,9 @@ scripts/
 - [x] Conversation compaction (LLM-powered summarization of pruned messages)
 - [x] Dynamic model registry (`kcode models` CLI + ~/.kcode/models.json)
 - [x] Print mode for piped output (`kcode --print "prompt" | less`)
+- [x] Native Anthropic Messages API (`/v1/messages` with SSE, tool_use/tool_result blocks)
+- [x] Cloud provider configuration (`/cloud` interactive TUI menu for 6 providers)
+- [x] Model switcher (`/toggle` TUI with LOCAL/CLOUD grouping)
 
 - [x] Extended thinking UI (ThinkingBlock.tsx: streaming, collapsed, expanded modes)
 - [x] Tab completion for slash commands and file paths
@@ -202,12 +218,29 @@ scripts/
 
 ### LLM Setup
 
-KCode connects to a **local llama-server** (or any OpenAI-compatible API endpoint). No external cloud APIs are required.
+KCode connects to **local llama-server** (or any OpenAI-compatible endpoint) and optionally to **cloud APIs** (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI).
 
 - **Default endpoint**: `http://localhost:10091` (overridden via `KCODE_API_BASE` env var or model registry)
 - **Default model**: `mnemo:code3` (configurable via `kcode models default <name>`)
-- **Auth**: Optional `ASTROLEXIS_API_KEY` sent as Bearer token if set
-- **Protocol**: OpenAI-compatible `/v1/chat/completions` with SSE streaming
+- **Auth**: Optional `ASTROLEXIS_API_KEY` as Bearer token, or provider-specific keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `TOGETHER_API_KEY`)
+- **Protocols**:
+  - OpenAI-compatible: `/v1/chat/completions` with SSE streaming
+  - Anthropic native: `/v1/messages` with SSE streaming, `x-api-key` header
+- **URL resolution**: Model registry entries take priority over `configBase` — each model's `baseUrl` in `~/.kcode/models.json` is authoritative
+- **Provider detection**: `provider` field in registry, or name heuristic (`claude-*` → anthropic)
+
+### Cloud Provider Configuration
+
+**Interactive** (`/cloud`, `/api-key`, `/provider`):
+- TUI menu to select provider, enter API key, save to `~/.kcode/settings.json`
+- Auto-registers provider's default models in the registry
+- Auto-switches active model to the provider's first model
+
+**Model Switching** (`/toggle`, `/model`, `/switch`):
+- TUI menu listing all registered models grouped by LOCAL and CLOUD
+- Shows current model indicator, description, GPU info
+- Switches model with proper context window and API key resolution
+- Sets `modelExplicitlySet` to prevent auto-router from overriding
 
 ---
 
@@ -238,9 +271,10 @@ kcode models add mnemo:code3 http://localhost:8091 --context 32000 --gpu 'RTX 50
 
 **File**: `src/core/models.ts` | **Config**: `~/.kcode/models.json`
 
-Each model entry stores: name, baseUrl, contextSize, capabilities, gpu, description. The registry provides:
+Each model entry stores: name, baseUrl, contextSize, capabilities, gpu, description, provider (`"openai"` | `"anthropic"`). The registry provides:
 
-- `getModelBaseUrl(name)` -- resolve a model name to its API endpoint (falls back to `KCODE_API_BASE` or `localhost:10091`)
+- `getModelBaseUrl(name)` -- resolve a model name to its API endpoint (registry first, then `configBase`, then `KCODE_API_BASE` or `localhost:10091`)
+- `getModelProvider(name)` -- detect provider from registry field or name heuristic
 - `getModelContextSize(name)` -- used by the conversation manager for context pruning thresholds
 - `getDefaultModel()` -- returns the configured default or `mnemo:code3`
 - In-memory caching with `invalidateCache()` for external edits
@@ -288,6 +322,7 @@ Slash commands that expand into LLM prompts via Handlebars-style templates:
   - **Code**: `/review-pr` (`/pr`), `/simplify` (`/clean`, `/refactor`), `/explain` (`/what`), `/find-bug` (`/bug`, `/debug`), `/security` (`/audit`)
   - **Dev**: `/test` (`/tests`), `/build`, `/lint` (`/fix`), `/deps` (`/dependencies`), `/todo` (`/todos`), `/test-for` (`/test-gen`), `/doc` (`/document`), `/type` (`/types`)
   - **System**: `/help` (`/?`), `/template` (`/tpl`, `/tmpl`), `/stats`, `/doctor` (`/health`), `/models` (`/model`), `/clear` (`/cls`), `/compact` (`/summarize`), `/undo`, `/status`
+  - **Cloud**: `/cloud` (`/api-key`, `/provider`), `/toggle` (`/model`, `/switch`)
 - **Custom skills**: Markdown files with YAML frontmatter (`name`, `description`, `aliases`, `args`) and a template body
 - **Template expansion**: `{{args}}` substitution, `{{#if args}}...{{/if}}` conditional blocks
 - **Matching**: by name or alias, case-insensitive
