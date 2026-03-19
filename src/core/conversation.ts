@@ -1017,6 +1017,29 @@ export class ConversationManager {
       }
     } catch { /* non-critical */ }
 
+    // Auto-invoke skills: match user message against trigger patterns
+    // Injects Level 2 (full body) of matched skills as system context
+    try {
+      const { SkillManager } = await import("./skills.js");
+      const sm = new SkillManager(this.config.workingDirectory);
+      const matched = sm.matchAutoInvoke(userMessage);
+      if (matched.length > 0) {
+        const skillContext = matched
+          .map((s) => {
+            const body = sm.getLevel2Body(s.name);
+            return body ? `[SKILL: ${s.name}]\n${body}` : null;
+          })
+          .filter(Boolean)
+          .join("\n\n");
+        if (skillContext) {
+          this.state.messages.push({
+            role: "user",
+            content: `[SYSTEM CONTEXT — Auto-invoked skills]\n${skillContext}`,
+          });
+        }
+      }
+    } catch { /* non-critical */ }
+
     // Auto-save checkpoint before each agent loop starts
     try {
       this.saveCheckpoint("auto:agent-loop-start");
@@ -1574,6 +1597,28 @@ export class ConversationManager {
           });
           yield { type: "turn_end", stopReason: "empty_response_retry" };
           continue;
+        }
+
+        // Fire Stop hook — can block the conversation from ending
+        if (this.hooks.hasHooks("Stop")) {
+          try {
+            const stopResult = await this.hooks.runStopHook("Stop", {
+              stopReason,
+              turnCount,
+              toolsUsed: this.state.toolUseCount,
+            });
+            if (stopResult.blocked) {
+              log.info("session", `Stop hook blocked conversation end: ${stopResult.reason}`);
+              this.state.messages.push({
+                role: "user",
+                content: `[SYSTEM] Stop hook prevented conversation end: ${stopResult.reason}. Continue the conversation.`,
+              });
+              yield { type: "turn_end", stopReason: "stop_hook_blocked" };
+              continue;
+            }
+          } catch (err) {
+            log.warn("hooks", `Stop hook error: ${err instanceof Error ? err.message : err}`);
+          }
         }
 
         // Desktop notification for long-running tasks (>30s or 3+ tool turns)

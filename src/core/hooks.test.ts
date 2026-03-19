@@ -301,6 +301,74 @@ describe("HookConfig legacy format", () => {
   });
 });
 
+// ─── Stop Hook Tests ─────────────────────────────────────────────
+
+describe("Stop hook", () => {
+  test("runStopHook returns not blocked when no hooks", async () => {
+    const manager = new HookManager("/tmp/nonexistent-hooks-dir");
+    const result = await manager.runStopHook("Stop", { stopReason: "end_turn" });
+    expect(result.blocked).toBe(false);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  test("runStopHook returns not blocked for SubagentStop when no hooks", async () => {
+    const manager = new HookManager("/tmp/nonexistent-hooks-dir");
+    const result = await manager.runStopHook("SubagentStop", {
+      agent_id: "abc",
+      status: "completed",
+    });
+    expect(result.blocked).toBe(false);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  test("runStopHook blocks when hook returns block decision", async () => {
+    const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const testDir = "/tmp/kcode-hooks-stop-test-" + Date.now();
+    mkdirSync(testDir + "/.kcode", { recursive: true });
+    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
+      hooks: {
+        Stop: [
+          {
+            type: "command",
+            command: 'echo \'{"decision":"block","reason":"task not complete"}\' && exit 2',
+          },
+        ],
+      },
+    }));
+    trustWorkspace(testDir);
+
+    const manager = new HookManager(testDir);
+    const result = await manager.runStopHook("Stop", { stopReason: "end_turn" });
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toContain("task not complete");
+
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  test("runStopHook allows when hook returns allow decision", async () => {
+    const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
+    const testDir = "/tmp/kcode-hooks-stop-allow-test-" + Date.now();
+    mkdirSync(testDir + "/.kcode", { recursive: true });
+    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
+      hooks: {
+        Stop: [
+          {
+            type: "command",
+            command: 'echo \'{"decision":"allow"}\'',
+          },
+        ],
+      },
+    }));
+    trustWorkspace(testDir);
+
+    const manager = new HookManager(testDir);
+    const result = await manager.runStopHook("Stop", { stopReason: "end_turn" });
+    expect(result.blocked).toBe(false);
+
+    rmSync(testDir, { recursive: true, force: true });
+  });
+});
+
 // ─── Agent Hook Entry shape tests ─────────────────────────────────
 
 describe("Agent hook entries", () => {

@@ -69,6 +69,8 @@ export default function App({ config, conversationManager, tools, initialSession
     names.add("/switch");
     names.add("/plugin");
     names.add("/plugins");
+    names.add("/hookify");
+    names.add("/marketplace");
     return [...names].sort();
   });
 
@@ -91,6 +93,8 @@ export default function App({ config, conversationManager, tools, initialSession
     descs["/switch"] = "Switch between local and cloud models";
     descs["/plugin"] = "Install, list, or remove plugins";
     descs["/plugins"] = "Install, list, or remove plugins";
+    descs["/hookify"] = "Manage dynamic hookify rules (create, list, toggle, delete, test)";
+    descs["/marketplace"] = "Browse and install plugins from the marketplace";
     return descs;
   });
 
@@ -423,6 +427,173 @@ export default function App({ config, conversationManager, tools, initialSession
       if (lower === "/toggle" || lower === "/model" || lower === "/switch") {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         setMode("toggle");
+        return;
+      }
+
+      // /hookify — dynamic rule engine
+      if (lower.startsWith("/hookify")) {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        (async () => {
+          try {
+            const { loadHookifyRules, saveHookifyRule, deleteHookifyRule, testHookifyRules, formatRuleList, formatRuleDetail } = await import("../core/hookify.js");
+            const args = userInput.slice("/hookify".length).trim();
+            const parts = args.split(/\s+/);
+            const subcmd = parts[0]?.toLowerCase() || "list";
+
+            if (subcmd === "list" || subcmd === "ls" || !args) {
+              const rules = await loadHookifyRules();
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatRuleList(rules) }]);
+            } else if (subcmd === "create" || subcmd === "add" || subcmd === "new") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify create <name> [event=bash|file|all] [action=block|warn] [tool=Bash|Edit] [field:operator:pattern]\n\n  Example: /hookify create no-force-push event=bash action=block tool=Bash command:regex_match:git\\\\s+push\\\\s+.*--force" }]);
+                return;
+              }
+              const rule: any = { name, enabled: true, event: "all" as const, conditions: [], action: "warn" as const, message: `Rule "${name}" triggered.` };
+              for (let i = 2; i < parts.length; i++) {
+                const part = parts[i]!;
+                if (part.startsWith("event=")) rule.event = part.slice(6);
+                else if (part.startsWith("action=")) rule.action = part.slice(7);
+                else if (part.startsWith("tool=")) rule.toolMatcher = part.slice(5);
+                else if (part.startsWith("msg=")) rule.message = part.slice(4).replace(/_/g, " ");
+                else if (part.includes(":")) {
+                  const [field, operator, ...rest] = part.split(":");
+                  if (field && operator) {
+                    rule.conditions.push({ field, operator, pattern: rest.join(":") });
+                  }
+                }
+              }
+              await saveHookifyRule(rule);
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Created hookify rule: ${name}\n${formatRuleDetail(rule)}` }]);
+            } else if (subcmd === "toggle") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify toggle <name>" }]);
+                return;
+              }
+              const rules = await loadHookifyRules();
+              const rule = rules.find(r => r.name === name);
+              if (!rule) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Rule not found: ${name}` }]);
+                return;
+              }
+              rule.enabled = !rule.enabled;
+              await saveHookifyRule(rule);
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Rule "${name}" is now ${rule.enabled ? "enabled" : "disabled"}` }]);
+            } else if (subcmd === "delete" || subcmd === "rm" || subcmd === "remove") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify delete <name>" }]);
+                return;
+              }
+              const deleted = await deleteHookifyRule(name);
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: deleted ? `  Deleted rule: ${name}` : `  Rule not found: ${name}` }]);
+            } else if (subcmd === "test") {
+              const command = parts.slice(1).join(" ");
+              if (!command) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify test <command>" }]);
+                return;
+              }
+              const result = await testHookifyRules(command);
+              const lines = [`  Test result for: ${command}\n`, `  Decision: ${result.decision}`];
+              if (result.matchedRules.length > 0) {
+                lines.push(`  Matched rules: ${result.matchedRules.join(", ")}`);
+              }
+              if (result.messages.length > 0) {
+                lines.push(`  Messages:`);
+                for (const msg of result.messages) lines.push(`    ${msg}`);
+              }
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+            } else if (subcmd === "show" || subcmd === "info") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify show <name>" }]);
+                return;
+              }
+              const rules = await loadHookifyRules();
+              const rule = rules.find(r => r.name === name);
+              if (!rule) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Rule not found: ${name}` }]);
+                return;
+              }
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatRuleDetail(rule) }]);
+            } else {
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify [list|create <name>|toggle <name>|delete <name>|test <command>|show <name>]" }]);
+            }
+          } catch (err) {
+            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Hookify error: ${err instanceof Error ? err.message : err}` }]);
+          }
+        })();
+        return;
+      }
+
+      // /marketplace — plugin marketplace
+      if (lower.startsWith("/marketplace")) {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        (async () => {
+          try {
+            const { searchPlugins, getPluginDetails, installFromMarketplace, updatePlugin, listInstalled, checkUpdates, formatPluginInfo, formatPluginList } = await import("../core/marketplace.js");
+            const args = userInput.slice("/marketplace".length).trim();
+            const parts = args.split(/\s+/);
+            const subcmd = parts[0]?.toLowerCase() || "list";
+
+            if (subcmd === "search" || subcmd === "find") {
+              const query = parts.slice(1).join(" ");
+              const results = await searchPlugins(query);
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatPluginList(results, query ? `Search results for "${query}"` : "All available plugins") }]);
+            } else if (subcmd === "install" || subcmd === "add") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /marketplace install <plugin-name>" }]);
+                return;
+              }
+              const success = await installFromMarketplace(name);
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: success ? `  Installed "${name}" from marketplace` : `  Failed to install "${name}". Check logs for details.` }]);
+            } else if (subcmd === "update") {
+              const name = parts[1];
+              if (name) {
+                const success = await updatePlugin(name);
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: success ? `  Updated "${name}"` : `  Failed to update "${name}"` }]);
+              } else {
+                const updates = await checkUpdates();
+                if (updates.length === 0) {
+                  setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  All plugins are up to date." }]);
+                } else {
+                  const lines = [`  Updates available (${updates.length}):\n`];
+                  for (const u of updates) {
+                    lines.push(`  ${u.name}: ${u.current} -> ${u.latest}`);
+                  }
+                  lines.push(`\n  Run /marketplace update <name> to update`);
+                  setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+                }
+              }
+            } else if (subcmd === "info" || subcmd === "details") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /marketplace info <plugin-name>" }]);
+                return;
+              }
+              const plugin = await getPluginDetails(name);
+              if (!plugin) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Plugin not found: ${name}` }]);
+                return;
+              }
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatPluginInfo(plugin) }]);
+            } else if (subcmd === "list" || subcmd === "ls" || subcmd === "installed" || !args) {
+              const installed = await listInstalled();
+              if (installed.length === 0) {
+                const available = await searchPlugins("");
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  No plugins installed from marketplace.\n\n${formatPluginList(available, "Available plugins")}` }]);
+              } else {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatPluginList(installed, "Installed from marketplace") }]);
+              }
+            } else {
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /marketplace [search <query>|install <name>|update [name]|info <name>|list]" }]);
+            }
+          } catch (err) {
+            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Marketplace error: ${err instanceof Error ? err.message : err}` }]);
+          }
+        })();
         return;
       }
 
@@ -1695,6 +1866,7 @@ async function handleBuiltinAction(
     }
     case "branch": {
       const { getBranchManager: getBM2 } = await import("../core/branch-manager.js");
+      const { createBranch } = await import("../core/session-branch.js");
       const bm2 = getBM2();
       const barg = args?.trim() ?? "";
       if (barg.startsWith("label ")) {
@@ -1716,7 +1888,22 @@ async function handleBuiltinAction(
         bm2.deleteBranch(cid);
         return `  Branch "${br.label || br.id}" marked as deleted.`;
       }
-      return "  Usage:\n  /branch label <name>  \u2014 Label the current branch\n  /branch delete        \u2014 Soft-delete current branch\n  /branches             \u2014 View branch tree";
+      // /branch [name] — create a fork from current conversation state
+      const branchName = barg || "";
+      const sessionId = conversationManager.getSessionId();
+      const messages = conversationManager.getState().messages;
+      const branch = await createBranch(sessionId, branchName, messages);
+      bm2.saveBranch(branch.id, sessionId, branch.name, `session-${branch.id}`, messages.length);
+      return `  Branch created: "${branch.name}" (id: ${branch.id})\n  ${messages.length} messages saved at branch point\n  Use /continue ${branch.id} to resume from this branch`;
+    }
+    case "continue": {
+      const { loadBranch } = await import("../core/session-branch.js");
+      const branchId = args?.trim() ?? "";
+      if (!branchId) return "  Usage: /continue <branchId>";
+      const branch = await loadBranch(branchId);
+      if (!branch) return `  Branch not found: ${branchId}`;
+      conversationManager.restoreMessages(branch.messages);
+      return `  Loaded branch: "${branch.name}" (${branch.messages.length} messages)\n  Branched at message ${branch.branchPoint} on ${branch.createdAt}\n  You can continue the conversation from here.`;
     }
     case "compare": {
       if (!args?.trim()) return "  Usage: /compare <model1> <model2> <prompt>\n  Example: /compare gpt-4o claude-sonnet-4-6 explain this code";

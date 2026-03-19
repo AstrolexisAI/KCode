@@ -7,6 +7,8 @@ import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ToolUseBlock, ToolResult } from "./types";
 import { log } from "./logger";
+import { evaluateHookifyRules } from "./hookify";
+import { evaluatePromptHook } from "./prompt-hooks";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -68,9 +70,15 @@ export interface HookConfig {
  * New simplified hook entry format.
  * Configured directly under each event in the hooks object.
  */
+export interface PromptHookConfig {
+  prompt: string;
+  model?: string;
+  timeout?: number;
+}
+
 export interface HookEntry {
-  /** Hook type: "command" runs a shell command, "prompt" injects text, "http" calls a webhook, "agent" spawns a subagent */
-  type: "command" | "prompt" | "http" | "agent";
+  /** Hook type: "command" runs a shell command, "prompt" injects text, "http" calls a webhook, "agent" spawns a subagent, "llm-prompt" uses LLM evaluation */
+  type: "command" | "prompt" | "http" | "agent" | "llm-prompt";
   /** Shell command to execute (type=command). Receives JSON on stdin. */
   command?: string;
   /** Text to inject into conversation context (type=prompt). */
@@ -87,6 +95,8 @@ export interface HookEntry {
   matcher?: HookMatcher;
   /** Timeout in milliseconds (default: 10000) */
   timeout?: number;
+  /** LLM prompt configuration (type=llm-prompt). Sends to a fast model for evaluation. */
+  promptConfig?: PromptHookConfig;
   /** Agent configuration (type=agent). Spawns a subagent to handle the hook. */
   agentConfig?: {
     /** Template prompt for the agent. Supports {{event}}, {{toolName}}, {{input}} placeholders. */
@@ -191,7 +201,7 @@ const HTTP_TIMEOUT = 10_000; // 10 seconds
 /** Check if a config entry is the new HookEntry format */
 function isHookEntry(entry: HookConfig | HookEntry): entry is HookEntry {
   const t = (entry as HookEntry).type;
-  return t === "command" || t === "prompt" || t === "http" || t === "agent";
+  return t === "command" || t === "prompt" || t === "http" || t === "agent" || t === "llm-prompt";
 }
 
 /** Check if a config entry is the legacy HookConfig format */
@@ -531,6 +541,16 @@ async function executeHookEntry(
   if (entry.type === "agent") {
     return executeHookAgent(entry, jsonData, cwd);
   }
+  if (entry.type === "llm-prompt" && entry.promptConfig) {
+    const result = await evaluatePromptHook(entry.promptConfig, jsonData);
+    if (result.decision === "block" || result.decision === "deny") {
+      return { exitCode: 2, stdout: JSON.stringify({ decision: "block", reason: result.reason }), stderr: "" };
+    }
+    if (result.decision === "warn") {
+      return { exitCode: 0, stdout: result.reason ?? "", stderr: "" };
+    }
+    return { exitCode: 0, stdout: result.reason ?? "", stderr: "" };
+  }
   return { exitCode: 1, stdout: "", stderr: `Unknown hook type: ${entry.type}` };
 }
 
@@ -847,6 +867,24 @@ export class HookManager {
       }
     }
 
+    // Evaluate hookify rules (lower priority than explicit hooks)
+    try {
+      const hookifyResult = await evaluateHookifyRules(tool.name, currentInput as Record<string, unknown>, "PreToolUse");
+      if (hookifyResult.decision === "block") {
+        return {
+          allowed: false,
+          reason: hookifyResult.messages.join("\n") || "Blocked by hookify rule",
+          warnings,
+          contextOutput: contextOutput.length > 0 ? contextOutput : undefined,
+        };
+      }
+      if (hookifyResult.decision === "warn" && hookifyResult.messages.length > 0) {
+        warnings.push(...hookifyResult.messages);
+      }
+    } catch (err) {
+      log.warn("hooks", `Hookify evaluation error: ${err instanceof Error ? err.message : err}`);
+    }
+
     const inputChanged = currentInput !== tool.input;
     return {
       allowed: true,
@@ -1048,6 +1086,85 @@ export class HookManager {
     this.runEventHook(event, context).catch((err) => {
       log.warn("hooks", `Fire-and-forget hook "${event}" error: ${err instanceof Error ? err.message : err}`);
     });
+  }
+
+  async runStopHook(
+    event: "Stop" | "SubagentStop",
+    context: Record<string, unknown> = {},
+  ): Promise<{ blocked: boolean; reason?: string; warnings: string[] }> {
+    const legacyHooks = this.getMatchingLegacyHooks(event, event);
+    const entryHooks = this.getMatchingHookEntries(event, undefined, context);
+
+    if (legacyHooks.length === 0 && entryHooks.length === 0) {
+      return { blocked: false, warnings: [] };
+    }
+
+    const stdinData = JSON.stringify({ event, ...context });
+    const warnings: string[] = [];
+
+    for (const config of legacyHooks) {
+      if (!(await this.checkHookTrust(config as TaggedHook))) continue;
+
+      for (const action of config.hooks) {
+        const result = await executeHookAction(action, stdinData, this.workingDirectory);
+
+        if (result.exitCode === 2) {
+          const output = parseHookOutput(result.stdout);
+          return {
+            blocked: true,
+            reason: output?.reason ?? `Stop hook blocked: ${action.command ?? action.url ?? "unknown"}`,
+            warnings,
+          };
+        }
+
+        if (result.exitCode === 0) {
+          const output = parseHookOutput(result.stdout);
+          if (output?.decision === "deny" || output?.decision === "block") {
+            return {
+              blocked: true,
+              reason: output.reason ?? "Stop hook blocked conversation end",
+              warnings,
+            };
+          }
+        } else {
+          const label = action.command ?? action.url ?? "unknown";
+          warnings.push(result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`);
+        }
+      }
+    }
+
+    for (const entry of entryHooks) {
+      if (!(await this.checkHookTrust(entry as TaggedHook))) continue;
+
+      const result = await executeHookEntry(entry, stdinData, this.workingDirectory);
+
+      if (entry.type === "prompt") continue;
+
+      if (result.exitCode === 2) {
+        const output = parseHookOutput(result.stdout);
+        return {
+          blocked: true,
+          reason: output?.reason ?? `Stop hook blocked: ${entry.command ?? "unknown"}`,
+          warnings,
+        };
+      }
+
+      if (result.exitCode === 0) {
+        const output = parseHookOutput(result.stdout);
+        if (output?.decision === "deny" || output?.decision === "block") {
+          return {
+            blocked: true,
+            reason: output.reason ?? "Stop hook blocked conversation end",
+            warnings,
+          };
+        }
+      } else {
+        const label = entry.command ?? "unknown";
+        warnings.push(result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`);
+      }
+    }
+
+    return { blocked: false, warnings };
   }
 
   /**

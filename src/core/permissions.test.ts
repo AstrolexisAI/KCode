@@ -9,11 +9,15 @@ import {
   detectQuoteDesync,
   analyzeBashCommand,
   validateFileWritePath,
+  evaluateRules,
+  parseToolRule,
+  suggestRule,
   PermissionManager,
   type PermissionResult,
   type PermissionPromptFn,
+  type ParsedToolRule,
 } from "./permissions.ts";
-import type { ToolUseBlock } from "./types.ts";
+import type { ToolUseBlock, PermissionRule } from "./types.ts";
 
 // ─── extractCommandPrefix ──────────────────────────────────────
 
@@ -615,6 +619,162 @@ describe("validateFileWritePath - protected directories", () => {
   test("allows write to normal file in /tmp/workdir", () => {
     const result = validateFileWritePath("/tmp/workdir/src/main.ts", cwd);
     expect(result.allowed).toBe(true);
+  });
+});
+
+// ─── parseToolRule ──────────────────────────────────────────────
+
+describe("parseToolRule", () => {
+  test("parses simple tool name", () => {
+    const result = parseToolRule("Bash");
+    expect(result).toEqual({ tool: "Bash" });
+  });
+
+  test("parses tool with inner pattern", () => {
+    const result = parseToolRule("Bash(git add:*)");
+    expect(result).toEqual({ tool: "Bash", pattern: "git add:*" });
+  });
+
+  test("parses Read with glob pattern", () => {
+    const result = parseToolRule("Read(src/**)");
+    expect(result).toEqual({ tool: "Read", pattern: "src/**" });
+  });
+
+  test("parses Write with extension pattern", () => {
+    const result = parseToolRule("Write(*.test.ts)");
+    expect(result).toEqual({ tool: "Write", pattern: "*.test.ts" });
+  });
+
+  test("parses MCP wildcard tool name", () => {
+    const result = parseToolRule("mcp__server__*");
+    expect(result).toEqual({ tool: "mcp__server__*" });
+  });
+
+  test("parses Bash deny pattern", () => {
+    const result = parseToolRule("Bash(rm:-rf)");
+    expect(result).toEqual({ tool: "Bash", pattern: "rm:-rf" });
+  });
+});
+
+// ─── suggestRule ────────────────────────────────────────────────
+
+describe("suggestRule", () => {
+  test("suggests Bash rule with subcommand", () => {
+    const rule = suggestRule("Bash", { command: "git commit -m 'msg'" });
+    expect(rule).toBe("Bash(git commit:*)");
+  });
+
+  test("suggests Bash rule without subcommand", () => {
+    const rule = suggestRule("Bash", { command: "ls -la" });
+    expect(rule).toBe("Bash(ls:*)");
+  });
+
+  test("suggests Bash rule for npm", () => {
+    const rule = suggestRule("Bash", { command: "npm install express" });
+    expect(rule).toBe("Bash(npm install:*)");
+  });
+
+  test("suggests Read rule with directory glob", () => {
+    const rule = suggestRule("Read", { file_path: "/home/user/project/src/main.ts" });
+    expect(rule).toBe("Read(/home/user/project/src/**)");
+  });
+
+  test("suggests Write rule with extension", () => {
+    const rule = suggestRule("Write", { file_path: "/tmp/test/foo.test.ts" });
+    expect(rule).toBe("Write(**.ts)");
+  });
+
+  test("suggests Edit rule with extension", () => {
+    const rule = suggestRule("Edit", { file_path: "/tmp/test/config.json" });
+    expect(rule).toBe("Edit(**.json)");
+  });
+
+  test("suggests MCP server wildcard", () => {
+    const rule = suggestRule("mcp__github__list_repos", {});
+    expect(rule).toBe("mcp__github__*");
+  });
+
+  test("returns tool name for unknown tools", () => {
+    const rule = suggestRule("CustomTool", {});
+    expect(rule).toBe("CustomTool");
+  });
+});
+
+// ─── evaluateRules with compound patterns ───────────────────────
+
+describe("evaluateRules compound patterns", () => {
+  function makeTool(name: string, input: Record<string, unknown>): ToolUseBlock {
+    return { type: "tool_use", id: "test-id", name, input };
+  }
+
+  test("Bash(git add:*) matches git add commands", () => {
+    const rules: PermissionRule[] = [{ pattern: "Bash(git add:*)", action: "allow" }];
+    const tool = makeTool("Bash", { command: "git add ." });
+    expect(evaluateRules(rules, tool)).toBe("allow");
+  });
+
+  test("Bash(git add:*) matches git add with flags", () => {
+    const rules: PermissionRule[] = [{ pattern: "Bash(git add:*)", action: "allow" }];
+    const tool = makeTool("Bash", { command: "git add -A" });
+    expect(evaluateRules(rules, tool)).toBe("allow");
+  });
+
+  test("Bash(git add:*) does not match git commit", () => {
+    const rules: PermissionRule[] = [{ pattern: "Bash(git add:*)", action: "allow" }];
+    const tool = makeTool("Bash", { command: "git commit -m 'msg'" });
+    expect(evaluateRules(rules, tool)).toBeNull();
+  });
+
+  test("Bash(npm:*) matches all npm commands", () => {
+    const rules: PermissionRule[] = [{ pattern: "Bash(npm:*)", action: "allow" }];
+    expect(evaluateRules(rules, makeTool("Bash", { command: "npm install" }))).toBe("allow");
+    expect(evaluateRules(rules, makeTool("Bash", { command: "npm run test" }))).toBe("allow");
+    expect(evaluateRules(rules, makeTool("Bash", { command: "npm test" }))).toBe("allow");
+  });
+
+  test("Bash(rm:-rf) matches rm -rf specifically", () => {
+    const rules: PermissionRule[] = [{ pattern: "Bash(rm:-rf)", action: "deny" }];
+    const tool = makeTool("Bash", { command: "rm -rf /tmp/foo" });
+    expect(evaluateRules(rules, tool)).toBeNull(); // -rf /tmp/foo != -rf
+  });
+
+  test("Bash(rm:-rf *) matches rm -rf with args", () => {
+    const rules: PermissionRule[] = [{ pattern: "Bash(rm:-rf *)", action: "deny" }];
+    const tool = makeTool("Bash", { command: "rm -rf /tmp/foo" });
+    expect(evaluateRules(rules, tool)).toBe("deny");
+  });
+
+  test("Read(src/**) matches files under src/", () => {
+    const rules: PermissionRule[] = [{ pattern: "Read(src/**)", action: "allow" }];
+    const tool = makeTool("Read", { file_path: "src/core/main.ts" });
+    expect(evaluateRules(rules, tool)).toBe("allow");
+  });
+
+  test("Write(**.test.ts) matches test files", () => {
+    const rules: PermissionRule[] = [{ pattern: "Write(**.test.ts)", action: "allow" }];
+    const tool = makeTool("Write", { file_path: "/home/user/project/src/foo.test.ts", content: "test" });
+    expect(evaluateRules(rules, tool)).toBe("allow");
+  });
+
+  test("mcp__github__* matches MCP tools", () => {
+    const rules: PermissionRule[] = [{ pattern: "mcp__github__*", action: "allow" }];
+    const tool = makeTool("mcp__github__list_repos", {});
+    expect(evaluateRules(rules, tool)).toBe("allow");
+  });
+
+  test("mcp__github__* does not match other MCP servers", () => {
+    const rules: PermissionRule[] = [{ pattern: "mcp__github__*", action: "allow" }];
+    const tool = makeTool("mcp__slack__send", {});
+    expect(evaluateRules(rules, tool)).toBeNull();
+  });
+
+  test("first matching rule wins", () => {
+    const rules: PermissionRule[] = [
+      { pattern: "Bash(rm:-rf *)", action: "deny" },
+      { pattern: "Bash(rm:*)", action: "allow" },
+    ];
+    const tool = makeTool("Bash", { command: "rm -rf /tmp" });
+    expect(evaluateRules(rules, tool)).toBe("deny");
   });
 });
 

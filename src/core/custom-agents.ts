@@ -317,18 +317,22 @@ function loadAgentsFromDir(dir: string): CustomAgentDef[] {
 }
 
 /**
- * Load all custom agents from user and project directories.
- * Project agents override user agents with the same name.
+ * Load all custom agents from bundled, user, and project directories.
+ * Priority (highest wins): project > user > bundled.
  */
 export function loadCustomAgents(cwd: string): CustomAgentDef[] {
+  // Bundled agents ship with KCode (src/agents/)
+  const bundledDir = join(import.meta.dir, "..", "agents");
   const userDir = join(homedir(), ".kcode", "agents");
   const projectDir = join(cwd, ".kcode", "agents");
 
+  const bundledAgents = loadAgentsFromDir(bundledDir);
   const userAgents = loadAgentsFromDir(userDir);
   const projectAgents = loadAgentsFromDir(projectDir);
 
-  // Deduplicate: project agents override user agents by name
+  // Deduplicate: higher priority overrides lower by name
   const byName = new Map<string, CustomAgentDef>();
+  for (const agent of bundledAgents) byName.set(agent.name, agent);
   for (const agent of userAgents) byName.set(agent.name, agent);
   for (const agent of projectAgents) byName.set(agent.name, agent);
 

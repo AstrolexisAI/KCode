@@ -8,11 +8,19 @@ import { getModelBaseUrl } from "./models.js";
 
 const SUMMARY_MAX_TOKENS = 1024;
 const SUMMARY_MODEL = "mnemo:code3"; // Use the local code model for summaries
+const CIRCUIT_BREAKER_THRESHOLD = 3;
 
 const SUMMARY_SYSTEM_PROMPT =
   "You are a conversation summarizer. Produce a concise summary of the conversation context provided. " +
   "Focus on: key decisions made, files modified, important findings, current task state, and any " +
   "outstanding questions. Be factual and brief. Output only the summary, no preamble.";
+
+// ─── Circuit Breaker State ──────────────────────────────────────
+
+export interface CircuitBreakerState {
+  failures: number;
+  tripped: boolean;
+}
 
 // ─── CompactionManager ──────────────────────────────────────────
 
@@ -21,6 +29,8 @@ export class CompactionManager {
   private apiKey?: string;
   private model: string;
   private compactionCount = 0;
+  private consecutiveFailures = 0;
+  private circuitBreakerTripped = false;
 
   constructor(apiKey?: string, model?: string, apiBase?: string) {
     this.model = model ?? SUMMARY_MODEL;
@@ -38,9 +48,15 @@ export class CompactionManager {
    * Compact a set of messages by summarizing them via the LLM.
    * Returns a single system-injected summary message to replace the pruned messages.
    * Falls back to simple pruning (returns null) if the summary call fails.
+   * When the circuit breaker is tripped (3 consecutive failures), auto-compaction
+   * is disabled for the session and null is returned immediately.
    */
   async compact(messagesToPrune: Message[]): Promise<Message | null> {
     if (messagesToPrune.length === 0) return null;
+
+    if (this.circuitBreakerTripped) {
+      return null;
+    }
 
     try {
       const conversationText = this.messagesToText(messagesToPrune);
@@ -72,13 +88,18 @@ export class CompactionManager {
       });
 
       if (!response.ok) {
+        this.recordFailure();
         return null;
       }
 
       const data = (await response.json()) as any;
       const summaryText = data.choices?.[0]?.message?.content;
-      if (!summaryText) return null;
+      if (!summaryText) {
+        this.recordFailure();
+        return null;
+      }
 
+      this.consecutiveFailures = 0;
       this.compactionCount++;
 
       return {
@@ -94,8 +115,19 @@ export class CompactionManager {
         ],
       };
     } catch {
-      // Fallback: return null so caller can do simple pruning
+      this.recordFailure();
       return null;
+    }
+  }
+
+  private recordFailure(): void {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD && !this.circuitBreakerTripped) {
+      this.circuitBreakerTripped = true;
+      console.warn(
+        `[compaction] Circuit breaker tripped after ${this.consecutiveFailures} consecutive failures. ` +
+        `Auto-compaction disabled for this session. Call resetCircuitBreaker() to re-enable.`,
+      );
     }
   }
 
@@ -151,5 +183,17 @@ export class CompactionManager {
    */
   reset(): void {
     this.compactionCount = 0;
+  }
+
+  resetCircuitBreaker(): void {
+    this.consecutiveFailures = 0;
+    this.circuitBreakerTripped = false;
+  }
+
+  getCircuitBreakerState(): CircuitBreakerState {
+    return {
+      failures: this.consecutiveFailures,
+      tripped: this.circuitBreakerTripped,
+    };
   }
 }
