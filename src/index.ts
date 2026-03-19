@@ -39,7 +39,7 @@ import { voiceToText, isVoiceAvailable } from "./core/voice";
 import { getBenchmarkSummary, formatBenchmarks, initBenchmarkSchema } from "./core/benchmarks";
 
 // Version — hardcoded to avoid Bun bundler resolving wrong package.json
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 
 // Prevent unhandled errors from background child processes from crashing kcode.
 // Only exit on truly fatal errors — background I/O errors (ENXIO, ECONNREFUSED, etc.)
