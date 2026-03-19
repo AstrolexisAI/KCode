@@ -67,6 +67,8 @@ export default function App({ config, conversationManager, tools, initialSession
     names.add("/toggle");
     names.add("/model");
     names.add("/switch");
+    names.add("/plugin");
+    names.add("/plugins");
     return [...names].sort();
   });
 
@@ -87,6 +89,8 @@ export default function App({ config, conversationManager, tools, initialSession
     descs["/toggle"] = "Switch between local and cloud models";
     descs["/model"] = "Switch between local and cloud models";
     descs["/switch"] = "Switch between local and cloud models";
+    descs["/plugin"] = "Install, list, or remove plugins";
+    descs["/plugins"] = "Install, list, or remove plugins";
     return descs;
   });
 
@@ -419,6 +423,51 @@ export default function App({ config, conversationManager, tools, initialSession
       if (lower === "/toggle" || lower === "/model" || lower === "/switch") {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         setMode("toggle");
+        return;
+      }
+
+      // /plugin — plugin management
+      if (lower.startsWith("/plugin")) {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        (async () => {
+          try {
+            const { PluginManager } = await import("../core/plugin-manager.js");
+            const pm = new PluginManager();
+            const args = userInput.slice("/plugin".length).trim();
+            const parts = args.split(/\s+/);
+            const subcmd = parts[0]?.toLowerCase() || "list";
+
+            if (subcmd === "list" || subcmd === "ls" || !args) {
+              const plugins = await pm.list();
+              if (plugins.length === 0) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  No plugins installed.\n  Usage: /plugin install <path-or-git-url>" }]);
+              } else {
+                const lines = plugins.map((p) => `  ${p.name} v${p.version} — ${p.description ?? "no description"}`);
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Installed plugins (${plugins.length}):\n${lines.join("\n")}` }]);
+              }
+            } else if (subcmd === "install" || subcmd === "add") {
+              const source = parts.slice(1).join(" ");
+              if (!source) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /plugin install <path-or-git-url>" }]);
+              } else {
+                const manifest = await pm.install(source);
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Installed: ${manifest.name} v${manifest.version}\n  ${manifest.description ?? ""}` }]);
+              }
+            } else if (subcmd === "remove" || subcmd === "rm" || subcmd === "uninstall") {
+              const name = parts[1];
+              if (!name) {
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /plugin remove <name>" }]);
+              } else {
+                const ok = await pm.remove(name);
+                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: ok ? `  Removed: ${name}` : `  Plugin not found: ${name}` }]);
+              }
+            } else {
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /plugin [list|install <source>|remove <name>]" }]);
+            }
+          } catch (err) {
+            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Plugin error: ${err instanceof Error ? err.message : err}` }]);
+          }
+        })();
         return;
       }
 

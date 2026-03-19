@@ -69,8 +69,8 @@ export interface HookConfig {
  * Configured directly under each event in the hooks object.
  */
 export interface HookEntry {
-  /** Hook type: "command" runs a shell command, "prompt" injects text, "http" calls a webhook */
-  type: "command" | "prompt" | "http";
+  /** Hook type: "command" runs a shell command, "prompt" injects text, "http" calls a webhook, "agent" spawns a subagent */
+  type: "command" | "prompt" | "http" | "agent";
   /** Shell command to execute (type=command). Receives JSON on stdin. */
   command?: string;
   /** Text to inject into conversation context (type=prompt). */
@@ -87,6 +87,17 @@ export interface HookEntry {
   matcher?: HookMatcher;
   /** Timeout in milliseconds (default: 10000) */
   timeout?: number;
+  /** Agent configuration (type=agent). Spawns a subagent to handle the hook. */
+  agentConfig?: {
+    /** Template prompt for the agent. Supports {{event}}, {{toolName}}, {{input}} placeholders. */
+    prompt: string;
+    /** Optional model override for the subagent. */
+    model?: string;
+    /** Timeout in milliseconds (default: 60000). */
+    timeout?: number;
+    /** Run in background without awaiting result (default: true). */
+    background?: boolean;
+  };
 }
 
 export interface HookAction {
@@ -180,7 +191,7 @@ const HTTP_TIMEOUT = 10_000; // 10 seconds
 /** Check if a config entry is the new HookEntry format */
 function isHookEntry(entry: HookConfig | HookEntry): entry is HookEntry {
   const t = (entry as HookEntry).type;
-  return t === "command" || t === "prompt" || t === "http";
+  return t === "command" || t === "prompt" || t === "http" || t === "agent";
 }
 
 /** Check if a config entry is the legacy HookConfig format */
@@ -376,6 +387,108 @@ async function executeHookAction(
   return { exitCode: 1, stdout: "", stderr: `Unknown hook type: ${action.type}` };
 }
 
+/** Expand template placeholders in an agent hook prompt. */
+function expandAgentTemplate(
+  template: string,
+  context: { event?: string; toolName?: string; input?: unknown },
+): string {
+  return template
+    .replace(/\{\{event\}\}/g, context.event ?? "")
+    .replace(/\{\{toolName\}\}/g, context.toolName ?? "")
+    .replace(/\{\{input\}\}/g, context.input !== undefined ? JSON.stringify(context.input) : "");
+}
+
+/** Default timeout for agent hooks (60 seconds). */
+const AGENT_HOOK_TIMEOUT = 60_000;
+
+/**
+ * Execute an agent hook by spawning a subagent process.
+ * Uses the same CLI pattern as src/tools/agent.ts — spawns `bun run src/index.ts --agent`.
+ */
+async function executeHookAgent(
+  entry: HookEntry,
+  jsonData: string,
+  cwd: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const config = entry.agentConfig;
+  if (!config?.prompt) {
+    return { exitCode: 1, stdout: "", stderr: "Agent hook missing agentConfig.prompt" };
+  }
+
+  // Parse the JSON context to extract template values
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = JSON.parse(jsonData);
+  } catch { /* use empty context */ }
+
+  const expandedPrompt = expandAgentTemplate(config.prompt, {
+    event: parsed.event as string | undefined,
+    toolName: parsed.tool_name as string | undefined,
+    input: parsed.tool_input ?? parsed,
+  });
+
+  const background = config.background !== false; // default true
+  const timeout = config.timeout ?? AGENT_HOOK_TIMEOUT;
+
+  // Build subagent command args
+  const args: string[] = ["run", "src/index.ts", "--agent"];
+  if (config.model) {
+    args.push("-m", config.model);
+  }
+
+  const proc = spawn("bun", args, {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env },
+    timeout: background ? undefined : timeout,
+  });
+
+  // Send the expanded prompt via stdin
+  proc.stdin.write(expandedPrompt + "\n");
+  proc.stdin.end();
+
+  if (background) {
+    // Fire and forget — don't await completion
+    proc.on("error", (err) => {
+      log.warn("hooks", `Agent hook (background) error: ${err.message}`);
+    });
+    proc.on("close", (code) => {
+      if (code !== 0) {
+        log.warn("hooks", `Agent hook (background) exited with code ${code}`);
+      }
+    });
+    return { exitCode: 0, stdout: "[agent hook started in background]", stderr: "" };
+  }
+
+  // Foreground: await result
+  return new Promise((resolve) => {
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+
+    proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
+    proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
+
+    const timer = setTimeout(() => {
+      try { proc.kill(); } catch { /* best effort */ }
+      resolve({ exitCode: 1, stdout: "", stderr: `Agent hook timed out after ${timeout}ms` });
+    }, timeout);
+
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({
+        exitCode: code ?? 1,
+        stdout: Buffer.concat(stdoutChunks).toString("utf-8").trim(),
+        stderr: Buffer.concat(stderrChunks).toString("utf-8").trim(),
+      });
+    });
+
+    proc.on("error", (err) => {
+      clearTimeout(timer);
+      resolve({ exitCode: 1, stdout: "", stderr: err.message });
+    });
+  });
+}
+
 /** Execute a new-format HookEntry. */
 async function executeHookEntry(
   entry: HookEntry,
@@ -414,6 +527,9 @@ async function executeHookEntry(
       timeout: entry.timeout,
     };
     return executeHookHttp(action, jsonData);
+  }
+  if (entry.type === "agent") {
+    return executeHookAgent(entry, jsonData, cwd);
   }
   return { exitCode: 1, stdout: "", stderr: `Unknown hook type: ${entry.type}` };
 }

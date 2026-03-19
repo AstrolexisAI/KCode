@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import type { ToolDefinition, ToolResult, BashInput } from "../core/types";
 import { log } from "../core/logger";
-import { wrapWithSandbox, getDefaultSandboxConfig, type SandboxMode } from "../core/sandbox";
+import { wrapWithSandbox, getDefaultSandboxConfig, isSandboxAvailable, type SandboxMode } from "../core/sandbox";
 
 const MAX_TIMEOUT = 600_000; // 10 minutes
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
@@ -19,6 +19,7 @@ export const bashDefinition: ToolDefinition = {
       description: { type: "string", description: "Description of what the command does" },
       timeout: { type: "number", description: "Timeout in milliseconds (max 600000)" },
       run_in_background: { type: "boolean", description: "Run in background, return after initial output" },
+      sandbox: { type: "boolean", description: "Enable OS-level sandbox isolation via bwrap (defaults to true when bwrap is available and permission mode is not 'auto')" },
     },
     required: ["command"],
   },
@@ -47,7 +48,7 @@ export function setBashStreamCallback(cb: BashStreamCallback | undefined): void 
 }
 
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
-  const { command, timeout, run_in_background } = input as BashInput;
+  const { command, timeout, run_in_background, sandbox } = input as BashInput & { sandbox?: boolean };
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
@@ -161,9 +162,14 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   }
 
   // ─── Apply sandbox wrapping ────────────────────────────────────
+  // Sandbox is enabled when:
+  //   1. _sandboxMode is not "off"
+  //   2. The sandbox input option is not explicitly false
+  //   3. Permission mode "auto" skips sandbox (implies full trust)
   let finalCommand = command;
   let sandboxEnv: Record<string, string> | undefined;
-  if (_sandboxMode !== "off") {
+  const useSandbox = sandbox !== false && _sandboxMode !== "off";
+  if (useSandbox) {
     const sandboxConfig = getDefaultSandboxConfig(_sandboxMode, process.cwd());
     const wrapped = wrapWithSandbox(command, sandboxConfig);
     finalCommand = wrapped.command;

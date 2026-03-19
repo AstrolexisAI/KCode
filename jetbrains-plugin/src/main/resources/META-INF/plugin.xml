@@ -1,0 +1,37 @@
+<idea-plugin>
+    <id>ai.kulvex.kcode</id>
+    <name>KCode — AI Coding Assistant</name>
+    <vendor>Astrolexis</vendor>
+    <description>KCode AI coding assistant by Astrolexis — local LLM + cloud hybrid coding assistant</description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow id="KCode" anchor="right" icon="/icons/kcode.svg"
+                    factoryClass="ai.kulvex.kcode.KCodeToolWindowFactory"/>
+        <applicationConfigurable instance="ai.kulvex.kcode.KCodeSettingsConfigurable"
+                                 displayName="KCode" groupId="tools"/>
+        <applicationService serviceImplementation="ai.kulvex.kcode.KCodeSettings"/>
+        <statusBarWidgetFactory id="KCodeStatus"
+                                implementation="ai.kulvex.kcode.KCodeStatusBarFactory"/>
+    </extensions>
+
+    <actions>
+        <group id="KCode.Menu" text="KCode" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="KCode.SendSelection" class="ai.kulvex.kcode.actions.SendSelectionAction"
+                    text="Send to KCode" description="Send selected code to KCode"
+                    icon="/icons/kcode.svg">
+                <keyboard-shortcut keymap="$default" first-keystroke="alt shift K"/>
+            </action>
+            <action id="KCode.ExplainCode" class="ai.kulvex.kcode.actions.ExplainCodeAction"
+                    text="Explain with KCode" description="Explain selected code"/>
+            <action id="KCode.ReviewCode" class="ai.kulvex.kcode.actions.ReviewCodeAction"
+                    text="Review with KCode" description="Review selected code"/>
+        </group>
+        <action id="KCode.SendSelectionContext" class="ai.kulvex.kcode.actions.SendSelectionAction"
+                text="Send to KCode">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

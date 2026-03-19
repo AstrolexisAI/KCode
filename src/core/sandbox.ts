@@ -4,11 +4,19 @@
 
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export type SandboxMode = "off" | "light" | "strict";
+
+export interface SandboxOptions {
+  allowNetwork?: boolean;
+  writablePaths?: string[];
+  readOnlyPaths?: string[];
+}
 
 interface SandboxConfig {
   mode: SandboxMode;
@@ -17,6 +25,24 @@ interface SandboxConfig {
   readOnlyPaths: string[];     // Paths mounted read-only
   tmpDir: string;              // Writable temp directory inside sandbox
 }
+
+// ─── Sensitive paths that must never be writable ────────────────
+
+const HOME = homedir();
+const KCODE_DIR = join(HOME, ".kcode");
+
+const SENSITIVE_PATHS = [
+  join(HOME, ".ssh"),
+  join(HOME, ".aws"),
+  join(HOME, ".gnupg"),
+  "/etc",
+  "/usr",
+  "/bin",
+  "/boot",
+  "/proc",
+  "/sys",
+  "/dev",
+];
 
 // ─── Detection ──────────────────────────────────────────────────
 
@@ -28,6 +54,7 @@ function hasBwrap(): boolean {
     try {
       execSync("which bwrap", { stdio: "pipe" });
       _hasBwrap = true;
+      log.info("sandbox" as any, "bubblewrap (bwrap) detected");
     } catch {
       _hasBwrap = false;
     }
@@ -47,6 +74,20 @@ function hasUnshare(): boolean {
   return _hasUnshare;
 }
 
+/**
+ * Check if bwrap is available on this system.
+ */
+export function isSandboxAvailable(): boolean {
+  return hasBwrap();
+}
+
+/**
+ * Return the sandbox backend mode: "bwrap" if bubblewrap is installed, "none" otherwise.
+ */
+export function getSandboxMode(): "bwrap" | "none" {
+  return hasBwrap() ? "bwrap" : "none";
+}
+
 // ─── Sandbox Wrapper ────────────────────────────────────────────
 
 /**
@@ -57,6 +98,8 @@ function hasUnshare(): boolean {
  * - "off": no sandboxing, command runs directly
  * - "light": restricted PATH, readonly HOME, tmpfs /tmp, no network write to system dirs
  * - "strict": bubblewrap (bwrap) namespace isolation — separate PID/NET/mount namespace
+ *
+ * If bwrap is unavailable for strict mode, falls back to light sandbox gracefully.
  */
 export function wrapWithSandbox(
   command: string,
@@ -71,7 +114,7 @@ export function wrapWithSandbox(
   }
 
   if (config.mode === "strict" && !hasBwrap()) {
-    log.warn("sandbox", "bwrap not available, falling back to light sandbox. Install bubblewrap for strict mode.");
+    log.warn("sandbox" as any, "bwrap not available, falling back to light sandbox. Install bubblewrap for strict mode.");
   }
 
   // Light sandbox: use restricted bash with safety guards
@@ -128,42 +171,37 @@ function wrapWithBwrap(
     "--unshare-ipc",
     // Die if parent dies
     "--die-with-parent",
-    // Tmpfs for /tmp
+    // Read-only bind mount of entire filesystem as the base layer
+    "--ro-bind", "/", "/",
+    // Writable /tmp (tmpfs overlay, not the host /tmp)
     "--tmpfs", "/tmp",
-    // Bind /usr, /bin, /lib, /lib64 as read-only
-    "--ro-bind", "/usr", "/usr",
-    "--ro-bind", "/bin", "/bin",
-    "--ro-bind", "/lib", "/lib",
+    // Proc filesystem (fresh mount over the ro-bind)
+    "--proc", "/proc",
+    // Dev filesystem (minimal, fresh mount over the ro-bind)
+    "--dev", "/dev",
   ];
 
-  // /lib64 may not exist on all systems
-  if (existsSync("/lib64")) {
-    bwrapArgs.push("--ro-bind", "/lib64", "/lib64");
+  // Writable: ~/.kcode (always — needed for logs, db, settings)
+  if (existsSync(KCODE_DIR)) {
+    bwrapArgs.push("--bind", KCODE_DIR, KCODE_DIR);
   }
 
-  // /sbin for system tools
-  if (existsSync("/sbin")) {
-    bwrapArgs.push("--ro-bind", "/sbin", "/sbin");
-  }
-
-  // Proc filesystem
-  bwrapArgs.push("--proc", "/proc");
-
-  // Dev filesystem (minimal)
-  bwrapArgs.push("--dev", "/dev");
-
-  // Read-only HOME (for reading configs, .gitconfig, etc.)
-  const home = process.env.HOME ?? "/home/user";
-  bwrapArgs.push("--ro-bind", home, home);
-
-  // Writable paths
+  // Writable paths from config (cwd, user-specified, etc.)
   for (const path of config.allowWritePaths) {
     if (existsSync(path)) {
       bwrapArgs.push("--bind", path, path);
     }
   }
 
-  // Read-only bind mounts
+  // Explicitly protect sensitive directories by re-mounting them read-only
+  // after the writable binds (order matters — later mounts override earlier ones)
+  for (const sensitivePath of SENSITIVE_PATHS) {
+    if (existsSync(sensitivePath)) {
+      bwrapArgs.push("--ro-bind", sensitivePath, sensitivePath);
+    }
+  }
+
+  // Additional read-only bind mounts from config
   for (const path of config.readOnlyPaths) {
     if (existsSync(path)) {
       bwrapArgs.push("--ro-bind", path, path);
@@ -181,6 +219,8 @@ function wrapWithBwrap(
   // The actual command
   bwrapArgs.push("--", "bash", "-c", command);
 
+  log.info("sandbox" as any, `bwrap sandbox: writable=[${config.allowWritePaths.join(", ")}], network=${config.allowNetwork}`);
+
   return {
     command: bwrapArgs.map(shellQuote).join(" "),
     env: { SANDBOX: "strict" },
@@ -189,20 +229,25 @@ function wrapWithBwrap(
 
 // ─── Default Config ─────────────────────────────────────────────
 
-export function getDefaultSandboxConfig(mode: SandboxMode, cwd: string): SandboxConfig {
+export function getDefaultSandboxConfig(mode: SandboxMode, cwd: string, opts?: SandboxOptions): SandboxConfig {
+  const extraWritable = opts?.writablePaths ?? [];
+  const extraReadOnly = opts?.readOnlyPaths ?? [];
+
   return {
     mode,
-    allowNetwork: true, // Allow network by default (needed for git, curl, etc.)
+    allowNetwork: opts?.allowNetwork ?? true, // Allow network by default (needed for git, curl, etc.)
     allowWritePaths: [
       cwd,                    // Project directory
-      "/tmp/kcode-sandbox",   // Sandbox temp
+      "/tmp",                 // System temp
+      ...extraWritable,
     ],
     readOnlyPaths: [
       "/etc/resolv.conf",     // DNS resolution
       "/etc/ssl",             // SSL certificates
       "/etc/ca-certificates", // CA certificates
+      ...extraReadOnly,
     ],
-    tmpDir: "/tmp/kcode-sandbox",
+    tmpDir: "/tmp",
   };
 }
 
