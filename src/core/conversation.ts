@@ -16,7 +16,8 @@ import type {
   OpenAIToolDefinition,
 } from "./types";
 import { readFileSync } from "node:fs";
-import { getModelBaseUrl } from "./models";
+import { getModelBaseUrl, getModelProvider } from "./models";
+import type { ModelProvider } from "./models";
 import { routeToModel } from "./router";
 import { ToolRegistry } from "./tool-registry";
 import { SystemPromptBuilder } from "./system-prompt";
@@ -439,6 +440,118 @@ function convertToOpenAITools(
   }));
 }
 
+// ─── Anthropic Message Conversion ────────────────────────────────
+
+interface AnthropicMessage {
+  role: "user" | "assistant";
+  content: string | AnthropicContentBlock[];
+}
+
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+
+interface AnthropicToolDefinition {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+/**
+ * Convert internal Message[] to Anthropic Messages API format.
+ * Key differences from OpenAI:
+ * - System prompt is NOT a message — goes in top-level `system` field
+ * - tool_use/tool_result are content blocks inside user/assistant messages (not separate roles)
+ * - Strict user/assistant alternation required
+ */
+function convertToAnthropicMessages(
+  messages: Message[],
+): AnthropicMessage[] {
+  const result: AnthropicMessage[] = [];
+
+  for (const msg of messages) {
+    if (typeof msg.content === "string") {
+      // Merge consecutive same-role messages (Anthropic requires strict alternation)
+      const last = result[result.length - 1];
+      if (last && last.role === msg.role) {
+        if (typeof last.content === "string") {
+          last.content = last.content + "\n\n" + msg.content;
+        } else {
+          last.content.push({ type: "text", text: msg.content });
+        }
+      } else {
+        result.push({ role: msg.role, content: msg.content });
+      }
+      continue;
+    }
+
+    // Complex content blocks — convert to Anthropic format
+    const blocks: AnthropicContentBlock[] = [];
+
+    for (const block of msg.content) {
+      if (block.type === "text") {
+        blocks.push({ type: "text", text: block.text });
+      } else if (block.type === "thinking") {
+        // Include thinking as text (Anthropic extended thinking is model-native, we just pass text)
+        blocks.push({ type: "text", text: `<thinking>${block.thinking}</thinking>` });
+      } else if (block.type === "tool_use") {
+        blocks.push({
+          type: "tool_use",
+          id: block.id,
+          name: block.name,
+          input: block.input,
+        });
+      } else if (block.type === "tool_result") {
+        const content = typeof block.content === "string"
+          ? block.content
+          : block.content.map((b) => b.type === "text" ? b.text : JSON.stringify(b)).join("\n");
+        blocks.push({
+          type: "tool_result",
+          tool_use_id: block.tool_use_id,
+          content,
+          is_error: block.is_error,
+        });
+      }
+    }
+
+    if (blocks.length === 0) continue; // Skip empty content
+
+    // Merge consecutive same-role messages
+    const last = result[result.length - 1];
+    if (last && last.role === msg.role) {
+      if (typeof last.content === "string") {
+        last.content = [{ type: "text", text: last.content }, ...blocks];
+      } else {
+        last.content.push(...blocks);
+      }
+    } else {
+      result.push({ role: msg.role, content: blocks });
+    }
+  }
+
+  // Anthropic requires conversation to start with user message
+  if (result.length > 0 && result[0].role !== "user") {
+    result.unshift({ role: "user", content: "Hello." });
+  }
+
+  return result;
+}
+
+/**
+ * Convert tool definitions to Anthropic format.
+ * Anthropic uses { name, description, input_schema } — which is already our internal format.
+ */
+function convertToAnthropicTools(
+  tools: { name: string; description: string; input_schema: Record<string, unknown> }[],
+): AnthropicToolDefinition[] {
+  return tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: t.input_schema,
+  }));
+}
+
 // ─── SSE Stream Parser ──────────────────────────────────────────
 
 interface SSEChunk {
@@ -562,6 +675,146 @@ async function* parseSSEStream(
         } catch {
           // ignore
         }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Parse an SSE stream from Anthropic's Messages API and yield structured chunks.
+ * Anthropic uses event: lines before data: lines, and a different JSON structure.
+ */
+async function* parseAnthropicSSEStream(
+  response: Response,
+): AsyncGenerator<SSEChunk> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEventType = "";
+  // Track content block types by index so we know if a delta is text or tool input
+  const blockTypes = new Map<number, string>(); // index -> "text" | "tool_use"
+  const blockToolIds = new Map<number, string>(); // index -> tool_use id
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+
+        // Track event type
+        if (trimmed.startsWith("event: ")) {
+          currentEventType = trimmed.slice(7).trim();
+          continue;
+        }
+
+        if (!trimmed.startsWith("data: ")) continue;
+
+        let parsed: any;
+        try {
+          parsed = JSON.parse(trimmed.slice(6));
+        } catch {
+          continue;
+        }
+
+        switch (currentEventType) {
+          case "message_start": {
+            // Contains usage.input_tokens
+            const usage = parsed.message?.usage;
+            if (usage) {
+              yield {
+                type: "usage",
+                promptTokens: usage.input_tokens ?? 0,
+                completionTokens: usage.output_tokens ?? 0,
+              };
+            }
+            break;
+          }
+
+          case "content_block_start": {
+            const idx = parsed.index ?? 0;
+            const block = parsed.content_block;
+            if (block?.type === "tool_use") {
+              blockTypes.set(idx, "tool_use");
+              blockToolIds.set(idx, block.id ?? "");
+              yield {
+                type: "tool_call_delta",
+                toolCallIndex: idx,
+                toolCallId: block.id,
+                functionName: block.name,
+              };
+            } else if (block?.type === "text") {
+              blockTypes.set(idx, "text");
+            }
+            break;
+          }
+
+          case "content_block_delta": {
+            const idx = parsed.index ?? 0;
+            const delta = parsed.delta;
+
+            if (delta?.type === "text_delta" && delta.text) {
+              yield { type: "content_delta", content: delta.text };
+            } else if (delta?.type === "input_json_delta" && delta.partial_json !== undefined) {
+              yield {
+                type: "tool_call_delta",
+                toolCallIndex: idx,
+                toolCallId: blockToolIds.get(idx),
+                functionArgDelta: delta.partial_json,
+              };
+            }
+            break;
+          }
+
+          case "content_block_stop": {
+            // Block finished — nothing special needed
+            break;
+          }
+
+          case "message_delta": {
+            // Contains stop_reason and output usage
+            if (parsed.delta?.stop_reason) {
+              const reason = parsed.delta.stop_reason;
+              // Map Anthropic stop reasons to our internal format
+              const mapped = reason === "end_turn" ? "stop"
+                : reason === "tool_use" ? "tool_calls"
+                : reason === "max_tokens" ? "length"
+                : reason === "stop_sequence" ? "stop"
+                : reason;
+              yield { type: "finish", finishReason: mapped };
+            }
+            if (parsed.usage) {
+              yield {
+                type: "usage",
+                promptTokens: parsed.usage.input_tokens ?? 0,
+                completionTokens: parsed.usage.output_tokens ?? 0,
+              };
+            }
+            break;
+          }
+
+          case "message_stop": {
+            // Stream complete
+            return;
+          }
+
+          case "error": {
+            const errMsg = parsed.error?.message ?? "Unknown Anthropic API error";
+            yield { type: "error", content: errMsg };
+            return;
+          }
+        }
+
+        currentEventType = ""; // Reset after processing
       }
     }
   } finally {
@@ -794,7 +1047,7 @@ export class ConversationManager {
         this.transcript.append("tool", "tool_result", JSON.stringify({
           tool_use_id: event.toolUseId,
           name: event.name,
-          content: event.result.slice(0, 2000),
+          content: (event.result ?? "").slice(0, 2000),
           is_error: event.isError,
         }));
         break;
@@ -833,7 +1086,7 @@ export class ConversationManager {
     let emptyEndTurnCount = 0; // track empty end_turn retries to avoid infinite loop
     const turnStartMs = Date.now();
     const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
-    const loopPatterns = new Map<string, { count: number; warned: boolean; examples: string[] }>(); // semantic loop detection
+    const loopPatterns = new Map<string, { count: number; warned: boolean; redirects: number; examples: string[] }>(); // semantic loop detection
 
     while (true) {
       // Hard break after force-stop allowed one final text turn
@@ -1494,18 +1747,20 @@ export class ConversationManager {
           const command = String((call.input as Record<string, unknown>).command ?? "");
           const pattern = extractBashLoopPattern(command);
           if (pattern) {
-            const entry = loopPatterns.get(pattern) ?? { count: 0, warned: false, examples: [] };
+            const entry = loopPatterns.get(pattern) ?? { count: 0, warned: false, redirects: 0, examples: [] };
             entry.count++;
             if (entry.examples.length < 3) entry.examples.push(command.slice(0, 80));
             loopPatterns.set(pattern, entry);
 
             if (entry.count >= LOOP_PATTERN_HARD_STOP) {
-              // Hard redirect: skip this call, force a strategy change, but keep working
-              log.warn("tool", `Loop pattern HARD redirect (${pattern}): ${entry.count} similar calls — forcing strategy change`);
+              // Hard redirect: skip this call, force a strategy change, reset counter for fresh attempts
+              entry.redirects++;
+              log.warn("tool", `Loop pattern HARD redirect #${entry.redirects} (${pattern}): ${entry.count} similar calls — forcing strategy change`);
               entry.warned = true;
-              entry.count = 0; // reset so the new strategy gets a fresh count
+              entry.count = 0; // reset so new strategy gets fresh attempts
               entry.examples = [];
-              const redirectMsg = `SKIPPED: This "${pattern}" approach has been tried ${LOOP_PATTERN_HARD_STOP} times without success. This call was NOT executed. You MUST now try a COMPLETELY DIFFERENT technique to achieve the user's goal. Think step by step:\n1. What did "${pattern}" attempts reveal?\n2. What alternative tools, protocols, or angles haven't been tried?\n3. Pick the most promising alternative and execute it NOW.\n\nDo NOT give up — the user wants results. Change your approach and keep going.`;
+              const urgency = entry.redirects >= 3 ? "CRITICAL" : entry.redirects >= 2 ? "URGENT" : "IMPORTANT";
+              const redirectMsg = `SKIPPED (redirect #${entry.redirects}): This "${pattern}" approach has been tried ${LOOP_PATTERN_HARD_STOP} times without success. This call was NOT executed. You MUST now try a COMPLETELY DIFFERENT technique to achieve the user's goal. [${urgency}] Think step by step:\n1. What did "${pattern}" attempts reveal? What is fundamentally wrong with this approach?\n2. What alternative tools, protocols, or angles haven't been tried yet?\n3. Pick the most promising NEW alternative and execute it NOW.\n\nDo NOT give up — the user wants results. Change your approach and keep going.${entry.redirects >= 2 ? "\n\nYou have been redirected " + entry.redirects + " times on this pattern. Try something RADICALLY different — different protocol, different tool, different port, different technique entirely." : ""}`;
               yield { type: "tool_result", name: call.name, toolUseId: call.id, result: redirectMsg, isError: true };
               toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: redirectMsg, is_error: true });
               continue;
@@ -1806,10 +2061,10 @@ export class ConversationManager {
       for (const [pattern, entry] of loopPatterns) {
         if (entry.count >= LOOP_PATTERN_HARD_STOP) {
           const examples = entry.examples.join("\n  - ");
-          const redirectMsg = `[SYSTEM — STRATEGY CHANGE REQUIRED] You have run ${entry.count} similar "${pattern}" commands:\n  - ${examples}\n\nThis approach is not working. You MUST now try a COMPLETELY DIFFERENT technique. Think about what other tools, protocols, or methods could achieve the user's goal. Change strategy and KEEP WORKING — do not give up.`;
+          entry.redirects++;
+          const redirectMsg = `[SYSTEM — STRATEGY CHANGE REQUIRED] You have run ${entry.count} similar "${pattern}" commands (redirect #${entry.redirects}):\n  - ${examples}\n\nThis approach is not working. You MUST now try a COMPLETELY DIFFERENT technique. Think about what other tools, protocols, or methods could achieve the user's goal. Change strategy and KEEP WORKING — do not give up.`;
           this.state.messages.push({ role: "user", content: redirectMsg });
-          log.warn("session", `Loop redirect HARD for pattern "${pattern}" (${entry.count} calls) — forcing strategy change`);
-          // Reset so the new strategy gets a fresh count
+          log.warn("session", `Loop redirect #${entry.redirects} for pattern "${pattern}" (${entry.count} calls) — forcing strategy change`);
           entry.count = 0;
           entry.examples = [];
           break; // only inject one redirect per turn
@@ -1910,6 +2165,171 @@ export class ConversationManager {
   }
 
   /**
+   * Build a complete API request (URL, headers, body, provider) for a given model.
+   * Handles both OpenAI and Anthropic formats, deduplicating logic across primary/fallback paths.
+   */
+  /**
+   * Resolve the API key for a model based on its name/baseUrl.
+   * Checks provider-specific env vars first, then falls back to config.apiKey.
+   */
+  private resolveApiKey(modelName: string, baseUrl: string): string | undefined {
+    // Provider-specific env vars (checked in priority order)
+    const lower = modelName.toLowerCase();
+    const urlLower = baseUrl.toLowerCase();
+
+    if (lower.startsWith("gpt-") || lower.startsWith("o1") || lower.startsWith("o3") || lower.startsWith("o4") || urlLower.includes("openai.com")) {
+      return process.env.OPENAI_API_KEY ?? this.config.apiKey;
+    }
+    if (lower.startsWith("gemini") || urlLower.includes("googleapis.com") || urlLower.includes("generativelanguage")) {
+      return process.env.GEMINI_API_KEY ?? this.config.apiKey;
+    }
+    if (urlLower.includes("groq.com")) {
+      return process.env.GROQ_API_KEY ?? this.config.apiKey;
+    }
+    if (lower.startsWith("deepseek") || urlLower.includes("deepseek.com")) {
+      return process.env.DEEPSEEK_API_KEY ?? this.config.apiKey;
+    }
+    if (urlLower.includes("together.xyz")) {
+      return process.env.TOGETHER_API_KEY ?? this.config.apiKey;
+    }
+
+    return this.config.apiKey;
+  }
+
+  private async buildRequestForModel(
+    modelName: string,
+    opts?: { maxTokens?: number; includeTools?: boolean; effortLevel?: string },
+  ): Promise<{
+    url: string;
+    headers: Record<string, string>;
+    body: Record<string, unknown>;
+    provider: ModelProvider;
+    parser: (response: Response) => AsyncGenerator<SSEChunk>;
+  }> {
+    const provider = await getModelProvider(modelName);
+    const apiBase = await getModelBaseUrl(modelName, this.config.apiBase);
+    const maxTokens = opts?.maxTokens ?? this.config.maxTokens;
+    const includeTools = opts?.includeTools ?? true;
+    const effort = (opts?.effortLevel ?? this.config.effortLevel ?? "medium") as string;
+
+    const effortMaxTokens = effort === "low" ? Math.min(maxTokens, 4096)
+      : effort === "max" ? Math.max(maxTokens, 65536)
+      : effort === "high" ? Math.max(maxTokens, 32768)
+      : maxTokens;
+    const effortTemperature = effort === "low" ? 0.3 : effort === "max" ? 0.9 : effort === "high" ? 0.7 : undefined;
+
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+    if (provider === "anthropic") {
+      // Anthropic API: /v1/messages with x-api-key header
+      const url = `${apiBase}/v1/messages`;
+      const apiKey = this.config.anthropicApiKey ?? this.config.apiKey;
+      if (apiKey) {
+        headers["x-api-key"] = apiKey;
+      }
+      headers["anthropic-version"] = "2023-06-01";
+
+      const messages = convertToAnthropicMessages(this.state.messages);
+      const body: Record<string, unknown> = {
+        model: modelName,
+        messages,
+        system: this.systemPrompt,
+        max_tokens: effortMaxTokens,
+        stream: true,
+      };
+
+      if (effortTemperature !== undefined) {
+        body.temperature = effortTemperature;
+      }
+
+      if (includeTools) {
+        const tools = convertToAnthropicTools(this.tools.getDefinitions());
+        if (tools.length > 0) body.tools = tools;
+      }
+
+      return { url, headers, body, provider, parser: parseAnthropicSSEStream };
+    } else {
+      // OpenAI-compatible API: /v1/chat/completions with Bearer token
+      const url = `${apiBase}/v1/chat/completions`;
+      // Resolve API key: check provider-specific env vars, then fall back to config.apiKey
+      const resolvedKey = this.resolveApiKey(modelName, apiBase);
+      if (resolvedKey) {
+        headers["Authorization"] = `Bearer ${resolvedKey}`;
+      }
+
+      const messages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
+      const tools = includeTools ? convertToOpenAITools(this.tools.getDefinitions()) : [];
+
+      const body: Record<string, unknown> = {
+        model: modelName,
+        messages,
+        max_tokens: effortMaxTokens,
+        stream: true,
+        stream_options: { include_usage: true },
+      };
+
+      if (effortTemperature !== undefined) {
+        body.temperature = effortTemperature;
+      }
+
+      if (tools.length > 0) body.tools = tools;
+
+      // Qwen3: disable thinking mode unless explicitly requested
+      if (!this.config.thinking) {
+        body.chat_template_kwargs = { enable_thinking: false };
+      }
+
+      // JSON schema response format
+      if (this.config.jsonSchema) {
+        try {
+          const schema = this.config.jsonSchema.startsWith("{")
+            ? JSON.parse(this.config.jsonSchema)
+            : JSON.parse(readFileSync(this.config.jsonSchema, "utf-8"));
+          body.response_format = { type: "json_object" };
+          body.json_schema = schema;
+        } catch (e) {
+          log.warn("llm", `Invalid JSON schema, ignoring: ${e}`);
+        }
+      }
+
+      return { url, headers, body, provider, parser: parseSSEStream };
+    }
+  }
+
+  /**
+   * Execute a streaming request to a model and return the parsed SSE stream.
+   * Used by both primary and fallback paths.
+   */
+  private async executeModelRequest(
+    modelName: string,
+    opts?: { maxTokens?: number; includeTools?: boolean; effortLevel?: string },
+  ): Promise<AsyncGenerator<SSEChunk>> {
+    const req = await this.buildRequestForModel(modelName, opts);
+
+    log.info("llm", `Request to ${modelName} (${req.provider}) at ${req.url}`);
+
+    const response = await fetch(req.url, {
+      method: "POST",
+      headers: req.headers,
+      body: JSON.stringify(req.body),
+      signal: this.abortController?.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(
+        `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
+      );
+    }
+
+    if (!response.body) {
+      throw new Error("Response body is null - streaming not supported");
+    }
+
+    return req.parser(response);
+  }
+
+  /**
    * Create a streaming API call with exponential backoff retry.
    * Returns an async generator of parsed SSE chunks.
    */
@@ -1925,94 +2345,10 @@ export class ConversationManager {
           effectiveModel = await routeToModel(this.config.model, recentText);
         }
 
-        const apiBase = await getModelBaseUrl(effectiveModel, this.config.apiBase);
-        const url = `${apiBase}/v1/chat/completions`;
         const requestStart = Date.now();
-
-        const openAIMessages = convertToOpenAIMessages(
-          this.systemPrompt,
-          this.state.messages,
-        );
-        const openAITools = convertToOpenAITools(this.tools.getDefinitions());
-
-        // Adjust parameters based on effort level
-        const effort = this.config.effortLevel ?? "medium";
-        const effortMaxTokens = effort === "low" ? Math.min(this.config.maxTokens, 4096)
-          : effort === "max" ? Math.max(this.config.maxTokens, 65536)
-          : effort === "high" ? Math.max(this.config.maxTokens, 32768)
-          : this.config.maxTokens;
-        const effortTemperature = effort === "low" ? 0.3 : effort === "max" ? 0.9 : effort === "high" ? 0.7 : undefined;
-
-        const body: Record<string, unknown> = {
-          model: effectiveModel,
-          messages: openAIMessages,
-          max_tokens: effortMaxTokens,
-          stream: true,
-          stream_options: { include_usage: true },
-        };
-
-        if (effortTemperature !== undefined) {
-          body.temperature = effortTemperature;
-        }
-
-        // Only include tools if we have any
-        if (openAITools.length > 0) {
-          body.tools = openAITools;
-        }
-
-        // Qwen3 models default to "thinking" mode which wastes tokens on internal
-        // reasoning. Disable it unless the user explicitly requested --thinking.
-        if (!this.config.thinking) {
-          body.chat_template_kwargs = { enable_thinking: false };
-        }
-
-        // Add JSON schema response format if configured
-        if (this.config.jsonSchema) {
-          try {
-            const schema = this.config.jsonSchema.startsWith("{")
-              ? JSON.parse(this.config.jsonSchema)
-              : JSON.parse(readFileSync(this.config.jsonSchema, "utf-8"));
-            // llama.cpp supports json_schema in grammar form, OpenAI uses response_format
-            // Try the OpenAI-compatible format first; llama.cpp also accepts it in newer versions
-            body.response_format = { type: "json_object" };
-            // Pass schema via the json_schema field (works with vLLM, newer llama.cpp)
-            body.json_schema = schema;
-          } catch (e) {
-            log.warn("llm", `Invalid JSON schema, ignoring: ${e}`);
-          }
-        }
-
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-
-        // Add auth header if an API key is configured (not required for local LLMs)
-        if (this.config.apiKey) {
-          headers["Authorization"] = `Bearer ${this.config.apiKey}`;
-        }
-
-        log.info("llm", `Request to ${effectiveModel} at ${url} (${openAIMessages.length} messages)`);
-
-        const response = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body),
-          signal: this.abortController?.signal,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => "");
-          throw new Error(
-            `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
-          );
-        }
-
-        if (!response.body) {
-          throw new Error("Response body is null - streaming not supported");
-        }
-
+        const stream = await this.executeModelRequest(effectiveModel);
         log.debug("llm", `Stream opened in ${Date.now() - requestStart}ms`);
-        return parseSSEStream(response);
+        return stream;
       } catch (error) {
         lastError =
           error instanceof Error ? error : new Error(String(error));
@@ -2028,75 +2364,24 @@ export class ConversationManager {
         if (this.config.fallbackModel && this.config.fallbackModel !== this.config.model) {
           log.warn("llm", `Primary model failed, switching to fallback: ${this.config.fallbackModel}`);
           try {
-            const fallbackBase = await getModelBaseUrl(this.config.fallbackModel, this.config.apiBase);
-            const fallbackUrl = `${fallbackBase}/v1/chat/completions`;
-            const openAIMessages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
-            const openAITools = convertToOpenAITools(this.tools.getDefinitions());
-
-            const fallbackBody: Record<string, unknown> = {
-              model: this.config.fallbackModel,
-              messages: openAIMessages,
-              max_tokens: this.config.maxTokens,
-              stream: true,
-            };
-            if (openAITools.length > 0) fallbackBody.tools = openAITools;
-
-            const fallbackHeaders: Record<string, string> = { "Content-Type": "application/json" };
-            // Only send API key to fallback if it's on the same base URL (avoid credential leak)
-            const primaryBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
-            if (this.config.apiKey && fallbackBase === primaryBase) {
-              fallbackHeaders["Authorization"] = `Bearer ${this.config.apiKey}`;
-            }
-
-            const fallbackResp = await fetch(fallbackUrl, {
-              method: "POST",
-              headers: fallbackHeaders,
-              body: JSON.stringify(fallbackBody),
-              signal: this.abortController?.signal,
-            });
-
-            if (fallbackResp.ok && fallbackResp.body) {
-              log.info("llm", `Fallback model ${this.config.fallbackModel} connected`);
-              return parseSSEStream(fallbackResp);
-            }
+            const stream = await this.executeModelRequest(this.config.fallbackModel);
+            log.info("llm", `Fallback model ${this.config.fallbackModel} connected`);
+            return stream;
           } catch (fallbackErr) {
             log.error("llm", `Fallback model also failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`);
           }
         }
 
-        // Tertiary model: ultra-lightweight last resort
+        // Tertiary model: ultra-lightweight last resort (no tools for max compatibility)
         if (this.config.tertiaryModel && this.config.tertiaryModel !== this.config.model && this.config.tertiaryModel !== this.config.fallbackModel) {
           log.warn("llm", `Primary + fallback failed, trying tertiary model: ${this.config.tertiaryModel}`);
           try {
-            const tertiaryBase = await getModelBaseUrl(this.config.tertiaryModel, this.config.apiBase);
-            const tertiaryUrl = `${tertiaryBase}/v1/chat/completions`;
-            // Rebuild messages for tertiary (fallback block vars are out of scope)
-            const tertiaryMessages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
-            // Tertiary model: skip tools for maximum compatibility with small models
-            const tertiaryBody: Record<string, unknown> = {
-              model: this.config.tertiaryModel,
-              messages: tertiaryMessages,
-              max_tokens: Math.min(this.config.maxTokens, 4096),
-              stream: true,
-            };
-
-            const tertiaryHeaders: Record<string, string> = { "Content-Type": "application/json" };
-            const tertiaryPrimaryBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
-            if (this.config.apiKey && tertiaryBase === tertiaryPrimaryBase) {
-              tertiaryHeaders["Authorization"] = `Bearer ${this.config.apiKey}`;
-            }
-
-            const tertiaryResp = await fetch(tertiaryUrl, {
-              method: "POST",
-              headers: tertiaryHeaders,
-              body: JSON.stringify(tertiaryBody),
-              signal: this.abortController?.signal,
+            const stream = await this.executeModelRequest(this.config.tertiaryModel, {
+              maxTokens: Math.min(this.config.maxTokens, 4096),
+              includeTools: false,
             });
-
-            if (tertiaryResp.ok && tertiaryResp.body) {
-              log.info("llm", `Tertiary model ${this.config.tertiaryModel} connected (no tools)`);
-              return parseSSEStream(tertiaryResp);
-            }
+            log.info("llm", `Tertiary model ${this.config.tertiaryModel} connected (no tools)`);
+            return stream;
           } catch (tertiaryErr) {
             log.error("llm", `Tertiary model also failed: ${tertiaryErr instanceof Error ? tertiaryErr.message : tertiaryErr}`);
           }
@@ -2116,36 +2401,9 @@ export class ConversationManager {
 
             log.warn("llm", `Falling back to model: ${chainModel}`);
             try {
-              const chainBase = await getModelBaseUrl(chainModel, this.config.apiBase);
-              const chainUrl = `${chainBase}/v1/chat/completions`;
-              const chainMessages = convertToOpenAIMessages(this.systemPrompt, this.state.messages);
-              const chainTools = convertToOpenAITools(this.tools.getDefinitions());
-
-              const chainBody: Record<string, unknown> = {
-                model: chainModel,
-                messages: chainMessages,
-                max_tokens: this.config.maxTokens,
-                stream: true,
-              };
-              if (chainTools.length > 0) chainBody.tools = chainTools;
-
-              const chainHeaders: Record<string, string> = { "Content-Type": "application/json" };
-              const primaryBase = await getModelBaseUrl(this.config.model, this.config.apiBase);
-              if (this.config.apiKey && chainBase === primaryBase) {
-                chainHeaders["Authorization"] = `Bearer ${this.config.apiKey}`;
-              }
-
-              const chainResp = await fetch(chainUrl, {
-                method: "POST",
-                headers: chainHeaders,
-                body: JSON.stringify(chainBody),
-                signal: this.abortController?.signal,
-              });
-
-              if (chainResp.ok && chainResp.body) {
-                log.info("llm", `Fallback chain model ${chainModel} connected`);
-                return parseSSEStream(chainResp);
-              }
+              const stream = await this.executeModelRequest(chainModel);
+              log.info("llm", `Fallback chain model ${chainModel} connected`);
+              return stream;
             } catch (chainErr) {
               log.error("llm", `Fallback chain model ${chainModel} failed: ${chainErr instanceof Error ? chainErr.message : chainErr}`);
             }

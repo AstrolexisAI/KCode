@@ -83,6 +83,7 @@ export type ToolHandler = (input: Record<string, unknown>) => Promise<ToolResult
 
 export interface KCodeConfig {
   apiKey?: string;
+  anthropicApiKey?: string; // Anthropic-specific API key (ANTHROPIC_API_KEY env var)
   apiBase?: string;
   model: string;
   maxTokens: number;

@@ -221,18 +221,19 @@ function ToolResultMessage({
   durationMs?: number;
 }) {
   const { theme } = useTheme();
+  const safeResult = result ?? "";
   const durationStr = durationMs != null && durationMs > 100 ? ` (${formatDuration(durationMs)})` : "";
 
   if (isError) {
     return (
       <Box flexDirection="column" paddingLeft={2}>
         <Text color={theme.error}>{"✗ "}{name} failed{durationStr}</Text>
-        <Text dimColor color={theme.error}>{"    "}{result.slice(0, 200)}</Text>
+        <Text dimColor color={theme.error}>{"    "}{safeResult.slice(0, 200)}</Text>
       </Box>
     );
   }
 
-  const preview = result.split("\n").slice(0, 3).join("\n    ");
+  const preview = safeResult.split("\n").slice(0, 3).join("\n    ");
   return (
     <Box flexDirection="column" paddingLeft={2}>
       <Text color={theme.toolResult} dimColor>{"✓ "}{name}{durationStr}</Text>

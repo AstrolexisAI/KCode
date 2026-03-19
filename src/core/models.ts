@@ -8,6 +8,8 @@ import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
+export type ModelProvider = "openai" | "anthropic";
+
 export interface ModelEntry {
   name: string;
   baseUrl: string;
@@ -15,6 +17,7 @@ export interface ModelEntry {
   capabilities?: string[]; // e.g. ["code", "vision", "general"]
   gpu?: string; // e.g. "RTX 5090", informational only
   description?: string;
+  provider?: ModelProvider; // "openai" (default) or "anthropic" — auto-detected from name if not set
 }
 
 export interface ModelsConfig {
@@ -71,6 +74,7 @@ function parseModelsConfig(raw: any): ModelsConfig {
           capabilities: Array.isArray(entry.capabilities) ? entry.capabilities : undefined,
           gpu: typeof entry.gpu === "string" ? entry.gpu : undefined,
           description: typeof entry.description === "string" ? entry.description : undefined,
+          provider: entry.provider === "anthropic" ? "anthropic" : entry.provider === "openai" ? "openai" : undefined,
         });
       }
     }
@@ -86,8 +90,7 @@ function parseModelsConfig(raw: any): ModelsConfig {
 
 /** Get the base URL for a model. Falls back to KCODE_API_BASE env var or http://localhost:10091. */
 export async function getModelBaseUrl(modelName: string, configBase?: string): Promise<string> {
-  if (configBase) return configBase;
-
+  // Registry entries always win — they have the correct baseUrl per model
   const config = await loadModelsConfig();
   const entry = config.models.find((m) => m.name === modelName);
   if (entry) {
@@ -95,7 +98,9 @@ export async function getModelBaseUrl(modelName: string, configBase?: string): P
     return entry.baseUrl;
   }
 
-  // Fallback: env var or default
+  // No registry entry: use configBase or fallback
+  if (configBase) return configBase;
+
   const fallback = process.env.KCODE_API_BASE ?? "http://localhost:10091";
   log.debug("config", `Model "${modelName}" not in registry, using fallback ${fallback}`);
   return fallback;
@@ -157,6 +162,19 @@ export async function setDefaultModel(modelName: string): Promise<void> {
   const config = await loadModelsConfig();
   config.defaultModel = modelName;
   await saveModelsConfig(config);
+}
+
+/** Detect the API provider for a model — checks registry first, then falls back to name heuristic. */
+export async function getModelProvider(modelName: string): Promise<ModelProvider> {
+  const config = await loadModelsConfig();
+  const entry = config.models.find((m) => m.name === modelName);
+  if (entry?.provider) return entry.provider;
+
+  // Name-based detection: claude-* models use Anthropic API
+  const lower = modelName.toLowerCase();
+  if (lower.startsWith("claude-") || lower.startsWith("claude_")) return "anthropic";
+
+  return "openai";
 }
 
 /** Invalidate the in-memory cache (e.g., after external edits). */

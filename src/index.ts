@@ -2311,15 +2311,27 @@ async function runMain(
 
   // ─── Read piped stdin if available ─────────────────────────
 
-  if (promptText && !process.stdin.isTTY) {
+  if (promptText && !process.stdin.isTTY && process.stdin.readable) {
     try {
-      const chunks: Buffer[] = [];
-      for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-      }
-      const stdinContent = Buffer.concat(chunks).toString("utf-8").trim();
-      if (stdinContent) {
-        promptText = `${promptText}\n\n<stdin>\n${stdinContent}\n</stdin>`;
+      // Only read stdin if data is available (don't block on empty pipe)
+      const hasData = await Promise.race([
+        new Promise<boolean>((resolve) => {
+          process.stdin.once("readable", () => resolve(true));
+          process.stdin.once("end", () => resolve(false));
+          process.stdin.once("error", () => resolve(false));
+        }),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
+
+      if (hasData) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of process.stdin) {
+          chunks.push(chunk);
+        }
+        const stdinContent = Buffer.concat(chunks).toString("utf-8").trim();
+        if (stdinContent) {
+          promptText = `${promptText}\n\n<stdin>\n${stdinContent}\n</stdin>`;
+        }
       }
     } catch { /* no stdin data */ }
   }

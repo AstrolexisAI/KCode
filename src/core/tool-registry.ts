@@ -21,7 +21,12 @@ export class ToolRegistry {
     }
 
     try {
-      return await tool.handler(input);
+      const result = await tool.handler(input);
+      // Normalize: some tools return a plain string instead of ToolResult
+      if (typeof result === "string") {
+        return { tool_use_id: "", content: result, is_error: false };
+      }
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
