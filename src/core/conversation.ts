@@ -1186,7 +1186,7 @@ export class ConversationManager {
         const words = cachedText.split(" ");
         for (let wi = 0; wi < words.length; wi++) {
           const chunk = (wi > 0 ? " " : "") + words[wi];
-          yield { type: "text", text: chunk };
+          yield { type: "text_delta", text: chunk };
           textChunks.push(chunk);
         }
         assistantContent.push({ type: "text", text: cachedText });

@@ -266,12 +266,19 @@ describe("models", () => {
       expect(url).toBe("http://local:11434");
     });
 
-    test("returns configBase override when provided", async () => {
+    test("registry entry takes priority over configBase", async () => {
       await writeModelsJson({
         models: [{ name: "local-llm", baseUrl: "http://local:11434" }],
       });
 
       const url = await getModelBaseUrl("local-llm", "http://override:9999");
+      expect(url).toBe("http://local:11434");
+    });
+
+    test("configBase used for models not in registry", async () => {
+      await writeModelsJson({ models: [] });
+
+      const url = await getModelBaseUrl("unregistered-model", "http://override:9999");
       expect(url).toBe("http://override:9999");
     });
 
