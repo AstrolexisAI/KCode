@@ -76,6 +76,28 @@ interface McpResourceContent {
   blob?: string;
 }
 
+// ─── Elicitation Types ──────────────────────────────────────────
+
+export interface ElicitationRequest {
+  id: string | number;
+  method: "elicitation/create";
+  params: {
+    message: string;
+    requestedSchema?: {
+      type: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+  };
+}
+
+export interface ElicitationResponse {
+  action: "accept" | "deny" | "cancel";
+  content?: Record<string, unknown>;
+}
+
+export type ElicitationCallback = (request: ElicitationRequest["params"]) => Promise<ElicitationResponse>;
+
 // ─── MCP Server Connection ──────────────────────────────────────
 
 class McpServerConnection {
@@ -94,10 +116,15 @@ class McpServerConnection {
   private resources: McpResource[] = [];
   private restartCount = 0;
   private maxRestarts = 3;
+  private elicitationCallback?: ElicitationCallback;
 
   constructor(name: string, config: McpServerConfig) {
     this.name = name;
     this.config = config;
+  }
+
+  setElicitationCallback(cb: ElicitationCallback): void {
+    this.elicitationCallback = cb;
   }
 
   async start(): Promise<void> {
@@ -171,7 +198,15 @@ class McpServerConnection {
       if (!trimmed) continue;
 
       try {
-        const response = JSON.parse(trimmed) as JsonRpcResponse;
+        const parsed = JSON.parse(trimmed);
+
+        // Check if this is a server-initiated request (has method field)
+        if (parsed.method && parsed.id !== undefined) {
+          this.handleServerRequest(parsed);
+          continue;
+        }
+
+        const response = parsed as JsonRpcResponse;
         if (response.id !== undefined) {
           const pending = this.pendingRequests.get(response.id);
           if (pending) {
@@ -233,7 +268,9 @@ class McpServerConnection {
   private async initialize(): Promise<void> {
     await this.sendRequest("initialize", {
       protocolVersion: "2024-11-05",
-      capabilities: {},
+      capabilities: {
+        elicitation: {},
+      },
       clientInfo: {
         name: "KCode",
         version: "1.0.0",
@@ -319,6 +356,37 @@ class McpServerConnection {
     return true;
   }
 
+  /**
+   * Handle a server-initiated JSON-RPC request (e.g., elicitation/create).
+   */
+  private handleServerRequest(request: { id: string | number; method: string; params?: Record<string, unknown> }): void {
+    if (request.method === "elicitation/create") {
+      const params = request.params as ElicitationRequest["params"];
+      const respond = (result: ElicitationResponse) => this.sendJsonRpcResponse(request.id, result);
+
+      if (this.elicitationCallback) {
+        this.elicitationCallback(params).then(respond).catch(() => {
+          respond({ action: "deny" });
+        });
+      } else {
+        respond({ action: "deny" });
+      }
+    }
+  }
+
+  /**
+   * Send a JSON-RPC response back to the MCP server.
+   */
+  private sendJsonRpcResponse(id: string | number, result: unknown): void {
+    if (!this.process?.stdin) return;
+    const response = JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n";
+    try {
+      this.process.stdin.write(response);
+    } catch {
+      // Process may have died
+    }
+  }
+
   shutdown(): void {
     log.info("mcp", `Shutting down server "${this.name}"`);
     // Reject all pending requests
@@ -371,10 +439,15 @@ class McpHttpConnection {
     timer: ReturnType<typeof setTimeout>;
   }>();
   private sseConnected = false;
+  private elicitationCallback?: ElicitationCallback;
 
   constructor(name: string, config: McpServerConfig) {
     this.name = name;
     this.config = config;
+  }
+
+  setElicitationCallback(cb: ElicitationCallback): void {
+    this.elicitationCallback = cb;
   }
 
   async start(): Promise<void> {
@@ -550,7 +623,15 @@ class McpHttpConnection {
 
     if (eventType === "message" || eventType === "response") {
       try {
-        const response = JSON.parse(event.data) as JsonRpcResponse;
+        const parsed = JSON.parse(event.data);
+
+        // Check if this is a server-initiated request (has method field)
+        if (parsed.method && parsed.id !== undefined) {
+          this.handleServerRequest(parsed);
+          return;
+        }
+
+        const response = parsed as JsonRpcResponse;
         if (response.id !== undefined) {
           const pending = this.ssePendingRequests.get(response.id);
           if (pending) {
@@ -778,7 +859,9 @@ class McpHttpConnection {
   private async initialize(): Promise<void> {
     const result = await this.sendHttp("initialize", {
       protocolVersion: "2024-11-05",
-      capabilities: {},
+      capabilities: {
+        elicitation: {},
+      },
       clientInfo: { name: "KCode", version: "1.0.0" },
     });
     if (result && typeof result === "object" && "sessionId" in (result as Record<string, unknown>)) {
@@ -857,6 +940,37 @@ class McpHttpConnection {
     this.sseConnected = false;
   }
 
+  /**
+   * Handle a server-initiated JSON-RPC request (e.g., elicitation/create).
+   */
+  private handleServerRequest(request: { id: string | number; method: string; params?: Record<string, unknown> }): void {
+    if (request.method === "elicitation/create") {
+      const params = request.params as ElicitationRequest["params"];
+      const respond = (result: ElicitationResponse) => this.sendJsonRpcResponseHttp(request.id, result);
+
+      if (this.elicitationCallback) {
+        this.elicitationCallback(params).then(respond).catch(() => {
+          respond({ action: "deny" });
+        });
+      } else {
+        respond({ action: "deny" });
+      }
+    }
+  }
+
+  /**
+   * Send a JSON-RPC response back to the MCP server via HTTP POST.
+   */
+  private sendJsonRpcResponseHttp(id: string | number, result: unknown): void {
+    const url = this.config.url;
+    if (!url) return;
+    const headers = this.buildHeaders("application/json");
+    const body = JSON.stringify({ jsonrpc: "2.0", id, result });
+    fetch(url, { method: "POST", headers, body }).catch(() => {
+      // Best-effort response
+    });
+  }
+
   shutdown(): void {
     this.shutdownSse();
     this.sessionId = null;
@@ -898,6 +1012,19 @@ export class McpManager {
   private servers = new Map<string, McpConnection>();
   private serverConfigs = new Map<string, McpServerConfig>();
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private elicitationCallback?: ElicitationCallback;
+
+  /**
+   * Set a callback to handle elicitation requests from MCP servers.
+   * The callback is propagated to all current and future server connections.
+   */
+  setElicitationCallback(cb: ElicitationCallback): void {
+    this.elicitationCallback = cb;
+    // Propagate to all existing connections
+    for (const connection of this.servers.values()) {
+      connection.setElicitationCallback(cb);
+    }
+  }
 
   /**
    * Load MCP server configs from settings files and start all servers.
@@ -1006,6 +1133,11 @@ export class McpManager {
       const connection: McpConnection = isHttp
         ? new McpHttpConnection(name, config)
         : new McpServerConnection(name, config);
+
+      // Propagate elicitation callback to new connections
+      if (this.elicitationCallback) {
+        connection.setElicitationCallback(this.elicitationCallback);
+      }
 
       try {
         await connection.start();
