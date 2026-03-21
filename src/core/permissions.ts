@@ -224,13 +224,18 @@ export function analyzeBashCommand(command: string): {
   const pipeToShell = detectPipeToShell(command);
   if (pipeToShell) issues.push(pipeToShell);
 
-  const riskLevel =
+  let riskLevel: "safe" | "moderate" | "dangerous" =
     issues.length === 0 ? "safe" :
     issues.some((i) =>
       i.includes("injection") || i.includes("shell invocation") || i.includes("sensitive system path") || i.includes("pipes to shell")
     )
       ? "dangerous"
       : "moderate";
+
+  // Sudo commands are at least moderate risk
+  if (/\bsudo\b/.test(command) && riskLevel === "safe") {
+    riskLevel = "moderate";
+  }
 
   return { safe: issues.length === 0, issues, riskLevel };
 }
@@ -968,6 +973,20 @@ export class PermissionManager {
     if (tool.name === "Bash") {
       const input = tool.input as unknown as BashInput;
       const analysis = analyzeBashCommand(input.command);
+
+      // Elevate risk for security tools
+      const cmdWords = input.command.trimStart().split(/\s+/);
+      const baseCmd = (cmdWords[0] === "sudo" ? cmdWords[1] : cmdWords[0]) ?? "";
+      const ELEVATED_RISK_TOOLS = new Set([
+        "msfconsole", "nmap", "nikto", "sqlmap", "hydra", "john", "hashcat",
+        "aircrack", "aircrack-ng", "gobuster", "masscan", "wireshark", "tshark",
+        "responder", "crackmapexec", "enum4linux", "wfuzz", "dirb", "setoolkit",
+        "tcpdump", "searchsploit", "metasploit", "beef",
+      ]);
+      if (ELEVATED_RISK_TOOLS.has(baseCmd)) {
+        return "dangerous";
+      }
+
       return analysis.riskLevel;
     }
 

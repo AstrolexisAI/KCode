@@ -8,14 +8,14 @@ import { log } from "./logger";
 
 // Hard cap: system prompt must never exceed this fraction of context window
 const MAX_SYSTEM_PROMPT_RATIO = 0.30; // 30% of context window
-const ABSOLUTE_MAX_TOKENS = 12_000; // Never exceed 12K tokens regardless of context window
+const ABSOLUTE_MAX_TOKENS = 24_000; // Never exceed 24K tokens regardless of context window
 const CHARS_PER_TOKEN = 3.5; // Conservative estimate for English text
 
 // Priority levels — higher number = first to be truncated
 export enum SectionPriority {
   CRITICAL = 0,    // Identity, tools — never truncated
   HIGH = 1,        // Code guidelines, git, environment
-  MEDIUM = 2,      // Awareness, project instructions, metacognition
+  MEDIUM = 2,      // Project instructions, metacognition, situational awareness
   LOW = 3,         // Learnings, distillation, world model, narrative
   OPTIONAL = 4,    // Extended identity, user model, rules
 }

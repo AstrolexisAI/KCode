@@ -26,6 +26,7 @@ import { runDiagnostics } from "./core/doctor";
 import { getNarrativeManager } from "./core/narrative";
 import { closeDb } from "./core/db";
 import { shutdownMcpManager } from "./core/mcp";
+import { clearSudoPasswordCache } from "./tools/bash";
 import { getRulesManager } from "./core/rules";
 import { getPluginManager } from "./core/plugins";
 import { getLspManager, shutdownLsp } from "./core/lsp";
@@ -40,6 +41,35 @@ import { getBenchmarkSummary, formatBenchmarks, initBenchmarkSchema } from "./co
 
 // Version — hardcoded to avoid Bun bundler resolving wrong package.json
 const VERSION = "1.1.0";
+
+/** On Windows, pause before exit so the user can read error messages (console closes on exit).
+ *  Also writes error to a crash log file for diagnostics. */
+async function exitWithPause(code: number, errorMsg?: string): Promise<never> {
+  // Write crash log on Windows so users can report the issue even if the console closes
+  if (process.platform === "win32" && code !== 0) {
+    try {
+      const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
+      require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
+      require("node:fs").appendFileSync(crashLog,
+        `[${new Date().toISOString()}] Exit code ${code}${errorMsg ? `: ${errorMsg}` : ""}\n`);
+    } catch { /* ignore */ }
+  }
+
+  if (process.platform === "win32") {
+    // Always pause on Windows — isTTY may be unreliable in compiled binaries
+    console.log("\n\x1b[2mPress Enter to exit...\x1b[0m");
+    try {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 60_000); // auto-close after 60s
+        try {
+          process.stdin.resume();
+          process.stdin.once("data", () => { clearTimeout(timer); resolve(); });
+        } catch { resolve(); }
+      });
+    } catch { /* ignore stdin errors */ }
+  }
+  process.exit(code);
+}
 
 // Prevent unhandled errors from background child processes from crashing kcode.
 // Only exit on truly fatal errors — background I/O errors (ENXIO, ECONNREFUSED, etc.)
@@ -57,18 +87,43 @@ process.on("uncaughtException", (err) => {
   }
 
   // Fatal errors — log to stderr synchronously and exit
-  process.stderr.write(`\n[KCode CRASH] ${err.stack ?? msg}\n`);
+  const crashMsg = err.stack ?? msg;
+  process.stderr.write(`\n[KCode CRASH] ${crashMsg}\n`);
   log.error("process", `Uncaught exception: ${msg}`);
   log.shutdown();
+
+  // On Windows, write crash log and pause so user can read the error
+  if (process.platform === "win32") {
+    try {
+      const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
+      require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
+      require("node:fs").appendFileSync(crashLog, `[${new Date().toISOString()}] CRASH: ${crashMsg}\n`);
+      process.stderr.write(`\nCrash log saved to: ${crashLog}\n`);
+      process.stderr.write("Press Enter to exit...\n");
+      // Sync read — can't use async in uncaughtException handler
+      try { require("node:fs").readSync(0, Buffer.alloc(1)); } catch { /* ignore */ }
+    } catch { /* ignore */ }
+  }
   process.exit(1);
 });
 process.on("unhandledRejection", (reason) => {
   const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : undefined;
   log.error("process", `Unhandled rejection: ${msg}`);
+
+  // On Windows, write crash log for unhandled promise rejections too
+  if (process.platform === "win32") {
+    try {
+      const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
+      require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
+      require("node:fs").appendFileSync(crashLog, `[${new Date().toISOString()}] UNHANDLED REJECTION: ${stack ?? msg}\n`);
+    } catch { /* ignore */ }
+  }
 });
 
 // Graceful cleanup on signals
 function cleanupAndExit() {
+  clearSudoPasswordCache();
   shutdownLsp();
   shutdownMcpManager();
   closeDb();
@@ -496,7 +551,7 @@ program
       await runSetup({ model: opts.model, force: opts.force });
     } catch (err) {
       console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
-      process.exit(1);
+      await exitWithPause(1);
     }
   });
 
@@ -1710,6 +1765,10 @@ async function runMain(
       } catch (err) {
         console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
         console.error("You can run '\x1b[1mkcode setup\x1b[0m' manually to configure.");
+        if (err instanceof Error && err.stack) {
+          log.error("setup", err.stack);
+        }
+        await exitWithPause(1, `Setup failed: ${err instanceof Error ? err.message : err}`);
       }
     }
 
@@ -1718,13 +1777,13 @@ async function runMain(
       console.log("\n\x1b[33m⚠  KCode requires a license key to run.\x1b[0m");
       console.log("  Activate with: \x1b[1mkcode activate <license-key>\x1b[0m");
       console.log("  Purchase at:   \x1b[36mhttps://kulvex.ai\x1b[0m\n");
-      process.exit(1);
+      await exitWithPause(1, "License key required");
     }
 
     const licenseCheck = await checkLicense();
     if (!licenseCheck.valid) {
       console.log(`\n\x1b[31m✗  License error: ${licenseCheck.message}\x1b[0m\n`);
-      process.exit(1);
+      await exitWithPause(1, `License error: ${licenseCheck.message}`);
     }
 
     if (licenseCheck.grace) {
@@ -1744,7 +1803,7 @@ async function runMain(
           process.stderr.write(`\r\x1b[2mLoading model into VRAM...\x1b[0m\x1b[K`);
         } catch (err) {
           console.error(`\n\x1b[31m✗ Server start failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
-          process.exit(1);
+          await exitWithPause(1, `Server start failed: ${err instanceof Error ? err.message : err}`);
         }
       } else {
         port = getServerPort()!;

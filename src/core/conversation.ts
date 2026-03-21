@@ -28,6 +28,7 @@ import { UndoManager } from "./undo";
 import { TranscriptManager } from "./transcript";
 import { log } from "./logger";
 import { getWorldModel } from "./world-model";
+import { setSudoPasswordPromptFn as _setSudoPasswordPromptFn, type SudoPasswordPromptFn } from "../tools/bash";
 import { getUserModel } from "./user-model";
 import { generateCacheKey, getCachedResponse, setCachedResponse } from "./response-cache";
 import { getIntentionEngine } from "./intentions";
@@ -66,12 +67,43 @@ function extractBashLoopPattern(command: string): string | null {
   const forMatch2 = inner.match(/echo\s+["'][^"']*["'];\s*(.+)/);
   if (forMatch2) inner = forMatch2[1]!;
 
+  // Strip leading comments (lines starting with #) — LLMs often add descriptive comments
+  // before the actual command, which would otherwise match as "bash:#"
+  inner = inner.replace(/^(\s*#[^\n]*\n)+/g, "").trim();
+  // Also strip inline leading comment on single-line commands
+  if (inner.startsWith("#")) {
+    const newlineIdx = inner.indexOf("\n");
+    if (newlineIdx !== -1) {
+      inner = inner.slice(newlineIdx + 1).trim();
+    } else {
+      return null; // Pure comment, no command to pattern-match
+    }
+  }
+
+  // Strip variable assignments at the start (e.g. MISSING="" FOO=bar)
+  inner = inner.replace(/^(\s*\w+="[^"]*"\s*\n?)+/g, "").trim();
+  inner = inner.replace(/^(\s*\w+='[^']*'\s*\n?)+/g, "").trim();
+
+  // For piped commands (echo X | socat Y), use BOTH source and sink command names + target IP.
+  // This prevents false loop detection when sending different payloads to different IoT devices.
+  // e.g. "echo ... | socat - UDP:192.168.1.146:38899" → "bash:echo|socat@192.168.1.146"
+  const pipeMatch = inner.match(/^(\S+)\s+.*?\|\s*(\S+)/);
+  if (pipeMatch) {
+    const sourceCmd = pipeMatch[1]!.replace(/^.*\//, "");
+    const sinkCmd = pipeMatch[2]!.replace(/^.*\//, "");
+    // Extract target IP from the sink side of the pipe
+    const pipeRest = inner.slice(inner.indexOf("|") + 1);
+    const pipeIpMatch = pipeRest.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/);
+    const pipeSuffix = pipeIpMatch ? `@${pipeIpMatch[1]}` : "";
+    return `bash:${sourceCmd}|${sinkCmd}${pipeSuffix}`;
+  }
+
   // Extract the base binary/command (first word that looks like a tool)
   const words = inner.trim().split(/\s+/);
-  const skipPrefixes = new Set(["sudo", "nohup", "env", "bash", "-c", "sh"]);
+  const skipPrefixes = new Set(["sudo", "nohup", "env", "bash", "-c", "sh", "timeout"]);
   let baseCmd = "";
   for (const w of words) {
-    if (skipPrefixes.has(w) || w.startsWith("-") || w.startsWith("$") || w.startsWith("\"") || w.startsWith("'")) continue;
+    if (skipPrefixes.has(w) || w.startsWith("-") || w.startsWith("$") || w.startsWith("\"") || w.startsWith("'") || w.startsWith("#")) continue;
     baseCmd = w.replace(/^.*\//, ""); // strip path prefix
     break;
   }
@@ -79,12 +111,14 @@ function extractBashLoopPattern(command: string): string | null {
   if (!baseCmd) return null;
 
   // Group related tools into categories
-  const SCAN_TOOLS = new Set(["nmap", "masscan", "zmap", "netcat", "nc", "nbtscan", "nmblookup"]);
-  const SMB_TOOLS = new Set(["smbclient", "smbmap", "rpcclient", "enum4linux", "crackmapexec", "impacket-smbclient"]);
+  const SCAN_TOOLS = new Set(["nmap", "masscan", "zmap", "netcat", "nc", "nbtscan", "nmblookup", "nikto", "gobuster", "dirb", "wfuzz", "sqlmap", "searchsploit", "enum4linux"]);
+  const SMB_TOOLS = new Set(["smbclient", "smbmap", "rpcclient", "crackmapexec", "impacket-smbclient"]);
   const HTTP_TOOLS = new Set(["curl", "wget", "httpie", "http"]);
   const SSH_TOOLS = new Set(["ssh", "sshpass", "scp", "sftp"]);
   const EXPLOIT_TOOLS = new Set(["dcomexec", "psexec", "wmiexec", "atexec", "smbexec", "secretsdump", "msfconsole", "hydra", "medusa",
-    "impacket-smbexec", "impacket-psexec", "impacket-wmiexec", "impacket-dcomexec", "impacket-atexec", "impacket-secretsdump"]);
+    "impacket-smbexec", "impacket-psexec", "impacket-wmiexec", "impacket-dcomexec", "impacket-atexec", "impacket-secretsdump",
+    "setoolkit", "beef", "responder"]);
+  const BRUTE_TOOLS = new Set(["hashcat", "john", "aircrack-ng", "aircrack", "hydra", "medusa"]);
 
   // Extract target host/IP for more specific pattern grouping
   const ipMatch = inner.match(/\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/);
@@ -95,6 +129,7 @@ function extractBashLoopPattern(command: string): string | null {
   if (HTTP_TOOLS.has(baseCmd)) return `http-request${targetSuffix}`;
   if (SSH_TOOLS.has(baseCmd)) return `ssh-access${targetSuffix}`;
   if (EXPLOIT_TOOLS.has(baseCmd)) return `exploit-attempt${targetSuffix}`;
+  if (BRUTE_TOOLS.has(baseCmd)) return `bruteforce-attempt${targetSuffix}`;
 
   // For python3/python scripts, use the script name instead of "python3"
   if ((baseCmd === "python3" || baseCmd === "python") && words.length > 1) {
@@ -106,6 +141,16 @@ function extractBashLoopPattern(command: string): string | null {
         if (EXPLOIT_TOOLS.has(scriptName)) return "exploit-attempt";
         return `bash:${scriptName}`;
       }
+    }
+  }
+
+  // For file-writing commands (cat/tee with redirect), include target filename
+  // to avoid false loop detection when creating multiple different files
+  if ((baseCmd === "cat" || baseCmd === "tee") && /[>]|<</.test(inner)) {
+    const fileMatch = inner.match(/>\s*(\S+)|<<.*?\n.*?\n.*?>\s*(\S+)/);
+    if (fileMatch) {
+      const targetFile = fileMatch[1] ?? fileMatch[2];
+      if (targetFile) return `bash:${baseCmd}@${targetFile}`;
     }
   }
 
@@ -301,6 +346,7 @@ function isRetryableError(error: unknown): boolean {
       msg.includes("network") ||
       msg.includes("econnreset") ||
       msg.includes("econnrefused") ||
+      msg.includes("unable to connect") ||
       msg.includes("timeout") ||
       msg.includes("socket") ||
       msg.includes("429") ||
@@ -897,6 +943,11 @@ export class ConversationManager {
   /** Access the permission manager (e.g., to set the prompt callback from the UI). */
   getPermissions(): PermissionManager {
     return this.permissions;
+  }
+
+  /** Set the sudo password prompt callback (called from UI layer). */
+  setSudoPasswordPromptFn(fn: SudoPasswordPromptFn): void {
+    _setSudoPasswordPromptFn(fn);
   }
 
   /** Access the hook manager (e.g., to force reload). */
@@ -2353,12 +2404,17 @@ export class ConversationManager {
 
     log.info("llm", `Request to ${modelName} (${req.provider}) at ${req.url}`);
 
+    // Use a long timeout for large prompts (local models can take minutes to process 40K+ tokens)
+    const controller = this.abortController;
+    const timeoutMs = 300_000; // 5 minutes
+    const timeoutId = setTimeout(() => controller?.abort(), timeoutMs);
+
     const response = await fetch(req.url, {
       method: "POST",
       headers: req.headers,
       body: JSON.stringify(req.body),
-      signal: this.abortController?.signal,
-    });
+      signal: controller?.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
@@ -2397,6 +2453,26 @@ export class ConversationManager {
       } catch (error) {
         lastError =
           error instanceof Error ? error : new Error(String(error));
+
+        // If the router sent us to a different model and it failed, fall back to the
+        // primary model immediately instead of retrying the broken routed model.
+        {
+          let effectiveModel = this.config.model;
+          if (this.config.autoRoute !== false && !this.config.modelExplicitlySet) {
+            const recentText = this.getRecentMessageText();
+            effectiveModel = await routeToModel(this.config.model, recentText);
+          }
+          if (effectiveModel !== this.config.model) {
+            log.warn("llm", `Routed model ${effectiveModel} failed, falling back to primary ${this.config.model}`);
+            try {
+              const stream = await this.executeModelRequest(this.config.model);
+              log.info("llm", `Primary model ${this.config.model} connected after routed model failure`);
+              return stream;
+            } catch (primaryErr) {
+              log.error("llm", `Primary model also failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
+            }
+          }
+        }
 
         if (attempt < this.maxRetries && isRetryableError(error)) {
           const delay = computeRetryDelay(attempt);

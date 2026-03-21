@@ -24,6 +24,7 @@ import PermissionDialog, {
   type PermissionRequest,
   type PermissionChoice,
 } from "./components/PermissionDialog.js";
+import SudoPasswordPrompt from "./components/SudoPasswordPrompt.js";
 import ContextGrid from "./components/ContextGrid.js";
 import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
 import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
@@ -35,7 +36,7 @@ interface AppProps {
   initialSessionName?: string;
 }
 
-type AppMode = "input" | "responding" | "permission" | "cloud" | "toggle";
+type AppMode = "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle";
 
 export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
   const { exit } = useApp();
@@ -154,6 +155,23 @@ export default function App({ config, conversationManager, tools, initialSession
             granted: choice === "allow" || choice === "allow_always",
             alwaysAllow: choice === "allow_always",
           });
+        });
+      });
+    });
+  });
+
+  // Sudo password prompt state
+  const [sudoPasswordResolver, setSudoPasswordResolver] = useState<
+    ((password: string | null) => void) | null
+  >(null);
+
+  // Wire up sudo password prompt callback so Bash tool can ask for password
+  useState(() => {
+    conversationManager.setSudoPasswordPromptFn(async () => {
+      return new Promise<string | null>((resolve) => {
+        setMode("sudo-password");
+        setSudoPasswordResolver(() => (password: string | null) => {
+          resolve(password);
         });
       });
     });
@@ -1281,6 +1299,17 @@ export default function App({ config, conversationManager, tools, initialSession
     [permissionResolver],
   );
 
+  const handleSudoPassword = useCallback(
+    (password: string | null) => {
+      if (sudoPasswordResolver) {
+        sudoPasswordResolver(password);
+        setSudoPasswordResolver(null);
+        setMode("responding");
+      }
+    },
+    [sudoPasswordResolver],
+  );
+
   const handleCloudDone = useCallback(
     async (result: CloudResult | null) => {
       if (!result) {
@@ -1432,6 +1461,13 @@ export default function App({ config, conversationManager, tools, initialSession
           />
         )}
 
+        {mode === "sudo-password" && (
+          <SudoPasswordPrompt
+            onSubmit={handleSudoPassword}
+            isActive={mode === "sudo-password"}
+          />
+        )}
+
         {mode === "cloud" && (
           <CloudMenu
             isActive={mode === "cloud"}
@@ -1509,7 +1545,7 @@ export default function App({ config, conversationManager, tools, initialSession
       />
       <InputPrompt
         onSubmit={handleSubmit}
-        isActive={mode !== "permission" && mode !== "cloud" && mode !== "toggle"}
+        isActive={mode !== "permission" && mode !== "sudo-password" && mode !== "cloud" && mode !== "toggle"}
         isQueuing={mode === "responding"}
         queueSize={messageQueue.length}
         model={config.model}
