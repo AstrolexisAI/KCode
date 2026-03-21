@@ -57,13 +57,14 @@ export class SystemPromptBuilder {
     }
 
     // User-defined awareness modules (~/.kcode/awareness/*.md)
+    // HIGH priority — these contain critical operational knowledge (networking, smart home, etc.)
     for (const mod of this.loadAwarenessModules()) {
-      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-global" });
+      sections.push({ content: mod, priority: SectionPriority.HIGH, label: "awareness-global" });
     }
 
     // Project-level awareness (.kcode/awareness/*.md in project)
     for (const mod of this.loadAwarenessModules(config.workingDirectory)) {
-      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-project" });
+      sections.push({ content: mod, priority: SectionPriority.HIGH, label: "awareness-project" });
     }
 
     // Project-specific instructions
@@ -308,6 +309,8 @@ Execute shell commands. Reserve for actual shell operations.
 - For long-running commands, use run_in_background: true
 - **NEVER use pkill/killall with broad patterns** like "serve", "server", "node", "python". Always use specific PIDs: \`kill $(lsof -ti :PORT)\` or \`pkill -f "exact-command-name"\` with the full command.
 - **NEVER kill processes you didn't start.** Only kill processes that YOU launched during this session.
+- **SUDO**: For commands requiring elevated privileges, just use \`sudo <command>\` normally. The system will automatically prompt the user for their password via a secure masked dialog. **NEVER** use \`sudo -S\`, pipe passwords via echo/printf, use here-strings (\`<<<\`), or pass passwords through variables. All of these will be blocked.
+- **SECURITY TOOLS**: msfconsole must use \`-r script.rc\` or \`-x "commands"\` for non-interactive mode. Security tools (nmap, nikto, sqlmap, hydra, etc.) get extended timeouts automatically. Do NOT ask the user for passwords via AskUser — the system handles sudo authentication.
 
 ## Plan
 Create structured plans for multi-step tasks.
