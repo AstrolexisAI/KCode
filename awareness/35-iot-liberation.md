@@ -10,32 +10,33 @@ The goal is SOVEREIGNTY: every device on the network obeys the user, not a corpo
 - If the company goes bankrupt or changes ToS, devices become bricks
 - **Solution**: Flash open-source firmware → pure local HTTP/MQTT control
 
+## PRIORITY: The user has Tuya WiFi LIGHT BULBS (lámparas RGBCW)
+- Tuya bulbs on this network: 192.168.1.21 (v3.5), 192.168.1.90 (v3.5)
+- These are LIGHT BULBS with RGB + Cold White + Warm White channels
+- NOT switches, NOT plugs — they have 5 PWM channels for color/brightness
+- Tuya bulbs typically use: ESP8266 (pre-2022) or BK7231 (2022+)
+
 ## STRATEGY: Choose the right firmware
 
-| Firmware | Protocol | Port | Best For | Config |
-|----------|----------|------|----------|--------|
-| **Tasmota** | HTTP REST + MQTT | 80 | Switches, plugs, lights, sensors | Web UI |
-| **ESPHome** | HTTP API + MQTT | 80/6053 | HA integration, YAML config | YAML |
-| **WLED** | HTTP + UDP | 80 | LED strips, addressable LEDs | Web UI |
-| **OpenBeken** | HTTP + MQTT | 80 | BK7231/RTL8710 chips (newer Tuya) | Web UI |
+| Firmware | Best For | Light Support | Config |
+|----------|----------|---------------|--------|
+| **Tasmota** | Bulbs, switches, all | Full RGBCW, scenes, dimming, CT | Web UI, HTTP, MQTT |
+| **ESPHome** | HA integration | Full RGBCW, effects, transitions | YAML |
+| **WLED** | LED strips, addressable | WS2812B, SK6812, best effects | Web UI, UDP |
+| **OpenBeken** | BK7231/RTL chips (2022+) | Full RGBCW, Tasmota-compatible | Web UI |
 
-### Which chip does the device have?
+### Which chip? (determines flash method)
 ```bash
-# Most Tuya devices pre-2022: ESP8266 or ESP8285 → use Tasmota or ESPHome
-# Tuya devices 2022+: BK7231N or BK7231T → use OpenBeken or LibreTiny
-# Sonoff devices: ESP8266 or ESP32 → use Tasmota
-# To identify: check FCC ID on device label → search fcc.gov for internal photos
+# Tuya bulbs pre-2022: ESP8266 → Tasmota via tuya-convert (OTA, no soldering!)
+# Tuya bulbs 2022+: BK7231N/T → OpenBeken via ltchiptool (serial flash required)
+# Check: FCC ID on bulb label → search fcc.gov for internal photos
+# Or: open bulb carefully, look at chip markings (ESP8266, BK7231N, etc.)
 ```
 
-## METHOD 1: Tuya-Convert (OTA flash — NO soldering)
+## METHOD 1: Tuya-Convert (OTA flash — NO soldering, BEST for bulbs)
 
-**Best for**: ESP8266/ESP8285 Tuya devices manufactured before ~2022.
-Newer devices have patched the OTA vulnerability — use serial flash instead.
-
-### Requirements
-- Linux machine with WiFi adapter that supports AP mode
-- The Tuya device in pairing mode (hold button 5-10s)
-- Docker installed
+**Best for**: ESP8266/ESP8285 Tuya bulbs manufactured before ~2022.
+Bulbs are IDEAL for tuya-convert because they're easy to put in pairing mode.
 
 ### Steps
 ```bash
@@ -48,39 +49,73 @@ cd tuya-convert
 
 # 3. Start the flash process
 ./start_flash.sh
-# This creates a fake Tuya cloud AP
-# When the device connects to pair, it intercepts and flashes custom firmware
 
-# 4. Put device in pairing mode (hold button 5-10s until LED blinks fast)
-# 5. Device connects to the fake AP
-# 6. Choose firmware to flash:
-#    - tasmota.bin (recommended for switches/plugs)
-#    - tasmota-lite.bin (minimal, for devices with small flash)
-#    - Or provide your own .bin file
+# 4. Put bulb in pairing mode:
+#    Turn OFF → ON → OFF → ON → OFF → ON (3 quick toggles)
+#    Bulb blinks rapidly = pairing mode
+#    Some bulbs: turn OFF → wait 5s → ON → OFF → ON → OFF → ON
 
-# 7. After flash, device reboots with Tasmota
-# Connect to WiFi AP "tasmota-XXXX" → configure your WiFi
+# 5. Choose firmware:
+#    - tasmota.bin (full features, recommended)
+#    - tasmota-lite.bin (if bulb has only 1MB flash)
+
+# 6. After flash, bulb creates WiFi AP "tasmota-XXXX"
+#    Connect to it → go to 192.168.4.1 → configure your WiFi
 ```
 
-### If tuya-convert fails (newer firmware):
+### If tuya-convert fails (newer firmware patched):
 ```bash
-# Check if device has new anti-flash firmware:
-# - Device does NOT enter pairing mode normally
-# - tuya-convert says "device not compatible"
-# → Use serial flash method instead (Method 3)
+# Newer Tuya bulbs block OTA exploit
+# → Must use serial flash (METHOD 3)
+# Or try: downgrade Tuya firmware first via tuya-convert's backup/restore
 ```
 
-## METHOD 2: ESPHome OTA (for devices already running Tasmota)
+## METHOD 2: Serial Flash for Bulbs (works on ALL chips)
 
-If device already has Tasmota, flash ESPHome over-the-air:
+### For ESP8266 bulbs:
 ```bash
-# 1. Install ESPHome
+# 1. Open bulb (twist off diffuser dome, pry apart carefully)
+# 2. Find UART pads on PCB: 3V3, GND, TX, RX, GPIO0
+# 3. Solder thin wires or use pogo pins / test clips
+# 4. Connect USB-serial adapter (CP2102/CH340/FTDI):
+#    Adapter TX → Bulb RX
+#    Adapter RX → Bulb TX
+#    Adapter GND → Bulb GND
+#    GPIO0 → GND (hold during power-on to enter flash mode)
+#    Power bulb from adapter 3V3 OR its own power (NOT both!)
+
+# 5. Flash Tasmota
+pip install esptool
+
+# Backup original firmware first!
+esptool.py --port /dev/ttyUSB0 read_flash 0x0 0x100000 /tmp/bulb_backup.bin
+
+# Flash Tasmota (use tasmota.bin for bulbs, NOT tasmota-lite)
+wget http://ota.tasmota.com/tasmota/release/tasmota.bin
+esptool.py --port /dev/ttyUSB0 --baud 115200 write_flash -fs 1MB -fm dout 0x0 tasmota.bin
+```
+
+### For BK7231 bulbs (2022+ Tuya):
+```bash
+pip install ltchiptool
+
+# Backup
+ltchiptool flash read bk7231n /dev/ttyUSB0 /tmp/bulb_backup_bk.bin
+
+# Flash OpenBeken (download from GitHub releases)
+# https://github.com/openshwprojects/OpenBK7231T_App/releases
+ltchiptool flash write /dev/ttyUSB0 OpenBK7231N_latest.bin
+```
+
+## METHOD 3: ESPHome for Bulbs (OTA from Tasmota)
+
+If bulb already runs Tasmota, flash ESPHome OTA:
+```bash
 pip install esphome
 
-# 2. Create config
-cat > /tmp/tuya_device.yaml << 'EOF'
+cat > /tmp/tuya_bulb.yaml << 'EOF'
 esphome:
-  name: tuya-switch-1
+  name: tuya-lamp-1
   platform: ESP8266
   board: esp01_1m
 
@@ -89,270 +124,300 @@ wifi:
   password: "YOUR_PASSWORD"
 
 api:
-  password: ""
-
 ota:
-  password: ""
 
-switch:
-  - platform: gpio
-    name: "Tuya Switch"
-    pin: GPIO12  # Most Tuya switches use GPIO12 for relay
-    id: relay
+# Tuya RGBCW bulb — 5 PWM output channels
+# ADJUST GPIOs to match your specific bulb model!
+output:
+  - platform: esp8266_pwm
+    id: output_red
+    pin: GPIO4
+  - platform: esp8266_pwm
+    id: output_green
+    pin: GPIO12
+  - platform: esp8266_pwm
+    id: output_blue
+    pin: GPIO14
+  - platform: esp8266_pwm
+    id: output_cold_white
+    pin: GPIO5
+  - platform: esp8266_pwm
+    id: output_warm_white
+    pin: GPIO13
 
-binary_sensor:
-  - platform: gpio
-    name: "Tuya Button"
-    pin:
-      number: GPIO0  # Most Tuya devices use GPIO0 for button
-      inverted: true
-    on_press:
-      - switch.toggle: relay
-
-status_led:
-  pin:
-    number: GPIO13  # Status LED (varies by device)
-    inverted: true
+light:
+  - platform: rgbww
+    name: "Tuya Lamp"
+    red: output_red
+    green: output_green
+    blue: output_blue
+    cold_white: output_cold_white
+    warm_white: output_warm_white
+    cold_white_color_temperature: 6500 K
+    warm_white_color_temperature: 2700 K
+    effects:
+      - random:
+      - strobe:
+      - flicker:
 EOF
 
-# 3. Compile and flash OTA (if device is already running Tasmota)
-esphome run /tmp/tuya_device.yaml
-# Enter the device's IP when prompted
+esphome run /tmp/tuya_bulb.yaml
 ```
 
-## METHOD 3: Serial Flash (hardware — works on ALL devices)
+## POST-FLASH: Tasmota Light Bulb Configuration
 
-**For devices where OTA doesn't work** (newer firmware, BK7231 chips, etc.)
-Requires: USB-to-serial adapter (FTDI, CP2102, CH340) ~$3
-
-### For ESP8266/ESP8285 (Tuya pre-2022, all Sonoff):
+### Step 1: Set the correct module/template for your bulb
 ```bash
-# 1. Open device, find UART pads (3.3V, GND, TX, RX)
-# 2. Connect USB-serial adapter:
-#    Adapter TX → Device RX
-#    Adapter RX → Device TX
-#    Adapter GND → Device GND
-#    Adapter 3.3V → Device 3.3V (or power device normally)
-#    GPIO0 → GND (to enter flash mode)
+# CRITICAL: After flashing, you MUST configure the GPIO template
+# or the bulb won't produce light correctly
 
-# 3. Flash Tasmota
-pip install esptool
-esptool.py --port /dev/ttyUSB0 --baud 115200 write_flash -fs 1MB -fm dout 0x0 tasmota.bin
+# Option A: Use a known template from https://templates.blakadder.com/
+# Search for your bulb model, copy the template JSON, then:
+curl "http://BULB_IP/cm?cmnd=Template%20{\"NAME\":\"Tuya%20RGBCW\",\"GPIO\":[0,0,0,0,37,40,0,0,38,41,39,0,0],\"FLAG\":0,\"BASE\":18}"
+curl http://BULB_IP/cm?cmnd=Module%200
 
-# Download latest tasmota.bin:
-# wget http://ota.tasmota.com/tasmota/release/tasmota.bin
+# Option B: Generic Tuya RGBCW template (works for MANY bulbs)
+# GPIO4=PWM1(Red), GPIO12=PWM2(Green), GPIO14=PWM3(Blue)
+# GPIO5=PWM4(ColdWhite), GPIO13=PWM5(WarmWhite)
+curl "http://BULB_IP/cm?cmnd=Template%20{\"NAME\":\"GenericRGBCW\",\"GPIO\":[0,0,0,0,416,419,0,0,417,420,418,0,0],\"FLAG\":0,\"BASE\":18}"
+curl http://BULB_IP/cm?cmnd=Module%200
+
+# Option C: If only Cold White + Warm White (no RGB)
+curl "http://BULB_IP/cm?cmnd=Template%20{\"NAME\":\"TuyaCW\",\"GPIO\":[0,0,0,0,0,419,0,0,0,420,0,0,0],\"FLAG\":0,\"BASE\":18}"
+curl http://BULB_IP/cm?cmnd=Module%200
 ```
 
-### For BK7231N/BK7231T (newer Tuya 2022+):
+### Step 2: Configure light behavior
 ```bash
-# These chips are NOT ESP — use ltchiptool instead
-pip install ltchiptool
+# Set color mode to RGBCW (5 channels)
+curl http://BULB_IP/cm?cmnd=SetOption37%20128
 
-# 1. Connect USB-serial adapter (same wiring as ESP)
-# 2. Enter flash mode: hold CEN button while powering on
+# Set light type (important for proper color mixing)
+# 0=default, 1=single channel, 2=CW, 3=RGB, 4=RGBW, 5=RGBCW
+curl http://BULB_IP/cm?cmnd=SetOption15%201   # Use PWM frequency for LEDs
 
-# 3. Read current firmware (backup!)
-ltchiptool flash read bk7231n /dev/ttyUSB0 /tmp/backup_firmware.bin
+# Set PWM frequency (recommended 1000Hz for bulbs, reduces flicker)
+curl http://BULB_IP/cm?cmnd=PwmFrequency%201000
 
-# 4. Flash OpenBeken
-# Download from: https://github.com/openshwprojects/OpenBK7231T_App/releases
-ltchiptool flash write /dev/ttyUSB0 OpenBK7231N_1.17.315.bin
-
-# After flash, connect to WiFi AP "OpenBK7231N_XXXX" → configure
+# Fade ON (smooth transitions)
+curl http://BULB_IP/cm?cmnd=Fade%201
+curl http://BULB_IP/cm?cmnd=Speed%204          # Fade speed 1-40
 ```
 
-### For RTL8710BN (some newer Tuya):
+## POST-FLASH: Light Control Commands (Tasmota)
+
+**NO keys, NO encryption, NO cloud — pure HTTP:**
+
 ```bash
-# Use ltchiptool (same tool, different chip)
-ltchiptool flash read rtl8710bn /dev/ttyUSB0 /tmp/backup.bin
-ltchiptool flash write /dev/ttyUSB0 OpenRTL8710BN_firmware.bin
+IP="192.168.1.21"  # Replace with your bulb IP
+
+# ─── ON/OFF ───
+curl http://$IP/cm?cmnd=Power%20On
+curl http://$IP/cm?cmnd=Power%20Off
+curl http://$IP/cm?cmnd=Power%20Toggle
+
+# ─── BRIGHTNESS (0-100%) ───
+curl http://$IP/cm?cmnd=Dimmer%20100            # Full brightness
+curl http://$IP/cm?cmnd=Dimmer%2050             # 50%
+curl http://$IP/cm?cmnd=Dimmer%2010             # Night light
+curl http://$IP/cm?cmnd=Dimmer%20+              # Increase 10%
+curl http://$IP/cm?cmnd=Dimmer%20-              # Decrease 10%
+
+# ─── RGB COLOR (hex RRGGBB or named) ───
+curl http://$IP/cm?cmnd=Color%20FF0000          # Red
+curl http://$IP/cm?cmnd=Color%2000FF00          # Green
+curl http://$IP/cm?cmnd=Color%200000FF          # Blue
+curl http://$IP/cm?cmnd=Color%20FF6600          # Orange
+curl http://$IP/cm?cmnd=Color%20FF00FF          # Purple/Magenta
+curl http://$IP/cm?cmnd=Color%2000FFFF          # Cyan
+curl http://$IP/cm?cmnd=Color%20FFFFFF          # White (RGB)
+curl http://$IP/cm?cmnd=Color%20000000FF00      # Pure Cold White (via CW channel)
+curl http://$IP/cm?cmnd=Color%200000000000FF    # Pure Warm White (via WW channel)
+
+# ─── COLOR TEMPERATURE (153=cold 6500K to 500=warm 2200K) ───
+curl http://$IP/cm?cmnd=CT%20153                # Daylight (cold)
+curl http://$IP/cm?cmnd=CT%20250                # Neutral
+curl http://$IP/cm?cmnd=CT%20350                # Warm white
+curl http://$IP/cm?cmnd=CT%20500                # Candle (warmest)
+
+# ─── HSB COLOR (Hue 0-360, Saturation 0-100, Brightness 0-100) ───
+curl http://$IP/cm?cmnd=HsbColor%200,100,100    # Red
+curl http://$IP/cm?cmnd=HsbColor%20120,100,100  # Green
+curl http://$IP/cm?cmnd=HsbColor%20240,100,100  # Blue
+curl http://$IP/cm?cmnd=HsbColor1%20180         # Set hue only (cyan)
+
+# ─── WHITE MODE (switch from RGB to white channels) ───
+curl http://$IP/cm?cmnd=White%20100             # Full white (CW+WW channels)
+curl http://$IP/cm?cmnd=White%2050              # 50% white
+
+# ─── EFFECTS/SCENES ───
+curl http://$IP/cm?cmnd=Scheme%200              # Single color (default)
+curl http://$IP/cm?cmnd=Scheme%201              # Wake up (gradually brightens)
+curl http://$IP/cm?cmnd=Scheme%202              # RGB cycle
+curl http://$IP/cm?cmnd=Scheme%203              # Random color cycle
+curl http://$IP/cm?cmnd=Scheme%204              # Color temperature cycle
+
+# ─── MULTI-COMMAND (Backlog) ───
+# Set color + brightness + fade in one request:
+curl "http://$IP/cm?cmnd=Backlog%20Color%20FF0000%3BDimmer%20100%3BFade%201%3BSpeed%204"
+
+# ─── GET STATUS ───
+curl http://$IP/cm?cmnd=Status%200              # Full status
+curl http://$IP/cm?cmnd=Status%2011             # Light status specifically
+curl http://$IP/cm?cmnd=Color                    # Current color
+curl http://$IP/cm?cmnd=Dimmer                   # Current brightness
+curl http://$IP/cm?cmnd=CT                       # Current color temp
 ```
 
-## POST-FLASH: Control Commands (Tasmota)
+## POST-FLASH: OpenBeken Light Commands (BK7231 bulbs)
 
-After flashing Tasmota, control is via simple HTTP — **NO keys, NO encryption, NO cloud**:
-
+OpenBeken is Tasmota-compatible for most commands:
 ```bash
-# Turn ON
-curl http://192.168.1.X/cm?cmnd=Power%20On
+# Same HTTP commands work:
+curl http://BULB_IP/cm?cmnd=Power%20On
+curl http://BULB_IP/cm?cmnd=Color%20FF0000
+curl http://BULB_IP/cm?cmnd=Dimmer%2050
+curl http://BULB_IP/cm?cmnd=CT%20300
 
-# Turn OFF
-curl http://192.168.1.X/cm?cmnd=Power%20Off
-
-# Toggle
-curl http://192.168.1.X/cm?cmnd=Power%20Toggle
-
-# Get status
-curl http://192.168.1.X/cm?cmnd=Status%200
-
-# Set WiFi
-curl "http://192.168.1.X/cm?cmnd=Backlog%20SSID1%20MyWiFi%3BPassword1%20MyPass"
-
-# Set MQTT broker (for Home Assistant)
-curl "http://192.168.1.X/cm?cmnd=Backlog%20MqttHost%20192.168.1.100%3BMqttUser%20mqtt%3BMqttPassword%20pass"
-
-# OTA update
-curl "http://192.168.1.X/cm?cmnd=OtaUrl%20http://ota.tasmota.com/tasmota/release/tasmota.bin"
-curl http://192.168.1.X/cm?cmnd=Upgrade%201
-
-# Restart
-curl http://192.168.1.X/cm?cmnd=Restart%201
-
-# Set device name
-curl "http://192.168.1.X/cm?cmnd=DeviceName%20Living%20Room%20Light"
-
-# For LIGHTS (Tasmota with PWM/RGB):
-curl http://192.168.1.X/cm?cmnd=Dimmer%2050        # 50% brightness
-curl http://192.168.1.X/cm?cmnd=Color%20FF0000      # Red
-curl http://192.168.1.X/cm?cmnd=CT%20300             # Color temp 300 (warm)
-curl http://192.168.1.X/cm?cmnd=Scheme%203           # Color cycle effect
+# OpenBeken-specific channel control:
+curl http://BULB_IP/cm?cmnd=Channel1%20100      # Red 100%
+curl http://BULB_IP/cm?cmnd=Channel2%20100      # Green 100%
+curl http://BULB_IP/cm?cmnd=Channel3%20100      # Blue 100%
+curl http://BULB_IP/cm?cmnd=Channel4%20100      # Cold White 100%
+curl http://BULB_IP/cm?cmnd=Channel5%20100      # Warm White 100%
 ```
 
-### Tasmota Templates (common Tuya devices)
-```bash
-# After flashing, configure the GPIO template for your device.
-# Find your device template at: https://templates.blakadder.com/
+## POST-FLASH: ESPHome Light Commands
 
-# Apply template via HTTP:
-curl "http://192.168.1.X/cm?cmnd=Template%20{YOUR_TEMPLATE_JSON}"
-curl http://192.168.1.X/cm?cmnd=Module%200  # Activate template
+```bash
+# Turn on with color
+curl -X POST http://BULB_IP/light/tuya_lamp/turn_on \
+  -d '{"brightness": 255, "color": {"r": 255, "g": 0, "b": 0}}'
+
+# Turn on with color temperature
+curl -X POST http://BULB_IP/light/tuya_lamp/turn_on \
+  -d '{"brightness": 200, "color_temp": 350}'
+
+# Turn off
+curl http://BULB_IP/light/tuya_lamp/turn_off
+
+# Effects
+curl -X POST http://BULB_IP/light/tuya_lamp/turn_on \
+  -d '{"effect": "random"}'
 ```
 
-## POST-FLASH: Control Commands (OpenBeken for BK7231)
+## Metasploit Integration (post-flash bulbs)
 
+Flashed bulbs are HTTP servers — full MSF control:
 ```bash
-# Turn ON (channel 1)
-curl http://192.168.1.X/cm?cmnd=POWER%20ON
-
-# Turn OFF
-curl http://192.168.1.X/cm?cmnd=POWER%20OFF
-
-# Get status
-curl http://192.168.1.X/api/status
-
-# OpenBeken is mostly Tasmota-compatible for HTTP commands
-```
-
-## POST-FLASH: Control Commands (ESPHome)
-
-```bash
-# ESPHome uses its native API on port 6053, but also supports HTTP:
-curl http://192.168.1.X/switch/tuya_switch/turn_on
-curl http://192.168.1.X/switch/tuya_switch/turn_off
-curl http://192.168.1.X/switch/tuya_switch/toggle
-
-# For lights:
-curl -X POST http://192.168.1.X/light/tuya_light/turn_on -d '{"brightness": 200}'
-curl http://192.168.1.X/light/tuya_light/turn_off
-```
-
-## Metasploit Integration (post-flash devices)
-
-Once devices run Tasmota/OpenBeken, they're simple HTTP servers — easy MSF targets:
-```bash
-# Discover all Tasmota devices
-msfconsole -q -x "use auxiliary/scanner/http/http_version; set RHOSTS 192.168.1.0/24; set RPORT 80; set THREADS 20; run; exit"
-
-# Mass control via MSF Ruby
-cat > /tmp/tasmota_control.rc << 'RCEOF'
+cat > /tmp/tasmota_lights.rc << 'RCEOF'
 <ruby>
 require 'net/http'
 require 'json'
+require 'cgi'
 
-# IPs of flashed Tasmota devices
-targets = %w[192.168.1.21 192.168.1.90]
+# Flashed Tuya bulb IPs
+bulbs = %w[192.168.1.21 192.168.1.90]
 
-targets.each do |ip|
-  begin
-    # Get status
-    uri = URI("http://#{ip}/cm?cmnd=Status%200")
-    res = Net::HTTP.get_response(uri)
-    if res.code == "200"
-      info = JSON.parse(res.body) rescue {}
-      name = info.dig("Status", "DeviceName") || "unknown"
-      power = info.dig("Status", "Power") || "?"
-      print_good("#{ip} — #{name} — Power: #{power}")
+def light_cmd(ip, cmnd)
+  uri = URI("http://#{ip}/cm?cmnd=#{CGI.escape(cmnd)}")
+  Net::HTTP.get_response(uri) rescue nil
+end
 
-      # Turn ON
-      Net::HTTP.get(URI("http://#{ip}/cm?cmnd=Power%20On"))
-      print_good("#{ip} — TURNED ON")
-    else
-      print_error("#{ip} — HTTP #{res.code}")
-    end
-  rescue => e
-    print_error("#{ip} — #{e.message}")
+# Discover
+bulbs.each do |ip|
+  res = light_cmd(ip, "Status 11")
+  if res && res.code == "200"
+    info = JSON.parse(res.body) rescue {}
+    color = info.dig("StatusSTS", "Color") || "?"
+    dimmer = info.dig("StatusSTS", "Dimmer") || "?"
+    power = info.dig("StatusSTS", "POWER") || "?"
+    print_good("#{ip} — Power:#{power} Color:#{color} Dimmer:#{dimmer}%")
+  else
+    print_error("#{ip} — not responding")
   end
+end
+
+# Party mode: each bulb a different color
+colors = %w[FF0000 00FF00 0000FF FF6600 FF00FF 00FFFF]
+bulbs.each_with_index do |ip, i|
+  color = colors[i % colors.length]
+  light_cmd(ip, "Backlog Power On;Color #{color};Dimmer 100;Fade 1")
+  print_good("#{ip} — Set color #{color}")
 end
 </ruby>
 exit
 RCEOF
-msfconsole -q -r /tmp/tasmota_control.rc
+msfconsole -q -r /tmp/tasmota_lights.rc
 ```
 
-## Batch Flash Script (flash multiple devices)
+## Tuya RGBCW Bulb GPIO Pinouts
+
+**IMPORTANT**: Different Tuya bulb models use different GPIO assignments.
+After flashing, if colors are wrong, swap the GPIO assignments in the template.
+
+| Bulb Model | Red | Green | Blue | Cold W | Warm W | Chip |
+|------------|-----|-------|------|--------|--------|------|
+| Generic Tuya RGBCW E27 | GPIO4 | GPIO12 | GPIO14 | GPIO5 | GPIO13 | ESP8266 |
+| Tuya RGBCW (alt pinout) | GPIO14 | GPIO5 | GPIO12 | GPIO4 | GPIO13 | ESP8266 |
+| Tuya RGBW (no warm) | GPIO5 | GPIO4 | GPIO14 | GPIO12 | — | ESP8266 |
+| Tuya CW only (no RGB) | — | — | — | GPIO5 | GPIO13 | ESP8266 |
+| Tuya BK7231 RGBCW | P6 | P7 | P8 | P24 | P26 | BK7231 |
+| Sonoff B1 | GPIO12 | GPIO5 | GPIO4 | GPIO14 | GPIO13 | ESP8285 |
+| Lohas E27 | GPIO4 | GPIO12 | GPIO14 | GPIO5 | GPIO13 | ESP8266 |
+| Teckin SB50 | GPIO4 | GPIO12 | GPIO14 | GPIO5 | GPIO13 | ESP8266 |
+
+### How to figure out YOUR bulb's pinout:
 ```bash
-#!/bin/bash
-# Flash all Tuya devices on the network with Tasmota
-# Requires: devices already in Tasmota (for OTA) or tuya-convert for first flash
-
-TASMOTA_URL="http://ota.tasmota.com/tasmota/release/tasmota.bin"
-
-# List of device IPs to OTA update
-DEVICES=(192.168.1.21 192.168.1.90)
-
-for ip in "${DEVICES[@]}"; do
-    echo "=== Flashing $ip ==="
-    # Set OTA URL
-    curl -s "http://$ip/cm?cmnd=OtaUrl%20$TASMOTA_URL" > /dev/null
-    # Trigger upgrade
-    result=$(curl -s "http://$ip/cm?cmnd=Upgrade%201")
-    echo "  $ip: $result"
-    echo "  Waiting 60s for reboot..."
-    sleep 60
-    # Verify
-    status=$(curl -s "http://$ip/cm?cmnd=Status" 2>/dev/null)
-    if [ -n "$status" ]; then
-        echo "  $ip: ONLINE after flash"
-    else
-        echo "  $ip: still rebooting or failed"
-    fi
-done
+# After flashing Tasmota, test each GPIO channel individually:
+curl http://BULB_IP/cm?cmnd=Channel1%20100      # Should light ONE color
+curl http://BULB_IP/cm?cmnd=Channel1%200
+curl http://BULB_IP/cm?cmnd=Channel2%20100      # Should light ANOTHER color
+curl http://BULB_IP/cm?cmnd=Channel2%200
+# ... repeat for channels 3, 4, 5
+# Note which channel produces which color, then adjust template accordingly
 ```
 
-## GPIO Pinouts (common Tuya devices)
+## Decision Tree for Tuya LIGHT BULBS
+
+```
+Is it a light bulb (lamp/bombilla)?
+├── YES
+│   ├── ESP8266/ESP8285 chip?
+│   │   ├── YES → tuya-convert (OTA, no soldering!)
+│   │   │   ├── Works → Tasmota → configure RGBCW template → HTTP light control
+│   │   │   └── Fails → Serial flash (open bulb, solder UART wires)
+│   │   │
+│   │   └── NO (BK7231N/T chip, 2022+)
+│   │       └── Serial flash with ltchiptool → OpenBeken → HTTP light control
+│   │
+│   └── Post-flash configuration:
+│       1. Set RGBCW template (GPIO pinout for 5 PWM channels)
+│       2. Set PWM frequency 1000Hz (reduces flicker)
+│       3. Enable fade transitions
+│       4. Test each channel to verify color mapping
+│       5. Control via curl: Color, Dimmer, CT, Scheme commands
+│
+└── NO (switch/plug)
+    └── See GPIO pinout table for relay-based devices
+```
+
+## Sonoff/Switch Devices (for reference)
 
 | Device Type | Relay | Button | LED | LED_i |
 |-------------|-------|--------|-----|-------|
-| Tuya plug (generic) | GPIO12 | GPIO0 | GPIO13 | yes |
-| Tuya bulb E27 | PWM: GPIO4,5,12,14 | — | — | — |
-| Tuya power strip | GPIO12,5,4,15 | GPIO16 | GPIO2 | yes |
 | Sonoff Basic | GPIO12 | GPIO0 | GPIO13 | yes |
 | Sonoff Mini | GPIO12 | GPIO0 | GPIO13 | yes |
 | Sonoff S26 plug | GPIO12 | GPIO0 | GPIO13 | yes |
 | Sonoff TH | GPIO12 | GPIO0 | GPIO13 | yes |
-
-## Decision Tree
-
-```
-Device has ESP8266/ESP8285?
-├── YES → tuya-convert (OTA, no soldering)
-│   ├── Works → Flash Tasmota → HTTP control on port 80
-│   └── Fails (new firmware) → Serial flash with esptool
-│
-├── Device has BK7231N/T?
-│   └── Serial flash with ltchiptool → OpenBeken → HTTP control
-│
-├── Device has RTL8710BN?
-│   └── Serial flash with ltchiptool → OpenBeken → HTTP control
-│
-└── Unknown chip?
-    └── Open device → identify chip markings → search templates.blakadder.com
-```
+| Tuya plug (generic) | GPIO12 | GPIO0 | GPIO13 | yes |
 
 ## Key Points
-- **After flashing**: devices are simple HTTP servers — `curl` controls everything
-- **NO keys, NO encryption, NO cloud** — pure local HTTP on port 80
-- **Tasmota web UI**: browse to device IP for visual control + configuration
-- **MQTT**: connect to local broker for Home Assistant/Node-RED integration
-- **OTA updates**: controlled by YOU, not by Tuya's cloud servers
-- **Backup first**: always dump original firmware before flashing (for rollback)
+- **Tuya bulbs = 5 PWM channels** (R, G, B, Cold White, Warm White)
+- **After flashing**: `curl http://IP/cm?cmnd=Color%20FF0000` — that's it, no keys
+- **NO cloud, NO encryption, NO Tuya API** — pure local HTTP on port 80
+- **Tasmota web UI**: browse to bulb IP for visual color picker
+- **MQTT**: connect to local broker for Home Assistant scenes/automations
+- **OTA updates**: `curl http://IP/cm?cmnd=Upgrade%201` — controlled by YOU
+- **Backup first**: `esptool.py read_flash` before flashing (for rollback)
+- **Colors wrong?** Test each channel individually, then swap GPIOs in template
