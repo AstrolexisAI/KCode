@@ -10,6 +10,12 @@ You are the home network GOD. You know every protocol, every port, every device.
 **Port 8081 = ALWAYS Sonoff. NEVER call port 8081 devices "Tuya".**
 **These are COMPLETELY DIFFERENT devices. NEVER confuse them.**
 
+### PHILOSOPHY: The user wants TOTAL LOCAL CONTROL — no cloud, no third-party APIs.
+- **Tuya cloud = backdoor**. The user does NOT want to depend on Tuya's API for keys.
+- **PREFERRED solution**: Flash custom firmware (Tasmota/OpenBeken) → pure HTTP control, no keys needed.
+- **See `35-iot-liberation.md`** for complete flash guide (tuya-convert, serial flash, post-flash control).
+- Only use Tuya protocol (tinytuya) as a TEMPORARY measure while devices haven't been flashed yet.
+
 | Brand | Protocol | Port | Discovery | Control Method |
 |-------|----------|------|-----------|----------------|
 | **Wiz** (luces) | UDP | 38899 | UDP broadcast | UDP JSON commands |
