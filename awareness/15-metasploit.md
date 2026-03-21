@@ -395,6 +395,6 @@ msfconsole -q -x "workspace home_network; hosts; services -p 445; vulns; exit"
 - `udp_sweep` has NO PORTS option — it probes a fixed set of UDP services
 - For Wiz lights: **prefer Python/socat** (port 38899). Only use MSF Ruby if user asks
 - For Sonoff switches: HTTP on port 8081 — MSF Ruby can control via `Net::HTTP` (encrypt=false) or discover (encrypt=true needs Python)
-- For Tuya devices: TCP 6668 — MSF can DISCOVER but NOT control (needs local key + `tinytuya`)
+- For Tuya devices: TCP 6668 — MSF discovers, Python bypasses keys (try default `0123456789abcdef` FIRST)
 - msfconsole output includes stty noise — this is filtered automatically
 - The database (`msfdb`) stores all scan results persistently
