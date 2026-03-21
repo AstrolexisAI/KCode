@@ -74,3 +74,6 @@ For encrypted devices (error 401), MSF Ruby does NOT have `pycryptodome` — use
 - Los Sonoff son SWITCHES de enchufe, no luces inteligentes con colores
 - MSF puede descubrir y controlar Sonoff (encrypt=false) via Net::HTTP
 - Para encrypt=true: necesitas API key + Python con pycryptodome
+- **MEJOR SOLUCIÓN**: Flashear Tasmota con tuya-convert o serial → control HTTP puro sin keys
+- Sonoff usan ESP8266/ESP32 → 100% compatible con Tasmota
+- Ver `35-iot-liberation.md` para guía completa de flash
