@@ -135,6 +135,8 @@ function extractBashLoopPattern(command: string): string | null {
   if ((baseCmd === "python3" || baseCmd === "python") && words.length > 1) {
     for (const w of words.slice(1)) {
       if (w.startsWith("-")) continue;
+      // Heredocs (python3 << 'EOF') are always unique inline scripts — skip loop detection
+      if (w.startsWith("<")) return null;
       // Extract script name from path (e.g. ~/.local/bin/dcomexec.py → dcomexec)
       const scriptName = w.replace(/^.*\//, "").replace(/\.py$/, "");
       if (scriptName) {
@@ -143,6 +145,10 @@ function extractBashLoopPattern(command: string): string | null {
       }
     }
   }
+
+  // Heredocs with any command are generally unique — skip loop detection
+  // e.g. "ruby << 'EOF'", "bash << 'HEREDOC'", "node << 'JS'"
+  if (/<<[-~]?\s*['"]?\w+['"]?/.test(inner)) return null;
 
   // For file-writing commands (cat/tee with redirect), include target filename
   // to avoid false loop detection when creating multiple different files
