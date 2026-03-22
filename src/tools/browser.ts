@@ -167,6 +167,9 @@ async function fallbackNavigate(url: string): Promise<string> {
 // ─── Executor ───────────────────────────────────────────────────
 
 export async function executeBrowser(input: Record<string, unknown>): Promise<ToolResult> {
+  const { requirePro } = await import("../core/pro.js");
+  await requirePro("browser");
+
   const { action, url } = input as { action: string; url: string };
 
   if (!url) {

@@ -7,7 +7,7 @@ import { getModelBaseUrl } from "./models.js";
 // ─── Constants ───────────────────────────────────────────────────
 
 const SUMMARY_MAX_TOKENS = 1024;
-const SUMMARY_MODEL = "mnemo:code3"; // Use the local code model for summaries
+const SUMMARY_MODEL = "mnemo:mark5"; // Use the local model for summaries
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 
 const SUMMARY_SYSTEM_PROMPT =

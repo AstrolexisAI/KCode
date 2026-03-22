@@ -82,10 +82,13 @@ export function indexAllTranscripts(reindex: boolean = false): { indexed: number
 /**
  * Search transcripts using FTS5. Returns results ranked by relevance.
  */
-export function searchTranscripts(
+export async function searchTranscripts(
   query: string,
   maxResults: number = 20,
-): TranscriptSearchResult[] {
+): Promise<TranscriptSearchResult[]> {
+  const { requirePro } = await import("./pro.js");
+  await requirePro("transcript-search");
+
   if (!query.trim()) return [];
 
   const db = getDb();

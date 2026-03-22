@@ -32,7 +32,7 @@ import { getPluginManager } from "./core/plugins";
 import { getLspManager, shutdownLsp } from "./core/lsp";
 import { runSetup, isSetupComplete, getAvailableModels } from "./core/model-manager";
 import { startServer, stopServer, getServerStatus, ensureServer, isServerRunning, getServerPort } from "./core/llama-server";
-import { activateLicense, checkLicense, hasLicense, getLicenseInfo, clearLicense } from "./core/license";
+import { isPro, clearProCache, PRO_FEATURES } from "./core/pro";
 import { performUpdate, checkForUpdate } from "./core/updater";
 import { setSandboxMode } from "./tools/bash";
 import { getSandboxCapabilities } from "./core/sandbox";
@@ -40,7 +40,7 @@ import { voiceToText, isVoiceAvailable } from "./core/voice";
 import { getBenchmarkSummary, formatBenchmarks, initBenchmarkSchema } from "./core/benchmarks";
 
 // Version — hardcoded to avoid Bun bundler resolving wrong package.json
-const VERSION = "1.1.0";
+const VERSION = "1.3.0";
 
 /** On Windows, pause before exit so the user can read error messages (console closes on exit).
  *  Also writes error to a crash log file for diagnostics. */
@@ -611,61 +611,92 @@ serverCmd
 // ─── Activate subcommand ────────────────────────────────────────
 
 program
-  .command("activate <license-key>")
-  .description("Activate a license key for this machine")
-  .action(async (licenseKey: string) => {
-    console.log("\nActivating license...\n");
+  .command("activate <pro-key>")
+  .description("Activate a KCode Pro key (legacy alias for 'kcode pro activate')")
+  .action(async (proKey: string) => {
+    // Delegate to pro activate logic
+    const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
+    const settings = await loadUserSettingsRaw();
+    settings.proKey = proKey;
+    await saveUserSettingsRaw(settings);
+    clearProCache();
 
-    const result = await activateLicense(licenseKey);
-
-    if (result.valid) {
-      console.log(`\x1b[32m✓\x1b[0m License activated successfully!`);
-      console.log(`  Tier: ${result.tier}`);
-      console.log(`  This license is now bound to this machine.\n`);
+    if (await isPro()) {
+      console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
+      console.log(`  Pro features are now unlocked.\n`);
     } else {
-      console.error(`\x1b[31m✗\x1b[0m ${result.message}\n`);
+      console.error(`\x1b[31m✗\x1b[0m Invalid Pro key format.\n`);
+      console.error(`  Expected format: kcode_pro_<32+ hex chars>`);
+      console.error(`  Get a key at: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
+      // Remove invalid key
+      delete settings.proKey;
+      await saveUserSettingsRaw(settings);
+      clearProCache();
       process.exit(1);
     }
   });
 
-// ─── License subcommand ─────────────────────────────────────────
+// ─── Pro subcommand ─────────────────────────────────────────
 
-const licenseCmd = program
-  .command("license")
-  .description("Manage your KCode license");
+const proCmd = program
+  .command("pro")
+  .description("Manage KCode Pro subscription");
 
-licenseCmd
+proCmd
   .command("status")
-  .description("Show current license status")
+  .description("Show Pro status and available features")
   .action(async () => {
-    const info = getLicenseInfo();
-    if (!info) {
-      console.log("\x1b[2m○ No license\x1b[0m");
-      console.log("  Activate with: kcode activate <license-key>");
-      return;
+    const pro = await isPro();
+    if (pro) {
+      console.log(`\x1b[32m● KCode Pro active\x1b[0m\n`);
+    } else {
+      console.log(`\x1b[2m○ KCode Pro not active\x1b[0m`);
+      console.log(`  Activate: kcode pro activate <your-pro-key>`);
+      console.log(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
     }
 
-    const result = await checkLicense();
-    if (result.valid) {
-      console.log(`\x1b[32m● Licensed\x1b[0m`);
-      console.log(`  Tier:      ${info.tier}`);
-      console.log(`  Activated: ${new Date(info.activatedAt).toLocaleDateString()}`);
-      console.log(`  Validated: ${new Date(info.lastValidated).toLocaleDateString()}`);
-      if (result.grace) {
-        console.log(`  \x1b[33m⚠ Offline mode — connect to re-validate\x1b[0m`);
-      }
+    console.log(`  Pro features:`);
+    for (const [key, desc] of Object.entries(PRO_FEATURES)) {
+      const icon = pro ? "\x1b[32m✓\x1b[0m" : "\x1b[2m○\x1b[0m";
+      console.log(`    ${icon} ${desc} \x1b[2m(${key})\x1b[0m`);
+    }
+    console.log();
+  });
+
+proCmd
+  .command("activate <pro-key>")
+  .description("Activate a Pro key")
+  .action(async (proKey: string) => {
+    const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
+    const settings = await loadUserSettingsRaw();
+    settings.proKey = proKey;
+    await saveUserSettingsRaw(settings);
+    clearProCache();
+
+    if (await isPro()) {
+      console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
+      console.log(`  Pro features are now unlocked.\n`);
     } else {
-      console.log(`\x1b[31m● Invalid\x1b[0m`);
-      console.log(`  ${result.message}`);
+      console.error(`\x1b[31m✗\x1b[0m Invalid Pro key format.`);
+      console.error(`  Expected: kcode_pro_<32+ hex chars>`);
+      console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
+      delete settings.proKey;
+      await saveUserSettingsRaw(settings);
+      clearProCache();
+      process.exit(1);
     }
   });
 
-licenseCmd
+proCmd
   .command("deactivate")
-  .description("Remove license from this machine")
-  .action(() => {
-    clearLicense();
-    console.log("License removed from this machine.");
+  .description("Remove Pro key from this machine")
+  .action(async () => {
+    const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
+    const settings = await loadUserSettingsRaw();
+    delete settings.proKey;
+    await saveUserSettingsRaw(settings);
+    clearProCache();
+    console.log("Pro key removed.");
   });
 
 // ─── Teach subcommand ──────────────────────────────────────────
@@ -1210,7 +1241,7 @@ program
     }
 
     // Use FTS search
-    const results = searchTranscripts(query, maxResults);
+    const results = await searchTranscripts(query, maxResults);
 
     if (results.length === 0) {
       // Fallback: try linear search for partial matches
@@ -1530,7 +1561,7 @@ _kcode_completions() {
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
 
-  commands="models setup server activate license stats doctor teach init resume search watch new update benchmark completions serve history"
+  commands="models setup server activate pro stats doctor teach init resume search watch new update benchmark completions serve history"
 
   if [ $COMP_CWORD -eq 1 ]; then
     COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
@@ -1752,12 +1783,12 @@ async function runMain(
 
   // ─── Managed mode (launched by Kulvex WebUI) ──────────────
   // When KCODE_MANAGED=1, an external server (Jarvis) manages the llama-server.
-  // Skip wizard, license check, and server auto-start — just connect to KCODE_API_BASE.
+  // Skip wizard and server auto-start — just connect to KCODE_API_BASE.
   const isManaged = process.env.KCODE_MANAGED === "1";
 
   if (!isManaged) {
     // Auto-setup on first run — launch the installation wizard
-    // The wizard handles license activation and PATH installation
+    // The wizard handles PATH installation and model setup
     if (!isSetupComplete()) {
       console.log("\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n");
       try {
@@ -1770,24 +1801,6 @@ async function runMain(
         }
         await exitWithPause(1, `Setup failed: ${err instanceof Error ? err.message : err}`);
       }
-    }
-
-    // ─── License check ─────────────────────────────────────────
-    if (!hasLicense()) {
-      console.log("\n\x1b[33m⚠  KCode requires a license key to run.\x1b[0m");
-      console.log("  Activate with: \x1b[1mkcode activate <license-key>\x1b[0m");
-      console.log("  Purchase at:   \x1b[36mhttps://kulvex.ai\x1b[0m\n");
-      await exitWithPause(1, "License key required");
-    }
-
-    const licenseCheck = await checkLicense();
-    if (!licenseCheck.valid) {
-      console.log(`\n\x1b[31m✗  License error: ${licenseCheck.message}\x1b[0m\n`);
-      await exitWithPause(1, `License error: ${licenseCheck.message}`);
-    }
-
-    if (licenseCheck.grace) {
-      process.stderr.write("\x1b[33m⚠ Offline mode — connect to the internet to re-validate your license\x1b[0m\n");
     }
 
     // Auto-start llama-server and wait for model to be fully loaded

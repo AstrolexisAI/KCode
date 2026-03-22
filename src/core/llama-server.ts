@@ -88,14 +88,40 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
 
   if (isMlx) {
     // MLX: python3 -m mlx_lm.server --model <repo> --port <port> --host 127.0.0.1
+    // If model > RAM, use a wrapper that sets mx.metal.set_wired_limit() for disk offloading.
+    // Inspired by flash-moe's "Trust the OS" — let the page cache stream weights from NVMe SSD.
     cmd = config.enginePath; // venv python3
-    args = [
-      "-m", "mlx_lm.server",
-      "--model", config.mlxRepo ?? config.modelPath,
-      "--port", port.toString(),
-      "--host", "127.0.0.1",
-    ];
-    log.info("server", `Starting MLX server on port ${port}: ${cmd} ${args.join(" ")}`);
+    const mlxModel = config.mlxRepo ?? config.modelPath;
+
+    if (config.mlxWiredLimitMB) {
+      // Disk offloading mode: cap wired memory so OS has room for page cache.
+      // mx.set_wired_limit() controls how much RAM is locked (non-swappable).
+      // Excess model weights stream from NVMe SSD via OS page cache (~7 GB/s).
+      // We monkey-patch set_wired_limit after our call so main() can't override it.
+      const wiredBytes = config.mlxWiredLimitMB * 1024 * 1024;
+      // Sanitize model name to prevent injection (only allow alphanumeric, -, /, .)
+      const safeModel = mlxModel.replace(/[^a-zA-Z0-9\-\/._]/g, "");
+      const wrapperScript =
+`import mlx.core as mx
+if hasattr(mx, 'set_wired_limit'):
+    mx.set_wired_limit(${wiredBytes})
+    _orig = mx.set_wired_limit
+    mx.set_wired_limit = lambda *a, **kw: _orig(${wiredBytes})
+import sys
+sys.argv = ['mlx_lm.server', '--model', '${safeModel}', '--port', '${port}', '--host', '127.0.0.1']
+from mlx_lm.server import main
+main()`;
+      args = ["-c", wrapperScript];
+      log.info("server", `Starting MLX server with disk offloading (wired: ${config.mlxWiredLimitMB}MB) on port ${port}`);
+    } else {
+      args = [
+        "-m", "mlx_lm.server",
+        "--model", mlxModel,
+        "--port", port.toString(),
+        "--host", "127.0.0.1",
+      ];
+      log.info("server", `Starting MLX server on port ${port}: ${cmd} ${args.join(" ")}`);
+    }
   } else {
     // llama.cpp
     if (!existsSync(config.modelPath)) {
@@ -111,6 +137,7 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
       "--n-gpu-layers", config.gpuLayers.toString(),
       "--parallel", "1",
       "--metrics",
+      "--mmap",  // Enable mmap for SSD-backed weight streaming (flash-moe principle)
     ];
 
     // Multi-GPU tensor split
@@ -118,6 +145,11 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
       const totalVram = config.gpus.reduce((s, g) => s + g.vramMB, 0);
       const splits = config.gpus.map((g) => (g.vramMB / totalVram).toFixed(2));
       args.push("--tensor-split", splits.join(","));
+    }
+
+    const isPartialOffload = config.gpuLayers > 0 && config.gpuLayers !== -1;
+    if (isPartialOffload) {
+      log.info("server", `Partial GPU offload: ${config.gpuLayers} layers on GPU, rest via mmap (SSD/RAM)`);
     }
 
     log.info("server", `Starting llama-server on port ${port}: ${cmd} ${args.join(" ")}`);

@@ -5,11 +5,10 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { mkdirSync, existsSync, unlinkSync, renameSync, chmodSync, copyFileSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { log } from "./logger";
 import { detectHardware, formatHardware, type HardwareInfo, type GpuInfo } from "./hardware";
 import { addModel, setDefaultModel } from "./models";
-import { activateLicense, hasLicense } from "./license";
+// license.ts removed — Pro gating handled by pro.ts
 
 // ─── Paths & Config ─────────────────────────────────────────────
 
@@ -47,12 +46,25 @@ interface CatalogEntry {
 }
 
 // ── Model Catalog ────────────────────────────────────────────────────────
+// mark5-pico: Qwen3-4B dense — tiny, fits 4GB GPUs or CPU-only, tool calling
 // mark5-nano: Qwen3-8B dense — fast, fits 12GB GPUs, native tool calling
 // mark5-mini to mark5-max: Qwen3-Coder-30B-A3B MoE (30B total, 3.3B active)
 //   MoE models need 16GB+ because all experts must be in VRAM even though
 //   only 3.3B params are active per token.
 // mark5-80b: Qwen3-Coder-Next (dense 80B) — flagship
 const MODEL_CATALOG: CatalogEntry[] = [
+  {
+    codename: "mnemo:mark5-pico",
+    paramBillions: 4,
+    quant: "Q4_K_M",
+    sizeGB: 2.6,
+    minVramMB: 3072,
+    contextSize: 16384,
+    localFile: "mark5-pico.gguf",
+    description: "Compact 4B abliterated — fits 4GB GPUs or CPU, uncensored",
+    mlxRepo: "mlx-community/Qwen3.5-4B-MLX-4bit",
+    mlxQuant: "4bit",
+  },
   {
     codename: "mnemo:mark5-nano",
     paramBillions: 8,
@@ -62,6 +74,8 @@ const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 32768,
     localFile: "mark5-nano.gguf",
     description: "Fast dense 8B — fits 12GB GPUs, native tool calling",
+    mlxRepo: "mlx-community/Qwen3-8B-8bit",
+    mlxQuant: "8bit",
   },
   {
     codename: "mnemo:mark5-mini",
@@ -72,6 +86,8 @@ const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 32768,
     localFile: "mark5-mini.gguf",
     description: "MoE 30B — fits 16GB GPUs (3.3B active per token)",
+    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+    mlxQuant: "4bit",
   },
   {
     codename: "mnemo:mark5-mid",
@@ -82,6 +98,8 @@ const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 32768,
     localFile: "mark5-mid.gguf",
     description: "MoE 30B — fits 24GB GPUs (3.3B active per token)",
+    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+    mlxQuant: "4bit",
   },
   {
     codename: "mnemo:mark5-max",
@@ -92,6 +110,8 @@ const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 32768,
     localFile: "mark5-max.gguf",
     description: "Best quality MoE — fits 32GB GPUs (3.3B active per token)",
+    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-8bit",
+    mlxQuant: "8bit",
   },
   {
     codename: "mnemo:mark5-80b",
@@ -102,6 +122,18 @@ const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 40960,
     localFile: "mark5-80b.gguf",
     description: "Maximum power — flagship dense 80B model",
+    mlxRepo: "mlx-community/Qwen3-Coder-Next-4bit",
+    mlxQuant: "4bit",
+  },
+  {
+    codename: "mnemo:mark5-titan",
+    paramBillions: 235,
+    quant: "Q3_K_M",
+    sizeGB: 105,
+    minVramMB: 57344,
+    contextSize: 40960,
+    localFile: "mark5-titan.gguf",
+    description: "MoE 235B abliterated — 22B active per token, massive reasoning, uncensored",
   },
 ];
 
@@ -125,21 +157,57 @@ export function getAvailableModels(): { codename: string; paramBillions: number;
 
 /** Recommend the best model for the detected hardware */
 export function recommendModel(hw: HardwareInfo): CatalogEntry {
-  // Available VRAM — for GPU inference we need VRAM, for CPU we use RAM
-  const availableMB = hw.totalVramMB > 0
-    ? hw.totalVramMB
-    : hw.ramMB * 0.7; // CPU mode: use ~70% of RAM
+  // ── macOS Apple Silicon: unified memory + SSD offloading ──────
+  // On Apple Silicon, RAM = VRAM (unified memory). Models larger than RAM
+  // can still run via mlx_lm's disk offloading — Apple's fast NVMe SSDs
+  // (~7 GB/s) make this viable at reduced speed. We allow models up to
+  // 2x RAM with offloading, and up to 1x RAM at full speed.
+  if (hw.platform === "darwin" && hw.arch === "arm64") {
+    const ramMB = hw.ramMB;
+    let best: CatalogEntry | null = null;
+    for (const entry of MODEL_CATALOG) {
+      if (!entry.mlxRepo) continue; // skip non-MLX models
+      const modelMB = entry.sizeGB * 1024;
+      // Full speed: model fits in 80% of RAM (leave room for KV cache + OS)
+      // Offloaded: model up to 2x RAM — disk offloading kicks in, slower but works
+      const maxModelMB = ramMB * 2;
+      if (modelMB <= maxModelMB) {
+        best = entry;
+      }
+    }
+    // Fallback to GGUF-based selection if no MLX models match
+    if (best) return best;
+  }
 
-  // Find the largest model that fits.
-  // minVramMB already represents the minimum GPU VRAM needed (includes KV cache overhead).
-  let best = MODEL_CATALOG[0]; // smallest as default
+  // ── Discrete GPU: pick largest model that can run ─────────────
+  // Priority: full VRAM fit > partial GPU offload (GPU + CPU/RAM via mmap)
+  // With mmap, llama.cpp streams layers that don't fit in VRAM from SSD/RAM.
+  // We allow models up to VRAM + 70% of system RAM (mmap handles the rest).
+  if (hw.totalVramMB > 0) {
+    let best: CatalogEntry | null = null;
+    const totalCapacityMB = hw.totalVramMB + hw.ramMB * 0.7;
+    for (const entry of MODEL_CATALOG) {
+      const modelMB = entry.sizeGB * 1024;
+      if (modelMB <= totalCapacityMB) {
+        best = entry;
+      }
+    }
+    if (best) return best;
+  }
+
+  // ── CPU mode: model runs in system RAM via mmap ────────────────
+  // With mmap, models larger than RAM can work (SSD-backed pages) but are slow.
+  // We recommend up to 1.5x RAM — mmap streams the overflow from SSD.
+  const availableRAM = hw.ramMB * 1.5;
+  let cpuBest: CatalogEntry | null = null;
   for (const entry of MODEL_CATALOG) {
-    if (entry.minVramMB <= availableMB) {
-      best = entry;
+    const neededRamMB = entry.sizeGB * 1024 * 1.2; // 20% overhead for KV cache
+    if (neededRamMB <= availableRAM) {
+      cpuBest = entry;
     }
   }
 
-  return best;
+  return cpuBest ?? MODEL_CATALOG[0];
 }
 
 /** Find a catalog entry by codename */
@@ -324,6 +392,10 @@ export async function downloadMlxModel(entry: CatalogEntry, onProgress?: (msg: s
 
 /** Download llama.cpp server binary for the current platform */
 export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string) => void): Promise<string> {
+  // Clean up corrupt engine dir from previous failed installs
+  if (existsSync(ENGINE_DIR) && !getEnginePath()) {
+    try { require("node:fs").rmSync(ENGINE_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
   ensureDir(ENGINE_DIR);
   const progress = onProgress ?? ((msg: string) => process.stderr.write(`\r  ${msg}`));
 
@@ -361,15 +433,61 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
   progress("Extracting...");
   await extractArchive(archivePath, ENGINE_DIR);
 
+  // Log extracted files for diagnostics
+  try {
+    const { readdirSync } = require("node:fs");
+    const allFiles = readdirSync(ENGINE_DIR);
+    log.info("setup", `Extracted to ${ENGINE_DIR}: [${allFiles.slice(0, 20).join(", ")}]${allFiles.length > 20 ? ` ... (${allFiles.length} total)` : ""}`);
+    // Also check subdirectories
+    for (const f of allFiles) {
+      const sub = join(ENGINE_DIR, f);
+      try {
+        if (require("node:fs").statSync(sub).isDirectory()) {
+          const subFiles = readdirSync(sub);
+          log.info("setup", `  subdir ${f}/: [${subFiles.slice(0, 10).join(", ")}]${subFiles.length > 10 ? ` ...` : ""}`);
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
   // Find llama-server in extracted files
   const serverBin = findBinaryInDir(ENGINE_DIR, "llama-server");
   if (!serverBin) {
-    throw new Error("llama-server binary not found in extracted archive");
+    // Provide detailed error for diagnostics
+    let contents = "";
+    try {
+      const { readdirSync } = require("node:fs");
+      contents = readdirSync(ENGINE_DIR).join(", ");
+    } catch { /* ignore */ }
+    throw new Error(`llama-server binary not found in extracted archive. Engine dir contents: [${contents}]`);
   }
 
   // Make executable on Unix
   if (hw.platform !== "win32") {
     chmodSync(serverBin, 0o755);
+  }
+
+  // On Windows with CUDA: also download the cudart DLLs package
+  if (hw.platform === "win32" && hw.cudaAvailable) {
+    const cudartAsset = release.assets.find((a) =>
+      a.name.startsWith("cudart") && a.name.includes("win") && a.name.endsWith(".zip")
+    );
+    if (cudartAsset) {
+      progress("Downloading CUDA runtime DLLs...");
+      const cudartPath = join(ENGINE_DIR, cudartAsset.name);
+      if (!existsSync(cudartPath)) {
+        try {
+          await downloadFile(cudartAsset.browser_download_url, cudartPath, (pct) => {
+            progress(`CUDA runtime: ${pct}`);
+          });
+          await extractArchive(cudartPath, ENGINE_DIR);
+          try { unlinkSync(cudartPath); } catch { /* ignore */ }
+        } catch (err) {
+          log.warn("setup", `Failed to download CUDA runtime: ${err instanceof Error ? err.message : err}`);
+          // Not fatal — llama-server may still work without bundled cudart if CUDA toolkit is installed
+        }
+      }
+    }
   }
 
   // Move all shared libraries (.so, .dylib, .dll) next to the binary
@@ -436,18 +554,29 @@ function findEngineAsset(assetNames: string[], hw: HardwareInfo): string | null 
     if (cudaAvailable) {
       if (cudaVersion) {
         const major = cudaVersion.split(".")[0];
+        // llama.cpp asset names: llama-bXXXX-bin-win-cuda-12.4-x64.zip
+        patterns.push(`win-cuda-${cudaVersion}-${arch}`);
+        patterns.push(`win-cuda-${major}`);
+        // Legacy format: win-cuda-cuXX
         patterns.push(`win-cuda-cu${cudaVersion}-${arch}`);
         patterns.push(`win-cuda-cu${major}`);
       }
       patterns.push(`win-cuda`);
+      // Vulkan also uses GPU on Windows
+      patterns.push(`win-vulkan-${arch}`);
     }
+    // CPU fallback
+    patterns.push(`win-cpu-${arch}`);
     patterns.push(`win-${arch}`);
   }
 
   // Match against available assets
+  // Skip cudart-* packages (CUDA runtime only, no llama-server binary)
   for (const pattern of patterns) {
     const match = assetNames.find((name) =>
-      name.includes(pattern) && (name.endsWith(".tar.gz") || name.endsWith(".zip"))
+      name.includes(pattern) &&
+      (name.endsWith(".tar.gz") || name.endsWith(".zip")) &&
+      !name.startsWith("cudart")
     );
     if (match) return match;
   }
@@ -477,8 +606,13 @@ export async function downloadModel(codename: string, onProgress?: (msg: string)
     progress(`Downloading ${entry.codename} (${entry.sizeGB} GB, ${entry.split} parts)...`);
     for (let i = 1; i <= entry.split; i++) {
       const partSuffix = `-${i.toString().padStart(5, "0")}-of-${entry.split.toString().padStart(5, "0")}`;
-      const partLocalName = entry.localFile.replace(".gguf", `${partSuffix}.gguf`);
-      const partUrl = `${MODEL_CDN}/${partLocalName}`;
+      // localFile may or may not have .gguf — normalize
+      const baseName = entry.localFile.replace(/\.gguf$/, "");
+      const partLocalName = `${baseName}${partSuffix}.gguf`;
+      // Use cdnUrl as base pattern if set (HuggingFace), otherwise Kulvex CDN
+      const partUrl = entry.cdnUrl
+        ? `${entry.cdnUrl}${partSuffix}.gguf`
+        : `${MODEL_CDN}/${partLocalName}`;
       const partPath = join(MODELS_DIR, partLocalName);
 
       if (!existsSync(partPath)) {
@@ -488,7 +622,8 @@ export async function downloadModel(codename: string, onProgress?: (msg: string)
       }
     }
     // The first part IS the model file for llama.cpp split format
-    const firstPart = entry.localFile.replace(".gguf", "-00001-of-" + entry.split.toString().padStart(5, "0") + ".gguf");
+    const baseName = entry.localFile.replace(/\.gguf$/, "");
+    const firstPart = `${baseName}-00001-of-${entry.split.toString().padStart(5, "0")}.gguf`;
     progress(`${entry.codename} downloaded\n`);
     return join(MODELS_DIR, firstPart);
   }
@@ -633,22 +768,62 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   const entry = findCatalogEntry(targetCodename) ?? recommended;
 
   // Show model catalog as a visual table
+  const isMacMLX = shouldUseMlx() && entry.mlxRepo;
   const availableVram = hw.totalVramMB > 0 ? hw.totalVramMB : hw.ramMB * 0.7;
-  console.log(`    ${C.dim}Model                Size      VRAM     Status${C.reset}`);
-  console.log(`    ${C.dim}${"─".repeat(52)}${C.reset}`);
+  console.log(`    ${C.dim}Model                Size    ${isMacMLX ? "  Needs" : "  VRAM"}     Status${C.reset}`);
+  console.log(`    ${C.dim}${"─".repeat(58)}${C.reset}`);
 
   for (const m of MODEL_CATALOG) {
-    const fits = m.minVramMB <= availableVram;
     const isSelected = m.codename === entry.codename;
+    let fits: boolean;
+    let statusStr: string;
+
+    if (isMacMLX && m.mlxRepo) {
+      // macOS Apple Silicon: unified memory + SSD disk offloading
+      const modelMB = m.sizeGB * 1024;
+      const fitsInRam = modelMB <= hw.ramMB * 0.8;
+      const fitsWithOffload = modelMB <= hw.ramMB * 2;
+      fits = fitsWithOffload;
+
+      if (isSelected) {
+        statusStr = fitsInRam
+          ? `${C.green}${C.bold}← SELECTED${C.reset}`
+          : `${C.green}${C.bold}← SELECTED ${C.yellow}(SSD offload)${C.reset}`;
+      } else if (fitsInRam) {
+        statusStr = `${C.green}compatible${C.reset}`;
+      } else if (fitsWithOffload) {
+        statusStr = `${C.cyan}SSD offload${C.reset}`;
+      } else {
+        statusStr = `${C.red}too large${C.reset}`;
+      }
+    } else {
+      // Linux/Windows: check VRAM fit, GPU+RAM fit (mmap), or too large
+      const fitsVram = m.minVramMB <= availableVram;
+      const modelMB = m.sizeGB * 1024;
+      const totalCapMB = (hw.totalVramMB > 0 ? hw.totalVramMB : 0) + hw.ramMB * 0.7;
+      const fitsWithMmap = modelMB <= totalCapMB;
+      fits = fitsWithMmap;
+
+      if (isSelected) {
+        statusStr = fitsVram
+          ? `${C.green}${C.bold}← SELECTED${C.reset}`
+          : `${C.green}${C.bold}← SELECTED ${C.cyan}(mmap)${C.reset}`;
+      } else if (fitsVram) {
+        statusStr = `${C.green}compatible${C.reset}`;
+      } else if (fitsWithMmap) {
+        statusStr = `${C.cyan}GPU+mmap${C.reset}`;
+      } else {
+        statusStr = `${C.red}too large${C.reset}`;
+      }
+    }
+
     const icon = isSelected ? `${C.green}▸` : fits ? `${C.dim} ` : `${C.red} `;
     const nameColor = isSelected ? C.bold + C.green : fits ? C.white : C.dim;
     const sizeStr = `${m.sizeGB} GB`.padStart(8);
-    const vramStr = `${(m.minVramMB / 1024).toFixed(0)} GB`.padStart(6);
-    const statusStr = isSelected
-      ? `${C.green}${C.bold}← SELECTED${C.reset}`
-      : fits
-      ? `${C.green}compatible${C.reset}`
-      : `${C.red}too large${C.reset}`;
+    // macOS: show model size (RAM needed at full speed), not minVramMB
+    const vramStr = isMacMLX
+      ? `${Math.ceil(m.sizeGB)} GB`.padStart(6)
+      : `${(m.minVramMB / 1024).toFixed(0)} GB`.padStart(6);
 
     console.log(`    ${icon} ${nameColor}${m.codename.padEnd(20)}${C.reset}${sizeStr}  ${vramStr}    ${statusStr}`);
   }
@@ -658,20 +833,56 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   if (targetCodename !== recommended.codename) {
     console.log(`    ${C.yellow}Note: Using manually selected model instead of recommended ${recommended.codename}${C.reset}`);
   }
+  // Show disk offloading info for macOS
+  if (isMacMLX) {
+    const modelMB = entry.sizeGB * 1024;
+    if (modelMB > hw.ramMB * 0.8) {
+      const overflowGB = ((modelMB - hw.ramMB * 0.8) / 1024).toFixed(1);
+      console.log();
+      console.log(`    ${C.cyan}SSD Disk Offloading enabled${C.reset}`);
+      console.log(`    ${C.dim}   ~${overflowGB} GB will stream from NVMe SSD via page cache.${C.reset}`);
+      console.log(`    ${C.dim}   Speed: slightly slower than full-RAM, but runs models up to 2x your RAM.${C.reset}`);
+      console.log(`    ${C.dim}   Technique inspired by flash-moe: "Trust the OS" page cache principle.${C.reset}`);
+    }
+  // Show mmap/partial offload info for Linux/Windows
+  } else if (hw.totalVramMB > 0 && hw.totalVramMB < entry.minVramMB) {
+    const gpuPct = Math.min(100, Math.round((hw.totalVramMB / (entry.sizeGB * 1024)) * 100));
+    console.log();
+    console.log(`    ${C.cyan}mmap SSD streaming enabled${C.reset}`);
+    console.log(`    ${C.dim}   Model doesn't fit fully in VRAM — using partial GPU offload + mmap.${C.reset}`);
+    if (hw.totalVramMB >= 2048) {
+      console.log(`    ${C.dim}   ~${gpuPct}% of layers on GPU, rest streamed from SSD/RAM via mmap.${C.reset}`);
+    }
+    console.log(`    ${C.dim}   For best speed, use an NVMe SSD. SATA SSDs will be slower.${C.reset}`);
+  } else if (hw.totalVramMB === 0 && entry.sizeGB * 1024 > hw.ramMB * 0.7) {
+    console.log();
+    console.log(`    ${C.cyan}mmap SSD streaming enabled${C.reset}`);
+    console.log(`    ${C.dim}   Model larger than RAM — overflow streamed from SSD via mmap.${C.reset}`);
+    console.log(`    ${C.dim}   Speed depends on SSD. NVMe recommended for usable performance.${C.reset}`);
+  } else if (hw.totalVramMB === 0 && !isMacMLX) {
+    console.log();
+    console.log(`    ${C.yellow}⚠  No GPU detected — model will run on CPU only (slower).${C.reset}`);
+    console.log(`    ${C.dim}   For faster inference, install an NVIDIA GPU with 4+ GB VRAM.${C.reset}`);
+  }
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
   //  Step 3: Engine Installation
   // ═══════════════════════════════════════════════════════════════
 
-  const useMlx = shouldUseMlx() && entry.mlxRepo;
+  const useMlx = isMacMLX;
   const engineLabel = useMlx ? "MLX (Apple Silicon optimized)" : "llama.cpp";
 
   stepHeader(3, `Installing inference engine (${engineLabel})`);
   console.log();
 
   if (useMlx) {
-    console.log(`    ${C.magenta}Apple Silicon detected — using MLX for 2x faster inference${C.reset}`);
+    const modelMB = entry.sizeGB * 1024;
+    const offloading = modelMB > hw.ramMB * 0.8;
+    console.log(`    ${C.magenta}Apple Silicon detected — using MLX for optimized inference${C.reset}`);
+    if (offloading) {
+      console.log(`    ${C.cyan}Disk offloading active — model will stream from NVMe SSD${C.reset}`);
+    }
     console.log();
   }
 
@@ -762,56 +973,10 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  Step 5: License Activation
+  //  Step 5: Install to PATH
   // ═══════════════════════════════════════════════════════════════
 
-  stepHeader(5, "License activation");
-  console.log();
-
-  if (hasLicense()) {
-    console.log(`    ${C.green}✓${C.reset} License already activated`);
-    console.log();
-  } else {
-    console.log(`    ${C.dim}KCode requires a license key to run.${C.reset}`);
-    console.log(`    ${C.dim}Purchase at: ${C.cyan}https://kulvex.ai${C.reset}`);
-    console.log();
-
-    // Interactive license key input
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const askKey = (): Promise<string> => new Promise((resolve) => {
-      rl.question(`    ${C.bold}Enter license key:${C.reset} `, (answer) => resolve(answer.trim()));
-    });
-
-    let activated = false;
-    while (!activated) {
-      const key = await askKey();
-      if (!key) {
-        console.log(`    ${C.yellow}⚠${C.reset} License key is required to use KCode.`);
-        continue;
-      }
-
-      const licSpinner = createSpinner("Activating license...");
-      const result = await activateLicense(key);
-
-      if (result.valid) {
-        licSpinner.succeed(`License activated — tier: ${C.cyan}${result.tier}${C.reset}`);
-        activated = true;
-      } else {
-        licSpinner.fail(`${result.message}`);
-        console.log(`    ${C.dim}Try again or press Ctrl+C to exit.${C.reset}`);
-        console.log();
-      }
-    }
-
-    rl.close();
-    console.log();
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  //  Step 6: Install to PATH
-  // ═══════════════════════════════════════════════════════════════
-
-  stepHeader(6, "Installing kcode command");
+  stepHeader(5, "Installing kcode command");
   console.log();
 
   const installSpinner = createSpinner("Installing to PATH...");
@@ -824,10 +989,10 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
-  //  Step 7: Configuration
+  //  Step 6: Configuration
   // ═══════════════════════════════════════════════════════════════
 
-  stepHeader(7, "Finalizing configuration");
+  stepHeader(6, "Finalizing configuration");
   console.log();
 
   const configSpinner = createSpinner("Writing configuration...");
@@ -847,6 +1012,21 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   await setDefaultModel(entry.codename);
 
   // Save server config for llama-server.ts
+  // For MLX disk offloading: calculate wired memory limit.
+  // If model > RAM, we wire 75% of RAM and let the rest page from SSD.
+  // Inspired by flash-moe's "Trust the OS" principle — let the OS page cache
+  // manage weight streaming from NVMe SSD, don't try to outsmart the kernel.
+  let mlxWiredLimitMB: number | undefined;
+  if (useMlx) {
+    const modelMB = entry.sizeGB * 1024;
+    const ramMB = hw.ramMB;
+    if (modelMB > ramMB * 0.8) {
+      // Model doesn't fit comfortably in RAM — enable disk offloading
+      // Wire 75% of RAM for model weights, leave 25% for OS + KV cache + apps
+      mlxWiredLimitMB = Math.floor(ramMB * 0.75);
+    }
+  }
+
   await Bun.write(
     join(KCODE_HOME, "server.json"),
     JSON.stringify({
@@ -855,10 +1035,11 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
       codename: entry.codename,
       port,
       contextSize: entry.contextSize,
-      gpuLayers: -1, // offload all layers
+      gpuLayers: calculateGpuLayers(hw, entry),
       gpus: hw.gpus,
       engine: useMlx ? "mlx" : "llama.cpp",
       mlxRepo: useMlx ? entry.mlxRepo : undefined,
+      mlxWiredLimitMB,
     }, null, 2) + "\n",
   );
 
@@ -869,10 +1050,10 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
-  //  Step 8: Start server & load model into VRAM
+  //  Step 7: Start server & load model into VRAM
   // ═══════════════════════════════════════════════════════════════
 
-  stepHeader(8, "Loading model into VRAM");
+  stepHeader(7, "Loading model into VRAM");
   console.log();
 
   const serverSpinner = createSpinner("Starting inference server...");
@@ -940,10 +1121,43 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
   console.log(successBox.join("\n"));
   console.log();
 
+  // Pro features hint
+  console.log(`  ${C.dim}💡 Pro features available: swarm, browser, API server, and more${C.reset}`);
+  console.log(`  ${C.dim}   Activate: ${C.cyan}kcode pro activate <your-pro-key>${C.reset}`);
+  console.log(`  ${C.dim}   Info:     ${C.cyan}https://kulvex.ai/pro${C.reset}`);
+  console.log();
+
   return { model: entry.codename, enginePath, modelPath };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
+
+/** Calculate optimal GPU layers based on available VRAM.
+ *  Reserves ~20% of VRAM for KV cache and OS overhead.
+ *  Typical transformer: ~32-40 layers for 4B-8B models. */
+function calculateGpuLayers(hw: HardwareInfo, entry: CatalogEntry): number {
+  if (hw.totalVramMB === 0) return 0; // No GPU — CPU only
+
+  // Estimate available VRAM after OS/display overhead (~300-500 MB on Windows)
+  const osOverheadMB = hw.platform === "win32" ? 400 : 200;
+  const usableVramMB = hw.totalVramMB - osOverheadMB;
+  const modelSizeMB = entry.sizeGB * 1024;
+
+  // If plenty of VRAM (model + 30% for KV cache fits), offload everything
+  if (usableVramMB >= modelSizeMB * 1.3) return -1;
+
+  // Otherwise, calculate how many layers we can fit while leaving room for KV cache
+  // KV cache estimate: ~15-25 MB per layer for small models at moderate context
+  const kvCacheReserveMB = Math.min(usableVramMB * 0.2, 600); // 20% of VRAM or 600 MB max
+  const vramForLayers = usableVramMB - kvCacheReserveMB;
+
+  // Estimate total layers (roughly 32 for 4B, 32 for 8B, 64 for 30B+)
+  const estimatedLayers = entry.paramBillions <= 8 ? 32 : entry.paramBillions <= 30 ? 64 : 80;
+  const mbPerLayer = modelSizeMB / estimatedLayers;
+  const fittableLayers = Math.floor(vramForLayers / mbPerLayer);
+
+  return Math.max(1, Math.min(fittableLayers, estimatedLayers));
+}
 
 function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -1014,13 +1228,28 @@ async function extractArchive(archivePath: string, destDir: string): Promise<voi
     }
   } else if (archivePath.endsWith(".zip")) {
     if (process.platform === "win32") {
-      // PowerShell Expand-Archive on Windows
-      const proc = Bun.spawnSync([
-        "powershell", "-NoProfile", "-Command",
-        `Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force`,
-      ], { stdout: "pipe", stderr: "pipe" });
-      if (proc.exitCode !== 0) {
-        throw new Error(`Failed to extract zip: ${proc.stderr.toString()}`);
+      // Try tar first (built-in on Windows 10 1803+), then PowerShell fallback
+      let extracted = false;
+
+      // Method 1: tar (fastest, most reliable on modern Windows)
+      try {
+        const tarProc = Bun.spawnSync(["tar", "-xf", archivePath, "-C", destDir], {
+          stdout: "pipe", stderr: "pipe",
+        });
+        if (tarProc.exitCode === 0) extracted = true;
+      } catch { /* tar not available */ }
+
+      // Method 2: PowerShell Expand-Archive
+      if (!extracted) {
+        const psProc = Bun.spawnSync([
+          "powershell", "-NoProfile", "-Command",
+          `Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force`,
+        ], { stdout: "pipe", stderr: "pipe" });
+        if (psProc.exitCode === 0) extracted = true;
+      }
+
+      if (!extracted) {
+        throw new Error(`Failed to extract zip on Windows. Tried tar and PowerShell.`);
       }
     } else {
       const proc = Bun.spawnSync(["unzip", "-o", archivePath, "-d", destDir], {
@@ -1059,6 +1288,29 @@ function findBinaryInDir(dir: string, name: string): string | null {
         return finalPath;
       }
     }
+  } catch { /* Bun.Glob may not work in compiled binaries on Windows */ }
+
+  // Fallback: manual recursive search using readdirSync (always works)
+  try {
+    const { readdirSync, statSync } = require("node:fs");
+    const search = (searchDir: string): string | null => {
+      for (const entry of readdirSync(searchDir)) {
+        const fullPath = join(searchDir, entry);
+        try {
+          if (entry === target) {
+            const finalPath = join(dir, target);
+            if (fullPath !== finalPath) renameSync(fullPath, finalPath);
+            return finalPath;
+          }
+          if (statSync(fullPath).isDirectory()) {
+            const found = search(fullPath);
+            if (found) return found;
+          }
+        } catch { /* skip */ }
+      }
+      return null;
+    };
+    return search(dir);
   } catch { /* ignore */ }
 
   return null;
@@ -1116,33 +1368,40 @@ function createLibSymlinks(dir: string): void {
 
 /** Install kcode binary to a PATH directory so it can be run as 'kcode' */
 function installToPath(): string | null {
-  // Find the current executable path
   const execPath = process.execPath;
+  const isWin = process.platform === "win32";
+  const binName = isWin ? "kcode.exe" : "kcode";
 
-  // If already named 'kcode' and in PATH, skip
-  const whichProc = Bun.spawnSync(["which", "kcode"], { stdout: "pipe", stderr: "pipe" });
+  // Check if already in PATH
+  const whichCmd = isWin ? "where" : "which";
+  const whichProc = Bun.spawnSync([whichCmd, "kcode"], { stdout: "pipe", stderr: "pipe" });
   if (whichProc.exitCode === 0) {
-    const existing = whichProc.stdout.toString().trim();
+    const existing = whichProc.stdout.toString().trim().split("\n")[0]?.trim();
     if (existing && existsSync(existing)) return null; // already installed
   }
 
-  // Try /usr/local/bin first (system-wide), then ~/.local/bin (user)
-  const candidates = [
-    "/usr/local/bin/kcode",
-    join(homedir(), ".local", "bin", "kcode"),
-  ];
+  // Platform-specific candidate install locations
+  const candidates: string[] = isWin
+    ? [
+        // Windows: %LOCALAPPDATA%\Programs\KCode\kcode.exe
+        join(process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local"), "Programs", "KCode", binName),
+        // Fallback: ~/.kcode/bin/kcode.exe (always writable)
+        join(KCODE_HOME, "bin", binName),
+      ]
+    : [
+        "/usr/local/bin/kcode",
+        join(homedir(), ".local", "bin", "kcode"),
+      ];
 
   for (const dest of candidates) {
     try {
       const dir = join(dest, "..");
       mkdirSync(dir, { recursive: true });
       copyFileSync(execPath, dest);
-      chmodSync(dest, 0o755);
+      if (!isWin) chmodSync(dest, 0o755);
 
-      // If ~/.local/bin, ensure it's in PATH by adding to shell rc
-      if (dest.includes(".local/bin")) {
-        ensureLocalBinInPath();
-      }
+      // Ensure the install directory is in PATH
+      ensureInPath(join(dest, ".."));
 
       log.info("setup", `Installed kcode to ${dest}`);
       return dest;
@@ -1156,25 +1415,49 @@ function installToPath(): string | null {
   return null;
 }
 
-/** Ensure ~/.local/bin is in PATH (add to shell rc if needed) */
-function ensureLocalBinInPath(): void {
-  const localBin = join(homedir(), ".local", "bin");
-  if (process.env.PATH?.includes(localBin)) return;
+/** Ensure a directory is in PATH (platform-aware) */
+function ensureInPath(dir: string): void {
+  const resolvedDir = require("node:path").resolve(dir);
+  const sep = process.platform === "win32" ? ";" : ":";
+  if (process.env.PATH?.split(sep).some((p) => require("node:path").resolve(p) === resolvedDir)) return;
 
-  // Detect shell and rc file
-  const shell = process.env.SHELL ?? "/bin/bash";
-  const rcFile = shell.includes("zsh")
-    ? join(homedir(), ".zshrc")
-    : join(homedir(), ".bashrc");
+  if (process.platform === "win32") {
+    // Windows: add to user PATH via reg.exe (persistent, no admin required)
+    try {
+      const regResult = Bun.spawnSync([
+        "reg", "query", "HKCU\\Environment", "/v", "Path",
+      ], { stdout: "pipe", stderr: "pipe" });
+      const currentPath = regResult.exitCode === 0
+        ? regResult.stdout.toString().match(/REG_(?:EXPAND_)?SZ\s+(.*)/)?.[ 1]?.trim() ?? ""
+        : "";
 
-  const exportLine = `export PATH="$HOME/.local/bin:$PATH"`;
+      if (!currentPath.toLowerCase().includes(resolvedDir.toLowerCase())) {
+        const newPath = currentPath ? `${currentPath};${resolvedDir}` : resolvedDir;
+        Bun.spawnSync([
+          "reg", "add", "HKCU\\Environment", "/v", "Path", "/t", "REG_EXPAND_SZ", "/d", newPath, "/f",
+        ], { stdout: "pipe", stderr: "pipe" });
+        // Notify running Explorer to pick up the change
+        Bun.spawnSync([
+          "powershell", "-NoProfile", "-Command",
+          "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User'), 'User')",
+        ], { stdout: "pipe", stderr: "pipe" });
+      }
+    } catch { /* ignore */ }
+  } else {
+    // Unix: add to shell rc
+    const shell = process.env.SHELL ?? "/bin/bash";
+    const rcFile = shell.includes("zsh")
+      ? join(homedir(), ".zshrc")
+      : join(homedir(), ".bashrc");
 
-  try {
-    const existing = existsSync(rcFile) ? require("node:fs").readFileSync(rcFile, "utf-8") : "";
-    if (!existing.includes(".local/bin")) {
-      require("node:fs").appendFileSync(rcFile, `\n# KCode\n${exportLine}\n`);
-    }
-  } catch { /* ignore */ }
+    const exportLine = `export PATH="${resolvedDir}:$PATH"`;
+    try {
+      const existing = existsSync(rcFile) ? require("node:fs").readFileSync(rcFile, "utf-8") : "";
+      if (!existing.includes(resolvedDir)) {
+        require("node:fs").appendFileSync(rcFile, `\n# KCode\n${exportLine}\n`);
+      }
+    } catch { /* ignore */ }
+  }
 }
 
 /** Get server config (saved during setup) */
@@ -1188,6 +1471,7 @@ export async function getServerConfig(): Promise<{
   gpus: GpuInfo[];
   engine?: "mlx" | "llama.cpp";
   mlxRepo?: string;
+  mlxWiredLimitMB?: number;
 } | null> {
   const configPath = join(KCODE_HOME, "server.json");
   try {

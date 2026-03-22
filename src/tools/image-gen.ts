@@ -188,6 +188,9 @@ async function generateViaKulvex(params: {
 // ─── Executor ───────────────────────────────────────────────────
 
 export async function executeImageGen(input: Record<string, unknown>): Promise<ToolResult> {
+  const { requirePro } = await import("../core/pro.js");
+  await requirePro("image-gen");
+
   const {
     prompt,
     negative_prompt,

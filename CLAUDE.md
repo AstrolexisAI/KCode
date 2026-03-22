@@ -23,13 +23,13 @@ bun test src/core/config.test.ts   # Run a single test file
 - **Bun over Node.js**: Use `Bun.file()` instead of `node:fs` readFile/writeFile. Bun auto-loads `.env`.
 - **Ports**: Ports below 10000 are reserved. Use 10000+ for any new defaults.
 - **Never reference competing products** in code or docs.
-- **Proprietary**: Copyright Astrolexis. All rights reserved.
+- **License**: AGPL-3.0-only. Copyright Astrolexis. Pro features gated via `src/core/pro.ts`.
 
 ## Architecture
 
 ### Entry Point & CLI
 
-`src/index.ts` — Commander.js CLI with subcommands (`models`, `setup`, `server`, `activate`, `license`, `stats`, `doctor`, `teach`, `init`, `resume`, `search`, `watch`, `new`, `update`, `benchmark`, `completions`, `history`, `serve`). The default command launches the interactive TUI or single-prompt mode.
+`src/index.ts` — Commander.js CLI with subcommands (`models`, `setup`, `server`, `pro`, `stats`, `doctor`, `teach`, `init`, `resume`, `search`, `watch`, `new`, `update`, `benchmark`, `completions`, `history`, `serve`). The default command launches the interactive TUI or single-prompt mode.
 
 **CLI Flags**: `--model`, `--api-key`, `--api-base`, `--max-turns`, `--no-tools`, `--print`, `--verbose`, `--effort` (low/medium/high), `--system-prompt`, `--append-system-prompt`, `--name`, `--allowed-tools`, `--disallowed-tools`, `--session-id`, `--agent`, `--agents` (multi-agent swarm), `--no-session-persistence`, `--mcp-config`, `--tmux`, `--file`, `--from-pr`.
 
@@ -43,7 +43,7 @@ bun test src/core/config.test.ts   # Run a single test file
 - **`db.ts`** — Shared SQLite connection (`~/.kcode/awareness.db`) with WAL mode. Tables: `narrative`, `user_model`, `user_interests`, `predictions`, `learnings` (FTS5), `distilled_examples`.
 - **`model-manager.ts`** (~47 KB) — Hardware-aware setup wizard. Detects CPU/GPU/RAM, recommends models, manages downloads. Supports llama.cpp (Linux/Windows) and MLX (macOS Apple Silicon).
 - **`llama-server.ts`** — Manages local inference server lifecycle (start/stop/health check). State files: `~/.kcode/server.pid`, `server.port`, `server.log`.
-- **`license.ts`** — Machine-ID-based license validation with 30-day grace period.
+- **`pro.ts`** — Feature gating for Pro tier. `isPro()` checks `~/.kcode/settings.json` proKey field. `requirePro(feature)` throws user-friendly error.
 - **`mcp.ts`** — JSON-RPC MCP client. Discovers tools/resources from MCP servers configured in plugin manifests.
 - **`auto-test.ts`** — Detects related test files after Edit/Write and prompts to run them.
 - **`context-pin.ts`** — Pin files to always include in LLM context across conversation turns.

@@ -101,7 +101,7 @@ export class SystemPromptBuilder {
 
     // Knowledge distillation
     try {
-      const distilled = loadDistilledExamples(undefined, keywords, config.workingDirectory);
+      const distilled = await loadDistilledExamples(undefined, keywords, config.workingDirectory);
       if (distilled) {
         sections.push({ content: distilled, priority: SectionPriority.LOW, label: "distillation" });
       }

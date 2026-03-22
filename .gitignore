@@ -36,3 +36,16 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# KCode runtime data (never commit)
+license.json
+server.pid
+server.port
+server.log
+awareness.db
+awareness.db-wal
+awareness.db-shm
+pro-cache.json
+
+# Release binaries (use GitHub Releases instead)
+release/

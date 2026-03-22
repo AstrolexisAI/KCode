@@ -9,7 +9,7 @@ import { useTheme } from "../ThemeContext.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type KodiMood = "idle" | "happy" | "excited" | "thinking" | "working" | "worried" | "sleeping" | "celebrating" | "curious";
+export type KodiMood = "idle" | "happy" | "excited" | "thinking" | "working" | "worried" | "sleeping" | "celebrating" | "curious" | "mischievous" | "crazy" | "angry" | "smug";
 
 export interface KodiEvent {
   type: "tool_start" | "tool_done" | "tool_error" | "thinking" | "streaming" | "idle" | "turn_end" | "compaction" | "agent_spawn" | "test_pass" | "test_fail" | "commit" | "error";
@@ -129,21 +129,21 @@ const SPRITES: Record<KodiMood, string[][]> = {
   ]],
   worried: [[
     " ╭───────╮",
-    " │ °  △° │",
+    " │ °  ~° │",
     " ╰───┬───╯",
     "    /|\\  ",
-    "    / \\  ",
+    "   </ \\> ",
   ], [
     " ╭───────╮",
     " │ •  ~• │!",
     " ╰───┬───╯",
-    "    /|\\  ",
+    "  .-|-.  ",
     "    / \\  ",
   ], [
     " ╭───────╮",
-    " │ ;  _; │",
+    " │ ;  _; │.",
     " ╰───┬───╯",
-    "    /|\\  ",
+    "   \\|    ",
     "    / \\  ",
   ]],
   sleeping: [[
@@ -156,7 +156,13 @@ const SPRITES: Record<KodiMood, string[][]> = {
     " ╭───────╮",
     " │ _  __ │Z",
     " ╰───┬───╯",
-    "    /|\\  ",
+    "    \\|   ",
+    "    / \\  ",
+  ], [
+    " ╭───────╮",
+    " │ -  _- │Zz",
+    " ╰───┬───╯",
+    "   __|__  ",
     "    / \\  ",
   ]],
   celebrating: [[
@@ -191,6 +197,82 @@ const SPRITES: Record<KodiMood, string[][]> = {
     "     |\\  ",
     "    / \\  ",
   ]],
+  mischievous: [[
+    " ╭───────╮",
+    " │ >  ‿> │",
+    " ╰───┬───╯",
+    "    /|--. ",
+    "    / \\   ",
+  ], [
+    " ╭───────╮",
+    " │ <  ‿< │~",
+    " ╰───┬───╯",
+    "  .-|/   ",
+    "    / \\   ",
+  ], [
+    " ╭───────╮",
+    " │ >  ‿~ │",
+    " ╰───┬───╯",
+    "  _/|\\   ",
+    "   // \\\\  ",
+  ]],
+  crazy: [[
+    " ╭───────╮",
+    " │ @  ◡° │!",
+    " ╰───┬───╯",
+    " ~\\(|)/~ ",
+    "   </ \\>  ",
+  ], [
+    " ╭───────╮",
+    " │ * ▽ @ │!",
+    " ╰───┬───╯",
+    "  /(|)\\  ",
+    "  ~/   \\~ ",
+  ], [
+    " ╭───────╮",
+    " │ o ◡ O │?!",
+    " ╰───┬───╯",
+    " ~\\(|)/~ ",
+    "  _/   \\_ ",
+  ]],
+  angry: [[
+    " ╭───────╮",
+    " │ ># <# │",
+    " ╰───┬───╯",
+    "  =/|\\=  ",
+    "    / \\  ",
+  ], [
+    " ╭───────╮",
+    " │ >  _< │!",
+    " ╰───┬───╯",
+    "  [/|\\]  ",
+    "    / \\  ",
+  ], [
+    " ╭───────╮",
+    " │ > ^< │!!",
+    " ╰───┬───╯",
+    "  =/|\\=  ",
+    "   _/ \\_ ",
+  ]],
+  smug: [[
+    " ╭───────╮",
+    " │ ~  ‿~ │",
+    " ╰───┬───╯",
+    "  ._/|\\  ",
+    "    / \\  ",
+  ], [
+    " ╭───────╮",
+    " │ - ‿-  │*",
+    " ╰───┬───╯",
+    "   -/|--, ",
+    "    / \\  ",
+  ], [
+    " ╭───────╮",
+    " │ ^ ‿^  │~",
+    " ╰───┬───╯",
+    "  ._/|\\. ",
+    "    / \\  ",
+  ]],
 };
 
 // ─── Fallback Reactions (used instantly while LLM generates) ────
@@ -211,6 +293,10 @@ const FALLBACKS: Record<string, string[]> = {
   test_fail:     ["Tests failed!", "Bugs found!", "Back to it!"],
   milestone:     ["Milestone!", "Level up!", "Amazing!"],
   startup:       ["Let's code!", "Ready to roll!", "Hello, world!"],
+  mischief:      ["Hehe...", "*whistles innocently*", "Who, me?", "I regret nothing", "Oopsie~"],
+  crazy_mode:    ["UNLIMITED POWER!", "LET'S GOOOO!", "I'm seeing colors!", "*twitches*", "CHAOS!"],
+  angry_mode:    ["Not cool.", "Seriously?!", "I'm done.", "ಠ_ಠ", "Fix. This. Now."],
+  smug_mode:     ["Told you so~", "Too easy.", "*adjusts monocle*", "As expected.", "Flawless."],
 };
 
 // ─── LLM Reaction Generator ────────────────────────────────────
@@ -414,13 +500,18 @@ export default function KodiCompanion({
         react("working", "tool_start", lastEvent);
         break;
       case "tool_done":
-        if (lastEvent.detail === "TestRunner") react("celebrating", "test_pass", lastEvent);
+        if (lastEvent.detail === "TestRunner") react("smug", "smug_mode", lastEvent);
         else if (lastEvent.detail === "GitCommit") react("celebrating", "commit", lastEvent);
+        else if (lastEvent.detail === "Edit" || lastEvent.detail === "Write") react("mischievous", "mischief", lastEvent);
+        else if (toolUseCount > 0 && toolUseCount % 20 === 0) react("crazy", "crazy_mode", lastEvent);
         else react("happy", "tool_done", lastEvent);
         break;
       case "tool_error":
+        if (eventCountRef.current > 2 && toolUseCount > 5) react("angry", "angry_mode", lastEvent);
+        else react("worried", "tool_error", lastEvent);
+        break;
       case "test_fail":
-        react("worried", "tool_error", lastEvent);
+        react("angry", "angry_mode", lastEvent);
         break;
       case "thinking":
         react("thinking", "thinking", lastEvent);
@@ -500,7 +591,11 @@ export default function KodiCompanion({
   const moodColor = mood === "happy" || mood === "celebrating" || mood === "excited"
     ? theme.success
     : mood === "worried" ? theme.error
+    : mood === "angry" ? theme.error
     : mood === "thinking" || mood === "working" ? theme.warning
+    : mood === "mischievous" ? "#ff69b4"
+    : mood === "crazy" ? "#ff00ff"
+    : mood === "smug" ? "#ffd700"
     : mood === "sleeping" ? theme.dimmed
     : theme.primary;
 
