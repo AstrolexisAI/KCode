@@ -65,10 +65,22 @@ function detectImageContent(text: string): boolean {
     if (text.includes(indicator)) return true;
   }
 
+  // Only detect image extensions in user-facing image references, not inside
+  // code, config text, or file listings. Require the extension to be preceded
+  // by a typical filename char and followed by a word boundary (whitespace,
+  // end-of-string, quote, paren, bracket, comma).
   for (const ext of IMAGE_EXTENSIONS) {
-    if (text.includes(ext)) {
-      const idx = text.indexOf(ext);
-      if (idx > 0 && text[idx - 1] !== " " && text[idx - 1] !== "\n") {
+    const re = new RegExp(`\\w${ext.replace(".", "\\.")}(?=[\\s"')\\],;:]|$)`, "i");
+    if (re.test(text)) {
+      // Extra guard: skip if the match is clearly inside a config line
+      // (e.g. "VISION_SUPPORTED_FORMATS=png,jpg,jpeg")
+      const match = text.match(re);
+      if (match && match.index !== undefined) {
+        const lineStart = text.lastIndexOf("\n", match.index) + 1;
+        const line = text.slice(lineStart, text.indexOf("\n", match.index + 1));
+        if (/^[A-Z_]+=/.test(line.trim()) || /formats?\s*[:=]/i.test(line)) {
+          continue; // Skip env/config lines
+        }
         return true;
       }
     }

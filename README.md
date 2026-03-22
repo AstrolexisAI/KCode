@@ -253,4 +253,6 @@ Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+S
 
 ## License
 
-Proprietary — Copyright (c) 2026 Astrolexis. All rights reserved.
+AGPL-3.0-only — Copyright (c) 2026 Astrolexis. See [LICENSE](./LICENSE) for details.
+
+Some features require [KCode Pro](https://kulvex.ai/pro). Core functionality is fully open source.

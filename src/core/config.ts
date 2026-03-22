@@ -7,6 +7,7 @@ import { readdirSync, statSync } from "node:fs";
 import type { KCodeConfig, PermissionMode, PermissionRule, PermissionRuleAction } from "./types";
 import { getGitRoot } from "./git";
 import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models";
+import { isPro } from "./pro";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ export interface Settings {
   maxBudgetUsd?: number;
   compactThreshold?: number; // 0.5–0.95, default 0.8 — trigger auto-compact at this % of context window
   telemetry?: boolean; // Opt-in/out for local analytics tracking
+  proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
 }
 
 // ─── Managed Policy ──────────────────────────────────────────────
@@ -565,6 +567,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     maxBudgetUsd: settings.maxBudgetUsd,
     compactThreshold: settings.compactThreshold,
     telemetry: settings.telemetry,
+    pro: await isPro(),
     // Managed policy fields
     managedDisallowedTools: policy.disallowedTools,
     managedAllowedTools: policy.allowedTools,

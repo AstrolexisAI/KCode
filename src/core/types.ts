@@ -116,6 +116,7 @@ export interface KCodeConfig {
   disallowedTools?: string[]; // Blacklist of blocked tool names
   noSessionPersistence?: boolean; // Do not save session transcript to disk
   tmux?: boolean; // Open worktree agents in separate tmux panes
+  pro?: boolean; // Whether the current installation has an active Pro license
   // Managed policy fields (org-level, immutable)
   managedDisallowedTools?: string[]; // Org-level blocked tools (cannot be overridden)
   managedAllowedTools?: string[]; // Org-level allowed tools (bypass permission prompts)

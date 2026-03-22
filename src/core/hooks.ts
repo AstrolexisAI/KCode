@@ -329,6 +329,9 @@ async function executeHookHttp(
   action: HookAction,
   jsonData: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const { requirePro } = await import("./pro.js");
+  await requirePro("hooks-webhook");
+
   if (!action.url) {
     return { exitCode: 1, stdout: "", stderr: "HTTP hook missing url" };
   }
@@ -420,6 +423,9 @@ async function executeHookAgent(
   jsonData: string,
   cwd: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const { requirePro } = await import("./pro.js");
+  await requirePro("hooks-agent");
+
   const config = entry.agentConfig;
   if (!config?.prompt) {
     return { exitCode: 1, stdout: "", stderr: "Agent hook missing agentConfig.prompt" };

@@ -301,11 +301,14 @@ function pruneExamples(): void {
  * Load relevant distilled examples for the current query context.
  * Uses FTS5 ranking + quality scoring to select the best few-shot examples.
  */
-export function loadDistilledExamples(
+export async function loadDistilledExamples(
   currentQuery?: string,
   contextKeywords?: string[],
   project?: string,
-): string | null {
+): Promise<string | null> {
+  const { isPro } = await import("./pro.js");
+  if (!(await isPro())) return null; // Silently skip — not a hard gate, just a premium enhancement
+
   try {
     const db = getDb();
 

@@ -781,6 +781,9 @@ async function handleRoute(
 // ─── Server Entry Point ──────────────────────────────────────────
 
 export async function startHttpServer(options: ServeOptions): Promise<void> {
+  const { requirePro } = await import("./pro.js");
+  await requirePro("http-server");
+
   const { port, host, apiKey } = options;
 
   serverState.startTime = Date.now();
