@@ -290,14 +290,58 @@ export async function getSessionCountThisMonth(): Promise<number> {
   } catch { return 0; }
 }
 
-/** Check if session limit reached (free: 50/month). Uses requirePro for interactive prompt. */
+/** Check if session limit reached (free: 50/month). Interactive prompt in TTY. */
 export async function checkSessionLimit(): Promise<void> {
   if (await isPro()) return;
   const count = await getSessionCountThisMonth();
-  if (count >= FREE_LIMITS.sessionsPerMonth) {
-    // This will show the interactive Pro key prompt if in TTY
-    await requirePro("swarm"); // reuse — the error message is overridden below
+  if (count < FREE_LIMITS.sessionsPerMonth) return;
+
+  const C = { reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m", cyan: "\x1b[36m", yellow: "\x1b[33m", green: "\x1b[32m", red: "\x1b[31m" };
+
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      `⚡ Session limit reached — ${count}/${FREE_LIMITS.sessionsPerMonth} sessions this month.\n` +
+      `\n` +
+      `  Upgrade to KCode Pro for unlimited sessions.\n` +
+      `  Activate: kcode pro activate <your-pro-key>\n` +
+      `  Get a key: https://kulvex.ai/pro\n`
+    );
   }
+
+  console.log();
+  console.log(`  ${C.yellow}⚡ Session limit reached${C.reset}`);
+  console.log(`  ${C.bold}${count}/${FREE_LIMITS.sessionsPerMonth} sessions used this month${C.reset}`);
+  console.log();
+  console.log(`  ${C.dim}Upgrade to KCode Pro ($19/mo) for unlimited sessions.${C.reset}`);
+  console.log(`  ${C.dim}Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}`);
+  console.log();
+
+  const { createInterface } = await import("node:readline");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise<string>((resolve) => {
+    rl.question(`  ${C.bold}Enter Pro key${C.reset} ${C.dim}(or press Enter to exit):${C.reset} `, (ans) => resolve(ans.trim()));
+  });
+  rl.close();
+
+  if (!answer) {
+    throw new Error("Session limit reached — Pro key required to continue.");
+  }
+
+  const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
+  const settings = await loadUserSettingsRaw();
+  settings.proKey = answer;
+  await saveUserSettingsRaw(settings);
+  clearProCache();
+
+  if (await isPro()) {
+    console.log(`\n  ${C.green}✓${C.reset} Pro activated! Continuing...\n`);
+    return;
+  }
+
+  delete settings.proKey;
+  await saveUserSettingsRaw(settings);
+  clearProCache();
+  throw new Error("Pro key not valid. Session limit remains in effect.");
 }
 
 /** Soft gate for swarm: show upgrade prompt when free user hits agent limit. */

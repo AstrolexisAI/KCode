@@ -21,7 +21,7 @@ export const kulvexDefinition: ToolDefinition = {
   action: "send_message", params: { channel: "telegram", message: "text", chat_id?: "..." }
 - **Home automation**: Control lights, switches, sensors via Home Assistant
   action: "home", params: { command: "turn_on|turn_off|state", entity_id: "light.living_room" }
-- **Image generation**: Generate images via ComfyUI (Flux, SDXL)
+- **Image generation**: Generate images via cloud API (Flux, DALL-E)
   action: "image_gen", params: { prompt: "description", width?: 1024, height?: 1024 }
 - **Voice**: Text-to-speech synthesis
   action: "tts", params: { text: "hello", voice?: "nova" }
