@@ -5,12 +5,17 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { createHmac } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { loadUserSettingsRaw } from "./config.js";
 
 const KCODE_HOME = join(homedir(), ".kcode");
 const PRO_CACHE_FILE = join(KCODE_HOME, "pro-cache.json");
-const VALIDATE_URL = "https://kulvex.ai/api/pro/validate";
+const VALIDATE_URL = process.env.KCODE_PRO_VALIDATE_URL ?? "https://kulvex.ai/api/pro/validate";
 const RECHECK_DAYS = 7;
+
+// HMAC secret derived from machine-specific data to prevent cache file tampering (#9)
+const CACHE_HMAC_KEY = `kcode_cache_${homedir()}_${process.arch}_${process.platform}`;
 
 export const PRO_FEATURES = {
   "http-server":       "HTTP API server for IDE integrations",
@@ -25,73 +30,99 @@ export const PRO_FEATURES = {
 
 export type ProFeature = keyof typeof PRO_FEATURES;
 
+// Serialized validation promise to prevent concurrent race conditions (#10)
+let _validationPromise: Promise<boolean> | null = null;
 let cachedProStatus: boolean | null = null;
 
 /**
  * Check if the current installation has a valid Pro key.
  * Reads from ~/.kcode/settings.json → proKey field.
- * Format: "kcode_pro_" followed by 32+ hex chars.
+ * Format: "kcode_pro_" followed by 32+ hex chars (case-insensitive).
  */
 export async function isPro(): Promise<boolean> {
   if (cachedProStatus !== null) return cachedProStatus;
 
+  // Serialize concurrent calls (#10) — only one validation runs at a time
+  if (_validationPromise) return _validationPromise;
+
+  _validationPromise = _doValidation();
+  try {
+    const result = await _validationPromise;
+    cachedProStatus = result;
+    return result;
+  } finally {
+    _validationPromise = null;
+  }
+}
+
+async function _doValidation(): Promise<boolean> {
   try {
     const settings = await loadUserSettingsRaw();
     const key = (settings as Record<string, unknown>).proKey;
     if (typeof key !== "string" || !key.startsWith("kcode_pro_")) {
-      cachedProStatus = false;
       return false;
     }
 
-    // Validate key format: kcode_pro_ + 32+ hex chars
+    // Validate key format: kcode_pro_ + 32+ hex chars, case-insensitive (#6)
     const payload = key.slice("kcode_pro_".length);
-    if (payload.length < 32 || !/^[a-f0-9]+$/.test(payload)) {
-      cachedProStatus = false;
+    if (payload.length < 32 || !/^[a-fA-F0-9]+$/i.test(payload)) {
       return false;
     }
 
-    // Online validation with offline-first fallback
-    const validated = await validateProKey(key);
-    cachedProStatus = validated;
-    return validated;
+    // Online validation with secure offline fallback
+    return await validateProKey(key);
   } catch {
-    cachedProStatus = false;
     return false;
   }
 }
+
+// ── Cache with HMAC integrity (#9) ──────────────────────────────
 
 interface ProCache {
   key: string;
   validatedAt: string;
   valid: boolean;
+  serverValidated: boolean; // true only if server confirmed at least once
+  hmac: string;             // HMAC of key+validatedAt+valid to detect tampering
+}
+
+function computeHmac(key: string, validatedAt: string, valid: boolean): string {
+  return createHmac("sha256", CACHE_HMAC_KEY)
+    .update(`${key}|${validatedAt}|${valid}`)
+    .digest("hex");
 }
 
 function loadProCache(): ProCache | null {
   try {
-    const file = Bun.file(PRO_CACHE_FILE);
-    if (!file.size) return null;
-    const raw = JSON.parse(require("node:fs").readFileSync(PRO_CACHE_FILE, "utf-8"));
-    if (!raw.key || !raw.validatedAt) return null;
+    if (!existsSync(PRO_CACHE_FILE)) return null;
+    const raw = JSON.parse(readFileSync(PRO_CACHE_FILE, "utf-8"));
+    if (!raw.key || !raw.validatedAt || typeof raw.valid !== "boolean") return null;
+
+    // Verify HMAC integrity (#9)
+    const expectedHmac = computeHmac(raw.key, raw.validatedAt, raw.valid);
+    if (raw.hmac !== expectedHmac) return null; // tampered — ignore cache
+
     return raw as ProCache;
   } catch {
     return null;
   }
 }
 
-function saveProCache(cache: ProCache): void {
+function saveProCache(key: string, validatedAt: string, valid: boolean, serverValidated: boolean): void {
   try {
-    require("node:fs").mkdirSync(KCODE_HOME, { recursive: true });
-    require("node:fs").writeFileSync(PRO_CACHE_FILE, JSON.stringify(cache, null, 2) + "\n", { mode: 0o600 });
+    mkdirSync(KCODE_HOME, { recursive: true });
+    const hmac = computeHmac(key, validatedAt, valid);
+    const cache: ProCache = { key, validatedAt, valid, serverValidated, hmac };
+    writeFileSync(PRO_CACHE_FILE, JSON.stringify(cache, null, 2) + "\n", { mode: 0o600 });
   } catch { /* best-effort */ }
 }
 
-/**
- * Validate a Pro key — checks local cache first, then phones home.
- * Offline-first: if server is unreachable, trusts cached result or format check.
- */
+// ── Validation logic (#1, #4) ───────────────────────────────────
+
 async function validateProKey(key: string): Promise<boolean> {
-  // Check cache — if recently validated with same key, trust it
   const cache = loadProCache();
+
+  // If cache exists for this key and is recent, trust it
   if (cache && cache.key === key) {
     const daysSince = (Date.now() - new Date(cache.validatedAt).getTime()) / (1000 * 60 * 60 * 24);
     if (daysSince < RECHECK_DAYS) {
@@ -108,17 +139,27 @@ async function validateProKey(key: string): Promise<boolean> {
       signal: AbortSignal.timeout(8000),
     });
 
+    // Check HTTP status (#4 from pro.ts audit)
+    if (!resp.ok) {
+      // Server error (5xx) — don't cache, fall through to offline logic
+      if (resp.status >= 500) throw new Error(`Server error: ${resp.status}`);
+      // Client error (4xx) — key is definitively invalid
+      saveProCache(key, new Date().toISOString(), false, true);
+      return false;
+    }
+
     const result = await resp.json() as { valid?: boolean };
     const valid = result.valid === true;
 
-    saveProCache({ key, validatedAt: new Date().toISOString(), valid });
+    saveProCache(key, new Date().toISOString(), valid, true);
     return valid;
   } catch {
-    // Server unreachable — trust cache if exists, otherwise trust format
-    if (cache && cache.key === key) return cache.valid;
-    // First-time offline: trust format validation (already passed above)
-    saveProCache({ key, validatedAt: new Date().toISOString(), valid: true });
-    return true;
+    // Server unreachable — ONLY trust cache if it was previously server-validated (#1)
+    if (cache && cache.key === key && cache.serverValidated) {
+      return cache.valid;
+    }
+    // First-time offline: DENY Pro — require at least one server validation (#1)
+    return false;
   }
 }
 
@@ -141,4 +182,5 @@ export async function requirePro(feature: ProFeature): Promise<void> {
 /** Clear cached status (e.g., after activating a new key). */
 export function clearProCache(): void {
   cachedProStatus = null;
+  _validationPromise = null;
 }
