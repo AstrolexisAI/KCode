@@ -614,24 +614,27 @@ program
   .command("activate <pro-key>")
   .description("Activate a KCode Pro key (legacy alias for 'kcode pro activate')")
   .action(async (proKey: string) => {
-    // Delegate to pro activate logic
-    const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
-    const settings = await loadUserSettingsRaw();
-    settings.proKey = proKey;
-    await saveUserSettingsRaw(settings);
-    clearProCache();
-
-    if (await isPro()) {
-      console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
-      console.log(`  Pro features are now unlocked.\n`);
-    } else {
-      console.error(`\x1b[31m✗\x1b[0m Pro key not valid.\n`);
-      console.error(`  The key was not recognized. Check that it's correct.`);
-      console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
-      // Remove invalid key
-      delete settings.proKey;
+    try {
+      const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
+      const settings = await loadUserSettingsRaw();
+      settings.proKey = proKey;
       await saveUserSettingsRaw(settings);
       clearProCache();
+
+      if (await isPro()) {
+        console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
+        console.log(`  Pro features are now unlocked.\n`);
+      } else {
+        console.error(`\x1b[31m✗\x1b[0m Pro key not valid.\n`);
+        console.error(`  The key was not recognized. Check that it's correct.`);
+        console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
+        delete settings.proKey;
+        await saveUserSettingsRaw(settings);
+        clearProCache();
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`\x1b[31m✗\x1b[0m ${err instanceof Error ? err.message : err}`);
       process.exit(1);
     }
   });
@@ -646,43 +649,53 @@ proCmd
   .command("status")
   .description("Show Pro status and available features")
   .action(async () => {
-    const pro = await isPro();
-    if (pro) {
-      console.log(`\x1b[32m● KCode Pro active\x1b[0m\n`);
-    } else {
-      console.log(`\x1b[2m○ KCode Pro not active\x1b[0m`);
-      console.log(`  Activate: kcode pro activate <your-pro-key>`);
-      console.log(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
-    }
+    try {
+      const pro = await isPro();
+      if (pro) {
+        console.log(`\x1b[32m● KCode Pro active\x1b[0m\n`);
+      } else {
+        console.log(`\x1b[2m○ KCode Pro not active\x1b[0m`);
+        console.log(`  Activate: kcode pro activate <your-pro-key>`);
+        console.log(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
+      }
 
-    console.log(`  Pro features:`);
-    for (const [key, desc] of Object.entries(PRO_FEATURES)) {
-      const icon = pro ? "\x1b[32m✓\x1b[0m" : "\x1b[2m○\x1b[0m";
-      console.log(`    ${icon} ${desc} \x1b[2m(${key})\x1b[0m`);
+      console.log(`  Pro features:`);
+      for (const [key, desc] of Object.entries(PRO_FEATURES)) {
+        const icon = pro ? "\x1b[32m✓\x1b[0m" : "\x1b[2m○\x1b[0m";
+        console.log(`    ${icon} ${desc} \x1b[2m(${key})\x1b[0m`);
+      }
+      console.log();
+    } catch (err) {
+      console.error(`\x1b[31m✗\x1b[0m ${err instanceof Error ? err.message : err}`);
+      process.exit(1);
     }
-    console.log();
   });
 
 proCmd
   .command("activate <pro-key>")
   .description("Activate a Pro key")
   .action(async (proKey: string) => {
-    const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
-    const settings = await loadUserSettingsRaw();
-    settings.proKey = proKey;
-    await saveUserSettingsRaw(settings);
-    clearProCache();
-
-    if (await isPro()) {
-      console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
-      console.log(`  Pro features are now unlocked.\n`);
-    } else {
-      console.error(`\x1b[31m✗\x1b[0m Invalid Pro key format.`);
-      console.error(`  Expected: kcode_pro_<32+ hex chars>`);
-      console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
-      delete settings.proKey;
+    try {
+      const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
+      const settings = await loadUserSettingsRaw();
+      settings.proKey = proKey;
       await saveUserSettingsRaw(settings);
       clearProCache();
+
+      if (await isPro()) {
+        console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
+        console.log(`  Pro features are now unlocked.\n`);
+      } else {
+        console.error(`\x1b[31m✗\x1b[0m Pro key not valid.`);
+        console.error(`  The key was not recognized. Check that it's correct.`);
+        console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
+        delete settings.proKey;
+        await saveUserSettingsRaw(settings);
+        clearProCache();
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`\x1b[31m✗\x1b[0m ${err instanceof Error ? err.message : err}`);
       process.exit(1);
     }
   });
@@ -691,12 +704,17 @@ proCmd
   .command("deactivate")
   .description("Remove Pro key from this machine")
   .action(async () => {
-    const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
-    const settings = await loadUserSettingsRaw();
-    delete settings.proKey;
-    await saveUserSettingsRaw(settings);
-    clearProCache();
-    console.log("Pro key removed.");
+    try {
+      const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./core/config");
+      const settings = await loadUserSettingsRaw();
+      delete settings.proKey;
+      await saveUserSettingsRaw(settings);
+      clearProCache();
+      console.log("Pro key removed.");
+    } catch (err) {
+      console.error(`\x1b[31m✗\x1b[0m ${err instanceof Error ? err.message : err}`);
+      process.exit(1);
+    }
   });
 
 // ─── Teach subcommand ──────────────────────────────────────────

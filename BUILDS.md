@@ -107,7 +107,7 @@ Resultado: carpeta `release/` con todos los binarios.
 El build de Windows incluye:
 - Publisher: Astrolexis
 - Description: KCode - Kulvex Code by Astrolexis
-- Copyright: Copyright 2026 Astrolexis. All rights reserved.
+- Copyright: Copyright 2026 Astrolexis. Licensed under AGPL-3.0.
 - Console oculta (`--windows-hide-console`)
 
 ---
