@@ -2,46 +2,66 @@
 
 > AI-powered coding assistant for the terminal. Runs 100% local on your GPU.
 
-KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM, or any OpenAI-compatible API) to read, write, search, and refactor code directly on your machine. Your code never leaves your hardware. Built with Bun and TypeScript, it features a rich Ink-based TUI, 18 built-in tools, 32 slash commands, a 10-layer cognitive architecture, SQLite-backed long-term memory, 11 color themes, a plugin system, and LSP integration.
+KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM) and cloud APIs (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI) to read, write, search, and refactor code directly from your terminal. Built with Bun and TypeScript, featuring a React/Ink TUI with 46 built-in tools, 152+ slash commands, multi-agent swarm orchestration, browser automation, and a 10-layer cognitive architecture.
 
 ## Features
 
-- **18 built-in tools**: Bash, Read, Write, Edit, Glob, Grep, Agent, WebFetch, WebSearch, NotebookEdit, Tasks (create/list/get/update/stop), Learn, and MCP resource tools
-- **32 slash commands**: /commit, /review-pr, /simplify, /diff, /test, /build, /lint, /branch, /log, /stash, /explain, /find-bug, /security, /security-review, /batch, /loop, /template, /deps, /todo, /test-for, /doc, /type, /export, /stats, /doctor, /models, /context, /compact, /rewind, /clear, /theme, /help
+### Core (free, open-source)
+
+- **46 built-in tools**: Bash, Read, Write, Edit, MultiEdit, Glob, Grep, GrepReplace, Rename, DiffView, LS, GitStatus, GitCommit, GitLog, TestRunner, Worktree (Enter/Exit), CronCreate/List/Delete, Clipboard, Undo, Stash, LSP, PlanMode, Skill, ToolSearch, AskUser, SendMessage, and more
+- **152+ slash commands**: /commit, /review-pr, /simplify, /diff, /test, /build, /lint, /branch, /log, /stash, /explain, /find-bug, /security, /security-review, /batch, /loop, /template, /deps, /todo, /test-for, /doc, /type, /export, /stats, /doctor, /models, /context, /compact, /rewind, /clear, /theme, /help, /plan, /pin, /memory, /search, /vim, /resume, /benchmark, /profile, /mcp, /style, /insights, /session-tags, /auto-compact, /fast, /cloud, /toggle, and many more
 - **11 color themes**: default, dark, light, cyberpunk, monokai, solarized, dracula, gruvbox, nord, catppuccin, matrix
 - **5 permission modes**: ask, auto, plan, deny, acceptEdits
 - **10-layer cognitive architecture**: identity, tools, code guidelines, git awareness, environment sensing, situational awareness, metacognition, user model, world model, session narrative
+- **Local LLM support**: Hardware-aware setup wizard detects GPU/VRAM, downloads models, manages llama.cpp (Linux/Windows) and MLX (macOS Apple Silicon) automatically
+- **Cloud API support**: Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI — switch with `/cloud` or `/toggle`
+- **Multi-GPU inference**: Distribute across multiple GPUs (e.g., RTX 5090 + 4090) via llama.cpp RPC
 - **Plugin system**: Directory-based plugins with skills, hooks, and MCP server bundles
-- **LSP integration**: Auto-detects language servers (TypeScript, Pyright, gopls, rust-analyzer) for real-time diagnostics
-- **VS Code extension**: Sidebar chat, context menu commands, terminal integration
-- **Local LLM support**: Works with llama.cpp, Ollama, vLLM, or any OpenAI-compatible API
-- **Multi-GPU**: Distribute inference across multiple GPUs (e.g., RTX 5090 + 4090) via llama.cpp RPC
+- **LSP integration**: Auto-detects language servers (TypeScript, Pyright, gopls, rust-analyzer)
+- **Long-term memory**: SQLite FTS5-backed persistent knowledge across sessions
 - **MCP support**: Connect to external tools via Model Context Protocol
-- **Long-term memory**: SQLite FTS5-backed Learn tool persists knowledge across sessions
-- **Autonomous learning**: Searches the web, reads docs, and remembers findings without being asked
-- **Privacy-first**: Your code never leaves your machine
+- **Session management**: Resume, fork, worktree isolation, conversation compaction
+- **Context pinning**: Pin files to always include in LLM context
+- **Codebase indexing**: SQLite-backed symbol index for fast project-wide lookup
+- **Cost tracking**: Per-model token pricing with running session totals
+- **Vim mode**: Configurable keybindings with full vim support
+- **Privacy-first**: Your code stays on your machine
+
+### Pro ($19/mo)
+
+- **Multi-agent swarm**: Spawn parallel sub-agents for divide-and-conquer workflows (`--agents`)
+- **Browser automation**: Playwright-based web interaction
+- **HTTP API server**: REST API for IDE integrations (VS Code, JetBrains)
+- **Image generation**: ComfyUI integration
+- **Transcript search**: Full-text search across past conversation transcripts
+- **Webhook hooks**: HTTP webhook lifecycle hooks
+- **Agent-spawn hooks**: Spawn agents from hook events
+- **Distilled learning**: Learn from past sessions to improve future responses
 
 ## Quick Start
 
 ```bash
 # Install (requires Bun — https://bun.sh)
-git clone https://github.com/GaltRanch/KCode.git
+git clone https://github.com/AstrolexisAI/KCode.git
 cd KCode
 bun install
+
+# Option 1: Run the setup wizard (auto-detects GPU, downloads model)
+bun run src/index.ts setup
+
+# Option 2: Build standalone binary (~101 MB)
 bun run build
-
-# Register your local model
-./dist/kcode models add mymodel http://localhost:8080 --context 32000 --gpu "RTX 4090" --default
-
-# Run
 ./dist/kcode
+
+# Option 3: Connect to an existing local/cloud API
+KCODE_API_BASE=http://localhost:8080 bun run src/index.ts
 ```
 
 ## Requirements
 
 - [Bun](https://bun.sh) runtime
-- A local LLM server (llama.cpp, Ollama, vLLM, etc.) with an OpenAI-compatible API
-- GPU recommended (CPU works but slow)
+- A GPU with 8+ GB VRAM recommended (CPU works but slow)
+- Or a cloud API key (Anthropic, OpenAI, etc.)
 
 ## Usage
 
@@ -55,6 +75,7 @@ kcode --fork                   # Fork last session into a new one
 kcode --worktree feature-x     # Work in an isolated git worktree
 kcode --thinking               # Enable extended thinking mode
 kcode --theme dracula          # Use a color theme
+kcode --agents 4 "refactor auth module"  # Multi-agent swarm (Pro)
 ```
 
 ### Print mode (for piping)
@@ -78,6 +99,9 @@ kcode --print --json-schema '{"type":"object","properties":{"bugs":{"type":"arra
 /diff                # Show git diff with stats
 /simplify            # Review and simplify recent changes
 /find-bug src/       # Analyze code for bugs
+/plan                # Create a structured task plan
+/pin src/core/       # Pin files to context
+/memory              # View/edit persistent memory
 /context             # View context window usage
 /compact             # Compress conversation history
 /export              # Save conversation to file
@@ -85,6 +109,8 @@ kcode --print --json-schema '{"type":"object","properties":{"bugs":{"type":"arra
 /stats               # Usage statistics
 /doctor              # System health check
 /theme dracula       # Switch color theme
+/cloud               # Configure cloud API providers
+/toggle              # Switch between local and cloud models
 /plugins             # List installed plugins
 /help                # Show all commands
 ```
@@ -96,6 +122,14 @@ kcode models list
 kcode models add gpt4 https://api.openai.com --context 128000 --default
 kcode models default mymodel
 kcode models rm oldmodel
+```
+
+### Pro management
+
+```bash
+kcode pro status                    # Show Pro status and features
+kcode pro activate <your-pro-key>   # Activate Pro
+kcode pro deactivate                # Remove Pro key
 ```
 
 ## Configuration
@@ -118,7 +152,8 @@ Settings are loaded in this order (highest priority first):
   "autoMemory": true,
   "effortLevel": "high",
   "autoRoute": true,
-  "theme": "dracula"
+  "theme": "dracula",
+  "proKey": "kcode_pro_..."
 }
 ```
 
@@ -189,7 +224,7 @@ Use `/plugins` to list installed plugins.
 KCode assembles a system prompt from 10 independent layers:
 
 1. **Identity** — who KCode is, its capabilities and limitations
-2. **Tool instructions** — usage patterns for all 18 built-in tools
+2. **Tool instructions** — usage patterns for all 46 built-in tools
 3. **Code guidelines** — safe coding practices, verification rules
 4. **Git instructions** — commit protocol, safety rules, PR workflow
 5. **Environment** — working directory, platform, git state, model info
@@ -204,10 +239,10 @@ KCode assembles a system prompt from 10 independent layers:
 ```
 src/
   core/       # Engine: conversation loop, config, permissions, models, memory,
-              #   system prompt, world model, user model, narrative, intentions,
-              #   compaction, hooks, rules, templates, stats, doctor, MCP, etc.
-  tools/      # 18 built-in tools + MCP integration
-  ui/         # Ink-based terminal UI (React components) + print mode
+              #   system prompt, pro gating, hooks, swarm, analytics, compaction,
+              #   transcript search, distillation, pricing, and more
+  tools/      # 46 built-in tools + MCP integration
+  ui/         # Ink-based terminal UI (React 19 components) + print mode
   utils/      # Shared utilities
   index.ts    # CLI entry point (Commander.js)
 ```
@@ -218,6 +253,7 @@ src/
 - **Bash safety analysis**: Detects command injection, pipe-to-shell, dangerous redirections, shell invocation, quote desync
 - **Write validation**: Blocks writes outside working directory and to sensitive files (.env, .bashrc, .zshrc)
 - **Allowlist**: "Always allow" specific tool+pattern combos per session
+- **Workspace trust**: Hooks and plugins require explicit trust per workspace
 
 ## Keyboard Shortcuts (TUI)
 
@@ -234,7 +270,7 @@ src/
 
 ```bash
 bun run dev          # Watch mode
-bun test             # Run tests (16 test files, 294 tests)
+bun test             # Run tests (31 test files, 559 tests)
 bun run build        # Build standalone binary (~101 MB)
 bun run build:dev    # Build without minification
 kcode doctor         # Check system health
@@ -250,6 +286,10 @@ code --install-extension vscode-extension/kcode-0.1.0.vsix
 ```
 
 Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+Shift+K` keybinding, terminal integration. See [vscode-extension/](./vscode-extension/) for details.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines. Report security issues to security@kulvex.ai (see [SECURITY.md](./SECURITY.md)).
 
 ## License
 
