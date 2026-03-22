@@ -289,7 +289,7 @@ Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+S
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines. Report security issues to security@kulvex.ai (see [SECURITY.md](./SECURITY.md)).
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines. Report security issues to contact@astrolexis.space (see [SECURITY.md](./SECURITY.md)).
 
 ## License
 
