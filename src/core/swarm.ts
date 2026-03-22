@@ -102,10 +102,9 @@ export async function runSwarm(
   cwd: string,
   model?: string,
 ): Promise<SwarmResult> {
-  const { requirePro } = await import("./pro.js");
-  await requirePro("swarm");
-
-  const agentCount = Math.min(tasks.length, MAX_AGENTS);
+  const { getMaxSwarmAgents } = await import("./pro.js");
+  const maxAgents = await getMaxSwarmAgents();
+  const agentCount = Math.min(tasks.length, maxAgents);
   const start = Date.now();
 
   const swarmTasks: SwarmTask[] = tasks.slice(0, agentCount).map((prompt, i) => ({
@@ -161,10 +160,11 @@ export async function runSwarmOnFiles(
   agentCount: number = 4,
   model?: string,
 ): Promise<SwarmResult> {
-  const { requirePro } = await import("./pro.js");
-  await requirePro("swarm");
+  const { getMaxSwarmAgents } = await import("./pro.js");
+  const maxAgents = await getMaxSwarmAgents();
+  const effectiveAgentCount = Math.min(agentCount, maxAgents);
 
-  const chunks = chunkFiles(files, agentCount);
+  const chunks = chunkFiles(files, effectiveAgentCount);
 
   const tasks = chunks.map((fileGroup, i) => {
     const fileList = fileGroup.join("\n  ");

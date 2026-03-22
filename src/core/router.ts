@@ -190,7 +190,19 @@ export async function routeToModel(
   userMessage: string,
   hasImageContent?: boolean,
 ): Promise<string> {
-  // Phase 12: Check custom routing rules first (pre-compiled, cached with TTL)
+  // Smart routing is a Pro feature — free users always use defaultModel
+  const { isPro } = await import("./pro.js");
+  if (!(await isPro())) {
+    // Free users still get vision routing (critical for image input)
+    if (hasImageContent) {
+      const models = await listModels();
+      const visionModel = models.find(m => m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"));
+      if (visionModel) return visionModel.name;
+    }
+    return defaultModel;
+  }
+
+  // Pro: full smart routing with custom rules and task classification
   const rules = loadRoutingRules();
   for (const rule of rules) {
     if (rule.compiled.test(userMessage)) {
@@ -207,7 +219,6 @@ export async function routeToModel(
 
   const models = await listModels();
 
-  // Map task type to capability
   const capabilityMap: Record<string, string[]> = {
     simple: ["fast"],
     code: ["code"],
@@ -230,6 +241,31 @@ export async function routeToModel(
   }
 
   return defaultModel;
+}
+
+/**
+ * Cloud failover: try multiple providers in order (Pro only).
+ * Returns the first successful response or throws the last error.
+ */
+export async function withCloudFailover<T>(
+  models: string[],
+  fn: (model: string) => Promise<T>,
+): Promise<T> {
+  const { isPro } = await import("./pro.js");
+  if (!(await isPro()) || models.length <= 1) {
+    return fn(models[0]);
+  }
+
+  let lastError: Error | undefined;
+  for (const model of models) {
+    try {
+      return await fn(model);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      log.warn("router", `Model ${model} failed, trying next: ${lastError.message}`);
+    }
+  }
+  throw lastError ?? new Error("All models in failover chain failed");
 }
 
 /** Reset cached routing rules (for testing or after config change). */

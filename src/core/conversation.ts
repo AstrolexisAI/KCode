@@ -1021,6 +1021,12 @@ export class ConversationManager {
     // Ensure system prompt is built (async due to Pro check in distillation)
     await this._systemPromptReady;
 
+    // Session limit check: enforce 50/month cap for free users (first message only)
+    if (this.state.messages.length === 0) {
+      const { checkSessionLimit } = await import("./pro.js");
+      await checkSessionLimit();
+    }
+
     // Budget guard: check if session has exceeded max budget
     if (this.config.maxBudgetUsd && this.config.maxBudgetUsd > 0) {
       try {
