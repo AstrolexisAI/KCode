@@ -4,7 +4,7 @@
 
 **Do NOT file a public GitHub issue for security vulnerabilities.**
 
-Email **security@kulvex.ai** with:
+Email **contact@astrolexis.space** with:
 
 - A description of the vulnerability
 - Steps to reproduce
