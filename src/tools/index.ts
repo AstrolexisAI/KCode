@@ -83,7 +83,7 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
   // Browser automation (Playwright)
   registry.register("Browser", browserDefinition, executeBrowser);
 
-  // Image generation (ComfyUI)
+  // Image generation (cloud: Flux, DALL-E)
   registry.register("ImageGen", imageGenDefinition, executeImageGen);
 
   // Structured planning
