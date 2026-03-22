@@ -625,9 +625,9 @@ program
       console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
       console.log(`  Pro features are now unlocked.\n`);
     } else {
-      console.error(`\x1b[31m✗\x1b[0m Invalid Pro key format.\n`);
-      console.error(`  Expected format: kcode_pro_<32+ hex chars>`);
-      console.error(`  Get a key at: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
+      console.error(`\x1b[31m✗\x1b[0m Pro key not valid.\n`);
+      console.error(`  The key was not recognized. Check that it's correct.`);
+      console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
       // Remove invalid key
       delete settings.proKey;
       await saveUserSettingsRaw(settings);
@@ -1760,13 +1760,18 @@ program
   .option("-h, --host <host>", "Host to bind to", "127.0.0.1")
   .option("--api-key <key>", "Require this API key for authentication")
   .action(async (opts: { port?: number; host?: string; apiKey?: string }) => {
-    const { startHttpServer } = await import("./core/http-server.js");
-    process.env.KCODE_VERSION = VERSION;
-    await startHttpServer({
-      port: opts.port ?? 10101,
-      host: opts.host ?? "127.0.0.1",
-      apiKey: opts.apiKey,
-    });
+    try {
+      const { startHttpServer } = await import("./core/http-server.js");
+      process.env.KCODE_VERSION = VERSION;
+      await startHttpServer({
+        port: opts.port ?? 10101,
+        host: opts.host ?? "127.0.0.1",
+        apiKey: opts.apiKey,
+      });
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
   });
 
 // ─── Parse ──────────────────────────────────────────────────────
