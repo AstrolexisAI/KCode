@@ -73,15 +73,16 @@ async function _doValidation(): Promise<boolean> {
   try {
     const settings = await loadUserSettingsRaw();
     const key = (settings as Record<string, unknown>).proKey;
-    if (typeof key !== "string" || !key.startsWith("kcode_pro_")) {
-      return false;
-    }
+    // Accept kcode_pro_ keys AND klx_lic_ keys (KULVEX licenses include Pro)
+    if (typeof key !== "string") return false;
+    const isProKey = key.startsWith("kcode_pro_");
+    const isKulvexKey = key.startsWith("klx_lic_");
+    if (!isProKey && !isKulvexKey) return false;
 
-    // Validate key format: kcode_pro_ + 32+ hex chars, case-insensitive (#6)
-    const payload = key.slice("kcode_pro_".length);
-    if (payload.length < 32 || !/^[a-fA-F0-9]+$/i.test(payload)) {
-      return false;
-    }
+    // Validate key format: prefix + sufficient entropy
+    const prefix = isProKey ? "kcode_pro_" : "klx_lic_";
+    const payload = key.slice(prefix.length);
+    if (payload.length < 20) return false;
 
     // Online validation with secure offline fallback
     return await validateProKey(key);
