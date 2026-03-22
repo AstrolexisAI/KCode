@@ -717,6 +717,53 @@ proCmd
     }
   });
 
+proCmd
+  .command("manage")
+  .description("Open billing portal to manage subscription, cancel, or update payment")
+  .action(async () => {
+    try {
+      if (!(await isPro())) {
+        console.error("\x1b[31m✗\x1b[0m No active Pro subscription to manage.");
+        console.error("  Activate first: kcode pro activate <your-pro-key>");
+        process.exit(1);
+      }
+
+      const { loadUserSettingsRaw } = await import("./core/config");
+      const settings = await loadUserSettingsRaw();
+      const key = (settings as Record<string, unknown>).proKey as string;
+
+      console.log("\nOpening billing portal...\n");
+
+      const resp = await fetch("https://kulvex.ai/api/pro/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      const data = await resp.json() as { url?: string; error?: string };
+
+      if (data.url) {
+        console.log(`\x1b[32m✓\x1b[0m Billing portal: \x1b[36m${data.url}\x1b[0m\n`);
+        // Try to open in browser
+        try {
+          const { execSync } = await import("node:child_process");
+          const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+          execSync(`${cmd} "${data.url}"`, { stdio: "ignore" });
+          console.log("  Opened in your browser.");
+        } catch {
+          console.log("  Copy the URL above to open in your browser.");
+        }
+      } else {
+        console.error(`\x1b[31m✗\x1b[0m ${data.error ?? "Failed to create portal session"}`);
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error(`\x1b[31m✗\x1b[0m ${err instanceof Error ? err.message : err}`);
+      process.exit(1);
+    }
+  });
+
 // ─── Teach subcommand ──────────────────────────────────────────
 
 const teachCmd = program
