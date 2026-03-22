@@ -881,6 +881,7 @@ export class ConversationManager {
   private state: ConversationState;
   private tools: ToolRegistry;
   private systemPrompt: string;
+  private _systemPromptReady: Promise<void>;
   private contextWindowSize: number;
   private maxRetries: number;
   private cumulativeUsage: TokenUsage;
@@ -902,8 +903,9 @@ export class ConversationManager {
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
     this.tools = tools;
-    this.systemPrompt = SystemPromptBuilder.build(config, config.version);
-    this.systemPromptHash = this.hashString(this.systemPrompt);
+    this.systemPrompt = ""; // initialized async via initSystemPrompt()
+    this.systemPromptHash = "";
+    this._systemPromptReady = this.initSystemPrompt();
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
     this.compactThreshold = config.compactThreshold ?? 0.75;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
@@ -944,6 +946,12 @@ export class ConversationManager {
         // Audit logger not available, continue without it
       }
     }
+  }
+
+  /** Build system prompt asynchronously (distillation requires async Pro check). */
+  private async initSystemPrompt(): Promise<void> {
+    this.systemPrompt = await SystemPromptBuilder.build(this.config, this.config.version);
+    this.systemPromptHash = this.hashString(this.systemPrompt);
   }
 
   /** Access the permission manager (e.g., to set the prompt callback from the UI). */
@@ -1010,6 +1018,9 @@ export class ConversationManager {
    * The generator runs the full agent loop: streaming response, tool execution, repeat.
    */
   async *sendMessage(userMessage: string): AsyncGenerator<StreamEvent> {
+    // Ensure system prompt is built (async due to Pro check in distillation)
+    await this._systemPromptReady;
+
     // Budget guard: check if session has exceeded max budget
     if (this.config.maxBudgetUsd && this.config.maxBudgetUsd > 0) {
       try {

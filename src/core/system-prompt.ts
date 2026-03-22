@@ -24,7 +24,7 @@ export class SystemPromptBuilder {
    * Build the full system prompt from config and environment context.
    * Each section is independently generated and can be toggled.
    */
-  static build(config: KCodeConfig, version?: string): string {
+  static async build(config: KCodeConfig, version?: string): Promise<string> {
     // If the user overrides the entire system prompt, return it directly
     if (config.systemPromptOverride) {
       return config.systemPromptOverride;
