@@ -86,8 +86,8 @@ export async function searchTranscripts(
   query: string,
   maxResults: number = 20,
 ): Promise<TranscriptSearchResult[]> {
-  const { requirePro } = await import("./pro.js");
-  await requirePro("transcript-search");
+  const { getTranscriptSearchHoursLimit } = await import("./pro.js");
+  const hoursLimit = await getTranscriptSearchHoursLimit();
 
   if (!query.trim()) return [];
 
@@ -116,7 +116,7 @@ export async function searchTranscripts(
       `SELECT te.session_file, te.role, te.content, te.timestamp, rank
        FROM transcript_fts
        JOIN transcript_entries te ON transcript_fts.rowid = te.id
-       WHERE transcript_fts MATCH ?
+       WHERE transcript_fts MATCH ?${hoursLimit != null ? ` AND te.timestamp >= datetime('now', '-${hoursLimit} hours')` : ""}
        ORDER BY rank
        LIMIT ?`
     ).all(ftsQuery, maxResults);

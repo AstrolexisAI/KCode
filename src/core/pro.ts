@@ -18,14 +18,28 @@ const RECHECK_DAYS = 7;
 const CACHE_HMAC_KEY = `kcode_cache_${homedir()}_${process.arch}_${process.platform}`;
 
 export const PRO_FEATURES = {
+  // Hard gates — fully blocked without Pro
   "http-server":       "HTTP API server for IDE integrations",
-  "swarm":             "Multi-agent swarm orchestration",
-  "transcript-search": "Full-text search across past transcripts",
+  "browser":           "Browser automation (Playwright)",
   "hooks-webhook":     "HTTP webhook hooks",
   "hooks-agent":       "Agent-spawn hooks",
-  "browser":           "Browser automation (Playwright)",
-  "image-gen":         "Image generation (ComfyUI)",
   "distillation":      "Distilled learning from past sessions",
+  "smart-routing":     "Auto-select best model per task type",
+  "cloud-failover":    "Multi-provider failover chain",
+  "deploy":            "Deploy automation (Docker, Vercel, Fly, SSH)",
+  // Soft gates — limited in free, unlimited in Pro
+  "swarm":             "Multi-agent swarm (free: 1 sequential, Pro: up to 8 parallel)",
+  "transcript-search": "Transcript search (free: 72h, Pro: full history)",
+  "image-gen":         "Image generation via cloud API (Flux, DALL-E)",
+  "analytics-export":  "Detailed analytics with cost tracking and export",
+} as const;
+
+// ── Soft gate limits ────────────────────────────────────────────
+export const FREE_LIMITS = {
+  maxSwarmAgents: 1,
+  transcriptSearchHours: 72,
+  contextWindowCap: 32_000,
+  sessionsPerMonth: 50,
 } as const;
 
 export type ProFeature = keyof typeof PRO_FEATURES;
@@ -164,18 +178,71 @@ async function validateProKey(key: string): Promise<boolean> {
 }
 
 /**
- * Require Pro for a feature. Throws a user-friendly error if not Pro.
+ * Require Pro for a feature.
+ * In interactive mode (TTY): shows feature info and prompts for key inline.
+ * In non-interactive mode: throws with activation instructions.
  */
 export async function requirePro(feature: ProFeature): Promise<void> {
   if (await isPro()) return;
 
   const description = PRO_FEATURES[feature];
+
+  // Non-interactive (piped, CI, tools) — throw immediately
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      `⚡ KCode Pro required — ${description}\n` +
+      `\n` +
+      `  This feature requires KCode Pro ($19/mo).\n` +
+      `  Activate: kcode pro activate <your-pro-key>\n` +
+      `  Get a key: https://kulvex.ai/pro\n`
+    );
+  }
+
+  // Interactive — show feature and prompt for key
+  const C = { reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m", cyan: "\x1b[36m", yellow: "\x1b[33m", green: "\x1b[32m", red: "\x1b[31m" };
+
+  console.log();
+  console.log(`  ${C.yellow}⚡ KCode Pro feature${C.reset}`);
+  console.log(`  ${C.bold}${description}${C.reset}`);
+  console.log();
+  console.log(`  ${C.dim}This feature requires KCode Pro ($19/mo).${C.reset}`);
+  console.log(`  ${C.dim}Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}`);
+  console.log();
+
+  // Prompt for key inline
+  const { createInterface } = await import("node:readline");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+  const answer = await new Promise<string>((resolve) => {
+    rl.question(`  ${C.bold}Enter Pro key${C.reset} ${C.dim}(or press Enter to cancel):${C.reset} `, (ans) => {
+      resolve(ans.trim());
+    });
+  });
+  rl.close();
+
+  if (!answer) {
+    throw new Error("Cancelled — Pro key required for this feature.");
+  }
+
+  // Try to activate the key
+  const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
+  const settings = await loadUserSettingsRaw();
+  settings.proKey = answer;
+  await saveUserSettingsRaw(settings);
+  clearProCache();
+
+  if (await isPro()) {
+    console.log(`\n  ${C.green}✓${C.reset} KCode Pro activated! Continuing...\n`);
+    return;
+  }
+
+  // Key didn't validate — revert
+  delete settings.proKey;
+  await saveUserSettingsRaw(settings);
+  clearProCache();
   throw new Error(
-    `⚡ KCode Pro required — ${description}\n` +
-    `\n` +
-    `  This feature requires KCode Pro ($19/mo).\n` +
-    `  Activate: kcode pro activate <your-pro-key>\n` +
-    `  Get a key: https://kulvex.ai/pro\n`
+    `${C.red}✗${C.reset} Pro key not valid. Check that it's correct.\n` +
+    `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`
   );
 }
 
@@ -183,4 +250,99 @@ export async function requirePro(feature: ProFeature): Promise<void> {
 export function clearProCache(): void {
   cachedProStatus = null;
   _validationPromise = null;
+}
+
+// ── Soft gate helpers ───────────────────────────────────────────
+
+/** Max swarm agents: 1 for free, MAX_AGENTS for Pro. */
+export async function getMaxSwarmAgents(): Promise<number> {
+  return (await isPro()) ? 8 : FREE_LIMITS.maxSwarmAgents;
+}
+
+/** Context window cap: 32K for free, unlimited for Pro. */
+export async function getContextWindowCap(): Promise<number | null> {
+  return (await isPro()) ? null : FREE_LIMITS.contextWindowCap;
+}
+
+/** Transcript search hours: 72h for free, null (unlimited) for Pro. */
+export async function getTranscriptSearchHoursLimit(): Promise<number | null> {
+  return (await isPro()) ? null : FREE_LIMITS.transcriptSearchHours;
+}
+
+/** Count sessions this month from transcript directory. */
+export async function getSessionCountThisMonth(): Promise<number> {
+  try {
+    const transcriptDir = join(KCODE_HOME, "transcripts");
+    const { readdirSync, statSync } = await import("node:fs");
+    if (!existsSync(transcriptDir)) return 0;
+    const files = readdirSync(transcriptDir);
+    const now = Date.now();
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    let count = 0;
+    for (const f of files) {
+      if (!f.endsWith(".jsonl")) continue;
+      try {
+        const mtime = statSync(join(transcriptDir, f)).mtimeMs;
+        if (mtime >= thirtyDaysAgo) count++;
+      } catch { /* skip */ }
+    }
+    return count;
+  } catch { return 0; }
+}
+
+/** Check if session limit reached (free: 50/month). Uses requirePro for interactive prompt. */
+export async function checkSessionLimit(): Promise<void> {
+  if (await isPro()) return;
+  const count = await getSessionCountThisMonth();
+  if (count >= FREE_LIMITS.sessionsPerMonth) {
+    // This will show the interactive Pro key prompt if in TTY
+    await requirePro("swarm"); // reuse — the error message is overridden below
+  }
+}
+
+/** Soft gate for swarm: show upgrade prompt when free user hits agent limit. */
+export async function softRequireSwarm(requestedAgents: number): Promise<number> {
+  const max = await getMaxSwarmAgents();
+  if (requestedAgents <= max) return requestedAgents;
+
+  if (!process.stdin.isTTY) {
+    process.stderr.write(
+      `\x1b[33m⚠ Free tier: swarm limited to ${max} agent. Upgrade to Pro for up to 8 parallel agents.\x1b[0m\n` +
+      `  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`
+    );
+    return max;
+  }
+
+  console.log();
+  console.log(`  \x1b[33m⚠ Free tier: swarm limited to ${max} agent (you requested ${requestedAgents}).\x1b[0m`);
+  console.log(`  \x1b[2mUpgrade to Pro for up to 8 parallel agents.\x1b[0m`);
+  console.log(`  \x1b[2mGet a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m`);
+  console.log();
+
+  const { createInterface } = await import("node:readline");
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise<string>((resolve) => {
+    rl.question(`  \x1b[1mEnter Pro key\x1b[0m \x1b[2m(or press Enter to continue with ${max} agent):\x1b[0m `, (ans) => resolve(ans.trim()));
+  });
+  rl.close();
+
+  if (!answer) return max; // Continue with free limit
+
+  // Try to activate
+  const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
+  const settings = await loadUserSettingsRaw();
+  settings.proKey = answer;
+  await saveUserSettingsRaw(settings);
+  clearProCache();
+
+  if (await isPro()) {
+    console.log(`\n  \x1b[32m✓\x1b[0m Pro activated! Using ${requestedAgents} agents.\n`);
+    return requestedAgents;
+  }
+
+  delete settings.proKey;
+  await saveUserSettingsRaw(settings);
+  clearProCache();
+  console.log(`\n  \x1b[31m✗\x1b[0m Key not valid. Continuing with ${max} agent.\n`);
+  return max;
 }

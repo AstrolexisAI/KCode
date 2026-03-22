@@ -47,6 +47,7 @@ import { askUserDefinition, executeAskUser } from "./ask-user";
 import { sendMessageDefinition, executeSendMessage } from "./send-message";
 import { lsDefinition, executeLs } from "./ls";
 import { toolSearchDefinition, executeToolSearch } from "./tool-search";
+import { deployDefinition, executeDeploy } from "./deploy";
 
 /**
  * Register all built-in tools and optionally MCP-discovered tools.
@@ -147,6 +148,9 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
 
   // ToolSearch — deferred tool loading
   registry.register("ToolSearch", toolSearchDefinition, executeToolSearch);
+
+  // Deploy — deploy automation (Pro)
+  registry.register("Deploy", deployDefinition, executeDeploy);
 
   // MCP resource tools (always available, gracefully handle no servers)
   registry.register("ListMcpResources", listMcpResourcesDefinition, executeListMcpResources);

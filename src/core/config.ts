@@ -547,6 +547,10 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     lockedApiBase ?? settings.apiBase ?? process.env.KCODE_API_BASE);
   const contextSize = await getModelContextSize(model);
 
+  const { getContextWindowCap } = await import("./pro.js");
+  const cap = await getContextWindowCap();
+  const effectiveContextSize = cap ? Math.min(contextSize, cap) : contextSize;
+
   return {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? (await loadUserSettingsRaw()).anthropicApiKey as string | undefined,
@@ -556,7 +560,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     systemPrompt: "", // Built later by SystemPromptBuilder
     workingDirectory: cwd,
     permissionMode: settings.permissionMode ?? "ask",
-    contextWindowSize: contextSize,
+    contextWindowSize: effectiveContextSize,
     autoRoute: settings.autoRoute ?? true, // enabled by default
     theme: settings.theme,
     permissionRules: settings.permissionRules,

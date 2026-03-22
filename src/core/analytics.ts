@@ -174,3 +174,33 @@ export function formatAnalyticsSummary(summary: AnalyticsSummary, days: number):
 
   return lines.join("\n");
 }
+
+/**
+ * Export analytics as JSON or CSV (Pro only).
+ */
+export async function exportAnalytics(
+  days: number = 30,
+  format: "json" | "csv" = "json",
+): Promise<string> {
+  const { requirePro } = await import("./pro.js");
+  await requirePro("analytics-export");
+
+  const db = getDb();
+  const rows = db.query(
+    `SELECT session_id, tool_name, model, duration_ms, is_error,
+            input_tokens, output_tokens, cost_usd, created_at
+     FROM tool_analytics
+     WHERE created_at >= datetime('now', '-${days} days')
+     ORDER BY created_at DESC`
+  ).all() as Array<Record<string, unknown>>;
+
+  if (format === "csv") {
+    const header = "session_id,tool_name,model,duration_ms,is_error,input_tokens,output_tokens,cost_usd,created_at";
+    const lines = rows.map(r =>
+      `${r.session_id},${r.tool_name},${r.model ?? ""},${r.duration_ms},${r.is_error ? 1 : 0},${r.input_tokens ?? 0},${r.output_tokens ?? 0},${r.cost_usd ?? 0},${r.created_at}`
+    );
+    return [header, ...lines].join("\n");
+  }
+
+  return JSON.stringify(rows, null, 2);
+}
