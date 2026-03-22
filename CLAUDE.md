@@ -14,7 +14,7 @@ bun run src/index.ts       # Run directly (no build needed, 0 MB overhead)
 bun run dev                # Watch mode
 bun run build              # Production build → dist/kcode (~101 MB, minified)
 bun run build:dev          # Dev build (no minification)
-bun test                   # Run all tests (18 test files, 309 tests)
+bun test                   # Run all tests (31 test files, 559 tests)
 bun test src/core/config.test.ts   # Run a single test file
 ```
 
