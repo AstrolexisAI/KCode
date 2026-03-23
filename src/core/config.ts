@@ -511,6 +511,8 @@ export async function saveUserSettings(settings: Settings): Promise<void> {
   const dir = KCODE_HOME;
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+  // Restrict permissions — settings may contain API keys and Pro license keys
+  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch { /* best-effort */ }
 }
 
 /** Load raw user settings JSON (preserves extra fields like provider-specific API keys). */
@@ -523,6 +525,7 @@ export async function saveUserSettingsRaw(raw: Record<string, unknown>): Promise
   const dir = KCODE_HOME;
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(USER_SETTINGS_PATH, JSON.stringify(raw, null, 2) + "\n");
+  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch { /* best-effort */ }
 }
 
 export async function saveProjectSettings(cwd: string, settings: Settings): Promise<void> {
@@ -530,6 +533,7 @@ export async function saveProjectSettings(cwd: string, settings: Settings): Prom
   const dir = dirname(path);
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(path, JSON.stringify(settings, null, 2) + "\n");
+  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(path, 0o600); } catch { /* best-effort */ }
 }
 
 // ─── Build KCodeConfig ──────────────────────────────────────────

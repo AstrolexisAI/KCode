@@ -316,6 +316,9 @@ function isPrivateHostname(hostname: string): boolean {
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
   if (/^192\.168\./.test(h)) return true;
   if (/^169\.254\./.test(h)) return true;
+  // Cloud provider metadata endpoints (AWS/GCP link-local + Azure wireserver)
+  if (h === "168.63.129.16") return true; // Azure Instance Metadata / wireserver
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h)) return true; // AWS VPC carrier-grade NAT (100.64-127.x)
   if (/^0\./.test(h) || h === "0.0.0.0") return true;
   if (h === "::1" || h === "[::1]") return true;
   if (/^fe80:/i.test(h) || /^fd/i.test(h) || /^fc/i.test(h)) return true;
@@ -351,6 +354,14 @@ async function executeHookHttp(
   const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
   if (isPrivateHostname(hostname)) {
     return { exitCode: 1, stdout: "", stderr: `Hook URL blocked (private/internal): ${action.url}` };
+  }
+
+  // Enforce HTTPS when auth headers are present (legacy format protection)
+  if (action.headers && parsed.protocol !== "https:") {
+    const hasAuth = Object.keys(action.headers).some(k => k.toLowerCase() === "authorization");
+    if (hasAuth) {
+      return { exitCode: 1, stdout: "", stderr: `Hook auth headers require HTTPS, got: ${parsed.protocol}` };
+    }
   }
 
   try {
