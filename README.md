@@ -13,7 +13,7 @@ KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp
 - **11 color themes**: default, dark, light, cyberpunk, monokai, solarized, dracula, gruvbox, nord, catppuccin, matrix
 - **5 permission modes**: ask, auto, plan, deny, acceptEdits
 - **10-layer cognitive architecture**: identity, tools, code guidelines, git awareness, environment sensing, situational awareness, metacognition, user model, world model, session narrative
-- **Local LLM support**: Hardware-aware setup wizard detects GPU/VRAM, downloads models, manages llama.cpp (Linux/Windows) and MLX (macOS Apple Silicon) automatically
+- **Local LLM support**: Hardware-aware setup wizard detects GPU/VRAM, downloads models, manages llama.cpp (Linux/Windows) and MLX (macOS Apple Silicon) automatically. The bundled mnemo:mark5 models are curated, optimized abliterated Qwen variants from community creators (huihui-ai, mradermacher, mlabonne) — we handle quantization, hardware selection, and integration
 - **Cloud API support**: Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI — switch with `/cloud` or `/toggle`
 - **Multi-GPU inference**: Distribute across multiple GPUs (e.g., RTX 5090 + 4090) via llama.cpp RPC
 - **Plugin system**: Directory-based plugins with skills, hooks, and MCP server bundles

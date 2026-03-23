@@ -1,6 +1,11 @@
 // KCode - Model Manager
 // Downloads llama.cpp engine and AI models with automatic hardware-based selection.
-// All model codenames use the mnemo:mark5 scheme — real names are NEVER exposed.
+//
+// The mnemo:mark5 series are curated, renamed, and optimized abliterated Qwen
+// variants (uncensored via abliteration) for seamless local use in KCode/KULVEX.
+// Base models from open-source community creators (huihui-ai, mradermacher, mlabonne).
+// Our contribution: quantization tuning, hardware-aware selection, and ecosystem
+// integration — not the base model training.
 
 import { join } from "node:path";
 import { homedir } from "node:os";
