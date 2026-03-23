@@ -898,6 +898,7 @@ export class ConversationManager {
   private systemPromptHash = "";
   private sessionStartTime = Date.now();
   private sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  private static MAX_TURN_COSTS = 500; // cap to prevent unbounded memory growth
   private turnCosts: TurnCostEntry[] = [];
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
@@ -1183,6 +1184,7 @@ export class ConversationManager {
     let emptyEndTurnCount = 0; // track empty end_turn retries to avoid infinite loop
     const turnStartMs = Date.now();
     const crossTurnSigs = new Map<string, number>(); // track identical tool calls across turns
+    const MAX_LOOP_PATTERNS = 200; // cap to prevent unbounded Map growth
     const loopPatterns = new Map<string, { count: number; warned: boolean; redirects: number; examples: string[] }>(); // semantic loop detection
 
     while (true) {
@@ -1526,6 +1528,10 @@ export class ConversationManager {
             toolCalls: toolCalls.map(tc => tc.name),
             timestamp: Date.now(),
           });
+          // Evict oldest entries if over cap (keep recent + running totals accurate)
+          if (this.turnCosts.length > ConversationManager.MAX_TURN_COSTS) {
+            this.turnCosts = this.turnCosts.slice(-ConversationManager.MAX_TURN_COSTS);
+          }
         } catch { /* cost tracking is non-critical */ }
       }
 
@@ -1870,6 +1876,12 @@ export class ConversationManager {
             entry.count++;
             if (entry.examples.length < 3) entry.examples.push(command.slice(0, 80));
             loopPatterns.set(pattern, entry);
+
+            // Evict oldest entries if over cap
+            if (loopPatterns.size > MAX_LOOP_PATTERNS) {
+              const firstKey = loopPatterns.keys().next().value;
+              if (firstKey) loopPatterns.delete(firstKey);
+            }
 
             if (entry.count >= LOOP_PATTERN_HARD_STOP) {
               // Hard redirect: skip this call, force a strategy change, reset counter for fresh attempts
