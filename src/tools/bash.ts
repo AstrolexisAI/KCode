@@ -53,15 +53,25 @@ export function setBashStreamCallback(cb: BashStreamCallback | undefined): void 
 export type SudoPasswordPromptFn = () => Promise<string | null>;
 
 let _sudoPasswordPromptFn: SudoPasswordPromptFn | undefined;
-let _cachedSudoPassword: string | null = null;
+let _cachedSudoPassword: Buffer | null = null;
 let _sudoPasswordCacheTime = 0;
-const SUDO_PASSWORD_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const SUDO_PASSWORD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (reduced from 15 for security)
 
 export function setSudoPasswordPromptFn(fn: SudoPasswordPromptFn | undefined): void {
   _sudoPasswordPromptFn = fn;
 }
 
+/** Convert Buffer back to string for use — caller should avoid retaining the string */
+function _getSudoPasswordString(): string | null {
+  if (!_cachedSudoPassword) return null;
+  return _cachedSudoPassword.toString("utf-8");
+}
+
 export function clearSudoPasswordCache(): void {
+  // Explicitly zero out the buffer before releasing it
+  if (_cachedSudoPassword) {
+    _cachedSudoPassword.fill(0);
+  }
   _cachedSudoPassword = null;
   _sudoPasswordCacheTime = 0;
   // Clean up any leftover askpass scripts
@@ -180,18 +190,26 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   if (containsSudo) {
     // Check cached password first
     if (_cachedSudoPassword && (Date.now() - _sudoPasswordCacheTime) < SUDO_PASSWORD_CACHE_TTL) {
-      sudoPassword = _cachedSudoPassword;
-    } else if (_sudoPasswordPromptFn) {
-      sudoPassword = await _sudoPasswordPromptFn();
-      if (sudoPassword === null) {
-        return {
-          tool_use_id: "",
-          content: "Sudo command cancelled: user did not provide password.",
-          is_error: true,
-        };
+      sudoPassword = _getSudoPasswordString();
+    } else {
+      // Clear expired cache with secure zeroing
+      if (_cachedSudoPassword) {
+        _cachedSudoPassword.fill(0);
+        _cachedSudoPassword = null;
       }
-      _cachedSudoPassword = sudoPassword;
-      _sudoPasswordCacheTime = Date.now();
+      if (_sudoPasswordPromptFn) {
+        sudoPassword = await _sudoPasswordPromptFn();
+        if (sudoPassword === null) {
+          return {
+            tool_use_id: "",
+            content: "Sudo command cancelled: user did not provide password.",
+            is_error: true,
+          };
+        }
+        // Store as Buffer for secure memory handling
+        _cachedSudoPassword = Buffer.from(sudoPassword, "utf-8");
+        _sudoPasswordCacheTime = Date.now();
+      }
     }
     // If no prompt function available, sudo will fail naturally (no TTY)
   }

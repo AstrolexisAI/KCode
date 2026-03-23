@@ -3,7 +3,7 @@
 // Supports: authorization URL generation, callback handling, token storage/refresh,
 // token encryption, browser-based auth flow, and token revocation.
 
-import { randomBytes, createHash, createCipheriv, createDecipheriv } from "node:crypto";
+import { randomBytes, createHash, createCipheriv, createDecipheriv, pbkdf2Sync } from "node:crypto";
 import { join } from "node:path";
 import { homedir, platform } from "node:os";
 import { createServer, type Server } from "node:http";
@@ -60,9 +60,33 @@ function generateState(): string {
 
 // ─── Encryption ─────────────────────────────────────────────────
 
+// Persistent random salt for key derivation — NOT guessable from public info
+const OAUTH_SALT_FILE = join(homedir(), ".kcode", ".oauth-key-salt");
+
+function getOrCreateOAuthSalt(): string {
+  try {
+    const { existsSync, readFileSync, writeFileSync, mkdirSync } = require("node:fs") as typeof import("node:fs");
+    if (existsSync(OAUTH_SALT_FILE)) {
+      return readFileSync(OAUTH_SALT_FILE, "utf-8").trim();
+    }
+    const salt = randomBytes(32).toString("hex");
+    mkdirSync(join(homedir(), ".kcode"), { recursive: true });
+    writeFileSync(OAUTH_SALT_FILE, salt + "\n", { mode: 0o600 });
+    return salt;
+  } catch {
+    // Fallback: use a hash of machine-specific data (less secure but functional)
+    return createHash("sha256").update(`${homedir()}:${process.env.USER ?? "kcode"}`).digest("hex");
+  }
+}
+
+let _oauthEncKey: Buffer | null = null;
+
 function deriveEncryptionKey(): Buffer {
-  const machineId = `${homedir()}:${process.env.USER ?? "kcode"}:mcp-oauth-enc`;
-  return createHash("sha256").update(machineId).digest();
+  if (_oauthEncKey) return _oauthEncKey;
+  const salt = getOrCreateOAuthSalt();
+  const material = `${homedir()}:${process.env.USER ?? "kcode"}:mcp-oauth-enc`;
+  _oauthEncKey = pbkdf2Sync(material, salt, 100_000, 32, "sha256");
+  return _oauthEncKey;
 }
 
 function encryptTokens(tokens: OAuthTokens): EncryptedTokens {

@@ -254,12 +254,19 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
 
   // Resolve symlinks to prevent directory traversal via symlink chains
   try {
-    // Only resolve symlinks if the parent directory exists
-    const dir = resolved.split("/").slice(0, -1).join("/");
-    if (dir && existsSync(dir)) {
-      const realDir = realpathSync(dir);
-      const basename = resolved.split("/").pop() ?? "";
-      resolved = realDir + "/" + basename;
+    if (existsSync(resolved)) {
+      // File exists — resolve the full path including the final component
+      // This prevents symlink attacks where the file itself is a symlink
+      // (e.g., /tmp/project/secret.txt -> /etc/passwd)
+      resolved = realpathSync(resolved);
+    } else {
+      // File doesn't exist yet — resolve the parent directory only
+      const dir = resolved.split("/").slice(0, -1).join("/");
+      if (dir && existsSync(dir)) {
+        const realDir = realpathSync(dir);
+        const basename = resolved.split("/").pop() ?? "";
+        resolved = realDir + "/" + basename;
+      }
     }
   } catch {
     // If realpath fails, continue with resolved path

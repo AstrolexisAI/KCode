@@ -5,17 +5,39 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes, pbkdf2Sync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { loadUserSettingsRaw } from "./config.js";
 
 const KCODE_HOME = join(homedir(), ".kcode");
 const PRO_CACHE_FILE = join(KCODE_HOME, "pro-cache.json");
+const PRO_CACHE_SALT_FILE = join(KCODE_HOME, ".pro-cache-salt");
 const VALIDATE_URL = process.env.KCODE_PRO_VALIDATE_URL ?? "https://kulvex.ai/api/pro/validate";
 const RECHECK_DAYS = 7;
 
-// HMAC secret derived from machine-specific data to prevent cache file tampering (#9)
-const CACHE_HMAC_KEY = `kcode_cache_${homedir()}_${process.arch}_${process.platform}`;
+// HMAC key derived via PBKDF2 with a persistent random salt — NOT guessable from public info
+function getOrCreateCacheSalt(): string {
+  try {
+    if (existsSync(PRO_CACHE_SALT_FILE)) {
+      return readFileSync(PRO_CACHE_SALT_FILE, "utf-8").trim();
+    }
+  } catch { /* regenerate */ }
+  const salt = randomBytes(32).toString("hex");
+  try {
+    mkdirSync(KCODE_HOME, { recursive: true });
+    writeFileSync(PRO_CACHE_SALT_FILE, salt + "\n", { mode: 0o600 });
+  } catch { /* best-effort */ }
+  return salt;
+}
+
+let _cacheHmacKey: Buffer | null = null;
+function getCacheHmacKey(): Buffer {
+  if (_cacheHmacKey) return _cacheHmacKey;
+  const salt = getOrCreateCacheSalt();
+  const material = `kcode_cache_${homedir()}_${process.arch}_${process.platform}`;
+  _cacheHmacKey = pbkdf2Sync(material, salt, 100_000, 32, "sha256");
+  return _cacheHmacKey;
+}
 
 export const PRO_FEATURES = {
   // Hard gates — fully blocked without Pro
@@ -102,7 +124,7 @@ interface ProCache {
 }
 
 function computeHmac(key: string, validatedAt: string, valid: boolean): string {
-  return createHmac("sha256", CACHE_HMAC_KEY)
+  return createHmac("sha256", getCacheHmacKey())
     .update(`${key}|${validatedAt}|${valid}`)
     .digest("hex");
 }
