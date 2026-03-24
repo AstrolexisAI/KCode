@@ -54,24 +54,33 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
   if (opts.path) args.push(opts.path);
 
   return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
     const proc = spawn("rg", args, { cwd: process.cwd(), timeout: 30_000 });
 
-    proc.stdout.on("data", (data: Buffer) => chunks.push(data));
-    proc.stderr.on("data", (data: Buffer) => chunks.push(data));
+    proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
+    proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
 
     proc.on("close", () => {
-      let output = Buffer.concat(chunks).toString("utf-8").trim();
+      let output = Buffer.concat(stdoutChunks).toString("utf-8").trim();
 
-      // Apply head_limit
-      if (opts.head_limit && opts.head_limit > 0) {
+      // Apply offset and head_limit
+      if (opts.offset || (opts.head_limit && opts.head_limit > 0)) {
         const lines = output.split("\n");
-        output = lines.slice(opts.offset ?? 0, (opts.offset ?? 0) + opts.head_limit).join("\n");
+        const start = opts.offset ?? 0;
+        const end = opts.head_limit ? start + opts.head_limit : undefined;
+        output = lines.slice(start, end).join("\n");
+      }
+
+      // Use stderr only when stdout is empty (no results)
+      if (!output) {
+        const stderr = Buffer.concat(stderrChunks).toString("utf-8").trim();
+        output = stderr || "No matches found.";
       }
 
       resolve({
         tool_use_id: "",
-        content: output || "No matches found.",
+        content: output,
       });
     });
 

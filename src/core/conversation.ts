@@ -1202,7 +1202,7 @@ export class ConversationManager {
       // Uses hash-based caching to skip rebuild if nothing changed
       this.turnsSincePromptRebuild++;
       if (this.turnsSincePromptRebuild >= 5) {
-        const candidate = SystemPromptBuilder.build(this.config, this.config.version);
+        const candidate = await SystemPromptBuilder.build(this.config, this.config.version);
         const candidateHash = this.hashString(candidate);
         if (candidateHash !== this.systemPromptHash) {
           this.systemPrompt = candidate;
@@ -1845,7 +1845,14 @@ export class ConversationManager {
         // Cross-turn dedup: handle identical READ/OBSERVE calls repeated across turns
         // Skip Write/Edit — rewriting same file with different content is normal iteration
         const crossCount = (call.name !== "Write" && call.name !== "Edit") ? (crossTurnSigs.get(sig) ?? 0) : 0;
-        if (call.name !== "Write" && call.name !== "Edit") crossTurnSigs.set(sig, crossCount + 1);
+        if (call.name !== "Write" && call.name !== "Edit") {
+          crossTurnSigs.set(sig, crossCount + 1);
+          // Cap crossTurnSigs to prevent unbounded growth (same as loopPatterns)
+          if (crossTurnSigs.size > MAX_LOOP_PATTERNS) {
+            const first = crossTurnSigs.keys().next().value;
+            if (first) crossTurnSigs.delete(first);
+          }
+        }
 
         // Smart redirect: auto-advance Read offset instead of blocking
         if (crossCount >= 2 && call.name === "Read") {
@@ -2017,9 +2024,19 @@ export class ConversationManager {
           // Poll for stream chunks while the tool is running
           let done = false;
           let toolResult: import("./types").ToolResult | undefined;
-          toolPromise.then((r) => { toolResult = r; done = true; });
+          toolPromise
+            .then((r) => { toolResult = r; done = true; })
+            .catch((err) => {
+              toolResult = { tool_use_id: call.id, content: `Error: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+              done = true;
+            });
 
           while (!done) {
+            // Check if user aborted (Ctrl+C)
+            if (this.abortController?.signal.aborted) {
+              setBashStreamCallback(undefined);
+              break;
+            }
             // Drain any queued stream chunks
             while (streamQueue.length > 0) {
               const chunk = streamQueue.shift()!;

@@ -268,15 +268,15 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         if (bgHasHeredoc) {
           // Heredoc consumes stdin — use SUDO_ASKPASS instead
           const bgAskpass = `/tmp/.kcode-askpass-bg-${process.pid}-${Date.now()}`;
-          const escapedPw = sudoPassword.replace(/'/g, "'\\''");
-          writeFileSync(bgAskpass, `#!/bin/sh\necho '${escapedPw}'\n`, { mode: 0o700 });
+          const b64Pw = Buffer.from(sudoPassword).toString("base64");
+          writeFileSync(bgAskpass, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 -d)"\n`, { mode: 0o700 });
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
           bgCommand = `SUDO_ASKPASS=${bgAskpass} ${bgCommand} ; rm -f ${bgAskpass}`;
         } else {
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*S)/g, "sudo -S");
           const sudoCount = (bgCommand.match(/\bsudo\b/g) ?? []).length;
-          const escapedPw = sudoPassword.replace(/'/g, "'\\''");
-          const pwContent = (`${escapedPw}\\n`).repeat(sudoCount);
+          const b64Pw = Buffer.from(sudoPassword).toString("base64");
+          const pwContent = (`$(printf '%s' '${b64Pw}' | base64 -d)\\n`).repeat(sudoCount);
           bgCommand = `printf '${pwContent}' | ${bgCommand}`;
         }
       }
@@ -367,8 +367,8 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       // Write a temp askpass script via Node.js fs (password never in command line).
       useAskpass = true;
       askpassPath = `/tmp/.kcode-askpass-${process.pid}-${Date.now()}`;
-      const escapedPw = sudoPassword.replace(/'/g, "'\\''");
-      writeFileSync(askpassPath, `#!/bin/sh\necho '${escapedPw}'\n`, { mode: 0o700 });
+      const b64Pw = Buffer.from(sudoPassword).toString("base64");
+      writeFileSync(askpassPath, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 -d)"\n`, { mode: 0o700 });
       const rewrittenCmd = finalCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
       finalCommand = `SUDO_ASKPASS=${askpassPath} ${rewrittenCmd} ; _krc=$?; rm -f ${askpassPath}; exit $_krc`;
     } else {

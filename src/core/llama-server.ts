@@ -198,6 +198,7 @@ main()`;
 
     proc.on("error", (err) => {
       log.error("server", `Failed to start server: ${err.message}`);
+      try { logFile.flush(); logFile.end(); } catch { /* best effort */ }
       cleanupPidFile();
       reject(new Error(`Failed to start server: ${err.message}`));
     });

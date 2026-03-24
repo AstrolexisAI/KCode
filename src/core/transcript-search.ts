@@ -109,17 +109,32 @@ export async function searchTranscripts(
   const ftsQuery = words.join(" ");
 
   try {
-    const rows = db.query<
-      { session_file: string; role: string; content: string; timestamp: string; rank: number },
-      [string, number]
-    >(
-      `SELECT te.session_file, te.role, te.content, te.timestamp, rank
-       FROM transcript_fts
-       JOIN transcript_entries te ON transcript_fts.rowid = te.id
-       WHERE transcript_fts MATCH ?${hoursLimit != null ? ` AND te.timestamp >= datetime('now', '-${hoursLimit} hours')` : ""}
-       ORDER BY rank
-       LIMIT ?`
-    ).all(ftsQuery, maxResults);
+    const cutoff = hoursLimit != null
+      ? new Date(Date.now() - hoursLimit * 3600_000).toISOString()
+      : null;
+    const rows = cutoff
+      ? db.query<
+          { session_file: string; role: string; content: string; timestamp: string; rank: number },
+          [string, string, number]
+        >(
+          `SELECT te.session_file, te.role, te.content, te.timestamp, rank
+           FROM transcript_fts
+           JOIN transcript_entries te ON transcript_fts.rowid = te.id
+           WHERE transcript_fts MATCH ? AND te.timestamp >= ?
+           ORDER BY rank
+           LIMIT ?`
+        ).all(ftsQuery, cutoff, maxResults)
+      : db.query<
+          { session_file: string; role: string; content: string; timestamp: string; rank: number },
+          [string, number]
+        >(
+          `SELECT te.session_file, te.role, te.content, te.timestamp, rank
+           FROM transcript_fts
+           JOIN transcript_entries te ON transcript_fts.rowid = te.id
+           WHERE transcript_fts MATCH ?
+           ORDER BY rank
+           LIMIT ?`
+        ).all(ftsQuery, maxResults);
 
     return rows.map(r => ({
       sessionFile: r.session_file,

@@ -186,13 +186,14 @@ export async function exportAnalytics(
   await requirePro("analytics-export");
 
   const db = getDb();
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
   const rows = db.query(
     `SELECT session_id, tool_name, model, duration_ms, is_error,
             input_tokens, output_tokens, cost_usd, created_at
      FROM tool_analytics
-     WHERE created_at >= datetime('now', '-${days} days')
+     WHERE created_at >= ?
      ORDER BY created_at DESC`
-  ).all() as Array<Record<string, unknown>>;
+  ).all(cutoff) as Array<Record<string, unknown>>;
 
   if (format === "csv") {
     const header = "session_id,tool_name,model,duration_ms,is_error,input_tokens,output_tokens,cost_usd,created_at";
