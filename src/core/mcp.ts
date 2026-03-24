@@ -350,6 +350,7 @@ class McpServerConnection {
     this.restartCount++;
     log.info("mcp", `Restarting server "${this.name}" (attempt ${this.restartCount}/${this.maxRestarts})`);
     this.shutdown();
+    this.buffer = ""; // Clear buffer to prevent old process data contaminating new connection
     await this.start();
     await this.discoverTools();
     await this.discoverResources();
@@ -1315,19 +1316,22 @@ export class McpManager {
     if (this.healthCheckInterval) return;
 
     this.healthCheckInterval = setInterval(async () => {
+      // Collect dead servers first, then act — avoids Map mutation during async iteration
+      const deadServers: Array<[string, typeof this.servers extends Map<string, infer V> ? V : never]> = [];
       for (const [name, connection] of this.servers) {
-        if (!connection.isAlive()) {
-          log.warn("mcp", `Health check: server "${name}" is dead, attempting restart`);
-          try {
-            const restarted = await connection.restart();
-            if (!restarted) {
-              log.warn("mcp", `Health check: removing dead server "${name}" (restart failed)`);
-              this.servers.delete(name);
-            }
-          } catch {
-            log.warn("mcp", `Health check: removing dead server "${name}" (restart threw)`);
+        if (!connection.isAlive()) deadServers.push([name, connection]);
+      }
+      for (const [name, connection] of deadServers) {
+        log.warn("mcp", `Health check: server "${name}" is dead, attempting restart`);
+        try {
+          const restarted = await connection.restart();
+          if (!restarted) {
+            log.warn("mcp", `Health check: removing dead server "${name}" (restart failed)`);
             this.servers.delete(name);
           }
+        } catch {
+          log.warn("mcp", `Health check: removing dead server "${name}" (restart threw)`);
+          this.servers.delete(name);
         }
       }
     }, 30_000);

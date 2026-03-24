@@ -167,12 +167,8 @@ function pruneCompletedAgents(): void {
   }
 }
 
-// Register cleanup handlers
+// Register cleanup handler (exit only — SIGINT is handled by the main TUI)
 process.on("exit", cleanupAgents);
-process.on("SIGINT", () => {
-  cleanupAgents();
-  process.exit(1);
-});
 
 export const agentDefinition: ToolDefinition = {
   name: "Agent",

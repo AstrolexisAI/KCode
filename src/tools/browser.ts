@@ -128,7 +128,9 @@ function generatePlaywrightScript(input: Record<string, unknown>): string {
 
     case "evaluate":
       if (!script) throw new Error("script is required for evaluate action");
-      lines.push(`    const result = await page.evaluate(() => { ${script} });`);
+      // Pass script as a string to page.evaluate to prevent Node.js context escape
+      lines.push(`    const __script = ${JSON.stringify(script)};`);
+      lines.push(`    const result = await page.evaluate((__s) => { return new Function(__s)(); }, __script);`);
       lines.push(`    console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result));`);
       break;
   }
