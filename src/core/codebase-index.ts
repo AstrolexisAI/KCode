@@ -238,6 +238,7 @@ export class CodebaseIndex {
       }
       db.exec("COMMIT");
     } catch (err) {
+      try { db.exec("ROLLBACK"); } catch { /* already rolled back or no transaction */ }
       log.error("indexer", `Failed to save index: ${err}`);
     }
   }

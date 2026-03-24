@@ -140,6 +140,8 @@ export class CompactionManager {
     for (const msg of messages) {
       const role = msg.role.toUpperCase();
 
+      if (!msg.content) continue;
+
       if (typeof msg.content === "string") {
         parts.push(`${role}: ${msg.content}`);
         continue;

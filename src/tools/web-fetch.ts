@@ -10,6 +10,7 @@ export interface WebFetchInput {
 
 const MAX_CONTENT_SIZE = 512_000; // 512KB
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_CACHE_ENTRIES = 100;
 
 // ─── SSRF Protection ──────────────────────────────────────────
 // Block requests to private/internal networks and cloud metadata endpoints
@@ -136,13 +137,8 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
   let { url } = input as WebFetchInput;
   const { prompt } = input as WebFetchInput;
 
-  // Auto-upgrade HTTP to HTTPS
-  if (url.startsWith("http://")) {
-    url = url.replace("http://", "https://");
-  }
-
-  // Add protocol if missing
-  if (!url.startsWith("https://")) {
+  // Add protocol if missing (default to HTTPS)
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
 
@@ -222,6 +218,18 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
     }
 
     // Cache the result
+    // Evict expired entries when cache is full
+    if (responseCache.size >= MAX_CACHE_ENTRIES) {
+      const now = Date.now();
+      for (const [k, v] of responseCache) {
+        if (now - v.timestamp > CACHE_TTL_MS) responseCache.delete(k);
+      }
+      // If still full after eviction, drop oldest
+      if (responseCache.size >= MAX_CACHE_ENTRIES) {
+        const oldest = responseCache.keys().next().value;
+        if (oldest) responseCache.delete(oldest);
+      }
+    }
     responseCache.set(url, { content, timestamp: Date.now() });
 
     const output = prompt
