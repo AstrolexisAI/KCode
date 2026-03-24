@@ -475,11 +475,18 @@ async function executeHookAgent(
   proc.stdin.end();
 
   if (background) {
-    // Fire and forget — don't await completion
+    // Fire and forget — but enforce a max timeout to prevent zombie processes
+    const bgTimeout = Math.max(timeout, 300_000); // at least 5 minutes
+    const bgTimer = setTimeout(() => {
+      try { proc.kill(); } catch { /* best effort */ }
+      log.warn("hooks", `Agent hook (background) killed after ${bgTimeout}ms timeout`);
+    }, bgTimeout);
     proc.on("error", (err) => {
+      clearTimeout(bgTimer);
       log.warn("hooks", `Agent hook (background) error: ${err.message}`);
     });
     proc.on("close", (code) => {
+      clearTimeout(bgTimer);
       if (code !== 0) {
         log.warn("hooks", `Agent hook (background) exited with code ${code}`);
       }

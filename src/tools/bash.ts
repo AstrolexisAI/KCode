@@ -269,15 +269,16 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
           // Heredoc consumes stdin — use SUDO_ASKPASS instead
           const bgAskpass = `/tmp/.kcode-askpass-bg-${process.pid}-${Date.now()}`;
           const b64Pw = Buffer.from(sudoPassword).toString("base64");
-          writeFileSync(bgAskpass, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 -d)"\n`, { mode: 0o700 });
+          writeFileSync(bgAskpass, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
           bgCommand = `SUDO_ASKPASS=${bgAskpass} ${bgCommand} ; rm -f ${bgAskpass}`;
         } else {
-          bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*S)/g, "sudo -S");
-          const sudoCount = (bgCommand.match(/\bsudo\b/g) ?? []).length;
+          // Use SUDO_ASKPASS for all background sudo — avoids password in process list
+          const bgAskpassStdin = `/tmp/.kcode-askpass-bg2-${process.pid}-${Date.now()}`;
           const b64Pw = Buffer.from(sudoPassword).toString("base64");
-          const pwContent = (`$(printf '%s' '${b64Pw}' | base64 -d)\\n`).repeat(sudoCount);
-          bgCommand = `printf '${pwContent}' | ${bgCommand}`;
+          writeFileSync(bgAskpassStdin, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
+          bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
+          bgCommand = `SUDO_ASKPASS=${bgAskpassStdin} ${bgCommand} ; rm -f ${bgAskpassStdin}`;
         }
       }
 
@@ -368,7 +369,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       useAskpass = true;
       askpassPath = `/tmp/.kcode-askpass-${process.pid}-${Date.now()}`;
       const b64Pw = Buffer.from(sudoPassword).toString("base64");
-      writeFileSync(askpassPath, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 -d)"\n`, { mode: 0o700 });
+      writeFileSync(askpassPath, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
       const rewrittenCmd = finalCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
       finalCommand = `SUDO_ASKPASS=${askpassPath} ${rewrittenCmd} ; _krc=$?; rm -f ${askpassPath}; exit $_krc`;
     } else {

@@ -58,14 +58,9 @@ export function extractCommandPrefix(command: string): string {
 
 /** Detect command injection patterns */
 export function detectCommandInjection(command: string): string | null {
-  // Backtick substitution
+  // Backtick substitution — always dangerous (injection vector)
   if (/`[^`]+`/.test(command)) {
-    return "Command contains backtick substitution";
-  }
-
-  // $() command substitution (but not simple $VAR)
-  if (/\$\(/.test(command)) {
-    return "Command contains $() command substitution";
+    return "Command contains backtick injection";
   }
 
   // Subshell via ( )
@@ -74,6 +69,14 @@ export function detectCommandInjection(command: string): string | null {
     return "Command contains subshell invocation";
   }
 
+  return null;
+}
+
+/** Detect $() command substitution — moderate risk, not injection */
+export function detectCommandSubstitution(command: string): string | null {
+  if (/\$\(/.test(command)) {
+    return "Command contains $() substitution";
+  }
   return null;
 }
 
@@ -211,6 +214,9 @@ export function analyzeBashCommand(command: string): {
 
   const injection = detectCommandInjection(command);
   if (injection) issues.push(injection);
+
+  const substitution = detectCommandSubstitution(command);
+  if (substitution) issues.push(substitution);
 
   const redirection = detectDangerousRedirections(command);
   if (redirection) issues.push(redirection);
@@ -724,9 +730,9 @@ export class PermissionManager {
     // acceptEdits mode: auto-allow all tools except Bash, which requires prompting
     if (this.mode === "acceptEdits") {
       if (ACCEPT_EDITS_TOOLS.has(tool.name)) {
-        // Still enforce hard safety checks for Write/Edit
+        // Enforce ALL safety checks (protected dirs, sensitive files, path traversal)
         const safetyResult = this.analyzeToolSafety(tool);
-        if (!safetyResult.allowed && safetyResult.reason?.includes("must be absolute")) {
+        if (!safetyResult.allowed) {
           return safetyResult;
         }
         return { allowed: true };
@@ -738,7 +744,7 @@ export class PermissionManager {
     const safetyResult = this.analyzeToolSafety(tool);
 
     // If safety analysis blocks it outright, deny regardless of mode
-    if (!safetyResult.allowed && safetyResult.reason?.includes("must be absolute")) {
+    if (!safetyResult.allowed) {
       return safetyResult;
     }
 
@@ -750,8 +756,8 @@ export class PermissionManager {
     // Ask mode: check allowlist first
     const pattern = this.getToolPattern(tool);
     if (this.isAllowlisted(tool.name, pattern)) {
-      // Still enforce hard safety blocks
-      if (!safetyResult.allowed && safetyResult.reason?.includes("must be absolute")) {
+      // Enforce ALL safety blocks (already checked above, but re-check in case tool pattern changed)
+      if (!safetyResult.allowed) {
         return safetyResult;
       }
       return { allowed: true };

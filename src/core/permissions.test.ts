@@ -55,9 +55,9 @@ describe("detectCommandInjection", () => {
     expect(result).toContain("backtick");
   });
 
-  test("detects $() substitution", () => {
+  test("$() is not detected as injection (moved to detectCommandSubstitution)", () => {
     const result = detectCommandInjection("echo $(cat /etc/passwd)");
-    expect(result).toContain("$()");
+    expect(result).toBeNull();
   });
 
   test("detects subshell via ;(", () => {
@@ -236,9 +236,8 @@ describe("analyzeBashCommand", () => {
   test("command with backtick injection is unsafe", () => {
     const result = analyzeBashCommand("echo `rm -rf /`");
     expect(result.safe).toBe(false);
-    // Backtick substitution is flagged but the issue text says "substitution" not "injection",
-    // so riskLevel is "moderate" per the current logic
-    expect(result.riskLevel).toBe("moderate");
+    // Backtick injection is dangerous (unlike $() which is moderate)
+    expect(result.riskLevel).toBe("dangerous");
   });
 
   test("redirect to /etc is dangerous", () => {

@@ -403,8 +403,8 @@ export default function App({ config, conversationManager, tools, initialSession
         }
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Running ${commands.length} commands...` }]);
         try {
+          commandDepthRef.current = 1; // mark as inside chain (not incrementing per iteration)
           for (const cmd of commands) {
-            commandDepthRef.current++;
             await processMessage(cmd.trim());
           }
         } finally {
