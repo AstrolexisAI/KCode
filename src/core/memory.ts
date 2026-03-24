@@ -267,8 +267,16 @@ export async function resolveIncludes(content: string, baseDir: string): Promise
     const includePath = match[1].trim();
     const fullPath = includePath.startsWith("/") ? includePath : join(baseDir, includePath);
 
+    // Prevent path traversal — includes must resolve within baseDir
+    const { resolve: resolvePath } = await import("node:path");
+    const resolvedFull = resolvePath(fullPath);
+    if (!resolvedFull.startsWith(resolvePath(baseDir))) {
+      resolved = resolved.replace(match[0], `<!-- include blocked: path outside memory directory -->`);
+      continue;
+    }
+
     try {
-      const file = Bun.file(fullPath);
+      const file = Bun.file(resolvedFull);
       if (await file.exists()) {
         const includeContent = await file.text();
         resolved = resolved.replace(match[0], includeContent);

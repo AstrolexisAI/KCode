@@ -116,8 +116,9 @@ export async function executeCronCreate(input: Record<string, unknown>): Promise
     };
   }
 
-  // Validate each field
-  const fieldPatterns = /^(\*|(\d+(-\d+)?(\/\d+)?)(,(\d+(-\d+)?(\/\d+)?))*)$/;
+  // Validate each field (supports numbers, ranges, named months/weekdays)
+  const cronWord = /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|sun|mon|tue|wed|thu|fri|sat)/i;
+  const fieldPatterns = new RegExp(`^(\\*|(\\d+|${cronWord.source})(-(\\d+|${cronWord.source}))?(\/\\d+)?)(,(\\d+|${cronWord.source})(-(\\d+|${cronWord.source}))?(\/\\d+)?)*$`, "i");
   for (const field of fields) {
     if (field !== "*" && !fieldPatterns.test(field) && !/^\*\/\d+$/.test(field)) {
       return {
@@ -128,11 +129,20 @@ export async function executeCronCreate(input: Record<string, unknown>): Promise
     }
   }
 
-  // Sanitize command — reject shell metacharacters that could be dangerous
-  if (/[`$;|><()]/.test(command) || /&&/.test(command) || /\|\|/.test(command)) {
+  // Sanitize command — reject dangerous shell metacharacters
+  // Allow $, ;, >, | as they are needed for real-world cron commands
+  // Block backticks (injection vector) and pipe-to-shell patterns
+  if (/`/.test(command)) {
     return {
       tool_use_id: "",
-      content: "Error: Command contains potentially dangerous characters (`, $, ;, |, &&, ||, >, <, (, )). Use a script file instead.",
+      content: "Error: Command contains backtick substitution. Use $() instead.",
+      is_error: true,
+    };
+  }
+  if (/\|\s*(bash|sh|zsh|dash)\b/.test(command) || /curl\s.*\|\s*sh/.test(command)) {
+    return {
+      tool_use_id: "",
+      content: "Error: Command pipes to a shell interpreter. Use a script file instead.",
       is_error: true,
     };
   }

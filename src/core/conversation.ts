@@ -40,7 +40,7 @@ import { getBranchManager } from "./branch-manager";
 // ─── Constants ───────────────────────────────────────────────────
 
 const DEFAULT_CONTEXT_WINDOW = 32_000;
-const CONTEXT_WINDOW_MARGIN = 0.25; // prune when we reach 75% of context window
+// Context window margin removed — compactThreshold (default 0.75) is used instead
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;

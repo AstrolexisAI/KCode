@@ -31,6 +31,7 @@ const AGENT_TIMEOUT = 120_000; // 2 minutes per agent
  * Split a list of files into N roughly equal chunks.
  */
 export function chunkFiles(files: string[], n: number): string[][] {
+  if (n <= 0 || files.length === 0) return [];
   const count = Math.min(n, files.length);
   const chunks: string[][] = Array.from({ length: count }, () => []);
   for (let i = 0; i < files.length; i++) {

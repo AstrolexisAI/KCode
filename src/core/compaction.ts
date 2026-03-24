@@ -2,7 +2,7 @@
 // Summarizes pruned messages via LLM instead of discarding them
 
 import type { Message, ContentBlock, TextBlock } from "./types.js";
-import { getModelBaseUrl } from "./models.js";
+import { getModelBaseUrl, getModelProvider } from "./models.js";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -66,25 +66,44 @@ export class CompactionManager {
         conversationText;
 
       const apiBase = await this.resolveApiBase();
-      const url = `${apiBase}/v1/chat/completions`;
+      const provider = await getModelProvider(this.model);
+      const isAnthropic = provider === "anthropic";
+
+      const url = isAnthropic
+        ? `${apiBase}/v1/messages`
+        : `${apiBase}/v1/chat/completions`;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
       if (this.apiKey) {
-        headers["Authorization"] = `Bearer ${this.apiKey}`;
+        if (isAnthropic) {
+          headers["x-api-key"] = this.apiKey;
+          headers["anthropic-version"] = "2023-06-01";
+        } else {
+          headers["Authorization"] = `Bearer ${this.apiKey}`;
+        }
       }
+
+      const body = isAnthropic
+        ? {
+            model: this.model,
+            max_tokens: SUMMARY_MAX_TOKENS,
+            system: SUMMARY_SYSTEM_PROMPT,
+            messages: [{ role: "user", content: summaryPrompt }],
+          }
+        : {
+            model: this.model,
+            max_tokens: SUMMARY_MAX_TOKENS,
+            messages: [
+              { role: "system", content: SUMMARY_SYSTEM_PROMPT },
+              { role: "user", content: summaryPrompt },
+            ],
+          };
 
       const response = await fetch(url, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          model: this.model,
-          max_tokens: SUMMARY_MAX_TOKENS,
-          messages: [
-            { role: "system", content: SUMMARY_SYSTEM_PROMPT },
-            { role: "user", content: summaryPrompt },
-          ],
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -93,7 +112,9 @@ export class CompactionManager {
       }
 
       const data = (await response.json()) as any;
-      const summaryText = data.choices?.[0]?.message?.content;
+      const summaryText = isAnthropic
+        ? data.content?.[0]?.text
+        : data.choices?.[0]?.message?.content;
       if (!summaryText) {
         this.recordFailure();
         return null;
