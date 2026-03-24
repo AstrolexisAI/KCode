@@ -1187,6 +1187,11 @@ export class ConversationManager {
     const MAX_LOOP_PATTERNS = 200; // cap to prevent unbounded Map growth
     const loopPatterns = new Map<string, { count: number; warned: boolean; redirects: number; examples: string[] }>(); // semantic loop detection
 
+    // Pre-compute tool filter sets (avoids repeated .map().includes() per tool call)
+    const managedDisallowedSet = new Set(this.config.managedDisallowedTools?.map(t => t.toLowerCase()));
+    const allowedToolsSet = this.config.allowedTools?.length ? new Set(this.config.allowedTools.map(t => t.toLowerCase())) : null;
+    const disallowedToolsSet = this.config.disallowedTools?.length ? new Set(this.config.disallowedTools.map(t => t.toLowerCase())) : null;
+
     while (true) {
       // Hard break after force-stop allowed one final text turn
       if (forceStopLoop) {
@@ -1728,7 +1733,7 @@ export class ConversationManager {
         const filtered: typeof toolCalls = [];
         for (const call of toolCalls) {
           // Org-level tool blocklist
-          if (this.config.managedDisallowedTools?.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+          if (managedDisallowedSet.has(call.name.toLowerCase())) {
             toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: `Tool '${call.name}' is blocked by organization policy`, is_error: true });
             continue;
           }
@@ -1750,10 +1755,10 @@ export class ConversationManager {
       if (this.config.allowedTools?.length || this.config.disallowedTools?.length) {
         const filtered: typeof toolCalls = [];
         for (const call of toolCalls) {
-          if (this.config.allowedTools?.length && !this.config.allowedTools.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+          if (allowedToolsSet && !allowedToolsSet.has(call.name.toLowerCase())) {
             const blockedContent = `Tool '${call.name}' is not in the allowed tools list`;
             toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
-          } else if (this.config.disallowedTools?.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+          } else if (disallowedToolsSet?.has(call.name.toLowerCase())) {
             const blockedContent = `Tool '${call.name}' is in the disallowed tools list`;
             toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
           } else {
@@ -1910,14 +1915,15 @@ export class ConversationManager {
           }
         }
 
-        // 0b. Check allowed/disallowed tools filter
-        if (this.config.allowedTools && this.config.allowedTools.length > 0 && !this.config.allowedTools.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+        // 0b. Allowed/disallowed tools filter (already applied in batch pre-filter above,
+        // but kept as safety net for tools injected after pre-filter, e.g. via MCP)
+        if (allowedToolsSet && !allowedToolsSet.has(call.name.toLowerCase())) {
           const blockedContent = `Tool '${call.name}' is not in the allowed tools list`;
           yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockedContent, isError: true };
           toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
           continue;
         }
-        if (this.config.disallowedTools && this.config.disallowedTools.map(t => t.toLowerCase()).includes(call.name.toLowerCase())) {
+        if (disallowedToolsSet?.has(call.name.toLowerCase())) {
           const blockedContent = `Tool '${call.name}' is in the disallowed tools list`;
           yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockedContent, isError: true };
           toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });

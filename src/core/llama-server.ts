@@ -220,14 +220,19 @@ main()`;
     const startTime = Date.now();
     const maxWait = 120_000; // 2 minutes max for model loading
     const pollInterval = 500;
+    let settled = false;
+
+    proc.on("error", () => { settled = true; });
 
     const poll = async () => {
       while (Date.now() - startTime < maxWait) {
+        if (settled) return; // process errored out, stop polling
         try {
           const resp = await fetch(`http://localhost:${port}${healthEndpoint}`, {
             signal: AbortSignal.timeout(1000),
           });
           if (resp.ok) {
+            settled = true;
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             log.info("server", `Server ready in ${elapsed}s (PID: ${proc.pid}, engine: ${isMlx ? "mlx" : "llama.cpp"})`);
             resolve({ port, pid: proc.pid! });
@@ -238,8 +243,11 @@ main()`;
         await new Promise((r) => setTimeout(r, pollInterval));
       }
 
-      // Timed out
-      reject(new Error(`Server did not become ready within ${maxWait / 1000}s. Check ${LOG_FILE}`));
+      if (!settled) {
+        settled = true;
+        // Timed out
+        reject(new Error(`Server did not become ready within ${maxWait / 1000}s. Check ${LOG_FILE}`));
+      }
     };
 
     poll();

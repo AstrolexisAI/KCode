@@ -346,7 +346,11 @@ function readNotebook(filePath: string): ToolResult {
 
 // ─── Text File Reading (original) ───────────────────────────────
 
-function readTextFile(filePath: string, offset?: number, limit?: number): ToolResult {
+interface TextFileResult extends ToolResult {
+  totalLines: number;
+}
+
+function readTextFile(filePath: string, offset?: number, limit?: number): TextFileResult {
   const raw = readFileSync(filePath, "utf-8");
   const allLines = raw.split("\n");
   const totalLines = allLines.length;
@@ -372,6 +376,7 @@ function readTextFile(filePath: string, offset?: number, limit?: number): ToolRe
   return {
     tool_use_id: "",
     content: header + formatted,
+    totalLines,
   };
 }
 
@@ -424,12 +429,8 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
     const result = readTextFile(file_path, offset, limit);
 
     // Hint: if file is large and no offset was specified, nudge the model to use offset/limit
-    if (!offset && !limit) {
-      const raw = readFileSync(file_path, "utf-8");
-      const totalLines = raw.split("\n").length;
-      if (totalLines > 100) {
-        result.content += `\n\n[HINT: This file has ${totalLines} lines. You are viewing the first ${Math.min(totalLines, MAX_LINES)} lines. To read a specific section, use the offset and limit parameters: offset=100, limit=50 to read lines 100-150.]`;
-      }
+    if (!offset && !limit && result.totalLines > 100) {
+      result.content += `\n\n[HINT: This file has ${result.totalLines} lines. You are viewing the first ${Math.min(result.totalLines, MAX_LINES)} lines. To read a specific section, use the offset and limit parameters: offset=100, limit=50 to read lines 100-150.]`;
     }
 
     // Cache the result for text files

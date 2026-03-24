@@ -141,7 +141,7 @@ export default function App({ config, conversationManager, tools, initialSession
   >(null);
 
   // Wire up the permission prompt callback so PermissionManager can ask the user
-  useState(() => {
+  useEffect(() => {
     conversationManager.getPermissions().setPromptFn(async (req) => {
       return new Promise<{ granted: boolean; alwaysAllow?: boolean }>((resolve) => {
         setPermissionRequest({
@@ -157,7 +157,8 @@ export default function App({ config, conversationManager, tools, initialSession
         });
       });
     });
-  });
+    return () => { conversationManager.getPermissions().setPromptFn(undefined); };
+  }, [conversationManager]);
 
   // Sudo password prompt state
   const [sudoPasswordResolver, setSudoPasswordResolver] = useState<
@@ -165,7 +166,7 @@ export default function App({ config, conversationManager, tools, initialSession
   >(null);
 
   // Wire up sudo password prompt callback so Bash tool can ask for password
-  useState(() => {
+  useEffect(() => {
     conversationManager.setSudoPasswordPromptFn(async () => {
       return new Promise<string | null>((resolve) => {
         setMode("sudo-password");
@@ -174,7 +175,8 @@ export default function App({ config, conversationManager, tools, initialSession
         });
       });
     });
-  });
+    return () => { conversationManager.setSudoPasswordPromptFn(undefined); };
+  }, [conversationManager]);
 
   // Wire up trust prompt callback so project hooks auto-trust with logging
   useEffect(() => {
@@ -400,11 +402,14 @@ export default function App({ config, conversationManager, tools, initialSession
           return;
         }
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Running ${commands.length} commands...` }]);
-        for (const cmd of commands) {
-          commandDepthRef.current++;
-          await processMessage(cmd.trim());
+        try {
+          for (const cmd of commands) {
+            commandDepthRef.current++;
+            await processMessage(cmd.trim());
+          }
+        } finally {
+          commandDepthRef.current = 0;
         }
-        commandDepthRef.current = 0;
         return;
       }
 
