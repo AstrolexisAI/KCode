@@ -625,11 +625,16 @@ program
         console.log(`\x1b[32m✓\x1b[0m KCode Pro activated!`);
         console.log(`  Pro features are now unlocked.\n`);
       } else {
-        console.error(`\x1b[31m✗\x1b[0m Pro key not valid.\n`);
-        console.error(`  The key was not recognized. Check that it's correct.`);
+        console.error(`\x1b[31m✗\x1b[0m Pro key could not be validated.\n`);
+        console.error(`  Check that it's correct, or try again if offline.`);
         console.error(`  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`);
-        delete settings.proKey;
-        await saveUserSettingsRaw(settings);
+        // Only remove key if server explicitly rejected it (not network failure)
+        const { loadProCache } = await import("./core/pro");
+        const cache = loadProCache();
+        if (cache && cache.key === proKey && cache.serverValidated && !cache.valid) {
+          settings.proKey = undefined;
+          await saveUserSettingsRaw(settings);
+        }
         clearProCache();
         process.exit(1);
       }

@@ -129,7 +129,7 @@ function computeHmac(key: string, validatedAt: string, valid: boolean): string {
     .digest("hex");
 }
 
-function loadProCache(): ProCache | null {
+export function loadProCache(): ProCache | null {
   try {
     if (!existsSync(PRO_CACHE_FILE)) return null;
 
@@ -202,12 +202,15 @@ async function validateProKey(key: string): Promise<boolean> {
     saveProCache(key, new Date().toISOString(), valid, true);
     return valid;
   } catch {
-    // Server unreachable — ONLY trust cache if it was previously server-validated (#1)
+    // Server unreachable — trust cache if it was previously server-validated
     if (cache && cache.key === key && cache.serverValidated) {
       return cache.valid;
     }
-    // First-time offline: DENY Pro — require at least one server validation (#1)
-    return false;
+    // First-time offline: grant a grace period so users aren't locked out
+    // when the validation server is unreachable. Cache as non-server-validated
+    // so we'll re-check next time. This prevents deleting the user's proKey.
+    saveProCache(key, new Date().toISOString(), true, false);
+    return true;
   }
 }
 
@@ -270,12 +273,17 @@ export async function requirePro(feature: ProFeature): Promise<void> {
     return;
   }
 
-  // Key didn't validate — revert
-  delete settings.proKey;
-  await saveUserSettingsRaw(settings);
+  // Key didn't validate — only revert if the server explicitly rejected it
+  // (not if validation failed due to network issues)
+  const cache = loadProCache();
+  const serverRejected = cache && cache.key === answer && cache.serverValidated && !cache.valid;
+  if (serverRejected) {
+    settings.proKey = undefined; // merge-safe deletion
+    await saveUserSettingsRaw(settings);
+  }
   clearProCache();
   throw new Error(
-    `${C.red}✗${C.reset} Pro key not valid. Check that it's correct.\n` +
+    `${C.red}✗${C.reset} Pro key could not be validated. Check that it's correct or try again later.\n` +
     `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`
   );
 }
@@ -372,10 +380,14 @@ export async function checkSessionLimit(): Promise<void> {
     return;
   }
 
-  delete settings.proKey;
-  await saveUserSettingsRaw(settings);
+  // Only remove key if server explicitly rejected it (not network failure)
+  const sessionCache = loadProCache();
+  if (sessionCache && sessionCache.key === answer && sessionCache.serverValidated && !sessionCache.valid) {
+    settings.proKey = undefined;
+    await saveUserSettingsRaw(settings);
+  }
   clearProCache();
-  throw new Error("Pro key not valid. Session limit remains in effect.");
+  throw new Error("Pro key could not be validated. Try again or check your connection.");
 }
 
 /** Soft gate for swarm: show upgrade prompt when free user hits agent limit. */

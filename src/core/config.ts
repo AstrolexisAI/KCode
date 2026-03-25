@@ -520,11 +520,18 @@ export async function loadUserSettingsRaw(): Promise<Record<string, unknown>> {
   return (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
 }
 
-/** Save raw user settings JSON (preserves extra fields). */
+/** Save raw user settings JSON (merges with existing to prevent data loss). */
 export async function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void> {
   const dir = KCODE_HOME;
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
-  await Bun.write(USER_SETTINGS_PATH, JSON.stringify(raw, null, 2) + "\n");
+  // Merge with existing settings to prevent losing fields (e.g., proKey) due to concurrent writes
+  const existing = (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+  const merged = { ...existing, ...raw };
+  // Explicitly delete fields set to undefined (allows intentional removal)
+  for (const [k, v] of Object.entries(raw)) {
+    if (v === undefined) delete merged[k];
+  }
+  await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
   try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch { /* best-effort */ }
 }
 
