@@ -23,8 +23,8 @@ export const readDefinition: ToolDefinition = {
     type: "object",
     properties: {
       file_path: { type: "string", description: "Absolute path to the file" },
-      offset: { type: "number", description: "Starting line number (1-indexed)" },
-      limit: { type: "number", description: "Number of lines to read" },
+      offset: { type: "number", description: "Starting line number (1-indexed). Omit to start from the beginning." },
+      limit: { type: "number", description: "Number of lines to read (default: up to 2000). Only set this if you need a specific smaller range. Do NOT read files in small chunks of 100 lines — read large sections at once." },
       pages: {
         type: "string",
         description:
