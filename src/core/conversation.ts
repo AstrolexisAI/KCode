@@ -2153,8 +2153,8 @@ export class ConversationManager {
         };
 
         // Truncate large tool results to protect context window
-        // ~4 chars per token, leave room for other messages
-        const maxResultChars = Math.floor(this.contextWindowSize * 1.5);
+        // ~4 chars per token, cap each result to ~15% of context to leave room for other messages
+        const maxResultChars = Math.floor(this.contextWindowSize * 0.6);
         let contextContent = result.content;
         if (contextContent.length > maxResultChars) {
           contextContent = contextContent.slice(0, maxResultChars)
