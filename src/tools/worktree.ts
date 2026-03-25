@@ -123,7 +123,7 @@ export async function executeEnterWorktree(input: Record<string, unknown>): Prom
     process.chdir(worktreePath);
   } catch (err) {
     // Cleanup on chdir failure
-    try { execFileSync("git", ["worktree", "remove", worktreePath, "--force"], { cwd, stdio: "pipe" }); } catch {}
+    try { execFileSync("git", ["worktree", "remove", worktreePath, "--force"], { cwd, stdio: "pipe" }); } catch { /* best-effort worktree cleanup */ }
     _activeWorktree = null;
     return {
       tool_use_id: "",
@@ -259,7 +259,7 @@ export async function executeExitWorktree(input: Record<string, unknown>): Promi
             stdio: "pipe",
             timeout: 5000,
           });
-        } catch {}
+        } catch { /* best-effort branch cleanup — branch may not exist */ }
       }
       lines.push("Worktree and branch cleaned up.");
     } catch {

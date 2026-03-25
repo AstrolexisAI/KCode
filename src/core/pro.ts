@@ -132,6 +132,17 @@ function computeHmac(key: string, validatedAt: string, valid: boolean): string {
 function loadProCache(): ProCache | null {
   try {
     if (!existsSync(PRO_CACHE_FILE)) return null;
+
+    // Verify file permissions — reject world-readable cache files
+    const { statSync } = require("node:fs") as typeof import("node:fs");
+    const stat = statSync(PRO_CACHE_FILE);
+    const mode = stat.mode & 0o777;
+    if ((mode & 0o077) !== 0) {
+      // File is readable by group/others — could be tampered. Reset permissions.
+      const { chmodSync } = require("node:fs") as typeof import("node:fs");
+      try { chmodSync(PRO_CACHE_FILE, 0o600); } catch { /* best-effort */ }
+    }
+
     const raw = JSON.parse(readFileSync(PRO_CACHE_FILE, "utf-8"));
     if (!raw.key || !raw.validatedAt || typeof raw.valid !== "boolean") return null;
 

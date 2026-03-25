@@ -524,7 +524,7 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
             try {
               execFileSync("git", ["add", "-A"], { cwd: worktreePath, stdio: "pipe", timeout: 5000 });
               execFileSync("git", ["commit", "-m", `Agent ${agentId} changes`], { cwd: worktreePath, stdio: "pipe", timeout: 10000 });
-            } catch {}
+            } catch { /* best-effort commit — worktree may have no staged changes */ }
             const branch = `kcode-agent-${agentId}`;
             record.content += `\n\n[Worktree: changes on branch "${branch}" at ${worktreePath}. Merge with: git merge ${branch}]`;
           } else {
@@ -540,7 +540,7 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
                 stdio: "pipe",
                 timeout: 5000,
               });
-            } catch {}
+            } catch { /* best-effort branch cleanup */ }
           }
         } catch {
           // Best effort cleanup

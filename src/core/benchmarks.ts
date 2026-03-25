@@ -127,9 +127,12 @@ export function getBenchmarkSummary(model?: string, days: number = 30): Benchmar
     const db = getDb();
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
+    interface ModelRow { model: string }
+    interface BenchmarkRow { task_type: string; score: number; tokens_used: number; latency_ms: number; created_at: string }
+
     const models: string[] = model
       ? [model]
-      : (db.query(`SELECT DISTINCT model FROM benchmarks WHERE created_at > ?`).all(cutoff) as any[]).map((r) => r.model);
+      : (db.query(`SELECT DISTINCT model FROM benchmarks WHERE created_at > ?`).all(cutoff) as ModelRow[]).map((r) => r.model);
 
     const summaries: BenchmarkSummary[] = [];
 
@@ -138,7 +141,7 @@ export function getBenchmarkSummary(model?: string, days: number = 30): Benchmar
         `SELECT task_type, score, tokens_used, latency_ms, created_at
          FROM benchmarks WHERE model = ? AND created_at > ?
          ORDER BY created_at DESC`,
-      ).all(m, cutoff) as any[];
+      ).all(m, cutoff) as BenchmarkRow[];
 
       if (rows.length === 0) continue;
 

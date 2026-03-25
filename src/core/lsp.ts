@@ -206,7 +206,7 @@ export class LspManager {
         file,
         line: (d.range?.start?.line ?? 0) + 1,
         column: (d.range?.start?.character ?? 0) + 1,
-        severity: ["", "error", "warning", "info", "hint"][d.severity ?? 1] as any,
+        severity: (["", "error", "warning", "info", "hint"] as const)[d.severity ?? 1] as LspDiagnostic["severity"],
         message: d.message,
         source: d.source ?? serverName,
       }));
@@ -407,11 +407,11 @@ export class LspManager {
       // Send shutdown notification (not request — no response expected during teardown)
       try {
         this.sendNotification(name, "shutdown", null);
-      } catch {}
+      } catch { /* best-effort shutdown notification */ }
       // Kill after brief grace period
       const proc = entry.process;
       setTimeout(() => {
-        try { proc.kill(); } catch {}
+        try { proc.kill(); } catch { /* process may have already exited */ }
       }, 1000);
     }
     this.servers.clear();

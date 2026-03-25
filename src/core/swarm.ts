@@ -57,11 +57,20 @@ function runAgent(
   const kcodebin = findKCodeBinary();
 
   return new Promise((resolve, reject) => {
+    // Strip sensitive API keys from subagent environment to prevent credential leakage
+    const subEnv = { ...process.env };
+    const sensitiveKeyPatterns = /^(KCODE_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|DEEPSEEK_API_KEY|TOGETHER_API_KEY|GEMINI_API_KEY|ASTROLEXIS_API_KEY)$/i;
+    for (const key of Object.keys(subEnv)) {
+      if (sensitiveKeyPatterns.test(key)) {
+        delete subEnv[key];
+      }
+    }
+
     execFile(kcodebin, args, {
       cwd,
       timeout: AGENT_TIMEOUT,
       maxBuffer: 512 * 1024,
-      env: { ...process.env },
+      env: subEnv,
     }, (err, stdout, stderr) => {
       if (err) {
         const msg = stderr || err.message;

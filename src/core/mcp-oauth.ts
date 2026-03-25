@@ -74,8 +74,11 @@ function getOrCreateOAuthSalt(): string {
     writeFileSync(OAUTH_SALT_FILE, salt + "\n", { mode: 0o600 });
     return salt;
   } catch {
-    // Fallback: use a hash of machine-specific data (less secure but functional)
-    return createHash("sha256").update(`${homedir()}:${process.env.USER ?? "kcode"}`).digest("hex");
+    // Fallback: use a hash of machine-specific data plus randomness (less secure but functional)
+    const { hostname } = require("node:os") as typeof import("node:os");
+    return createHash("sha256")
+      .update(`${homedir()}:${process.env.USER ?? "kcode"}:${hostname()}:${process.getuid?.() ?? 0}:${Date.now()}`)
+      .digest("hex");
   }
 }
 
@@ -84,7 +87,9 @@ let _oauthEncKey: Buffer | null = null;
 function deriveEncryptionKey(): Buffer {
   if (_oauthEncKey) return _oauthEncKey;
   const salt = getOrCreateOAuthSalt();
-  const material = `${homedir()}:${process.env.USER ?? "kcode"}:mcp-oauth-enc`;
+  // Include hostname and uid for additional entropy beyond homedir/user
+  const { hostname } = require("node:os") as typeof import("node:os");
+  const material = `${homedir()}:${process.env.USER ?? "kcode"}:${hostname()}:${process.getuid?.() ?? 0}:mcp-oauth-enc`;
   _oauthEncKey = pbkdf2Sync(material, salt, 100_000, 32, "sha256");
   return _oauthEncKey;
 }

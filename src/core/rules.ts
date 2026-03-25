@@ -82,13 +82,38 @@ export class RulesManager {
   }
 
   /**
+   * Sanitize rule content to prevent prompt injection attacks.
+   * Strips patterns that attempt to override system instructions.
+   */
+  private sanitizeContent(content: string): string {
+    // Strip lines that attempt to override/ignore previous instructions
+    const injectionPatterns = [
+      /^.*ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|guidelines?|rules?|prompts?).*/gim,
+      /^.*disregard\s+(all\s+)?(previous|above|prior)\s+(instructions?|guidelines?|rules?).*/gim,
+      /^.*override[:\s].*new\s+(directive|instruction|rule).*/gim,
+      /^.*you\s+are\s+now\s+.*/gim,
+      /^.*forget\s+(everything|all)\s+(you|about).*/gim,
+      /^.*switch\s+to\s+(auto|unrestricted)\s+(permission|mode).*/gim,
+    ];
+    let sanitized = content;
+    for (const pattern of injectionPatterns) {
+      sanitized = sanitized.replace(pattern, "[blocked: prompt injection attempt]");
+    }
+    // Limit rule content length to prevent context flooding
+    if (sanitized.length > 10_000) {
+      sanitized = sanitized.slice(0, 10_000) + "\n[truncated: rule content exceeds 10KB limit]";
+    }
+    return sanitized;
+  }
+
+  /**
    * Format all always-active rules (no path restriction) for system prompt.
    */
   formatForPrompt(): string | null {
     const globalRules = this.rules.filter(r => r.paths.length === 0);
     if (globalRules.length === 0) return null;
 
-    const sections = globalRules.map(r => `### ${r.name}\n${r.content}`);
+    const sections = globalRules.map(r => `### ${r.name}\n${this.sanitizeContent(r.content)}`);
     return `# Project Rules\n\n${sections.join("\n\n")}`;
   }
 
@@ -99,7 +124,7 @@ export class RulesManager {
     const matching = this.getMatchingRules(filePath).filter(r => r.paths.length > 0);
     if (matching.length === 0) return null;
 
-    const sections = matching.map(r => `### ${r.name}\n${r.content}`);
+    const sections = matching.map(r => `### ${r.name}\n${this.sanitizeContent(r.content)}`);
     return `[Rules for ${filePath}]\n${sections.join("\n\n")}`;
   }
 

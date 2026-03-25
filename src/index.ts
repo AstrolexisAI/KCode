@@ -749,7 +749,8 @@ proCmd
         try {
           const { execSync } = await import("node:child_process");
           const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-          execSync(`${cmd} "${data.url}"`, { stdio: "ignore" });
+          const { execFileSync: openExec } = await import("node:child_process");
+          openExec(cmd, [data.url], { stdio: "ignore" });
           console.log("  Opened in your browser.");
         } catch {
           console.log("  Copy the URL above to open in your browser.");
@@ -806,7 +807,8 @@ teachCmd
 
     const editor = process.env.EDITOR || process.env.VISUAL || "nano";
     try {
-      execSync(`${editor} "${filePath}"`, { stdio: "inherit" });
+      const { execFileSync: editorExec } = await import("node:child_process");
+      editorExec(editor, [filePath], { stdio: "inherit" });
     } catch {
       console.log(`  Edit it with: ${editor} ${filePath}`);
     }
@@ -898,7 +900,8 @@ teachCmd
 
     const editor = process.env.EDITOR || process.env.VISUAL || "nano";
     try {
-      execSync(`${editor} "${filePath}"`, { stdio: "inherit" });
+      const { execFileSync: editorExec } = await import("node:child_process");
+      editorExec(editor, [filePath], { stdio: "inherit" });
       console.log(`\x1b[32m*\x1b[0m Updated: ${filePath}`);
     } catch {
       console.log(`  Edit manually: ${editor} ${filePath}`);
@@ -2139,13 +2142,17 @@ async function runMain(
 
   // Create git worktree if --worktree flag is set
   if (opts.worktree) {
-    const { execSync } = await import("node:child_process");
-    const worktreeName = opts.worktree;
+    const { execFileSync } = await import("node:child_process");
+    const worktreeName = opts.worktree.replace(/[^a-zA-Z0-9_\-./]/g, ""); // sanitize
     const worktreePath = `.kcode-worktrees/${worktreeName}`;
 
     try {
-      // Create worktree with a new branch
-      execSync(`git worktree add ${worktreePath} -b kcode/${worktreeName} 2>/dev/null || git worktree add ${worktreePath} kcode/${worktreeName}`, { cwd });
+      // Create worktree with a new branch (using execFileSync to prevent shell injection)
+      try {
+        execFileSync("git", ["worktree", "add", worktreePath, "-b", `kcode/${worktreeName}`], { cwd, stdio: "pipe" });
+      } catch {
+        execFileSync("git", ["worktree", "add", worktreePath, `kcode/${worktreeName}`], { cwd, stdio: "pipe" });
+      }
       // Change working directory to worktree
       process.chdir(resolve(cwd, worktreePath));
       config.workingDirectory = process.cwd();

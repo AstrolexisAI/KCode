@@ -249,29 +249,25 @@ async function handleRoute(
               controller.enqueue(encoder.encode(`event: session\ndata: ${JSON.stringify({ sessionId: sid })}\n\n`));
 
               for await (const event of manager.sendMessage(body.prompt)) {
-                if (event.type === "text" || event.type === "text_delta") {
-                  const text = (event as any).text ?? "";
-                  controller.enqueue(encoder.encode(`event: text\ndata: ${JSON.stringify({ text })}\n\n`));
+                if (event.type === "text_delta") {
+                  controller.enqueue(encoder.encode(`event: text\ndata: ${JSON.stringify({ text: event.text })}\n\n`));
                 } else if (event.type === "tool_result") {
-                  const ev = event as any;
                   controller.enqueue(encoder.encode(`event: tool_result\ndata: ${JSON.stringify({
-                    name: ev.name,
-                    result: ev.result,
-                    isError: ev.isError ?? false,
+                    name: event.name,
+                    result: event.result,
+                    isError: event.isError ?? false,
                   })}\n\n`));
                 } else if (event.type === "tool_progress") {
-                  const ev = event as any;
                   controller.enqueue(encoder.encode(`event: tool_progress\ndata: ${JSON.stringify({
-                    name: ev.name,
-                    status: ev.status,
-                    index: ev.index,
-                    total: ev.total,
+                    name: event.name,
+                    status: event.status,
+                    index: event.index,
+                    total: event.total,
                   })}\n\n`));
                 } else if (event.type === "turn_start") {
                   controller.enqueue(encoder.encode(`event: turn_start\ndata: {}\n\n`));
                 } else if (event.type === "compaction_end") {
-                  const ev = event as any;
-                  controller.enqueue(encoder.encode(`event: compaction\ndata: ${JSON.stringify({ tokensAfter: ev.tokensAfter })}\n\n`));
+                  controller.enqueue(encoder.encode(`event: compaction\ndata: ${JSON.stringify({ tokensAfter: event.tokensAfter })}\n\n`));
                 }
               }
 
@@ -309,15 +305,14 @@ async function handleRoute(
         let responseText = "";
 
         for await (const event of manager.sendMessage(body.prompt)) {
-          if (event.type === "text_delta" || event.type === "text") {
-            responseText += (event as any).text ?? "";
+          if (event.type === "text_delta") {
+            responseText += event.text;
           } else if (event.type === "tool_result") {
-            const ev = event as any;
             toolResults.push({
-              name: ev.name,
+              name: event.name,
               input: {},
-              result: ev.result,
-              isError: ev.isError ?? false,
+              result: event.result,
+              isError: event.isError ?? false,
             });
           }
         }
@@ -503,7 +498,7 @@ async function handleRoute(
       try {
         const h = req.headers.get("X-Session-Id");
         if (h) return h;
-      } catch {}
+      } catch { /* header parsing may fail on malformed requests */ }
       return undefined;
     })();
 
@@ -603,7 +598,7 @@ async function handleRoute(
     const state = session.manager.getState();
 
     // Extract plan from conversation state (plans are stored in state.plan)
-    const plan = (state as any).plan ?? null;
+    const plan = (state as Record<string, unknown>).plan ?? null;
     return Response.json({ sessionId: targetSid, plan }, { headers: corsHeaders });
   }
 
@@ -730,14 +725,13 @@ async function handleRoute(
       try {
         for await (const event of manager.sendMessage(body.message)) {
           if (event.type === "text_delta") {
-            responseText += (event as any).text ?? "";
+            responseText += event.text;
           } else if (event.type === "tool_result") {
-            const ev = event as any;
             toolResults.push({
-              name: ev.name,
+              name: event.name,
               input: {},
-              result: ev.result,
-              isError: ev.isError ?? false,
+              result: event.result,
+              isError: event.isError ?? false,
             });
           }
         }
