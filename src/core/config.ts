@@ -553,7 +553,9 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
 
   const { getContextWindowCap } = await import("./pro.js");
   const cap = await getContextWindowCap();
-  const effectiveContextSize = cap ? Math.min(contextSize, cap) : contextSize;
+  // Don't cap context for local models — the cap only applies to cloud API usage
+  const isLocalModel = apiBase && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(apiBase);
+  const effectiveContextSize = (cap && !isLocalModel) ? Math.min(contextSize ?? 32_000, cap) : (contextSize ?? 32_000);
 
   return {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
