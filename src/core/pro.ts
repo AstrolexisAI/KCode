@@ -261,6 +261,14 @@ export async function requirePro(feature: ProFeature): Promise<void> {
     throw new Error("Cancelled — Pro key required for this feature.");
   }
 
+  // Validate key format before saving — reject non-key inputs like "quit", "exit", etc.
+  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
+    throw new Error(
+      `${C.red}✗${C.reset} Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n` +
+      `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`
+    );
+  }
+
   // Try to activate the key
   const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
   const settings = await loadUserSettingsRaw();
@@ -369,6 +377,11 @@ export async function checkSessionLimit(): Promise<void> {
     throw new Error("Session limit reached — Pro key required to continue.");
   }
 
+  // Validate key format before saving
+  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
+    throw new Error("Invalid key format. Keys start with \"kcode_pro_\" or \"klx_lic_\".");
+  }
+
   const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
   const settings = await loadUserSettingsRaw();
   settings.proKey = answer;
@@ -417,6 +430,12 @@ export async function softRequireSwarm(requestedAgents: number): Promise<number>
   rl.close();
 
   if (!answer) return max; // Continue with free limit
+
+  // Validate key format before saving
+  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
+    console.log(`\n  \x1b[31m✗\x1b[0m Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n`);
+    return max;
+  }
 
   // Try to activate
   const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
