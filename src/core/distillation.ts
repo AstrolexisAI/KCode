@@ -389,11 +389,12 @@ export async function loadDistilledExamples(
 
     if (rows.length === 0) return null;
 
-    // Increment use_count for selected examples
+    // Increment use_count for selected examples (parameterized to prevent SQL injection)
     const ids = rows.map(r => r.id);
+    const placeholders = ids.map(() => "?").join(",");
     db.query(
-      `UPDATE distilled_examples SET use_count = use_count + 1 WHERE id IN (${ids.join(",")})`
-    ).run();
+      `UPDATE distilled_examples SET use_count = use_count + 1 WHERE id IN (${placeholders})`
+    ).run(...ids);
 
     // Format as few-shot context
     const sections: string[] = [];

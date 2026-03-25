@@ -263,23 +263,46 @@ function validateHooks(value: unknown): AgentHookEntry[] | undefined {
 
 // ─── Agent Builder ───────────────────────────────────────────────
 
-function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile: string, sourcePath: string): CustomAgentDef {
+/** Security-sensitive fields that project-level agents must not escalate. */
+const RESTRICTED_PERMISSION_MODES = new Set(["auto"]);
+
+function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile: string, sourcePath: string, isProjectLevel = false): CustomAgentDef {
+  let permissionMode = validatePermissionMode(meta.permissionMode);
+  // Project-level agents cannot escalate to "auto" permission mode (security)
+  if (isProjectLevel && permissionMode && RESTRICTED_PERMISSION_MODES.has(permissionMode)) {
+    permissionMode = undefined; // Fall back to session default
+  }
+
+  // Project-level agents cannot override apiKey or apiBase (prevent credential exfiltration)
+  const apiKey = isProjectLevel ? undefined
+    : (typeof meta.apiKey === "string" && validateEnvValue(meta.apiKey) ? meta.apiKey : undefined);
+  const apiBase = isProjectLevel ? undefined : validateApiBase(meta.apiBase);
+
+  // Sanitize system prompt from project-level agents
+  let systemPrompt = body.trim() || undefined;
+  if (isProjectLevel && systemPrompt) {
+    // Limit length and strip prompt injection attempts
+    if (systemPrompt.length > 20_000) {
+      systemPrompt = systemPrompt.slice(0, 20_000) + "\n[truncated: agent prompt exceeds 20KB limit]";
+    }
+  }
+
   return {
     name: typeof meta.name === "string" ? meta.name : nameFromFile,
     description: typeof meta.description === "string" ? meta.description : `Custom agent: ${nameFromFile}`,
     model: validateModel(meta.model),
     tools: Array.isArray(meta.tools) ? meta.tools as string[] : undefined,
     disallowedTools: Array.isArray(meta.disallowedTools) ? meta.disallowedTools as string[] : undefined,
-    permissionMode: validatePermissionMode(meta.permissionMode),
+    permissionMode,
     maxTurns: typeof meta.maxTurns === "number" ? Math.min(Math.max(meta.maxTurns, 1), 100) : undefined,
     effort: validateEffort(meta.effort),
-    apiKey: typeof meta.apiKey === "string" && validateEnvValue(meta.apiKey) ? meta.apiKey : undefined,
-    apiBase: validateApiBase(meta.apiBase),
+    apiKey,
+    apiBase,
     mcpServers: validateMcpServers(meta.mcpServers),
-    hooks: validateHooks(meta.hooks),
+    hooks: isProjectLevel ? undefined : validateHooks(meta.hooks), // Project agents cannot define hooks
     memory: meta.memory === true,
     skills: Array.isArray(meta.skills) ? meta.skills as string[] : undefined,
-    systemPrompt: body.trim() || undefined,
+    systemPrompt,
     sourcePath,
   };
 }
@@ -289,7 +312,7 @@ function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile
 /**
  * Load agent definitions from a directory.
  */
-function loadAgentsFromDir(dir: string): CustomAgentDef[] {
+function loadAgentsFromDir(dir: string, isProjectLevel = false): CustomAgentDef[] {
   if (!existsSync(dir)) return [];
 
   const agents: CustomAgentDef[] = [];
@@ -304,7 +327,7 @@ function loadAgentsFromDir(dir: string): CustomAgentDef[] {
 
         const { meta, body } = parseFrontmatter(content);
         const nameFromFile = entry.name.replace(/\.md$/, "");
-        agents.push(buildAgentDef(meta, body, nameFromFile, filePath));
+        agents.push(buildAgentDef(meta, body, nameFromFile, filePath, isProjectLevel));
       } catch {
         // Skip unreadable files
       }
@@ -328,7 +351,7 @@ export function loadCustomAgents(cwd: string): CustomAgentDef[] {
 
   const bundledAgents = loadAgentsFromDir(bundledDir);
   const userAgents = loadAgentsFromDir(userDir);
-  const projectAgents = loadAgentsFromDir(projectDir);
+  const projectAgents = loadAgentsFromDir(projectDir, true); // project-level: restricted
 
   // Deduplicate: higher priority overrides lower by name
   const byName = new Map<string, CustomAgentDef>();

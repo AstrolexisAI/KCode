@@ -56,6 +56,7 @@ let _sudoPasswordPromptFn: SudoPasswordPromptFn | undefined;
 let _cachedSudoPassword: Buffer | null = null;
 let _sudoPasswordCacheTime = 0;
 const SUDO_PASSWORD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (reduced from 15 for security)
+let _sudoPromptInFlight: Promise<string | null> | null = null; // mutex for concurrent prompts
 
 export function setSudoPasswordPromptFn(fn: SudoPasswordPromptFn | undefined): void {
   _sudoPasswordPromptFn = fn;
@@ -198,7 +199,17 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         _cachedSudoPassword = null;
       }
       if (_sudoPasswordPromptFn) {
-        sudoPassword = await _sudoPasswordPromptFn();
+        // Serialize concurrent sudo prompts to avoid multiple prompts + race on cache
+        if (_sudoPromptInFlight) {
+          sudoPassword = await _sudoPromptInFlight;
+        } else {
+          _sudoPromptInFlight = _sudoPasswordPromptFn();
+          try {
+            sudoPassword = await _sudoPromptInFlight;
+          } finally {
+            _sudoPromptInFlight = null;
+          }
+        }
         if (sudoPassword === null) {
           return {
             tool_use_id: "",
@@ -259,7 +270,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   if (isBackground) {
     return new Promise((resolve) => {
       const tmpDir = '/tmp/kcode-bg';
-      const tmpLog = `${tmpDir}/bg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`;
+      const tmpLog = `${tmpDir}/bg-${Date.now()}-${require("node:crypto").randomBytes(4).toString("hex")}.log`;
 
       // For background sudo commands, inject password via stdin pipe or SUDO_ASKPASS
       let bgCommand = command;

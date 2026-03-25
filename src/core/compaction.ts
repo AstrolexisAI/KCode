@@ -111,7 +111,11 @@ export class CompactionManager {
         return null;
       }
 
-      const data = (await response.json()) as any;
+      interface CompactionResponse {
+        content?: Array<{ text?: string }>;
+        choices?: Array<{ message?: { content?: string } }>;
+      }
+      const data = (await response.json()) as CompactionResponse;
       const summaryText = isAnthropic
         ? data.content?.[0]?.text
         : data.choices?.[0]?.message?.content;

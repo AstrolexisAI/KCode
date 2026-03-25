@@ -215,10 +215,31 @@ function isLegacyHookConfig(entry: HookConfig | HookEntry): entry is HookConfig 
  */
 function safeRegexTest(pattern: string, target: string): boolean {
   try {
+    // Reject patterns longer than 200 chars (reduces attack surface)
+    if (pattern.length > 200) return false;
+
     // Reject obviously dangerous patterns (nested quantifiers)
     if (/([+*])\)?[+*{]|(\{[^}]*\})\)?[+*{]/.test(pattern)) {
-      return false; // Reject potentially catastrophic regex
+      return false; // Reject nested quantifiers like a+* or a{2,}*
     }
+    // Reject alternation with overlapping branches: (a|a)*, (ab|ab)+
+    if (/\(([^)]+)\|(\1)\)[*+{]/.test(pattern)) {
+      return false; // Reject (x|x)* patterns
+    }
+    // Reject deeply nested groups with quantifiers: ((a+)+)
+    if (/\([^)]*\([^)]*[+*]\)[^)]*\)[+*{]/.test(pattern)) {
+      return false; // Reject nested group quantifiers
+    }
+    // Reject excessive backtracking from repeated overlapping char classes
+    if (/(\[.*\])[+*]\1[+*]/.test(pattern)) {
+      return false;
+    }
+
+    // Execute with a timeout guard using a simple length check heuristic
+    if (target.length > 10_000) {
+      return false; // Don't run regex against very long strings
+    }
+
     const regex = new RegExp(pattern);
     return regex.test(target);
   } catch {
@@ -264,6 +285,23 @@ function matcherMatches(
   return true;
 }
 
+/** Validate a hook command string for obviously dangerous patterns. */
+function validateHookCommand(command: string): boolean {
+  const trimmed = command.trim();
+  // Block empty commands
+  if (!trimmed) return false;
+  // Block commands that attempt to download and pipe to shell
+  if (/curl\s.*\|\s*(sh|bash|zsh)/.test(trimmed)) return false;
+  if (/wget\s.*\|\s*(sh|bash|zsh)/.test(trimmed)) return false;
+  // Block reverse shells
+  if (/\/dev\/(tcp|udp)\//.test(trimmed)) return false;
+  // Block base64-encoded execution (common obfuscation)
+  if (/base64\s.*-d\s*\|\s*(sh|bash|zsh)/.test(trimmed)) return false;
+  // Block backgrounded network exfiltration
+  if (/nc\s+-[^l]*\s+\d+/.test(trimmed) && /\|/.test(trimmed)) return false;
+  return true;
+}
+
 /** Execute a single hook command, passing context as JSON via stdin. */
 async function executeHookCommand(
   command: string,
@@ -271,14 +309,28 @@ async function executeHookCommand(
   cwd: string,
   timeout: number = LEGACY_HOOK_TIMEOUT,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  // Validate hook command before execution
+  if (!validateHookCommand(command)) {
+    log.warn("hooks", `Blocked suspicious hook command: ${command.slice(0, 100)}`);
+    return { exitCode: 1, stdout: "", stderr: "Hook command blocked by security validation" };
+  }
+
   return new Promise((resolve) => {
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
 
+    // Strip sensitive env vars from hook subprocess environment
+    const hookEnv = { ...process.env };
+    for (const key of Object.keys(hookEnv)) {
+      if (/^(KCODE_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|DEEPSEEK_API_KEY|TOGETHER_API_KEY|GEMINI_API_KEY)$/i.test(key)) {
+        delete hookEnv[key];
+      }
+    }
+
     const proc = spawn("sh", ["-c", command], {
       cwd,
       timeout,
-      env: { ...process.env },
+      env: hookEnv,
       stdio: ["pipe", "pipe", "pipe"],
     });
 

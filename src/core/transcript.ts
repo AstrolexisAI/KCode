@@ -184,7 +184,7 @@ export class TranscriptManager {
         if (match) {
           const fileDate = new Date(match[1]);
           if (fileDate < cutoffDate) {
-            try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch {}
+            try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch { /* best-effort cleanup of old transcripts */ }
           }
         }
       }

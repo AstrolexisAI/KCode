@@ -98,7 +98,7 @@ async function transcribeViaKulvex(audioPath: string): Promise<string> {
     throw new Error(`Kulvex STT failed: ${resp.status}`);
   }
 
-  const data = (await resp.json()) as any;
+  const data = (await resp.json()) as { text?: string; transcript?: string };
   return data.text ?? data.transcript ?? "";
 }
 

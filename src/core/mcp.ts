@@ -309,14 +309,27 @@ class McpServerConnection {
     const result = await this.sendRequest("tools/call", {
       name: toolName,
       arguments: args,
-    }) as { content?: Array<{ type: string; text?: string }> };
+    }) as { content?: unknown };
 
-    if (!result?.content || result.content.length === 0) {
-      return "";
-    }
+    // Validate response structure (prevent malicious MCP server injection)
+    if (!result || typeof result !== "object") return "";
+    if (!Array.isArray(result.content) || result.content.length === 0) return "";
+
+    const MAX_RESPONSE_SIZE = 1024 * 1024; // 1MB limit per tool response
+    let totalSize = 0;
 
     return result.content
-      .map((c) => c.text ?? JSON.stringify(c))
+      .filter((c: unknown): c is { type: string; text?: string } => {
+        if (!c || typeof c !== "object") return false;
+        const item = c as Record<string, unknown>;
+        return typeof item.type === "string";
+      })
+      .map((c) => {
+        const text = typeof c.text === "string" ? c.text : JSON.stringify(c);
+        totalSize += text.length;
+        if (totalSize > MAX_RESPONSE_SIZE) return "[truncated: MCP response too large]";
+        return text;
+      })
       .join("\n");
   }
 

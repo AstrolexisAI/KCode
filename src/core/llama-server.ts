@@ -335,7 +335,7 @@ export async function getServerStatus(): Promise<{
         signal: AbortSignal.timeout(2000),
       });
       if (resp.ok) {
-        const props = await resp.json() as any;
+        const props = await resp.json() as { default_generation_settings?: { model?: string } };
         return { running, port, pid, model: props.default_generation_settings?.model };
       }
     } catch { /* try MLX */ }
@@ -345,7 +345,7 @@ export async function getServerStatus(): Promise<{
         signal: AbortSignal.timeout(2000),
       });
       if (resp.ok) {
-        const data = await resp.json() as any;
+        const data = await resp.json() as { data?: Array<{ id?: string }> };
         const model = data?.data?.[0]?.id;
         return { running, port, pid, model };
       }

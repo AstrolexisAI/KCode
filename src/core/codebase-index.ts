@@ -253,7 +253,7 @@ export class CodebaseIndex {
       const rows = db.query(
         `SELECT path, relative_path, ext, size, exports, imports, definitions, modified_at
          FROM codebase_index WHERE path LIKE ? ORDER BY relative_path`,
-      ).all(`${this.cwd}%`) as any[];
+      ).all(`${this.cwd}%`) as Array<{ path: string; relative_path: string; ext: string; size: number; exports: string; imports: string; definitions: string | null; modified_at: string }>;
 
       if (!rows || rows.length === 0) return false;
 

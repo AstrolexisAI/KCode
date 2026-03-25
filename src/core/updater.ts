@@ -71,12 +71,14 @@ async function getLatestRelease(updateUrl?: string): Promise<ReleaseInfo | null>
 
     if (!resp.ok) return null;
 
-    const data = (await resp.json()) as any;
+    interface ReleaseAsset { name: string; browser_download_url: string }
+    interface ReleaseData { tag_name?: string; version?: string; assets?: ReleaseAsset[] }
+    const data = (await resp.json()) as ReleaseData;
     const tag = data.tag_name ?? data.version;
-    const version = tag.replace(/^v/, "");
+    const version = tag?.replace(/^v/, "");
 
     const suffix = getPlatformSuffix();
-    const asset = data.assets?.find((a: any) => a.name.includes(suffix));
+    const asset = data.assets?.find((a) => a.name.includes(suffix));
 
     if (!asset) {
       log.warn("updater", `No binary found for ${suffix} in release ${tag}`);
@@ -115,7 +117,7 @@ async function downloadBinary(url: string, destPath: string): Promise<void> {
   const writer = Bun.file(tmpPath).writer();
   let downloaded = 0;
 
-  for await (const chunk of resp.body as any) {
+  for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
     writer.write(chunk);
     downloaded += chunk.length;
 

@@ -3552,9 +3552,17 @@ export async function handleBuiltinAction(
         }
       }
 
-      // No brackets, backticks, quotes, or assignment allowed
+      // No brackets, backticks, quotes, assignment, or dangerous constructs allowed
       if (/[\[\]`'"\\{}=;]/.test(expr)) {
         return "  Invalid characters in expression.";
+      }
+      // Block property access, template literals, and function constructor escape
+      if (/\.\s*\w|=>|import|require|eval|Function|this|global|process|constructor|prototype|__proto__/.test(expr)) {
+        return "  Invalid expression. Only numbers, operators, and math functions allowed.";
+      }
+      // Limit expression length to prevent abuse
+      if (expr.length > 500) {
+        return "  Expression too long (max 500 characters).";
       }
 
       try {
@@ -6016,7 +6024,7 @@ INSTRUCTIONS:
                 oauthConfig = await discoverOAuthConfig(serverConfig.url);
               }
             }
-          } catch {}
+          } catch { /* OAuth discovery optional — server may not support it */ }
 
           if (!oauthConfig || !oauthConfig.clientId) {
             return `  No OAuth config for "${serverName}".\n  Add oauth settings to ~/.kcode/settings.json:\n  {\n    "mcpServers": {\n      "${serverName}": {\n        "url": "https://...",\n        "oauth": {\n          "clientId": "YOUR_CLIENT_ID",\n          "authorizationUrl": "https://provider/authorize",\n          "tokenUrl": "https://provider/token"\n        }\n      }\n    }\n  }`;

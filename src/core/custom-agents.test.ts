@@ -268,11 +268,8 @@ test`);
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
     const agent = agents.find(a => a.name === "hooked");
-    expect(agent!.hooks).toBeDefined();
-    expect(agent!.hooks!.length).toBe(1);
-    expect(agent!.hooks![0]!.event).toBe("PreToolUse");
-    expect(agent!.hooks![0]!.matcher).toBe("Bash");
-    expect(agent!.hooks![0]!.actions[0]!.command).toBe("echo checking");
+    // Project-level agents cannot define hooks (security restriction)
+    expect(agent!.hooks).toBeUndefined();
   });
 
   test("parses disallowedTools and skills", async () => {
@@ -376,7 +373,8 @@ test`);
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
     const agent = agents.find(a => a.name === "goodapi");
-    expect(agent!.apiBase).toBe("https://api.openai.com/v1");
+    // Project-level agents cannot override apiBase (security restriction)
+    expect(agent!.apiBase).toBeUndefined();
   });
 
   test("rejects apiKey with newlines", async () => {
@@ -392,9 +390,9 @@ test`);
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
-    // Normal key should work
+    // Project-level agents cannot override apiKey (security restriction)
     const agent = agents.find(a => a.name === "badkey");
-    expect(agent!.apiKey).toBe("sk-test");
+    expect(agent!.apiKey).toBeUndefined();
   });
 
   test("accepts valid model names with slashes and colons", async () => {

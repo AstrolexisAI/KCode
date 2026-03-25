@@ -272,6 +272,21 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
         const realDir = realpathSync(dir);
         const basename = resolved.split("/").pop() ?? "";
         resolved = realDir + "/" + basename;
+        // Check if the resolved basename itself is a symlink (TOCTOU-safe check)
+        // The file doesn't exist yet, but a dangling symlink could be present
+        try {
+          const { lstatSync } = require("node:fs") as typeof import("node:fs");
+          const lstat = lstatSync(resolve(realDir, basename));
+          if (lstat.isSymbolicLink()) {
+            // Dangling symlink — resolve its target to prevent symlink-based traversal
+            const target = require("node:fs").readlinkSync(resolve(realDir, basename));
+            const { resolve: pathResolve, isAbsolute: pathIsAbsolute } = require("node:path") as typeof import("node:path");
+            const resolvedTarget = pathIsAbsolute(target) ? target : pathResolve(realDir, target);
+            resolved = resolvedTarget;
+          }
+        } catch {
+          // Not a symlink or doesn't exist — continue with resolved path
+        }
       }
     }
   } catch {

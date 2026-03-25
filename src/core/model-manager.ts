@@ -1079,7 +1079,7 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
           signal: AbortSignal.timeout(3000),
         });
         if (healthResp.ok) {
-          const health = await healthResp.json() as any;
+          const health = await healthResp.json() as { status?: string };
           if (health.status === "ok") {
             const modelsResp = await fetch(`http://localhost:${srvPort}/v1/models`, {
               signal: AbortSignal.timeout(3000),
