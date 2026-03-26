@@ -1832,9 +1832,19 @@ export class ConversationManager {
         this.state.toolUseCount++;
 
         // 0. Dedup identical tool calls within same response
-        const dedupKey = call.name === "Bash"
-          ? String((call.input as Record<string, unknown>).command ?? "").slice(0, 120)
-          : String((call.input as Record<string, unknown>).file_path ?? (call.input as Record<string, unknown>).pattern ?? (call.input as Record<string, unknown>).query ?? JSON.stringify(call.input).slice(0, 120));
+        const inputRec = call.input as Record<string, unknown>;
+        let dedupKey: string;
+        if (call.name === "Bash") {
+          dedupKey = String(inputRec.command ?? "").slice(0, 120);
+        } else if (call.name === "Read") {
+          // Include offset+limit so reading different ranges of the same file isn't treated as duplicate
+          const fp = String(inputRec.file_path ?? "");
+          const off = inputRec.offset ?? 0;
+          const lim = inputRec.limit ?? 0;
+          dedupKey = `${fp}:${off}:${lim}`;
+        } else {
+          dedupKey = String(inputRec.file_path ?? inputRec.pattern ?? inputRec.query ?? JSON.stringify(inputRec).slice(0, 120));
+        }
         const sig = `${call.name}:${dedupKey}`;
         const prevCount = executedSigs.get(sig) ?? 0;
         executedSigs.set(sig, prevCount + 1);
