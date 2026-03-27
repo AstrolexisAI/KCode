@@ -34,6 +34,7 @@ import { generateCacheKey, getCachedResponse, setCachedResponse } from "./respon
 import { getIntentionEngine } from "./intentions";
 import type { Suggestion } from "./intentions";
 import { extractExample, saveExample } from "./distillation";
+import { createThinkTagParser } from "./think-tag-parser";
 import { scoreResponse, saveBenchmark, initBenchmarkSchema } from "./benchmarks";
 import { getBranchManager } from "./branch-manager";
 
@@ -634,14 +635,8 @@ async function* parseSSEStream(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  // State machine for extracting thinking blocks from content stream
-  // Supports: <think>...</think>, <reasoning>...</reasoning>
-  let thinkTagBuf = "";
-  let insideThinkTag = false;
-  let activeCloseTag = ""; // e.g. "</think>" or "</reasoning>"
-  const OPEN_TAGS = ["<think>", "<reasoning>"];
-  const CLOSE_MAP: Record<string, string> = { "<think>": "</think>", "<reasoning>": "</reasoning>" };
-  const MAX_TAG_LEN = 12; // length of "</reasoning>"
+  // Streaming parser for <think>/<reasoning> tag extraction from content
+  const thinkParser = createThinkTagParser();
 
   try {
     while (true) {
@@ -693,55 +688,12 @@ async function* parseSSEStream(
           }
 
           // Content delta — with thinking tag extraction for models that embed thinking in content
-          // Supports <think>...</think> and <reasoning>...</reasoning>
           if (delta?.content) {
-            thinkTagBuf += delta.content;
-
-            while (thinkTagBuf.length > 0) {
-              if (insideThinkTag) {
-                // Inside thinking block: look for the matching close tag
-                const closeIdx = thinkTagBuf.indexOf(activeCloseTag);
-                if (closeIdx !== -1) {
-                  const thinkText = thinkTagBuf.slice(0, closeIdx);
-                  if (thinkText) yield { type: "thinking_delta", thinking: thinkText };
-                  thinkTagBuf = thinkTagBuf.slice(closeIdx + activeCloseTag.length);
-                  insideThinkTag = false;
-                  activeCloseTag = "";
-                } else if (thinkTagBuf.length > MAX_TAG_LEN) {
-                  // Flush safe portion, keep enough for a potential partial close tag
-                  const safe = thinkTagBuf.slice(0, -MAX_TAG_LEN);
-                  if (safe) yield { type: "thinking_delta", thinking: safe };
-                  thinkTagBuf = thinkTagBuf.slice(-MAX_TAG_LEN);
-                  break;
-                } else {
-                  break; // wait for more data
-                }
+            for (const ev of thinkParser.feed(delta.content)) {
+              if (ev.type === "thinking") {
+                yield { type: "thinking_delta", thinking: ev.text };
               } else {
-                // Outside: look for any open tag
-                let bestIdx = -1;
-                let bestTag = "";
-                for (const tag of OPEN_TAGS) {
-                  const idx = thinkTagBuf.indexOf(tag);
-                  if (idx !== -1 && (bestIdx === -1 || idx < bestIdx)) {
-                    bestIdx = idx;
-                    bestTag = tag;
-                  }
-                }
-                if (bestIdx !== -1) {
-                  const beforeText = thinkTagBuf.slice(0, bestIdx);
-                  if (beforeText) yield { type: "content_delta", content: beforeText };
-                  thinkTagBuf = thinkTagBuf.slice(bestIdx + bestTag.length);
-                  insideThinkTag = true;
-                  activeCloseTag = CLOSE_MAP[bestTag]!;
-                } else if (thinkTagBuf.length > MAX_TAG_LEN) {
-                  // Flush safe portion, keep tail for partial tag detection
-                  const safe = thinkTagBuf.slice(0, -MAX_TAG_LEN);
-                  if (safe) yield { type: "content_delta", content: safe };
-                  thinkTagBuf = thinkTagBuf.slice(-MAX_TAG_LEN);
-                  break;
-                } else {
-                  break; // wait for more data
-                }
+                yield { type: "content_delta", content: ev.text };
               }
             }
           }
@@ -777,13 +729,12 @@ async function* parseSSEStream(
     }
 
     // Flush any remaining think-tag buffer
-    if (thinkTagBuf.length > 0) {
-      if (insideThinkTag) {
-        yield { type: "thinking_delta", thinking: thinkTagBuf };
+    for (const ev of thinkParser.flush()) {
+      if (ev.type === "thinking") {
+        yield { type: "thinking_delta", thinking: ev.text };
       } else {
-        yield { type: "content_delta", content: thinkTagBuf };
+        yield { type: "content_delta", content: ev.text };
       }
-      thinkTagBuf = "";
     }
 
     // Process any remaining buffer
