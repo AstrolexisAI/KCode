@@ -1310,11 +1310,17 @@ export class ConversationManager {
       let textChunks: string[] = [];
 
       // Check response cache before making API call
-      const cacheKey = generateCacheKey(this.config.model, this.state.messages.map(m => ({
-        role: m.role,
-        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      })));
-      const cachedText = getCachedResponse(cacheKey);
+      // Skip cache when: thinking is enabled (reasoning varies), noCache flag, or first turn with tools
+      const cacheDisabled = this.config.noCache || this.config.thinking;
+      const cacheKey = cacheDisabled ? "" : generateCacheKey(
+        this.config.model,
+        this.state.messages.map(m => ({
+          role: m.role,
+          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        })),
+        this.systemPrompt,
+      );
+      const cachedText = cacheKey ? getCachedResponse(cacheKey) : null;
       if (cachedText) {
         // Replay cached response
         log.info("cache", "Cache hit — replaying response");
@@ -1681,7 +1687,8 @@ export class ConversationManager {
         }
 
         // Cache text-only responses (no tool calls = deterministic enough to cache)
-        if (stopReason === "end_turn" && toolCalls.length === 0 && textChunks.length > 0) {
+        // Skip when cache is disabled or thinking is enabled
+        if (cacheKey && stopReason === "end_turn" && toolCalls.length === 0 && textChunks.length > 0) {
           try {
             const fullText = textChunks.join("");
             const lastUserMsg = this.state.messages.filter(m => m.role === "user").pop();
