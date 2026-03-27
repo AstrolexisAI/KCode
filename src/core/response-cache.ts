@@ -35,12 +35,23 @@ function getDb() {
 }
 
 /**
- * Generate a cache key from model + messages.
- * Uses SHA-256 of the model name + last user message + system prompt hash.
+ * Generate a cache key from model + messages + system prompt.
+ * Uses SHA-256 of the model name + system prompt + last 3 messages.
+ * Including the system prompt prevents cross-session collisions (system prompt
+ * contains timestamps, git status, and other session-specific data).
  */
-export function generateCacheKey(model: string, messages: Array<{ role: string; content: string }>): string {
+export function generateCacheKey(
+  model: string,
+  messages: Array<{ role: string; content: string }>,
+  systemPrompt?: string,
+): string {
   const hash = createHash("sha256");
   hash.update(model);
+
+  // Include system prompt to prevent cross-session cache collisions
+  if (systemPrompt) {
+    hash.update(systemPrompt);
+  }
 
   // Include the last 3 messages for context-sensitivity
   const relevant = messages.slice(-3);

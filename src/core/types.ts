@@ -100,6 +100,7 @@ export interface KCodeConfig {
   jsonSchema?: string;
   thinking?: boolean;
   reasoningBudget?: number; // -1 = unlimited, positive = max thinking tokens
+  noCache?: boolean; // Disable response cache
   theme?: string;
   compactThreshold?: number; // 0.0 to 1.0, default 0.8 — trigger auto-compact at this % of context window
   permissionRules?: PermissionRule[]; // Granular per-tool rules (first match wins)

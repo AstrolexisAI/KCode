@@ -33,6 +33,7 @@ export interface Settings {
   telemetry?: boolean; // Opt-in/out for local analytics tracking
   thinking?: boolean; // Enable extended thinking mode (Qwen3 reasoning_content)
   reasoningBudget?: number; // -1 = unlimited, positive = max thinking tokens
+  noCache?: boolean; // Disable response cache (always call the model)
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
 }
 
@@ -142,6 +143,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     telemetry: typeof raw.telemetry === "boolean" ? raw.telemetry : undefined,
     thinking: typeof raw.thinking === "boolean" ? raw.thinking : undefined,
     reasoningBudget: typeof raw.reasoningBudget === "number" ? raw.reasoningBudget : undefined,
+    noCache: typeof raw.noCache === "boolean" ? raw.noCache : undefined,
   };
 }
 
@@ -246,6 +248,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.telemetry !== undefined) result.telemetry = layer.telemetry;
     if (layer.thinking !== undefined) result.thinking = layer.thinking;
     if (layer.reasoningBudget !== undefined) result.reasoningBudget = layer.reasoningBudget;
+    if (layer.noCache !== undefined) result.noCache = layer.noCache;
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
       result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
@@ -592,6 +595,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     telemetry: settings.telemetry,
     thinking: settings.thinking,
     reasoningBudget: settings.reasoningBudget,
+    noCache: settings.noCache,
     pro: await isPro(),
     // Managed policy fields
     managedDisallowedTools: policy.disallowedTools,
