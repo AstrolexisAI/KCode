@@ -1,7 +1,7 @@
 // KCode - ThinkingBlock component
-// Collapsible display for model thinking/reasoning content
+// Visually striking display for model thinking/reasoning content
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Box, Text } from "ink";
 import { useTheme } from "../ThemeContext.js";
 
@@ -14,8 +14,12 @@ interface ThinkingBlockProps {
   defaultExpanded?: boolean;
 }
 
-const BORDER_CHAR = "│";
-const MAX_PREVIEW_LENGTH = 60;
+const MAX_PREVIEW_LINES = 4;
+const BRAIN = "🧠";
+
+// Pulsing frames for the live thinking indicator
+const PULSE_FRAMES = ["⣀", "⣤", "⣶", "⣿", "⣶", "⣤"];
+const SPARK_FRAMES = ["✦", "✧", "✦", "✧", "⚡", "✦"];
 
 export default function ThinkingBlock({
   text,
@@ -24,66 +28,110 @@ export default function ThinkingBlock({
 }: ThinkingBlockProps) {
   const { theme } = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [frame, setFrame] = useState(0);
+  const startTimeRef = useRef(Date.now());
+
+  // Animate pulse during streaming
+  useEffect(() => {
+    if (!isStreaming) return;
+    const timer = setInterval(() => {
+      setFrame((prev) => prev + 1);
+    }, 120);
+    return () => clearInterval(timer);
+  }, [isStreaming]);
 
   const charCount = text.length;
   const lineCount = text.split("\n").length;
+  const elapsed = Math.round((Date.now() - startTimeRef.current) / 1000);
 
-  // While streaming, show a live preview
+  // Violet/purple — always use accent (purple across all themes)
+  const violet = theme.accent;
+
+  // While streaming — full-width glowing banner
   if (isStreaming) {
-    const lastLine = text.split("\n").pop() ?? "";
-    const preview =
-      lastLine.length > MAX_PREVIEW_LENGTH
-        ? lastLine.slice(0, MAX_PREVIEW_LENGTH) + "..."
-        : lastLine;
+    const pulse = PULSE_FRAMES[frame % PULSE_FRAMES.length];
+    const spark = SPARK_FRAMES[frame % SPARK_FRAMES.length];
+
+    // Show last few lines as live preview
+    const lines = text.split("\n");
+    const previewLines = lines.slice(-MAX_PREVIEW_LINES);
+    const tokEstimate = Math.round(charCount / 4);
+    const statsText = `${tokEstimate > 0 ? `~${tokEstimate} tok` : ""}${elapsed > 0 ? ` · ${elapsed}s` : ""}`;
 
     return (
-      <Box flexDirection="column" paddingLeft={2}>
-        <Text dimColor color={theme.warning}>
-          {"💭 Thinking"}
-          {charCount > 0 ? ` (${charCount} chars)...` : "..."}
-        </Text>
-        {charCount > 0 && (
-          <Box paddingLeft={1}>
-            <Text dimColor>
-              {BORDER_CHAR} {preview}
+      <Box flexDirection="column" paddingLeft={1}>
+        {/* Header banner */}
+        <Box>
+          <Text color={violet} bold>
+            {spark} {BRAIN} Reasoning {pulse}
+          </Text>
+          {statsText && (
+            <Text color={violet} dimColor>
+              {"  "}{statsText}
             </Text>
+          )}
+        </Box>
+        {/* Live preview with violet left border */}
+        {charCount > 0 && (
+          <Box
+            flexDirection="column"
+            paddingLeft={1}
+            borderStyle="bold"
+            borderLeft={true}
+            borderRight={false}
+            borderTop={false}
+            borderBottom={false}
+            borderColor={violet}
+          >
+            {previewLines.map((line, i) => (
+              <Text key={i} color={violet} dimColor italic>
+                {line.length > 120 ? line.slice(0, 120) + "…" : line}
+              </Text>
+            ))}
+            {lines.length > MAX_PREVIEW_LINES && (
+              <Text dimColor color={violet}>{"  ⋮ "}{lines.length - MAX_PREVIEW_LINES} more lines above</Text>
+            )}
           </Box>
         )}
       </Box>
     );
   }
 
-  // Completed thinking - collapsed view
+  // Completed thinking — collapsed view
   if (!expanded) {
+    const tokEstimate = Math.round(charCount / 4);
     return (
-      <Box paddingLeft={2}>
-        <Text color={theme.dimmed}>
-          {"💭 Thinking ("}
-          {charCount} chars, {lineCount} {lineCount === 1 ? "line" : "lines"}
-          {") ▸ collapsed"}
+      <Box paddingLeft={1}>
+        <Text color={violet}>
+          {BRAIN}{" "}
+        </Text>
+        <Text color={violet} dimColor>
+          Reasoned ({tokEstimate > 1000 ? `${(tokEstimate / 1000).toFixed(1)}K` : tokEstimate} tok, {lineCount} {lineCount === 1 ? "line" : "lines"}) ▸
         </Text>
       </Box>
     );
   }
 
-  // Completed thinking - expanded view
+  // Completed thinking — expanded view
   const lines = text.split("\n");
 
   return (
-    <Box flexDirection="column" paddingLeft={2}>
-      <Text color={theme.dimmed}>
-        {"💭 Thinking ("}
-        {charCount} chars{") ▾ expanded"}
+    <Box flexDirection="column" paddingLeft={1}>
+      <Text color={violet}>
+        {BRAIN}{" "}
+        <Text color={violet} dimColor>
+          Reasoned ({charCount} chars) ▾
+        </Text>
       </Text>
       <Box
         flexDirection="column"
         paddingLeft={1}
-        borderStyle="single"
+        borderStyle="bold"
         borderLeft={true}
         borderRight={false}
         borderTop={false}
         borderBottom={false}
-        borderColor={theme.dimmed}
+        borderColor={violet}
       >
         {lines.map((line, i) => (
           <Text key={i} dimColor italic>

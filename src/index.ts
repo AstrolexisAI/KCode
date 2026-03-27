@@ -151,6 +151,7 @@ program
   .option("--print", "Print mode: output only text, no UI (for piping)")
   .option("--json-schema <schema>", "Validate output against JSON schema (inline JSON or file path)")
   .option("--thinking", "Enable extended thinking mode")
+  .option("--reasoning-budget <tokens>", "Thinking token budget (-1 = unlimited)")
   .option("--worktree <name>", "Create and work in an isolated git worktree")
   .option("--theme <name>", "Set color theme (e.g. dracula, monokai, nord)")
   .option("--fork", "Fork the last session (new session with previous history)")
@@ -1988,6 +1989,12 @@ async function runMain(
   }
   if (opts.thinking) {
     config.thinking = true;
+  }
+  if (opts.reasoningBudget !== undefined) {
+    const budget = parseInt(opts.reasoningBudget);
+    if (!isNaN(budget)) {
+      config.reasoningBudget = budget;
+    }
   }
   if (opts.compactThreshold) {
     const pct = parseInt(opts.compactThreshold);

@@ -135,10 +135,10 @@ export default function MessageList({
       {isLoading && (
         <Box paddingLeft={2}>
           <Spinner
-            message={loadingMessage ?? "Thinking..."}
+            message={loadingMessage ?? (isThinking ? "Reasoning..." : "Thinking...")}
             tokens={turnTokens}
             startTime={turnStartTime}
-            phase={spinnerPhase}
+            phase={isThinking ? "thinking" : spinnerPhase}
           />
         </Box>
       )}
