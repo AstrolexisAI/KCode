@@ -27,7 +27,13 @@ export interface ModelsConfig {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-const MODELS_PATH = join(homedir(), ".kcode", "models.json");
+let MODELS_PATH = join(homedir(), ".kcode", "models.json");
+
+/** Override the models.json path (for tests). Passing undefined resets to default. */
+export function _setModelsPathForTest(path?: string): void {
+  MODELS_PATH = path ?? join(homedir(), ".kcode", "models.json");
+  cachedConfig = null;
+}
 
 // ─── In-memory cache ────────────────────────────────────────────
 
@@ -55,7 +61,8 @@ export async function loadModelsConfig(): Promise<ModelsConfig> {
 }
 
 export async function saveModelsConfig(config: ModelsConfig): Promise<void> {
-  const dir = join(homedir(), ".kcode");
+  const { dirname } = await import("node:path");
+  const dir = dirname(MODELS_PATH);
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(MODELS_PATH, JSON.stringify(config, null, 2) + "\n");
   cachedConfig = config;

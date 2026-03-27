@@ -3,6 +3,7 @@
 
 import { log } from "./logger";
 import { getDb } from "./db";
+import type { Database } from "bun:sqlite";
 
 export interface UserProfile {
   expertise: number;
@@ -17,9 +18,19 @@ export interface UserProfile {
 const EMA_ALPHA = 0.3;
 
 export class UserModel {
+  private _db?: Database;
+
+  constructor(db?: Database) {
+    this._db = db;
+  }
+
+  private getDatabase(): Database {
+    return this._db ?? getDb();
+  }
+
   updateTrait(trait: string, observedValue: number): void {
     try {
-      const db = getDb();
+      const db = this.getDatabase();
       const existing = db.query("SELECT value, samples FROM user_model WHERE key = ?").get(trait) as { value: number; samples: number } | null;
       if (existing) {
         const newValue = Math.max(0, Math.min(1, EMA_ALPHA * observedValue + (1 - EMA_ALPHA) * existing.value));
@@ -56,7 +67,7 @@ export class UserModel {
 
   getProfile(): UserProfile {
     try {
-      const db = getDb();
+      const db = this.getDatabase();
       const traits = db.query("SELECT key, value FROM user_model").all() as { key: string; value: number }[];
       const interests = db.query("SELECT topic FROM user_interests ORDER BY frequency DESC LIMIT 10").all() as { topic: string }[];
       const traitMap: Record<string, number> = {};
@@ -108,7 +119,7 @@ export class UserModel {
 
   private trackInterest(topic: string): void {
     try {
-      const db = getDb();
+      const db = this.getDatabase();
       const existing = db.query("SELECT frequency FROM user_interests WHERE topic = ?").get(topic);
       if (existing) db.query("UPDATE user_interests SET frequency = frequency + 1, updated_at = datetime('now') WHERE topic = ?").run(topic);
       else db.query("INSERT INTO user_interests (topic) VALUES (?)").run(topic);
@@ -116,12 +127,12 @@ export class UserModel {
   }
 
   private setMeta(key: string, value: string): void {
-    try { getDb().query("INSERT OR REPLACE INTO user_meta (key, value) VALUES (?, ?)").run(key, value); } catch { /* ignore */ }
+    try { this.getDatabase().query("INSERT OR REPLACE INTO user_meta (key, value) VALUES (?, ?)").run(key, value); } catch { /* ignore */ }
   }
 
   private getMeta(key: string): string | null {
     try {
-      const row = getDb().query("SELECT value FROM user_meta WHERE key = ?").get(key) as { value: string } | null;
+      const row = this.getDatabase().query("SELECT value FROM user_meta WHERE key = ?").get(key) as { value: string } | null;
       return row?.value ?? null;
     } catch { return null; }
   }

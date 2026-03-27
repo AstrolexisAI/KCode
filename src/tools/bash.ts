@@ -474,6 +474,8 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
     proc.on("close", (code) => {
       clearTimeout(timer);
+      // Always clean up askpass script on process exit (belt-and-suspenders with inline rm -f)
+      if (askpassPath) { try { unlinkSync(askpassPath); } catch { /* ignore */ } }
       if (resolved) return;
       resolved = true;
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
