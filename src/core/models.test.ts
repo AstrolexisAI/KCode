@@ -1,5 +1,5 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,65 +20,40 @@ import {
   addModel,
   removeModel,
   setDefaultModel,
+  _setModelsPathForTest,
   type ModelEntry,
   type ModelsConfig,
 } from "./models.ts";
 
-// Since models.ts reads from a hardcoded path (~/.kcode/models.json),
-// we need to test parseModelsConfig behavior by writing to that path
-// and using invalidateCache + loadModelsConfig.
-// For isolation, we'll save/restore any existing config.
+// Each test gets its own temp directory so we never touch ~/.kcode/models.json.
 
-const KCODE_HOME = join(process.env.HOME ?? "/tmp", ".kcode");
-const MODELS_PATH = join(KCODE_HOME, "models.json");
-
-let originalConfig: string | null = null;
-
-async function saveOriginal() {
-  try {
-    const file = Bun.file(MODELS_PATH);
-    if (await file.exists()) {
-      originalConfig = await file.text();
-    } else {
-      originalConfig = null;
-    }
-  } catch {
-    originalConfig = null;
-  }
-}
-
-async function restoreOriginal() {
-  invalidateCache();
-  if (originalConfig !== null) {
-    await Bun.write(MODELS_PATH, originalConfig);
-  } else {
-    // Remove the file if it didn't exist before
-    try {
-      await rm(MODELS_PATH, { force: true });
-    } catch {}
-  }
-}
+let tmpDir: string;
+let modelsPath: string;
 
 async function writeModelsJson(data: unknown) {
-  await mkdir(KCODE_HOME, { recursive: true });
-  await Bun.write(MODELS_PATH, JSON.stringify(data));
+  await Bun.write(modelsPath, JSON.stringify(data));
   invalidateCache();
 }
 
 async function removeModelsJson() {
   try {
-    await rm(MODELS_PATH, { force: true });
+    await rm(modelsPath, { force: true });
   } catch {}
   invalidateCache();
 }
 
 describe("models", () => {
   beforeEach(async () => {
-    await saveOriginal();
+    tmpDir = await mkdtemp(join(tmpdir(), "kcode-models-test-"));
+    modelsPath = join(tmpDir, "models.json");
+    _setModelsPathForTest(modelsPath);
   });
 
   afterEach(async () => {
-    await restoreOriginal();
+    _setModelsPathForTest(); // reset to default
+    try {
+      await rm(tmpDir, { recursive: true, force: true });
+    } catch {}
   });
 
   // ─── parseModelsConfig (tested indirectly via loadModelsConfig) ───
@@ -139,8 +114,7 @@ describe("models", () => {
     });
 
     test("invalid JSON file returns empty config", async () => {
-      await mkdir(KCODE_HOME, { recursive: true });
-      await Bun.write(MODELS_PATH, "not valid json{{{");
+      await Bun.write(modelsPath, "not valid json{{{");
       invalidateCache();
       const config = await loadModelsConfig();
       expect(config.models).toHaveLength(0);
@@ -376,7 +350,7 @@ describe("models", () => {
 
       // Write different data directly
       await Bun.write(
-        MODELS_PATH,
+        modelsPath,
         JSON.stringify({
           models: [
             { name: "first", baseUrl: "http://first:10080" },

@@ -3,6 +3,7 @@
 
 import { log } from "./logger";
 import { getDb } from "./db";
+import type { Database } from "bun:sqlite";
 
 export interface NarrativeEntry {
   summary: string;
@@ -23,10 +24,20 @@ export interface SessionData {
 }
 
 export class NarrativeManager {
+  private _db?: Database;
+
+  constructor(db?: Database) {
+    this._db = db;
+  }
+
+  private getDatabase(): Database {
+    return this._db ?? getDb();
+  }
+
   updateNarrative(data: SessionData): void {
     try {
       const summary = this.generateNarrative(data);
-      const db = getDb();
+      const db = this.getDatabase();
       db.query("INSERT INTO narrative (summary, project, tools_used, actions_taken) VALUES (?, ?, ?, ?)").run(
         summary, data.project, data.toolsUsed.join(", "), data.actionsCount,
       );
@@ -40,7 +51,7 @@ export class NarrativeManager {
 
   loadNarrative(limit = 3): string | null {
     try {
-      const db = getDb();
+      const db = this.getDatabase();
       const entries = db.query("SELECT summary, project, created_at FROM narrative ORDER BY created_at DESC LIMIT ?").all(limit) as NarrativeEntry[];
       if (entries.length === 0) return null;
       const lines = ["# Recent Sessions", "", "Summaries of recent sessions for continuity:", ""];
@@ -58,7 +69,7 @@ export class NarrativeManager {
 
   getAllNarratives(limit = 20): NarrativeEntry[] {
     try {
-      return getDb().query("SELECT summary, project, tools_used, actions_taken, created_at FROM narrative ORDER BY created_at DESC LIMIT ?").all(limit) as NarrativeEntry[];
+      return this.getDatabase().query("SELECT summary, project, tools_used, actions_taken, created_at FROM narrative ORDER BY created_at DESC LIMIT ?").all(limit) as NarrativeEntry[];
     } catch { return []; }
   }
 

@@ -1,61 +1,57 @@
 import { test, expect, describe, beforeEach } from "bun:test";
+import { Database } from "bun:sqlite";
 import { UserModel } from "./user-model";
 
-// The UserModel class uses a module-level singleton DB at ~/.kcode/awareness.db.
-// We test against the real DB since the module doesn't support injection.
-// Each test uses a fresh UserModel instance; trait keys are prefixed to avoid collision.
+// Each test uses a fresh in-memory SQLite database to avoid contamination
+// from the shared ~/.kcode/awareness.db used in production.
+
+function createTestDb(): Database {
+  const db = new Database(":memory:");
+  db.exec(`CREATE TABLE IF NOT EXISTS user_model (
+    key TEXT PRIMARY KEY, value REAL NOT NULL, samples INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS user_interests (
+    topic TEXT PRIMARY KEY, frequency INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS user_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+  return db;
+}
 
 describe("UserModel", () => {
   let model: UserModel;
-  const prefix = `test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  let testDb: Database;
 
   beforeEach(() => {
-    model = new UserModel();
+    testDb = createTestDb();
+    model = new UserModel(testDb);
   });
 
   // ─── updateTrait ───────────────────────────────────────────────
 
   test("updateTrait sets initial value", () => {
-    const trait = `${prefix}_expertise_init`;
-    model.updateTrait(trait, 0.8);
+    model.updateTrait("expertise", 0.8);
     const profile = model.getProfile();
-    // We can't directly read arbitrary traits from getProfile (it only reads known keys),
-    // so we verify via the DB indirectly — updateTrait should not throw
-    // and a subsequent update should apply EMA smoothing.
-    // For a proper check, let's use the known trait name "expertise"
+    // Fresh DB — initial value is set directly
+    expect(profile.expertise).toBe(0.8);
   });
 
   test("updateTrait sets and retrieves known trait", () => {
-    // Use a unique approach: update the "expertise" trait and check getProfile
-    // Since this shares the real DB, the value will be affected by prior state.
-    // We'll verify the value is within valid range [0, 1].
     model.updateTrait("expertise", 0.9);
     const profile = model.getProfile();
-    expect(profile.expertise).toBeGreaterThanOrEqual(0);
-    expect(profile.expertise).toBeLessThanOrEqual(1);
+    expect(profile.expertise).toBe(0.9);
   });
 
   test("updateTrait applies EMA smoothing on subsequent updates", () => {
-    const trait = `${prefix}_ema_test`;
     // First call: sets value directly (clamped to [0,1])
-    model.updateTrait(trait, 0.5);
+    model.updateTrait("patience", 0.5);
 
     // Second call: applies EMA: newValue = 0.3 * observed + 0.7 * existing
     // With observed=1.0 and existing=0.5: newValue = 0.3*1.0 + 0.7*0.5 = 0.65
-    model.updateTrait(trait, 1.0);
-
-    // Third call: EMA again: 0.3*0.0 + 0.7*0.65 = 0.455
-    model.updateTrait(trait, 0.0);
-
-    // We can't read arbitrary traits via getProfile, but we can verify no errors.
-    // The important thing is EMA is applied (not just overwritten).
-    // Let's verify with a known trait key instead:
-    model.updateTrait("patience", 0.5);  // initial
-    model.updateTrait("patience", 1.0);  // EMA: 0.3*1.0 + 0.7*0.5 = 0.65
+    model.updateTrait("patience", 1.0);
     const profile = model.getProfile();
-    // Should be around 0.65 (or further smoothed if prior state existed)
-    expect(profile.patience).toBeGreaterThan(0.5);
-    expect(profile.patience).toBeLessThanOrEqual(1.0);
+    expect(profile.patience).toBeCloseTo(0.65, 5);
   });
 
   // ─── updateFromMessage ─────────────────────────────────────────
@@ -67,16 +63,10 @@ describe("UserModel", () => {
   });
 
   test("updateFromMessage detects English (no Spanish triggers)", () => {
-    // Reset language by not triggering Spanish detection
-    // Since language defaults to "en" when not set to something else
-    const freshModel = new UserModel();
-    freshModel.updateFromMessage("I want to build a simple web app");
-    const profile = freshModel.getProfile();
-    // Language stays "en" if no Spanish words detected (or was already "es" from prior test)
-    // This test validates that English messages don't change language to "es"
-    // Note: since we share DB, language might already be "es" from previous test
-    // The key assertion is that this message doesn't SET language to Spanish
-    expect(typeof profile.language).toBe("string");
+    model.updateFromMessage("I want to build a simple web app");
+    const profile = model.getProfile();
+    // Language stays "en" when no Spanish words detected
+    expect(profile.language).toBe("en");
   });
 
   test("updateFromMessage detects technical terms and increases expertise", () => {
@@ -95,13 +85,10 @@ describe("UserModel", () => {
   });
 
   test("updateFromMessage detects impatient language", () => {
-    // Send multiple impatient messages to overcome EMA smoothing from prior DB state
     model.updateFromMessage("just quickly fix this asap");
-    model.updateFromMessage("hurry up, just do it fast");
-    model.updateFromMessage("simply do it quickly asap");
     const profile = model.getProfile();
-    // Patience should be reduced (toward 0.2) after multiple impatient signals
-    expect(profile.patience).toBeLessThan(0.5);
+    // Patience should be set to 0.2 on fresh DB
+    expect(profile.patience).toBe(0.2);
   });
 
   test("updateFromMessage detects autonomy preference", () => {
@@ -137,14 +124,10 @@ describe("UserModel", () => {
     model.updateTrait("expertise", 0.9);
     model.updateTrait("patience", 0.1);
     const result = model.formatForPrompt();
-    // Should return a string since we've set traits far from 0.5
-    if (result !== null) {
-      expect(result).toContain("# User Model");
-      expect(result).toContain("Adapt your responses");
-    }
-    // Result could be null if no traits differ enough from 0.5
-    // (due to EMA smoothing with existing DB values)
-    expect(result === null || typeof result === "string").toBe(true);
+    // Fresh DB — traits are set directly, so they differ enough from 0.5
+    expect(result).not.toBeNull();
+    expect(result!).toContain("# User Model");
+    expect(result!).toContain("Adapt your responses");
   });
 
   test("formatForPrompt includes language when not English", () => {

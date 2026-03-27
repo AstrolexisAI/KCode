@@ -1,9 +1,21 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterAll } from "bun:test";
+import { Database } from "bun:sqlite";
 import { NarrativeManager, type SessionData } from "./narrative";
 
 describe("NarrativeManager", () => {
   let manager: NarrativeManager;
   const testProject = `test-project-${Date.now()}`;
+
+  // Isolated in-memory DB for tests
+  const testDb = new Database(":memory:");
+  testDb.exec(`CREATE TABLE IF NOT EXISTS narrative (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    summary TEXT NOT NULL,
+    project TEXT NOT NULL DEFAULT '',
+    tools_used TEXT DEFAULT '',
+    actions_taken INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
 
   function makeSessionData(overrides: Partial<SessionData> = {}): SessionData {
     return {
@@ -18,8 +30,14 @@ describe("NarrativeManager", () => {
     };
   }
 
+  afterAll(() => {
+    testDb.close();
+  });
+
   beforeEach(() => {
-    manager = new NarrativeManager();
+    // Clear narrative table between tests for isolation
+    testDb.exec("DELETE FROM narrative");
+    manager = new NarrativeManager(testDb);
   });
 
   // ─── updateNarrative ──────────────────────────────────────────
@@ -50,14 +68,8 @@ describe("NarrativeManager", () => {
   });
 
   test("loadNarrative returns null when no narratives exist for empty DB", () => {
-    // This might return data from prior tests since we share the DB.
-    // Instead, verify the return type is correct.
     const result = manager.loadNarrative(3);
-    // Result is either null (empty DB) or a formatted string
-    expect(result === null || typeof result === "string").toBe(true);
-    if (result !== null) {
-      expect(result).toContain("# Recent Sessions");
-    }
+    expect(result).toBeNull();
   });
 
   // ─── getAllNarratives ──────────────────────────────────────────
