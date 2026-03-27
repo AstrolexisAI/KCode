@@ -42,7 +42,17 @@ export class SystemPromptBuilder {
     sections.push({ content: this.buildGitInstructions(), priority: SectionPriority.HIGH, label: "git" });
     sections.push({ content: this.buildToneAndOutput(), priority: SectionPriority.HIGH, label: "tone" });
     if (config.thinking) {
-      sections.push({ content: "## Extended Thinking\nYou have extended thinking enabled. Use <thinking> blocks to reason through complex problems step by step before responding. Show your work.", priority: SectionPriority.HIGH, label: "thinking" });
+      sections.push({ content: `## Extended Reasoning
+IMPORTANT: Before EVERY response, you MUST first write your internal reasoning inside a <reasoning> block.
+ALWAYS start your response with <reasoning> immediately — no exceptions, no preamble before it.
+
+Format:
+<reasoning>
+your step-by-step analysis, planning, and thought process here
+</reasoning>
+
+Then write your final answer after the closing tag.
+NEVER skip the reasoning block, even for simple questions. The reasoning block is shown separately in the UI and helps you produce better, more thorough answers.`, priority: SectionPriority.HIGH, label: "thinking" });
     }
     sections.push({ content: this.buildEnvironment(config), priority: SectionPriority.HIGH, label: "environment" });
 

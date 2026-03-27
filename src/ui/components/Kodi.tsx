@@ -9,7 +9,7 @@ import { useTheme } from "../ThemeContext.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type KodiMood = "idle" | "happy" | "excited" | "thinking" | "working" | "worried" | "sleeping" | "celebrating" | "curious" | "mischievous" | "crazy" | "angry" | "smug";
+export type KodiMood = "idle" | "happy" | "excited" | "thinking" | "reasoning" | "working" | "worried" | "sleeping" | "celebrating" | "curious" | "mischievous" | "crazy" | "angry" | "smug";
 
 export interface KodiEvent {
   type: "tool_start" | "tool_done" | "tool_error" | "thinking" | "streaming" | "idle" | "turn_end" | "compaction" | "agent_spawn" | "test_pass" | "test_fail" | "commit" | "error";
@@ -104,6 +104,28 @@ const SPRITES: Record<KodiMood, string[][]> = {
   ], [
     " ╭───────╮",
     " │ •  ‿• │",
+    " ╰───┬───╯",
+    "    /|   ",
+    "    / \\  ",
+  ]],
+  reasoning: [[
+    "   ⣀⣤⣶⣿   ",
+    " ╭───────╮",
+    " │ ◉  ◉ │🧠",
+    " ╰───┬───╯",
+    "    /|\\  ",
+    "    / \\  ",
+  ], [
+    "   ⣿⣶⣤⣀   ",
+    " ╭───────╮",
+    " │ ◉ _◉ │🧠",
+    " ╰───┬───╯",
+    "     |\\  ",
+    "    / \\  ",
+  ], [
+    "   ⣶⣿⣶⣤   ",
+    " ╭───────╮",
+    " │ ◉  ◉ │⚡",
     " ╰───┬───╯",
     "    /|   ",
     "    / \\  ",
@@ -282,6 +304,7 @@ const FALLBACKS: Record<string, string[]> = {
   tool_done:     ["Done!", "Got it!", "All good!"],
   tool_error:    ["Oops!", "That didn't work...", "Let me check..."],
   thinking:      ["Hmm...", "Thinking...", "Let me ponder..."],
+  reasoning:     ["🧠 Deep reasoning...", "🧠 Processing...", "🧠 Analyzing...", "🧠 Connecting the dots..."],
   streaming:     ["Writing...", "Here goes...", "Composing..."],
   idle:          ["Ready!", "What's next?", "Standing by!"],
   turn_end:      ["All done!", "Back to you!", "Your turn!"],
@@ -409,7 +432,7 @@ function buildContext(event: KodiEvent, stats: { tools: number; tokens: number; 
       parts.push(`The ${event.detail ?? "a"} tool just FAILED with an error.`);
       break;
     case "thinking":
-      parts.push("The AI is now deep in thought, processing the user's request.");
+      parts.push("The AI is now doing deep reasoning — brain is glowing, neurons firing. This is extended thinking mode with the 🧠 indicator.");
       break;
     case "streaming":
       parts.push("The AI is writing its response to the user.");
@@ -514,7 +537,7 @@ export default function KodiCompanion({
         react("angry", "angry_mode", lastEvent);
         break;
       case "thinking":
-        react("thinking", "thinking", lastEvent);
+        react("reasoning", "reasoning", lastEvent);
         break;
       case "streaming":
         react("happy", "streaming", lastEvent);
@@ -592,6 +615,7 @@ export default function KodiCompanion({
     ? theme.success
     : mood === "worried" ? theme.error
     : mood === "angry" ? theme.error
+    : mood === "reasoning" ? theme.accent
     : mood === "thinking" || mood === "working" ? theme.warning
     : mood === "mischievous" ? "#ff69b4"
     : mood === "crazy" ? "#ff00ff"

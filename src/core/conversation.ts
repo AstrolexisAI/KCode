@@ -607,9 +607,11 @@ function convertToAnthropicTools(
 // ─── SSE Stream Parser ──────────────────────────────────────────
 
 interface SSEChunk {
-  type: "content_delta" | "tool_call_delta" | "finish" | "usage" | "error";
+  type: "content_delta" | "thinking_delta" | "tool_call_delta" | "finish" | "usage" | "error";
   // content_delta
   content?: string;
+  // thinking_delta (Qwen3 reasoning_content)
+  thinking?: string;
   // tool_call_delta
   toolCallIndex?: number;
   toolCallId?: string;
@@ -631,6 +633,15 @@ async function* parseSSEStream(
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+
+  // State machine for extracting thinking blocks from content stream
+  // Supports: <think>...</think>, <reasoning>...</reasoning>
+  let thinkTagBuf = "";
+  let insideThinkTag = false;
+  let activeCloseTag = ""; // e.g. "</think>" or "</reasoning>"
+  const OPEN_TAGS = ["<think>", "<reasoning>"];
+  const CLOSE_MAP: Record<string, string> = { "<think>": "</think>", "<reasoning>": "</reasoning>" };
+  const MAX_TAG_LEN = 12; // length of "</reasoning>"
 
   try {
     while (true) {
@@ -676,9 +687,63 @@ async function* parseSSEStream(
           const delta = choice.delta;
           const finishReason = choice.finish_reason;
 
-          // Content delta
+          // Thinking delta (native reasoning_content field — vLLM, OpenRouter, etc.)
+          if (delta?.reasoning_content) {
+            yield { type: "thinking_delta", thinking: delta.reasoning_content };
+          }
+
+          // Content delta — with thinking tag extraction for models that embed thinking in content
+          // Supports <think>...</think> and <reasoning>...</reasoning>
           if (delta?.content) {
-            yield { type: "content_delta", content: delta.content };
+            thinkTagBuf += delta.content;
+
+            while (thinkTagBuf.length > 0) {
+              if (insideThinkTag) {
+                // Inside thinking block: look for the matching close tag
+                const closeIdx = thinkTagBuf.indexOf(activeCloseTag);
+                if (closeIdx !== -1) {
+                  const thinkText = thinkTagBuf.slice(0, closeIdx);
+                  if (thinkText) yield { type: "thinking_delta", thinking: thinkText };
+                  thinkTagBuf = thinkTagBuf.slice(closeIdx + activeCloseTag.length);
+                  insideThinkTag = false;
+                  activeCloseTag = "";
+                } else if (thinkTagBuf.length > MAX_TAG_LEN) {
+                  // Flush safe portion, keep enough for a potential partial close tag
+                  const safe = thinkTagBuf.slice(0, -MAX_TAG_LEN);
+                  if (safe) yield { type: "thinking_delta", thinking: safe };
+                  thinkTagBuf = thinkTagBuf.slice(-MAX_TAG_LEN);
+                  break;
+                } else {
+                  break; // wait for more data
+                }
+              } else {
+                // Outside: look for any open tag
+                let bestIdx = -1;
+                let bestTag = "";
+                for (const tag of OPEN_TAGS) {
+                  const idx = thinkTagBuf.indexOf(tag);
+                  if (idx !== -1 && (bestIdx === -1 || idx < bestIdx)) {
+                    bestIdx = idx;
+                    bestTag = tag;
+                  }
+                }
+                if (bestIdx !== -1) {
+                  const beforeText = thinkTagBuf.slice(0, bestIdx);
+                  if (beforeText) yield { type: "content_delta", content: beforeText };
+                  thinkTagBuf = thinkTagBuf.slice(bestIdx + bestTag.length);
+                  insideThinkTag = true;
+                  activeCloseTag = CLOSE_MAP[bestTag]!;
+                } else if (thinkTagBuf.length > MAX_TAG_LEN) {
+                  // Flush safe portion, keep tail for partial tag detection
+                  const safe = thinkTagBuf.slice(0, -MAX_TAG_LEN);
+                  if (safe) yield { type: "content_delta", content: safe };
+                  thinkTagBuf = thinkTagBuf.slice(-MAX_TAG_LEN);
+                  break;
+                } else {
+                  break; // wait for more data
+                }
+              }
+            }
           }
 
           // Tool call deltas
@@ -709,6 +774,16 @@ async function* parseSSEStream(
           }
         }
       }
+    }
+
+    // Flush any remaining think-tag buffer
+    if (thinkTagBuf.length > 0) {
+      if (insideThinkTag) {
+        yield { type: "thinking_delta", thinking: thinkTagBuf };
+      } else {
+        yield { type: "content_delta", content: thinkTagBuf };
+      }
+      thinkTagBuf = "";
     }
 
     // Process any remaining buffer
@@ -804,6 +879,8 @@ async function* parseAnthropicSSEStream(
                 toolCallId: block.id,
                 functionName: block.name,
               };
+            } else if (block?.type === "thinking") {
+              blockTypes.set(idx, "thinking");
             } else if (block?.type === "text") {
               blockTypes.set(idx, "text");
             }
@@ -814,7 +891,9 @@ async function* parseAnthropicSSEStream(
             const idx = parsed.index ?? 0;
             const delta = parsed.delta;
 
-            if (delta?.type === "text_delta" && delta.text) {
+            if (delta?.type === "thinking_delta" && delta.thinking) {
+              yield { type: "thinking_delta", thinking: delta.thinking };
+            } else if (delta?.type === "text_delta" && delta.text) {
               yield { type: "content_delta", content: delta.text };
             } else if (delta?.type === "input_json_delta" && delta.partial_json !== undefined) {
               yield {
@@ -1270,6 +1349,7 @@ export class ConversationManager {
       let stopReason = "end_turn";
       let turnInputTokens = 0;
       let turnOutputTokens = 0;
+      let thinkingChunks: string[] = [];
 
       // Track in-progress tool calls by index
       const activeToolCalls = new Map<
@@ -1320,8 +1400,25 @@ export class ConversationManager {
       try {
         for await (const chunk of sseStream) {
           switch (chunk.type) {
+            case "thinking_delta": {
+              if (chunk.thinking) {
+                thinkingChunks.push(chunk.thinking);
+                streamedOutputChars += chunk.thinking.length;
+                yield { type: "thinking_delta", thinking: chunk.thinking };
+              }
+              break;
+            }
+
             case "content_delta": {
               if (chunk.content) {
+                // Finalize thinking when content starts (thinking is always before content)
+                if (thinkingChunks.length > 0) {
+                  const fullThinking = thinkingChunks.join("");
+                  if (fullThinking.trim()) {
+                    assistantContent.push({ type: "thinking", thinking: fullThinking });
+                  }
+                  thinkingChunks = [];
+                }
                 textChunks.push(chunk.content);
                 streamedOutputChars += chunk.content.length;
                 yield { type: "text_delta", text: chunk.content };
@@ -1438,6 +1535,15 @@ export class ConversationManager {
         return;
       } finally {
         this.rateLimiter.release();
+      }
+
+      // Finalize any remaining thinking (when response ends with thinking only, no content after)
+      if (thinkingChunks.length > 0) {
+        const fullThinking = thinkingChunks.join("");
+        if (fullThinking.trim()) {
+          assistantContent.push({ type: "thinking", thinking: fullThinking });
+        }
+        thinkingChunks = [];
       }
 
       // Finalize text content
@@ -2438,8 +2544,14 @@ export class ConversationManager {
 
       if (tools.length > 0) body.tools = tools;
 
-      // Qwen3: disable thinking mode unless explicitly requested
-      if (!this.config.thinking) {
+      // Qwen3: control thinking mode via chat_template_kwargs
+      if (this.config.thinking) {
+        body.chat_template_kwargs = { enable_thinking: true };
+        // Set reasoning budget (-1 = unlimited, matching llama-server config)
+        if (this.config.reasoningBudget !== undefined) {
+          body.reasoning_budget = this.config.reasoningBudget;
+        }
+      } else {
         body.chat_template_kwargs = { enable_thinking: false };
       }
 

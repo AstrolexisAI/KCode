@@ -31,6 +31,8 @@ export interface Settings {
   maxBudgetUsd?: number;
   compactThreshold?: number; // 0.5–0.95, default 0.8 — trigger auto-compact at this % of context window
   telemetry?: boolean; // Opt-in/out for local analytics tracking
+  thinking?: boolean; // Enable extended thinking mode (Qwen3 reasoning_content)
+  reasoningBudget?: number; // -1 = unlimited, positive = max thinking tokens
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
 }
 
@@ -138,6 +140,8 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     maxBudgetUsd: typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0 ? raw.maxBudgetUsd : undefined,
     compactThreshold: typeof raw.compactThreshold === "number" && raw.compactThreshold >= 0.5 && raw.compactThreshold <= 0.95 ? raw.compactThreshold : undefined,
     telemetry: typeof raw.telemetry === "boolean" ? raw.telemetry : undefined,
+    thinking: typeof raw.thinking === "boolean" ? raw.thinking : undefined,
+    reasoningBudget: typeof raw.reasoningBudget === "number" ? raw.reasoningBudget : undefined,
   };
 }
 
@@ -240,6 +244,8 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.maxBudgetUsd !== undefined) result.maxBudgetUsd = layer.maxBudgetUsd;
     if (layer.compactThreshold !== undefined) result.compactThreshold = layer.compactThreshold;
     if (layer.telemetry !== undefined) result.telemetry = layer.telemetry;
+    if (layer.thinking !== undefined) result.thinking = layer.thinking;
+    if (layer.reasoningBudget !== undefined) result.reasoningBudget = layer.reasoningBudget;
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
       result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
@@ -584,6 +590,8 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     maxBudgetUsd: settings.maxBudgetUsd,
     compactThreshold: settings.compactThreshold,
     telemetry: settings.telemetry,
+    thinking: settings.thinking,
+    reasoningBudget: settings.reasoningBudget,
     pro: await isPro(),
     // Managed policy fields
     managedDisallowedTools: policy.disallowedTools,

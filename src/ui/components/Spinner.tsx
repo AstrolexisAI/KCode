@@ -7,7 +7,7 @@ import { useTheme } from "../ThemeContext.js";
 
 // Different spinner styles for different phases
 const SPINNERS = {
-  thinking: ["◐", "◓", "◑", "◒"],           // circular — model is thinking
+  thinking: ["🧠⣀", "🧠⣤", "🧠⣶", "🧠⣿", "🧠⣶", "🧠⣤"], // brain pulse — model is reasoning
   streaming: ["▁", "▃", "▅", "▇", "▅", "▃"], // wave — tokens flowing
   tool: ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"], // matrix — executing tool
 };
@@ -91,7 +91,8 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
   if (startTime && elapsed > 0) meta.push(formatElapsed(elapsed));
 
   // Spinner color based on phase
-  const spinnerColor = phase === "streaming" ? theme.success
+  const spinnerColor = phase === "thinking" ? theme.accent
+    : phase === "streaming" ? theme.success
     : phase === "tool" ? theme.warning
     : theme.primary;
 

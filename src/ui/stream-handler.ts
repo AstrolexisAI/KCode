@@ -95,7 +95,10 @@ export async function processStreamEvents(
         break;
 
       case "thinking_delta":
-        if (currentThinking.length === 0) setLastKodiEvent({ type: "thinking" });
+        if (currentThinking.length === 0) {
+          setLastKodiEvent({ type: "thinking" });
+          setSpinnerPhase("thinking");
+        }
         currentThinking += event.thinking;
         setIsThinking(true);
         setStreamingThinking(currentThinking);

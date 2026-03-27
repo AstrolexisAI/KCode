@@ -228,9 +228,10 @@ export default function App({ config, conversationManager, tools, initialSession
     // Alt+T: Toggle extended thinking
     if (key.meta && input === "t" && mode === "input") {
       config.thinking = !config.thinking;
+      const budgetLabel = config.reasoningBudget === -1 ? "unlimited" : config.reasoningBudget !== undefined ? `${config.reasoningBudget} tokens` : "default";
       setCompleted((prev) => [
         ...prev,
-        { kind: "text", role: "assistant", text: `  Thinking mode: ${config.thinking ? "ON" : "OFF"}` },
+        { kind: "text", role: "assistant", text: `  Thinking mode: ${config.thinking ? `ON (budget: ${budgetLabel})` : "OFF"}` },
       ]);
       return;
     }
