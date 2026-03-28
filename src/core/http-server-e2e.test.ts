@@ -244,3 +244,50 @@ describe("E2E: Legacy endpoints", () => {
     expect(Array.isArray(body.skills)).toBe(true);
   });
 });
+
+// ─── Workspace Scoping (real HTTP) ──────────────────────────────
+
+describe("E2E: Workspace scoping", () => {
+  test("Glob rejects absolute path outside workspace", async () => {
+    const res = await api("/api/tool", {
+      method: "POST",
+      body: JSON.stringify({ name: "Glob", input: { pattern: "*.ts", path: "/etc" } }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.isError).toBe(true);
+    expect(body.content).toContain("outside the project workspace");
+  });
+
+  test("Glob rejects path traversal", async () => {
+    const res = await api("/api/tool", {
+      method: "POST",
+      body: JSON.stringify({ name: "Glob", input: { pattern: "*.ts", path: "../../../etc" } }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.isError).toBe(true);
+    expect(body.content).toContain("outside the project workspace");
+  });
+
+  test("Grep rejects path outside workspace", async () => {
+    const res = await api("/api/tool", {
+      method: "POST",
+      body: JSON.stringify({ name: "Grep", input: { pattern: "root", path: "/etc/passwd" } }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.isError).toBe(true);
+    expect(body.content).toContain("outside the project workspace");
+  });
+
+  test("Glob works within workspace over real HTTP", async () => {
+    const res = await api("/api/tool", {
+      method: "POST",
+      body: JSON.stringify({ name: "Glob", input: { pattern: "src/**/*.ts" } }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.isError ?? false).toBe(false);
+  });
+});

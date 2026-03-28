@@ -37,6 +37,7 @@ interface PromptRequest {
 interface ToolExecRequest {
   name: string;
   input: Record<string, unknown>;
+  cwd?: string; // Optional workspace override (must be absolute, no traversal)
 }
 
 // ─── Security ────────────────────────────────────────────────────
@@ -432,9 +433,17 @@ export async function handleRoute(
         return jsonError(`Unknown tool: "${body.name}"`, 404, corsHeaders);
       }
 
-      // Ensure workspace is set for Glob/Grep even in direct tool execution
+      // Set workspace for Glob/Grep — use request cwd if valid, else process.cwd()
       const { setToolWorkspace } = await import("../tools/workspace.js");
-      setToolWorkspace(process.cwd());
+      let toolCwd = process.cwd();
+      if (body.cwd && typeof body.cwd === "string") {
+        const { resolve, isAbsolute } = await import("node:path");
+        const { existsSync } = await import("node:fs");
+        if (isAbsolute(body.cwd) && !body.cwd.includes("..") && existsSync(body.cwd)) {
+          toolCwd = resolve(body.cwd);
+        }
+      }
+      setToolWorkspace(toolCwd);
 
       // Audit log for tool execution via HTTP
       log.info("http", `Executing tool via API: ${body.name} (input keys: ${Object.keys(body.input).join(", ")})`);
