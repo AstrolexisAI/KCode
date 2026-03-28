@@ -1,0 +1,9 @@
+export { registerModelsCommand } from "./models";
+export { registerPluginCommand } from "./plugin";
+export { registerMcpCommand } from "./mcp";
+export { registerServerCommand } from "./server";
+export { registerProCommands } from "./pro";
+export { registerSetupCommand } from "./setup";
+export { registerDoctorCommand } from "./doctor";
+export { registerTeachCommand } from "./teach";
+export { registerMiscCommands } from "./misc";
