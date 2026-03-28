@@ -60,7 +60,7 @@ const MAX_RETRY_DELAY_MS = 8000;
  * Heuristic: does the text look like it was cut off mid-sentence?
  * Catches responses that end in prepositions, articles, open brackets, etc.
  */
-function looksIncomplete(text: string): boolean {
+export function looksIncomplete(text: string): boolean {
   if (text.length < 50) return false;
   const trimmed = text.trimEnd();
   // Ends with an open code block that was never closed
