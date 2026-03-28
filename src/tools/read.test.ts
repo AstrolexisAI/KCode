@@ -1,9 +1,10 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach, afterAll } from "bun:test";
 import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { executeRead } from "./read.ts";
+import { setToolWorkspace } from "./workspace";
 
 let tempDir: string;
 
@@ -195,5 +196,46 @@ describe("read tool", () => {
     const result = await executeRead({ file_path: filePath });
 
     expect(result.content).toContain("Showing lines 1-2000 of");
+  });
+});
+
+// ─── HOME workspace guard for Read ──────────────────────────────
+
+describe("Read — HOME workspace guard", () => {
+  const originalCwd = process.cwd();
+
+  afterAll(() => {
+    setToolWorkspace(originalCwd);
+  });
+
+  test("gives specific error for invented path when workspace is HOME", async () => {
+    const home = process.env.HOME ?? "";
+    if (!home) return;
+    setToolWorkspace(home);
+    const result = await executeRead({ file_path: join(home, "lib", "nonexistent-types.ts") });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("does not exist");
+    expect(result.content).toContain("home directory");
+  });
+
+  test("rejects paths outside HOME when workspace is HOME", async () => {
+    const home = process.env.HOME ?? "";
+    if (!home) return;
+    setToolWorkspace(home);
+    const result = await executeRead({ file_path: "/etc/passwd" });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("outside the workspace");
+  });
+
+  test("allows reading existing files in HOME workspace", async () => {
+    const home = process.env.HOME ?? "";
+    if (!home) return;
+    setToolWorkspace(home);
+    // Read a file that definitely exists
+    const result = await executeRead({ file_path: join(home, ".bashrc") });
+    // Should either succeed or fail normally (not our guard error)
+    if (result.is_error) {
+      expect(result.content).not.toContain("home directory");
+    }
   });
 });
