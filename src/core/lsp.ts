@@ -144,8 +144,8 @@ export class LspManager {
   }
 
   private async readResponses(serverName: string, proc: Subprocess, entry: ServerEntry): Promise<void> {
-    if (!proc.stdout) return;
-    const reader = proc.stdout.getReader();
+    if (!proc.stdout || typeof proc.stdout === "number") return;
+    const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
     const decoder = new TextDecoder();
     let buffer = "";
 
@@ -232,7 +232,9 @@ export class LspManager {
       entry.pendingRequests.set(id, { resolve, reject, timer });
 
       try {
-        entry.process.stdin!.write(header + msg);
+        const stdin = entry.process.stdin;
+        if (!stdin || typeof stdin === "number") throw new Error("stdin not available");
+        (stdin as import("bun").FileSink).write(header + msg);
       } catch (err) {
         clearTimeout(timer);
         entry.pendingRequests.delete(id);
@@ -243,13 +245,13 @@ export class LspManager {
 
   private sendNotification(serverName: string, method: string, params: any): void {
     const entry = this.servers.get(serverName);
-    if (!entry?.process.stdin) return;
+    if (!entry?.process.stdin || typeof entry.process.stdin === "number") return;
 
     const msg = JSON.stringify({ jsonrpc: "2.0", method, params });
     const header = `Content-Length: ${Buffer.byteLength(msg)}\r\n\r\n`;
 
     try {
-      entry.process.stdin.write(header + msg);
+      (entry.process.stdin as import("bun").FileSink).write(header + msg);
     } catch { /* ignore */ }
   }
 

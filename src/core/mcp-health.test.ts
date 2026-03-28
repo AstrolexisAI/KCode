@@ -1,11 +1,12 @@
 // KCode - MCP Health Monitor & Aliases Tests
 // Tests for circuit breaker logic, health recording, latency tracking, and tool aliases
 
-import { describe, test, expect, beforeEach, afterAll } from "bun:test";
+import { describe, test, expect, beforeEach, afterAll, afterEach } from "bun:test";
 import { McpHealthMonitor, type ServerHealth } from "./mcp-health";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { closeDb } from "./db";
 
 // ─── Health Monitor Tests ───────────────────────────────────────
 
@@ -188,11 +189,12 @@ describe("McpHealthMonitor", () => {
 
 // ─── Alias Tests ────────────────────────────────────────────────
 
-// Note: alias tests use the real awareness.db via getDb().
-// We test at the module level to verify DB integration.
+// Close any existing singleton opened by earlier test files,
+// then switch to in-memory DB before aliases touch getDb().
+closeDb();
+process.env.KCODE_DB_PATH = ":memory:";
 
 describe("MCP Tool Aliases", () => {
-  // Use dynamic import so the DB schema is created on demand
   let addAlias: typeof import("./mcp-aliases").addAlias;
   let removeAlias: typeof import("./mcp-aliases").removeAlias;
   let resolveAlias: typeof import("./mcp-aliases").resolveAlias;
@@ -248,15 +250,8 @@ describe("MCP Tool Aliases", () => {
     expect(removed).toBe(false);
   });
 
-  // Clean up all test aliases after the suite
-  afterAll(async () => {
-    try {
-      const mod = await import("./mcp-aliases");
-      for (const alias of mod.listAliases()) {
-        if (alias.alias.startsWith("test_")) {
-          mod.removeAlias(alias.alias);
-        }
-      }
-    } catch { /* ignore cleanup errors */ }
+  // Clean up: close the in-memory DB singleton after the suite
+  afterAll(() => {
+    closeDb();
   });
 });

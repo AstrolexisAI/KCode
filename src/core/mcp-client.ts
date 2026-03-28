@@ -94,6 +94,43 @@ export interface ElicitationResponse {
 
 export type ElicitationCallback = (request: ElicitationRequest["params"]) => Promise<ElicitationResponse>;
 
+// ─── Input Sanitization ─────────────────────────────────────────
+
+/** Dangerous keys that could enable prototype pollution via JSON */
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+/** Maximum nesting depth for MCP tool arguments */
+const MAX_INPUT_DEPTH = 20;
+
+/**
+ * Sanitize MCP tool input: strip prototype pollution keys and
+ * reject excessively deep nesting.
+ */
+export function sanitizeMcpInput(
+  obj: Record<string, unknown>,
+  depth = 0,
+): Record<string, unknown> {
+  if (depth > MAX_INPUT_DEPTH) {
+    return { _error: "Input exceeds maximum nesting depth" };
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = sanitizeMcpInput(value as Record<string, unknown>, depth + 1);
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((item) =>
+        item !== null && typeof item === "object" && !Array.isArray(item)
+          ? sanitizeMcpInput(item as Record<string, unknown>, depth + 1)
+          : item,
+      );
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // ─── MCP Server Connection (stdio) ──────────────────────────────
 
 export class McpServerConnection {
@@ -125,10 +162,11 @@ export class McpServerConnection {
 
   async start(): Promise<void> {
     log.info("mcp", `Starting server "${this.name}": ${this.config.command} ${(this.config.args ?? []).join(" ")}`);
-    const env = { ...process.env, ...(this.config.env ?? {}) };
+    const rawEnv = { ...process.env, ...(this.config.env ?? {}) };
+    const env = Object.fromEntries(Object.entries(rawEnv).filter((e): e is [string, string] => e[1] !== undefined));
 
     this.process = spawn({
-      cmd: [this.config.command, ...(this.config.args ?? [])],
+      cmd: [this.config.command!, ...(this.config.args ?? [])],
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
@@ -145,9 +183,9 @@ export class McpServerConnection {
   }
 
   private async readStdout(): Promise<void> {
-    if (!this.process?.stdout) return;
+    if (!this.process?.stdout || typeof this.process.stdout === "number") return;
 
-    const reader = this.process.stdout.getReader();
+    const reader = (this.process.stdout as ReadableStream<Uint8Array>).getReader();
     const decoder = new TextDecoder();
 
     try {
@@ -252,7 +290,9 @@ export class McpServerConnection {
       });
 
       try {
-        this.process!.stdin!.write(message);
+        const stdin = this.process!.stdin;
+        if (!stdin || typeof stdin === "number") throw new Error("stdin not available");
+        (stdin as import("bun").FileSink).write(message);
       } catch (err) {
         clearTimeout(timer);
         this.pendingRequests.delete(id);
@@ -274,12 +314,12 @@ export class McpServerConnection {
     });
 
     // Send initialized notification (no id, but we still use sendRequest-like approach)
-    if (this.process?.stdin) {
+    if (this.process?.stdin && typeof this.process.stdin !== "number") {
       const notification = JSON.stringify({
         jsonrpc: "2.0",
         method: "notifications/initialized",
       }) + "\n";
-      this.process.stdin.write(notification);
+      (this.process.stdin as import("bun").FileSink).write(notification);
     }
   }
 
@@ -302,9 +342,12 @@ export class McpServerConnection {
   }
 
   async callTool(toolName: string, args: Record<string, unknown>): Promise<string> {
+    // Sanitize input: strip prototype pollution keys and limit depth
+    const sanitizedArgs = sanitizeMcpInput(args);
+
     const result = await this.sendRequest("tools/call", {
       name: toolName,
-      arguments: args,
+      arguments: sanitizedArgs,
     }) as { content?: unknown };
 
     // Validate response structure (prevent malicious MCP server injection)
@@ -388,10 +431,10 @@ export class McpServerConnection {
    * Send a JSON-RPC response back to the MCP server.
    */
   private sendJsonRpcResponse(id: string | number, result: unknown): void {
-    if (!this.process?.stdin) return;
+    if (!this.process?.stdin || typeof this.process.stdin === "number") return;
     const response = JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n";
     try {
-      this.process.stdin.write(response);
+      (this.process.stdin as import("bun").FileSink).write(response);
     } catch (err) {
       log.warn("mcp", "Failed to write to stdin of server \"" + this.name + "\": " + err);
     }
@@ -900,13 +943,31 @@ export class McpHttpConnection {
   }
 
   async callTool(toolName: string, args: Record<string, unknown>): Promise<string> {
+    // Sanitize input: strip prototype pollution keys and limit depth
+    const sanitizedArgs = sanitizeMcpInput(args);
+
     const result = await this.sendHttp("tools/call", {
       name: toolName,
-      arguments: args,
+      arguments: sanitizedArgs,
     }) as { content?: Array<{ type: string; text?: string }> };
 
-    if (!result?.content || result.content.length === 0) return "";
-    return result.content.map((c) => c.text ?? JSON.stringify(c)).join("\n");
+    if (!result?.content || !Array.isArray(result.content) || result.content.length === 0) return "";
+
+    // Apply same 1MB response limit as stdio transport
+    const MAX_RESPONSE_SIZE = 1024 * 1024;
+    let totalSize = 0;
+    const parts: string[] = [];
+    for (const c of result.content) {
+      if (!c || typeof c !== "object") continue;
+      const text = typeof c.text === "string" ? c.text : JSON.stringify(c);
+      totalSize += text.length;
+      if (totalSize > MAX_RESPONSE_SIZE) {
+        parts.push(`\n[Response truncated at 1MB limit]`);
+        break;
+      }
+      parts.push(text);
+    }
+    return parts.join("\n");
   }
 
   async readResource(uri: string): Promise<McpResourceContent[]> {

@@ -30,7 +30,7 @@ const SENSITIVE_PATTERNS = [
 ];
 
 export async function executeWrite(input: Record<string, unknown>): Promise<ToolResult> {
-  const { file_path, content } = input as FileWriteInput;
+  const { file_path, content } = input as unknown as FileWriteInput;
 
   // Block writes to sensitive files
   const isSensitive = SENSITIVE_PATTERNS.some(p => p.test(file_path));

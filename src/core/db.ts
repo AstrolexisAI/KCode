@@ -7,26 +7,41 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { log } from "./logger";
 
-const KCODE_HOME = join(homedir(), ".kcode");
-const DB_PATH = join(KCODE_HOME, "awareness.db");
-
 let _db: Database | null = null;
+
+/**
+ * Resolve the DB path at call time so env var overrides work in tests.
+ */
+function resolveDbPath(): string {
+  const kcodeHome = process.env.KCODE_HOME ?? join(homedir(), ".kcode");
+  return process.env.KCODE_DB_PATH ?? join(kcodeHome, "awareness.db");
+}
 
 /**
  * Get the shared Database instance for awareness.db.
  * Creates and initializes the connection on first call.
+ *
+ * Override the DB location via:
+ * - KCODE_DB_PATH env var (full path to .db file)
+ * - KCODE_HOME env var (uses <KCODE_HOME>/awareness.db)
+ * - Pass ":memory:" as KCODE_DB_PATH for in-memory testing
  */
 export function getDb(): Database {
   if (_db) return _db;
 
-  mkdirSync(KCODE_HOME, { recursive: true });
-  _db = new Database(DB_PATH);
+  const dbPath = resolveDbPath();
+  const isMemory = dbPath === ":memory:";
+  if (!isMemory) {
+    const { dirname } = require("node:path") as typeof import("node:path");
+    mkdirSync(dirname(dbPath), { recursive: true });
+  }
+  _db = new Database(dbPath);
   _db.exec("PRAGMA journal_mode=WAL");
   _db.exec("PRAGMA busy_timeout=5000");
 
   initSchema(_db);
 
-  log.info("db", "Opened shared awareness.db connection");
+  log.info("db", `Opened shared DB connection: ${isMemory ? ":memory:" : dbPath}`);
   return _db;
 }
 

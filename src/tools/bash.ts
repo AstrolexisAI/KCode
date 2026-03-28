@@ -113,7 +113,7 @@ const SECURITY_TOOLS: Record<string, { category: string; timeout: number; notes:
 };
 
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
-  const { command, timeout, run_in_background, sandbox } = input as BashInput & { sandbox?: boolean };
+  const { command, timeout, run_in_background, sandbox } = input as unknown as BashInput & { sandbox?: boolean };
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;

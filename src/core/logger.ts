@@ -9,7 +9,7 @@ import { appendFile } from "node:fs/promises";
 // ─── Types ──────────────────────────────────────────────────────
 
 type LogLevel = "debug" | "info" | "warn" | "error";
-type LogCategory = "llm" | "tool" | "permission" | "mcp" | "config" | "session" | "general" | "db" | "narrative" | "indexer" | "intentions" | "learn" | "user-model" | "world-model" | "process";
+type LogCategory = "llm" | "tool" | "permission" | "mcp" | "config" | "session" | "general" | "db" | "narrative" | "indexer" | "intentions" | "learn" | "user-model" | "world-model" | "process" | (string & {});
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 0,

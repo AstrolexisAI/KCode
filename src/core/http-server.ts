@@ -41,8 +41,15 @@ interface ToolExecRequest {
 
 // ─── Security ────────────────────────────────────────────────────
 
-// Tools that can NEVER be executed via HTTP API (dangerous for remote exec)
-const BLOCKED_TOOLS = new Set([
+// Tools that CAN be executed via HTTP API (allowlist — read-only, no side effects)
+export const ALLOWED_HTTP_TOOLS = new Set([
+  "Read", "Glob", "Grep", "LS", "DiffView",
+  "GitStatus", "GitLog",
+  "ToolSearch",
+]);
+
+// Legacy blocklist kept as a secondary guard
+export const BLOCKED_TOOLS = new Set([
   "Bash", "Write", "Edit", "NotebookEdit", "Agent",
   "MultiEdit", "GrepReplace", "Rename",
 ]);
@@ -152,7 +159,7 @@ function evictIdleSessions(): void {
 
 // ─── Route Handler ───────────────────────────────────────────────
 
-async function handleRoute(
+export async function handleRoute(
   req: Request,
   url: URL,
   corsHeaders: Record<string, string>,
@@ -409,9 +416,12 @@ async function handleRoute(
       return jsonError("'input' is required and must be an object", 400, corsHeaders);
     }
 
-    // Security: block dangerous tools from HTTP execution
-    if (BLOCKED_TOOLS.has(body.name)) {
-      return jsonError(`Tool "${body.name}" is not allowed via HTTP API for security reasons`, 403, corsHeaders);
+    // Security: only allow explicitly approved read-only tools via HTTP
+    if (!ALLOWED_HTTP_TOOLS.has(body.name)) {
+      const reason = BLOCKED_TOOLS.has(body.name)
+        ? "dangerous tool blocked from HTTP execution"
+        : "tool not in the HTTP API allowlist (only read-only tools are permitted)";
+      return jsonError(`Tool "${body.name}" is not allowed via HTTP API: ${reason}`, 403, corsHeaders);
     }
 
     try {
@@ -421,6 +431,9 @@ async function handleRoute(
       if (!tools.has(body.name)) {
         return jsonError(`Unknown tool: "${body.name}"`, 404, corsHeaders);
       }
+
+      // Audit log for tool execution via HTTP
+      log.info("http", `Executing tool via API: ${body.name} (input keys: ${Object.keys(body.input).join(", ")})`);
 
       const result = await tools.execute(body.name, body.input);
       return Response.json({
@@ -598,7 +611,7 @@ async function handleRoute(
     const state = session.manager.getState();
 
     // Extract plan from conversation state (plans are stored in state.plan)
-    const plan = (state as Record<string, unknown>).plan ?? null;
+    const plan = (state as unknown as Record<string, unknown>).plan ?? null;
     return Response.json({ sessionId: targetSid, plan }, { headers: corsHeaders });
   }
 

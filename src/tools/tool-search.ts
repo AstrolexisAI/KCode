@@ -1,7 +1,7 @@
 // KCode - ToolSearch
 // Deferred tool loading — search for tools by keyword and retrieve their schemas
 
-import type { ToolDefinition } from "../core/types";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Deferred Tool Registry ────────────────────────────────────
 
@@ -63,16 +63,16 @@ export const toolSearchDefinition: ToolDefinition = {
 
 export async function executeToolSearch(
   input: Record<string, unknown>,
-): Promise<string> {
+): Promise<ToolResult> {
   const query = String(input.query ?? "").trim();
   const maxResults = Math.min(Math.max(Number(input.max_results) || 5, 1), 20);
 
   if (!query) {
-    return "Error: query is required";
+    return { tool_use_id: "", content: "Error: query is required", is_error: true };
   }
 
   if (deferredTools.size === 0) {
-    return "No deferred tools available. All tools are already loaded.";
+    return { tool_use_id: "", content: "No deferred tools available. All tools are already loaded." };
   }
 
   // Exact select mode: "select:ToolA,ToolB"
@@ -82,11 +82,11 @@ export async function executeToolSearch(
       .split(",")
       .map((n) => n.trim())
       .filter(Boolean);
-    return selectByNames(names);
+    return { tool_use_id: "", content: selectByNames(names) };
   }
 
   // Keyword search
-  return searchByKeywords(query, maxResults);
+  return { tool_use_id: "", content: searchByKeywords(query, maxResults) };
 }
 
 function selectByNames(names: string[]): string {

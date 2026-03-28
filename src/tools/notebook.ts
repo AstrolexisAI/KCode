@@ -110,7 +110,7 @@ function makeCell(content: string, cellType: string): NotebookCell {
 }
 
 export async function executeNotebookEdit(input: Record<string, unknown>): Promise<ToolResult> {
-  const opts = input as NotebookEditInput;
+  const opts = input as unknown as NotebookEditInput;
   const { file_path, operation, cell_index, cell_type, content } = opts;
 
   try {

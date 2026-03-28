@@ -220,7 +220,7 @@ export const agentDefinition: ToolDefinition = {
 };
 
 export async function executeAgent(input: Record<string, unknown>): Promise<ToolResult> {
-  const opts = input as AgentInput;
+  const opts = input as unknown as AgentInput;
 
   // Prune completed agent entries older than 5 minutes to prevent unbounded growth
   pruneCompletedAgents();
@@ -438,8 +438,8 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
       taskPayload = `[Team Context — results from completed teammates]\n${contextBlock}\n\n${taskPayload}`;
     }
   }
-  proc.stdin.write(taskPayload + "\n");
-  proc.stdin.end();
+  proc.stdin!.write(taskPayload + "\n");
+  proc.stdin!.end();
 
   const record: AgentRecord = {
     id: agentId,
@@ -475,8 +475,8 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
   const chunks: Buffer[] = [];
   const errChunks: Buffer[] = [];
 
-  proc.stdout.on("data", (data: Buffer) => chunks.push(data));
-  proc.stderr.on("data", (data: Buffer) => errChunks.push(data));
+  proc.stdout!.on("data", (data: Buffer) => chunks.push(data));
+  proc.stderr!.on("data", (data: Buffer) => errChunks.push(data));
 
   const completionPromise = new Promise<void>((resolve) => {
     proc.on("close", (code) => {

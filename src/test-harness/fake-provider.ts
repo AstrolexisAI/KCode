@@ -1,6 +1,7 @@
 // KCode - Fake LLM Provider for E2E Testing
 // Returns pre-scripted responses as SSE streams matching OpenAI chat completions API format
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { Server } from "bun";
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -116,7 +117,8 @@ function makeUsageChunk(promptTokens: number, completionTokens: number) {
 export class FakeProvider {
   private responses: FakeResponse[] = [];
   private responseIndex = 0;
-  private server: Server | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private server: any | null = null;
   private _requests: RecordedRequest[] = [];
 
   /** The base URL of the fake server (e.g., "http://localhost:12345"). */

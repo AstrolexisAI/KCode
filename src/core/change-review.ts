@@ -261,7 +261,7 @@ export function assessRisk(files: FileChange[]): RiskAssessment {
   if (level !== "critical") {
     for (const f of files) {
       if (HIGH_RISK_PATTERNS.some((p) => p.test(f.path))) {
-        if (level === "low" || level === "medium") level = "high";
+        if ((level as string) === "low" || (level as string) === "medium") level = "high";
         reasons.push(`High-risk file modified: ${f.path}`);
       }
     }

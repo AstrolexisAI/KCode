@@ -4,6 +4,7 @@
 import type { ActionContext } from "./action-helpers.js";
 import { listModels, loadModelsConfig } from "../../core/models.js";
 import { getAvailableThemes, getCurrentThemeName } from "../../core/theme.js";
+import { log } from "../../core/logger.js";
 
 export async function handleModelConfigAction(
   action: string,
@@ -368,9 +369,8 @@ export async function handleModelConfigAction(
         const serverArgs = parts.slice(3);
         try {
           await manager.addServer(name, { command, args: serverArgs.length > 0 ? serverArgs : undefined });
-          // Re-register MCP tools so newly added server's tools are available
-          manager.registerTools(tools);
-          const toolCount = tools.getToolNames().filter((n: string) => n.startsWith(`mcp__${name}__`)).length;
+          // Count newly registered MCP tools
+          const toolCount = manager.discoverTools().filter((t) => t.name.startsWith(`mcp__${name}__`)).length;
           return `  Added MCP server "${name}" (${command}${serverArgs.length > 0 ? " " + serverArgs.join(" ") : ""}), registered ${toolCount} tool(s)`;
         } catch (err) {
           return `  Error adding MCP server: ${err instanceof Error ? err.message : String(err)}`;

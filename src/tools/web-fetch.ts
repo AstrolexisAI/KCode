@@ -134,8 +134,8 @@ function stripHtmlTags(html: string): string {
 }
 
 export async function executeWebFetch(input: Record<string, unknown>): Promise<ToolResult> {
-  let { url } = input as WebFetchInput;
-  const { prompt } = input as WebFetchInput;
+  let { url } = input as unknown as WebFetchInput;
+  const { prompt } = input as unknown as WebFetchInput;
 
   // Add protocol if missing (default to HTTPS)
   if (!url.startsWith("http://") && !url.startsWith("https://")) {

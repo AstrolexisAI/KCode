@@ -342,7 +342,7 @@ export async function executeWebSearch(input: Record<string, unknown>): Promise<
     blocked_domains,
     max_results = 10,
     freshness,
-  } = input as WebSearchInput;
+  } = input as unknown as WebSearchInput;
 
   const maxCount = Math.min(Math.max(1, max_results), 20);
 
