@@ -135,6 +135,10 @@ export class ConversationManager {
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
     this.permissions = new PermissionManager(config.permissionMode, config.workingDirectory, config.additionalDirs, config.permissionRules);
     this.hooks = new HookManager(config.workingDirectory);
+
+    // Anchor tools (Glob, Grep) to the session's working directory
+    const { setToolWorkspace } = require("../tools/workspace") as typeof import("../tools/workspace");
+    setToolWorkspace(config.workingDirectory);
     this.rateLimiter = new RateLimiter(
       config.rateLimit?.maxPerMinute ?? 60,
       config.rateLimit?.maxConcurrent ?? 2,

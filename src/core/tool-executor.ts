@@ -204,6 +204,14 @@ export async function* executeToolsSequential(
       continue;
     }
 
+    // After a denial, skip all remaining tool calls in this turn
+    if (turnHadDenial) {
+      const skippedContent = `Skipped: a previous tool call was denied in this turn. Respond to the user with text instead of using more tools.`;
+      yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skippedContent, isError: true };
+      toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: skippedContent, is_error: true });
+      continue;
+    }
+
     // 1. Check permissions before executing
     const permResult = await ctx.permissions.checkPermission(call);
     if (!permResult.allowed) {
@@ -211,7 +219,7 @@ export async function* executeToolsSequential(
         ctx.debugTracer.tracePermission(call.name, "denied", permResult.reason ?? "blocked by permission system");
       }
       turnHadDenial = true;
-      const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}. STOP: Do not retry this tool. Inform the user that permission mode needs to be changed (use -p auto) or approve in interactive mode.`;
+      const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}. STOP: Do not retry this tool or any other tools. Respond to the user with text only.`;
       yield { type: "tool_result", name: call.name, toolUseId: call.id, result: deniedContent, isError: true };
       toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: deniedContent, is_error: true });
       continue;

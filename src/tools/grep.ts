@@ -2,7 +2,9 @@
 // Search file contents using ripgrep
 
 import { spawn } from "node:child_process";
+import { resolve, relative } from "node:path";
 import type { ToolDefinition, ToolResult, GrepInput } from "../core/types";
+import { getToolWorkspace } from "./workspace";
 
 export const grepDefinition: ToolDefinition = {
   name: "Grep",
@@ -51,12 +53,27 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
   if (opts.type) args.push("--type", opts.type);
 
   args.push("--", opts.pattern);
-  if (opts.path) args.push(opts.path);
 
-  return new Promise((resolve) => {
+  // Anchor to workspace — validate path doesn't escape
+  const workspace = getToolWorkspace();
+  let searchCwd = workspace;
+  if (opts.path) {
+    const resolved = resolve(workspace, opts.path);
+    const rel = relative(workspace, resolved);
+    if (rel.startsWith("..")) {
+      return Promise.resolve({
+        tool_use_id: "",
+        content: `Error: Path "${opts.path}" is outside the project workspace (${workspace}). Use a path within the project.`,
+        is_error: true,
+      } as ToolResult);
+    }
+    args.push(resolved);
+  }
+
+  return new Promise((resolveResult) => {
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
-    const proc = spawn("rg", args, { cwd: process.cwd(), timeout: 30_000 });
+    const proc = spawn("rg", args, { cwd: searchCwd, timeout: 30_000 });
 
     proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
     proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
@@ -78,14 +95,14 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
         output = stderr || "No matches found.";
       }
 
-      resolve({
+      resolveResult({
         tool_use_id: "",
         content: output,
       });
     });
 
     proc.on("error", (err) => {
-      resolve({
+      resolveResult({
         tool_use_id: "",
         content: `Error: ${err.message}. Is ripgrep (rg) installed?`,
         is_error: true,
