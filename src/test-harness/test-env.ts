@@ -1,7 +1,7 @@
 // KCode - Test Environment Setup for E2E Testing
 // Creates isolated test environments with fake dependencies
 
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
@@ -45,6 +45,8 @@ export interface TestEnvOptions {
   maxTokens?: number;
   /** Whether to initialize a git repo in the temp dir (default: true). */
   initGit?: boolean;
+  /** Force in-process transport (no HTTP server). Default: false (use HTTP). */
+  inProcess?: boolean;
   /** Additional config overrides. */
   configOverrides?: Partial<KCodeConfig>;
 }
@@ -57,9 +59,15 @@ export interface TestEnvOptions {
  * Sets up:
  * - Temporary working directory (optionally with git init)
  * - In-memory SQLite database
- * - Fake LLM provider on a random port
+ * - Fake LLM provider (in-process by default, or HTTP with `inProcess: false`)
  * - Fake tool registry
  * - Minimal KCodeConfig wired to the fake provider
+ *
+ * Transport modes:
+ * - `inProcess: true` (recommended) — no HTTP server, portable to sandboxed environments.
+ *   Injects `customFetch` into config so requests go directly to FakeProvider.handleRequest().
+ * - `inProcess: false` (default for backwards compat) — starts a real Bun.serve HTTP server
+ *   on a random port. Requires local network access. Use only when testing actual HTTP behavior.
  *
  * Call `cleanup()` when done to release resources.
  */
@@ -87,7 +95,18 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
 
   // 4. Start fake LLM provider
   const provider = new FakeProvider();
-  await provider.start();
+  if (opts.inProcess) {
+    provider.startInProcess();
+  } else {
+    try {
+      await provider.start();
+    } catch (err) {
+      // Cleanup resources created before the failure
+      try { db.close(); } catch { /* ignore */ }
+      try { rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      throw err;
+    }
+  }
 
   // 5. Create fake tool registry
   const { registry, writes, bashCommands, edits } = createFakeToolRegistry(opts.tools);
@@ -107,6 +126,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
     noCache: true, // Don't use response cache in tests
     noSessionPersistence: true, // Don't write transcript files
     telemetry: false,
+    ...(opts.inProcess ? { customFetch: provider.createFetch() } : {}),
     ...opts.configOverrides,
   };
 
@@ -114,10 +134,7 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
   const cleanup = async () => {
     await provider.stop();
     try { db.close(); } catch { /* ignore */ }
-    try {
-      const { rmSync } = await import("node:fs");
-      rmSync(workDir, { recursive: true, force: true });
-    } catch { /* ignore */ }
+    try { rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
   };
 
   return {

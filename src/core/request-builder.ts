@@ -202,7 +202,8 @@ export async function executeModelRequest(
   const timeoutMs = 300_000; // 5 minutes
   const timeoutId = setTimeout(() => controller?.abort(), timeoutMs);
 
-  const response = await fetch(req.url, {
+  const fetchFn = config.customFetch ?? globalThis.fetch;
+  const response = await fetchFn(req.url, {
     method: "POST",
     headers: req.headers,
     body: JSON.stringify(req.body),

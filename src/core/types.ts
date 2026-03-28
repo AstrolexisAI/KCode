@@ -126,6 +126,7 @@ export interface KCodeConfig {
   auditLog?: boolean; // Org-level: require audit logging
   orgId?: string; // Organization identifier for audit trail
   activeProfile?: string; // Currently active execution profile name (e.g., "safe", "fast", "review")
+  customFetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>; // Inject a custom fetch function (for in-process testing)
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";

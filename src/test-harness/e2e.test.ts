@@ -39,20 +39,22 @@ function eventsOfType<T extends StreamEvent["type"]>(
 
 describe("E2E: FakeProvider standalone", () => {
   let provider: FakeProvider;
+  let fetchFn: ReturnType<FakeProvider["createFetch"]>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     provider = new FakeProvider();
-    await provider.start();
+    provider.startInProcess();
+    fetchFn = provider.createFetch();
   });
 
   afterEach(async () => {
-    await provider.stop();
+    try { await provider?.stop(); } catch { /* setup may have failed */ }
   });
 
   test("serves text response as valid SSE stream", async () => {
     provider.addResponse("Hello from the fake provider, this is a longer test response for the SSE stream parser");
 
-    const res = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [{ role: "user", content: "hi" }], stream: true }),
@@ -72,7 +74,7 @@ describe("E2E: FakeProvider standalone", () => {
       { name: "Read", arguments: { file_path: "/tmp/test.txt" } },
     ]);
 
-    const res = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [], stream: true }),
@@ -87,7 +89,7 @@ describe("E2E: FakeProvider standalone", () => {
   test("records requests for assertion", async () => {
     provider.addResponse("recorded response with enough text to avoid buffer issues");
 
-    await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer test-key" },
       body: JSON.stringify({ model: "test-model", messages: [{ role: "user", content: "test" }] }),
@@ -103,7 +105,7 @@ describe("E2E: FakeProvider standalone", () => {
   test("serves error response", async () => {
     provider.addErrorResponse("Rate limit exceeded");
 
-    const res = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [] }),
@@ -119,7 +121,7 @@ describe("E2E: FakeProvider standalone", () => {
     provider.addResponse("second response is also long enough to parse correctly");
 
     // First request
-    const res1 = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res1 = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [] }),
@@ -128,7 +130,7 @@ describe("E2E: FakeProvider standalone", () => {
     expect(body1).toContain("first");
 
     // Second request
-    const res2 = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res2 = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [] }),
@@ -139,7 +141,7 @@ describe("E2E: FakeProvider standalone", () => {
 
   test("returns 500 when no more scripted responses", async () => {
     // No responses queued
-    const res = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [] }),
@@ -151,7 +153,7 @@ describe("E2E: FakeProvider standalone", () => {
   test("serves max_tokens response with length finish reason", async () => {
     provider.addMaxTokensResponse("This response was truncated because the model ran out of");
 
-    const res = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [] }),
@@ -168,7 +170,7 @@ describe("E2E: FakeProvider standalone", () => {
       "Here is my answer after careful consideration and analysis",
     );
 
-    const res = await fetch(`${provider.baseUrl}/v1/chat/completions`, {
+    const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "fake-model", messages: [] }),
@@ -186,6 +188,7 @@ describe("E2E: ConversationManager with FakeProvider", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a helpful test assistant.",
       },
@@ -193,7 +196,7 @@ describe("E2E: ConversationManager with FakeProvider", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("basic text response flow", async () => {
@@ -261,6 +264,7 @@ describe("E2E: ConversationManager with FakeProvider", () => {
 
   test("tool use flow — model calls Bash, result is returned", async () => {
     const envWithBash = await createTestEnv({
+      inProcess: true,
       tools: {
         bashCommands: { "ls": "file1.ts\nfile2.ts\nfile3.ts" },
       },
