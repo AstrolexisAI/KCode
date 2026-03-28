@@ -18,9 +18,8 @@ interface StartUIOptions {
 }
 
 export function startUI({ config, conversationManager, tools }: StartUIOptions) {
-  // Install paste interceptor on stdin BEFORE Ink sets up its input handler.
-  // This monkey-patches stdin.emit to detect paste content at the byte level
-  // and prevent Ink from seeing it (avoiding character-by-character corruption).
+  // Install paste interceptor BEFORE Ink sets up its listeners.
+  // Uses prependListener so our handler fires first on stdin data events.
   const cleanupPaste = installPasteInterceptor((text) => {
     invokePasteHandler(text);
   });
@@ -39,7 +38,6 @@ export function startUI({ config, conversationManager, tools }: StartUIOptions) 
     },
   );
 
-  // Cleanup paste interceptor on exit
   const originalWaitUntilExit = instance.waitUntilExit.bind(instance);
   instance.waitUntilExit = async () => {
     try {

@@ -9,6 +9,7 @@ import { useTheme } from "../ThemeContext.js";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 import { kcodePath } from "../../core/paths.js";
 import { setPasteHandler } from "../paste-handler.js";
+import { isPasting } from "../paste-stream.js";
 
 // ─── Persistent Input History ──────────────────────────────────
 
@@ -350,6 +351,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   useInput(
     (input, key) => {
       if (!isActive) return;
+
+      // Skip all input while a paste is being captured by the stdin
+      // interceptor. The paste content is injected atomically via the
+      // paste handler — Ink's character events must be ignored.
+      if (isPasting) return;
 
       // Vim normal mode handling
       if (vimMode === "normal") {
