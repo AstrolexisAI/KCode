@@ -64,10 +64,11 @@ export interface TestEnvOptions {
  * - Minimal KCodeConfig wired to the fake provider
  *
  * Transport modes:
- * - `inProcess: true` (recommended) — no HTTP server, portable to sandboxed environments.
- *   Injects `customFetch` into config so requests go directly to FakeProvider.handleRequest().
- * - `inProcess: false` (default for backwards compat) — starts a real Bun.serve HTTP server
- *   on a random port. Requires local network access. Use only when testing actual HTTP behavior.
+ * - `inProcess: true` (recommended for all new tests) — no HTTP server, portable to
+ *   sandboxed environments. Injects `customFetch` into config so requests go directly
+ *   to FakeProvider.handleRequest().
+ * - `inProcess: false` (default) — starts a real Bun.serve HTTP server on a random port.
+ *   Requires local network access. Use only when testing actual HTTP layer behavior.
  *
  * Call `cleanup()` when done to release resources.
  */
