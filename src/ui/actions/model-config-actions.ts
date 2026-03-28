@@ -445,7 +445,48 @@ export async function handleModelConfigAction(
         }
       }
 
-      return `  Unknown subcommand: ${subCmd}\n  Usage: /mcp [list | tools | add <name> <command> | remove <name> | auth <name>]`;
+      if (subCmd === "health") {
+        return manager.healthMonitor.formatHealthReport();
+      }
+
+      if (subCmd === "reset") {
+        const name = parts[1];
+        if (!name) return "  Usage: /mcp reset <server-name>";
+        manager.healthMonitor.resetCircuit(name);
+        return `  Circuit breaker reset for "${name}"`;
+      }
+
+      if (subCmd === "alias" || subCmd === "aliases") {
+        const { addAlias, removeAlias, listAliases } = await import("../../core/mcp-aliases");
+        const action = parts[1];
+
+        if (!action || action === "list") {
+          const aliases = listAliases();
+          if (aliases.length === 0) return "  No tool aliases defined.\n  Use /mcp alias add <alias> <target> to create one.";
+          const lines = aliases.map((a) => `  ${a.alias} -> ${a.target}${a.description ? ` (${a.description})` : ""}`);
+          return `  Tool Aliases:\n${lines.join("\n")}`;
+        }
+
+        if (action === "add") {
+          const alias = parts[2];
+          const target = parts[3];
+          if (!alias || !target) return "  Usage: /mcp alias add <alias> <target> [description...]";
+          const desc = parts.slice(4).join(" ") || undefined;
+          addAlias(alias, target, desc);
+          return `  Added alias "${alias}" -> "${target}"`;
+        }
+
+        if (action === "remove" || action === "rm") {
+          const alias = parts[2];
+          if (!alias) return "  Usage: /mcp alias remove <alias>";
+          const removed = removeAlias(alias);
+          return removed ? `  Removed alias "${alias}"` : `  Alias "${alias}" not found`;
+        }
+
+        return "  Usage: /mcp alias [list | add <alias> <target> | remove <alias>]";
+      }
+
+      return `  Unknown subcommand: ${subCmd}\n  Usage: /mcp [list | tools | health | reset <server> | alias | add <name> <command> | remove <name> | auth <name>]`;
     }
     case "telemetry": {
       const { isTelemetryEnabled, setTelemetryEnabled } = await import("../../core/analytics.js");

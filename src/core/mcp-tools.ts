@@ -4,6 +4,7 @@
 import type { ToolDefinition, ToolResult } from "./types";
 import type { ToolRegistry } from "./tool-registry";
 import type { McpServerConfig, McpConnection } from "./mcp-client";
+import type { McpHealthMonitor } from "./mcp-health";
 import { log } from "./logger";
 
 // ─── Tool Filtering ─────────────────────────────────────────────
@@ -41,6 +42,7 @@ export function registerMcpTools(
   servers: Map<string, McpConnection>,
   serverConfigs: Map<string, McpServerConfig>,
   registry: ToolRegistry,
+  healthMonitor?: McpHealthMonitor,
 ): void {
   for (const [serverName, connection] of servers) {
     const config = serverConfigs.get(serverName);
@@ -67,10 +69,20 @@ export function registerMcpTools(
 
       const handler = async (input: Record<string, unknown>): Promise<ToolResult> => {
         try {
+          // Check circuit breaker if health monitor is available
+          if (healthMonitor?.isCircuitOpen(serverName)) {
+            return {
+              tool_use_id: "",
+              content: `MCP server "${serverName}" circuit breaker is open — server is experiencing failures. Wait for recovery or run /mcp reset ${serverName}.`,
+              is_error: true,
+            };
+          }
+
           // Check if server is alive, try restart if not
           if (!connection.isAlive()) {
             const restarted = await connection.restart();
             if (!restarted) {
+              healthMonitor?.recordFailure(serverName, "Server not running and restart failed");
               return {
                 tool_use_id: "",
                 content: `MCP server "${serverName}" is not running and could not be restarted`,
@@ -79,10 +91,13 @@ export function registerMcpTools(
             }
           }
 
+          const start = Date.now();
           const result = await connection.callTool(tool.name, input);
+          healthMonitor?.recordSuccess(serverName, Date.now() - start);
           return { tool_use_id: "", content: result };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          healthMonitor?.recordFailure(serverName, msg);
           return { tool_use_id: "", content: `MCP tool error: ${msg}`, is_error: true };
         }
       };
