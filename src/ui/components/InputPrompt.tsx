@@ -8,6 +8,7 @@ import { resolve, dirname, basename } from "node:path";
 import { useTheme } from "../ThemeContext.js";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 import { kcodePath } from "../../core/paths.js";
+import { setPasteHandler } from "../paste-handler.js";
 
 // ─── Persistent Input History ──────────────────────────────────
 
@@ -70,8 +71,6 @@ interface InputPromptProps {
   completions?: string[];
   /** Map of command name to description for preview dropdown */
   commandDescriptions?: Record<string, string>;
-  /** Paste intercept stream — emits 'bracketed-paste' events with complete paste content */
-  pasteStream?: import("../paste-stream.js").PasteInterceptStream;
 }
 
 /**
@@ -123,7 +122,7 @@ function commonPrefix(strings: string[]): string {
   return prefix;
 }
 
-export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [], commandDescriptions = {}, pasteStream }: InputPromptProps) {
+export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [], commandDescriptions = {} }: InputPromptProps) {
   const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -193,14 +192,13 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     if (pasteSettleTimerRef.current) clearTimeout(pasteSettleTimerRef.current);
   }, []);
 
-  // ─── Bracketed paste handler ─────────────────────────────────
-  // When the terminal supports bracketed paste mode, the entire paste
-  // content arrives as a single 'bracketed-paste' event on the stream,
-  // completely bypassing Ink's useInput character-by-character processing.
-  // This guarantees the paste is inserted atomically with all newlines,
-  // indentation, tables, and structure preserved exactly.
+  // ─── Paste handler ──────────────────────────────────────────
+  // Receives complete paste content from the stdin interceptor
+  // (installed in render.tsx). The interceptor detects paste at the
+  // byte level — either via bracketed paste sequences or by detecting
+  // newlines mixed with printable chars in a single stdin data event.
+  // The paste is inserted atomically with one setValue call.
   useEffect(() => {
-    if (!pasteStream) return;
     const handler = (text: string) => {
       if (!isActive) return;
       // Flush any pending buffer first
@@ -217,9 +215,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       setValue((prev) => prev.slice(0, pos) + allNew + prev.slice(pos));
       setCursor(cursorRef.current);
     };
-    pasteStream.on("bracketed-paste", handler);
-    return () => { pasteStream.off("bracketed-paste", handler); };
-  }, [pasteStream, isActive]);
+    setPasteHandler(handler);
+    return () => { setPasteHandler(null); };
+  }, [isActive]);
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
