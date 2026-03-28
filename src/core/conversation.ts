@@ -791,16 +791,33 @@ export class ConversationManager {
         // Knowledge distillation + benchmark scoring (delegated to post-turn)
         processKnowledgeAndBenchmark(stopReason, turnCount, this.state.messages, this.config.workingDirectory, this.config.model, this.state.toolUseCount, this.state.tokenCount);
 
-        // Safety net: if the model stops with no text after 3+ tool turns, push it to summarize
+        // Safety net: classify empty responses and retry with context-aware prompts
         const hasTextOutput = textChunks.join("").trim().length > 0;
-        if (!hasTextOutput && turnCount >= 3 && stopReason === "end_turn" && guardState.emptyEndTurnCount < 2) {
+        const hasThinkingOutput = thinkingChunks.length > 0 || (this.state.messages.at(-1) as any)?.thinkingContent;
+        const hasToolOutput = toolCalls.length > 0;
+
+        if (!hasTextOutput && stopReason === "end_turn" && guardState.emptyEndTurnCount < 2) {
           guardState.emptyEndTurnCount++;
-          log.info("session", `Model ended turn ${turnCount} with no text output — pushing for summary (attempt ${guardState.emptyEndTurnCount}/2)`);
-          this.state.messages.push({
-            role: "user",
-            content: "[SYSTEM] You executed tools but didn't provide any response to the user. Summarize your findings and report the results. The user is waiting for your answer.",
-          });
-          yield { type: "turn_end", stopReason: "empty_response_retry" };
+
+          // Classify the empty response for better retry and diagnostics
+          const emptyType = hasThinkingOutput && !hasToolOutput ? "thinking_only"
+            : hasToolOutput && !hasThinkingOutput ? "tools_only"
+            : hasThinkingOutput && hasToolOutput ? "thinking_and_tools"
+            : "no_output";
+
+          log.info("session", `Empty response (${emptyType}) on turn ${turnCount} — retry ${guardState.emptyEndTurnCount}/2`);
+
+          // Context-aware retry prompt
+          const retryPrompt = emptyType === "thinking_only"
+            ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
+            : emptyType === "tools_only"
+            ? "[SYSTEM] You executed tools but didn't provide any response. Summarize your findings in 3-6 sentences now."
+            : emptyType === "thinking_and_tools"
+            ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
+            : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
+
+          this.state.messages.push({ role: "user", content: retryPrompt });
+          yield { type: "turn_end", stopReason: "empty_response_retry", emptyType } as any;
           continue;
         }
 

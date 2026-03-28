@@ -355,3 +355,79 @@ describe("parseAnthropicSSEStream", () => {
     expect(content[0].content).toBe("ok");
   });
 });
+
+// ─── Empty Response Edge Cases ──────────────────────────��───────
+
+describe("SSE Parser — empty response edge cases", () => {
+  test("thinking-only stream: reasoning_content but no content", async () => {
+    const resp = mockResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "Let me analyze this..." }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: "The answer involves..." }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+      `data: [DONE]\n\n`,
+    ]);
+    const chunks = await collect(parseSSEStream(resp));
+    const thinking = chunks.filter(c => c.type === "thinking_delta");
+    const content = chunks.filter(c => c.type === "content_delta");
+    const finish = chunks.filter(c => c.type === "finish");
+    expect(thinking.length).toBe(2);
+    expect(content.length).toBe(0);
+    expect(finish.length).toBe(1);
+    expect(finish[0].finishReason).toBe("stop");
+  });
+
+  test("tool-calls-only stream: tool_calls but no content", async () => {
+    const resp = mockResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "Read", arguments: '{"file' } }] }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '_path":"/x"}' } }] }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "tool_calls" }] })}\n\n`,
+      `data: [DONE]\n\n`,
+    ]);
+    const chunks = await collect(parseSSEStream(resp));
+    const content = chunks.filter(c => c.type === "content_delta");
+    const tools = chunks.filter(c => c.type === "tool_call_delta");
+    expect(content.length).toBe(0);
+    expect(tools.length).toBe(2);
+  });
+
+  test("completely empty stream: finish with no deltas", async () => {
+    const resp = mockResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+      `data: [DONE]\n\n`,
+    ]);
+    const chunks = await collect(parseSSEStream(resp));
+    const content = chunks.filter(c => c.type === "content_delta");
+    const thinking = chunks.filter(c => c.type === "thinking_delta");
+    expect(content.length).toBe(0);
+    expect(thinking.length).toBe(0);
+    const finish = chunks.filter(c => c.type === "finish");
+    expect(finish.length).toBe(1);
+  });
+
+  test("thinking in <reasoning> tags but no visible text", async () => {
+    const resp = mockResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: "<reasoning>I need to think about" }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: " this carefully.</reasoning>" }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "stop" }] })}\n\n`,
+      `data: [DONE]\n\n`,
+    ]);
+    const chunks = await collect(parseSSEStream(resp));
+    const thinking = chunks.filter(c => c.type === "thinking_delta");
+    const content = chunks.filter(c => c.type === "content_delta");
+    // The thinking tag parser should extract reasoning as thinking_delta
+    expect(thinking.length).toBeGreaterThan(0);
+    // No visible content should come through
+    expect(content.length).toBe(0);
+  });
+
+  test("stream with finish_reason but unexpected format", async () => {
+    const resp = mockResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "length" }] })}\n\n`,
+      `data: [DONE]\n\n`,
+    ]);
+    const chunks = await collect(parseSSEStream(resp));
+    const finish = chunks.filter(c => c.type === "finish");
+    expect(finish.length).toBe(1);
+    expect(finish[0].finishReason).toBe("length");
+  });
+});

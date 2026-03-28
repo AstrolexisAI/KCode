@@ -2,6 +2,9 @@
 // Handles parsing of Server-Sent Events from OpenAI-compatible and Anthropic APIs
 
 import { createThinkTagParser } from "./think-tag-parser";
+import { log } from "./logger";
+
+const SSE_DEBUG = process.env.KCODE_DEBUG_SSE === "1";
 
 export interface SSEChunk {
   type: "content_delta" | "thinking_delta" | "tool_call_delta" | "finish" | "usage" | "error";
@@ -62,6 +65,10 @@ export async function* parseSSEStream(
             continue; // Skip malformed JSON
           }
 
+          if (SSE_DEBUG) {
+            log.debug("sse", `SSE chunk: ${jsonStr.slice(0, 300)}`);
+          }
+
           const choice = parsed.choices?.[0];
           if (!choice) {
             // Check for usage-only messages
@@ -77,6 +84,15 @@ export async function* parseSSEStream(
 
           const delta = choice.delta;
           const finishReason = choice.finish_reason;
+
+          if (SSE_DEBUG) {
+            const fields: string[] = [];
+            if (delta?.content) fields.push(`content(${delta.content.length})`);
+            if (delta?.reasoning_content) fields.push(`reasoning(${delta.reasoning_content.length})`);
+            if (delta?.tool_calls) fields.push(`tool_calls(${delta.tool_calls.length})`);
+            if (finishReason) fields.push(`finish=${finishReason}`);
+            if (fields.length > 0) log.debug("sse", `SSE delta: ${fields.join(", ")}`);
+          }
 
           // Thinking delta (native reasoning_content field — vLLM, OpenRouter, etc.)
           if (delta?.reasoning_content) {
