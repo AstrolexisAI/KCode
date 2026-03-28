@@ -268,6 +268,50 @@ describe("TUI vs Server permission isolation", () => {
   });
 });
 
+// ─── Workspace Scoping via /api/tool ────────────────────────────
+
+describe("/api/tool workspace scoping", () => {
+  test("Glob rejects paths outside workspace", async () => {
+    const { status, body } = await route("POST", "/api/tool", {
+      name: "Glob",
+      input: { pattern: "*.ts", path: "/etc" },
+    });
+    expect(status).toBe(200);
+    expect(body.isError).toBe(true);
+    expect(body.content).toContain("outside the project workspace");
+  });
+
+  test("Glob rejects path traversal", async () => {
+    const { status, body } = await route("POST", "/api/tool", {
+      name: "Glob",
+      input: { pattern: "*.ts", path: "../../../etc" },
+    });
+    expect(status).toBe(200);
+    expect(body.isError).toBe(true);
+    expect(body.content).toContain("outside the project workspace");
+  });
+
+  test("Glob works within workspace (no path = workspace default)", async () => {
+    const { status, body } = await route("POST", "/api/tool", {
+      name: "Glob",
+      input: { pattern: "src/**/*.ts" },
+    });
+    expect(status).toBe(200);
+    // Should either find files or say "No files found" — but not error about workspace
+    expect(body.isError ?? false).toBe(false);
+  });
+
+  test("Grep rejects paths outside workspace", async () => {
+    const { status, body } = await route("POST", "/api/tool", {
+      name: "Grep",
+      input: { pattern: "password", path: "/etc/shadow" },
+    });
+    expect(status).toBe(200);
+    expect(body.isError).toBe(true);
+    expect(body.content).toContain("outside the project workspace");
+  });
+});
+
 // ─── 404 ────────────────────────────────────────────────────────
 
 describe("Unknown routes", () => {
