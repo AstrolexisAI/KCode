@@ -323,11 +323,19 @@ export async function processStreamEvents(
           ]);
           currentText = "";
           setStreamingText("");
-        } else if (event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue") {
-          // Model returned empty response — show a fallback so the user knows
+        } else if (event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry") {
+          // Model returned empty response — show a diagnostic fallback
+          const emptyType = (event as any).emptyType as string | undefined;
+          const hint = emptyType === "thinking_only"
+            ? "(the model reasoned but produced no visible answer — try a different model or disable thinking)"
+            : emptyType === "tools_only"
+            ? "(the model used tools but gave no response — try rephrasing)"
+            : emptyType === "no_output"
+            ? "(empty response — the model returned no text. Try rephrasing or use a different model.)"
+            : "(empty response \u2014 the model returned no text. Try rephrasing or use a different model.)";
           setCompleted((prev) => [
             ...prev,
-            { kind: "text", role: "assistant", text: "  (empty response \u2014 the model returned no text. Try rephrasing or use a different model.)" },
+            { kind: "text", role: "assistant", text: `  ${hint}` },
           ]);
         }
         // Show any pending file change suggestions
