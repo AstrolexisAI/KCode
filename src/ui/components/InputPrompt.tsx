@@ -490,10 +490,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     const lines = value.split("\n").length;
     const chars = value.length;
     pasteHint = lines > 1
-      ? `[paste ${chars.toLocaleString()} chars, ${lines} lines]`
-      : `[paste ${chars.toLocaleString()} chars]`;
-    // Show first 40 chars + … + last 20 chars
-    displayValue = value.slice(0, 40) + "…" + value.slice(-20);
+      ? `paste ${chars.toLocaleString()} chars, ${lines} lines`
+      : `paste ${chars.toLocaleString()} chars`;
+    // Show only the hint, not the content — keeps prompt clean
+    displayValue = "";
   }
 
   // Render value with cursor
@@ -520,14 +520,17 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         {model && <Text color={promptColor}>{model}</Text>}
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
         <Text bold color={promptColor}>{vimIndicator}{promptChar}</Text>
-        <Text>
-          {before}
-          <Text inverse>{cursorChar}</Text>
-          {after}
-          {pasteHint && <Text color={theme.dimmed}> {pasteHint}</Text>}
-          {hint && <Text color={theme.dimmed}>{hint}</Text>}
-          {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
-        </Text>
+        {pasteHint ? (
+          <Text color={theme.dimmed} italic>{pasteHint} <Text color={promptColor}>↵ send</Text></Text>
+        ) : (
+          <Text>
+            {before}
+            <Text inverse>{cursorChar}</Text>
+            {after}
+            {hint && <Text color={theme.dimmed}>{hint}</Text>}
+            {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
+          </Text>
+        )}
       </Box>
       {visibleItems.length > 0 && (
         <Box flexDirection="column" marginLeft={2} marginTop={0}>
