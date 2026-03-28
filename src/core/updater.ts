@@ -5,14 +5,15 @@
 import { execSync } from "node:child_process";
 import { existsSync, renameSync, unlinkSync, chmodSync, copyFileSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { homedir, platform, arch } from "node:os";
+import { platform, arch, homedir } from "node:os";
+import { kcodePath } from "./paths";
 import { log } from "./logger";
 
 // ─── Constants ───────────────────────────────────────────────────
 
 const GITHUB_REPO = "astrolexis/kcode";
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const UPDATE_CHECK_FILE = join(homedir(), ".kcode", "last-update-check");
+const UPDATE_CHECK_FILE = kcodePath("last-update-check");
 
 // ─── Types ──────────────────────────────────────────────────────
 

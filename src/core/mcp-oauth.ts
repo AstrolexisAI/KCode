@@ -4,8 +4,8 @@
 // token encryption, browser-based auth flow, and token revocation.
 
 import { randomBytes, createHash, createCipheriv, createDecipheriv, pbkdf2Sync } from "node:crypto";
-import { join } from "node:path";
 import { homedir, platform } from "node:os";
+import { kcodeHome, kcodePath } from "./paths";
 import { createServer, type Server } from "node:http";
 import { log } from "./logger";
 
@@ -61,7 +61,7 @@ function generateState(): string {
 // ─── Encryption ─────────────────────────────────────────────────
 
 // Persistent random salt for key derivation — NOT guessable from public info
-const OAUTH_SALT_FILE = join(homedir(), ".kcode", ".oauth-key-salt");
+const OAUTH_SALT_FILE = kcodePath(".oauth-key-salt");
 
 function getOrCreateOAuthSalt(): string {
   try {
@@ -70,7 +70,7 @@ function getOrCreateOAuthSalt(): string {
       return readFileSync(OAUTH_SALT_FILE, "utf-8").trim();
     }
     const salt = randomBytes(32).toString("hex");
-    mkdirSync(join(homedir(), ".kcode"), { recursive: true });
+    mkdirSync(kcodeHome(), { recursive: true });
     writeFileSync(OAUTH_SALT_FILE, salt + "\n", { mode: 0o600 });
     return salt;
   } catch (err) {
@@ -122,8 +122,8 @@ function decryptTokens(encrypted: EncryptedTokens): OAuthTokens {
 
 // ─── Token Storage ───────────────────────────────────────────────
 
-const TOKEN_FILE = join(homedir(), ".kcode", "oauth-tokens.json");
-const LEGACY_TOKEN_FILE = join(homedir(), ".kcode", "mcp-tokens.json");
+const TOKEN_FILE = kcodePath("oauth-tokens.json");
+const LEGACY_TOKEN_FILE = kcodePath("mcp-tokens.json");
 
 async function loadTokenStore(tokenFile?: string): Promise<Map<string, TokenStorageEntry>> {
   const store = new Map<string, TokenStorageEntry>();

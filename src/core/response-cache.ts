@@ -2,12 +2,11 @@
 // Caches LLM responses by prompt hash to reduce latency and inference cost.
 // Uses SQLite for persistence across sessions.
 
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { createHash } from "node:crypto";
+import { kcodePath } from "./paths";
 import { log } from "./logger";
 
-const CACHE_DB_PATH = join(homedir(), ".kcode", "cache.db");
+const CACHE_DB_PATH = kcodePath("cache.db");
 const MAX_CACHE_SIZE = 500; // Max cached entries
 const MAX_ENTRY_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 

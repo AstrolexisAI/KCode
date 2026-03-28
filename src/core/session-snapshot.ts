@@ -4,8 +4,8 @@
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { createHash } from "node:crypto";
+import { kcodeHome } from "./paths";
 import type { Message, KCodeConfig, ConversationState, TokenUsage, ContentBlock } from "./types";
 import { log } from "./logger";
 
@@ -13,8 +13,7 @@ import { log } from "./logger";
 
 /** Resolve at call time so KCODE_HOME env var overrides work in tests. */
 function getSnapshotsDir(): string {
-  const kcodeHome = process.env.KCODE_HOME ?? join(homedir(), ".kcode");
-  return join(kcodeHome, "snapshots");
+  return join(kcodeHome(), "snapshots");
 }
 const MAX_SNAPSHOTS = 200;
 

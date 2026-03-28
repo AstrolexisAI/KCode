@@ -1,11 +1,10 @@
 // KCode - Custom Alias Manager
 // Persistent user-defined aliases for slash commands stored in ~/.kcode/aliases.json
 
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { kcodeHome, kcodePath } from "./paths";
 
-const ALIASES_PATH = join(homedir(), ".kcode", "aliases.json");
+const ALIASES_PATH = kcodePath("aliases.json");
 
 export interface AliasEntry {
   shortcut: string;
@@ -13,7 +12,7 @@ export interface AliasEntry {
 }
 
 function ensureDir(): void {
-  const dir = join(homedir(), ".kcode");
+  const dir = kcodeHome();
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

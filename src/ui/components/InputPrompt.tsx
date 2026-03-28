@@ -4,14 +4,14 @@
 import React, { useState, useCallback } from "react";
 import { Box, Text, useInput } from "ink";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve, dirname, basename, join } from "node:path";
-import { homedir } from "node:os";
+import { resolve, dirname, basename } from "node:path";
 import { useTheme } from "../ThemeContext.js";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
+import { kcodePath } from "../../core/paths.js";
 
 // ─── Persistent Input History ──────────────────────────────────
 
-const HISTORY_FILE = join(homedir(), ".kcode", "input_history");
+const HISTORY_FILE = kcodePath("input_history");
 const MAX_HISTORY = 500;
 
 function loadPersistentHistory(): string[] {

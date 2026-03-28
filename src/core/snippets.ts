@@ -2,10 +2,10 @@
 // Save and retrieve reusable code/text snippets
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
+import { kcodePath } from "./paths";
 
-const SNIPPETS_DIR = join(homedir(), ".kcode", "snippets");
+const SNIPPETS_DIR = kcodePath("snippets");
 
 export interface Snippet {
   name: string;

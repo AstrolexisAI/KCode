@@ -11,8 +11,8 @@
 // The markdown body becomes the agent's system prompt.
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -346,7 +346,7 @@ function loadAgentsFromDir(dir: string, isProjectLevel = false): CustomAgentDef[
 export function loadCustomAgents(cwd: string): CustomAgentDef[] {
   // Bundled agents ship with KCode (src/agents/)
   const bundledDir = join(import.meta.dir, "..", "agents");
-  const userDir = join(homedir(), ".kcode", "agents");
+  const userDir = kcodePath("agents");
   const projectDir = join(cwd, ".kcode", "agents");
 
   const bundledAgents = loadAgentsFromDir(bundledDir);
@@ -420,7 +420,7 @@ export function listAllAgents(cwd: string): CustomAgentDef[] {
 export function getAgentMemoryDir(agentName: string): string {
   // Sanitize agent name for use as directory
   const safe = agentName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
-  return join(homedir(), ".kcode", "agents", safe, "memory");
+  return kcodePath("agents", safe, "memory");
 }
 
 /**

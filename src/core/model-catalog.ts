@@ -8,14 +8,13 @@
 // integration — not the base model training.
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { existsSync } from "node:fs";
+import { kcodePath } from "./paths";
 import type { HardwareInfo } from "./hardware";
 
 // ─── Paths & Config ─────────────────────────────────────────────
 
-const KCODE_HOME = join(homedir(), ".kcode");
-const MODELS_DIR = join(KCODE_HOME, "models");
+const MODELS_DIR = kcodePath("models");
 
 // Models are served from the Astrolexis CDN — already renamed with codenames.
 // Users NEVER see real model names. GGUF format works on any GPU (NVIDIA, AMD, Apple, CPU).

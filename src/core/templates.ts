@@ -2,8 +2,8 @@
 // Lets users save and reuse common prompts as .md files in ~/.kcode/templates/
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ export class TemplateManager {
   private templatesDir: string;
 
   constructor(private workingDirectory: string) {
-    this.templatesDir = join(homedir(), ".kcode", "templates");
+    this.templatesDir = kcodePath("templates");
   }
 
   /**

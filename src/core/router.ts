@@ -5,8 +5,7 @@
 import { listModels } from "./models";
 import { log } from "./logger";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 import { getDebugTracer } from "./debug-tracer";
 
 // ─── Task Types ─────────────────────────────────────────────────
@@ -160,7 +159,7 @@ function loadRoutingRules(): RoutingRule[] {
   customRulesLoadedAt = Date.now();
 
   // Load from ~/.kcode/settings.json → routing.rules
-  const settingsPath = join(homedir(), ".kcode", "settings.json");
+  const settingsPath = kcodePath("settings.json");
   try {
     if (existsSync(settingsPath)) {
       const data = JSON.parse(readFileSync(settingsPath, "utf-8"));

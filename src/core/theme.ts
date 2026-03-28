@@ -1,9 +1,8 @@
 // KCode - Theme System
 // Customizable color themes for terminal output
 
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { readFileSync, existsSync } from "node:fs";
+import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -194,7 +193,7 @@ const builtinThemes: Record<string, Theme> = {
 
 // ─── State ──────────────────────────────────────────────────────
 
-const CUSTOM_THEME_PATH = join(homedir(), ".kcode", "theme.json");
+const CUSTOM_THEME_PATH = kcodePath("theme.json");
 
 let currentThemeName = "default";
 let currentTheme: Theme = builtinThemes["default"]!;

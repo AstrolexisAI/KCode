@@ -5,14 +5,15 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { kcodeHome, kcodePath } from "./paths";
 import { createHmac, randomBytes, pbkdf2Sync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { loadUserSettingsRaw } from "./config.js";
 import { log } from "./logger";
 
-const KCODE_HOME = join(homedir(), ".kcode");
-const PRO_CACHE_FILE = join(KCODE_HOME, "pro-cache.json");
-const PRO_CACHE_SALT_FILE = join(KCODE_HOME, ".pro-cache-salt");
+const KCODE_HOME = kcodeHome();
+const PRO_CACHE_FILE = kcodePath("pro-cache.json");
+const PRO_CACHE_SALT_FILE = kcodePath(".pro-cache-salt");
 const VALIDATE_URL = process.env.KCODE_PRO_VALIDATE_URL ?? "https://kulvex.ai/api/pro/validate";
 const RECHECK_DAYS = 7;
 

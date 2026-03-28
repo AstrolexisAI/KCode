@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { kcodePath } from "../../core/paths";
 
 export function registerHistoryCommand(program: Command): void {
   program
@@ -11,8 +12,7 @@ export function registerHistoryCommand(program: Command): void {
     .action(async (opts: { limit?: number; load?: string; delete?: string; clear?: boolean }) => {
       const { readdirSync, unlinkSync, statSync } = await import("node:fs");
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
-      const transcriptsDir = join(homedir(), ".kcode", "transcripts");
+      const transcriptsDir = kcodePath("transcripts");
 
       if (opts.clear) {
         try {

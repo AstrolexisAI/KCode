@@ -1,8 +1,8 @@
 // KCode - MCP Input Sanitization Tests
 // Validates prototype pollution prevention, depth limits, and response truncation
 
-import { describe, test, expect } from "bun:test";
-import { sanitizeMcpInput } from "./mcp-client";
+import { describe, test, expect, afterAll } from "bun:test";
+import { sanitizeMcpInput, validateStdioCommand } from "./mcp-client";
 
 // ─── Prototype Pollution Prevention ─────────────────────────────
 
@@ -99,6 +99,103 @@ describe("sanitizeMcpInput — pass-through", () => {
 
   test("handles empty objects", () => {
     expect(sanitizeMcpInput({})).toEqual({});
+  });
+});
+
+// ─── Field Size Limits ──────────────────────────────────────────
+
+describe("sanitizeMcpInput — field limits", () => {
+  test("truncates oversized string fields", () => {
+    const bigString = "x".repeat(300_000);
+    const result = sanitizeMcpInput({ data: bigString });
+    expect(typeof result.data).toBe("string");
+    expect((result.data as string).length).toBeLessThan(bigString.length);
+    expect((result.data as string)).toContain("Truncated");
+  });
+
+  test("rejects objects with too many keys", () => {
+    const manyKeys: Record<string, unknown> = {};
+    for (let i = 0; i < 150; i++) manyKeys[`key${i}`] = i;
+    const result = sanitizeMcpInput(manyKeys);
+    expect(result._error).toContain("too many keys");
+  });
+
+  test("caps array elements at limit", () => {
+    const bigArray = Array.from({ length: 2000 }, (_, i) => i);
+    const result = sanitizeMcpInput({ items: bigArray });
+    expect((result.items as unknown[]).length).toBe(1000);
+  });
+});
+
+// ─── Stdio Command Validation ───────────────────────────────────
+
+describe("validateStdioCommand", () => {
+  test("allows npx", () => {
+    expect(validateStdioCommand("npx").ok).toBe(true);
+  });
+
+  test("allows node", () => {
+    expect(validateStdioCommand("node").ok).toBe(true);
+  });
+
+  test("allows python3", () => {
+    expect(validateStdioCommand("python3").ok).toBe(true);
+  });
+
+  test("allows docker", () => {
+    expect(validateStdioCommand("docker").ok).toBe(true);
+  });
+
+  test("blocks bash", () => {
+    const result = validateStdioCommand("bash");
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("shell invocation");
+  });
+
+  test("blocks sh", () => {
+    expect(validateStdioCommand("sh").ok).toBe(false);
+  });
+
+  test("blocks zsh", () => {
+    expect(validateStdioCommand("zsh").ok).toBe(false);
+  });
+
+  test("blocks /bin/bash via basename extraction", () => {
+    expect(validateStdioCommand("/bin/bash").ok).toBe(false);
+  });
+
+  test("blocks commands with shell metacharacters", () => {
+    expect(validateStdioCommand("node; rm -rf /").ok).toBe(false);
+    expect(validateStdioCommand("echo | cat").ok).toBe(false);
+    expect(validateStdioCommand("cmd && bad").ok).toBe(false);
+    expect(validateStdioCommand("$(whoami)").ok).toBe(false);
+    expect(validateStdioCommand("`id`").ok).toBe(false);
+  });
+
+  test("blocks empty command", () => {
+    expect(validateStdioCommand("").ok).toBe(false);
+    expect(validateStdioCommand("   ").ok).toBe(false);
+  });
+
+  describe("safe-plugins mode", () => {
+    const origEnv = process.env.KCODE_SAFE_PLUGINS;
+
+    afterAll(() => {
+      if (origEnv === undefined) delete process.env.KCODE_SAFE_PLUGINS;
+      else process.env.KCODE_SAFE_PLUGINS = origEnv;
+    });
+
+    test("blocks unknown commands in safe mode", () => {
+      process.env.KCODE_SAFE_PLUGINS = "1";
+      const result = validateStdioCommand("my-custom-binary");
+      expect(result.ok).toBe(false);
+      expect(result.reason).toContain("safe-plugins allowlist");
+    });
+
+    test("allows npx in safe mode", () => {
+      process.env.KCODE_SAFE_PLUGINS = "1";
+      expect(validateStdioCommand("npx").ok).toBe(true);
+    });
   });
 });
 

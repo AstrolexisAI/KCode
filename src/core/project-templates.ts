@@ -3,8 +3,8 @@
 // Templates are loaded from ~/.kcode/templates/ and built-in defaults.
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { kcodePath } from "./paths";
 
 export interface ProjectTemplate {
   name: string;
@@ -117,7 +117,7 @@ const BUILTIN_TEMPLATES: ProjectTemplate[] = [
 // ─── User Templates ─────────────────────────────────────────────
 
 function loadUserTemplates(): ProjectTemplate[] {
-  const dir = join(homedir(), ".kcode", "templates");
+  const dir = kcodePath("templates");
   if (!existsSync(dir)) return [];
 
   const templates: ProjectTemplate[] = [];

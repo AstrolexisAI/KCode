@@ -7,6 +7,7 @@
 
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { kcodeHome, kcodePath } from "./paths";
 import { mkdirSync, existsSync, unlinkSync, renameSync, chmodSync, copyFileSync } from "node:fs";
 import { log } from "./logger";
 import { detectHardware, formatHardware, type HardwareInfo, type GpuInfo } from "./hardware";
@@ -32,14 +33,14 @@ export type { CatalogEntry } from "./model-catalog";
 
 // ─── Paths & Config ─────────────────────────────────────────────
 
-const KCODE_HOME = join(homedir(), ".kcode");
-const ENGINE_DIR = join(KCODE_HOME, "engine");
+const KCODE_HOME = kcodeHome();
+const ENGINE_DIR = kcodePath("engine");
 const MODELS_DIR = MODELS_DIR_PATH;
-const SETUP_MARKER = join(KCODE_HOME, ".setup-complete");
+const SETUP_MARKER = kcodePath(".setup-complete");
 
 // MLX venv lives inside ~/.kcode/mlx-venv (isolated, no system pollution)
-const MLX_VENV = join(KCODE_HOME, "mlx-venv");
-const MLX_MARKER = join(KCODE_HOME, ".mlx-engine");
+const MLX_VENV = kcodePath("mlx-venv");
+const MLX_MARKER = kcodePath(".mlx-engine");
 
 // ─── Public API ─────────────────────────────────────────────────
 

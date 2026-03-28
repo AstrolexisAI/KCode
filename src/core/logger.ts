@@ -1,9 +1,9 @@
 // KCode - Logging System
 // Lightweight file logger with daily rotation and buffered writes
 
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { readdirSync, unlinkSync, mkdirSync, appendFileSync } from "node:fs";
+import { join } from "node:path";
+import { kcodePath } from "./paths";
 import { appendFile } from "node:fs/promises";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 
 // ─── Configuration ──────────────────────────────────────────────
 
-const LOG_DIR = join(homedir(), ".kcode", "logs");
+const LOG_DIR = kcodePath("logs");
 const FLUSH_INTERVAL_MS = 1_000;
 const FLUSH_THRESHOLD = 10;
 const MAX_LOG_AGE_DAYS = 7;

@@ -4,8 +4,8 @@
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
+import { kcodeHome } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -32,7 +32,7 @@ export interface HookifyEvalResult {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-const HOOKIFY_DIR = join(homedir(), ".kcode");
+const HOOKIFY_DIR = kcodeHome();
 
 function ruleFilePath(name: string): string {
   return join(HOOKIFY_DIR, `hookify.${name}.md`);

@@ -3,8 +3,8 @@
 // Low-level client connections live in mcp-client.ts; tool adaptation in mcp-tools.ts (core).
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { ToolDefinition } from "./types";
+import { kcodePath } from "./paths";
 import type { ToolRegistry } from "./tool-registry";
 import { log } from "./logger";
 
@@ -187,7 +187,7 @@ export class McpManager {
    */
   private async loadConfigs(cwd: string): Promise<McpServersConfig> {
     const paths = [
-      join(homedir(), ".kcode", "settings.json"),
+      kcodePath("settings.json"),
       join(cwd, ".kcode", "settings.json"),
     ];
 

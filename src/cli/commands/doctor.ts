@@ -1,11 +1,12 @@
 import type { Command } from "commander";
-import { runDiagnostics } from "../../core/doctor";
+import { runDiagnostics, runDeepDiagnostics, formatDeepDiagnostics } from "../../core/doctor";
 
 export function registerDoctorCommand(program: Command): void {
   program
     .command("doctor")
     .description("Check KCode setup and diagnose issues")
-    .action(async () => {
+    .option("--deep", "Run extended diagnostics (MCP health, storage, plugins, security, config origin)")
+    .action(async (opts: { deep?: boolean }) => {
       console.log("KCode Doctor\n");
       const results = await runDiagnostics();
 
@@ -21,11 +22,20 @@ export function registerDoctorCommand(program: Command): void {
 
       if (fails > 0) {
         console.log(`\x1b[31m${fails} issue(s) need attention.\x1b[0m`);
-        process.exit(1);
       } else if (warns > 0) {
         console.log(`\x1b[33m${warns} warning(s), but KCode should work.\x1b[0m`);
       } else {
         console.log("\x1b[32mAll checks passed!\x1b[0m");
       }
+
+      // Deep diagnostics
+      if (opts.deep) {
+        console.log("\n\x1b[1m═══ Deep Diagnostics ═══════════════════════════════\x1b[0m");
+        const deepSections = await runDeepDiagnostics();
+        console.log(formatDeepDiagnostics(deepSections));
+        console.log();
+      }
+
+      if (fails > 0) process.exit(1);
     });
 }
