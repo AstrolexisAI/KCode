@@ -59,22 +59,12 @@ export class PasteDetector {
 
   /**
    * Check whether Enter should insert a newline (paste active) or submit.
-   * Also updates burst tracking since Enter is part of the input stream.
-   * Returns true if the Enter is part of a paste and should insert \n.
+   * Enter does NOT count toward the burst — it's a control action, not content.
+   * Only returns true if paste was already activated by prior character input.
    */
   shouldInsertNewline(): boolean {
-    const now = this.now();
-    const elapsed = now - this.lastInputTime;
-    this.lastInputTime = now;
-
-    if (elapsed > 0 && elapsed < this.detectMs) {
-      this.burstCount++;
-      if (this.burstCount >= this.burstThreshold) {
-        this._active = true;
-      }
-    }
-
     if (this._active) {
+      this.lastInputTime = this.now();
       this.resetSettleTimer();
       return true;
     }
