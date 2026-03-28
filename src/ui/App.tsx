@@ -123,7 +123,7 @@ export default function App({ config, conversationManager, tools, initialSession
   const [sessionTags, setSessionTags] = useState<string[]>([]);
   const [showContextGrid, setShowContextGrid] = useState(false);
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
-  const [activePlan, setActivePlan] = useState<Plan | null>(() => getActivePlan() ?? loadLatestPlan());
+  const [activePlan, setActivePlan] = useState<Plan | null>(() => getActivePlan() ?? null);
 
   // Message queue — user can type while KCode is responding
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
@@ -155,7 +155,7 @@ export default function App({ config, conversationManager, tools, initialSession
   });
 
   useEffect(() => {
-    setActivePlan(getActivePlan() ?? loadLatestPlan());
+    setActivePlan(getActivePlan() ?? null);
     return onPlanChange((plan) => {
       setActivePlan(plan);
     });
