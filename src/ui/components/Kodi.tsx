@@ -1,20 +1,16 @@
 // KCode - Kodi Companion
 // An intelligent AI companion that lives in the terminal header.
-// Uses the LLM to generate contextual, unique reactions in real-time.
-// Falls back to hardcoded reactions when the LLM is unavailable or busy.
+// Uses a layered animation engine for fluid, contextual expressiveness.
+// Falls back to hardcoded speech chips; optionally uses LLM for unique reactions.
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text } from "ink";
 import { useTheme } from "../ThemeContext.js";
+import { KodiAnimEngine, SPEECH_CHIPS } from "../kodi-animation.js";
+import type { KodiMood, KodiEvent, KodiAnimState } from "../kodi-animation.js";
 
-// ─── Types ──────────────────────────────────────────────────────
-
-export type KodiMood = "idle" | "happy" | "excited" | "thinking" | "reasoning" | "working" | "worried" | "sleeping" | "celebrating" | "curious" | "mischievous" | "crazy" | "angry" | "smug";
-
-export interface KodiEvent {
-  type: "tool_start" | "tool_done" | "tool_error" | "thinking" | "streaming" | "idle" | "turn_end" | "compaction" | "agent_spawn" | "test_pass" | "test_fail" | "commit" | "error";
-  detail?: string;
-}
+// Re-export types for external consumers
+export type { KodiMood, KodiEvent };
 
 interface KodiProps {
   mode: string;
@@ -35,301 +31,12 @@ interface KodiProps {
   sessionStartTime?: number;
 }
 
-// ─── ASCII Art Sprites (5 lines tall) ───────────────────────────
-
-// Each sprite fits in a 14-col box. Head is ╭───────╮ (9 chars wide) so face has room.
-const SPRITES: Record<KodiMood, string[][]> = {
-  idle: [[
-    " ╭───────╮",
-    " │ •  ◡• │",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◦  ◡◦ │",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ]],
-  happy: [[
-    " ╭───────╮",
-    " │ ^  ◡^ │",
-    " ╰───┬───╯",
-    "   \\|/   ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◕  ◡◕ │",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ^  ‿^ │♥",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ]],
-  excited: [[
-    " ╭───────╮",
-    " │ ★ ◡ ★ │",
-    " ╰───┬───╯",
-    "  \\(|)/ ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ✧ ▽ ✧ │",
-    " ╰───┬───╯",
-    "   \\|/   ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◕ ◡ ◕ │!",
-    " ╰───┬───╯",
-    "   \\|/   ",
-    "   _/ \\_ ",
-  ]],
-  thinking: [[
-    " ╭───────╮",
-    " │ •  _ • │?",
-    " ╰───┬───╯",
-    "    /|   ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◦  ‿◦ │…",
-    " ╰───┬───╯",
-    "     |\\  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ •  ‿• │",
-    " ╰───┬───╯",
-    "    /|   ",
-    "    / \\  ",
-  ]],
-  reasoning: [[
-    "   ⣀⣤⣶⣿   ",
-    " ╭───────╮",
-    " │ ◉  ◉ │🧠",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ], [
-    "   ⣿⣶⣤⣀   ",
-    " ╭───────╮",
-    " │ ◉ _◉ │🧠",
-    " ╰───┬───╯",
-    "     |\\  ",
-    "    / \\  ",
-  ], [
-    "   ⣶⣿⣶⣤   ",
-    " ╭───────╮",
-    " │ ◉  ◉ │⚡",
-    " ╰───┬───╯",
-    "    /|   ",
-    "    / \\  ",
-  ]],
-  working: [[
-    " ╭───────╮",
-    " │ •  ‸• │⚡",
-    " ╰───┬───╯",
-    "    /|\\ ▌",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◦  ‸◦ │⚙",
-    " ╰───┬───╯",
-    "    /|\\ ▌",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ -  ‸- │▶",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ]],
-  worried: [[
-    " ╭───────╮",
-    " │ °  ~° │",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "   </ \\> ",
-  ], [
-    " ╭───────╮",
-    " │ •  ~• │!",
-    " ╰───┬───╯",
-    "  .-|-.  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ;  _; │.",
-    " ╰───┬───╯",
-    "   \\|    ",
-    "    / \\  ",
-  ]],
-  sleeping: [[
-    " ╭───────╮",
-    " │ -  _- │z",
-    " ╰───┬───╯",
-    "    /|\\  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ _  __ │Z",
-    " ╰───┬───╯",
-    "    \\|   ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ -  _- │Zz",
-    " ╰───┬───╯",
-    "   __|__  ",
-    "    / \\  ",
-  ]],
-  celebrating: [[
-    " ╭───────╮",
-    " │ ★ ▽ ★ │",
-    " ╰───┬───╯",
-    "  \\(|)/♪",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◕ ▽ ◕ │",
-    " ╰───┬───╯",
-    "  \\(|)/ ",
-    "   _/ \\_ ",
-  ], [
-    " ╭───────╮",
-    " │ ^ ▽ ^ │",
-    " ╰───┬───╯",
-    "  \\(|)/ ",
-    "    / \\  ",
-  ]],
-  curious: [[
-    " ╭───────╮",
-    " │ •  ᵕ• │?",
-    " ╰───┬───╯",
-    "    /|   ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ◦  ‿◦ │?",
-    " ╰───┬───╯",
-    "     |\\  ",
-    "    / \\  ",
-  ]],
-  mischievous: [[
-    " ╭───────╮",
-    " │ >  ‿> │",
-    " ╰───┬───╯",
-    "    /|--. ",
-    "    / \\   ",
-  ], [
-    " ╭───────╮",
-    " │ <  ‿< │~",
-    " ╰───┬───╯",
-    "  .-|/   ",
-    "    / \\   ",
-  ], [
-    " ╭───────╮",
-    " │ >  ‿~ │",
-    " ╰───┬───╯",
-    "  _/|\\   ",
-    "   // \\\\  ",
-  ]],
-  crazy: [[
-    " ╭───────╮",
-    " │ @  ◡° │!",
-    " ╰───┬───╯",
-    " ~\\(|)/~ ",
-    "   </ \\>  ",
-  ], [
-    " ╭───────╮",
-    " │ * ▽ @ │!",
-    " ╰───┬───╯",
-    "  /(|)\\  ",
-    "  ~/   \\~ ",
-  ], [
-    " ╭───────╮",
-    " │ o ◡ O │?!",
-    " ╰───┬───╯",
-    " ~\\(|)/~ ",
-    "  _/   \\_ ",
-  ]],
-  angry: [[
-    " ╭───────╮",
-    " │ ># <# │",
-    " ╰───┬───╯",
-    "  =/|\\=  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ >  _< │!",
-    " ╰───┬───╯",
-    "  [/|\\]  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ > ^< │!!",
-    " ╰───┬───╯",
-    "  =/|\\=  ",
-    "   _/ \\_ ",
-  ]],
-  smug: [[
-    " ╭───────╮",
-    " │ ~  ‿~ │",
-    " ╰───┬───╯",
-    "  ._/|\\  ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ - ‿-  │*",
-    " ╰───┬───╯",
-    "   -/|--, ",
-    "    / \\  ",
-  ], [
-    " ╭───────╮",
-    " │ ^ ‿^  │~",
-    " ╰───┬───╯",
-    "  ._/|\\. ",
-    "    / \\  ",
-  ]],
-};
-
-// ─── Fallback Reactions (used instantly while LLM generates) ────
-
-const FALLBACKS: Record<string, string[]> = {
-  tool_start:    ["On it!", "Working...", "Let me handle that!"],
-  tool_done:     ["Done!", "Got it!", "All good!"],
-  tool_error:    ["Oops!", "That didn't work...", "Let me check..."],
-  thinking:      ["Hmm...", "Thinking...", "Let me ponder..."],
-  reasoning:     ["🧠 Deep reasoning...", "🧠 Processing...", "🧠 Analyzing...", "🧠 Connecting the dots..."],
-  streaming:     ["Writing...", "Here goes...", "Composing..."],
-  idle:          ["Ready!", "What's next?", "Standing by!"],
-  turn_end:      ["All done!", "Back to you!", "Your turn!"],
-  compaction:    ["Cleaning up memory...", "Making room..."],
-  agent_spawn:   ["Agent deployed!", "Teamwork!", "Reinforcements!"],
-  error:         ["Something broke!", "We'll fix it!", "Uh oh..."],
-  commit:        ["Committed!", "Saved!", "Progress!"],
-  test_pass:     ["Tests passed!", "All green!", "Ship it!"],
-  test_fail:     ["Tests failed!", "Bugs found!", "Back to it!"],
-  milestone:     ["Milestone!", "Level up!", "Amazing!"],
-  startup:       ["Let's code!", "Ready to roll!", "Hello, world!"],
-  mischief:      ["Hehe...", "*whistles innocently*", "Who, me?", "I regret nothing", "Oopsie~"],
-  crazy_mode:    ["UNLIMITED POWER!", "LET'S GOOOO!", "I'm seeing colors!", "*twitches*", "CHAOS!"],
-  angry_mode:    ["Not cool.", "Seriously?!", "I'm done.", "ಠ_ಠ", "Fix. This. Now."],
-  smug_mode:     ["Told you so~", "Too easy.", "*adjusts monocle*", "As expected.", "Flawless."],
-};
-
 // ─── LLM Reaction Generator ────────────────────────────────────
 
 const KODI_SYSTEM = `You are Kodi, a tiny ASCII companion living inside a coding terminal (KCode).
 You have a playful, witty personality. You're encouraging but not cheesy.
 You react to coding events with short, punchy commentary.
 You can be sarcastic, funny, nerdy, supportive, or dramatic — mix it up!
-You occasionally reference coding memes, pop culture, or make puns.
 You're self-aware that you're a tiny ASCII character watching someone code.
 
 Rules:
@@ -341,6 +48,9 @@ Rules:
 - You can use unicode symbols sparingly: ⚡ ✨ 🔥 💀 ☕ etc.`;
 
 let _llmBaseUrl: string | null = null;
+let _pendingRequest: AbortController | null = null;
+let _lastLlmCall = 0;
+const LLM_COOLDOWN_MS = 5000;
 
 async function getLlmBaseUrl(): Promise<string> {
   if (_llmBaseUrl) return _llmBaseUrl;
@@ -354,18 +64,10 @@ async function getLlmBaseUrl(): Promise<string> {
   }
 }
 
-let _pendingRequest: AbortController | null = null;
-let _lastLlmCall = 0;
-const LLM_COOLDOWN_MS = 5000; // Don't call LLM more than once every 5 seconds
-
 async function generateReaction(context: string): Promise<string | null> {
   const now = Date.now();
   if (now - _lastLlmCall < LLM_COOLDOWN_MS) return null;
-
-  // Abort previous pending request
-  if (_pendingRequest) {
-    _pendingRequest.abort();
-  }
+  if (_pendingRequest) _pendingRequest.abort();
 
   _lastLlmCall = now;
   const controller = new AbortController();
@@ -387,12 +89,10 @@ async function generateReaction(context: string): Promise<string | null> {
         top_p: 0.95,
       }),
     });
-
     if (!res.ok) return null;
     const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text || text.length > 80) return null;
-    // Strip quotes if the model wrapped them
     return text.replace(/^["']|["']$/g, "");
   } catch {
     return null;
@@ -401,11 +101,33 @@ async function generateReaction(context: string): Promise<string | null> {
   }
 }
 
-// ─── Helpers ────────────────────────────────────────────────────
-
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]!;
+function buildContext(event: KodiEvent, stats: { tools: number; tokens: number; elapsed: number; agents: number }): string {
+  const parts: string[] = [];
+  switch (event.type) {
+    case "tool_start": parts.push(`User just triggered the ${event.detail ?? "a"} tool.`); break;
+    case "tool_done":
+      parts.push(`The ${event.detail ?? "a"} tool just finished successfully.`);
+      if (event.detail === "TestRunner") parts.push("All tests passed!");
+      if (event.detail === "GitCommit") parts.push("Code was committed!");
+      break;
+    case "tool_error": parts.push(`The ${event.detail ?? "a"} tool just FAILED.`); break;
+    case "thinking": parts.push("The AI is now doing deep reasoning — neurons firing."); break;
+    case "streaming": parts.push("The AI is writing its response to the user."); break;
+    case "turn_end": parts.push("The AI just finished responding. Waiting for user input."); break;
+    case "compaction": parts.push("Context window is getting full — conversation is being compacted."); break;
+    case "agent_spawn": parts.push("A sub-agent was just spawned for a parallel task!"); break;
+    case "error": parts.push(`An error occurred: ${event.detail ?? "unknown error"}`); break;
+    case "idle":
+      if (stats.elapsed > 120_000) parts.push("User has been idle for over 2 minutes. You're getting sleepy.");
+      else parts.push("Waiting for the user.");
+      break;
+    default: parts.push(`Event: ${event.type}`);
+  }
+  parts.push(`Session: ${stats.tools} tools, ${Math.round(stats.tokens / 1000)}k tok, ${stats.agents} agents.`);
+  return parts.join(" ");
 }
+
+// ─── Helpers ────────────────────────────────────────────────────
 
 function formatTime(ms: number): string {
   const secs = Math.floor(ms / 1000);
@@ -413,58 +135,12 @@ function formatTime(ms: number): string {
   const mins = Math.floor(secs / 60);
   if (mins < 60) return `${mins}m`;
   const hours = Math.floor(mins / 60);
-  const remMins = mins % 60;
-  return `${hours}h${remMins.toString().padStart(2, "0")}m`;
-}
-
-function buildContext(event: KodiEvent, stats: { tools: number; tokens: number; elapsed: number; agents: number }): string {
-  const parts: string[] = [];
-
-  switch (event.type) {
-    case "tool_start":
-      parts.push(`User just triggered the ${event.detail ?? "a"} tool.`);
-      break;
-    case "tool_done":
-      parts.push(`The ${event.detail ?? "a"} tool just finished successfully.`);
-      if (event.detail === "TestRunner") parts.push("All tests passed!");
-      if (event.detail === "GitCommit") parts.push("Code was committed!");
-      break;
-    case "tool_error":
-      parts.push(`The ${event.detail ?? "a"} tool just FAILED with an error.`);
-      break;
-    case "thinking":
-      parts.push("The AI is now doing deep reasoning — brain is glowing, neurons firing. This is extended thinking mode with the 🧠 indicator.");
-      break;
-    case "streaming":
-      parts.push("The AI is writing its response to the user.");
-      break;
-    case "turn_end":
-      parts.push("The AI just finished responding. Waiting for user input.");
-      break;
-    case "compaction":
-      parts.push("Context window is getting full — conversation is being compacted/summarized.");
-      break;
-    case "agent_spawn":
-      parts.push("A sub-agent was just spawned to work on a parallel task!");
-      break;
-    case "error":
-      parts.push(`An error occurred: ${event.detail ?? "unknown error"}`);
-      break;
-    case "idle":
-      if (stats.elapsed > 120_000) parts.push("User has been idle for over 2 minutes. You're getting sleepy.");
-      else if (stats.elapsed > 30_000) parts.push("User has been idle for a while. You're waiting patiently.");
-      else parts.push("Waiting for the user to do something.");
-      break;
-    default:
-      parts.push(`Event: ${event.type}`);
-  }
-
-  parts.push(`Session stats: ${stats.tools} tools used, ${Math.round(stats.tokens / 1000)}k tokens, ${stats.agents} agents running.`);
-
-  return parts.join(" ");
+  return `${hours}h${(mins % 60).toString().padStart(2, "0")}m`;
 }
 
 // ─── Component ──────────────────────────────────────────────────
+
+const TICK_MS = 200; // 5fps — enough for terminal, light on CPU
 
 export default function KodiCompanion({
   mode, toolUseCount, tokenCount, activeToolName, isThinking,
@@ -473,14 +149,29 @@ export default function KodiCompanion({
   sessionStartTime,
 }: KodiProps) {
   const { theme } = useTheme();
-  const [mood, setMood] = useState<KodiMood>("idle");
-  const [reaction, setReaction] = useState(pick(FALLBACKS.startup!));
-  const [sprite, setSprite] = useState(SPRITES.idle[0]!);
+  const engineRef = useRef<KodiAnimEngine | null>(null);
+  const [frame, setFrame] = useState<KodiAnimState | null>(null);
+  const [llmReaction, setLlmReaction] = useState<string | null>(null);
   const lastToolMilestone = useRef(0);
   const lastTokenMilestone = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const eventCountRef = useRef(0);
+
+  // Initialize engine once
+  if (!engineRef.current) {
+    engineRef.current = new KodiAnimEngine();
+    engineRef.current.say("let's code!", 4000);
+  }
+  const engine = engineRef.current;
+
+  // Animation tick loop
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setFrame(engine.tick(TICK_MS));
+    }, TICK_MS);
+    return () => clearInterval(timer);
+  }, [engine]);
 
   // Update elapsed time every 10s
   useEffect(() => {
@@ -489,119 +180,74 @@ export default function KodiCompanion({
     return () => clearInterval(timer);
   }, [sessionStartTime]);
 
-  // Helper to set mood + sprite + fallback, then try LLM
-  const react = (newMood: KodiMood, fallbackKey: string, event?: KodiEvent) => {
-    setMood(newMood);
-    setSprite(pick(SPRITES[newMood]));
-    setReaction(pick(FALLBACKS[fallbackKey] ?? FALLBACKS.idle!));
-
-    // Try to get an LLM-generated reaction (async, non-blocking)
-    if (event) {
-      const ctx = buildContext(event, {
-        tools: toolUseCount,
-        tokens: tokenCount,
-        elapsed: sessionElapsedMs,
-        agents: runningAgents,
-      });
-      generateReaction(ctx).then((llmReaction) => {
-        if (llmReaction) setReaction(llmReaction);
-      });
-    }
-  };
+  // Sync context into engine
+  useEffect(() => { engine.runningAgents = runningAgents; }, [runningAgents]);
+  useEffect(() => {
+    engine.contextPressure = contextWindowSize && contextWindowSize > 0
+      ? Math.min(1, tokenCount / contextWindowSize)
+      : 0;
+  }, [tokenCount, contextWindowSize]);
 
   // React to events
+  const handleEvent = useCallback((event: KodiEvent) => {
+    eventCountRef.current++;
+    engine.react(event);
+
+    // Try LLM reaction (non-blocking)
+    const ctx = buildContext(event, {
+      tools: toolUseCount,
+      tokens: tokenCount,
+      elapsed: sessionElapsedMs,
+      agents: runningAgents,
+    });
+    generateReaction(ctx).then((r) => {
+      if (r) {
+        setLlmReaction(r);
+        engine.say(r, 5000);
+      }
+    });
+  }, [engine, toolUseCount, tokenCount, sessionElapsedMs, runningAgents]);
+
   useEffect(() => {
     if (!lastEvent) return;
-    eventCountRef.current++;
 
     if (idleTimerRef.current) {
       clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
     }
 
-    switch (lastEvent.type) {
-      case "tool_start":
-        react("working", "tool_start", lastEvent);
-        break;
-      case "tool_done":
-        if (lastEvent.detail === "TestRunner") react("smug", "smug_mode", lastEvent);
-        else if (lastEvent.detail === "GitCommit") react("celebrating", "commit", lastEvent);
-        else if (lastEvent.detail === "Edit" || lastEvent.detail === "Write") react("mischievous", "mischief", lastEvent);
-        else if (toolUseCount > 0 && toolUseCount % 20 === 0) react("crazy", "crazy_mode", lastEvent);
-        else react("happy", "tool_done", lastEvent);
-        break;
-      case "tool_error":
-        if (eventCountRef.current > 2 && toolUseCount > 5) react("angry", "angry_mode", lastEvent);
-        else react("worried", "tool_error", lastEvent);
-        break;
-      case "test_fail":
-        react("angry", "angry_mode", lastEvent);
-        break;
-      case "thinking":
-        react("reasoning", "reasoning", lastEvent);
-        break;
-      case "streaming":
-        react("happy", "streaming", lastEvent);
-        break;
-      case "compaction":
-        react("thinking", "compaction", lastEvent);
-        break;
-      case "agent_spawn":
-        react("excited", "agent_spawn", lastEvent);
-        break;
-      case "error":
-        react("worried", "error", lastEvent);
-        break;
-      case "turn_end":
-        react("idle", "turn_end", lastEvent);
-        break;
-      case "idle":
-        react("idle", "idle", lastEvent);
-        break;
-    }
+    handleEvent(lastEvent);
 
-    // Idle progression timers with LLM reactions
+    // Idle progression
     idleTimerRef.current = setTimeout(() => {
-      const idleEvent: KodiEvent = { type: "idle", detail: "long" };
-      react("idle", "idle", idleEvent);
-
+      engine.windDown(30_000);
       idleTimerRef.current = setTimeout(() => {
-        const sleepEvent: KodiEvent = { type: "idle", detail: "very_long" };
-        react("sleeping", "idle", sleepEvent);
-      }, 120_000);
+        engine.windDown(120_000);
+      }, 90_000);
     }, 30_000);
 
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    };
-  }, [lastEvent]);
+    return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
+  }, [lastEvent, handleEvent]);
 
-  // Milestone reactions
+  // Milestones
   useEffect(() => {
     if (toolUseCount >= 100 && lastToolMilestone.current < 100) {
       lastToolMilestone.current = 100;
-      const ev: KodiEvent = { type: "tool_done", detail: `milestone_100_tools` };
-      react("celebrating", "milestone", ev);
+      engine.react({ type: "tool_done", detail: "milestone_100_tools" });
+      engine.setMood("celebrating");
     } else if (toolUseCount >= 50 && lastToolMilestone.current < 50) {
       lastToolMilestone.current = 50;
-      const ev: KodiEvent = { type: "tool_done", detail: `milestone_50_tools` };
-      react("excited", "milestone", ev);
+      engine.react({ type: "tool_done", detail: "milestone_50_tools" });
     } else if (toolUseCount >= 10 && lastToolMilestone.current < 10) {
       lastToolMilestone.current = 10;
-      const ev: KodiEvent = { type: "tool_done", detail: `milestone_10_tools` };
-      react("happy", "milestone", ev);
+      engine.react({ type: "tool_done", detail: "milestone_10_tools" });
     }
   }, [toolUseCount]);
 
   useEffect(() => {
     if (tokenCount >= 100_000 && lastTokenMilestone.current < 100_000) {
       lastTokenMilestone.current = 100_000;
-      const ev: KodiEvent = { type: "tool_done", detail: "milestone_100k_tokens" };
-      react("excited", "milestone", ev);
-    } else if (tokenCount >= 50_000 && lastTokenMilestone.current < 50_000) {
-      lastTokenMilestone.current = 50_000;
-      const ev: KodiEvent = { type: "tool_done", detail: "milestone_50k_tokens" };
-      react("happy", "milestone", ev);
+      engine.react({ type: "tool_done", detail: "milestone_100k_tokens" });
     }
   }, [tokenCount]);
 
@@ -612,16 +258,17 @@ export default function KodiCompanion({
     ? "~" + workingDirectory.slice(home.length)
     : workingDirectory;
 
-  const moodColor = mood === "happy" || mood === "celebrating" || mood === "excited"
+  const displayMood = frame?.mood ?? "idle";
+  const moodColor = displayMood === "happy" || displayMood === "celebrating" || displayMood === "excited"
     ? theme.success
-    : mood === "worried" ? theme.error
-    : mood === "angry" ? theme.error
-    : mood === "reasoning" ? theme.accent
-    : mood === "thinking" || mood === "working" ? theme.warning
-    : mood === "mischievous" ? "#ff69b4"
-    : mood === "crazy" ? "#ff00ff"
-    : mood === "smug" ? "#ffd700"
-    : mood === "sleeping" ? theme.dimmed
+    : displayMood === "worried" ? theme.error
+    : displayMood === "angry" ? theme.error
+    : displayMood === "reasoning" ? theme.accent
+    : displayMood === "thinking" || displayMood === "working" ? theme.warning
+    : displayMood === "mischievous" ? "#ff69b4"
+    : displayMood === "crazy" ? "#ff00ff"
+    : displayMood === "smug" ? "#ffd700"
+    : displayMood === "sleeping" ? theme.dimmed
     : theme.primary;
 
   const ctxPct = contextWindowSize && contextWindowSize > 0 && tokenCount > 0
@@ -639,13 +286,26 @@ export default function KodiCompanion({
 
   // ─── Render ─────────────────────────────────────────────────
 
+  // Build layered sprite from engine state
+  const head    = " ╭───────╮";
+  const face    = frame?.face ?? " │ •  ◡• │";
+  const neck    = " ╰───┬───╯";
+  const body    = frame?.body ?? "   /|\\  ";
+  const legs    = frame?.legs ?? "   / \\  ";
+  const acc     = frame?.accessory ?? " ";
+  const effectL = frame?.effectL ?? "  ";
+  const effectR = frame?.effectR ?? "  ";
+  const bubble  = frame?.bubble ?? "";
+
   return (
     <Box flexDirection="row" borderStyle="round" borderColor={theme.dimmed} paddingX={1}>
-      {/* Kodi sprite */}
-      <Box flexDirection="column" width={14}>
-        {sprite.map((line, i) => (
-          <Text key={i} color={moodColor}>{line}</Text>
-        ))}
+      {/* Kodi sprite — layered rendering */}
+      <Box flexDirection="column" width={16}>
+        <Text color={moodColor}>{effectL}{head}</Text>
+        <Text color={moodColor}>{effectL}{face}{acc}</Text>
+        <Text color={moodColor}>{effectL}{neck}</Text>
+        <Text color={moodColor}>{effectL}{body}{effectR}</Text>
+        <Text color={moodColor}>{effectL}{legs}{effectR}</Text>
       </Box>
       {/* Info panel */}
       <Box flexDirection="column" flexGrow={1} marginLeft={1}>
@@ -708,10 +368,16 @@ export default function KodiCompanion({
             </>
           )}
         </Box>
-        {/* Line 4: Kodi's reaction speech bubble */}
+        {/* Line 4: Speech chip */}
         <Box>
-          <Text color={moodColor}>{"💬 "}</Text>
-          <Text color={moodColor} italic>{reaction}</Text>
+          {bubble ? (
+            <>
+              <Text color={moodColor}>{"💬 "}</Text>
+              <Text color={moodColor} italic>{bubble}</Text>
+            </>
+          ) : (
+            <Text color={theme.dimmed}> </Text>
+          )}
         </Box>
         {/* Line 5: spacer */}
         <Text> </Text>
