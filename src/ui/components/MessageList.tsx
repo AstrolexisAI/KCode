@@ -179,8 +179,6 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
     if (isPaste) {
       const lines = text.split("\n");
       const lineCount = lines.length;
-      const firstLine = lines[0].slice(0, 70) + (lines[0].length > 70 ? "…" : "");
-      const lastLine = lines[lineCount - 1].slice(0, 70) + (lines[lineCount - 1].length > 70 ? "…" : "");
 
       return (
         <Box flexDirection="column" paddingLeft={2}>
@@ -190,9 +188,9 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
             <Text bold color={theme.dimmed}>{`paste — ${lineCount} lines, ${text.length.toLocaleString()} chars`}</Text>
           </Box>
           <Box flexDirection="column" paddingLeft={4} marginTop={0}>
-            <Text color={theme.dimmed}>{firstLine}</Text>
-            {lineCount > 2 && <Text color={theme.dimmed}>{"  ⋮"}</Text>}
-            {lineCount > 1 && <Text color={theme.dimmed}>{lastLine}</Text>}
+            {lines.map((line, i) => (
+              <Text key={i} color={theme.dimmed}>{line || " "}</Text>
+            ))}
           </Box>
         </Box>
       );
