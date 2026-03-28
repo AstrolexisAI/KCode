@@ -126,6 +126,14 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
+
+  // Synchronous cursor ref: tracks cursor position between React renders.
+  // During rapid paste events, multiple useInput calls fire before React
+  // re-renders. React state `cursor` stays stale across these calls, but
+  // cursorRef is updated synchronously on each keystroke, ensuring characters
+  // are inserted at the correct position even during paste bursts.
+  const cursorRef = useRef(0);
+  cursorRef.current = cursor; // Sync ref with state on each render
   const [history, setHistory] = useState<string[]>(() => loadPersistentHistory());
   const [historyIndex, setHistoryIndex] = useState(-1);
 
@@ -308,8 +316,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         // Ask the paste detector if this Enter is part of a paste.
         // Only returns true after 5+ rapid consecutive inputs were seen.
         if (pasteDetectorRef.current.shouldInsertNewline()) {
-          setValue((prev) => prev.slice(0, cursor) + "\n" + prev.slice(cursor));
-          setCursor((prev) => prev + 1);
+          const pos = cursorRef.current;
+          cursorRef.current = pos + 1;
+          setValue((prev) => prev.slice(0, pos) + "\n" + prev.slice(pos));
+          setCursor(cursorRef.current);
           return;
         }
 
@@ -342,9 +352,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       }
 
       if (key.backspace || key.delete) {
-        if (cursor > 0) {
-          setValue((prev) => prev.slice(0, cursor - 1) + prev.slice(cursor));
-          setCursor((prev) => prev - 1);
+        if (cursorRef.current > 0) {
+          const pos = cursorRef.current;
+          cursorRef.current = pos - 1;
+          setValue((prev) => prev.slice(0, pos - 1) + prev.slice(pos));
+          setCursor(cursorRef.current);
         }
         return;
       }
@@ -478,8 +490,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       // Regular character input
       if (input && !key.ctrl && !key.meta) {
         pasteDetectorRef.current.recordInput();
-        setValue((prev) => prev.slice(0, cursor) + input + prev.slice(cursor));
-        setCursor((prev) => prev + input.length);
+        const pos = cursorRef.current;
+        cursorRef.current = pos + input.length;
+        setValue((prev) => prev.slice(0, pos) + input + prev.slice(pos));
+        setCursor(cursorRef.current);
         setDropdownIndex(0); // Reset dropdown selection on typing
       }
     },
