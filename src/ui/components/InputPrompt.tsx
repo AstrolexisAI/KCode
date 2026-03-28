@@ -153,12 +153,12 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   }, []);
 
   const submit = useCallback(() => {
-    const trimmed = value.trim();
-    if (trimmed.length === 0) return;
+    if (value.trim().length === 0) return;
 
     setHistory((prev) => {
-      // Deduplicate: remove if already at top
-      const deduped = prev[0] === trimmed ? prev : [trimmed, ...prev];
+      // Store trimmed version in history for dedup/display, but send raw
+      const forHistory = value.trim();
+      const deduped = prev[0] === forHistory ? prev : [forHistory, ...prev];
       const clamped = deduped.slice(0, MAX_HISTORY);
       savePersistentHistory(clamped);
       return clamped;
@@ -168,7 +168,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     setCursor(0);
     resetTabState();
     pasteDetectorRef.current.reset();
-    onSubmit(trimmed);
+    onSubmit(value);
   }, [value, onSubmit, resetTabState]);
 
   const handleTab = useCallback(() => {
