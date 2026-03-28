@@ -139,10 +139,15 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   // Vim mode state (enabled via ~/.kcode/keybindings.json)
   const [vimMode, setVimMode] = useState<VimMode>(isVimModeEnabled() ? "normal" : "insert");
 
-  // Paste detection: track timing between input events to distinguish
-  // typed Enter (submit) from newlines embedded in a pasted block.
+  // Paste detection: track whether a paste is actively in progress.
+  // During an active paste, Enter inserts \n instead of submitting.
+  // Paste is detected by rapid inter-keystroke timing (<50ms) and
+  // auto-expires after 100ms of no input (the "settle" period).
   const lastInputTimeRef = useRef(0);
-  const PASTE_DETECT_MS = 15; // inputs arriving faster than this are from paste
+  const pasteActiveRef = useRef(false);
+  const pasteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const PASTE_DETECT_MS = 50; // inputs arriving faster than this are from paste
+  const PASTE_SETTLE_MS = 100; // paste expires after this much idle time
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
@@ -283,7 +288,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       if (key.escape && isVimModeEnabled()) { setVimMode("normal"); return; }
 
       if (key.return) {
-        // Alt+Enter (Meta+Return): always submit, even multiline content
+        // Alt+Enter (Meta+Return): always submit, even during paste
         if (key.meta) {
           submit();
           return;
@@ -302,20 +307,27 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
           }
         }
 
-        // Detect paste: if Enter arrives within the paste detection window
-        // after previous input, it's a newline embedded in pasted text.
+        // During active paste: insert newline as content instead of submitting.
+        // Paste is "active" when rapid input was recently detected and hasn't
+        // settled yet (no 100ms idle gap since last rapid input).
         const now = Date.now();
         const timeSinceLast = now - lastInputTimeRef.current;
-        const isPasting = timeSinceLast < PASTE_DETECT_MS && timeSinceLast > 0;
+        if (timeSinceLast < PASTE_DETECT_MS && timeSinceLast > 0) {
+          pasteActiveRef.current = true;
+        }
 
-        if (isPasting || value.includes("\n")) {
-          // During paste or when content is already multiline: insert newline
+        if (pasteActiveRef.current) {
           setValue((prev) => prev.slice(0, cursor) + "\n" + prev.slice(cursor));
           setCursor((prev) => prev + 1);
           lastInputTimeRef.current = now;
+          // Reset settle timer
+          if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
+          pasteTimerRef.current = setTimeout(() => { pasteActiveRef.current = false; }, PASTE_SETTLE_MS);
           return;
         }
 
+        // No active paste: submit normally (works for single-line AND
+        // multiline content after paste has settled)
         submit();
         return;
       }
@@ -478,7 +490,20 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
       // Regular character input
       if (input && !key.ctrl && !key.meta) {
-        lastInputTimeRef.current = Date.now();
+        const now = Date.now();
+        const timeSinceLast = now - lastInputTimeRef.current;
+        lastInputTimeRef.current = now;
+
+        // Activate paste mode on rapid input
+        if (timeSinceLast < PASTE_DETECT_MS && timeSinceLast > 0) {
+          pasteActiveRef.current = true;
+        }
+        // Reset settle timer on every character during paste
+        if (pasteActiveRef.current) {
+          if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
+          pasteTimerRef.current = setTimeout(() => { pasteActiveRef.current = false; }, PASTE_SETTLE_MS);
+        }
+
         setValue((prev) => prev.slice(0, cursor) + input + prev.slice(cursor));
         setCursor((prev) => prev + input.length);
         setDropdownIndex(0); // Reset dropdown selection on typing
@@ -510,7 +535,6 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   // ─── Paste collapse: show summary for large inputs ──────────
   const PASTE_THRESHOLD = 200; // chars before collapsing display
-  const isMultiline = value.includes("\n");
   const isPastedLong = value.length > PASTE_THRESHOLD && !value.startsWith("/");
   let displayValue = value;
   let pasteHint = "";
@@ -522,12 +546,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       : `paste ${chars.toLocaleString()} chars`;
     // Show only the hint, not the content — keeps prompt clean
     displayValue = "";
-  } else if (isMultiline) {
-    // For shorter multiline content, show first line + line count
-    const lines = value.split("\n");
-    const firstLine = lines[0].length > 60 ? lines[0].slice(0, 57) + "..." : lines[0];
-    pasteHint = `${firstLine}  (${lines.length} lines)`;
-    displayValue = "";
+  } else if (value.includes("\n")) {
+    // Short multiline: show content with visible newline markers
+    displayValue = value.replace(/\n/g, "↵");
   }
 
   // Render value with cursor
@@ -555,7 +576,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
         <Text bold color={promptColor}>{vimIndicator}{promptChar}</Text>
         {pasteHint ? (
-          <Text color={theme.dimmed} italic>{pasteHint} <Text color={promptColor}>Alt+↵ send</Text></Text>
+          <Text color={theme.dimmed} italic>{pasteHint} <Text color={promptColor}>↵ send</Text></Text>
         ) : (
           <Text>
             {before}
