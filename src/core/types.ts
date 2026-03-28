@@ -125,6 +125,7 @@ export interface KCodeConfig {
   disableWebAccess?: boolean; // Org-level: disable WebFetch/WebSearch
   auditLog?: boolean; // Org-level: require audit logging
   orgId?: string; // Organization identifier for audit trail
+  activeProfile?: string; // Currently active execution profile name (e.g., "safe", "fast", "review")
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";
