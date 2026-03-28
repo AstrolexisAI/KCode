@@ -102,9 +102,18 @@ const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 /** Maximum nesting depth for MCP tool arguments */
 const MAX_INPUT_DEPTH = 20;
 
+/** Maximum size of a single string field in MCP input (256 KB) */
+const MAX_STRING_FIELD_SIZE = 256 * 1024;
+
+/** Maximum number of keys in a single MCP input object */
+const MAX_INPUT_KEYS = 100;
+
+/** Maximum total number of array elements across all fields */
+const MAX_ARRAY_ELEMENTS = 1000;
+
 /**
- * Sanitize MCP tool input: strip prototype pollution keys and
- * reject excessively deep nesting.
+ * Sanitize MCP tool input: strip prototype pollution keys,
+ * reject excessively deep nesting, enforce field size limits.
  */
 export function sanitizeMcpInput(
   obj: Record<string, unknown>,
@@ -113,13 +122,20 @@ export function sanitizeMcpInput(
   if (depth > MAX_INPUT_DEPTH) {
     return { _error: "Input exceeds maximum nesting depth" };
   }
+  const entries = Object.entries(obj);
+  if (entries.length > MAX_INPUT_KEYS) {
+    return { _error: `Input has too many keys (${entries.length}, max ${MAX_INPUT_KEYS})` };
+  }
   const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
+  for (const [key, value] of entries) {
     if (DANGEROUS_KEYS.has(key)) continue;
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    if (typeof value === "string" && value.length > MAX_STRING_FIELD_SIZE) {
+      result[key] = value.slice(0, MAX_STRING_FIELD_SIZE) + `\n[Truncated at ${MAX_STRING_FIELD_SIZE} bytes]`;
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       result[key] = sanitizeMcpInput(value as Record<string, unknown>, depth + 1);
     } else if (Array.isArray(value)) {
-      result[key] = value.map((item) =>
+      const capped = value.slice(0, MAX_ARRAY_ELEMENTS);
+      result[key] = capped.map((item) =>
         item !== null && typeof item === "object" && !Array.isArray(item)
           ? sanitizeMcpInput(item as Record<string, unknown>, depth + 1)
           : item,
@@ -129,6 +145,51 @@ export function sanitizeMcpInput(
     }
   }
   return result;
+}
+
+// ─── Stdio Command Allowlist ────────────────────────────────────
+
+/** Commands that are allowed for stdio MCP transport by default */
+const ALLOWED_STDIO_COMMANDS = new Set([
+  "npx", "node", "bun", "bunx", "deno",
+  "python", "python3", "pip", "pipx", "uvx",
+  "docker", "podman",
+  "mcp-server", "mcp-server-*",
+]);
+
+/**
+ * Validate that a stdio MCP server command is safe to execute.
+ * Blocks shell invocations and suspicious commands.
+ */
+export function validateStdioCommand(command: string): { ok: boolean; reason?: string } {
+  // Block empty/whitespace-only commands
+  if (!command.trim()) {
+    return { ok: false, reason: "Empty command" };
+  }
+
+  // Block direct shell invocations
+  const shell = command.split("/").pop() ?? command;
+  const dangerousShells = new Set(["sh", "bash", "zsh", "fish", "csh", "tcsh", "dash", "ksh", "cmd", "powershell", "pwsh"]);
+  if (dangerousShells.has(shell)) {
+    return { ok: false, reason: `Direct shell invocation blocked: "${command}"` };
+  }
+
+  // Block commands with shell metacharacters that suggest injection
+  if (/[;|&$`\\]/.test(command)) {
+    return { ok: false, reason: `Command contains shell metacharacters: "${command}"` };
+  }
+
+  // In safe mode, also check the allowlist
+  if (process.env.KCODE_SAFE_PLUGINS === "1") {
+    const basename = command.split("/").pop() ?? command;
+    const matched = ALLOWED_STDIO_COMMANDS.has(basename)
+      || [...ALLOWED_STDIO_COMMANDS].some(p => p.endsWith("*") && basename.startsWith(p.slice(0, -1)));
+    if (!matched) {
+      return { ok: false, reason: `Command "${basename}" not in safe-plugins allowlist` };
+    }
+  }
+
+  return { ok: true };
 }
 
 // ─── MCP Server Connection (stdio) ──────────────────────────────
@@ -161,7 +222,14 @@ export class McpServerConnection {
   }
 
   async start(): Promise<void> {
-    log.info("mcp", `Starting server "${this.name}": ${this.config.command} ${(this.config.args ?? []).join(" ")}`);
+    // Validate the command before spawning
+    const cmd = this.config.command ?? "";
+    const validation = validateStdioCommand(cmd);
+    if (!validation.ok) {
+      throw new Error(`MCP server "${this.name}" blocked: ${validation.reason}`);
+    }
+
+    log.info("mcp", `Starting server "${this.name}": ${cmd} ${(this.config.args ?? []).join(" ")}`);
     const rawEnv = { ...process.env, ...(this.config.env ?? {}) };
     const env = Object.fromEntries(Object.entries(rawEnv).filter((e): e is [string, string] => e[1] !== undefined));
 

@@ -3,8 +3,8 @@
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 interface Rule {
   name: string;
@@ -21,7 +21,7 @@ export class RulesManager {
     // Load from project .kcode/rules/
     this.loadFromDir(join(cwd, ".kcode", "rules"));
     // Load from user ~/.kcode/rules/
-    this.loadFromDir(join(homedir(), ".kcode", "rules"));
+    this.loadFromDir(kcodePath("rules"));
   }
 
   private loadFromDir(dir: string): void {

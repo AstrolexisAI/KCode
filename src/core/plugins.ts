@@ -3,8 +3,8 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 export interface PluginManifest {
   name: string;
@@ -39,7 +39,7 @@ export class PluginManager {
   private userPluginsDir: string;
 
   constructor(userPluginsDir?: string) {
-    this.userPluginsDir = userPluginsDir ?? join(homedir(), ".kcode", "plugins");
+    this.userPluginsDir = userPluginsDir ?? kcodePath("plugins");
   }
 
   /**

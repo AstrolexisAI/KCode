@@ -3,7 +3,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 
 // ─── Built-in Styles ─────────────────────────────────────────────
 
@@ -77,7 +77,7 @@ export function getStyleInstructions(): string {
  */
 function getStyleDirs(): string[] {
   const dirs: string[] = [];
-  const userDir = join(homedir(), ".kcode", "output-styles");
+  const userDir = kcodePath("output-styles");
   if (existsSync(userDir)) dirs.push(userDir);
 
   const projectDir = join(process.cwd(), ".kcode", "output-styles");
@@ -125,7 +125,7 @@ function loadCustomStyleContent(name: string): string | null {
   }
 
   // User-level fallback
-  const userPath = join(homedir(), ".kcode", "output-styles", filename);
+  const userPath = kcodePath("output-styles", filename);
   if (existsSync(userPath)) {
     try {
       return readFileSync(userPath, "utf-8").trim();

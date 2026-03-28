@@ -3,7 +3,7 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 import type { ToolUseBlock, ToolResult } from "./types";
 import { log } from "./logger";
 import { evaluateHookifyRules } from "./hookify";
@@ -117,7 +117,7 @@ export class HookManager {
     this.loaded = true;
 
     // User-level settings (lower priority) — always trusted
-    const userSettingsPath = join(homedir(), ".kcode", "settings.json");
+    const userSettingsPath = kcodePath("settings.json");
     const userSettings = loadSettingsFile(userSettingsPath, "user");
 
     // Project-level settings (higher priority) — require workspace trust

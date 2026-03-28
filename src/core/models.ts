@@ -3,8 +3,8 @@
 // Each model entry maps a name to a base URL and optional metadata.
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -27,11 +27,11 @@ export interface ModelsConfig {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-let MODELS_PATH = join(homedir(), ".kcode", "models.json");
+let MODELS_PATH = kcodePath("models.json");
 
 /** Override the models.json path (for tests). Passing undefined resets to default. */
 export function _setModelsPathForTest(path?: string): void {
-  MODELS_PATH = path ?? join(homedir(), ".kcode", "models.json");
+  MODELS_PATH = path ?? kcodePath("models.json");
   cachedConfig = null;
 }
 

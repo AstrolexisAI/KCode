@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { kcodePath } from "../../core/paths";
 
 export function registerMcpCommand(program: Command): void {
   const mcpCmd = program
@@ -12,11 +13,10 @@ export function registerMcpCommand(program: Command): void {
     .action(async () => {
       const cwd = process.cwd();
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
 
       // Read configs directly (don't start servers for a listing)
       const paths = [
-        { path: join(homedir(), ".kcode", "settings.json"), scope: "user" },
+        { path: kcodePath("settings.json"), scope: "user" },
         { path: join(cwd, ".kcode", "settings.json"), scope: "project" },
       ];
 
@@ -59,10 +59,9 @@ export function registerMcpCommand(program: Command): void {
       }
 
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
 
       const settingsPath = opts.user
-        ? join(homedir(), ".kcode", "settings.json")
+        ? kcodePath("settings.json")
         : join(process.cwd(), ".kcode", "settings.json");
 
       let data: Record<string, any> = {};
@@ -100,10 +99,9 @@ export function registerMcpCommand(program: Command): void {
     .option("--user", "Remove from user-level settings")
     .action(async (name: string, opts: { user?: boolean }) => {
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
 
       const settingsPath = opts.user
-        ? join(homedir(), ".kcode", "settings.json")
+        ? kcodePath("settings.json")
         : join(process.cwd(), ".kcode", "settings.json");
 
       try {

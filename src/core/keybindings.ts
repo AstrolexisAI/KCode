@@ -1,8 +1,7 @@
 // KCode - Configurable Keybindings
 // Supports readline-style shortcuts and vim normal mode
 
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 
 export interface KeybindingConfig {
   /** Enable vim-style normal/insert mode toggle */
@@ -13,7 +12,7 @@ export interface KeybindingConfig {
 
 export type VimMode = "insert" | "normal";
 
-const KEYBINDINGS_PATH = join(homedir(), ".kcode", "keybindings.json");
+const KEYBINDINGS_PATH = kcodePath("keybindings.json");
 
 let config: KeybindingConfig | null = null;
 

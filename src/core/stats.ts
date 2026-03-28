@@ -1,9 +1,9 @@
 // KCode - Usage Statistics
 // Aggregates usage data from log files and transcript files
 
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -22,8 +22,8 @@ export interface UsageStats {
 
 // ─── Constants ──────────────────────────────────────────────────
 
-const LOG_DIR = join(homedir(), ".kcode", "logs");
-const TRANSCRIPTS_DIR = join(homedir(), ".kcode", "transcripts");
+const LOG_DIR = kcodePath("logs");
+const TRANSCRIPTS_DIR = kcodePath("transcripts");
 
 // ─── Log Parsing ────────────────────────────────────────────────
 

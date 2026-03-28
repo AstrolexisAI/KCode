@@ -3,8 +3,8 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
+import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -27,9 +27,9 @@ export interface MarketplaceConfig {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-const KCODE_DIR = join(homedir(), ".kcode");
-const MARKETPLACE_CONFIG_PATH = join(KCODE_DIR, "marketplace.json");
-const PLUGINS_DIR = join(KCODE_DIR, "plugins");
+const KCODE_DIR = kcodeHome();
+const MARKETPLACE_CONFIG_PATH = kcodePath("marketplace.json");
+const PLUGINS_DIR = kcodePath("plugins");
 const BUNDLED_REGISTRY_PATH = join(import.meta.dir, "..", "data", "plugin-registry.json");
 
 const DEFAULT_REGISTRY_URL = "https://plugins.kulvex.ai/api/v1";

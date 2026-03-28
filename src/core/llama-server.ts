@@ -5,16 +5,16 @@
 //   - MLX (mlx_lm.server) on macOS Apple Silicon
 
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodeHome, kcodePath } from "./paths";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { log } from "./logger";
 import { getServerConfig } from "./model-manager";
 
-const KCODE_HOME = join(homedir(), ".kcode");
-const PID_FILE = join(KCODE_HOME, "server.pid");
-const PORT_FILE = join(KCODE_HOME, "server.port");
-const LOG_FILE = join(KCODE_HOME, "server.log");
+const KCODE_HOME = kcodeHome();
+const PID_FILE = kcodePath("server.pid");
+const PORT_FILE = kcodePath("server.port");
+const LOG_FILE = kcodePath("server.log");
 
 let serverProcess: ChildProcess | null = null;
 

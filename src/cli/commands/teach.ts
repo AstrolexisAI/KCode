@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { kcodePath } from "../../core/paths";
 
 export function registerTeachCommand(program: Command): void {
   const teachCmd = program
@@ -11,13 +12,12 @@ export function registerTeachCommand(program: Command): void {
     .option("-g, --global", "Create in ~/.kcode/awareness/ instead of project")
     .action(async (name: string, opts: { global?: boolean }) => {
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
       const { mkdirSync, existsSync, writeFileSync } = await import("node:fs");
       const { execSync } = await import("node:child_process");
 
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
       const dir = opts.global
-        ? join(homedir(), ".kcode", "awareness")
+        ? kcodePath("awareness")
         : join(process.cwd(), ".kcode", "awareness");
 
       mkdirSync(dir, { recursive: true });
@@ -53,10 +53,9 @@ export function registerTeachCommand(program: Command): void {
     .description("List all awareness modules")
     .action(async () => {
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
       const { readdirSync, existsSync, readFileSync, statSync } = await import("node:fs");
 
-      const globalDir = join(homedir(), ".kcode", "awareness");
+      const globalDir = kcodePath("awareness");
       const projectDir = join(process.cwd(), ".kcode", "awareness");
 
       let found = false;
@@ -92,12 +91,11 @@ export function registerTeachCommand(program: Command): void {
     .option("-g, --global", "Remove from ~/.kcode/awareness/")
     .action(async (name: string, opts: { global?: boolean }) => {
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
       const { existsSync, unlinkSync } = await import("node:fs");
 
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
       const dir = opts.global
-        ? join(homedir(), ".kcode", "awareness")
+        ? kcodePath("awareness")
         : join(process.cwd(), ".kcode", "awareness");
 
       const filePath = join(dir, `${slug}.md`);
@@ -116,13 +114,12 @@ export function registerTeachCommand(program: Command): void {
     .option("-g, --global", "Edit from ~/.kcode/awareness/")
     .action(async (name: string, opts: { global?: boolean }) => {
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
       const { existsSync } = await import("node:fs");
       const { execSync } = await import("node:child_process");
 
       const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
       const dir = opts.global
-        ? join(homedir(), ".kcode", "awareness")
+        ? kcodePath("awareness")
         : join(process.cwd(), ".kcode", "awareness");
 
       const filePath = join(dir, `${slug}.md`);

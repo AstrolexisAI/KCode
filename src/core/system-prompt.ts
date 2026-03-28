@@ -5,7 +5,7 @@ import type { KCodeConfig } from "./types";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 import { log } from "./logger";
 import { loadLearnings } from "../tools/learn";
 import { loadDistilledExamples } from "./distillation";
@@ -575,7 +575,7 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
 
   static loadMemoryInstructions(): string | null {
     const memoryPaths = [
-      join(homedir(), ".kcode", "memory.md"),
+      kcodePath("memory.md"),
     ];
 
     for (const memPath of memoryPaths) {
@@ -682,7 +682,7 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
    * This file can add personality traits, preferences, context about the user, etc.
    */
   static loadExtensibleIdentity(): string | null {
-    const identityPath = join(homedir(), ".kcode", "identity.md");
+    const identityPath = kcodePath("identity.md");
     try {
       if (!existsSync(identityPath)) return null;
       const content = readFileSync(identityPath, "utf-8").trim();
@@ -708,7 +708,7 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
   static loadAwarenessModules(projectDir?: string): string[] {
     const dir = projectDir
       ? join(projectDir, ".kcode", "awareness")
-      : join(homedir(), ".kcode", "awareness");
+      : kcodePath("awareness");
 
     const modules: string[] = [];
 

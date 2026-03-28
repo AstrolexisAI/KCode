@@ -3,9 +3,9 @@
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 
-const BOOKMARKS_DIR = join(homedir(), ".kcode", "bookmarks");
+const BOOKMARKS_DIR = kcodePath("bookmarks");
 
 export interface Bookmark {
   label: string;

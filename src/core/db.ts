@@ -4,8 +4,8 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
+import { kcodeHome } from "./paths";
 
 let _db: Database | null = null;
 
@@ -13,8 +13,7 @@ let _db: Database | null = null;
  * Resolve the DB path at call time so env var overrides work in tests.
  */
 function resolveDbPath(): string {
-  const kcodeHome = process.env.KCODE_HOME ?? join(homedir(), ".kcode");
-  return process.env.KCODE_DB_PATH ?? join(kcodeHome, "awareness.db");
+  return process.env.KCODE_DB_PATH ?? join(kcodeHome(), "awareness.db");
 }
 
 /**

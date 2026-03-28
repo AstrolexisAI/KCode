@@ -2,7 +2,7 @@
 // Settings hierarchy: user > project > local, plus env vars and KCODE.md loading
 
 import { join, dirname, resolve } from "node:path";
-import { homedir } from "node:os";
+import { kcodeHome, kcodePath } from "./paths";
 import { readdirSync, statSync } from "node:fs";
 import type { KCodeConfig, PermissionMode, PermissionRule, PermissionRuleAction } from "./types";
 import { getGitRoot } from "./git";
@@ -69,11 +69,11 @@ export interface ManagedPolicy {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-const KCODE_HOME = join(homedir(), ".kcode");
-const USER_SETTINGS_PATH = join(KCODE_HOME, "settings.json");
+const KCODE_HOME = kcodeHome();
+const USER_SETTINGS_PATH = kcodePath("settings.json");
 const MANAGED_SETTINGS_PATHS = [
   "/etc/kcode/policy.json",                  // System-wide admin policy
-  join(KCODE_HOME, "managed-settings.json"),  // Per-user admin-deployed policy
+  kcodePath("managed-settings.json"),         // Per-user admin-deployed policy
 ];
 
 // Cached managed policy with mtime tracking for invalidation

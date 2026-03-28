@@ -5,6 +5,7 @@ import type { ActionContext } from "./action-helpers.js";
 import { listModels, loadModelsConfig } from "../../core/models.js";
 import { getAvailableThemes, getCurrentThemeName } from "../../core/theme.js";
 import { log } from "../../core/logger.js";
+import { kcodePath } from "../../core/paths.js";
 
 export async function handleModelConfigAction(
   action: string,
@@ -52,7 +53,6 @@ export async function handleModelConfigAction(
     case "config": {
       const { existsSync } = await import("node:fs");
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
 
       const cwd = appConfig.workingDirectory;
 
@@ -77,7 +77,7 @@ export async function handleModelConfigAction(
         { name: "Environment vars", exists: !!(process.env.KCODE_MODEL || process.env.KCODE_API_KEY || process.env.KCODE_API_BASE) },
         { name: ".kcode/settings.local.json", exists: existsSync(join(cwd, ".kcode", "settings.local.json")) },
         { name: ".kcode/settings.json", exists: existsSync(join(cwd, ".kcode", "settings.json")) },
-        { name: "~/.kcode/settings.json", exists: existsSync(join(homedir(), ".kcode", "settings.json")) },
+        { name: "~/.kcode/settings.json", exists: existsSync(kcodePath("settings.json")) },
       ];
 
       for (const src of sources) {
@@ -398,9 +398,7 @@ export async function handleModelConfigAction(
           const { McpOAuthClient, discoverOAuthConfig } = await import("../../core/mcp-oauth");
 
           // Try to get OAuth config from server settings
-          const { join } = await import("node:path");
-          const { homedir } = await import("node:os");
-          const settingsPath = join(homedir(), ".kcode", "settings.json");
+          const settingsPath = kcodePath("settings.json");
           let oauthConfig = null;
           try {
             const file = Bun.file(settingsPath);
@@ -490,15 +488,13 @@ export async function handleModelConfigAction(
     }
     case "telemetry": {
       const { isTelemetryEnabled, setTelemetryEnabled } = await import("../../core/analytics.js");
-      const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
 
       const current = isTelemetryEnabled();
       const arg = args?.trim().toLowerCase();
 
       if (arg === "on" || arg === "enable" || arg === "true" || arg === "yes") {
         setTelemetryEnabled(true);
-        const settingsPath = join(homedir(), ".kcode", "settings.json");
+        const settingsPath = kcodePath("settings.json");
         try {
           const file = Bun.file(settingsPath);
           const existing = (await file.exists()) ? await file.json() : {};
@@ -510,7 +506,7 @@ export async function handleModelConfigAction(
 
       if (arg === "off" || arg === "disable" || arg === "false" || arg === "no") {
         setTelemetryEnabled(false);
-        const settingsPath = join(homedir(), ".kcode", "settings.json");
+        const settingsPath = kcodePath("settings.json");
         try {
           const file = Bun.file(settingsPath);
           const existing = (await file.exists()) ? await file.json() : {};

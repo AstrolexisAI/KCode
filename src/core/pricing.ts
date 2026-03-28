@@ -36,9 +36,8 @@ async function loadCustomPricing(): Promise<void> {
   if (customLoaded) return;
   customLoaded = true;
   try {
-    const { join } = await import("node:path");
-    const { homedir } = await import("node:os");
-    const file = Bun.file(join(homedir(), ".kcode", "pricing.json"));
+    const { kcodePath } = await import("./paths");
+    const file = Bun.file(kcodePath("pricing.json"));
     if (await file.exists()) {
       customPricing = await file.json();
     }

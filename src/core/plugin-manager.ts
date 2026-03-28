@@ -3,8 +3,8 @@
 // Plugins provide skills (slash commands), hooks, and MCP server configs
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, cpSync } from "node:fs";
+import { kcodePath } from "./paths";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export class PluginManager {
   private pluginsDir: string;
 
   constructor(pluginsDir?: string) {
-    this.pluginsDir = pluginsDir ?? join(homedir(), ".kcode", "plugins");
+    this.pluginsDir = pluginsDir ?? kcodePath("plugins");
   }
 
   /**

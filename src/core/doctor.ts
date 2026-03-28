@@ -3,7 +3,7 @@
 
 import { existsSync, accessSync, constants, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodeHome } from "./paths";
 import { createServer } from "node:net";
 import { loadModelsConfig, getDefaultModel, getModelBaseUrl } from "./models";
 import { getUserMemoryDir } from "./memory";
@@ -60,7 +60,7 @@ async function dirSizeBytes(path: string): Promise<number> {
 
 export async function runDiagnostics(): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
-  const kcodeDir = join(homedir(), ".kcode");
+  const kcodeDir = kcodeHome();
 
   // 1. Bun runtime
   try {
@@ -266,4 +266,158 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
   }
 
   return results;
+}
+
+// ─── Deep Diagnostics ───────────────────────────────────────────
+
+export interface DeepDiagnosticSection {
+  title: string;
+  items: Array<{ label: string; value: string; status?: "ok" | "warn" | "fail" }>;
+}
+
+/**
+ * Extended diagnostics: MCP health, storage paths, permission mode,
+ * loaded plugins, config origin, and security posture.
+ */
+export async function runDeepDiagnostics(): Promise<DeepDiagnosticSection[]> {
+  const sections: DeepDiagnosticSection[] = [];
+  const kcodeDir = kcodeHome();
+
+  // ── Storage Paths ─────────────────────────────────────────
+  const storagePaths = [
+    { label: "KCODE_HOME", value: kcodeDir },
+    { label: "KCODE_HOME source", value: process.env.KCODE_HOME ? "env: KCODE_HOME" : "default (~/.kcode)" },
+    { label: "Database", value: process.env.KCODE_DB_PATH ?? join(kcodeDir, "awareness.db") },
+    { label: "Transcripts", value: join(kcodeDir, "transcripts") },
+    { label: "Snapshots", value: join(kcodeDir, "snapshots") },
+    { label: "Logs", value: join(kcodeDir, "logs") },
+    { label: "Plugins", value: join(kcodeDir, "plugins") },
+    { label: "Memory", value: getUserMemoryDir() },
+  ];
+  sections.push({
+    title: "Storage Paths",
+    items: storagePaths.map((p) => ({
+      ...p,
+      status: existsSync(p.value) ? (dirWritable(p.value) ? "ok" as const : "warn" as const) : undefined,
+    })),
+  });
+
+  // ── Config Origin ─────────────────────────────────────────
+  const configItems: DeepDiagnosticSection["items"] = [];
+  const configFiles = [
+    { label: "User settings", path: join(kcodeDir, "settings.json") },
+    { label: "Project settings", path: join(process.cwd(), ".kcode", "settings.json") },
+    { label: "Local settings", path: join(process.cwd(), ".kcode", "settings.local.json") },
+    { label: "Models config", path: join(kcodeDir, "models.json") },
+    { label: "KCODE.md", path: join(process.cwd(), "KCODE.md") },
+  ];
+  for (const cf of configFiles) {
+    configItems.push({
+      label: cf.label,
+      value: existsSync(cf.path) ? cf.path : "(not found)",
+      status: existsSync(cf.path) ? "ok" : undefined,
+    });
+  }
+
+  // Active env var overrides
+  const envOverrides = ["KCODE_MODEL", "KCODE_API_KEY", "KCODE_API_BASE", "KCODE_PERMISSION_MODE", "KCODE_HOME", "KCODE_DB_PATH", "KCODE_SAFE_PLUGINS"];
+  for (const key of envOverrides) {
+    if (process.env[key]) {
+      configItems.push({ label: `env ${key}`, value: key === "KCODE_API_KEY" ? "(set, redacted)" : process.env[key]!, status: "ok" });
+    }
+  }
+  sections.push({ title: "Config Origin", items: configItems });
+
+  // ── Permission & Security ─────────────────────────────────
+  const secItems: DeepDiagnosticSection["items"] = [];
+  const { buildConfig } = await import("./config.js");
+  try {
+    const config = await buildConfig(process.cwd());
+    secItems.push({ label: "Permission mode", value: config.permissionMode ?? "ask", status: config.permissionMode === "auto" ? "warn" : "ok" });
+    secItems.push({ label: "Safe plugins", value: process.env.KCODE_SAFE_PLUGINS === "1" ? "enabled" : "disabled" });
+    const ruleCount = config.permissionRules?.length ?? 0;
+    secItems.push({ label: "Permission rules", value: `${ruleCount} rule(s) configured` });
+  } catch {
+    secItems.push({ label: "Permission mode", value: "unknown (config load failed)", status: "fail" });
+  }
+  sections.push({ title: "Permission & Security", items: secItems });
+
+  // ── MCP Health ────────────────────────────────────────────
+  const mcpItems: DeepDiagnosticSection["items"] = [];
+  try {
+    const { getMcpManager } = await import("./mcp.js");
+    const manager = getMcpManager();
+    const servers = manager.getServerStatus();
+    if (servers.length === 0) {
+      mcpItems.push({ label: "MCP servers", value: "none configured" });
+    } else {
+      for (const s of servers) {
+        mcpItems.push({
+          label: `Server: ${s.name}`,
+          value: `${s.alive ? "alive" : "dead"}, ${s.toolCount} tool(s)`,
+          status: s.alive ? "ok" : "fail",
+        });
+      }
+    }
+  } catch {
+    mcpItems.push({ label: "MCP servers", value: "MCP manager not available" });
+  }
+  sections.push({ title: "MCP Health", items: mcpItems });
+
+  // ── Loaded Plugins ────────────────────────────────────────
+  const pluginItems: DeepDiagnosticSection["items"] = [];
+  try {
+    const { PluginManager } = await import("./plugin-manager.js");
+    const pm = new PluginManager();
+    const plugins = await pm.list();
+    if (plugins.length === 0) {
+      pluginItems.push({ label: "Plugins", value: "none installed" });
+    } else {
+      for (const p of plugins) {
+        const m = (p as any).manifest ?? p;
+        pluginItems.push({
+          label: m.name,
+          value: `v${m.version} — ${m.description || "no description"}`,
+          status: "ok",
+        });
+      }
+    }
+  } catch {
+    pluginItems.push({ label: "Plugins", value: "plugin manager not available" });
+  }
+  sections.push({ title: "Loaded Plugins", items: pluginItems });
+
+  // ── HTTP Endpoints ────────────────────────────────────────
+  const endpointItems: DeepDiagnosticSection["items"] = [];
+  const endpoints = [
+    "GET  /api/health", "GET  /api/status", "POST /api/prompt",
+    "GET  /api/tools", "GET  /api/sessions", "POST /api/tool (allowlist only)",
+    "GET  /api/context", "POST /api/compact", "GET  /api/plan",
+    "GET  /api/mcp", "GET  /api/agents",
+  ];
+  for (const ep of endpoints) {
+    endpointItems.push({ label: ep, value: "available" });
+  }
+  sections.push({ title: "HTTP API Endpoints (when serve is active)", items: endpointItems });
+
+  return sections;
+}
+
+/**
+ * Format deep diagnostics for terminal output.
+ */
+export function formatDeepDiagnostics(sections: DeepDiagnosticSection[]): string {
+  const lines: string[] = [];
+  const statusIcon = (s?: "ok" | "warn" | "fail") =>
+    s === "ok" ? "\x1b[32m✓\x1b[0m" : s === "warn" ? "\x1b[33m⚠\x1b[0m" : s === "fail" ? "\x1b[31m✗\x1b[0m" : " ";
+
+  for (const section of sections) {
+    lines.push("");
+    lines.push(`\x1b[1m── ${section.title} ${"─".repeat(Math.max(0, 50 - section.title.length))}\x1b[0m`);
+    for (const item of section.items) {
+      const icon = statusIcon(item.status);
+      lines.push(`  ${icon} ${item.label}: ${item.value}`);
+    }
+  }
+  return lines.join("\n");
 }

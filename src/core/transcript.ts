@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 import type { Message, ToolUseBlock, ToolResultBlock, ContentBlock } from "./types";
 import { log } from "./logger";
 
@@ -32,7 +32,7 @@ interface SessionMeta {
 
 // ─── Constants ───────────────────────────────────────────────────
 
-const TRANSCRIPTS_DIR = join(homedir(), ".kcode", "transcripts");
+const TRANSCRIPTS_DIR = kcodePath("transcripts");
 const MAX_SESSIONS = 100;
 
 // ─── TranscriptManager ──────────────────────────────────────────

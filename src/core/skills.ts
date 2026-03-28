@@ -2,8 +2,8 @@
 // Discovers, loads, and executes slash-command skills from multiple sources
 
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { kcodePath } from "./paths";
 import { builtinSkills, type SkillDefinition } from "./builtin-skills.js";
 import { TemplateManager } from "./templates.js";
 import { getPluginManager } from "./plugins.js";
@@ -181,7 +181,7 @@ export class SkillManager {
     }
 
     // User-level skills (~/.kcode/skills/)
-    const userDir = join(homedir(), ".kcode", "skills");
+    const userDir = kcodePath("skills");
     for (const skill of loadSkillsFromDirectory(userDir)) {
       byName.set(skill.name, skill);
     }

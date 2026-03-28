@@ -3,7 +3,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { kcodePath } from "./paths";
 import type { Message } from "./types";
 
 export interface SessionBranch {
@@ -24,7 +24,7 @@ interface BranchMeta {
   messageCount: number;
 }
 
-const SESSIONS_DIR = join(homedir(), ".kcode", "sessions");
+const SESSIONS_DIR = kcodePath("sessions");
 
 function branchDir(sessionId: string): string {
   return join(SESSIONS_DIR, sessionId, "branches");

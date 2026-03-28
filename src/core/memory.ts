@@ -2,7 +2,7 @@
 // Read/write memory files with YAML frontmatter + markdown content
 
 import { join, dirname, basename } from "node:path";
-import { homedir } from "node:os";
+import { kcodeHome } from "./paths";
 import { createHash } from "node:crypto";
 import { readdirSync, statSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -33,7 +33,7 @@ export interface MemoryMeta {
 
 // ─── Constants ──────────────────────────────────────────────────
 
-const KCODE_HOME = join(homedir(), ".kcode");
+const KCODE_HOME = kcodeHome();
 const MEMORY_INDEX = "MEMORY.md";
 const MEMORY_LINE_LIMIT = 200;
 

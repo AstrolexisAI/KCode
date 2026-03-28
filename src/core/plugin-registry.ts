@@ -3,10 +3,8 @@
 
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { log } from "./logger";
-
-const PLUGINS_DIR = join(homedir(), ".kcode", "plugins");
+import { kcodePath } from "./paths";
 const REGISTRY_URL = "https://registry.kulvex.ai/plugins";
 
 export interface RegistryEntry {
@@ -58,13 +56,13 @@ export async function installPlugin(name: string): Promise<{ success: boolean; m
   const entry = entries.find(e => e.name === name);
   if (!entry) return { success: false, message: `Plugin "${name}" not found in registry.` };
 
-  const pluginDir = join(PLUGINS_DIR, name);
+  const pluginDir = join(kcodePath("plugins"), name);
   if (existsSync(pluginDir)) {
     return { success: false, message: `Plugin "${name}" is already installed at ${pluginDir}` };
   }
 
   // Clone the plugin repo
-  if (!existsSync(PLUGINS_DIR)) mkdirSync(PLUGINS_DIR, { recursive: true });
+  if (!existsSync(kcodePath("plugins"))) mkdirSync(kcodePath("plugins"), { recursive: true });
 
   try {
     const proc = Bun.spawnSync(["git", "clone", "--depth", "1", entry.url, pluginDir]);
@@ -83,7 +81,7 @@ export async function installPlugin(name: string): Promise<{ success: boolean; m
  * Uninstall a plugin by name.
  */
 export async function uninstallPlugin(name: string): Promise<{ success: boolean; message: string }> {
-  const pluginDir = join(PLUGINS_DIR, name);
+  const pluginDir = join(kcodePath("plugins"), name);
   if (!existsSync(pluginDir)) {
     return { success: false, message: `Plugin "${name}" is not installed.` };
   }

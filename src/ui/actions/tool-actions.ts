@@ -2,6 +2,7 @@
 // Auto-extracted from builtin-actions.ts
 
 import type { ActionContext } from "./action-helpers.js";
+import { kcodePath } from "../../core/paths.js";
 
 export async function handleToolAction(
   action: string,
@@ -474,10 +475,9 @@ export async function handleToolAction(
     case "hooks": {
       const { readFileSync, existsSync } = await import("node:fs");
       const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
 
       const sources = [
-        { label: "User (~/.kcode/settings.json)", path: join(homedir(), ".kcode", "settings.json") },
+        { label: "User (~/.kcode/settings.json)", path: kcodePath("settings.json") },
         { label: "Project (.kcode/settings.json)", path: join(appConfig.workingDirectory, ".kcode", "settings.json") },
       ];
 
