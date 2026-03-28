@@ -7,9 +7,10 @@ export interface ThinkTagEvent {
   text: string;
 }
 
-const OPEN_TAGS = ["<think>", "<reasoning>"];
+const OPEN_TAGS = ["<think>", "<thinking>", "<reasoning>"];
 const CLOSE_MAP: Record<string, string> = {
   "<think>": "</think>",
+  "<thinking>": "</thinking>",
   "<reasoning>": "</reasoning>",
 };
 const MAX_TAG_LEN = 12; // length of "</reasoning>"
