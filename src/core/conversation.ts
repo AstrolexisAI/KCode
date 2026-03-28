@@ -122,7 +122,8 @@ export function detectLanguage(text: string): "es" | "fr" | "pt" | "en" {
  */
 export function looksTheoretical(prompt: string): boolean {
   const lower = prompt.toLowerCase();
-  // Strong signals: formal proof/analysis language
+
+  // ── Strong signals: formal proof/analysis language ──────────
   const strongPatterns = [
     /\bdemuestra\s+(formalmente|que)\b/,
     /\bprove\s+(that|formally)\b/,
@@ -142,7 +143,25 @@ export function looksTheoretical(prompt: string): boolean {
   ];
   if (strongPatterns.some(p => p.test(lower))) return true;
 
-  // Moderate signals: multiple formal keywords in the same prompt
+  // ── Structured reasoning prompt: long, multiline, with sections ──
+  // Prompts with structured sections (###, PARTE, numbered tasks) and
+  // reasoning keywords are analytical exercises, not code tasks.
+  const hasStructuredSections = /^#{2,4}\s+/m.test(prompt) || /\bparte\s+\d/i.test(prompt) || /\b(task|tarea)\s*\d/i.test(prompt);
+  const hasDataTables = /\|.*\|.*\|/m.test(prompt);
+  const hasReasoningKeywords = [
+    "razonamiento", "reasoning", "paso a paso", "step by step",
+    "trade-off", "contraejemplo", "counterexample", "diagnóstico",
+    "diagnostic", "optimización", "optimization", "consistencia",
+    "consistency", "meta razonamiento", "meta reasoning",
+    "maximizar", "maximize", "minimizar", "minimize",
+  ].filter(kw => lower.includes(kw)).length;
+
+  // Long prompt (>500 chars) with sections + reasoning language = theoretical
+  if (prompt.length > 500 && hasStructuredSections && hasReasoningKeywords >= 1) return true;
+  // Prompt with data tables + reasoning keywords = analytical exercise
+  if (hasDataTables && hasReasoningKeywords >= 2) return true;
+
+  // ── Moderate signals: multiple formal keywords ─────────────
   const formalKeywords = [
     "demuestra", "prove", "formalmente", "formally", "reducible",
     "decidible", "decidability", "equivalencia", "equivalence",
@@ -217,6 +236,7 @@ export class ConversationManager {
   private static MAX_CHECKPOINTS = 10;
   private abortController: AbortController | null = null;
   private _theoreticalMode = false;
+  private _theoreticalRetries = 0;
   private turnsSincePromptRebuild = 0;
   private systemPromptHash = "";
   private sessionStartTime = Date.now();
@@ -398,6 +418,7 @@ export class ConversationManager {
       const lang = detectLanguage(userMessage);
       log.info("session", `Detected theoretical prompt (lang=${lang}) — disabling tools for this turn`);
       this._theoreticalMode = true;
+      this._theoreticalRetries = 0;
       const langHint = lang !== "en" ? ` You MUST respond in ${lang === "es" ? "Spanish" : lang === "fr" ? "French" : lang === "pt" ? "Portuguese" : "the user's language"}.` : "";
       this.state.messages.push({
         role: "user",
@@ -840,17 +861,26 @@ export class ConversationManager {
 
       // Theoretical mode: drop all tool calls and force text-only response
       if (this._theoreticalMode && toolCalls.length > 0) {
-        log.info("session", `Theoretical mode: dropping ${toolCalls.length} tool call(s)`);
+        this._theoreticalRetries = (this._theoreticalRetries ?? 0) + 1;
+        log.info("session", `Theoretical mode: dropping ${toolCalls.length} tool call(s) (attempt ${this._theoreticalRetries})`);
         const textOnly = assistantContent.filter(b => b.type === "text");
         this.state.messages[this.state.messages.length - 1] = {
           role: "assistant",
           content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
         };
+
+        // After 2 retries, stop the turn — the model won't comply
+        if (this._theoreticalRetries >= 2) {
+          log.warn("session", "Theoretical mode: model persists with tool calls after 2 retries — stopping turn");
+          yield { type: "turn_end", stopReason: "theoretical_no_tools" };
+          this._theoreticalRetries = 0;
+          return;
+        }
+
         this.state.messages.push({
           role: "user",
           content: "[SYSTEM] Tools are disabled for theoretical questions. Answer with text only. Do not attempt any tool calls.",
         });
-        // Continue loop — model will retry without tools
         yield { type: "turn_end", stopReason: "theoretical_no_tools" };
         continue;
       }
