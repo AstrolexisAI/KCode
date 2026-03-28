@@ -146,23 +146,33 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   // ─── Input buffer ──────────────────────────────────────────────
   // All character input accumulates in a buffer. A flush timer fires
-  // after 16ms of no input, inserting the entire buffer into value
+  // after 32ms of no input, inserting the entire buffer into value
   // as a single atomic operation. This eliminates race conditions
   // from interleaved setState calls during rapid paste events.
   //
-  // For normal typing (>50ms between keys), each keystroke flushes
-  // individually before the next arrives — no perceptible delay.
-  // For paste (many chars in <1ms), the entire paste accumulates
-  // in the buffer and flushes as one string.
+  // pasteActiveRef stays true for 80ms after the last flush, covering
+  // inter-chunk gaps when the OS splits a paste into multiple stdin
+  // reads. Enter checks both the buffer AND pasteActiveRef to decide
+  // whether to insert \n or submit.
   const inputBufferRef = useRef("");
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const INPUT_FLUSH_MS = 16; // ~1 frame at 60fps
+  const pasteActiveRef = useRef(false);
+  const pasteSettleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const INPUT_FLUSH_MS = 32;
+  const PASTE_SETTLE_MS = 80;
 
   const flushInputBuffer = useCallback(() => {
     const buf = inputBufferRef.current;
     inputBufferRef.current = "";
     flushTimerRef.current = null;
     if (buf.length === 0) return;
+
+    // Mark paste as active — persists for PASTE_SETTLE_MS after last flush
+    pasteActiveRef.current = true;
+    if (pasteSettleTimerRef.current) clearTimeout(pasteSettleTimerRef.current);
+    pasteSettleTimerRef.current = setTimeout(() => {
+      pasteActiveRef.current = false;
+    }, PASTE_SETTLE_MS);
 
     const pos = cursorRef.current;
     cursorRef.current = pos + buf.length;
@@ -175,9 +185,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     flushTimerRef.current = setTimeout(flushInputBuffer, INPUT_FLUSH_MS);
   }, [flushInputBuffer]);
 
-  // Cleanup flush timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => () => {
     if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    if (pasteSettleTimerRef.current) clearTimeout(pasteSettleTimerRef.current);
   }, []);
 
   const resetTabState = useCallback(() => {
@@ -213,6 +224,8 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     setCursor(0);
     cursorRef.current = 0;
     resetTabState();
+    pasteActiveRef.current = false;
+    if (pasteSettleTimerRef.current) { clearTimeout(pasteSettleTimerRef.current); pasteSettleTimerRef.current = null; }
     onSubmit(finalValue);
   }, [value, onSubmit, resetTabState]);
 
@@ -349,16 +362,16 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
           }
         }
 
-        // If the input buffer has pending characters, this Enter is part
-        // of a paste — append \n to the buffer instead of submitting.
-        // This is deterministic: buffer non-empty = paste in progress.
-        if (inputBufferRef.current.length > 0) {
+        // If the input buffer has pending characters OR paste is still
+        // active (buffer was recently flushed), this Enter is part of a
+        // paste — append \n to the buffer instead of submitting.
+        if (inputBufferRef.current.length > 0 || pasteActiveRef.current) {
           inputBufferRef.current += "\n";
           scheduleFlush();
           return;
         }
 
-        // No pending buffer: submit normally
+        // No active paste: submit normally
         submit();
         return;
       }
