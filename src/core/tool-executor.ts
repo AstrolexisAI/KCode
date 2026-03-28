@@ -11,6 +11,7 @@ import { LoopGuardState, buildDedupKey, extractBashLoopPattern, LOOP_PATTERN_THR
 import { log } from "./logger";
 import { getWorldModel } from "./world-model";
 import { getIntentionEngine } from "./intentions";
+import type { DebugTracer } from "./debug-tracer";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -24,6 +25,7 @@ export interface ToolExecutionContext {
   contextWindowSize: number;
   abortController: AbortController | null;
   toolUseCount: number;
+  debugTracer?: DebugTracer | null;
 }
 
 export interface ToolExecutionResult {
@@ -160,6 +162,9 @@ export async function* executeToolsSequential(
           // Hard redirect: skip this call, force a strategy change, reset counter
           entry.redirects++;
           log.warn("tool", `Loop pattern HARD redirect #${entry.redirects} (${pattern}): ${entry.count} similar calls — forcing strategy change`);
+          if (ctx.debugTracer?.isEnabled()) {
+            ctx.debugTracer.traceGuard("loop-pattern-hard", true, `Pattern "${pattern}" hit ${entry.count} times (redirect #${entry.redirects})`);
+          }
           entry.warned = true;
           entry.count = 0;
           entry.examples = [];
@@ -172,18 +177,27 @@ export async function* executeToolsSequential(
           // Soft redirect: inject a strategy hint
           entry.warned = true;
           log.info("tool", `Loop pattern detected (${pattern}): ${entry.count} similar calls, injecting redirect`);
+          if (ctx.debugTracer?.isEnabled()) {
+            ctx.debugTracer.traceGuard("loop-pattern-soft", true, `Pattern "${pattern}" at ${entry.count} occurrences (soft warning)`);
+          }
         }
       }
     }
 
     // Safety net: allowed/disallowed tools filter (for tools injected after pre-filter, e.g. via MCP)
     if (guardState.allowedToolsSet && !guardState.allowedToolsSet.has(call.name.toLowerCase())) {
+      if (ctx.debugTracer?.isEnabled()) {
+        ctx.debugTracer.tracePermission(call.name, "blocked", "not in allowed tools list");
+      }
       const blockedContent = `Tool '${call.name}' is not in the allowed tools list`;
       yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockedContent, isError: true };
       toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
       continue;
     }
     if (guardState.disallowedToolsSet?.has(call.name.toLowerCase())) {
+      if (ctx.debugTracer?.isEnabled()) {
+        ctx.debugTracer.tracePermission(call.name, "blocked", "in disallowed tools list");
+      }
       const blockedContent = `Tool '${call.name}' is in the disallowed tools list`;
       yield { type: "tool_result", name: call.name, toolUseId: call.id, result: blockedContent, isError: true };
       toolResultBlocks.push({ type: "tool_result", tool_use_id: call.id, content: blockedContent, is_error: true });
@@ -193,6 +207,9 @@ export async function* executeToolsSequential(
     // 1. Check permissions before executing
     const permResult = await ctx.permissions.checkPermission(call);
     if (!permResult.allowed) {
+      if (ctx.debugTracer?.isEnabled()) {
+        ctx.debugTracer.tracePermission(call.name, "denied", permResult.reason ?? "blocked by permission system");
+      }
       turnHadDenial = true;
       const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}. STOP: Do not retry this tool. Inform the user that permission mode needs to be changed (use -p auto) or approve in interactive mode.`;
       yield { type: "tool_result", name: call.name, toolUseId: call.id, result: deniedContent, isError: true };

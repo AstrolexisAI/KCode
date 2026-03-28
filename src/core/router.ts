@@ -7,6 +7,7 @@ import { log } from "./logger";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { getDebugTracer } from "./debug-tracer";
 
 // ─── Task Types ─────────────────────────────────────────────────
 
@@ -233,6 +234,11 @@ export async function routeToModel(
     );
     if (matched && (taskType === "vision" || matched.name !== defaultModel)) {
       log.info("router", `Routing ${taskType} task to ${matched.name}`);
+      const tracer = getDebugTracer();
+      if (tracer.isEnabled()) {
+        const candidates = models.filter(m => caps.some(cap => m.capabilities?.includes(cap))).map(m => m.name);
+        tracer.traceRouting(taskType, matched.name, candidates);
+      }
       return matched.name;
     }
     if (taskType === "vision" && !matched) {

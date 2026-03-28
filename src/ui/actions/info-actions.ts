@@ -528,6 +528,60 @@ export async function handleInfoAction(
 
       return lines.join("\n");
     }
+    case "debug": {
+      const { getDebugTracer } = await import("../../core/debug-tracer.js");
+      const tracer = getDebugTracer();
+      const arg = (args ?? "").trim().toLowerCase();
+
+      if (arg === "" || arg === "on") {
+        tracer.enable();
+        // Also attach to conversation manager if not already
+        if (!conversationManager.getDebugTracer()) {
+          conversationManager.setDebugTracer(tracer);
+        }
+        return "  Debug tracing enabled. Agent decisions will be recorded.\n  Use /debug trace to view, /debug off to disable.";
+      }
+
+      if (arg === "off") {
+        tracer.disable();
+        return "  Debug tracing disabled.";
+      }
+
+      if (arg === "clear") {
+        const count = tracer.size;
+        tracer.clear();
+        return `  Debug trace cleared (${count} events removed).`;
+      }
+
+      if (arg === "trace" || arg.startsWith("trace ")) {
+        const category = arg.replace("trace", "").trim() || undefined;
+        const validCategories = ["decision", "routing", "tool", "context", "permission", "guard", "hook", "model"];
+        if (category && !validCategories.includes(category)) {
+          return `  Unknown category: "${category}"\n  Valid categories: ${validCategories.join(", ")}`;
+        }
+        const events = tracer.getEvents({
+          category: category as any,
+          limit: 50,
+        });
+        if (!tracer.isEnabled()) {
+          return "  Debug tracing is not enabled. Use /debug on to start recording.";
+        }
+        return tracer.formatTrace(events);
+      }
+
+      return [
+        "  Debug Tracer",
+        `  Status: ${tracer.isEnabled() ? "enabled" : "disabled"}`,
+        `  Events: ${tracer.size}`,
+        "",
+        "  Commands:",
+        "    /debug on         Enable tracing",
+        "    /debug off        Disable tracing",
+        "    /debug trace      Show recent trace events",
+        "    /debug trace <cat> Filter by category (decision, routing, tool, context, permission, guard, hook, model)",
+        "    /debug clear      Clear trace buffer",
+      ].join("\n");
+    }
     default:
       return null;
   }
