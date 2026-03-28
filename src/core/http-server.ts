@@ -787,6 +787,50 @@ export async function handleRoute(
 
 // ─── Server Entry Point ──────────────────────────────────────────
 
+/**
+ * Build the top-level fetch handler with auth + CORS + routing.
+ * Exported so E2E tests can use the exact same code path as production.
+ */
+export function buildFetchHandler(apiKey?: string): (req: Request) => Promise<Response> {
+  return async function fetchHandler(req: Request): Promise<Response> {
+    const url = new URL(req.url);
+
+    // CORS headers for IDE integrations — restrict to localhost origins
+    const origin = req.headers.get("Origin") ?? "";
+    const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(origin)
+      || origin.startsWith("vscode-webview://");
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": isLocalOrigin ? origin : "http://localhost",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Id",
+      "Vary": "Origin",
+    };
+
+    // Preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    // Auth check
+    if (apiKey) {
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader !== `Bearer ${apiKey}`) {
+        return jsonError("Unauthorized", 401, corsHeaders);
+      }
+    }
+
+    serverState.totalRequests++;
+
+    try {
+      return await handleRoute(req, url, corsHeaders);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.error("http", `Unhandled error: ${msg}`);
+      return jsonError("Internal Server Error", 500, corsHeaders);
+    }
+  };
+}
+
 export async function startHttpServer(options: ServeOptions): Promise<void> {
   const { requirePro } = await import("./pro.js");
   await requirePro("http-server");
@@ -798,43 +842,7 @@ export async function startHttpServer(options: ServeOptions): Promise<void> {
   const server = Bun.serve({
     port,
     hostname: host,
-    async fetch(req) {
-      const url = new URL(req.url);
-
-      // CORS headers for IDE integrations — restrict to localhost origins
-      const origin = req.headers.get("Origin") ?? "";
-      const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(origin)
-        || origin.startsWith("vscode-webview://");
-      const corsHeaders = {
-        "Access-Control-Allow-Origin": isLocalOrigin ? origin : "http://localhost",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Id",
-        "Vary": "Origin",
-      };
-
-      // Preflight
-      if (req.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: corsHeaders });
-      }
-
-      // Auth check
-      if (apiKey) {
-        const authHeader = req.headers.get("Authorization");
-        if (authHeader !== `Bearer ${apiKey}`) {
-          return jsonError("Unauthorized", 401, corsHeaders);
-        }
-      }
-
-      serverState.totalRequests++;
-
-      try {
-        return await handleRoute(req, url, corsHeaders);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.error("http", `Unhandled error: ${msg}`);
-        return jsonError("Internal Server Error", 500, corsHeaders);
-      }
-    },
+    fetch: buildFetchHandler(apiKey),
   });
 
   console.log(`\x1b[32m✓\x1b[0m KCode HTTP API server running at \x1b[1mhttp://${host}:${port}\x1b[0m`);
