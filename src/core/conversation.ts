@@ -68,9 +68,24 @@ export function looksIncomplete(text: string): boolean {
   if (openFences % 2 !== 0) return true;
   // Ends with an open table row
   if (trimmed.endsWith("|")) return true;
-  // Ends mid-sentence: preposition, article, conjunction, or bare word without punctuation
+  // Ends mid-sentence: preposition, article, conjunction (English + Spanish)
   const lastLine = trimmed.split("\n").pop() ?? "";
-  const midSentenceEndings = /\b(the|a|an|of|in|to|for|with|and|or|but|that|is|are|was|from|by|as|at|on|into|this|these|which|where|when|how|if|than|between|through|about|over|under|provides?|contains?|includes?|requires?|ensures?)\s*$/i;
+  const midSentenceEndings = new RegExp(
+    "\\b(" +
+    // English
+    "the|a|an|of|in|to|for|with|and|or|but|that|is|are|was|from|by|as|at|on|into|" +
+    "this|these|which|where|when|how|if|than|between|through|about|over|under|" +
+    "provides?|contains?|includes?|requires?|ensures?|" +
+    // Spanish
+    "del?|la|los|las|un|una|unos|unas|en|para|con|sin|sobre|entre|que|como|" +
+    "mediante|donde|cuando|hacia|desde|hasta|por|al|su|sus|este|esta|estos|estas|" +
+    "preserva|caracteriza|reduce|incluye|requiere|permite|genera|produce|define|" +
+    // French/Portuguese common
+    "le|les|des|du|dans|avec|pour|sur|sous|qui|dont|mais|donc|" +
+    "ou|et|das|dos|nas|nos|pelo|pela|uma|com|sem|sobre" +
+    ")\\s*$",
+    "i"
+  );
   if (midSentenceEndings.test(lastLine)) return true;
   return false;
 }
