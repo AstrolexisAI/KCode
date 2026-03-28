@@ -49,7 +49,7 @@ import {
 } from "./cli/commands";
 
 // Version — hardcoded to avoid Bun bundler resolving wrong package.json
-const VERSION = "1.3.1";
+const VERSION = "1.4.0";
 
 /** On Windows, pause before exit so the user can read error messages (console closes on exit).
  *  Also writes error to a crash log file for diagnostics. */
