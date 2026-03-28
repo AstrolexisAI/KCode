@@ -5,15 +5,11 @@ import type {
   Message,
   ContentBlock,
   ToolUseBlock,
-  TextBlock,
   KCodeConfig,
   ConversationState,
   StreamEvent,
   TokenUsage,
   TurnCostEntry,
-  OpenAIMessage,
-  OpenAIToolCall,
-  OpenAIToolDefinition,
 } from "./types";
 import { readFileSync } from "node:fs";
 import { getModelBaseUrl, getModelProvider } from "./models";
@@ -37,6 +33,13 @@ import { extractExample, saveExample } from "./distillation";
 import { type SSEChunk, parseSSEStream, parseAnthropicSSEStream } from "./sse-parser";
 import { scoreResponse, saveBenchmark, initBenchmarkSchema } from "./benchmarks";
 import { getBranchManager } from "./branch-manager";
+import {
+  convertToOpenAIMessages,
+  convertToOpenAITools,
+  convertToAnthropicMessages,
+  convertToAnthropicTools,
+} from "./message-converters";
+import { extractToolCallsFromText } from "./tool-call-extractor";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -256,93 +259,6 @@ function validateJsonSchema(data: unknown, schema: Record<string, unknown>, path
   return errors;
 }
 
-// ─── Text-based Tool Call Extraction ─────────────────────────────
-// Local models (Qwen, etc.) often emit tool calls as JSON in text content
-// instead of using OpenAI's native tool_calls format. This extracts them.
-
-interface ExtractedToolCall {
-  name: string;
-  input: Record<string, unknown>;
-  prefixText: string;
-}
-
-function extractToolCallsFromText(text: string, tools: ToolRegistry): ExtractedToolCall[] {
-  const results: ExtractedToolCall[] = [];
-  const toolDefs = tools.getDefinitions();
-  const knownTools = new Set(toolDefs.map((t) => t.name));
-  // Case-insensitive lookup: "bash" → "Bash"
-  const toolNameMap = new Map(toolDefs.map((t) => [t.name.toLowerCase(), t.name]));
-  let match: RegExpExecArray | null;
-  let firstMatchIndex = text.length;
-
-  // Pattern 1: ```json\n{"name": "ToolName", "arguments": {...}}\n```
-  const codeBlockRe = /```(?:json)?\s*\n?\s*(\{[\s\S]*?\})\s*\n?\s*```/g;
-  while ((match = codeBlockRe.exec(text)) !== null) {
-    try {
-      const parsed = JSON.parse(match[1]);
-      const rawName = parsed.name ?? parsed.function ?? parsed.tool;
-      const toolName = typeof rawName === "string" ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
-      const args = parsed.arguments ?? parsed.parameters ?? parsed.input ?? {};
-      if (toolName && knownTools.has(toolName)) {
-        if (match.index < firstMatchIndex) firstMatchIndex = match.index;
-        results.push({ name: toolName, input: typeof args === "object" ? args : {}, prefixText: text.slice(0, firstMatchIndex) });
-      }
-    } catch { /* not valid JSON */ }
-  }
-  if (results.length > 0) return results;
-
-  // Pattern 2: Raw JSON {"name": "ToolName", "arguments": {...}} anywhere in text
-  const rawJsonRe = /\{\s*"(?:name|function|tool)"\s*:\s*"(\w+)"\s*,\s*"(?:arguments|parameters|input)"\s*:\s*(\{[^}]*\})\s*\}/g;
-  while ((match = rawJsonRe.exec(text)) !== null) {
-    const rawName = match[1];
-    const toolName = rawName ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
-    if (toolName && knownTools.has(toolName)) {
-      try {
-        const args = JSON.parse(match[2]);
-        if (match.index < firstMatchIndex) firstMatchIndex = match.index;
-        results.push({ name: toolName, input: typeof args === "object" ? args : {}, prefixText: text.slice(0, firstMatchIndex) });
-      } catch { /* bad args JSON */ }
-    }
-  }
-  if (results.length > 0) return results;
-
-  // Pattern 3: Code block containing a shell command — common with small models
-  // ```bash\nsome command\n``` or ```\nsome command\n```
-  const bashBlockRe = /```(?:bash|sh|shell)?\s*\n([\s\S]*?)\n\s*```/g;
-  while ((match = bashBlockRe.exec(text)) !== null) {
-    const cmd = match[1].trim();
-    // Only extract if it looks like a real command (not multiline explanation)
-    if (cmd && !cmd.includes("\n") && cmd.length < 500 && !cmd.startsWith("#") && !cmd.startsWith("//")) {
-      if (match.index < firstMatchIndex) firstMatchIndex = match.index;
-      results.push({
-        name: "Bash",
-        input: { command: cmd, description: `Execute: ${cmd.slice(0, 60)}` },
-        prefixText: text.slice(0, firstMatchIndex),
-      });
-    }
-  }
-  if (results.length > 0) return results;
-
-  // Pattern 4: ToolName "arg1" "arg2" format (Qwen-style)
-  // e.g. Bash "mkdir foo" "description" 20000
-  for (const def of toolDefs) {
-    const namePattern = new RegExp(`(?:^|\\n)\\s*${def.name}\\s+"([^"]+)"`, "g");
-    while ((match = namePattern.exec(text)) !== null) {
-      const firstArg = match[1];
-      if (def.name === "Bash" || def.name === "bash") {
-        if (match.index < firstMatchIndex) firstMatchIndex = match.index;
-        results.push({
-          name: "Bash",
-          input: { command: firstArg, description: `Execute: ${firstArg.slice(0, 60)}` },
-          prefixText: text.slice(0, firstMatchIndex),
-        });
-      }
-    }
-  }
-
-  return results;
-}
-
 // ─── Retry Logic ─────────────────────────────────────────────────
 
 function isRetryableError(error: unknown): boolean {
@@ -381,231 +297,6 @@ function computeRetryDelay(attempt: number): number {
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-// ─── Message Conversion ─────────────────────────────────────────
-
-/**
- * Convert internal Message[] to OpenAI-compatible message format.
- */
-function convertToOpenAIMessages(
-  systemPrompt: string,
-  messages: Message[],
-): OpenAIMessage[] {
-  const result: OpenAIMessage[] = [];
-
-  // System message first
-  if (systemPrompt) {
-    result.push({ role: "system", content: systemPrompt });
-  }
-
-  for (const msg of messages) {
-    if (typeof msg.content === "string") {
-      result.push({ role: msg.role, content: msg.content });
-      continue;
-    }
-
-    // Complex content blocks
-    if (msg.role === "assistant") {
-      // Collect text and tool_calls from assistant blocks
-      const textParts: string[] = [];
-      const toolCalls: OpenAIToolCall[] = [];
-
-      for (const block of msg.content) {
-        if (block.type === "text") {
-          textParts.push(block.text);
-        } else if (block.type === "thinking") {
-          // Include thinking as text prefix (local models don't have thinking blocks)
-          textParts.push(`<thinking>${block.thinking}</thinking>`);
-        } else if (block.type === "tool_use") {
-          toolCalls.push({
-            id: block.id,
-            type: "function",
-            function: {
-              name: block.name,
-              arguments: JSON.stringify(block.input),
-            },
-          });
-        }
-      }
-
-      const assistantMsg: OpenAIMessage = {
-        role: "assistant",
-        content: textParts.length > 0 ? textParts.join("\n") : null,
-      };
-      if (toolCalls.length > 0) {
-        assistantMsg.tool_calls = toolCalls;
-      }
-      result.push(assistantMsg);
-    } else if (msg.role === "user") {
-      // User messages may contain tool_result blocks
-      const textParts: string[] = [];
-      const toolResults: OpenAIMessage[] = [];
-
-      for (const block of msg.content) {
-        if (block.type === "text") {
-          textParts.push(block.text);
-        } else if (block.type === "tool_result") {
-          const content =
-            typeof block.content === "string"
-              ? block.content
-              : block.content
-                  .map((b) => {
-                    if (b.type === "text") return b.text;
-                    return JSON.stringify(b);
-                  })
-                  .join("\n");
-          toolResults.push({
-            role: "tool",
-            tool_call_id: block.tool_use_id,
-            content: content,
-          });
-        }
-      }
-
-      // Tool results go as separate "tool" role messages
-      for (const tr of toolResults) {
-        result.push(tr);
-      }
-
-      // Any plain text from the user block
-      if (textParts.length > 0) {
-        result.push({ role: "user", content: textParts.join("\n") });
-      }
-    }
-  }
-
-  return result;
-}
-
-/**
- * Convert tool definitions to OpenAI function-calling format.
- */
-function convertToOpenAITools(
-  tools: { name: string; description: string; input_schema: Record<string, unknown> }[],
-): OpenAIToolDefinition[] {
-  return tools.map((t) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.input_schema,
-    },
-  }));
-}
-
-// ─── Anthropic Message Conversion ────────────────────────────────
-
-interface AnthropicMessage {
-  role: "user" | "assistant";
-  content: string | AnthropicContentBlock[];
-}
-
-type AnthropicContentBlock =
-  | { type: "text"; text: string }
-  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
-
-interface AnthropicToolDefinition {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-}
-
-/**
- * Convert internal Message[] to Anthropic Messages API format.
- * Key differences from OpenAI:
- * - System prompt is NOT a message — goes in top-level `system` field
- * - tool_use/tool_result are content blocks inside user/assistant messages (not separate roles)
- * - Strict user/assistant alternation required
- */
-function convertToAnthropicMessages(
-  messages: Message[],
-): AnthropicMessage[] {
-  const result: AnthropicMessage[] = [];
-
-  for (const msg of messages) {
-    if (typeof msg.content === "string") {
-      // Merge consecutive same-role messages (Anthropic requires strict alternation)
-      const last = result[result.length - 1];
-      if (last && last.role === msg.role) {
-        if (typeof last.content === "string") {
-          last.content = last.content + "\n\n" + msg.content;
-        } else {
-          last.content.push({ type: "text", text: msg.content });
-        }
-      } else {
-        result.push({ role: msg.role, content: msg.content });
-      }
-      continue;
-    }
-
-    // Complex content blocks — convert to Anthropic format
-    const blocks: AnthropicContentBlock[] = [];
-
-    for (const block of msg.content) {
-      if (block.type === "text") {
-        blocks.push({ type: "text", text: block.text });
-      } else if (block.type === "thinking") {
-        // Include thinking as text (Anthropic extended thinking is model-native, we just pass text)
-        blocks.push({ type: "text", text: `<thinking>${block.thinking}</thinking>` });
-      } else if (block.type === "tool_use") {
-        blocks.push({
-          type: "tool_use",
-          id: block.id,
-          name: block.name,
-          input: block.input,
-        });
-      } else if (block.type === "tool_result") {
-        const content = typeof block.content === "string"
-          ? block.content
-          : block.content.map((b) => b.type === "text" ? b.text : JSON.stringify(b)).join("\n");
-        blocks.push({
-          type: "tool_result",
-          tool_use_id: block.tool_use_id,
-          content,
-          is_error: block.is_error,
-        });
-      }
-    }
-
-    if (blocks.length === 0) continue; // Skip empty content
-
-    // Merge consecutive same-role messages
-    const last = result[result.length - 1];
-    if (last && last.role === msg.role) {
-      if (typeof last.content === "string") {
-        last.content = [{ type: "text", text: last.content }, ...blocks];
-      } else {
-        last.content.push(...blocks);
-      }
-    } else {
-      result.push({ role: msg.role, content: blocks });
-    }
-  }
-
-  // Anthropic requires conversation to start with user message
-  if (result.length > 0 && result[0].role !== "user") {
-    result.unshift({ role: "user", content: "Hello." });
-  }
-
-  return result;
-}
-
-/**
- * Convert tool definitions to Anthropic format.
- * Anthropic uses { name, description, input_schema } — which is already our internal format.
- */
-function convertToAnthropicTools(
-  tools: { name: string; description: string; input_schema: Record<string, unknown> }[],
-): AnthropicToolDefinition[] {
-  return tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: t.input_schema,
-  }));
-}
-
-// ─── SSE Stream Parser ──────────────────────────────────────────
 
 // ─── Conversation Manager ────────────────────────────────────────
 
