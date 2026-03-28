@@ -86,11 +86,14 @@ export function looksIncomplete(text: string): boolean {
     "\\b(" +
     // English
     "the|a|an|of|in|to|for|with|and|or|but|that|is|are|was|from|by|as|at|on|into|" +
+    "not only|not just|rather|although|because|since|while|whereas|however|" +
     "this|these|which|where|when|how|if|than|between|through|about|over|under|" +
-    "provides?|contains?|includes?|requires?|ensures?|" +
+    "provides?|contains?|includes?|requires?|ensures?|means|implies|suggests|" +
     // Spanish
     "del?|la|los|las|un|una|unos|unas|en|para|con|sin|sobre|entre|que|como|" +
+    "sino|aunque|porque|mientras|según|también|además|entonces|pero|ni|" +
     "mediante|donde|cuando|hacia|desde|hasta|por|al|su|sus|este|esta|estos|estas|" +
+    "ya que|dado que|puesto que|siempre que|a menos que|no solo|no sólo|" +
     "preserva|caracteriza|reduce|incluye|requiere|permite|genera|produce|define|" +
     // French/Portuguese common
     "le|les|des|du|dans|avec|pour|sur|sous|qui|dont|mais|donc|" +
