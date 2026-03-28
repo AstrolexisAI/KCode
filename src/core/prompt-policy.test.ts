@@ -41,6 +41,13 @@ describe("System prompt policy sections", () => {
     expect(prompt).toContain("within the project workspace only");
     expect(prompt).toContain("Start with specific subdirectories");
   });
+
+  test("contains math/formula policy for terminal", async () => {
+    const prompt = await SystemPromptBuilder.build(minConfig());
+    expect(prompt).toContain("Math and formulas in terminal");
+    expect(prompt).toContain("Unicode first");
+    expect(prompt).toContain("Do NOT write raw LaTeX");
+  });
 });
 
 // ─── Truncation Detection on tool_use Path ──────────────────────
