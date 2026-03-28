@@ -284,13 +284,13 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
             const resolvedTarget = pathIsAbsolute(target) ? target : pathResolve(realDir, target);
             resolved = resolvedTarget;
           }
-        } catch {
-          // Not a symlink or doesn't exist — continue with resolved path
+        } catch (err) {
+          log.debug("permissions", `Symlink check failed for ${resolve(realDir, basename)}: ${err}`);
         }
       }
     }
-  } catch {
-    // If realpath fails, continue with resolved path
+  } catch (err) {
+    log.debug("permissions", `Realpath resolution failed for ${filePath}: ${err}`);
   }
 
   // Block writes to system directories (checked first for specific error messages)
@@ -513,7 +513,7 @@ function getToolMatchValue(tool: ToolUseBlock): string {
         try {
           const u = new URL(input.url);
           return u.hostname;
-        } catch { return input.url; }
+        } catch (err) { log.debug("permissions", `Failed to parse WebFetch URL: ${err}`); return input.url; }
       }
       return "";
     }
@@ -700,8 +700,8 @@ export class PermissionManager {
           reason: `Plan mode active: "${tool.name}" is blocked. Only read-only and planning tools are allowed. Use ExitPlanMode to return to normal mode.`,
         };
       }
-    } catch {
-      // plan-mode module not loaded yet, skip
+    } catch (err) {
+      log.debug("permissions", `Plan-mode module not loaded yet: ${err}`);
     }
 
     // Deny mode blocks everything
@@ -962,8 +962,8 @@ export class PermissionManager {
               summary += "\n" + formatDiffPreview(diff, 30);
             }
           }
-        } catch {
-          // If we can't read the file, just show the basic summary
+        } catch (err) {
+          log.debug("permissions", `Failed to generate diff preview for Write: ${err}`);
         }
         return summary;
       }
@@ -981,8 +981,8 @@ export class PermissionManager {
               summary += "\n" + formatDiffPreview(diff, 30);
             }
           }
-        } catch {
-          // If we can't read the file, just show the basic summary
+        } catch (err) {
+          log.debug("permissions", `Failed to generate diff preview for Edit: ${err}`);
         }
         return summary;
       }

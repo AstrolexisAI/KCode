@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { createServer } from "node:net";
 import { loadModelsConfig, getDefaultModel, getModelBaseUrl } from "./models";
 import { getUserMemoryDir } from "./memory";
+import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -27,7 +28,8 @@ async function runCommand(cmd: string[]): Promise<{ ok: boolean; output: string 
     const exitCode = await proc.exited;
     const stdout = await new Response(proc.stdout).text();
     return { ok: exitCode === 0, output: stdout.trim() };
-  } catch {
+  } catch (err) {
+    log.debug("doctor", `Command failed [${cmd.join(" ")}]: ${err}`);
     return { ok: false, output: "" };
   }
 }
@@ -36,7 +38,8 @@ function dirWritable(path: string): boolean {
   try {
     accessSync(path, constants.W_OK);
     return true;
-  } catch {
+  } catch (err) {
+    log.debug("doctor", `Directory not writable ${path}: ${err}`);
     return false;
   }
 }
@@ -49,7 +52,7 @@ async function dirSizeBytes(path: string): Promise<number> {
       const bytes = parseInt(result.output.split("\t")[0], 10);
       return isNaN(bytes) ? 0 : bytes;
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("doctor", `Failed to get directory size for ${path}: ${err}`); }
   return 0;
 }
 
@@ -63,7 +66,8 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
   try {
     const version = Bun.version;
     results.push({ name: "Bun runtime", status: "ok", message: `Bun v${version}` });
-  } catch {
+  } catch (err) {
+    log.debug("doctor", `Bun runtime check failed: ${err}`);
     results.push({ name: "Bun runtime", status: "fail", message: "Bun runtime not detected" });
   }
 
@@ -85,7 +89,8 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
       const file = Bun.file(modelsPath);
       await file.json();
       results.push({ name: "Models config", status: "ok", message: `${modelsPath} is valid JSON` });
-    } catch {
+    } catch (err) {
+      log.debug("doctor", `Failed to parse models config: ${err}`);
       results.push({ name: "Models config", status: "fail", message: `${modelsPath} exists but is not valid JSON` });
     }
   } else {
@@ -180,7 +185,8 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
       try {
         mkdirSync(memDir, { recursive: true });
         results.push({ name: "Memory system", status: "ok", message: `${memDir} created and writable` });
-      } catch {
+      } catch (err) {
+        log.debug("doctor", `Failed to create memory directory: ${err}`);
         results.push({ name: "Memory system", status: "fail", message: `Cannot create memory directory at ${memDir}` });
       }
     }
@@ -211,7 +217,8 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
     } else {
       results.push({ name: "HTTP server port", status: "warn", message: "Port 10101 is in use — server subcommand may fail" });
     }
-  } catch {
+  } catch (err) {
+    log.debug("doctor", `Failed to check port 10101 availability: ${err}`);
     results.push({ name: "HTTP server port", status: "warn", message: "Could not check port 10101 availability" });
   }
 
@@ -222,7 +229,8 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
       const file = Bun.file(keybindingsPath);
       await file.json();
       results.push({ name: "Keybindings", status: "ok", message: `${keybindingsPath} is valid JSON` });
-    } catch {
+    } catch (err) {
+      log.debug("doctor", `Failed to parse keybindings: ${err}`);
       results.push({ name: "Keybindings", status: "warn", message: `${keybindingsPath} exists but is not valid JSON` });
     }
   } else {
@@ -236,7 +244,8 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
       const file = Bun.file(pricingPath);
       await file.json();
       results.push({ name: "Pricing data", status: "ok", message: `${pricingPath} is valid JSON` });
-    } catch {
+    } catch (err) {
+      log.debug("doctor", `Failed to parse pricing data: ${err}`);
       results.push({ name: "Pricing data", status: "warn", message: `${pricingPath} exists but is not valid JSON` });
     }
   } else {

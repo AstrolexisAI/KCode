@@ -34,7 +34,8 @@ function detectBackends(): VoiceBackend[] {
   try {
     execSync("which faster-whisper 2>/dev/null || python3 -c 'import faster_whisper' 2>/dev/null", { stdio: "pipe", timeout: 3000 });
     backends.push({ name: "faster-whisper", available: true });
-  } catch {
+  } catch (err) {
+    log.debug("voice", `faster-whisper not available: ${err}`);
     backends.push({ name: "faster-whisper", available: false });
   }
 
@@ -42,15 +43,16 @@ function detectBackends(): VoiceBackend[] {
   try {
     execSync("which whisper-cpp 2>/dev/null || which main 2>/dev/null", { stdio: "pipe", timeout: 3000 });
     backends.push({ name: "whisper-cpp", available: true });
-  } catch {
+  } catch (err) {
+    log.debug("voice", `whisper-cpp not available: ${err}`);
     backends.push({ name: "whisper-cpp", available: false });
   }
 
   // Check arecord (ALSA) for microphone access
   try {
     execSync("which arecord 2>/dev/null || which sox 2>/dev/null", { stdio: "pipe", timeout: 3000 });
-  } catch {
-    // No recording capability
+  } catch (err) {
+    log.debug("voice", `No audio recording tool (arecord/sox) found: ${err}`);
   }
 
   return backends;
@@ -68,7 +70,7 @@ function recordAudio(durationSec: number): string {
       { stdio: "pipe", timeout: (durationSec + 2) * 1000 },
     );
     return outPath;
-  } catch { /* arecord not available */ }
+  } catch (err) { log.debug("voice", `arecord not available: ${err}`); }
 
   try {
     execSync(
@@ -76,7 +78,7 @@ function recordAudio(durationSec: number): string {
       { stdio: "pipe", timeout: (durationSec + 2) * 1000 },
     );
     return outPath;
-  } catch { /* sox not available */ }
+  } catch (err) { log.debug("voice", `sox not available: ${err}`); }
 
   throw new Error("No audio recording tool found. Install alsa-utils (arecord) or sox.");
 }
@@ -122,7 +124,8 @@ function transcribeViaWhisperCpp(audioPath: string): string {
     try {
       execSync(`which ${bin}`, { stdio: "pipe" });
       return true;
-    } catch {
+    } catch (err) {
+      log.debug("voice", `whisper binary '${bin}' not found: ${err}`);
       return false;
     }
   });
@@ -180,7 +183,7 @@ export async function voiceToText(durationSec?: number): Promise<string> {
         log.info("voice", `Transcribed via Kulvex: ${text.slice(0, 50)}`);
         return text;
       }
-    } catch { /* not available */ }
+    } catch (err) { log.debug("voice", `Kulvex voice API not available: ${err}`); }
 
     // 2. faster-whisper (Python, CUDA-accelerated)
     try {
@@ -189,7 +192,7 @@ export async function voiceToText(durationSec?: number): Promise<string> {
         log.info("voice", `Transcribed via faster-whisper: ${text.slice(0, 50)}`);
         return text;
       }
-    } catch { /* not available */ }
+    } catch (err) { log.debug("voice", `faster-whisper transcription failed: ${err}`); }
 
     // 3. whisper.cpp
     try {
@@ -198,7 +201,7 @@ export async function voiceToText(durationSec?: number): Promise<string> {
         log.info("voice", `Transcribed via whisper.cpp: ${text.slice(0, 50)}`);
         return text;
       }
-    } catch { /* not available */ }
+    } catch (err) { log.debug("voice", `whisper.cpp transcription failed: ${err}`); }
 
     throw new Error(
       "No STT backend available. Install one of:\n" +
@@ -207,7 +210,7 @@ export async function voiceToText(durationSec?: number): Promise<string> {
     );
   } finally {
     // Cleanup audio file
-    try { unlinkSync(audioPath); } catch { /* ignore */ }
+    try { unlinkSync(audioPath); } catch (err) { log.debug("voice", `Failed to clean up audio file: ${err}`); }
   }
 }
 
@@ -220,7 +223,7 @@ export function isVoiceAvailable(): { available: boolean; backends: VoiceBackend
   try {
     execSync("which arecord 2>/dev/null || which sox 2>/dev/null", { stdio: "pipe", timeout: 2000 });
     recording = true;
-  } catch { /* no recording */ }
+  } catch (err) { log.debug("voice", `No recording tool available: ${err}`); }
 
   return {
     available: recording && backends.some((b) => b.available),

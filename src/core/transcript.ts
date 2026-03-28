@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlin
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Message, ToolUseBlock, ToolResultBlock, ContentBlock } from "./types";
+import { log } from "./logger";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -86,8 +87,8 @@ export class TranscriptManager {
 
     try {
       appendFileSync(this.sessionFile, JSON.stringify(entry) + "\n", "utf-8");
-    } catch {
-      // Silently ignore write failures to avoid disrupting the session
+    } catch (err) {
+      log.debug("transcript", `Failed to append transcript entry: ${err}`);
     }
   }
 
@@ -149,8 +150,8 @@ export class TranscriptManager {
       if (line.trim().length === 0) continue;
       try {
         entries.push(JSON.parse(line) as TranscriptEntry);
-      } catch {
-        // Skip malformed lines
+      } catch (err) {
+        log.debug("transcript", `Skipping malformed transcript line: ${err}`);
       }
     }
 
@@ -171,8 +172,8 @@ export class TranscriptManager {
         for (let i = 0; i < excess; i++) {
           try {
             unlinkSync(join(TRANSCRIPTS_DIR, files[i]));
-          } catch {
-            // Ignore individual deletion failures
+          } catch (err) {
+            log.debug("transcript", `Failed to delete old transcript ${files[i]}: ${err}`);
           }
         }
       }
@@ -184,12 +185,12 @@ export class TranscriptManager {
         if (match) {
           const fileDate = new Date(match[1]);
           if (fileDate < cutoffDate) {
-            try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch { /* best-effort cleanup of old transcripts */ }
+            try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch (err) { log.debug("transcript", `Failed to delete expired transcript ${f}: ${err}`); }
           }
         }
       }
-    } catch {
-      // Ignore pruning failures
+    } catch (err) {
+      log.debug("transcript", `Failed to prune old sessions: ${err}`);
     }
   }
 
@@ -281,8 +282,8 @@ export class TranscriptManager {
                   resultBlock.is_error = parsed.is_error;
                 }
               }
-            } catch {
-              // Use raw content as-is
+            } catch (err) {
+              log.debug("transcript", `Failed to parse structured tool result content: ${err}`);
             }
             // Merge into existing user tool_result message or create new one
             const lastUser = messages[messages.length - 1];
@@ -301,8 +302,8 @@ export class TranscriptManager {
           default:
             break;
         }
-      } catch {
-        // Skip entries that fail to parse
+      } catch (err) {
+        log.debug("transcript", `Failed to parse session message entry: ${err}`);
       }
     }
 
@@ -345,8 +346,8 @@ export class TranscriptManager {
             break;
           }
         }
-      } catch {
-        // Skip unreadable sessions
+      } catch (err) {
+        log.debug("transcript", `Failed to search session ${session.filename}: ${err}`);
       }
     }
 
@@ -370,7 +371,7 @@ export class TranscriptManager {
       const endTime = new Date(lastEntry.timestamp).getTime();
       const mins = Math.round((endTime - startTime) / 60_000);
       duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("transcript", `Failed to calculate session duration: ${err}`); }
 
     return {
       prompt: firstUser?.content.slice(0, 100) ?? "(empty)",
