@@ -113,6 +113,42 @@ describe("looksTheoretical", () => {
     const prompt = "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema de determinar si existe una subsecuencia de compaction que preserve la equivalencia observacional del estado final del filesystem es reducible al problema de alcanzabilidad";
     expect(looksTheoretical(prompt)).toBe(true);
   });
+
+  test("detects structured reasoning prompt with sections and tables", () => {
+    const prompt = `### CONTEXTO GENERAL
+Una empresa de retail opera con las siguientes condiciones:
+| Producto | A | B | C |
+| P1 | 10 | 0 | 5 |
+#### PARTE 1 — Diagnóstico
+* Identificá qué productos van a tener quiebres de stock
+* Explicá el razonamiento paso a paso
+#### PARTE 2 — Optimización
+* Diseñá un plan de transferencias para maximizar ganancia`;
+    expect(looksTheoretical(prompt)).toBe(true);
+  });
+
+  test("detects long prompt with structured sections and reasoning keywords", () => {
+    const prompt = "Sos un sistema de razonamiento avanzado. " + "x ".repeat(250) + `
+### TAREAS
+Explicá la consistencia lógica del modelo y mostrá el diagnóstico paso a paso.`;
+    expect(looksTheoretical(prompt)).toBe(true);
+  });
+
+  test("detects prompt with data tables and multiple reasoning keywords", () => {
+    const prompt = `| Stock | A | B | C |
+| P1 | 10 | 0 | 5 |
+Analizá el trade-off entre maximizar ganancia y minimizar pérdidas.
+Mostrá el razonamiento paso a paso.`;
+    expect(looksTheoretical(prompt)).toBe(true);
+  });
+
+  test("does not trigger on short request mentioning tables", () => {
+    expect(looksTheoretical("create a table with user data")).toBe(false);
+  });
+
+  test("does not trigger on code task with markdown headers", () => {
+    expect(looksTheoretical("### TODO\nfix the login bug")).toBe(false);
+  });
 });
 
 // ─── detectLanguage ─────────────────────────────────────────────
