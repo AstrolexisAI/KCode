@@ -876,8 +876,8 @@ export class ConversationManager {
         }
 
         // Truncation heuristic: detect suspiciously incomplete responses
-        // even when the provider says "stop" — the text may have been cut off
-        if (hasTextOutput && stopReason === "end_turn" && guardState.truncationRetries < 1) {
+        // Check on any terminal stop (end_turn or tool_use — text before tools may be truncated)
+        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use") && guardState.truncationRetries < 1) {
           const fullText = textChunks.join("").trim();
           if (looksIncomplete(fullText)) {
             guardState.truncationRetries++;
