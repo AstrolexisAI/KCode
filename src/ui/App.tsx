@@ -33,11 +33,12 @@ interface AppProps {
   conversationManager: ConversationManager;
   tools: ToolRegistry;
   initialSessionName?: string;
+  pasteStream?: import("./paste-stream.js").PasteInterceptStream;
 }
 
 type AppMode = "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle";
 
-export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
+export default function App({ config, conversationManager, tools, initialSessionName, pasteStream }: AppProps) {
   const { exit } = useApp();
   const { switchTheme } = useTheme();
   // Skills manager - created once per component instance
@@ -448,6 +449,7 @@ export default function App({ config, conversationManager, tools, initialSession
         cwd={config.workingDirectory}
         completions={slashCompletions}
         commandDescriptions={commandDescriptions}
+        pasteStream={pasteStream}
       />
     </Box>
   );
