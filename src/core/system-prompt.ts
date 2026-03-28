@@ -300,11 +300,14 @@ Create new files or completely overwrite existing ones.
 Find files by name/pattern. Use this instead of find or ls.
 - Supports glob patterns like "**/*.ts", "src/**/*.test.ts"
 - Returns files sorted by modification time
+- Searches within the project workspace only; paths outside the project are rejected
+- IMPORTANT: Start with specific subdirectories (src/, tests/, lib/) before broad patterns like **/*.ts
 - Run multiple glob calls in parallel for broad searches
 
 ## Grep
 Search file contents with regex. Use this instead of grep or rg.
 - Supports full regex syntax
+- Searches within the project workspace only; paths outside the project are rejected
 - output_mode: "files_with_matches" (default), "content", or "count"
 - Use glob or type params to filter file types
 - Use -i for case-insensitive, -C for context lines

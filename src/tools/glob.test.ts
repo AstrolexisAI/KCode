@@ -3,11 +3,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { executeGlob, globDefinition } from "./glob.ts";
+import { setToolWorkspace } from "./workspace";
 
 const tempDir = `/tmp/kcode-test-glob-${Date.now()}`;
 
 describe("glob tool", () => {
   beforeAll(() => {
+    // Set workspace to the test tmpdir so paths are valid
+    setToolWorkspace(tempDir);
     // Create a test directory structure
     mkdirSync(join(tempDir, "src"), { recursive: true });
     mkdirSync(join(tempDir, "src", "utils"), { recursive: true });
