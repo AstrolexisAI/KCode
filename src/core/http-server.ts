@@ -432,6 +432,10 @@ export async function handleRoute(
         return jsonError(`Unknown tool: "${body.name}"`, 404, corsHeaders);
       }
 
+      // Ensure workspace is set for Glob/Grep even in direct tool execution
+      const { setToolWorkspace } = await import("../tools/workspace.js");
+      setToolWorkspace(process.cwd());
+
       // Audit log for tool execution via HTTP
       log.info("http", `Executing tool via API: ${body.name} (input keys: ${Object.keys(body.input).join(", ")})`);
 
