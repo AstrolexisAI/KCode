@@ -468,3 +468,129 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     expect(text).toContain("new response after reset");
   });
 });
+
+// ─── Theoretical Mode E2E ──────────────────────────────────────
+
+describe("E2E: Theoretical mode — tool blocking", () => {
+  test("detects theoretical prompt and blocks tool calls, preserving text", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    try {
+      // Model tries to use a tool despite the theoretical prompt
+      env.provider.addToolCallResponse([
+        { name: "Bash", arguments: { command: "echo test", description: "test" } },
+      ]);
+      // After tool is blocked and model retries, it responds with text
+      env.provider.addResponse("Here is my text-only analysis of the theoretical problem with detailed reasoning and step by step explanation.");
+
+      const cm = new ConversationManager(env.config, env.registry);
+
+      // Structured reasoning prompt that triggers looksTheoretical()
+      const theoreticalPrompt = `### CONTEXTO
+Una empresa opera con las siguientes condiciones.
+| Producto | A | B | C |
+| P1 | 10 | 0 | 5 |
+#### PARTE 1 — Diagnóstico
+Explicá el razonamiento paso a paso para maximizar ganancia.
+#### PARTE 2 — Trade-offs
+Analizá los trade-off entre opciones.`;
+
+      const { events, text } = await sendAndCollect(cm, theoreticalPrompt);
+
+      // Tool should NOT have been executed
+      const toolExecs = eventsOfType(events, "tool_executing");
+      expect(toolExecs.length).toBe(0);
+
+      // Should have theoretical_no_tools stop reason (tool was blocked)
+      const turnEnds = eventsOfType(events, "turn_end");
+      const blocked = turnEnds.find((e) => e.stopReason === "theoretical_no_tools");
+      expect(blocked).toBeDefined();
+
+      // Should have the text-only response from the retry
+      expect(text).toContain("text-only analysis");
+
+      // Bash command should NOT have been recorded
+      expect(env.bashCommands.length).toBe(0);
+    } finally {
+      await env.cleanup();
+    }
+  });
+
+  test("after 2 retries with only tool calls, yields error and stops", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    try {
+      // Model stubbornly returns only tool calls, 3 times
+      env.provider.addToolCallResponse([
+        { name: "Read", arguments: { file_path: "/tmp/test.txt" } },
+      ]);
+      env.provider.addToolCallResponse([
+        { name: "Bash", arguments: { command: "ls", description: "list" } },
+      ]);
+      env.provider.addToolCallResponse([
+        { name: "Glob", arguments: { pattern: "*.ts" } },
+      ]);
+
+      const cm = new ConversationManager(env.config, env.registry);
+
+      const theoreticalPrompt = `### TAREAS
+#### PARTE 1 — Diagnóstico
+Explicá el razonamiento paso a paso para maximizar ganancia.
+| Stock | A | B |
+| P1 | 10 | 0 |
+#### PARTE 2 — Optimización
+Analizá el trade-off entre las opciones disponibles.`;
+
+      const { events } = await sendAndCollect(cm, theoreticalPrompt);
+
+      // No tools should have been executed
+      const toolExecs = eventsOfType(events, "tool_executing");
+      expect(toolExecs.length).toBe(0);
+
+      // Should have an error event about model not complying
+      const errors = eventsOfType(events, "error");
+      expect(errors.length).toBeGreaterThan(0);
+
+      // Bash/Read should NOT have been recorded
+      expect(env.bashCommands.length).toBe(0);
+    } finally {
+      await env.cleanup();
+    }
+  });
+
+  test("non-theoretical prompt allows tool execution normally", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    try {
+      env.provider.addToolCallResponse([
+        { name: "Bash", arguments: { command: "ls", description: "List files" } },
+      ]);
+      env.provider.addResponse("I listed the files and found the project structure for you as requested in this test.");
+
+      const cm = new ConversationManager(env.config, env.registry);
+      const { events } = await sendAndCollect(cm, "List all TypeScript files in this directory");
+
+      // Tool SHOULD have been executed
+      const toolExecs = eventsOfType(events, "tool_executing");
+      expect(toolExecs.length).toBe(1);
+      expect(toolExecs[0]!.name).toBe("Bash");
+    } finally {
+      await env.cleanup();
+    }
+  });
+});
