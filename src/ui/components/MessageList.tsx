@@ -173,6 +173,31 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
   const { theme } = useTheme();
 
   if (role === "user") {
+    // Detect paste: multiline user input with substantial content
+    const isPaste = text.includes("\n") && text.length > 80;
+
+    if (isPaste) {
+      const lines = text.split("\n");
+      const lineCount = lines.length;
+      const firstLine = lines[0].slice(0, 70) + (lines[0].length > 70 ? "…" : "");
+      const lastLine = lines[lineCount - 1].slice(0, 70) + (lines[lineCount - 1].length > 70 ? "…" : "");
+
+      return (
+        <Box flexDirection="column" paddingLeft={2}>
+          <Box>
+            <Text bold color={theme.userPrompt}>{"❯ "}</Text>
+            <Text color={theme.accent}>{"📋 "}</Text>
+            <Text bold color={theme.dimmed}>{`paste — ${lineCount} lines, ${text.length.toLocaleString()} chars`}</Text>
+          </Box>
+          <Box flexDirection="column" paddingLeft={4} marginTop={0}>
+            <Text color={theme.dimmed}>{firstLine}</Text>
+            {lineCount > 2 && <Text color={theme.dimmed}>{"  ⋮"}</Text>}
+            {lineCount > 1 && <Text color={theme.dimmed}>{lastLine}</Text>}
+          </Box>
+        </Box>
+      );
+    }
+
     return (
       <Box paddingLeft={2}>
         <Text bold color={theme.userPrompt}>{"❯ "}</Text>

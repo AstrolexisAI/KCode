@@ -603,36 +603,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     ? "~" + cwd.slice(home.length)
     : cwd;
 
-  // ─── Multiline detection and render preparation ──��──────────
+  // ─── Multiline / paste detection ────────────────────────────
   const isMultiline = value.includes("\n");
-  const lines = isMultiline ? value.split("\n") : null;
+  const lineCount = isMultiline ? value.split("\n").length : 1;
 
-  // For multiline: compute which line the cursor is on and column position
-  let cursorLine = 0;
-  let cursorCol = cursor;
-  if (lines) {
-    let charsSoFar = 0;
-    for (let i = 0; i < lines.length; i++) {
-      if (cursor <= charsSoFar + lines[i].length) {
-        cursorLine = i;
-        cursorCol = cursor - charsSoFar;
-        break;
-      }
-      charsSoFar += lines[i].length + 1; // +1 for the \n
-    }
-  }
-
-  // Viewport: show a window of lines for large multiline content
-  const MAX_VISIBLE_LINES = Math.max(6, Math.min(20, (process.stdout.rows || 24) - 6));
-  let viewportStart = 0;
-  if (lines && lines.length > MAX_VISIBLE_LINES) {
-    // Keep cursor line in view, centered when possible
-    const half = Math.floor(MAX_VISIBLE_LINES / 2);
-    viewportStart = Math.max(0, Math.min(cursorLine - half, lines.length - MAX_VISIBLE_LINES));
-  }
-  const viewportEnd = lines ? Math.min(viewportStart + MAX_VISIBLE_LINES, lines.length) : 0;
-
-  // Single-line: render with cursor as before
+  // Single-line display
   const singleLineDisplay = !isMultiline ? value : "";
   const before = singleLineDisplay.slice(0, Math.min(cursor, singleLineDisplay.length));
   const cursorChar = singleLineDisplay[Math.min(cursor, singleLineDisplay.length)] ?? " ";
@@ -651,9 +626,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   const promptColor = isQueuing ? theme.warning : (vimMode === "normal" ? theme.accent : theme.success);
   const queueHint = isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
 
-  // Multiline status bar
-  const multilineStatus = lines
-    ? `${lines.length} lines, ${value.length.toLocaleString()} chars — ↵ send`
+  // Paste compact summary
+  const pasteFirstLine = isMultiline ? (value.split("\n")[0] || "").slice(0, 50) : "";
+  const pasteSummary = isMultiline
+    ? `${lineCount} lines, ${value.length.toLocaleString()} chars`
     : "";
 
   return (
@@ -664,7 +640,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
         <Text bold color={promptColor}>{vimIndicator}{promptChar}</Text>
         {isMultiline ? (
-          <Text color={theme.dimmed} italic>{multilineStatus}</Text>
+          <Text>
+            <Text color={theme.accent}>{"📋 "}</Text>
+            <Text color={theme.dimmed} italic>{pasteSummary}</Text>
+            <Text color={promptColor}>{" — ↵ send"}</Text>
+          </Text>
         ) : (
           <Text>
             {before}
@@ -676,40 +656,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         )}
       </Box>
 
-      {/* ─── Multiline content viewport ───────────────────── */}
-      {lines && (
-        <Box flexDirection="column" marginLeft={2}>
-          {viewportStart > 0 && (
-            <Text color={theme.dimmed}>  ↑ {viewportStart} more lines</Text>
-          )}
-          {lines.slice(viewportStart, viewportEnd).map((line, viewIdx) => {
-            const lineIdx = viewportStart + viewIdx;
-            const isCursorLine = lineIdx === cursorLine;
-            const lineNum = String(lineIdx + 1).padStart(String(lines.length).length, " ");
-
-            if (isCursorLine) {
-              // Render this line with the cursor
-              const lineBefore = line.slice(0, cursorCol);
-              const lineChar = line[cursorCol] ?? " ";
-              const lineAfter = line.slice(cursorCol + 1);
-              return (
-                <Box key={lineIdx}>
-                  <Text color={theme.dimmed}>{lineNum} </Text>
-                  <Text>{lineBefore}<Text inverse>{lineChar}</Text>{lineAfter}</Text>
-                </Box>
-              );
-            }
-
-            return (
-              <Box key={lineIdx}>
-                <Text color={theme.dimmed}>{lineNum} </Text>
-                <Text>{line || " "}</Text>
-              </Box>
-            );
-          })}
-          {viewportEnd < lines.length && (
-            <Text color={theme.dimmed}>  ↓ {lines.length - viewportEnd} more lines</Text>
-          )}
+      {/* ─── Paste preview (compact) ──────────────────────── */}
+      {isMultiline && (
+        <Box marginLeft={4}>
+          <Text color={theme.dimmed}>{pasteFirstLine}{pasteFirstLine.length < (value.split("\n")[0] || "").length ? "…" : ""}</Text>
         </Box>
       )}
 
