@@ -3,7 +3,7 @@
 
 import { describe, test, expect } from "bun:test";
 import { SystemPromptBuilder } from "./system-prompt";
-import { looksIncomplete, looksTheoretical } from "./conversation";
+import { looksIncomplete, looksTheoretical, detectLanguage } from "./conversation";
 import type { KCodeConfig } from "./types";
 
 // ─── Minimal config for prompt generation ───────────────────────
@@ -112,5 +112,26 @@ describe("looksTheoretical", () => {
   test("detects the exact KCode test prompt", () => {
     const prompt = "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema de determinar si existe una subsecuencia de compaction que preserve la equivalencia observacional del estado final del filesystem es reducible al problema de alcanzabilidad";
     expect(looksTheoretical(prompt)).toBe(true);
+  });
+});
+
+// ─── detectLanguage ─────────────────────────────────────────────
+
+describe("detectLanguage", () => {
+  test("detects Spanish", () => {
+    expect(detectLanguage("Dado un programa que recibe una secuencia de tool calls sobre un filesystem")).toBe("es");
+  });
+
+  test("detects English", () => {
+    expect(detectLanguage("Prove that the problem of determining reachability is undecidable")).toBe("en");
+  });
+
+  test("defaults to English for short/ambiguous text", () => {
+    expect(detectLanguage("fix the bug")).toBe("en");
+  });
+
+  test("detects Spanish in the KCode test prompt", () => {
+    const prompt = "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema";
+    expect(detectLanguage(prompt)).toBe("es");
   });
 });
