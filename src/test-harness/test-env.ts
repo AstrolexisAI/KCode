@@ -59,7 +59,7 @@ export interface TestEnvOptions {
  * Sets up:
  * - Temporary working directory (optionally with git init)
  * - In-memory SQLite database
- * - Fake LLM provider (in-process by default, or HTTP with `inProcess: false`)
+ * - Fake LLM provider (HTTP by default, or in-process with `inProcess: true`)
  * - Fake tool registry
  * - Minimal KCodeConfig wired to the fake provider
  *
