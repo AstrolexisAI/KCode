@@ -25,7 +25,8 @@ export class PasteInterceptStream extends Transform {
   private pending: string = "";
 
   // Ink requires these TTY/raw-mode properties on its stdin stream.
-  // Proxy them from the real process.stdin so Ink can enable raw mode.
+  // Proxy them from the real process.stdin so Ink can enable raw mode,
+  // manage the event loop, and check terminal capabilities.
   get isTTY(): boolean { return !!(process.stdin as any).isTTY; }
   get isRaw(): boolean { return !!(process.stdin as any).isRaw; }
   setRawMode(mode: boolean): this {
@@ -34,6 +35,8 @@ export class PasteInterceptStream extends Transform {
     }
     return this;
   }
+  ref(): this { process.stdin.ref(); return this; }
+  unref(): this { process.stdin.unref(); return this; }
 
   override _transform(chunk: Buffer, _encoding: string, callback: TransformCallback): void {
     let data = this.pending + chunk.toString("utf-8");
