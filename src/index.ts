@@ -48,8 +48,9 @@ import {
   registerServeCommand,
 } from "./cli/commands";
 
-// Version — hardcoded to avoid Bun bundler resolving wrong package.json
-const VERSION = "1.4.0";
+// Version — read from package.json at build time via Bun's JSON import
+import pkg from "../package.json";
+const VERSION = pkg.version;
 
 /** On Windows, pause before exit so the user can read error messages (console closes on exit).
  *  Also writes error to a crash log file for diagnostics. */
