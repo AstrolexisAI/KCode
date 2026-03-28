@@ -73,7 +73,8 @@ function getOrCreateOAuthSalt(): string {
     mkdirSync(join(homedir(), ".kcode"), { recursive: true });
     writeFileSync(OAUTH_SALT_FILE, salt + "\n", { mode: 0o600 });
     return salt;
-  } catch {
+  } catch (err) {
+    log.debug("mcp-oauth", "Failed to read/write OAuth salt file: " + err);
     // Fallback: use a hash of machine-specific data plus randomness (less secure but functional)
     const { hostname } = require("node:os") as typeof import("node:os");
     return createHash("sha256")
@@ -141,8 +142,8 @@ async function loadTokenStore(): Promise<Map<string, TokenStorageEntry>> {
               if (tokens.accessToken) {
                 store.set(key, { ...entry, tokens });
               }
-            } catch {
-              // Decryption failed, skip
+            } catch (err) {
+              log.debug("mcp-oauth", "Token decryption failed for key " + key + ": " + err);
             }
           } else {
             const tokens = entry?.tokens as OAuthTokens;
@@ -153,8 +154,8 @@ async function loadTokenStore(): Promise<Map<string, TokenStorageEntry>> {
         }
         break;
       }
-    } catch {
-      // No stored tokens or corrupt file
+    } catch (err) {
+      log.debug("mcp-oauth", "Failed to load stored OAuth tokens: " + err);
     }
   }
   return store;
@@ -190,8 +191,8 @@ async function openBrowser(url: string): Promise<void> {
   try {
     const proc = spawn({ cmd, stdout: "ignore", stderr: "ignore" });
     await proc.exited;
-  } catch {
-    log.warn("mcp-oauth", `Could not open browser automatically. Visit: ${url}`);
+  } catch (err) {
+    log.warn("mcp-oauth", `Could not open browser automatically (${err}). Visit: ${url}`);
   }
 }
 
@@ -461,7 +462,8 @@ export class McpOAuthManager {
           const refreshed = await client.refreshTokens(tokens.refreshToken);
           await client.storeTokens(refreshed);
           return refreshed.accessToken;
-        } catch {
+        } catch (err) {
+          log.warn("mcp-oauth", "Token refresh failed for server: " + err);
           return null;
         }
       }
@@ -568,7 +570,8 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
       tokenUrl,
       scopes: Array.isArray(data.scopes_supported) ? data.scopes_supported as string[] : undefined,
     };
-  } catch {
+  } catch (err) {
+    log.debug("mcp-oauth", "OAuth auto-discovery failed: " + err);
     return null;
   }
 }

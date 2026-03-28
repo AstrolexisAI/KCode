@@ -367,8 +367,8 @@ export class ConversationManager {
           sessionId: this.sessionId,
           orgId: config.orgId,
         });
-      } catch {
-        // Audit logger not available, continue without it
+      } catch (err) {
+        log.debug("audit", "Failed to initialize audit logger: " + err);
       }
     }
   }
@@ -467,7 +467,7 @@ export class ConversationManager {
         } else {
           log.warn("budget", `No pricing data for model "${this.config.model}" — budget limit ($${this.config.maxBudgetUsd}) cannot be enforced`);
         }
-      } catch { /* non-critical, continue */ }
+      } catch (err) { log.debug("budget", "Failed to check budget limit: " + err); }
     }
 
     // Start transcript session on first message (skip if --no-session-persistence)
@@ -485,10 +485,10 @@ export class ConversationManager {
     });
 
     // Layer 7: Update user model from message signals
-    try { getUserModel().updateFromMessage(userMessage); } catch { /* ignore */ }
+    try { getUserModel().updateFromMessage(userMessage); } catch (err) { log.debug("user-model", "Failed to update user model from message: " + err); }
 
     // Layer 9: Reset intention engine for new turn
-    try { getIntentionEngine().reset(); } catch { /* ignore */ }
+    try { getIntentionEngine().reset(); } catch (err) { log.debug("intention", "Failed to reset intention engine: " + err); }
 
     // Smart context: inject relevant file hints + code snippets based on user query
     try {
@@ -514,7 +514,7 @@ export class ConversationManager {
           });
         }
       }
-    } catch { /* non-critical */ }
+    } catch (err) { log.debug("context", "Failed to inject smart context hints: " + err); }
 
     // Auto-invoke skills: match user message against trigger patterns
     // Injects Level 2 (full body) of matched skills as system context
@@ -537,12 +537,12 @@ export class ConversationManager {
           });
         }
       }
-    } catch { /* non-critical */ }
+    } catch (err) { log.debug("skills", "Failed to auto-invoke skills: " + err); }
 
     // Auto-save checkpoint before each agent loop starts
     try {
       this.saveCheckpoint("auto:agent-loop-start");
-    } catch { /* non-critical */ }
+    } catch (err) { log.warn("checkpoint", "Failed to save pre-loop checkpoint: " + err); }
 
     // Wrap the agent loop to record events to transcript
     for await (const event of this.runAgentLoop()) {
@@ -934,7 +934,8 @@ export class ConversationManager {
         if (fullJson.length > 0) {
           try {
             parsedInput = JSON.parse(fullJson);
-          } catch {
+          } catch (err) {
+            log.debug("parse", "Failed to parse tool call JSON (" + fullJson.length + " chars): " + err);
             if (fullJson.length > 50000) {
               parsedInput = { _raw: `[truncated: ${fullJson.length} chars of malformed JSON]` };
               log.warn("llm", `Truncated malformed tool args: ${fullJson.length} chars`);
@@ -994,7 +995,7 @@ export class ConversationManager {
           if (this.turnCosts.length > ConversationManager.MAX_TURN_COSTS) {
             this.turnCosts = this.turnCosts.slice(-ConversationManager.MAX_TURN_COSTS);
           }
-        } catch { /* cost tracking is non-critical */ }
+        } catch (err) { log.debug("pricing", "Failed to track turn cost: " + err); }
       }
 
       // Client-side JSON schema validation
@@ -1066,7 +1067,7 @@ export class ConversationManager {
             // Check if any high-priority suggestion indicates incomplete work
             hasHighPrioritySuggestion = suggestions.some(s => s.priority === "high" && s.type === "verify");
           }
-        } catch { /* ignore */ }
+        } catch (err) { log.debug("intention", "Failed to evaluate intention suggestions: " + err); }
 
         // Auto-continue: if the model stopped but has incomplete tasks, push it to continue
         if (hasHighPrioritySuggestion && turnCount <= 3) {
@@ -1090,7 +1091,7 @@ export class ConversationManager {
               ? (typeof lastUserMsg.content === "string" ? lastUserMsg.content : "")
               : "";
             setCachedResponse(cacheKey, this.config.model, preview, fullText, this.state.tokenCount);
-          } catch { /* caching is non-critical */ }
+          } catch (err) { log.debug("cache", "Failed to cache response: " + err); }
         }
 
         // Knowledge distillation: capture successful interaction pattern
@@ -1098,7 +1099,7 @@ export class ConversationManager {
           try {
             const example = extractExample(this.state.messages, this.config.workingDirectory);
             if (example) saveExample(example);
-          } catch { /* distillation is non-critical */ }
+          } catch (err) { log.debug("distillation", "Failed to extract distillation example: " + err); }
 
           // Benchmark: score this interaction
           try {
@@ -1126,7 +1127,7 @@ export class ConversationManager {
               latencyMs: 0,
               details: { turns: turnCount, tools: this.state.toolUseCount },
             });
-          } catch { /* benchmarking is non-critical */ }
+          } catch (err) { log.debug("benchmark", "Failed to score/save benchmark: " + err); }
         }
 
         // Safety net: if the model stops with no text after 3+ tool turns, push it to summarize
@@ -1265,7 +1266,7 @@ export class ConversationManager {
             try {
               const { recordToolEvent } = await import("./analytics.js");
               recordToolEvent({ sessionId: this.sessionId, toolName: call.name, model: this.config.model, durationMs, isError: !!result.is_error });
-            } catch { /* non-critical */ }
+            } catch (err) { log.debug("analytics", "Failed to record parallel tool event: " + err); }
 
             yield { type: "tool_progress", toolUseId: call.id, name: call.name, status: (result.is_error ? "error" : "done") as "done" | "error", index: i, total: toolCalls.length, durationMs };
             yield { type: "tool_result", name: call.name, toolUseId: call.id, result: result.content, isError: result.is_error, durationMs };
@@ -1449,7 +1450,7 @@ export class ConversationManager {
         if (call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit") {
           try {
             this.saveCheckpoint(`auto:before-${call.name}`);
-          } catch { /* non-critical */ }
+          } catch (err) { log.warn("checkpoint", "Failed to save pre-edit checkpoint: " + err); }
         }
 
         // 3b. Capture undo snapshot for file-modifying tools
@@ -1475,7 +1476,7 @@ export class ConversationManager {
 
         // 4. Layer 6: World Model — predict outcome before executing
         let prediction: { action: string; expected: string; confidence: number } | null = null;
-        try { prediction = getWorldModel().predict(call.name, effectiveInput); } catch { /* ignore */ }
+        try { prediction = getWorldModel().predict(call.name, effectiveInput); } catch (err) { log.debug("world-model", "Failed to predict outcome for " + call.name + ": " + err); }
 
         // Execute the tool
         yield {
@@ -1542,13 +1543,13 @@ export class ConversationManager {
             durationMs: toolDurationMs,
             isError: !!result.is_error,
           });
-        } catch { /* non-critical */ }
+        } catch (err) { log.debug("analytics", "Failed to record tool event: " + err); }
 
         // Layer 6: Compare prediction with actual result
-        try { if (prediction) getWorldModel().compare(prediction, result.content, result.is_error); } catch { /* ignore */ }
+        try { if (prediction) getWorldModel().compare(prediction, result.content, result.is_error); } catch (err) { log.debug("world-model", "Failed to compare prediction for " + call.name + ": " + err); }
 
         // Layer 9: Record action for post-task evaluation
-        try { getIntentionEngine().recordAction(call.name, effectiveInput, result.content, result.is_error); } catch { /* ignore */ }
+        try { getIntentionEngine().recordAction(call.name, effectiveInput, result.content, result.is_error); } catch (err) { log.debug("intention", "Failed to record action for " + call.name + ": " + err); }
 
         // LSP: notify file change and append diagnostics to result
         if (!result.is_error && (call.name === "Write" || call.name === "Edit")) {
@@ -1568,7 +1569,7 @@ export class ConversationManager {
                 }
               }
             }
-          } catch { /* LSP not available, ignore */ }
+          } catch (err) { log.debug("lsp", "Failed to get LSP diagnostics after file change: " + err); }
         }
 
         // After successful Edit/Write, reset cross-turn dedup for Bash/Read
@@ -1580,7 +1581,7 @@ export class ConversationManager {
             }
           }
           // Also reset intention engine's action history for Bash/Read
-          try { getIntentionEngine().resetTestFixCycle(); } catch { /* ignore */ }
+          try { getIntentionEngine().resetTestFixCycle(); } catch (err) { log.debug("intention", "Failed to reset test-fix cycle: " + err); }
           inlineWarningCount = 0;
 
           // Invalidate tool cache for modified files
@@ -1588,7 +1589,7 @@ export class ConversationManager {
             const { getToolCache } = await import("./tool-cache.js");
             const filePath = String(effectiveInput.file_path ?? "");
             if (filePath) getToolCache().invalidate(filePath);
-          } catch { /* non-critical */ }
+          } catch (err) { log.debug("cache", "Failed to invalidate tool cache for edited file: " + err); }
         } else if (!result.is_error && call.name === "MultiEdit") {
           try {
             const { getToolCache } = await import("./tool-cache.js");
@@ -1598,7 +1599,7 @@ export class ConversationManager {
                 if (edit.file_path) getToolCache().invalidate(edit.file_path);
               }
             }
-          } catch { /* non-critical */ }
+          } catch (err) { log.debug("cache", "Failed to invalidate tool cache for multi-edited files: " + err); }
         }
 
         // Record undo action if snapshot was captured and tool succeeded
@@ -1669,7 +1670,7 @@ export class ConversationManager {
                 };
               }
             }
-          } catch { /* auto-test is non-critical */ }
+          } catch (err) { log.debug("auto-test", "Failed to detect related tests: " + err); }
         }
       }
 
@@ -1717,7 +1718,7 @@ export class ConversationManager {
               yield { type: "budget_warning", costUsd: cost, limitUsd: this.config.maxBudgetUsd, pct };
             }
           }
-        } catch { /* non-critical */ }
+        } catch (err) { log.debug("budget", "Failed to check mid-loop budget: " + err); }
       }
 
       // Layer 9: Inline warning — detect wasted context mid-loop
@@ -1750,7 +1751,7 @@ export class ConversationManager {
             });
           }
         }
-      } catch { /* ignore */ }
+      } catch (err) { log.debug("intention", "Failed to generate inline warning: " + err); }
 
       // Track consecutive permission denials to prevent infinite loops
       if (turnHadDenial) {
@@ -2440,8 +2441,8 @@ export class ConversationManager {
           bm.saveBranch(previousSessionId, null, summary, `session-${previousSessionId}`, msgs.length);
         }
         bm.saveBranch(newSessionId, previousSessionId, `[FORK] ${summary}`, `session-${newSessionId}`, msgs.length);
-      } catch {
-        // Branch persistence is best-effort; don't break fork if db fails
+      } catch (err) {
+        log.warn("branch", "Failed to persist branch data during fork: " + err);
       }
     }
 
@@ -2536,8 +2537,8 @@ export class ConversationManager {
       } else if (process.platform === "darwin") {
         execSync(`osascript -e 'display notification "${safeBody}" with title "${safeTitle}"' 2>/dev/null`, { timeout: 3000 });
       }
-    } catch {
-      // Silent failure — notifications are best-effort
+    } catch (err) {
+      log.debug("notify", "Failed to send desktop notification: " + err);
     }
   }
 
