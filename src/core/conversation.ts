@@ -103,6 +103,20 @@ export function looksIncomplete(text: string): boolean {
 }
 
 /**
+ * Simple language detection by keyword frequency.
+ */
+export function detectLanguage(text: string): "es" | "fr" | "pt" | "en" {
+  const lower = text.toLowerCase();
+  const es = (lower.match(/\b(que|del?|para|con|por|como|una?|los?|las?|sobre|entre|desde|hasta|también|puede|tiene|cada|este|esta|demuestra|dado|propón|diseña)\b/g) || []).length;
+  const fr = (lower.match(/\b(les?|des|une?|dans|pour|avec|qui|sur|sont|cette|aussi|peut|chaque|mais|donc)\b/g) || []).length;
+  const pt = (lower.match(/\b(uma?|dos?|das?|para|com|que|sobre|entre|desde|também|pode|cada|este|esta)\b/g) || []).length;
+  if (es > fr && es > pt && es >= 3) return "es";
+  if (fr > es && fr > pt && fr >= 3) return "fr";
+  if (pt > es && pt > fr && pt >= 3) return "pt";
+  return "en";
+}
+
+/**
  * Heuristic: does the prompt look like a theoretical/formal question
  * that should be answered with text only, no tools?
  */
@@ -202,6 +216,7 @@ export class ConversationManager {
   private checkpoints: Array<{ label: string; messageIndex: number; undoSize: number; timestamp: number }> = [];
   private static MAX_CHECKPOINTS = 10;
   private abortController: AbortController | null = null;
+  private _theoreticalMode = false;
   private turnsSincePromptRebuild = 0;
   private systemPromptHash = "";
   private sessionStartTime = Date.now();
@@ -378,13 +393,18 @@ export class ConversationManager {
       }
     }
 
-    // Auto-detect theoretical/formal prompts and hint the model to avoid tools
+    // Auto-detect theoretical/formal prompts — disable tools at execution level
     if (looksTheoretical(userMessage)) {
-      log.info("session", "Detected theoretical prompt — injecting no-tools hint");
+      const lang = detectLanguage(userMessage);
+      log.info("session", `Detected theoretical prompt (lang=${lang}) — disabling tools for this turn`);
+      this._theoreticalMode = true;
+      const langHint = lang !== "en" ? ` You MUST respond in ${lang === "es" ? "Spanish" : lang === "fr" ? "French" : lang === "pt" ? "Portuguese" : "the user's language"}.` : "";
       this.state.messages.push({
         role: "user",
-        content: "[SYSTEM] The user's question is theoretical/formal. Respond with text only — do NOT use Bash, Glob, Grep, Read, or any tools. No code exploration needed.",
+        content: `[SYSTEM] The user's question is theoretical/formal. Respond with text only — do NOT use any tools. Use Unicode for math (fᵢ : S → S, not LaTeX).${langHint}`,
       });
+    } else {
+      this._theoreticalMode = false;
     }
 
     this.state.messages.push({
@@ -816,6 +836,23 @@ export class ConversationManager {
         yield { type: "turn_end", stopReason: "force_stop" };
         this.abortController = null;
         return;
+      }
+
+      // Theoretical mode: drop all tool calls and force text-only response
+      if (this._theoreticalMode && toolCalls.length > 0) {
+        log.info("session", `Theoretical mode: dropping ${toolCalls.length} tool call(s)`);
+        const textOnly = assistantContent.filter(b => b.type === "text");
+        this.state.messages[this.state.messages.length - 1] = {
+          role: "assistant",
+          content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
+        };
+        this.state.messages.push({
+          role: "user",
+          content: "[SYSTEM] Tools are disabled for theoretical questions. Answer with text only. Do not attempt any tool calls.",
+        });
+        // Continue loop — model will retry without tools
+        yield { type: "turn_end", stopReason: "theoretical_no_tools" };
+        continue;
       }
 
       // Record per-turn cost entry
