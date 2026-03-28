@@ -27,6 +27,9 @@ export {
   McpHttpConnection,
 } from "./mcp-client";
 
+export { McpHealthMonitor, type ServerHealth, type CircuitBreakerConfig } from "./mcp-health";
+export { addAlias, removeAlias, resolveAlias, listAliases, type ToolAlias } from "./mcp-aliases";
+
 import {
   McpServerConnection,
   McpHttpConnection,
@@ -39,6 +42,8 @@ import {
 } from "./mcp-client";
 
 import { registerMcpTools, discoverMcpTools } from "./mcp-tools";
+import { McpHealthMonitor } from "./mcp-health";
+import { resolveAlias } from "./mcp-aliases";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -98,6 +103,7 @@ export class McpManager {
   private serverConfigs = new Map<string, McpServerConfig>();
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private elicitationCallback?: ElicitationCallback;
+  readonly healthMonitor = new McpHealthMonitor();
 
   /**
    * Set a callback to handle elicitation requests from MCP servers.
@@ -244,7 +250,7 @@ export class McpManager {
    * Register all discovered MCP tools into a ToolRegistry.
    */
   registerTools(registry: ToolRegistry): void {
-    registerMcpTools(this.servers, this.serverConfigs, registry);
+    registerMcpTools(this.servers, this.serverConfigs, registry, this.healthMonitor);
   }
 
   /**
@@ -279,8 +285,18 @@ export class McpManager {
 
   /**
    * Call a tool on a specific MCP server.
+   * Checks circuit breaker before calling and records success/failure with latency.
    */
   async callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<string> {
+    // Check circuit breaker — block if circuit is open
+    if (this.healthMonitor.isCircuitOpen(serverName)) {
+      const health = this.healthMonitor.getHealth(serverName);
+      throw new Error(
+        `MCP server "${serverName}" circuit breaker is open (${health.consecutiveFailures} consecutive failures). ` +
+        `Wait for automatic recovery or run /mcp reset ${serverName}.`
+      );
+    }
+
     const connection = this.servers.get(serverName);
     if (!connection) {
       throw new Error(`MCP server "${serverName}" not found`);
@@ -288,10 +304,27 @@ export class McpManager {
     if (!connection.isAlive()) {
       const restarted = await connection.restart();
       if (!restarted) {
+        this.healthMonitor.recordFailure(serverName, "Server not running and restart failed");
         throw new Error(`MCP server "${serverName}" is not running and could not be restarted`);
       }
     }
-    return connection.callTool(toolName, args);
+
+    const start = Date.now();
+    try {
+      const result = await connection.callTool(toolName, args);
+      this.healthMonitor.recordSuccess(serverName, Date.now() - start);
+      return result;
+    } catch (err) {
+      this.healthMonitor.recordFailure(serverName, err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+  }
+
+  /**
+   * Resolve a tool alias to its full MCP tool name.
+   */
+  resolveAlias(name: string): string {
+    return resolveAlias(name);
   }
 
   /**
