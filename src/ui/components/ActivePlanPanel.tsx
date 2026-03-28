@@ -5,12 +5,14 @@ import { useTheme } from "../ThemeContext.js";
 
 interface ActivePlanPanelProps {
   plan: Plan | null;
+  sessionStartTime: number;
 }
 
-export default function ActivePlanPanel({ plan }: ActivePlanPanelProps) {
+export default function ActivePlanPanel({ plan, sessionStartTime }: ActivePlanPanelProps) {
   const { theme } = useTheme();
 
-  if (!plan) return null;
+  // Only show plans created or updated during this session
+  if (!plan || plan.updatedAt < sessionStartTime) return null;
 
   const statusIcons: Record<string, string> = {
     pending: "[ ]",
