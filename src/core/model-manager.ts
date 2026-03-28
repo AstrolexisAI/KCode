@@ -214,7 +214,7 @@ export async function downloadMlxModel(entry: CatalogEntry, onProgress?: (msg: s
 export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string) => void): Promise<string> {
   // Clean up corrupt engine dir from previous failed installs
   if (existsSync(ENGINE_DIR) && !getEnginePath()) {
-    try { require("node:fs").rmSync(ENGINE_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
+    try { require("node:fs").rmSync(ENGINE_DIR, { recursive: true, force: true }); } catch (err) { log.debug("model-manager", `Failed to clean corrupt engine dir: ${err}`); }
   }
   ensureDir(ENGINE_DIR);
   const progress = onProgress ?? ((msg: string) => process.stderr.write(`\r  ${msg}`));
@@ -266,9 +266,9 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
           const subFiles = readdirSync(sub);
           log.info("setup", `  subdir ${f}/: [${subFiles.slice(0, 10).join(", ")}]${subFiles.length > 10 ? ` ...` : ""}`);
         }
-      } catch { /* ignore */ }
+      } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
 
   // Find llama-server in extracted files
   const serverBin = findBinaryInDir(ENGINE_DIR, "llama-server");
@@ -278,7 +278,7 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
     try {
       const { readdirSync } = require("node:fs");
       contents = readdirSync(ENGINE_DIR).join(", ");
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
     throw new Error(`llama-server binary not found in extracted archive. Engine dir contents: [${contents}]`);
   }
 
@@ -301,7 +301,7 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
             progress(`CUDA runtime: ${pct}`);
           });
           await extractArchive(cudartPath, ENGINE_DIR);
-          try { unlinkSync(cudartPath); } catch { /* ignore */ }
+          try { unlinkSync(cudartPath); } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
         } catch (err) {
           log.warn("setup", `Failed to download CUDA runtime: ${err instanceof Error ? err.message : err}`);
           // Not fatal — llama-server may still work without bundled cudart if CUDA toolkit is installed
@@ -319,7 +319,7 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
     const libName = libPath.split(sep).pop() ?? libPath.split("/").pop()!;
     const dest = join(binDir, libName);
     if (libPath !== dest && !existsSync(dest)) {
-      try { renameSync(libPath, dest); } catch { /* ignore */ }
+      try { renameSync(libPath, dest); } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
     }
   }
 
@@ -332,7 +332,7 @@ export async function downloadEngine(hw: HardwareInfo, onProgress?: (msg: string
   await Bun.write(join(ENGINE_DIR, "version.txt"), `${tag}\n${assetName}\n`);
 
   // Clean up archive
-  try { unlinkSync(archivePath); } catch { /* ignore */ }
+  try { unlinkSync(archivePath); } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
 
   progress(`Engine installed: ${tag}\n`);
   log.info("setup", `llama.cpp engine installed: ${tag} (${assetName})`);
@@ -905,7 +905,7 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
             }
           }
         }
-      } catch { /* not ready yet */ }
+      } catch (err) { log.debug("model-manager", `Server not ready: ${err}`); }
 
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       serverSpinner.update(`Loading model into VRAM... ${C.dim}(${elapsed}s)${C.reset}`);
@@ -1030,7 +1030,7 @@ async function extractArchive(archivePath: string, destDir: string): Promise<voi
           stdout: "pipe", stderr: "pipe",
         });
         if (tarProc.exitCode === 0) extracted = true;
-      } catch { /* tar not available */ }
+      } catch (err) { log.debug("model-manager", `tar extraction failed: ${err}`); }
 
       // Method 2: PowerShell Expand-Archive
       if (!extracted) {
@@ -1081,7 +1081,7 @@ function findBinaryInDir(dir: string, name: string): string | null {
         return finalPath;
       }
     }
-  } catch { /* Bun.Glob may not work in compiled binaries on Windows */ }
+  } catch (err) { log.debug("model-manager", `Bun.Glob search failed: ${err}`); }
 
   // Fallback: manual recursive search using readdirSync (always works)
   try {
@@ -1099,12 +1099,12 @@ function findBinaryInDir(dir: string, name: string): string | null {
             const found = search(fullPath);
             if (found) return found;
           }
-        } catch { /* skip */ }
+        } catch (err) { log.debug("model-manager", `Skipped entry: ${err}`); }
       }
       return null;
     };
     return search(dir);
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
 
   return null;
 }
@@ -1125,7 +1125,7 @@ function findLibraryFiles(dir: string): string[] {
         results.push(join(dir, match));
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
 
   return results;
 }
@@ -1148,15 +1148,15 @@ function createLibSymlinks(dir: string): void {
 
       // Create libfoo.so.X → libfoo.so.X.Y.Z
       if (!existsSync(join(dir, soMajor))) {
-        try { symlinkSync(file, join(dir, soMajor)); } catch { /* ignore */ }
+        try { symlinkSync(file, join(dir, soMajor)); } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
       }
 
       // Create libfoo.so → libfoo.so.X.Y.Z
       if (!existsSync(join(dir, base))) {
-        try { symlinkSync(file, join(dir, base)); } catch { /* ignore */ }
+        try { symlinkSync(file, join(dir, base)); } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
 }
 
 /** Install kcode binary to a PATH directory so it can be run as 'kcode' */
@@ -1198,8 +1198,8 @@ function installToPath(): string | null {
 
       log.info("setup", `Installed kcode to ${dest}`);
       return dest;
-    } catch {
-      // Permission denied or other error — try next
+    } catch (err) {
+      log.debug("model-manager", `Install to ${dest} failed, trying next: ${err}`);
       continue;
     }
   }
@@ -1235,7 +1235,7 @@ function ensureInPath(dir: string): void {
           "[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User'), 'User')",
         ], { stdout: "pipe", stderr: "pipe" });
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
   } else {
     // Unix: add to shell rc
     const shell = process.env.SHELL ?? "/bin/bash";
@@ -1249,7 +1249,7 @@ function ensureInPath(dir: string): void {
       if (!existing.includes(resolvedDir)) {
         require("node:fs").appendFileSync(rcFile, `\n# KCode\n${exportLine}\n`);
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
   }
 }
 
@@ -1272,6 +1272,6 @@ export async function getServerConfig(): Promise<{
     if (await file.exists()) {
       return await file.json();
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("model-manager", `FS operation failed: ${err}`); }
   return null;
 }
