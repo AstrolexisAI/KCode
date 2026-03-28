@@ -25,12 +25,8 @@ export interface KodiEvent {
 export interface KodiAnimState {
   mood: KodiMood;
   phase: AnimPhase;
-  face: string;        // eyes + mouth line — FIXED 11 chars
-  body: string;        // torso + arms — FIXED 9 chars
-  legs: string;        // legs — FIXED 9 chars
-  effectL: string;     // particle left — FIXED 2 chars
-  effectR: string;     // particle right — FIXED 2 chars
-  accessory: string;   // top-right icon — FIXED 2 chars (padded)
+  /** 5 pre-composed lines, each exactly LINE_WIDTH chars. Ready to render. */
+  lines: [string, string, string, string, string];
   bubble: string;
   moodColor: string;
   intensity: number;   // 0-1
@@ -47,12 +43,8 @@ function padFixed(s: string, width: number): string {
   return s + " ".repeat(width - chars.length);
 }
 
-// Fixed widths for each layer (characters)
-const W_FACE = 11;     // " │ xxxxx │"
-const W_BODY = 9;
-const W_LEGS = 9;
-const W_EFFECT = 2;
-const W_ACC = 2;
+/** Every output line is padded to exactly this many characters. */
+const LINE_WIDTH = 14;
 
 // ─── Sprite Layers ──────────────────────────────────────────────
 
@@ -339,15 +331,26 @@ export class KodiAnimEngine {
     const effectsL = EFFECTS_L[effectPhase]?.[rhythm] ?? ["  "];
     const effectsR = EFFECTS_R[effectPhase]?.[rhythm] ?? ["  "];
 
+    // ── Compose full lines — each exactly LINE_WIDTH chars ──
+    const eL = effectsL[this.frameIndex % effectsL.length] ?? "";
+    const eR = effectsR[this.frameIndex % effectsR.length] ?? "";
+    const acc = accVariants[accIdx] ?? "";
+    const face = ` │ ${eyes[eyeIdx]} │`;
+    const bodyStr = bodyVariants[bodyIdx] ?? "";
+    const legsStr = legsVariants[legsIdx] ?? "";
+
+    const lines: [string, string, string, string, string] = [
+      padFixed(` ╭───────╮`,    LINE_WIDTH),   // head
+      padFixed(`${face}${acc}`, LINE_WIDTH),    // face + accessory
+      padFixed(` ╰───┬───╯`,    LINE_WIDTH),   // neck
+      padFixed(`${bodyStr}`,     LINE_WIDTH),   // body (sprites already have correct indent)
+      padFixed(` ${legsStr}`,    LINE_WIDTH),   // legs (1 extra space to center under torso)
+    ];
+
     return {
       mood: displayMood,
       phase: this.transitioning ? "anticipation" : this.phase,
-      face:      padFixed(` │ ${eyes[eyeIdx]} │`, W_FACE),
-      body:      padFixed(bodyVariants[bodyIdx]!, W_BODY),
-      legs:      padFixed(legsVariants[legsIdx]!, W_LEGS),
-      effectL:   padFixed(effectsL[this.frameIndex % effectsL.length]!, W_EFFECT),
-      effectR:   padFixed(effectsR[this.frameIndex % effectsR.length]!, W_EFFECT),
-      accessory: padFixed(accVariants[accIdx]!, W_ACC),
+      lines,
       bubble: this.bubble,
       moodColor: displayMood,
       intensity: this.intensity,
