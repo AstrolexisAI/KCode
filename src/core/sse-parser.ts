@@ -6,6 +6,11 @@ import { log } from "./logger";
 
 const SSE_DEBUG = process.env.KCODE_DEBUG_SSE === "1";
 
+// Auto-elevate log level when SSE debug is enabled
+if (SSE_DEBUG && !process.env.KCODE_LOG_LEVEL) {
+  process.env.KCODE_LOG_LEVEL = "debug";
+}
+
 export interface SSEChunk {
   type: "content_delta" | "thinking_delta" | "tool_call_delta" | "finish" | "usage" | "error";
   // content_delta
