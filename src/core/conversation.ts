@@ -869,12 +869,20 @@ export class ConversationManager {
           content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
         };
 
-        // After 2 retries, stop the turn — the model won't comply
+        // After 2 retries, force one final text-only attempt with a hard constraint
         if (this._theoreticalRetries >= 2) {
-          log.warn("session", "Theoretical mode: model persists with tool calls after 2 retries — stopping turn");
-          yield { type: "turn_end", stopReason: "theoretical_no_tools" };
+          log.warn("session", "Theoretical mode: model persists with tool calls after 2 retries — forcing final text-only attempt");
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] FINAL WARNING: All tool calls have been blocked. You MUST respond with text only. Produce your complete answer now using ONLY text. No tool_use blocks.",
+          });
           this._theoreticalRetries = 0;
-          return;
+          // Don't return — continue loop for the final text-only attempt
+          // but disable theoretical mode retry so if it still fails, the
+          // response (even if empty) is returned as-is
+          this._theoreticalMode = false;
+          yield { type: "turn_end", stopReason: "theoretical_no_tools" };
+          continue;
         }
 
         this.state.messages.push({
