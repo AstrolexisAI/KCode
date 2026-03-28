@@ -286,26 +286,23 @@ export default function KodiCompanion({
 
   // ─── Render ─────────────────────────────────────────────────
 
-  // Build layered sprite from engine state
-  const head    = " ╭───────╮";
-  const face    = frame?.face ?? " │ •  ◡• │";
-  const neck    = " ╰───┬───╯";
-  const body    = frame?.body ?? "   /|\\  ";
-  const legs    = frame?.legs ?? "   / \\  ";
-  const acc     = frame?.accessory ?? " ";
-  const effectL = frame?.effectL ?? "  ";
-  const effectR = frame?.effectR ?? "  ";
-  const bubble  = frame?.bubble ?? "";
+  // Pre-composed lines from engine — all same width, guaranteed aligned
+  const lines = frame?.lines ?? [
+    " ╭───────╮   ",
+    " │ o  .o │   ",
+    " ╰───┬───╯   ",
+    "    /|\\      ",
+    "    / \\      ",
+  ];
+  const bubble = frame?.bubble ?? "";
 
   return (
     <Box flexDirection="row" borderStyle="round" borderColor={theme.dimmed} paddingX={1}>
-      {/* Kodi sprite — layered rendering */}
-      <Box flexDirection="column" width={16}>
-        <Text color={moodColor}>{effectL}{head}</Text>
-        <Text color={moodColor}>{effectL}{face}{acc}</Text>
-        <Text color={moodColor}>{effectL}{neck}</Text>
-        <Text color={moodColor}>{effectL}{body}{effectR}</Text>
-        <Text color={moodColor}>{effectL}{legs}{effectR}</Text>
+      {/* Kodi sprite — pre-composed, fixed-width lines */}
+      <Box flexDirection="column" width={15}>
+        {lines.map((line, i) => (
+          <Text key={i} color={moodColor}>{line}</Text>
+        ))}
       </Box>
       {/* Info panel */}
       <Box flexDirection="column" flexGrow={1} marginLeft={1}>
