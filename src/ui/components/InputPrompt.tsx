@@ -1,13 +1,14 @@
 // KCode - InputPrompt component
 // Text input with prompt character, history, multi-line support, and tab completion
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
 import { useTheme } from "../ThemeContext.js";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 import { kcodePath } from "../../core/paths.js";
+import { PasteDetector } from "../paste-detector.js";
 
 // ─── Persistent Input History ──────────────────────────────────
 
@@ -139,15 +140,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   // Vim mode state (enabled via ~/.kcode/keybindings.json)
   const [vimMode, setVimMode] = useState<VimMode>(isVimModeEnabled() ? "normal" : "insert");
 
-  // Paste detection: track whether a paste is actively in progress.
-  // During an active paste, Enter inserts \n instead of submitting.
-  // Paste is detected by rapid inter-keystroke timing (<50ms) and
-  // auto-expires after 100ms of no input (the "settle" period).
-  const lastInputTimeRef = useRef(0);
-  const pasteActiveRef = useRef(false);
-  const pasteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const PASTE_DETECT_MS = 50; // inputs arriving faster than this are from paste
-  const PASTE_SETTLE_MS = 100; // paste expires after this much idle time
+  // Paste detection: distinguishes pasted text from fast typing.
+  // Requires 5+ rapid consecutive inputs (<50ms apart) to activate.
+  // Auto-expires after 100ms of no input.
+  const pasteDetectorRef = useRef(new PasteDetector());
+  useEffect(() => () => pasteDetectorRef.current.dispose(), []);
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
@@ -170,6 +167,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     setValue("");
     setCursor(0);
     resetTabState();
+    pasteDetectorRef.current.reset();
     onSubmit(trimmed);
   }, [value, onSubmit, resetTabState]);
 
@@ -307,22 +305,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
           }
         }
 
-        // During active paste: insert newline as content instead of submitting.
-        // Paste is "active" when rapid input was recently detected and hasn't
-        // settled yet (no 100ms idle gap since last rapid input).
-        const now = Date.now();
-        const timeSinceLast = now - lastInputTimeRef.current;
-        if (timeSinceLast < PASTE_DETECT_MS && timeSinceLast > 0) {
-          pasteActiveRef.current = true;
-        }
-
-        if (pasteActiveRef.current) {
+        // Ask the paste detector if this Enter is part of a paste.
+        // Only returns true after 5+ rapid consecutive inputs were seen.
+        if (pasteDetectorRef.current.shouldInsertNewline()) {
           setValue((prev) => prev.slice(0, cursor) + "\n" + prev.slice(cursor));
           setCursor((prev) => prev + 1);
-          lastInputTimeRef.current = now;
-          // Reset settle timer
-          if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
-          pasteTimerRef.current = setTimeout(() => { pasteActiveRef.current = false; }, PASTE_SETTLE_MS);
           return;
         }
 
@@ -490,20 +477,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
       // Regular character input
       if (input && !key.ctrl && !key.meta) {
-        const now = Date.now();
-        const timeSinceLast = now - lastInputTimeRef.current;
-        lastInputTimeRef.current = now;
-
-        // Activate paste mode on rapid input
-        if (timeSinceLast < PASTE_DETECT_MS && timeSinceLast > 0) {
-          pasteActiveRef.current = true;
-        }
-        // Reset settle timer on every character during paste
-        if (pasteActiveRef.current) {
-          if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
-          pasteTimerRef.current = setTimeout(() => { pasteActiveRef.current = false; }, PASTE_SETTLE_MS);
-        }
-
+        pasteDetectorRef.current.recordInput();
         setValue((prev) => prev.slice(0, cursor) + input + prev.slice(cursor));
         setCursor((prev) => prev + input.length);
         setDropdownIndex(0); // Reset dropdown selection on typing
