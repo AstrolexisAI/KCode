@@ -1,22 +1,13 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync, existsSync, renameSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { PluginManager } from "./plugins.ts";
 
 let tempDir: string;
+let userPluginsDir: string;
 let pm: PluginManager;
-
-// The real ~/.kcode/plugins/ may contain plugins; temporarily rename it during tests.
-const userPluginsDir = join(homedir(), ".kcode", "plugins");
-const userPluginsBackup = userPluginsDir + ".bak-test";
-let didBackup = false;
-
-function makeTempDir(): string {
-  const dir = join("/tmp", `kcode-plugins-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  mkdirSync(dir, { recursive: true });
-  return dir;
-}
 
 function createPlugin(baseDir: string, name: string, manifest: object, skillFiles?: string[]): void {
   const pluginsDir = join(baseDir, ".kcode", "plugins", name);
@@ -31,28 +22,15 @@ function createPlugin(baseDir: string, name: string, manifest: object, skillFile
 }
 
 describe("PluginManager", () => {
-  beforeEach(() => {
-    // Temporarily hide real user plugins so they don't interfere
-    if (existsSync(userPluginsDir) && !existsSync(userPluginsBackup)) {
-      renameSync(userPluginsDir, userPluginsBackup);
-      didBackup = true;
-    }
-    tempDir = makeTempDir();
-    pm = new PluginManager();
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "kcode-plugins-test-"));
+    userPluginsDir = join(tempDir, "user-plugins");
+    mkdirSync(userPluginsDir, { recursive: true });
+    pm = new PluginManager(userPluginsDir);
   });
 
-  afterEach(() => {
-    if (existsSync(tempDir)) {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-    // Restore real user plugins
-    if (didBackup && existsSync(userPluginsBackup)) {
-      if (existsSync(userPluginsDir)) {
-        rmSync(userPluginsDir, { recursive: true, force: true });
-      }
-      renameSync(userPluginsBackup, userPluginsDir);
-      didBackup = false;
-    }
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
   });
 
   test("load() with no plugin dirs does not crash", () => {

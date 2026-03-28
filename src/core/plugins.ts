@@ -36,6 +36,11 @@ export interface LoadedPlugin {
 
 export class PluginManager {
   private plugins: LoadedPlugin[] = [];
+  private userPluginsDir: string;
+
+  constructor(userPluginsDir?: string) {
+    this.userPluginsDir = userPluginsDir ?? join(homedir(), ".kcode", "plugins");
+  }
 
   /**
    * Discover and load plugins from standard directories.
@@ -44,7 +49,7 @@ export class PluginManager {
     this.plugins = [];
 
     // Load from user plugins directory
-    this.loadFromDir(join(homedir(), ".kcode", "plugins"));
+    this.loadFromDir(this.userPluginsDir);
 
     // Load from project plugins directory (higher priority)
     this.loadFromDir(join(cwd, ".kcode", "plugins"));

@@ -125,11 +125,12 @@ function decryptTokens(encrypted: EncryptedTokens): OAuthTokens {
 const TOKEN_FILE = join(homedir(), ".kcode", "oauth-tokens.json");
 const LEGACY_TOKEN_FILE = join(homedir(), ".kcode", "mcp-tokens.json");
 
-async function loadTokenStore(): Promise<Map<string, TokenStorageEntry>> {
+async function loadTokenStore(tokenFile?: string): Promise<Map<string, TokenStorageEntry>> {
   const store = new Map<string, TokenStorageEntry>();
 
-  // Try new file first, then legacy
-  for (const path of [TOKEN_FILE, LEGACY_TOKEN_FILE]) {
+  // Try specified file, then default new file, then legacy
+  const paths = tokenFile ? [tokenFile] : [TOKEN_FILE, LEGACY_TOKEN_FILE];
+  for (const path of paths) {
     try {
       const file = Bun.file(path);
       if (await file.exists()) {
@@ -161,7 +162,8 @@ async function loadTokenStore(): Promise<Map<string, TokenStorageEntry>> {
   return store;
 }
 
-async function saveTokenStore(store: Map<string, TokenStorageEntry>): Promise<void> {
+async function saveTokenStore(store: Map<string, TokenStorageEntry>, tokenFile?: string): Promise<void> {
+  const targetFile = tokenFile ?? TOKEN_FILE;
   const data: Record<string, TokenStorageEntry> = {};
   for (const [key, entry] of store) {
     data[key] = {
@@ -171,8 +173,9 @@ async function saveTokenStore(store: Map<string, TokenStorageEntry>): Promise<vo
     };
   }
   const { mkdirSync } = await import("node:fs");
-  mkdirSync(join(homedir(), ".kcode"), { recursive: true });
-  await Bun.write(TOKEN_FILE, JSON.stringify(data, null, 2), { mode: 0o600 } as never);
+  const { dirname } = await import("node:path");
+  mkdirSync(dirname(targetFile), { recursive: true });
+  await Bun.write(targetFile, JSON.stringify(data, null, 2), { mode: 0o600 } as never);
 }
 
 // ─── Browser Opening ─────────────────────────────────────────────
@@ -198,18 +201,25 @@ async function openBrowser(url: string): Promise<void> {
 
 // ─── OAuth Flow ──────────────────────────────────────────────────
 
+export interface McpOAuthClientOptions {
+  /** Override the token storage file path (default: ~/.kcode/oauth-tokens.json) */
+  tokenStorePath?: string;
+}
+
 export class McpOAuthClient {
   private config: OAuthConfig;
   private serverName: string;
   private codeVerifier: string | null = null;
+  private tokenStorePath: string | undefined;
 
-  constructor(serverName: string, config: OAuthConfig) {
+  constructor(serverName: string, config: OAuthConfig, options?: McpOAuthClientOptions) {
     this.serverName = serverName;
     this.config = config;
+    this.tokenStorePath = options?.tokenStorePath;
   }
 
   async getStoredTokens(): Promise<OAuthTokens | null> {
-    const store = await loadTokenStore();
+    const store = await loadTokenStore(this.tokenStorePath);
     const entry = store.get(this.serverName);
     if (!entry) return null;
 
@@ -233,7 +243,7 @@ export class McpOAuthClient {
   }
 
   async storeTokens(tokens: OAuthTokens): Promise<void> {
-    const store = await loadTokenStore();
+    const store = await loadTokenStore(this.tokenStorePath);
     store.set(this.serverName, {
       serverName: this.serverName,
       tokens,
@@ -242,13 +252,13 @@ export class McpOAuthClient {
         tokenUrl: this.config.tokenUrl,
       },
     });
-    await saveTokenStore(store);
+    await saveTokenStore(store, this.tokenStorePath);
   }
 
   async clearTokens(): Promise<void> {
-    const store = await loadTokenStore();
+    const store = await loadTokenStore(this.tokenStorePath);
     store.delete(this.serverName);
-    await saveTokenStore(store);
+    await saveTokenStore(store, this.tokenStorePath);
   }
 
   async startAuthFlow(): Promise<{ url: string; port: number; waitForCallback: () => Promise<OAuthTokens> }> {
