@@ -1,7 +1,7 @@
 // KCode - InputPrompt component
 // Text input with prompt character, history, multi-line support, and tab completion
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { resolve, dirname, basename } from "node:path";
@@ -138,6 +138,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   // Vim mode state (enabled via ~/.kcode/keybindings.json)
   const [vimMode, setVimMode] = useState<VimMode>(isVimModeEnabled() ? "normal" : "insert");
+
+  // Paste detection: track timing between input events to distinguish
+  // typed Enter (submit) from newlines embedded in a pasted block.
+  const lastInputTimeRef = useRef(0);
+  const PASTE_DETECT_MS = 15; // inputs arriving faster than this are from paste
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
@@ -278,6 +283,12 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       if (key.escape && isVimModeEnabled()) { setVimMode("normal"); return; }
 
       if (key.return) {
+        // Alt+Enter (Meta+Return): always submit, even multiline content
+        if (key.meta) {
+          submit();
+          return;
+        }
+
         // If dropdown is visible and an item is selected, fill it and submit
         if (dropdownItems.length > 0 && value.length > 1) {
           const selected = dropdownItems[dropdownIndex];
@@ -290,6 +301,21 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
             return;
           }
         }
+
+        // Detect paste: if Enter arrives within the paste detection window
+        // after previous input, it's a newline embedded in pasted text.
+        const now = Date.now();
+        const timeSinceLast = now - lastInputTimeRef.current;
+        const isPasting = timeSinceLast < PASTE_DETECT_MS && timeSinceLast > 0;
+
+        if (isPasting || value.includes("\n")) {
+          // During paste or when content is already multiline: insert newline
+          setValue((prev) => prev.slice(0, cursor) + "\n" + prev.slice(cursor));
+          setCursor((prev) => prev + 1);
+          lastInputTimeRef.current = now;
+          return;
+        }
+
         submit();
         return;
       }
@@ -452,6 +478,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
       // Regular character input
       if (input && !key.ctrl && !key.meta) {
+        lastInputTimeRef.current = Date.now();
         setValue((prev) => prev.slice(0, cursor) + input + prev.slice(cursor));
         setCursor((prev) => prev + input.length);
         setDropdownIndex(0); // Reset dropdown selection on typing
@@ -483,6 +510,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   // ─── Paste collapse: show summary for large inputs ──────────
   const PASTE_THRESHOLD = 200; // chars before collapsing display
+  const isMultiline = value.includes("\n");
   const isPastedLong = value.length > PASTE_THRESHOLD && !value.startsWith("/");
   let displayValue = value;
   let pasteHint = "";
@@ -493,6 +521,12 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       ? `paste ${chars.toLocaleString()} chars, ${lines} lines`
       : `paste ${chars.toLocaleString()} chars`;
     // Show only the hint, not the content — keeps prompt clean
+    displayValue = "";
+  } else if (isMultiline) {
+    // For shorter multiline content, show first line + line count
+    const lines = value.split("\n");
+    const firstLine = lines[0].length > 60 ? lines[0].slice(0, 57) + "..." : lines[0];
+    pasteHint = `${firstLine}  (${lines.length} lines)`;
     displayValue = "";
   }
 
@@ -521,7 +555,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
         <Text bold color={promptColor}>{vimIndicator}{promptChar}</Text>
         {pasteHint ? (
-          <Text color={theme.dimmed} italic>{pasteHint} <Text color={promptColor}>↵ send</Text></Text>
+          <Text color={theme.dimmed} italic>{pasteHint} <Text color={promptColor}>Alt+↵ send</Text></Text>
         ) : (
           <Text>
             {before}
