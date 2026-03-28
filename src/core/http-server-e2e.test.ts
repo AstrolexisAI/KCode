@@ -8,21 +8,27 @@ import { buildFetchHandler } from "./http-server";
 // ─── Real Server Setup ──────────────────────────────────────────
 
 const TEST_API_KEY = "e2e-test-key-" + Date.now();
-let server: ReturnType<typeof Bun.serve>;
-let BASE: string;
+let server: ReturnType<typeof Bun.serve> | null = null;
+let BASE = "";
 
 beforeAll(() => {
-  // Use the exact same fetch handler as production (auth + CORS + routing)
-  server = Bun.serve({
-    port: 0, // OS-assigned — no collisions
-    hostname: "127.0.0.1",
-    fetch: buildFetchHandler(TEST_API_KEY),
-  });
-  BASE = `http://127.0.0.1:${server.port}`;
+  const handler = buildFetchHandler(TEST_API_KEY);
+  // Try port 0 (OS-assigned); if that somehow fails, try an explicit high port
+  for (const port of [0, 19900 + (Date.now() % 100)]) {
+    try {
+      server = Bun.serve({ port, hostname: "127.0.0.1", fetch: handler });
+      BASE = `http://127.0.0.1:${server.port}`;
+      return;
+    } catch {
+      // Port busy — try next
+    }
+  }
+  throw new Error("Failed to start E2E test server on any port");
 });
 
 afterAll(() => {
-  server?.stop(true);
+  try { server?.stop(true); } catch { /* ignore cleanup errors */ }
+  server = null;
 });
 
 // ─── Helpers ────────────────────────────────────────────────────

@@ -81,6 +81,28 @@ function jsonError(message: string, code: number, corsHeaders: Record<string, st
   return Response.json({ error: message, code }, { status: code, headers: corsHeaders });
 }
 
+/**
+ * Sanitize and validate a cwd path for use as workspace.
+ * Returns the resolved real path, or null if invalid.
+ * Same rules as getOrCreateSession: absolute, exists, not root/home, resolved via realpath.
+ */
+function sanitizeCwd(rawCwd: string): string | null {
+  const { resolve, isAbsolute } = require("node:path") as typeof import("node:path");
+  const { existsSync, realpathSync } = require("node:fs") as typeof import("node:fs");
+
+  if (!isAbsolute(rawCwd)) return null;
+  const resolved = resolve(rawCwd);
+  if (!existsSync(resolved)) return null;
+
+  let real: string;
+  try { real = realpathSync(resolved); } catch { return null; }
+
+  const home = process.env.HOME ?? "/root";
+  if (real === "/" || real === home) return null;
+
+  return real;
+}
+
 async function getOrCreateSession(
   sessionId: string | undefined,
   opts: { model?: string; cwd?: string; noTools?: boolean },
@@ -105,26 +127,14 @@ async function getOrCreateSession(
   const { registerBuiltinTools } = await import("../tools/index.js");
   const { ConversationManager: CM } = await import("./conversation.js");
 
-  // Sanitize cwd — must be absolute, no traversal, and must exist
-  let cwd = opts.cwd ?? process.cwd();
+  // Sanitize cwd — reuse shared validator
+  let cwd = process.cwd();
   if (opts.cwd) {
-    const { resolve, isAbsolute } = await import("node:path");
-    const { existsSync, realpathSync } = await import("node:fs");
-    // Require absolute path and resolve it
-    if (!isAbsolute(opts.cwd)) {
-      throw new Error(`Working directory must be an absolute path: "${opts.cwd}"`);
+    const validated = sanitizeCwd(opts.cwd);
+    if (!validated) {
+      throw new Error(`Invalid working directory: "${opts.cwd}" (must be absolute, exist, and not be root or home)`);
     }
-    cwd = resolve(cwd);
-    if (!existsSync(cwd)) {
-      throw new Error(`Working directory does not exist: "${opts.cwd}"`);
-    }
-    // Resolve symlinks to get the real path
-    cwd = realpathSync(cwd);
-    // Don't allow root or home directory
-    const home = process.env.HOME ?? "/root";
-    if (cwd === "/" || cwd === home) {
-      throw new Error(`Refusing to use "${cwd}" as working directory`);
-    }
+    cwd = validated;
   }
   const config = await buildConfig(cwd);
   if (opts.model) config.model = opts.model;
@@ -433,16 +443,11 @@ export async function handleRoute(
         return jsonError(`Unknown tool: "${body.name}"`, 404, corsHeaders);
       }
 
-      // Set workspace for Glob/Grep — use request cwd if valid, else process.cwd()
+      // Set workspace for Glob/Grep — same validation as session creation
       const { setToolWorkspace } = await import("../tools/workspace.js");
-      let toolCwd = process.cwd();
-      if (body.cwd && typeof body.cwd === "string") {
-        const { resolve, isAbsolute } = await import("node:path");
-        const { existsSync } = await import("node:fs");
-        if (isAbsolute(body.cwd) && !body.cwd.includes("..") && existsSync(body.cwd)) {
-          toolCwd = resolve(body.cwd);
-        }
-      }
+      const toolCwd = (body.cwd && typeof body.cwd === "string")
+        ? (sanitizeCwd(body.cwd) ?? process.cwd())
+        : process.cwd();
       setToolWorkspace(toolCwd);
 
       // Audit log for tool execution via HTTP
