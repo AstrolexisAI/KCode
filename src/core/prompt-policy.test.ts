@@ -80,6 +80,30 @@ describe("looksIncomplete — tool_use path coverage", () => {
   test("does not trigger on text ending with colon (valid before tools)", () => {
     expect(looksIncomplete(pad("Here is what I found:"))).toBe(false);
   });
+
+  test("detects 'sino' at end (Spanish continuation connector)", () => {
+    expect(looksIncomplete(pad("La clave no es solo igualar stock, sino"))).toBe(true);
+  });
+
+  test("detects 'aunque' at end (Spanish concessive)", () => {
+    expect(looksIncomplete(pad("El resultado es correcto, aunque"))).toBe(true);
+  });
+
+  test("detects 'porque' at end (Spanish causal)", () => {
+    expect(looksIncomplete(pad("Esto funciona mejor porque"))).toBe(true);
+  });
+
+  test("detects 'not only' at end (English continuation)", () => {
+    expect(looksIncomplete(pad("The strategy should consider not only"))).toBe(true);
+  });
+
+  test("detects 'however' at end (English contrast)", () => {
+    expect(looksIncomplete(pad("The first approach works. However"))).toBe(true);
+  });
+
+  test("detects 'means' at end (English verb continuation)", () => {
+    expect(looksIncomplete(pad("This result means"))).toBe(true);
+  });
 });
 
 // ─── looksTheoretical — auto-detect formal prompts ──────────────
