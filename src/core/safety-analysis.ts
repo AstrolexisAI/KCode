@@ -188,6 +188,35 @@ function stripQuotedStrings(command: string): string {
   return result;
 }
 
+/**
+ * Detect commands that aren't real shell commands — symbolic expressions,
+ * math formulas, or pseudo-code that the model confused with Bash.
+ */
+export function detectNonShellExpression(command: string): string | null {
+  const trimmed = command.trim();
+  // Contains mathematical operators that don't exist in shell
+  if (/[×÷≤≥≠∈∉∀∃∅∇∑∏∫]/.test(trimmed)) {
+    return `Non-shell expression detected: contains mathematical symbols`;
+  }
+  // Looks like a variable comparison without any shell command (e.g. "compactThreshold < currentTokens")
+  if (/^[a-zA-Z_]\w*\s*[<>=!]+\s*[a-zA-Z_]\w*$/.test(trimmed)) {
+    return `Non-shell expression: looks like a comparison, not a command`;
+  }
+  // Looks like a formula (e.g. "a × b + c")
+  if (/^[a-zA-Z_]\w*\s*[×*+\-/]\s*[a-zA-Z_]\w*/.test(trimmed) && !trimmed.includes("/") || /×/.test(trimmed)) {
+    if (/×/.test(trimmed)) return `Non-shell expression: contains × (multiplication symbol)`;
+  }
+  // No actual command: just identifiers and operators, no recognized shell commands
+  const firstWord = trimmed.split(/\s+/)[0] ?? "";
+  if (/^[A-Z][a-zA-Z]+$/.test(firstWord) && !["Test", "Set", "New", "Get", "Install"].includes(firstWord)) {
+    // PascalCase identifier — likely pseudo-code, not a command
+    if (trimmed.includes("(") && !trimmed.includes("$(")) {
+      return `Non-shell expression: looks like a function call, not a shell command`;
+    }
+  }
+  return null;
+}
+
 // ─── Full Analysis ──────────────────────────────────────────────
 
 /** Full bash command safety analysis */
@@ -215,6 +244,9 @@ export function analyzeBashCommand(command: string): {
 
   const pipeToShell = detectPipeToShell(command);
   if (pipeToShell) issues.push(pipeToShell);
+
+  const nonShell = detectNonShellExpression(command);
+  if (nonShell) issues.push(nonShell);
 
   let riskLevel: "safe" | "moderate" | "dangerous" =
     issues.length === 0 ? "safe" :

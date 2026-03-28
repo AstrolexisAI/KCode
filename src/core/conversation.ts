@@ -56,6 +56,25 @@ const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
 
+/**
+ * Heuristic: does the text look like it was cut off mid-sentence?
+ * Catches responses that end in prepositions, articles, open brackets, etc.
+ */
+function looksIncomplete(text: string): boolean {
+  if (text.length < 50) return false;
+  const trimmed = text.trimEnd();
+  // Ends with an open code block that was never closed
+  const openFences = (trimmed.match(/```/g) || []).length;
+  if (openFences % 2 !== 0) return true;
+  // Ends with an open table row
+  if (trimmed.endsWith("|")) return true;
+  // Ends mid-sentence: preposition, article, conjunction, or bare word without punctuation
+  const lastLine = trimmed.split("\n").pop() ?? "";
+  const midSentenceEndings = /\b(the|a|an|of|in|to|for|with|and|or|but|that|is|are|was|from|by|as|at|on|into|this|these|which|where|when|how|if|than|between|through|about|over|under|provides?|contains?|includes?|requires?|ensures?)\s*$/i;
+  if (midSentenceEndings.test(lastLine)) return true;
+  return false;
+}
+
 
 // ─── Retry Logic ─────────────────────────────────────────────────
 
@@ -827,6 +846,22 @@ export class ConversationManager {
           this.state.messages.push({ role: "user", content: retryPrompt });
           yield { type: "turn_end", stopReason: "empty_response_retry", emptyType: guardState.lastEmptyType };
           continue;
+        }
+
+        // Truncation heuristic: detect suspiciously incomplete responses
+        // even when the provider says "stop" — the text may have been cut off
+        if (hasTextOutput && stopReason === "end_turn" && guardState.truncationRetries < 1) {
+          const fullText = textChunks.join("").trim();
+          if (looksIncomplete(fullText)) {
+            guardState.truncationRetries++;
+            log.info("session", `Response looks truncated — pushing for continuation`);
+            this.state.messages.push({
+              role: "user",
+              content: "[SYSTEM] Your response appears to have been cut off mid-sentence. Continue exactly where you left off.",
+            });
+            yield { type: "turn_end", stopReason: "truncation_retry" };
+            continue;
+          }
         }
 
         // Fire Stop hook — can block the conversation from ending
