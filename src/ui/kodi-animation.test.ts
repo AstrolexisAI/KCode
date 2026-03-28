@@ -305,6 +305,62 @@ describe("KodiAnimEngine — context modifiers", () => {
   });
 });
 
+// ─── Unicode Safety ─────────────────────────────────────────────
+
+describe("KodiAnimEngine — no ambiguous-width Unicode", () => {
+  // East Asian Ambiguous width codepoints that cause terminal jitter.
+  // Ranges: U+2500-U+257F (box-drawing, OK), but we flag the rest.
+  // See: https://www.unicode.org/reports/tr11/
+  const AMBIGUOUS_RANGES: Array<[number, number]> = [
+    [0x2010, 0x2027],  // general punctuation subset (‐–—‗''‚‛""„†‡•‣)
+    [0x2030, 0x2044],  // per mille, prime, etc
+    [0x2190, 0x21FF],  // arrows
+    [0x2200, 0x22FF],  // math operators (∀∃∅∇∈∉∋)
+    [0x2300, 0x23FF],  // misc technical (⌀⌂⌘)
+    [0x2460, 0x24FF],  // enclosed alphanumerics
+    [0x25A0, 0x25FF],  // geometric shapes (■□▪▫▲△▴▵▶▷▸▹►▻▼▽▾▿◀◁◆◇◈◉◊○◌◍◎●◐◑◒◓◕◖◗)
+    [0x2600, 0x26FF],  // misc symbols (☀☁☂☃★☆☎☏☐☑☒☓☕☠☢☣☮☯☸☹☺☻☼)
+    [0x2700, 0x27BF],  // dingbats (✂✃✄✅✆✇✈✉✊✋✌✍✎✏✐✑✒✓✔✕✖✗✘✙✚✛✜✝✞✟✠✡✢✣✤✥✦✧)
+  ];
+
+  function isAmbiguous(cp: number): boolean {
+    // Allow box-drawing (U+2500-U+257F) and block elements (U+2580-U+259F)
+    if (cp >= 0x2500 && cp <= 0x259F) return false;
+    for (const [lo, hi] of AMBIGUOUS_RANGES) {
+      if (cp >= lo && cp <= hi) return true;
+    }
+    return false;
+  }
+
+  test("all face/eye sprites use only ASCII-safe characters", () => {
+    const engine = new KodiAnimEngine();
+    const moods = ["idle", "happy", "excited", "thinking", "reasoning", "working",
+      "worried", "sleeping", "celebrating", "curious", "mischievous",
+      "crazy", "angry", "smug"] as const;
+
+    for (const mood of moods) {
+      engine.setMood(mood);
+      advance(engine, 500);
+      // Check several frames
+      for (let i = 0; i < 20; i++) {
+        const frame = engine.tick(100);
+        for (const ch of frame.face) {
+          const cp = ch.codePointAt(0)!;
+          if (isAmbiguous(cp)) {
+            throw new Error(`Ambiguous-width char U+${cp.toString(16).toUpperCase()} ('${ch}') in face for mood "${mood}": "${frame.face}"`);
+          }
+        }
+        for (const ch of frame.accessory) {
+          const cp = ch.codePointAt(0)!;
+          if (isAmbiguous(cp)) {
+            throw new Error(`Ambiguous-width char U+${cp.toString(16).toUpperCase()} ('${ch}') in accessory for mood "${mood}"`);
+          }
+        }
+      }
+    }
+  });
+});
+
 // ─── Determinism ────────────────────────────────────────────────
 
 describe("KodiAnimEngine — determinism", () => {
