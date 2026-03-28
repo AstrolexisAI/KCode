@@ -1,58 +1,28 @@
 // KCode - HTTP Server E2E Tests
-// Spins up a real Bun.serve with auth, CORS, and routing to test full HTTP stack.
+// Spins up a real Bun.serve using the production fetch handler (buildFetchHandler).
+// Uses port 0 for OS-assigned port to avoid collisions.
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { handleRoute } from "./http-server";
+import { buildFetchHandler } from "./http-server";
 
 // ─── Real Server Setup ──────────────────────────────────────────
 
-const TEST_PORT = 19877;
 const TEST_API_KEY = "e2e-test-key-" + Date.now();
-const BASE = `http://127.0.0.1:${TEST_PORT}`;
-
 let server: ReturnType<typeof Bun.serve>;
+let BASE: string;
 
 beforeAll(() => {
+  // Use the exact same fetch handler as production (auth + CORS + routing)
   server = Bun.serve({
-    port: TEST_PORT,
+    port: 0, // OS-assigned — no collisions
     hostname: "127.0.0.1",
-    async fetch(req) {
-      const url = new URL(req.url);
-
-      // CORS — same logic as startHttpServer
-      const origin = req.headers.get("Origin") ?? "";
-      const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$/.test(origin)
-        || origin.startsWith("vscode-webview://");
-      const corsHeaders: Record<string, string> = {
-        "Access-Control-Allow-Origin": isLocalOrigin ? origin : "http://localhost",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Id",
-        "Vary": "Origin",
-      };
-
-      // Preflight
-      if (req.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: corsHeaders });
-      }
-
-      // Auth
-      const authHeader = req.headers.get("Authorization");
-      if (authHeader !== `Bearer ${TEST_API_KEY}`) {
-        return Response.json({ error: "Unauthorized", code: 401 }, { status: 401, headers: corsHeaders });
-      }
-
-      try {
-        return await handleRoute(req, url, corsHeaders);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return Response.json({ error: msg }, { status: 500, headers: corsHeaders });
-      }
-    },
+    fetch: buildFetchHandler(TEST_API_KEY),
   });
+  BASE = `http://127.0.0.1:${server.port}`;
 });
 
 afterAll(() => {
-  server.stop(true);
+  server?.stop(true);
 });
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -75,7 +45,7 @@ async function api(
   return fetch(`${BASE}${path}`, { ...fetchOpts, headers });
 }
 
-// ─── Auth (real HTTP) ───────────────────────────────────────────
+// ─── Auth (production code path) ────────────────────────────────
 
 describe("E2E: Auth", () => {
   test("rejects request with no auth header", async () => {
@@ -96,7 +66,7 @@ describe("E2E: Auth", () => {
   });
 });
 
-// ─── CORS (real HTTP) ───────────────────────────────────────────
+// ─── CORS (production code path) ────────────────────────────────
 
 describe("E2E: CORS", () => {
   test("preflight OPTIONS returns 204 with CORS headers", async () => {
@@ -245,7 +215,6 @@ describe("E2E: Session headers", () => {
       headers: { "X-Session-Id": "test-session-abc" },
     });
     expect(res.status).toBe(200);
-    // No active session with that ID, should return empty context
     const body = await res.json() as Record<string, unknown>;
     expect(body.messageCount).toBe(0);
   });
