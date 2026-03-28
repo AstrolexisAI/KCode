@@ -1317,4 +1317,18 @@ This lets the user trade quality for speed on simpler tasks.`,
     args: ["[name]"],
     template: `__builtin_agents__`,
   },
+  {
+    name: "snapshot",
+    description: "Capture a snapshot of the current session state",
+    aliases: ["snap"],
+    args: ["[json|markdown]"],
+    template: `__builtin_snapshot__`,
+  },
+  {
+    name: "snapshots",
+    description: "List saved session snapshots",
+    aliases: ["snapshot-list"],
+    args: ["[limit] | diff <id1> <id2> | view <id>"],
+    template: `__builtin_snapshots__`,
+  },
 ];
