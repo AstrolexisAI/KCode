@@ -1,155 +1,104 @@
-// KCode - Bracketed paste stdin wrapper
-// Intercepts bracketed paste sequences (\x1b[200~ ... \x1b[201~) from stdin
-// and delivers the paste content as a single atomic data event, preventing
-// Ink's useInput from breaking it into individual character/key events.
+// KCode - Stdin paste interceptor
+// Detects multiline paste at the stdin byte level, BEFORE Ink processes
+// the data. Paste content is captured atomically and delivered via callback.
 //
-// Without this, pasted newlines are interpreted as key.return (submit),
-// and Ink's escape sequence parser may corrupt the character stream.
+// Detection methods (belt-and-suspenders):
+// 1. Bracketed paste sequences (\x1b[200~ ... \x1b[201~) — deterministic
+// 2. Byte heuristic: a single stdin `data` event with both printable
+//    characters AND newlines is a multiline paste. Single keystrokes
+//    never produce this pattern.
+//
+// When a paste is detected, the `data` event is consumed (Ink never sees
+// it), and the complete paste text is delivered via the onPaste callback.
 
-import { Transform, type TransformCallback } from "node:stream";
-
-const PASTE_START = "\x1b[200~";
-const PASTE_END = "\x1b[201~";
-
-/**
- * A Transform stream that detects bracketed paste mode sequences.
- *
- * Normal input passes through unchanged. When a paste bracket is detected,
- * all content is buffered until the end bracket, then emitted via the
- * 'bracketed-paste' event on the stream. The paste data is NOT passed
- * through to stdout/Ink — the consumer must handle it separately.
- */
-export class PasteInterceptStream extends Transform {
-  private pasteBuffer: string = "";
-  private inPaste: boolean = false;
-  private pending: string = "";
-
-  // Ink requires these TTY/raw-mode properties on its stdin stream.
-  // Proxy them from the real process.stdin so Ink can enable raw mode,
-  // manage the event loop, and check terminal capabilities.
-  get isTTY(): boolean { return !!(process.stdin as any).isTTY; }
-  get isRaw(): boolean { return !!(process.stdin as any).isRaw; }
-  setRawMode(mode: boolean): this {
-    if (typeof (process.stdin as any).setRawMode === "function") {
-      (process.stdin as any).setRawMode(mode);
-    }
-    return this;
-  }
-  ref(): this { process.stdin.ref(); return this; }
-  unref(): this { process.stdin.unref(); return this; }
-
-  override _transform(chunk: Buffer, _encoding: string, callback: TransformCallback): void {
-    let data = this.pending + chunk.toString("utf-8");
-    this.pending = "";
-
-    while (data.length > 0) {
-      if (this.inPaste) {
-        const endIdx = data.indexOf(PASTE_END);
-        if (endIdx === -1) {
-          // Partial paste end sequence at the tail?
-          if (data.length < PASTE_END.length && PASTE_END.startsWith(data)) {
-            this.pending = data;
-            data = "";
-          } else {
-            // Check if the tail could be a partial match for PASTE_END
-            let partialLen = Math.min(data.length, PASTE_END.length - 1);
-            while (partialLen > 0) {
-              if (PASTE_END.startsWith(data.slice(data.length - partialLen))) break;
-              partialLen--;
-            }
-            if (partialLen > 0) {
-              this.pasteBuffer += data.slice(0, data.length - partialLen);
-              this.pending = data.slice(data.length - partialLen);
-            } else {
-              this.pasteBuffer += data;
-            }
-            data = "";
-          }
-        } else {
-          // Found end bracket
-          this.pasteBuffer += data.slice(0, endIdx);
-          this.inPaste = false;
-          this.emit("bracketed-paste", this.pasteBuffer);
-          this.pasteBuffer = "";
-          data = data.slice(endIdx + PASTE_END.length);
-        }
-      } else {
-        const startIdx = data.indexOf(PASTE_START);
-        if (startIdx === -1) {
-          // Check for partial start sequence at the tail
-          let partialLen = Math.min(data.length, PASTE_START.length - 1);
-          while (partialLen > 0) {
-            if (PASTE_START.startsWith(data.slice(data.length - partialLen))) break;
-            partialLen--;
-          }
-          if (partialLen > 0) {
-            this.push(Buffer.from(data.slice(0, data.length - partialLen), "utf-8"));
-            this.pending = data.slice(data.length - partialLen);
-          } else {
-            this.push(Buffer.from(data, "utf-8"));
-          }
-          data = "";
-        } else {
-          // Found start bracket — pass through everything before it
-          if (startIdx > 0) {
-            this.push(Buffer.from(data.slice(0, startIdx), "utf-8"));
-          }
-          this.inPaste = true;
-          this.pasteBuffer = "";
-          data = data.slice(startIdx + PASTE_START.length);
-        }
-      }
-    }
-
-    callback();
-  }
-
-  override _flush(callback: TransformCallback): void {
-    // Flush any remaining pending data
-    if (this.pending.length > 0) {
-      if (this.inPaste) {
-        this.pasteBuffer += this.pending;
-      } else {
-        this.push(Buffer.from(this.pending, "utf-8"));
-      }
-      this.pending = "";
-    }
-    // If we're still in a paste (no end bracket), emit what we have
-    if (this.inPaste && this.pasteBuffer.length > 0) {
-      this.emit("bracketed-paste", this.pasteBuffer);
-      this.pasteBuffer = "";
-      this.inPaste = false;
-    }
-    callback();
-  }
-}
+type PasteCallback = (text: string) => void;
 
 /**
- * Enable bracketed paste mode on the terminal and create an intercept stream.
+ * Install a paste interceptor on process.stdin.
  *
- * Returns the intercept stream (pipe process.stdin through it) and a cleanup
- * function that disables bracketed paste mode.
+ * Monkey-patches `process.stdin.emit` to detect paste content before
+ * Ink's input handler sees it. Returns a cleanup function.
  *
- * Usage:
- *   const { stream, cleanup } = enableBracketedPaste();
- *   process.stdin.pipe(stream);
- *   stream.on('bracketed-paste', (text: string) => { ... });
- *   // Pass `stream` as Ink's stdin
- *   // On exit: cleanup();
+ * @param onPaste Called with the complete paste text (newlines normalized to \n)
  */
-export function enableBracketedPaste(): {
-  stream: PasteInterceptStream;
-  cleanup: () => void;
-} {
-  // Enable bracketed paste mode
+export function installPasteInterceptor(onPaste: PasteCallback): () => void {
+  const originalEmit = process.stdin.emit.bind(process.stdin);
+
+  // Enable bracketed paste mode (terminal will wrap pastes in escape sequences)
   process.stdout.write("\x1b[?2004h");
 
-  const stream = new PasteInterceptStream();
+  // Track bracketed paste state across data events (paste may span multiple chunks)
+  let inBracketedPaste = false;
+  let bracketBuffer = "";
 
-  const cleanup = () => {
+  (process.stdin as any).emit = function (event: string, ...args: any[]): boolean {
+    if (event !== "data") {
+      return originalEmit(event, ...args);
+    }
+
+    const chunk = args[0] as Buffer;
+    const str = chunk.toString("utf-8");
+
+    // ── Bracketed paste: deterministic detection ──────────────
+    if (str.includes("\x1b[200~") || inBracketedPaste) {
+      let data = str;
+
+      if (!inBracketedPaste) {
+        // Start of bracketed paste — strip start sequence
+        const startIdx = data.indexOf("\x1b[200~");
+        // Pass through anything before the start bracket
+        const before = data.slice(0, startIdx);
+        if (before.length > 0) {
+          originalEmit("data", Buffer.from(before, "utf-8"));
+        }
+        data = data.slice(startIdx + 6); // "\x1b[200~".length = 6
+        inBracketedPaste = true;
+        bracketBuffer = "";
+      }
+
+      const endIdx = data.indexOf("\x1b[201~");
+      if (endIdx !== -1) {
+        // End of bracketed paste — deliver content
+        bracketBuffer += data.slice(0, endIdx);
+        inBracketedPaste = false;
+        const normalized = bracketBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        onPaste(normalized);
+        bracketBuffer = "";
+
+        // Pass through anything after the end bracket
+        const after = data.slice(endIdx + 6);
+        if (after.length > 0) {
+          originalEmit("data", Buffer.from(after, "utf-8"));
+        }
+      } else {
+        // Middle of bracketed paste — accumulate
+        bracketBuffer += data;
+      }
+
+      return true;
+    }
+
+    // ── Byte heuristic: fallback for terminals without bracketed paste ──
+    // A single stdin data event with both printable content AND newlines
+    // is a multiline paste. Single keystrokes never produce this pattern:
+    // - Enter key sends just \r (1 byte, no printable chars)
+    // - Regular key sends 1-8 bytes (no newlines)
+    const hasNewline = str.includes("\n") || str.includes("\r");
+    const printableContent = str.replace(/[\r\n\x1b]/g, "");
+    if (hasNewline && printableContent.length > 0) {
+      const normalized = str.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      onPaste(normalized);
+      return true;
+    }
+
+    // ── Normal input — let Ink handle it ─────────────────────
+    return originalEmit(event, ...args);
+  };
+
+  return () => {
+    // Restore original emit
+    (process.stdin as any).emit = originalEmit;
     // Disable bracketed paste mode
     process.stdout.write("\x1b[?2004l");
   };
-
-  return { stream, cleanup };
 }
