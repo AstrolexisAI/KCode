@@ -8,6 +8,7 @@ import { homedir } from "node:os";
 import { createHmac, randomBytes, pbkdf2Sync } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { loadUserSettingsRaw } from "./config.js";
+import { log } from "./logger";
 
 const KCODE_HOME = join(homedir(), ".kcode");
 const PRO_CACHE_FILE = join(KCODE_HOME, "pro-cache.json");
@@ -21,12 +22,12 @@ function getOrCreateCacheSalt(): string {
     if (existsSync(PRO_CACHE_SALT_FILE)) {
       return readFileSync(PRO_CACHE_SALT_FILE, "utf-8").trim();
     }
-  } catch { /* regenerate */ }
+  } catch (err) { log.debug("pro", `Failed to read cache salt file, regenerating: ${err}`); }
   const salt = randomBytes(32).toString("hex");
   try {
     mkdirSync(KCODE_HOME, { recursive: true });
     writeFileSync(PRO_CACHE_SALT_FILE, salt + "\n", { mode: 0o600 });
-  } catch { /* best-effort */ }
+  } catch (err) { log.debug("pro", `Failed to write cache salt file: ${err}`); }
   return salt;
 }
 
@@ -108,7 +109,8 @@ async function _doValidation(): Promise<boolean> {
 
     // Online validation with secure offline fallback
     return await validateProKey(key);
-  } catch {
+  } catch (err) {
+    log.debug("pro", `Pro validation failed: ${err}`);
     return false;
   }
 }
@@ -140,7 +142,7 @@ export function loadProCache(): ProCache | null {
     if ((mode & 0o077) !== 0) {
       // File is readable by group/others — could be tampered. Reset permissions.
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
-      try { chmodSync(PRO_CACHE_FILE, 0o600); } catch { /* best-effort */ }
+      try { chmodSync(PRO_CACHE_FILE, 0o600); } catch (err) { log.debug("pro", `Failed to chmod pro-cache file: ${err}`); }
     }
 
     const raw = JSON.parse(readFileSync(PRO_CACHE_FILE, "utf-8"));
@@ -151,7 +153,8 @@ export function loadProCache(): ProCache | null {
     if (raw.hmac !== expectedHmac) return null; // tampered — ignore cache
 
     return raw as ProCache;
-  } catch {
+  } catch (err) {
+    log.debug("pro", `Failed to load pro cache: ${err}`);
     return null;
   }
 }
@@ -162,7 +165,7 @@ function saveProCache(key: string, validatedAt: string, valid: boolean, serverVa
     const hmac = computeHmac(key, validatedAt, valid);
     const cache: ProCache = { key, validatedAt, valid, serverValidated, hmac };
     writeFileSync(PRO_CACHE_FILE, JSON.stringify(cache, null, 2) + "\n", { mode: 0o600 });
-  } catch { /* best-effort */ }
+  } catch (err) { log.debug("pro", `Failed to save pro cache: ${err}`); }
 }
 
 // ── Validation logic (#1, #4) ───────────────────────────────────
@@ -201,7 +204,8 @@ async function validateProKey(key: string): Promise<boolean> {
 
     saveProCache(key, new Date().toISOString(), valid, true);
     return valid;
-  } catch {
+  } catch (err) {
+    log.debug("pro", `Pro key validation server unreachable: ${err}`);
     // Server unreachable — trust cache if it was previously server-validated
     if (cache && cache.key === key && cache.serverValidated) {
       return cache.valid;
@@ -334,10 +338,10 @@ export async function getSessionCountThisMonth(): Promise<number> {
       try {
         const mtime = statSync(join(transcriptDir, f)).mtimeMs;
         if (mtime >= thirtyDaysAgo) count++;
-      } catch { /* skip */ }
+      } catch (err) { log.debug("pro", `Failed to stat transcript file ${f}: ${err}`); }
     }
     return count;
-  } catch { return 0; }
+  } catch (err) { log.debug("pro", `Failed to count sessions this month: ${err}`); return 0; }
 }
 
 /** Check if session limit reached (free: 50/month). Interactive prompt in TTY. */

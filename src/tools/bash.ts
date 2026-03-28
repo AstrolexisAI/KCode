@@ -79,10 +79,10 @@ export function clearSudoPasswordCache(): void {
   try {
     for (const f of readdirSync("/tmp")) {
       if (f.startsWith(".kcode-askpass-")) {
-        try { unlinkSync(`/tmp/${f}`); } catch { /* ignore */ }
+        try { unlinkSync(`/tmp/${f}`); } catch (err) { log.debug("bash", `Failed to clean up askpass script /tmp/${f}: ${err}`); }
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("bash", `Failed to list /tmp for askpass cleanup: ${err}`); }
 }
 
 // ─── Security Tool Registry ───────────────────────────────────
@@ -423,14 +423,14 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         // Kill entire process group with SIGKILL (negative PID = process group)
         if (proc.pid) {
           if (process.platform === "win32") {
-            try { Bun.spawnSync(["taskkill", "/PID", proc.pid.toString(), "/T", "/F"], { stdout: "pipe", stderr: "pipe" }); } catch { /* ignore */ }
+            try { Bun.spawnSync(["taskkill", "/PID", proc.pid.toString(), "/T", "/F"], { stdout: "pipe", stderr: "pipe" }); } catch (err) { log.debug("bash", `Failed to taskkill PID ${proc.pid}: ${err}`); }
           } else {
             process.kill(-proc.pid, "SIGKILL");
           }
         }
-      } catch { /* already dead */ }
+      } catch (err) { log.debug("bash", `Failed to kill process group on timeout: ${err}`); }
       // Clean up askpass script on timeout
-      if (askpassPath) { try { unlinkSync(askpassPath); } catch { /* ignore */ } }
+      if (askpassPath) { try { unlinkSync(askpassPath); } catch (err) { log.debug("bash", `Failed to clean up askpass on timeout: ${err}`); } }
       if (!resolved) {
         resolved = true;
         const stdout = Buffer.concat(chunks).toString("utf-8");
@@ -455,7 +455,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     proc.stdout.on("data", (data: Buffer) => {
       chunks.push(data);
       if (streamCb) {
-        try { streamCb(data.toString("utf-8")); } catch { /* ignore callback errors */ }
+        try { streamCb(data.toString("utf-8")); } catch (err) { log.debug("bash", `Stream callback error (stdout): ${err}`); }
       }
     });
     proc.stderr.on("data", (data: Buffer) => {
@@ -468,14 +468,14 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
             streamNoiseFilter.lastIndex = 0; // reset regex state for next chunk
           }
           if (text) streamCb(text);
-        } catch { /* ignore callback errors */ }
+        } catch (err) { log.debug("bash", `Stream callback error (stderr): ${err}`); }
       }
     });
 
     proc.on("close", (code) => {
       clearTimeout(timer);
       // Always clean up askpass script on process exit (belt-and-suspenders with inline rm -f)
-      if (askpassPath) { try { unlinkSync(askpassPath); } catch { /* ignore */ } }
+      if (askpassPath) { try { unlinkSync(askpassPath); } catch (err) { log.debug("bash", `Failed to clean up askpass on close: ${err}`); } }
       if (resolved) return;
       resolved = true;
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -500,7 +500,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
     proc.on("error", (err) => {
       clearTimeout(timer);
-      if (askpassPath) { try { unlinkSync(askpassPath); } catch { /* ignore */ } }
+      if (askpassPath) { try { unlinkSync(askpassPath); } catch (err2) { log.debug("bash", `Failed to clean up askpass on error: ${err2}`); } }
       if (resolved) return;
       resolved = true;
       resolve({

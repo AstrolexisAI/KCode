@@ -61,7 +61,7 @@ async function exitWithPause(code: number, errorMsg?: string): Promise<never> {
       require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
       require("node:fs").appendFileSync(crashLog,
         `[${new Date().toISOString()}] Exit code ${code}${errorMsg ? `: ${errorMsg}` : ""}\n`);
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("index", `Failed to write crash log: ${err}`); }
   }
 
   if (process.platform === "win32") {
@@ -73,9 +73,9 @@ async function exitWithPause(code: number, errorMsg?: string): Promise<never> {
         try {
           process.stdin.resume();
           process.stdin.once("data", () => { clearTimeout(timer); resolve(); });
-        } catch { resolve(); }
+        } catch (err) { log.debug("index", `Failed to resume stdin for pause: ${err}`); resolve(); }
       });
-    } catch { /* ignore stdin errors */ }
+    } catch (err) { log.debug("index", `Stdin pause error: ${err}`); }
   }
   process.exit(code);
 }
@@ -110,8 +110,8 @@ process.on("uncaughtException", (err) => {
       process.stderr.write(`\nCrash log saved to: ${crashLog}\n`);
       process.stderr.write("Press Enter to exit...\n");
       // Sync read — can't use async in uncaughtException handler
-      try { require("node:fs").readSync(0, Buffer.alloc(1)); } catch { /* ignore */ }
-    } catch { /* ignore */ }
+      try { require("node:fs").readSync(0, Buffer.alloc(1)); } catch (err) { log.debug("index", `Sync stdin read for pause failed: ${err}`); }
+    } catch (err) { log.debug("index", `Failed to write crash log on uncaught exception: ${err}`); }
   }
   process.exit(1);
 });
@@ -126,7 +126,7 @@ process.on("unhandledRejection", (reason) => {
       const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
       require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
       require("node:fs").appendFileSync(crashLog, `[${new Date().toISOString()}] UNHANDLED REJECTION: ${stack ?? msg}\n`);
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("index", `Failed to write crash log on unhandled rejection: ${err}`); }
   }
 });
 
@@ -306,7 +306,7 @@ async function runMain(
               }
             }
           }
-        } catch { /* not ready yet */ }
+        } catch (err) { log.debug("index", `Server health check not ready yet: ${err}`); }
 
         const elapsed = Math.round((Date.now() - start) / 1000);
         if (!serverRunning) {
@@ -549,7 +549,8 @@ async function runMain(
       // Create worktree with a new branch (using execFileSync to prevent shell injection)
       try {
         execFileSync("git", ["worktree", "add", worktreePath, "-b", `kcode/${worktreeName}`], { cwd, stdio: "pipe" });
-      } catch {
+      } catch (err) {
+        log.debug("index", `Worktree creation with new branch failed, trying existing branch: ${err}`);
         execFileSync("git", ["worktree", "add", worktreePath, `kcode/${worktreeName}`], { cwd, stdio: "pipe" });
       }
       // Change working directory to worktree
@@ -648,7 +649,7 @@ async function runMain(
   try {
     const { setUndoManager } = await import("./tools/undo.js");
     setUndoManager(conversationManager.getUndo());
-  } catch { /* non-critical */ }
+  } catch (err) { log.debug("index", `Failed to wire undo manager: ${err}`); }
 
   // Wire stash callbacks for conversation context snapshots
   try {
@@ -657,7 +658,7 @@ async function runMain(
       () => conversationManager.getState().messages,
       (msgs) => { conversationManager.restoreMessages(msgs); },
     );
-  } catch { /* non-critical */ }
+  } catch (err) { log.debug("index", `Failed to wire stash callbacks: ${err}`); }
 
   log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}, noTools=${!!opts.noTools}`);
 
@@ -746,7 +747,7 @@ async function runMain(
             }
           }
         }
-      } catch { /* transcript search is best-effort */ }
+      } catch (err) { log.debug("index", `Transcript search for PR-linked session failed: ${err}`); }
 
       // If no related session found, inject PR context into the conversation
       if (!resumedFromTranscript) {
@@ -881,7 +882,7 @@ async function runMain(
           promptText = `${promptText}\n\n<stdin>\n${stdinContent}\n</stdin>`;
         }
       }
-    } catch { /* no stdin data */ }
+    } catch (err) { log.debug("index", `Failed to read piped stdin: ${err}`); }
   }
 
   // ─── Route to the appropriate mode ──────────────────────────
@@ -910,9 +911,9 @@ async function runMain(
         const idx = getCodebaseIndex(cwd);
         idx.build();
         log.info("watcher", `Re-indexed after ${changes.length} external file change(s)`);
-      } catch { /* non-critical */ }
+      } catch (err) { log.debug("index", `Failed to re-index after file changes: ${err}`); }
     });
-  } catch { /* file watcher is optional */ }
+  } catch (err) { log.debug("index", `File watcher initialization failed: ${err}`); }
 
   // Interactive mode: start the Ink-based terminal UI
   const app = startUI({ config, conversationManager, tools });
@@ -927,7 +928,7 @@ async function runMain(
     if (sessionData.messagesCount > 1) {
       getNarrativeManager().updateNarrative(sessionData);
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("index", `Failed to save session narrative: ${err}`); }
 
   log.info("session", "Session ended");
   shutdownLsp();

@@ -30,7 +30,7 @@ export async function isServerRunning(): Promise<boolean> {
         signal: AbortSignal.timeout(2000),
       });
       if (resp.ok) return true;
-    } catch { /* try next */ }
+    } catch (err) { log.debug("llama-server", `Health check ${endpoint} failed: ${err}`); }
   }
 
   // Server not responding — clean up stale PID file
@@ -45,7 +45,7 @@ export function getServerPort(): number | null {
       const port = parseInt(readFileSync(PORT_FILE, "utf-8").trim(), 10);
       if (port > 0) return port;
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("llama-server", `Failed to read port file: ${err}`); }
   return null;
 }
 
@@ -56,7 +56,7 @@ function getServerPid(): number | null {
       const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
       if (pid > 0) return pid;
     }
-  } catch { /* ignore */ }
+  } catch (err) { log.debug("llama-server", `Failed to read PID file: ${err}`); }
   return null;
 }
 
@@ -198,7 +198,7 @@ main()`;
 
     proc.on("error", (err) => {
       log.error("server", `Failed to start server: ${err.message}`);
-      try { logFile.flush(); logFile.end(); } catch { /* best effort */ }
+      try { logFile.flush(); logFile.end(); } catch (err) { log.debug("llama-server", `Failed to flush log file: ${err}`); }
       cleanupPidFile();
       reject(new Error(`Failed to start server: ${err.message}`));
     });
@@ -238,7 +238,7 @@ main()`;
             resolve({ port, pid: proc.pid! });
             return;
           }
-        } catch { /* not ready yet */ }
+        } catch (err) { log.debug("llama-server", `Server not ready yet: ${err}`); }
 
         await new Promise((r) => setTimeout(r, pollInterval));
       }
@@ -277,8 +277,9 @@ export async function stopServer(): Promise<void> {
         await new Promise((r) => setTimeout(r, 500));
         try {
           process.kill(pid, 0); // Check if still alive
-        } catch {
+        } catch (err) {
           // Process is dead
+          log.debug("llama-server", `Server process already dead: ${err}`);
           break;
         }
       }
@@ -287,7 +288,7 @@ export async function stopServer(): Promise<void> {
       try {
         process.kill(pid, "SIGKILL");
         log.warn("server", `Force-killed llama-server (PID: ${pid})`);
-      } catch { /* already dead */ }
+      } catch (err) { log.debug("llama-server", `Force-kill failed (process already dead): ${err}`); }
     }
   } catch (err) {
     // Process doesn't exist — clean up stale files
@@ -338,7 +339,7 @@ export async function getServerStatus(): Promise<{
         const props = await resp.json() as { default_generation_settings?: { model?: string } };
         return { running, port, pid, model: props.default_generation_settings?.model };
       }
-    } catch { /* try MLX */ }
+    } catch (err) { log.debug("llama-server", `Failed to fetch /props for server status: ${err}`); }
 
     try {
       const resp = await fetch(`http://localhost:${port}/v1/models`, {
@@ -349,15 +350,15 @@ export async function getServerStatus(): Promise<{
         const model = data?.data?.[0]?.id;
         return { running, port, pid, model };
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("llama-server", `Failed to fetch /v1/models for server status: ${err}`); }
   }
 
   return { running, port, pid };
 }
 
 function cleanupPidFile(): void {
-  try { unlinkSync(PID_FILE); } catch { /* ignore */ }
-  try { unlinkSync(PORT_FILE); } catch { /* ignore */ }
+  try { unlinkSync(PID_FILE); } catch (err) { log.debug("llama-server", `Failed to remove PID file: ${err}`); }
+  try { unlinkSync(PORT_FILE); } catch (err) { log.debug("llama-server", `Failed to remove port file: ${err}`); }
 }
 
 /** Find directories containing shared library files under a given path (cross-platform) */
@@ -377,5 +378,5 @@ function findLibDirs(baseDir: string): string[] {
       }
     }
     return [...dirs];
-  } catch { return []; }
+  } catch (err) { log.debug("llama-server", `Failed to scan for shared libraries: ${err}`); return []; }
 }

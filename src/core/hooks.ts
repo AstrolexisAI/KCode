@@ -242,7 +242,8 @@ function safeRegexTest(pattern: string, target: string): boolean {
 
     const regex = new RegExp(pattern);
     return regex.test(target);
-  } catch {
+  } catch (err) {
+    log.debug("hooks", `Regex test failed for pattern "${pattern}": ${err}`);
     return false;
   }
 }
@@ -395,7 +396,8 @@ async function executeHookHttp(
   let parsed: URL;
   try {
     parsed = new URL(action.url);
-  } catch {
+  } catch (err) {
+    log.debug("hooks", `Invalid hook URL "${action.url}": ${err}`);
     return { exitCode: 1, stdout: "", stderr: `Invalid hook URL: ${action.url}` };
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
@@ -498,7 +500,7 @@ async function executeHookAgent(
   let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(jsonData);
-  } catch { /* use empty context */ }
+  } catch (err) { log.debug("hooks", `Failed to parse JSON context for agent hook: ${err}`); }
 
   const expandedPrompt = expandAgentTemplate(config.prompt, {
     event: parsed.event as string | undefined,
@@ -530,7 +532,7 @@ async function executeHookAgent(
     // Fire and forget — but enforce a max timeout to prevent zombie processes
     const bgTimeout = Math.max(timeout, 300_000); // at least 5 minutes
     const bgTimer = setTimeout(() => {
-      try { proc.kill(); } catch { /* best effort */ }
+      try { proc.kill(); } catch (err) { log.debug("hooks", `Failed to kill background agent hook: ${err}`); }
       log.warn("hooks", `Agent hook (background) killed after ${bgTimeout}ms timeout`);
     }, bgTimeout);
     proc.on("error", (err) => {
@@ -555,7 +557,7 @@ async function executeHookAgent(
     proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
 
     const timer = setTimeout(() => {
-      try { proc.kill(); } catch { /* best effort */ }
+      try { proc.kill(); } catch (err) { log.debug("hooks", `Failed to kill foreground agent hook: ${err}`); }
       resolve({ exitCode: 1, stdout: "", stderr: `Agent hook timed out after ${timeout}ms` });
     }, timeout);
 
@@ -597,7 +599,8 @@ async function executeHookEntry(
         if (parsed.protocol !== "https:") {
           return { exitCode: 1, stdout: "", stderr: `Hook auth requires HTTPS, got: ${parsed.protocol}` };
         }
-      } catch {
+      } catch (err) {
+        log.debug("hooks", `Invalid hook entry URL "${entry.url}": ${err}`);
         return { exitCode: 1, stdout: "", stderr: `Invalid hook URL: ${entry.url}` };
       }
     }
@@ -644,8 +647,8 @@ function parseHookOutput(stdout: string): HookOutput | null {
     ) {
       return parsed as HookOutput;
     }
-  } catch {
-    // Non-JSON output is ignored
+  } catch (err) {
+    log.debug("hooks", `Non-JSON hook output (ignored): ${err}`);
   }
 
   return null;
@@ -667,7 +670,8 @@ function loadSettingsFile(path: string, source: HookSource): KCodeSettings {
       }
     }
     return settings;
-  } catch {
+  } catch (err) {
+    log.debug("hooks", `Failed to parse settings file ${path}: ${err}`);
     return {};
   }
 }

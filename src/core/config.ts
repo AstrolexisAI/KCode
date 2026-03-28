@@ -8,6 +8,7 @@ import type { KCodeConfig, PermissionMode, PermissionRule, PermissionRuleAction 
 import { getGitRoot } from "./git";
 import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models";
 import { isPro } from "./pro";
+import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -99,7 +100,8 @@ async function readJsonFile(path: string): Promise<Record<string, unknown> | nul
     const file = Bun.file(path);
     if (!(await file.exists())) return null;
     return await file.json();
-  } catch {
+  } catch (err) {
+    log.debug("config", `Failed to read JSON file ${path}: ${err}`);
     return null;
   }
 }
@@ -109,7 +111,8 @@ async function readTextFile(path: string): Promise<string | null> {
     const file = Bun.file(path);
     if (!(await file.exists())) return null;
     return await file.text();
-  } catch {
+  } catch (err) {
+    log.debug("config", `Failed to read text file ${path}: ${err}`);
     return null;
   }
 }
@@ -295,8 +298,9 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
       if (stat.mtimeMs === _managedPolicyMtime) return _managedPolicy;
       // File changed, reload
       _managedPolicy = null;
-    } catch {
+    } catch (err) {
       // File gone, reload
+      log.debug("config", `Managed policy file stat failed: ${err}`);
       _managedPolicy = null;
     }
   }
@@ -314,7 +318,7 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
           console.error(`[config] Managed policy ${path} is a symlink, skipping for security`);
           continue;
         }
-      } catch { /* File stat failed, continue cautiously */ }
+      } catch (err) { log.debug("config", `Failed to check symlink for managed policy ${path}: ${err}`); }
       // Size check: reject policy files > 1 MB
       if (file.size > 1024 * 1024) {
         console.error(`[config] Managed policy file ${path} exceeds 1MB limit, skipping`);
@@ -359,7 +363,7 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
 
       _managedPolicy = policy;
       _managedPolicyPath = path;
-      try { _managedPolicyMtime = statSync(path).mtimeMs; } catch { _managedPolicyMtime = 0; }
+      try { _managedPolicyMtime = statSync(path).mtimeMs; } catch (err) { log.debug("config", `Failed to stat managed policy for mtime: ${err}`); _managedPolicyMtime = 0; }
       console.error(`[config] Loaded managed policy from ${path}`);
       return policy;
     } catch (err) {
@@ -521,7 +525,7 @@ export async function saveUserSettings(settings: Settings): Promise<void> {
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
   // Restrict permissions — settings may contain API keys and Pro license keys
-  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch { /* best-effort */ }
+  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod user settings: ${err}`); }
 }
 
 /** Load raw user settings JSON (preserves extra fields like provider-specific API keys). */
@@ -541,7 +545,7 @@ export async function saveUserSettingsRaw(raw: Record<string, unknown>): Promise
     if (v === undefined) delete merged[k];
   }
   await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
-  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch { /* best-effort */ }
+  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod raw user settings: ${err}`); }
 }
 
 export async function saveProjectSettings(cwd: string, settings: Settings): Promise<void> {
@@ -549,7 +553,7 @@ export async function saveProjectSettings(cwd: string, settings: Settings): Prom
   const dir = dirname(path);
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(path, JSON.stringify(settings, null, 2) + "\n");
-  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(path, 0o600); } catch { /* best-effort */ }
+  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(path, 0o600); } catch (err) { log.debug("config", `Failed to chmod project settings: ${err}`); }
 }
 
 // ─── Build KCodeConfig ──────────────────────────────────────────
@@ -673,8 +677,8 @@ function collectMdFiles(dir: string): string[] {
         results.push(fullPath);
       }
     }
-  } catch {
-    // Directory doesn't exist or not readable
+  } catch (err) {
+    log.debug("config", `Failed to read rules directory ${dir}: ${err}`);
   }
   return results;
 }
