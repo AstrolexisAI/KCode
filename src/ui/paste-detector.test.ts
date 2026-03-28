@@ -105,7 +105,7 @@ describe("PasteDetector", () => {
     expect(detector.shouldInsertNewline()).toBe(false);
   });
 
-  test("fast typing then Enter does not insert newline", () => {
+  test("fast typing 2 chars then Enter does not insert newline", () => {
     const { detector, advance } = createDetector({ burstThreshold: 5 });
 
     // Type "hi" fast — only 2 rapid inputs, below threshold
@@ -115,6 +115,25 @@ describe("PasteDetector", () => {
     detector.recordInput(); // i
 
     // Enter — burst count is 2, below threshold of 5
+    advance(10);
+    expect(detector.shouldInsertNewline()).toBe(false);
+  });
+
+  test("fast typing 4 chars then Enter does not insert newline", () => {
+    const { detector, advance } = createDetector({ burstThreshold: 5 });
+
+    // Type "abcd" fast — 4 rapid inputs, still below threshold
+    advance(10);
+    detector.recordInput(); // a
+    advance(10);
+    detector.recordInput(); // b
+    advance(10);
+    detector.recordInput(); // c
+    advance(10);
+    detector.recordInput(); // d
+
+    // Enter — burst count is 4, below threshold of 5.
+    // Enter must NOT count toward the burst.
     advance(10);
     expect(detector.shouldInsertNewline()).toBe(false);
   });
