@@ -558,6 +558,8 @@ export class ConversationManager {
       this.config.disallowedTools,
     );
     const turnStartMs = Date.now();
+    // Track the tail of text from previous turn iteration (for dedup on truncation retry)
+    let previousTurnTail = "";
 
     while (true) {
       // Hard break after force-stop allowed one final text turn
@@ -1003,20 +1005,53 @@ export class ConversationManager {
         // Truncation heuristic: detect suspiciously incomplete responses
         // Check on any terminal stop (end_turn or tool_use — text before tools may be truncated)
         // Allow up to 2 retries for continuation
-        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use") && guardState.truncationRetries < 2) {
-          const fullText = textChunks.join("").trim();
-          if (looksIncomplete(fullText)) {
+        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use")) {
+          let fullText = textChunks.join("").trim();
+
+          // Dedup: if this is a continuation and the model repeated the tail
+          // from the previous turn, strip the overlapping prefix
+          if (previousTurnTail.length > 0 && fullText.length > 0) {
+            // Find the longest suffix of previousTurnTail that matches a prefix of fullText
+            const tailToMatch = previousTurnTail.slice(-200);
+            for (let overlapLen = Math.min(tailToMatch.length, fullText.length); overlapLen >= 20; overlapLen--) {
+              const tailSuffix = tailToMatch.slice(-overlapLen);
+              if (fullText.startsWith(tailSuffix)) {
+                log.info("session", `Stripping ${overlapLen} chars of duplicated tail from continuation`);
+                fullText = fullText.slice(overlapLen);
+                // Update the text in the conversation state too
+                const lastMsg = this.state.messages[this.state.messages.length - 1];
+                if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
+                  const textBlocks = (lastMsg.content as ContentBlock[]).filter(b => b.type === "text");
+                  if (textBlocks.length > 0) {
+                    (textBlocks[0] as any).text = fullText;
+                  }
+                }
+                // Re-emit the cleaned text
+                if (fullText.length > 0) {
+                  yield { type: "text_delta" as const, text: "" }; // trigger re-render
+                }
+                break;
+              }
+            }
+          }
+
+          if (guardState.truncationRetries < 2 && looksIncomplete(fullText)) {
             guardState.truncationRetries++;
             log.info("session", `Response looks truncated (attempt ${guardState.truncationRetries}) — pushing for continuation`);
-            // Include the last ~300 chars so the model knows where it left off.
-            // Without this context, models tend to restart from the beginning.
-            const tail = fullText.slice(-300);
+            previousTurnTail = fullText.slice(-300);
+            const tail = fullText.slice(-200);
             this.state.messages.push({
               role: "user",
               content: `[SYSTEM] Your response was cut off. Here is how it ended:\n\n"…${tail}"\n\nContinue EXACTLY from that point. Do NOT repeat any previous content. Do NOT restart the response. Just write the next sentence.`,
             });
             yield { type: "turn_end", stopReason: "truncation_retry" };
             continue;
+          }
+
+          // After all retries, if still incomplete, notify the user
+          if (guardState.truncationRetries >= 2 && looksIncomplete(fullText)) {
+            log.warn("session", "Response still incomplete after 2 continuation retries");
+            yield { type: "text_delta" as const, text: "\n\n---\n*[Response may be incomplete — model reached output limit]*\n" };
           }
         }
 
