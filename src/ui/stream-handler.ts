@@ -325,7 +325,7 @@ export async function processStreamEvents(
           setStreamingText("");
         } else if (event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry") {
           // Model returned empty response — show a diagnostic fallback
-          const emptyType = (event as any).emptyType as string | undefined;
+          const emptyType = event.emptyType;
           const hint = emptyType === "thinking_only"
             ? "(the model reasoned but produced no visible answer — try a different model or disable thinking)"
             : emptyType === "tools_only"

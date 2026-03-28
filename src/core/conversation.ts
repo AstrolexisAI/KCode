@@ -796,28 +796,32 @@ export class ConversationManager {
         const hasThinkingOutput = thinkingChunks.length > 0 || (this.state.messages.at(-1) as any)?.thinkingContent;
         const hasToolOutput = toolCalls.length > 0;
 
-        if (!hasTextOutput && stopReason === "end_turn" && guardState.emptyEndTurnCount < 2) {
-          guardState.emptyEndTurnCount++;
-
-          // Classify the empty response for better retry and diagnostics
-          const emptyType = hasThinkingOutput && !hasToolOutput ? "thinking_only"
+        // Classify empty responses — persisted so the final turn_end carries it
+        if (!hasTextOutput && stopReason === "end_turn") {
+          guardState.lastEmptyType = hasThinkingOutput && !hasToolOutput ? "thinking_only"
             : hasToolOutput && !hasThinkingOutput ? "tools_only"
             : hasThinkingOutput && hasToolOutput ? "thinking_and_tools"
             : "no_output";
+        } else {
+          guardState.lastEmptyType = undefined;
+        }
 
-          log.info("session", `Empty response (${emptyType}) on turn ${turnCount} — retry ${guardState.emptyEndTurnCount}/2`);
+        if (!hasTextOutput && stopReason === "end_turn" && guardState.emptyEndTurnCount < 2) {
+          guardState.emptyEndTurnCount++;
+
+          log.info("session", `Empty response (${guardState.lastEmptyType}) on turn ${turnCount} — retry ${guardState.emptyEndTurnCount}/2`);
 
           // Context-aware retry prompt
-          const retryPrompt = emptyType === "thinking_only"
+          const retryPrompt = guardState.lastEmptyType === "thinking_only"
             ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
-            : emptyType === "tools_only"
+            : guardState.lastEmptyType === "tools_only"
             ? "[SYSTEM] You executed tools but didn't provide any response. Summarize your findings in 3-6 sentences now."
-            : emptyType === "thinking_and_tools"
+            : guardState.lastEmptyType === "thinking_and_tools"
             ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
             : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
 
           this.state.messages.push({ role: "user", content: retryPrompt });
-          yield { type: "turn_end", stopReason: "empty_response_retry", emptyType } as any;
+          yield { type: "turn_end", stopReason: "empty_response_retry", emptyType: guardState.lastEmptyType };
           continue;
         }
 
@@ -849,7 +853,7 @@ export class ConversationManager {
           sendDesktopNotification("KCode", `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`);
         }
 
-        yield { type: "turn_end", stopReason };
+        yield { type: "turn_end", stopReason, emptyType: guardState.lastEmptyType };
         this.abortController = null;
         break;
       }

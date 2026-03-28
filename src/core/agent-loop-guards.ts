@@ -241,6 +241,7 @@ export class LoopGuardState {
   maxTokensContinuations = 0;
   jsonSchemaRetries = 0;
   emptyEndTurnCount = 0;
+  lastEmptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output";
   readonly crossTurnSigs = new Map<string, number>();
   readonly loopPatterns = new Map<string, LoopPatternEntry>();
 

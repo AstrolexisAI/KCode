@@ -197,7 +197,7 @@ export type StreamEvent =
   | { type: "error"; error: Error; retryable: boolean; attempt?: number }
   | { type: "turn_start" }
   | { type: "suggestion"; suggestions: { type: string; message: string; priority: string }[] }
-  | { type: "turn_end"; stopReason: string }
+  | { type: "turn_end"; stopReason: string; emptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" }
   | { type: "compaction_start"; messageCount: number; tokensBefore: number }
   | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }
   | { type: "budget_warning"; costUsd: number; limitUsd: number; pct: number }
