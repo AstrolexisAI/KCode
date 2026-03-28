@@ -8,7 +8,6 @@ import { resolve, dirname, basename } from "node:path";
 import { useTheme } from "../ThemeContext.js";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 import { kcodePath } from "../../core/paths.js";
-import { PasteDetector } from "../paste-detector.js";
 
 // ─── Persistent Input History ──────────────────────────────────
 
@@ -128,12 +127,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   const [cursor, setCursor] = useState(0);
 
   // Synchronous cursor ref: tracks cursor position between React renders.
-  // During rapid paste events, multiple useInput calls fire before React
-  // re-renders. React state `cursor` stays stale across these calls, but
-  // cursorRef is updated synchronously on each keystroke, ensuring characters
-  // are inserted at the correct position even during paste bursts.
   const cursorRef = useRef(0);
   cursorRef.current = cursor; // Sync ref with state on each render
+
   const [history, setHistory] = useState<string[]>(() => loadPersistentHistory());
   const [historyIndex, setHistoryIndex] = useState(-1);
 
@@ -148,11 +144,41 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   // Vim mode state (enabled via ~/.kcode/keybindings.json)
   const [vimMode, setVimMode] = useState<VimMode>(isVimModeEnabled() ? "normal" : "insert");
 
-  // Paste detection: distinguishes pasted text from fast typing.
-  // Requires 5+ rapid consecutive inputs (<50ms apart) to activate.
-  // Auto-expires after 100ms of no input.
-  const pasteDetectorRef = useRef(new PasteDetector());
-  useEffect(() => () => pasteDetectorRef.current.dispose(), []);
+  // ─── Input buffer ──────────────────────────────────────────────
+  // All character input accumulates in a buffer. A flush timer fires
+  // after 16ms of no input, inserting the entire buffer into value
+  // as a single atomic operation. This eliminates race conditions
+  // from interleaved setState calls during rapid paste events.
+  //
+  // For normal typing (>50ms between keys), each keystroke flushes
+  // individually before the next arrives — no perceptible delay.
+  // For paste (many chars in <1ms), the entire paste accumulates
+  // in the buffer and flushes as one string.
+  const inputBufferRef = useRef("");
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const INPUT_FLUSH_MS = 16; // ~1 frame at 60fps
+
+  const flushInputBuffer = useCallback(() => {
+    const buf = inputBufferRef.current;
+    inputBufferRef.current = "";
+    flushTimerRef.current = null;
+    if (buf.length === 0) return;
+
+    const pos = cursorRef.current;
+    cursorRef.current = pos + buf.length;
+    setValue((prev) => prev.slice(0, pos) + buf + prev.slice(pos));
+    setCursor(cursorRef.current);
+  }, []);
+
+  const scheduleFlush = useCallback(() => {
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(flushInputBuffer, INPUT_FLUSH_MS);
+  }, [flushInputBuffer]);
+
+  // Cleanup flush timer on unmount
+  useEffect(() => () => {
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+  }, []);
 
   const resetTabState = useCallback(() => {
     setTabMatches([]);
@@ -161,11 +187,22 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   }, []);
 
   const submit = useCallback(() => {
-    if (value.trim().length === 0) return;
+    // Flush any pending buffered input before submitting
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
+    // Compute final value: current state + any pending buffer
+    const pending = inputBufferRef.current;
+    inputBufferRef.current = "";
+    const finalValue = pending.length > 0
+      ? value.slice(0, cursorRef.current) + pending + value.slice(cursorRef.current)
+      : value;
+
+    if (finalValue.trim().length === 0) return;
 
     setHistory((prev) => {
-      // Store trimmed version in history for dedup/display, but send raw
-      const forHistory = value.trim();
+      const forHistory = finalValue.trim();
       const deduped = prev[0] === forHistory ? prev : [forHistory, ...prev];
       const clamped = deduped.slice(0, MAX_HISTORY);
       savePersistentHistory(clamped);
@@ -174,9 +211,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     setHistoryIndex(-1);
     setValue("");
     setCursor(0);
+    cursorRef.current = 0;
     resetTabState();
-    pasteDetectorRef.current.reset();
-    onSubmit(value);
+    onSubmit(finalValue);
   }, [value, onSubmit, resetTabState]);
 
   const handleTab = useCallback(() => {
@@ -308,23 +345,20 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
             setValue(completed);
             setCursor(completed.length);
             setDropdownIndex(0);
-            // Don't submit yet — let user add args
             return;
           }
         }
 
-        // Ask the paste detector if this Enter is part of a paste.
-        // Only returns true after 5+ rapid consecutive inputs were seen.
-        if (pasteDetectorRef.current.shouldInsertNewline()) {
-          const pos = cursorRef.current;
-          cursorRef.current = pos + 1;
-          setValue((prev) => prev.slice(0, pos) + "\n" + prev.slice(pos));
-          setCursor(cursorRef.current);
+        // If the input buffer has pending characters, this Enter is part
+        // of a paste — append \n to the buffer instead of submitting.
+        // This is deterministic: buffer non-empty = paste in progress.
+        if (inputBufferRef.current.length > 0) {
+          inputBufferRef.current += "\n";
+          scheduleFlush();
           return;
         }
 
-        // No active paste: submit normally (works for single-line AND
-        // multiline content after paste has settled)
+        // No pending buffer: submit normally
         submit();
         return;
       }
@@ -352,11 +386,15 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       }
 
       if (key.backspace || key.delete) {
-        if (cursorRef.current > 0) {
-          const pos = cursorRef.current;
-          cursorRef.current = pos - 1;
-          setValue((prev) => prev.slice(0, pos - 1) + prev.slice(pos));
-          setCursor(cursorRef.current);
+        // If buffer has pending input, remove from buffer first
+        if (inputBufferRef.current.length > 0) {
+          inputBufferRef.current = inputBufferRef.current.slice(0, -1);
+          scheduleFlush();
+          return;
+        }
+        if (cursor > 0) {
+          setValue((prev) => prev.slice(0, cursor - 1) + prev.slice(cursor));
+          setCursor((prev) => prev - 1);
         }
         return;
       }
@@ -487,14 +525,11 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         return;
       }
 
-      // Regular character input
+      // Regular character input — buffer and schedule flush
       if (input && !key.ctrl && !key.meta) {
-        pasteDetectorRef.current.recordInput();
-        const pos = cursorRef.current;
-        cursorRef.current = pos + input.length;
-        setValue((prev) => prev.slice(0, pos) + input + prev.slice(pos));
-        setCursor(cursorRef.current);
-        setDropdownIndex(0); // Reset dropdown selection on typing
+        inputBufferRef.current += input;
+        scheduleFlush();
+        setDropdownIndex(0);
       }
     },
     { isActive },
