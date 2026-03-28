@@ -194,26 +194,34 @@ function stripQuotedStrings(command: string): string {
  */
 export function detectNonShellExpression(command: string): string | null {
   const trimmed = command.trim();
-  // Contains mathematical operators that don't exist in shell
-  if (/[×÷≤≥≠∈∉∀∃∅∇∑∏∫]/.test(trimmed)) {
-    return `Non-shell expression detected: contains mathematical symbols`;
+  if (!trimmed) return null;
+
+  // Contains Unicode mathematical operators that don't exist in shell
+  if (/[×÷≤≥≠∈∉∀∃∅∇∑∏∫≈∞±]/.test(trimmed)) {
+    return `Non-shell expression: contains mathematical symbols`;
   }
-  // Looks like a variable comparison without any shell command (e.g. "compactThreshold < currentTokens")
+
+  // Bare identifier comparison (e.g. "compactThreshold < currentTokens")
   if (/^[a-zA-Z_]\w*\s*[<>=!]+\s*[a-zA-Z_]\w*$/.test(trimmed)) {
     return `Non-shell expression: looks like a comparison, not a command`;
   }
-  // Looks like a formula (e.g. "a × b + c")
-  if (/^[a-zA-Z_]\w*\s*[×*+\-/]\s*[a-zA-Z_]\w*/.test(trimmed) && !trimmed.includes("/") || /×/.test(trimmed)) {
-    if (/×/.test(trimmed)) return `Non-shell expression: contains × (multiplication symbol)`;
+
+  // Identifier × identifier (symbolic multiplication)
+  if (/[a-zA-Z_]\w*\s*×\s*[a-zA-Z_]\w*/.test(trimmed)) {
+    return `Non-shell expression: contains symbolic multiplication (×)`;
   }
-  // No actual command: just identifiers and operators, no recognized shell commands
-  const firstWord = trimmed.split(/\s+/)[0] ?? "";
-  if (/^[A-Z][a-zA-Z]+$/.test(firstWord) && !["Test", "Set", "New", "Get", "Install"].includes(firstWord)) {
-    // PascalCase identifier — likely pseudo-code, not a command
-    if (trimmed.includes("(") && !trimmed.includes("$(")) {
+
+  // PascalCase function call without $() — likely pseudo-code
+  // Extract the identifier before any parenthesis
+  const funcMatch = trimmed.match(/^([A-Z][a-zA-Z]+)\s*\(/);
+  if (funcMatch && !trimmed.includes("$(")) {
+    const funcName = funcMatch[1];
+    const shellLikePascal = new Set(["Test", "Set", "New", "Get", "Install", "Remove", "Start", "Stop"]);
+    if (!shellLikePascal.has(funcName)) {
       return `Non-shell expression: looks like a function call, not a shell command`;
     }
   }
+
   return null;
 }
 
