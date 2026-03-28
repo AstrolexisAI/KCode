@@ -104,6 +104,22 @@ describe("looksIncomplete — tool_use path coverage", () => {
   test("detects 'means' at end (English verb continuation)", () => {
     expect(looksIncomplete(pad("This result means"))).toBe(true);
   });
+
+  test("detects short post-tool truncation ending with 'en'", () => {
+    expect(looksIncomplete("Para ver los cambios, abre ese URL en")).toBe(true);
+  });
+
+  test("detects short truncation ending mid-word", () => {
+    expect(looksIncomplete("Ahora voy a verificar que todo funcione co")).toBe(true);
+  });
+
+  test("does not trigger on intentionally short complete sentence", () => {
+    expect(looksIncomplete("Done.")).toBe(false);
+  });
+
+  test("does not trigger on very short text below 10 chars", () => {
+    expect(looksIncomplete("OK")).toBe(false);
+  });
 });
 
 // ─── looksTheoretical — auto-detect formal prompts ──────────────
