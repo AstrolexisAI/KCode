@@ -61,7 +61,7 @@ const MAX_RETRY_DELAY_MS = 8000;
  * Catches responses that end in prepositions, articles, open brackets, etc.
  */
 export function looksIncomplete(text: string): boolean {
-  if (text.length < 50) return false;
+  if (text.length < 10) return false;
   const trimmed = text.trimEnd();
   // Ends with an open code block that was never closed
   const openFences = (trimmed.match(/```/g) || []).length;
