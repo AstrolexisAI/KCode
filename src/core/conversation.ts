@@ -1002,14 +1002,18 @@ export class ConversationManager {
 
         // Truncation heuristic: detect suspiciously incomplete responses
         // Check on any terminal stop (end_turn or tool_use — text before tools may be truncated)
-        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use") && guardState.truncationRetries < 1) {
+        // Allow up to 2 retries for continuation
+        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use") && guardState.truncationRetries < 2) {
           const fullText = textChunks.join("").trim();
           if (looksIncomplete(fullText)) {
             guardState.truncationRetries++;
-            log.info("session", `Response looks truncated — pushing for continuation`);
+            log.info("session", `Response looks truncated (attempt ${guardState.truncationRetries}) — pushing for continuation`);
+            // Include the last ~300 chars so the model knows where it left off.
+            // Without this context, models tend to restart from the beginning.
+            const tail = fullText.slice(-300);
             this.state.messages.push({
               role: "user",
-              content: "[SYSTEM] Your response appears to have been cut off mid-sentence. Continue exactly where you left off.",
+              content: `[SYSTEM] Your response was cut off. Here is how it ended:\n\n"…${tail}"\n\nContinue EXACTLY from that point. Do NOT repeat any previous content. Do NOT restart the response. Just write the next sentence.`,
             });
             yield { type: "turn_end", stopReason: "truncation_retry" };
             continue;
