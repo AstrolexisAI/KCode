@@ -449,7 +449,7 @@ export default function App({ config, conversationManager, tools, initialSession
         sessionName={sessionName}
         sessionStartTime={sessionStart}
       />
-      <ActivePlanPanel plan={activePlan} />
+      <ActivePlanPanel plan={activePlan} sessionStartTime={sessionStart} />
       <InputPrompt
         onSubmit={handleSubmit}
         isActive={mode !== "permission" && mode !== "sudo-password" && mode !== "cloud" && mode !== "toggle"}
