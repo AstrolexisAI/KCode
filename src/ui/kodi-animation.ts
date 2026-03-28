@@ -56,21 +56,23 @@ const W_ACC = 2;
 
 // ─── Sprite Layers ──────────────────────────────────────────────
 
+// All eye sprites use only ASCII + box-drawing (no ambiguous-width Unicode).
+// This guarantees stable column alignment across all terminals and locales.
 const EYES: Record<KodiMood, string[]> = {
-  idle:         ["•  ◡•", "◦  ◡◦", "•  ◡•", "•   •"],
-  happy:        ["^  ◡^", "◕  ◡◕", "^  ‿^"],
-  excited:      ["★ ◡ ★", "✧ ▽ ✧", "◕ ◡ ◕"],
-  thinking:     ["•  _ •", "◦  ‿◦", "•  ‿•"],
-  reasoning:    ["◉   ◉", "◉  _◉", "◉   ◉"],
-  working:      ["•  ‸•", "◦  ‸◦", "-  ‸-"],
-  worried:      ["°  ~°", "•  ~•", ";  _;"],
+  idle:         ["o  .o", "o  _o", "o  .o", "o   o"],
+  happy:        ["^  .^", "^  _^", "^  -^"],
+  excited:      ["* . *", "* v *", "o . o"],
+  thinking:     ["o  _ o", "o  -o", "o  -o"],
+  reasoning:    ["O   O", "O  _O", "O   O"],
+  working:      ["o  :o", "o  :o", "-  :-"],
+  worried:      ["o  ~o", "o  ~o", ";  _;"],
   sleeping:     ["-  _-", "_  __", "-  _-"],
-  celebrating:  ["★ ▽ ★", "◕ ▽ ◕", "^ ▽ ^"],
-  curious:      ["•  ᵕ•", "◦  ‿◦", "•  ᵕ•"],
-  mischievous:  [">  ‿>", "<  ‿<", ">  ‿~"],
-  crazy:        ["@  ◡°", "* ▽ @", "o ◡ O"],
+  celebrating:  ["* v *", "^ v ^", "^ v ^"],
+  curious:      ["o  .o", "o  -o", "o  .o"],
+  mischievous:  [">  ->", "<  -<", ">  -~"],
+  crazy:        ["@  .o", "* v @", "o . O"],
   angry:        ["># <#", ">  _<", ">  ^<"],
-  smug:         ["~  ‿~", "- ‿- ", "^ ‿^ "],
+  smug:         ["~  -~", "- -- ", "^ -^ "],
 };
 
 const BODY: Record<KodiMood, string[]> = {
