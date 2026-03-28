@@ -32,7 +32,7 @@ export const grepDefinition: ToolDefinition = {
 };
 
 export async function executeGrep(input: Record<string, unknown>): Promise<ToolResult> {
-  const opts = input as GrepInput;
+  const opts = input as unknown as GrepInput;
   const args: string[] = [];
 
   // Output mode

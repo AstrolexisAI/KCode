@@ -93,7 +93,7 @@ function collectFiles(
 ): void {
   if (depth > 10 || results.length >= maxFiles) return;
 
-  let entries: ReturnType<typeof readdirSync>;
+  let entries: import("node:fs").Dirent[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
   } catch {

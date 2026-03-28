@@ -84,7 +84,7 @@ export class CodebaseIndex {
   private walkDir(dir: string, depth: number): void {
     if (depth > 10 || this.entries.length >= MAX_FILES) return;
 
-    let entries: ReturnType<typeof readdirSync>;
+    let entries: import("node:fs").Dirent[];
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
@@ -206,8 +206,8 @@ export class CodebaseIndex {
   // ─── Persistence ──────────────────────────────────────────────
 
   private saveToDb(): void {
+    const db = getDb();
     try {
-      const db = getDb();
       db.exec(`CREATE TABLE IF NOT EXISTS codebase_index (
         path TEXT PRIMARY KEY,
         relative_path TEXT NOT NULL,
@@ -265,7 +265,7 @@ export class CodebaseIndex {
         exports: JSON.parse(r.exports),
         imports: JSON.parse(r.imports),
         definitions: r.definitions ? JSON.parse(r.definitions) : [],
-        modifiedAt: r.modified_at,
+        modifiedAt: Number(r.modified_at),
       }));
       this.indexed = true;
       return true;

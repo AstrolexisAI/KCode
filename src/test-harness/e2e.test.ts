@@ -110,7 +110,7 @@ describe("E2E: FakeProvider standalone", () => {
     });
 
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = await res.json() as Record<string, any>;
     expect(body.error.message).toBe("Rate limit exceeded");
   });
 

@@ -139,11 +139,11 @@ export type PermissionRuleAction = "allow" | "deny" | "ask";
  * Evaluated in order: first match wins. If no rule matches, falls back to permission mode.
  *
  * Pattern formats:
- *   "Bash(npm run *)"              — match Bash commands starting with "npm run "
- *   "Edit(/src/**/*.ts)"           — match Edit/Write on paths matching glob
- *   "WebFetch(domain:example.com)" — match WebFetch to specific domain
- *   "Bash(*)"                      — match ALL bash commands
- *   "mcp__server__*"               — match MCP tool calls by prefix
+ *   `Bash(npm run *)` — match Bash commands starting with "npm run "
+ *   `Edit(/src/wildcard.ts)` — match Edit/Write on paths matching glob
+ *   `WebFetch(domain:example.com)` — match WebFetch to specific domain
+ *   `Bash(*)` — match ALL bash commands
+ *   `mcp__server__*` — match MCP tool calls by prefix
  */
 export interface PermissionRule {
   pattern: string;

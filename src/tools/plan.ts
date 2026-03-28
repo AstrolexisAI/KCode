@@ -166,7 +166,7 @@ interface PlanInput {
 }
 
 export async function executePlan(input: Record<string, unknown>): Promise<ToolResult> {
-  const { mode, title, steps, updates } = input as PlanInput;
+  const { mode, title, steps, updates } = input as unknown as PlanInput;
 
   switch (mode) {
     case "create": {

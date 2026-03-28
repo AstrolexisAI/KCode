@@ -73,15 +73,41 @@ export class PluginManager {
       if (!raw.name || typeof raw.name !== "string") return null;
       if (!raw.version || typeof raw.version !== "string") return null;
 
+      // Validate name: only alphanumeric, hyphens, underscores (prevent path traversal)
+      if (!/^[a-zA-Z0-9_-]+$/.test(raw.name)) {
+        log.warn("plugins", `Invalid plugin name "${raw.name}" — must be alphanumeric/hyphens/underscores only`);
+        return null;
+      }
+
+      // Validate skills: must be an array of relative path strings (no path traversal)
+      const skills = Array.isArray(raw.skills)
+        ? raw.skills.filter((s: unknown) => typeof s === "string" && !String(s).includes(".."))
+        : undefined;
+
+      // Validate hooks: must be an array of objects with event + command
+      const hooks = Array.isArray(raw.hooks)
+        ? raw.hooks.filter((h: unknown) =>
+            h && typeof h === "object" &&
+            typeof (h as Record<string, unknown>).event === "string" &&
+            typeof (h as Record<string, unknown>).command === "string"
+          )
+        : undefined;
+
+      // Validate mcpServers: delegate to isValidServerConfig downstream
+      // but ensure structure is an object of named configs
+      const mcpServers = raw.mcpServers && typeof raw.mcpServers === "object" && !Array.isArray(raw.mcpServers)
+        ? raw.mcpServers
+        : undefined;
+
       return {
         name: raw.name,
         version: raw.version,
-        description: raw.description ?? "",
-        author: raw.author,
-        skills: raw.skills,
-        hooks: raw.hooks,
-        mcpServers: raw.mcpServers,
-        dependencies: raw.dependencies,
+        description: typeof raw.description === "string" ? raw.description : "",
+        author: typeof raw.author === "string" ? raw.author : undefined,
+        skills,
+        hooks,
+        mcpServers,
+        dependencies: Array.isArray(raw.dependencies) ? raw.dependencies : undefined,
       };
     } catch {
       return null;

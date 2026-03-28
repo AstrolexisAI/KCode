@@ -1,7 +1,7 @@
 // KCode - AskUser Tool
 // Structured user questions with optional choices
 
-import type { ToolDefinition } from "../core/types";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const askUserDefinition: ToolDefinition = {
   name: "AskUser",
@@ -37,14 +37,14 @@ export const askUserDefinition: ToolDefinition = {
 
 export async function executeAskUser(
   input: Record<string, unknown>,
-): Promise<string> {
+): Promise<ToolResult> {
   const question = String(input.question ?? "");
   const choices = input.choices as string[] | undefined;
   const defaultChoice = input.default_choice as string | undefined;
   const context = input.context as string | undefined;
 
   if (!question.trim()) {
-    return "Error: question is required";
+    return { tool_use_id: "", content: "Error: question is required", is_error: true };
   }
 
   const parts: string[] = [];
@@ -66,5 +66,5 @@ export async function executeAskUser(
     parts.push(`Default: ${defaultChoice}`);
   }
 
-  return parts.join("\n");
+  return { tool_use_id: "", content: parts.join("\n") };
 }

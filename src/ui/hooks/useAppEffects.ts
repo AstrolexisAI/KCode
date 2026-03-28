@@ -70,7 +70,7 @@ export function useAppEffects({
     setTrustPromptCallback(async (workspacePath, _command) => {
       setCompleted((prev) => [
         ...prev,
-        { kind: "system" as const, text: `Trusting workspace: ${workspacePath}` },
+        { kind: "learn" as const, text: `Trusting workspace: ${workspacePath}` },
       ]);
       return true;
     });

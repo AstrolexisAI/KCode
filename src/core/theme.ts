@@ -15,6 +15,7 @@ export interface Theme {
   warning: string;
   success: string;
   dimmed: string;
+  info?: string;
   userPrompt: string;
   assistantText: string;
   codeBlock: string;

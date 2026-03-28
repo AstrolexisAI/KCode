@@ -11,7 +11,11 @@ import { log } from "./logger";
 
 // ─── Constants ───────────────────────────────────────────────────
 
-const SNAPSHOTS_DIR = join(homedir(), ".kcode", "snapshots");
+/** Resolve at call time so KCODE_HOME env var overrides work in tests. */
+function getSnapshotsDir(): string {
+  const kcodeHome = process.env.KCODE_HOME ?? join(homedir(), ".kcode");
+  return join(kcodeHome, "snapshots");
+}
 const MAX_SNAPSHOTS = 200;
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -78,8 +82,8 @@ export interface SnapshotDiff {
 // ─── Helpers ─────────────────────────────────────────────────────
 
 function ensureDir(): void {
-  if (!existsSync(SNAPSHOTS_DIR)) {
-    mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+  if (!existsSync(getSnapshotsDir())) {
+    mkdirSync(getSnapshotsDir(), { recursive: true });
   }
 }
 
@@ -353,7 +357,7 @@ export function exportSnapshot(
 export function saveSnapshot(snapshot: SessionSnapshot): string {
   ensureDir();
 
-  const filePath = join(SNAPSHOTS_DIR, `${snapshot.id}.json`);
+  const filePath = join(getSnapshotsDir(), `${snapshot.id}.json`);
   writeFileSync(filePath, JSON.stringify(snapshot, null, 2), "utf-8");
 
   // Prune old snapshots if over limit
@@ -368,7 +372,7 @@ export function saveSnapshot(snapshot: SessionSnapshot): string {
 export function loadSnapshot(id: string): SessionSnapshot | null {
   ensureDir();
 
-  const filePath = join(SNAPSHOTS_DIR, `${id}.json`);
+  const filePath = join(getSnapshotsDir(), `${id}.json`);
   if (!existsSync(filePath)) return null;
 
   try {
@@ -393,7 +397,7 @@ export function listSnapshots(limit = 20): Array<{
 }> {
   ensureDir();
 
-  const files = readdirSync(SNAPSHOTS_DIR)
+  const files = readdirSync(getSnapshotsDir())
     .filter((f) => f.endsWith(".json"))
     .sort()
     .reverse();
@@ -409,7 +413,7 @@ export function listSnapshots(limit = 20): Array<{
 
   for (const file of files.slice(0, limit)) {
     try {
-      const content = readFileSync(join(SNAPSHOTS_DIR, file), "utf-8");
+      const content = readFileSync(join(getSnapshotsDir(), file), "utf-8");
       const snap = JSON.parse(content) as SessionSnapshot;
       results.push({
         id: snap.id,
@@ -485,7 +489,7 @@ export function diffSnapshots(a: SessionSnapshot, b: SessionSnapshot): SnapshotD
  */
 function pruneSnapshots(): void {
   try {
-    const files = readdirSync(SNAPSHOTS_DIR)
+    const files = readdirSync(getSnapshotsDir())
       .filter((f) => f.endsWith(".json"))
       .sort(); // oldest first
 
@@ -494,7 +498,7 @@ function pruneSnapshots(): void {
       const { unlinkSync } = require("node:fs");
       for (let i = 0; i < excess; i++) {
         try {
-          unlinkSync(join(SNAPSHOTS_DIR, files[i]));
+          unlinkSync(join(getSnapshotsDir(), files[i]));
         } catch (err) {
           log.debug("snapshot", `Failed to delete old snapshot ${files[i]}: ${err}`);
         }
@@ -506,4 +510,4 @@ function pruneSnapshots(): void {
 }
 
 /** Exposed for testing: the directory where snapshots are stored. */
-export const SNAPSHOTS_DIR_PATH = SNAPSHOTS_DIR;
+export { getSnapshotsDir as getSnapshotsDirPath };

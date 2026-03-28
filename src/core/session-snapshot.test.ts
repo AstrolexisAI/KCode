@@ -1,10 +1,16 @@
 // Tests for session-snapshot.ts
 
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
 import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { KCodeConfig, ConversationState, TokenUsage, Message } from "./types";
+
+// Redirect snapshot storage to a temp directory before importing the module
+const TEST_KCODE_HOME = join(tmpdir(), `kcode-test-snap-${process.pid}`);
+const origKcodeHome = process.env.KCODE_HOME;
+process.env.KCODE_HOME = TEST_KCODE_HOME;
+
 import {
   captureSnapshot,
   exportSnapshot,
@@ -15,6 +21,13 @@ import {
   type SessionSnapshot,
   type SnapshotMessage,
 } from "./session-snapshot";
+
+afterAll(() => {
+  // Restore env and clean up temp dir
+  if (origKcodeHome === undefined) delete process.env.KCODE_HOME;
+  else process.env.KCODE_HOME = origKcodeHome;
+  try { rmSync(TEST_KCODE_HOME, { recursive: true, force: true }); } catch {}
+});
 
 // ─── Test Helpers ────────────────────────────────────────────────
 

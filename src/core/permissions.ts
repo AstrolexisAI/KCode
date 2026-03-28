@@ -92,8 +92,8 @@ export class PermissionManager {
   }
 
   /** Set the callback used to prompt the user in "ask" mode. */
-  setPromptFn(fn: PermissionPromptFn): void {
-    this.promptFn = fn;
+  setPromptFn(fn: PermissionPromptFn | undefined): void {
+    this.promptFn = fn ?? null;
   }
 
   /** Get the current permission mode. */

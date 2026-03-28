@@ -31,13 +31,13 @@ export const globDefinition: ToolDefinition = {
 };
 
 export async function executeGlob(input: Record<string, unknown>): Promise<ToolResult> {
-  const { pattern, path: searchPath } = input as GlobInput;
+  const { pattern, path: searchPath } = input as unknown as GlobInput;
   const cwd = searchPath ?? process.cwd();
 
   try {
     const excludePatterns = EXCLUDED_DIRS.map((d) => `**/${d}/**`);
     const matches = (globSync(pattern, { cwd, withFileTypes: false, exclude: (p) => {
-      const name = typeof p === "string" ? p : p.name ?? "";
+      const name = typeof p === "string" ? p : (p as { name?: string }).name ?? "";
       return EXCLUDED_DIRS.includes(name);
     }}) as string[]).filter((m) => {
       // Double-check: filter out any paths containing excluded dirs

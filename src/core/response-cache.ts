@@ -11,7 +11,8 @@ const CACHE_DB_PATH = join(homedir(), ".kcode", "cache.db");
 const MAX_CACHE_SIZE = 500; // Max cached entries
 const MAX_ENTRY_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-let db: ReturnType<typeof import("bun:sqlite").Database.prototype.constructor> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let db: any | null = null;
 
 function getDb() {
   if (db) return db;

@@ -184,7 +184,7 @@ export class ConversationManager {
   }
 
   /** Set the sudo password prompt callback (called from UI layer). */
-  setSudoPasswordPromptFn(fn: SudoPasswordPromptFn): void {
+  setSudoPasswordPromptFn(fn: SudoPasswordPromptFn | undefined): void {
     _setSudoPasswordPromptFn(fn);
   }
 

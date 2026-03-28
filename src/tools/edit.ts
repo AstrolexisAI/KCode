@@ -126,7 +126,7 @@ function findClosestMatch(
 }
 
 export async function executeEdit(input: Record<string, unknown>): Promise<ToolResult> {
-  const { file_path, old_string, new_string, replace_all } = input as FileEditInput;
+  const { file_path, old_string, new_string, replace_all } = input as unknown as FileEditInput;
 
   try {
     const content = readFileSync(file_path, "utf-8");

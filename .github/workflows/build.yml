@@ -17,6 +17,10 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
+      - name: Dependency audit
+        run: bun audit
+      - name: Typecheck
+        run: bun run typecheck
       - run: bun test
 
   build:

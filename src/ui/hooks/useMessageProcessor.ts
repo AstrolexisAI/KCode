@@ -39,7 +39,7 @@ export interface UseMessageProcessorParams {
   setToolUseCount: (count: number) => void;
   setRunningAgentCount: (count: number) => void;
   setActiveTabs: (updater: (prev: TabInfo[]) => TabInfo[]) => void;
-  setBashStreamOutput: (output: string) => void;
+  setBashStreamOutput: (output: string | ((prev: string) => string)) => void;
   setSessionNotes: (updater: (prev: Array<{ time: string; text: string }>) => Array<{ time: string; text: string }>) => void;
   setSessionName: (name: string) => void;
   setSessionTags: (updater: (prev: string[]) => string[]) => void;
@@ -767,7 +767,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
   // Drain the message queue — process queued messages one by one
   const drainQueue = useCallback(async () => {
     while (messageQueueRef.current.length > 0) {
-      const next = messageQueueRef.current[0];
+      const next = messageQueueRef.current[0]!;
       messageQueueRef.current = messageQueueRef.current.slice(1);
       setMessageQueue([...messageQueueRef.current]);
       await processMessage(next);

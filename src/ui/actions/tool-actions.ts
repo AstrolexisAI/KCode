@@ -419,7 +419,7 @@ export async function handleToolAction(
       const { TemplateManager } = await import("../../core/templates.js");
       const tm = new TemplateManager(appConfig.workingDirectory);
       tm.load();
-      const templates = tm.list();
+      const templates = tm.listTemplates();
 
       // Also show builtin skills as "built-in templates"
       const { builtinSkills } = await import("../../core/builtin-skills.js");

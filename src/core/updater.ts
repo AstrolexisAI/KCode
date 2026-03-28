@@ -3,7 +3,7 @@
 // Downloads from GitHub releases or a configured update URL.
 
 import { execSync } from "node:child_process";
-import { existsSync, renameSync, unlinkSync, chmodSync, copyFileSync } from "node:fs";
+import { existsSync, renameSync, unlinkSync, chmodSync, copyFileSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir, platform, arch } from "node:os";
 import { log } from "./logger";
@@ -72,10 +72,10 @@ async function getLatestRelease(updateUrl?: string): Promise<ReleaseInfo | null>
     if (!resp.ok) return null;
 
     interface ReleaseAsset { name: string; browser_download_url: string }
-    interface ReleaseData { tag_name?: string; version?: string; assets?: ReleaseAsset[] }
+    interface ReleaseData { tag_name?: string; version?: string; assets?: ReleaseAsset[]; published_at?: string }
     const data = (await resp.json()) as ReleaseData;
-    const tag = data.tag_name ?? data.version;
-    const version = tag?.replace(/^v/, "");
+    const tag = data.tag_name ?? data.version ?? "";
+    const version = tag.replace(/^v/, "");
 
     const suffix = getPlatformSuffix();
     const asset = data.assets?.find((a) => a.name.includes(suffix));
@@ -89,7 +89,7 @@ async function getLatestRelease(updateUrl?: string): Promise<ReleaseInfo | null>
       tag,
       version,
       downloadUrl: asset.browser_download_url,
-      publishedAt: data.published_at,
+      publishedAt: data.published_at ?? "",
     };
   } catch (err) {
     log.debug("updater", `Failed to check for updates: ${err}`);
@@ -164,7 +164,7 @@ export async function checkForUpdate(currentVersion: string): Promise<string | n
   // Throttle: only check once per 24 hours
   try {
     if (existsSync(UPDATE_CHECK_FILE)) {
-      const lastCheck = parseInt(Bun.file(UPDATE_CHECK_FILE).textSync(), 10);
+      const lastCheck = parseInt(readFileSync(UPDATE_CHECK_FILE, "utf-8"), 10);
       if (Date.now() - lastCheck < UPDATE_CHECK_INTERVAL_MS) {
         return null;
       }

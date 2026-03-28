@@ -47,7 +47,7 @@ reference-source
 
 ### Permission & Security System
 
-- Permission modes: ask, auto, plan, bypassPermissions, dontAsk
+- Permission modes: ask, auto, plan, deny, acceptEdits
 - Bash command safety: prefix extraction, injection detection ($(), backticks), dangerous redirections, shell invocation blocking
 - Hooks: PreToolUse, PostToolUse, PreCompact, UserPromptSubmit, Stop, Notification
 - Hook output: { decision: allow|deny|block, reason, updatedInput }

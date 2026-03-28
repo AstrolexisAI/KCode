@@ -11,7 +11,7 @@ export async function handleSessionAction(
 
   switch (action) {
     case "clear": {
-      setCompleted([{
+      setCompleted(() => [{
         kind: "banner",
         title: `KCode v${appConfig.version ?? "?"}`,
         subtitle: "Kulvex Code by Astrolexis",
