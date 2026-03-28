@@ -35,7 +35,17 @@ import {
   registerSetupCommand,
   registerDoctorCommand,
   registerTeachCommand,
-  registerMiscCommands,
+  registerStatsCommand,
+  registerInitCommand,
+  registerNewCommand,
+  registerResumeCommand,
+  registerSearchCommand,
+  registerWatchCommand,
+  registerUpdateCommand,
+  registerBenchmarkCommands,
+  registerCompletionsCommand,
+  registerHistoryCommand,
+  registerServeCommand,
 } from "./cli/commands";
 
 // Version — hardcoded to avoid Bun bundler resolving wrong package.json
@@ -209,7 +219,17 @@ registerProCommands(program);
 registerSetupCommand(program, exitWithPause);
 registerDoctorCommand(program);
 registerTeachCommand(program);
-registerMiscCommands(program, VERSION);
+registerStatsCommand(program);
+registerInitCommand(program);
+registerNewCommand(program);
+registerResumeCommand(program);
+registerSearchCommand(program);
+registerWatchCommand(program);
+registerUpdateCommand(program, VERSION);
+registerBenchmarkCommands(program);
+registerCompletionsCommand(program);
+registerHistoryCommand(program);
+registerServeCommand(program, VERSION);
 
 // ─── Parse ──────────────────────────────────────────────────────
 
