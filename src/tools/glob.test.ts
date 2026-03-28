@@ -167,4 +167,32 @@ describe("glob tool", () => {
     const result = await executeGlob({ pattern: "**/*.ts", path: tempDir });
     expect(result.tool_use_id).toBe("");
   });
+
+  // ─── HOME workspace guard ───
+
+  test("warns when workspace is HOME and no path specified", async () => {
+    const home = process.env.HOME ?? "";
+    if (!home) return; // skip if HOME not set
+    setToolWorkspace(home);
+    try {
+      const result = await executeGlob({ pattern: "**/*.ts" });
+      expect(result.is_error).toBe(true);
+      expect(result.content).toContain("home directory");
+    } finally {
+      setToolWorkspace(tempDir); // restore
+    }
+  });
+
+  test("allows HOME workspace when path is specified", async () => {
+    const home = process.env.HOME ?? "";
+    if (!home) return;
+    setToolWorkspace(home);
+    try {
+      const result = await executeGlob({ pattern: "*.ts", path: tempDir });
+      // Should not trigger the HOME warning since path is explicit
+      expect(result.content).not.toContain("home directory");
+    } finally {
+      setToolWorkspace(tempDir);
+    }
+  });
 });
