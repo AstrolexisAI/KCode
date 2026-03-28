@@ -1,7 +1,7 @@
 // KCode - Main Ink application component
 // Top-level component managing conversation flow and rendering
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useApp } from "ink";
 import type { ConversationManager } from "../core/conversation.js";
 import type { KCodeConfig } from "../core/types.js";
@@ -14,6 +14,7 @@ import ToolTabs from "./components/ToolTabs.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import InputPrompt from "./components/InputPrompt.js";
+import ActivePlanPanel from "./components/ActivePlanPanel.js";
 import PermissionDialog, {
   type PermissionRequest,
   type PermissionChoice,
@@ -27,6 +28,7 @@ import { useKeyBindings } from "./hooks/useKeyBindings.js";
 import { useAppEffects } from "./hooks/useAppEffects.js";
 import { useMessageProcessor } from "./hooks/useMessageProcessor.js";
 import type { TabInfo } from "./stream-handler.js";
+import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 
 interface AppProps {
   config: KCodeConfig;
@@ -121,6 +123,7 @@ export default function App({ config, conversationManager, tools, initialSession
   const [sessionTags, setSessionTags] = useState<string[]>([]);
   const [showContextGrid, setShowContextGrid] = useState(false);
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
+  const [activePlan, setActivePlan] = useState<Plan | null>(() => getActivePlan() ?? loadLatestPlan());
 
   // Message queue — user can type while KCode is responding
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
@@ -150,6 +153,13 @@ export default function App({ config, conversationManager, tools, initialSession
     setSudoPasswordResolver,
     setWatcherSuggestions,
   });
+
+  useEffect(() => {
+    setActivePlan(getActivePlan() ?? loadLatestPlan());
+    return onPlanChange((plan) => {
+      setActivePlan(plan);
+    });
+  }, []);
 
   // Message processing: slash commands, LLM sending, queue draining
   const { handleSubmit, messageQueueRef } = useMessageProcessor({
@@ -439,6 +449,7 @@ export default function App({ config, conversationManager, tools, initialSession
         sessionName={sessionName}
         sessionStartTime={sessionStart}
       />
+      <ActivePlanPanel plan={activePlan} />
       <InputPrompt
         onSubmit={handleSubmit}
         isActive={mode !== "permission" && mode !== "sudo-password" && mode !== "cloud" && mode !== "toggle"}
