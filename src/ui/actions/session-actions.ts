@@ -694,6 +694,141 @@ export async function handleSessionAction(
       conversationManager.setCompactThreshold(pct / 100);
       return `  Auto-compaction threshold set to ${pct}% of context window.`;
     }
+    case "snapshot": {
+      const { captureSnapshot, saveSnapshot, exportSnapshot } = await import("../../core/session-snapshot.js");
+      const state = conversationManager.getState();
+      const usage = conversationManager.getUsage();
+      const startTime = Date.now() - 60_000; // approximate — real start time not available here
+
+      // Try to get git info
+      let gitBranch: string | undefined;
+      let gitCommit: string | undefined;
+      try {
+        const { execSync } = await import("node:child_process");
+        gitBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: appConfig.workingDirectory, timeout: 3000 }).toString().trim();
+        gitCommit = execSync("git rev-parse --short HEAD", { cwd: appConfig.workingDirectory, timeout: 3000 }).toString().trim();
+      } catch (_) { /* not a git repo */ }
+
+      // Calculate total cost from turn costs
+      const turnCosts = conversationManager.getTurnCosts();
+      const totalCost = turnCosts.reduce((sum, t) => sum + t.costUsd, 0);
+
+      const snap = captureSnapshot(appConfig, state, usage, startTime, {
+        provider: appConfig.model.includes("claude") ? "anthropic" : "openai",
+        gitBranch,
+        gitCommit,
+        totalCost: totalCost > 0 ? totalCost : undefined,
+      });
+
+      const filePath = saveSnapshot(snap);
+
+      // Optionally export in a specific format
+      const format = args?.trim();
+      if (format === "markdown" || format === "md") {
+        const md = exportSnapshot(snap, "markdown");
+        const { writeFileSync } = await import("node:fs");
+        const mdPath = filePath.replace(/\.json$/, ".md");
+        writeFileSync(mdPath, md, "utf-8");
+        return [
+          `  Snapshot captured: ${snap.id}`,
+          `  JSON: ${filePath}`,
+          `  Markdown: ${mdPath}`,
+          ``,
+          `  Model: ${snap.model} | Messages: ${snap.messages.length} | Turns: ${snap.turnCount}`,
+          `  Tools: ${snap.toolsUsed.join(", ") || "none"}`,
+          `  Files modified: ${snap.filesModified.length}`,
+        ].join("\n");
+      }
+
+      return [
+        `  Snapshot captured: ${snap.id}`,
+        `  Saved to: ${filePath}`,
+        ``,
+        `  Model: ${snap.model} | Messages: ${snap.messages.length} | Turns: ${snap.turnCount}`,
+        `  Tokens: ${snap.totalTokens.toLocaleString()}${snap.totalCost !== undefined ? ` | Cost: $${snap.totalCost.toFixed(4)}` : ""}`,
+        `  Tools: ${snap.toolsUsed.join(", ") || "none"}`,
+        `  Files modified: ${snap.filesModified.length}`,
+        ``,
+        `  View: /snapshots view ${snap.id}`,
+        `  List: /snapshots`,
+      ].join("\n");
+    }
+    case "snapshots": {
+      const { listSnapshots, loadSnapshot, diffSnapshots, exportSnapshot } = await import("../../core/session-snapshot.js");
+      const arg = args?.trim() ?? "";
+
+      // /snapshots view <id>
+      if (arg.startsWith("view ")) {
+        const id = arg.slice(5).trim();
+        const snap = loadSnapshot(id);
+        if (!snap) return `  Snapshot not found: ${id}`;
+
+        const md = exportSnapshot(snap, "markdown");
+        // Show a truncated version in terminal
+        const lines = md.split("\n").slice(0, 40);
+        if (md.split("\n").length > 40) lines.push("", "  ... (truncated, use /snapshot markdown for full export)");
+        return lines.map((l) => `  ${l}`).join("\n");
+      }
+
+      // /snapshots diff <id1> <id2>
+      if (arg.startsWith("diff ")) {
+        const parts = arg.slice(5).trim().split(/\s+/);
+        if (parts.length < 2) return "  Usage: /snapshots diff <id1> <id2>";
+
+        const snapA = loadSnapshot(parts[0]);
+        const snapB = loadSnapshot(parts[1]);
+        if (!snapA) return `  Snapshot not found: ${parts[0]}`;
+        if (!snapB) return `  Snapshot not found: ${parts[1]}`;
+
+        const diff = diffSnapshots(snapA, snapB);
+
+        const lines = [
+          `  Snapshot Diff: ${parts[0]} vs ${parts[1]}`,
+          ``,
+        ];
+
+        if (diff.configChanges.length > 0) {
+          lines.push(`  Config changes:`);
+          for (const c of diff.configChanges) {
+            lines.push(`    - ${c}`);
+          }
+        } else {
+          lines.push(`  Config: identical`);
+        }
+
+        lines.push(`  Messages: ${diff.messageCountDelta >= 0 ? "+" : ""}${diff.messageCountDelta}`);
+        lines.push(`  Tokens: ${diff.tokenDelta >= 0 ? "+" : ""}${diff.tokenDelta.toLocaleString()}`);
+        if (diff.costDelta !== undefined) {
+          lines.push(`  Cost: ${diff.costDelta >= 0 ? "+" : ""}$${diff.costDelta.toFixed(4)}`);
+        }
+        lines.push(`  Duration: ${diff.durationDelta >= 0 ? "+" : ""}${Math.round(diff.durationDelta / 1000)}s`);
+
+        if (diff.newTools.length > 0) lines.push(`  New tools: ${diff.newTools.join(", ")}`);
+        if (diff.removedTools.length > 0) lines.push(`  Removed tools: ${diff.removedTools.join(", ")}`);
+        if (diff.newFiles.length > 0) lines.push(`  New files: ${diff.newFiles.join(", ")}`);
+        if (diff.removedFiles.length > 0) lines.push(`  Removed files: ${diff.removedFiles.join(", ")}`);
+
+        return lines.join("\n");
+      }
+
+      // /snapshots [limit]
+      const limit = arg ? parseInt(arg) : 20;
+      const snapshots = listSnapshots(isNaN(limit) ? 20 : limit);
+      if (snapshots.length === 0) return "  No saved snapshots. Use /snapshot to capture one.";
+
+      const lines = [`  Saved Snapshots (${snapshots.length}):\n`];
+      for (const s of snapshots) {
+        const date = s.createdAt.slice(0, 16).replace("T", " ");
+        const dur = s.duration < 60_000
+          ? `${Math.round(s.duration / 1000)}s`
+          : `${Math.round(s.duration / 60_000)}m`;
+        lines.push(`  ${date}  ${s.model.slice(0, 20).padEnd(20)}  ${s.turnCount} turns  ${s.messageCount} msgs  ${dur}`);
+        lines.push(`    ${s.id}`);
+      }
+      lines.push(`\n  View: /snapshots view <id>`);
+      lines.push(`  Diff: /snapshots diff <id1> <id2>`);
+      return lines.join("\n");
+    }
     default:
       return null;
   }
