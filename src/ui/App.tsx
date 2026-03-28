@@ -123,7 +123,8 @@ export default function App({ config, conversationManager, tools, initialSession
   const [sessionTags, setSessionTags] = useState<string[]>([]);
   const [showContextGrid, setShowContextGrid] = useState(false);
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
-  const [activePlan, setActivePlan] = useState<Plan | null>(() => getActivePlan() ?? null);
+  // Plan panel: starts null, only set by onPlanChange (not from DB restore)
+  const [activePlan, setActivePlan] = useState<Plan | null>(null);
 
   // Message queue — user can type while KCode is responding
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
@@ -154,8 +155,10 @@ export default function App({ config, conversationManager, tools, initialSession
     setWatcherSuggestions,
   });
 
+  // Only show plans that are explicitly created/updated during this session.
+  // Do NOT read from getActivePlan() on mount — that contains DB-restored
+  // plans from previous sessions. Only react to onPlanChange events.
   useEffect(() => {
-    setActivePlan(getActivePlan() ?? null);
     return onPlanChange((plan) => {
       setActivePlan(plan);
     });
@@ -449,7 +452,7 @@ export default function App({ config, conversationManager, tools, initialSession
         sessionName={sessionName}
         sessionStartTime={sessionStart}
       />
-      <ActivePlanPanel plan={activePlan} sessionStartTime={sessionStart} />
+      <ActivePlanPanel plan={activePlan} />
       <InputPrompt
         onSubmit={handleSubmit}
         isActive={mode !== "permission" && mode !== "sudo-password" && mode !== "cloud" && mode !== "toggle"}
