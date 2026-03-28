@@ -121,10 +121,18 @@ export class FakeProvider {
   private server: any | null = null;
   private _requests: RecordedRequest[] = [];
 
+  private _inProcess = false;
+
   /** The base URL of the fake server (e.g., "http://localhost:12345"). */
   get baseUrl(): string {
-    if (!this.server) throw new Error("FakeProvider not started — call start() first");
+    if (this._inProcess) return "http://fake-provider.local";
+    if (!this.server) throw new Error("FakeProvider not started — call start() or startInProcess() first");
     return `http://localhost:${this.server.port}`;
+  }
+
+  /** Whether the provider is running in-process (no HTTP server). */
+  get inProcess(): boolean {
+    return this._inProcess;
   }
 
   /** All requests received by the fake server. */
@@ -197,7 +205,12 @@ export class FakeProvider {
 
   // ─── Server Lifecycle ──────────────────────────────────────────
 
-  /** Start the fake HTTP server on a random available port. */
+  /**
+   * Start the fake HTTP server on a random available port.
+   * Optional — only needed when tests require real HTTP (e.g., testing network
+   * layer behavior). For most tests, prefer startInProcess() which is portable
+   * to sandboxed/networkless environments.
+   */
   async start(): Promise<void> {
     this.server = Bun.serve({
       port: 0, // random available port
@@ -207,17 +220,38 @@ export class FakeProvider {
     });
   }
 
-  /** Stop the fake HTTP server. */
+  /**
+   * Start in-process mode — no HTTP server, use createFetch() to get a
+   * fetch-compatible function. Portable to sandboxed/networkless environments.
+   */
+  startInProcess(): void {
+    this._inProcess = true;
+  }
+
+  /**
+   * Returns a fetch-compatible function that routes requests directly to
+   * handleRequest() without going through HTTP. Only works after
+   * startInProcess() or start().
+   */
+  createFetch(): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
+    return async (input, init?) => {
+      const req = new Request(input as string, init);
+      return this.handleRequest(req);
+    };
+  }
+
+  /** Stop the fake HTTP server (no-op in in-process mode). */
   async stop(): Promise<void> {
     if (this.server) {
       this.server.stop(true);
       this.server = null;
     }
+    this._inProcess = false;
   }
 
   // ─── Request Handling ──────────────────────────────────────────
 
-  private async handleRequest(req: Request): Promise<Response> {
+  async handleRequest(req: Request): Promise<Response> {
     // Record the request
     let body: unknown = null;
     try {

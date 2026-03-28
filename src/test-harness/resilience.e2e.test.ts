@@ -5,9 +5,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { ConversationManager } from "../core/conversation";
 import type { StreamEvent } from "../core/types";
-import { FakeProvider } from "./fake-provider";
 import { createTestEnv, type TestEnv } from "./test-env";
-import { ToolRegistry } from "../core/tool-registry";
 import type { ToolDefinition, ToolHandler } from "../core/types";
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -36,6 +34,40 @@ function eventsOfType<T extends StreamEvent["type"]>(
   return events.filter((e) => e.type === type) as any;
 }
 
+/** Config overrides provided by withRawServer for in-process request routing. */
+interface RawServerOverrides {
+  apiBase: string;
+  customFetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+}
+
+/**
+ * Run a test body with an in-process request handler (no HTTP server needed).
+ * Creates a customFetch that routes requests directly to the handler,
+ * with abort signal support for timeout/cancellation tests.
+ */
+async function withRawServer(
+  handler: (req: Request) => Response | Promise<Response>,
+  fn: (overrides: RawServerOverrides) => Promise<void>,
+): Promise<void> {
+  const customFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    if (init?.signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
+    const req = new Request(input as string, init);
+    const responsePromise = Promise.resolve(handler(req));
+    if (init?.signal) {
+      return Promise.race([
+        responsePromise,
+        new Promise<never>((_, reject) => {
+          init.signal!.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted", "AbortError"));
+          });
+        }),
+      ]);
+    }
+    return responsePromise;
+  };
+  await fn({ apiBase: "http://in-process.test", customFetch });
+}
+
 // ─── Malformed SSE Tests ────────────────────────────────────────
 
 describe("Resilience: Malformed SSE chunks", () => {
@@ -43,6 +75,7 @@ describe("Resilience: Malformed SSE chunks", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -50,14 +83,12 @@ describe("Resilience: Malformed SSE chunks", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("malformed SSE — provider sends invalid JSON in SSE data lines", async () => {
-    // Start a raw HTTP server that sends garbage SSE
-    const rawServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         const body = [
           "data: {invalid json\n\n",
           "data: not even close to json\n\n",
@@ -80,22 +111,15 @@ describe("Resilience: Malformed SSE chunks", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const config = { ...env.config, apiBase, customFetch };
+        const cm = new ConversationManager(config, env.registry);
+        const { events } = await sendAndCollect(cm, "test");
 
-    try {
-      const config = {
-        ...env.config,
-        apiBase: `http://localhost:${rawServer.port}`,
-      };
-      const cm = new ConversationManager(config, env.registry);
-      const { events } = await sendAndCollect(cm, "test");
-
-      // Should not crash — should have turn_end
-      const turnEnds = eventsOfType(events, "turn_end");
-      expect(turnEnds.length).toBeGreaterThanOrEqual(1);
-    } finally {
-      rawServer.stop(true);
-    }
+        const turnEnds = eventsOfType(events, "turn_end");
+        expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+      },
+    );
   });
 });
 
@@ -106,6 +130,7 @@ describe("Resilience: Empty response", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -113,14 +138,12 @@ describe("Resilience: Empty response", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("provider sends finish with no content — no crash", async () => {
-    // Raw server that sends only a finish chunk with no content delta
-    const rawServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         const body = [
           `data: ${JSON.stringify({
             id: "chatcmpl-empty", object: "chat.completion.chunk", model: "fake",
@@ -137,20 +160,16 @@ describe("Resilience: Empty response", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const config = { ...env.config, apiBase, customFetch };
+        const cm = new ConversationManager(config, env.registry);
+        const { events, text } = await sendAndCollect(cm, "hello");
 
-    try {
-      const config = { ...env.config, apiBase: `http://localhost:${rawServer.port}` };
-      const cm = new ConversationManager(config, env.registry);
-      const { events, text } = await sendAndCollect(cm, "hello");
-
-      const turnEnds = eventsOfType(events, "turn_end");
-      expect(turnEnds.length).toBeGreaterThanOrEqual(1);
-      // Text should be empty or minimal
-      expect(text.length).toBeLessThanOrEqual(1);
-    } finally {
-      rawServer.stop(true);
-    }
+        const turnEnds = eventsOfType(events, "turn_end");
+        expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+        expect(text.length).toBeLessThanOrEqual(1);
+      },
+    );
   });
 });
 
@@ -161,6 +180,7 @@ describe("Resilience: Huge response", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -168,7 +188,7 @@ describe("Resilience: Huge response", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("provider sends 100KB of text — streams without OOM", async () => {
@@ -190,56 +210,61 @@ describe("Resilience: Huge response", () => {
 
 describe("Resilience: Provider timeout via abort", () => {
   test("abort signal cancels a slow provider — no hang", async () => {
-    // Start a server that delays forever
-    const slowServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         await new Promise((resolve) => setTimeout(resolve, 30_000));
         return new Response("too late", { status: 200 });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const env = await createTestEnv({
+          inProcess: true,
+          configOverrides: {
+            systemPromptOverride: "You are a test assistant.",
+            apiBase,
+            customFetch,
+          },
+        });
 
-    const env = await createTestEnv({
-      configOverrides: {
-        systemPromptOverride: "You are a test assistant.",
-        apiBase: `http://localhost:${slowServer.port}`,
-      },
-    });
+        try {
+          const cm = new ConversationManager(env.config, env.registry);
+          const events: StreamEvent[] = [];
 
-    try {
-      const cm = new ConversationManager(env.config, env.registry);
-      const events: StreamEvent[] = [];
+          const gen = cm.sendMessage("test timeout");
+          const collectPromise = (async () => {
+            for await (const event of gen) {
+              events.push(event);
+            }
+          })();
 
-      const gen = cm.sendMessage("test timeout");
-      const collectPromise = (async () => {
-        for await (const event of gen) {
-          events.push(event);
+          // Abort after 300ms to simulate user cancellation on a slow provider
+          setTimeout(() => cm.abort(), 300);
+
+          await collectPromise;
+
+          // The test passes if it completes at all (doesn't hang forever).
+          expect(true).toBe(true);
+        } finally {
+          await env.cleanup();
         }
-      })();
-
-      // Abort after 300ms to simulate user cancellation on a slow provider
-      setTimeout(() => cm.abort(), 300);
-
-      await collectPromise;
-
-      // The test passes if it completes at all (doesn't hang forever).
-      // May have error or aborted turn_end, or just terminate cleanly.
-      expect(true).toBe(true);
-    } finally {
-      slowServer.stop(true);
-      await env.cleanup();
-    }
+      },
+    );
   }, 10_000);
 });
 
 // ─── Provider Connection Refused ────────────────────────────────
 
 describe("Resilience: Provider connection refused", () => {
-  test("connection to unreachable port — error event, no hang", async () => {
+  test("connection to unreachable endpoint — error event, no hang", async () => {
+    const connectionRefusedFetch = async () => {
+      throw new TypeError("fetch failed: ConnectionRefused");
+    };
+
     const env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
-        apiBase: "http://localhost:19999", // Port with no server
+        apiBase: "http://unreachable.test",
+        customFetch: connectionRefusedFetch as any,
       },
     });
 
@@ -265,6 +290,7 @@ describe("Resilience: Partial tool call JSON", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -272,14 +298,12 @@ describe("Resilience: Partial tool call JSON", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("provider sends tool_call with truncated arguments JSON — graceful handling", async () => {
-    // Raw server that sends a tool call with malformed arguments
-    const rawServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         const body = [
           `data: ${JSON.stringify({
             id: "chatcmpl-bad-tool", object: "chat.completion.chunk", model: "fake",
@@ -311,19 +335,15 @@ describe("Resilience: Partial tool call JSON", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const config = { ...env.config, apiBase, customFetch };
+        const cm = new ConversationManager(config, env.registry);
+        const { events } = await sendAndCollect(cm, "read a file");
 
-    try {
-      const config = { ...env.config, apiBase: `http://localhost:${rawServer.port}` };
-      const cm = new ConversationManager(config, env.registry);
-      const { events } = await sendAndCollect(cm, "read a file");
-
-      // Should not crash — should have a turn_end eventually
-      const turnEnds = eventsOfType(events, "turn_end");
-      expect(turnEnds.length).toBeGreaterThanOrEqual(1);
-    } finally {
-      rawServer.stop(true);
-    }
+        const turnEnds = eventsOfType(events, "turn_end");
+        expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+      },
+    );
   });
 });
 
@@ -332,6 +352,7 @@ describe("Resilience: Partial tool call JSON", () => {
 describe("Resilience: Tool execution error", () => {
   test("tool that throws — error is caught and reported", async () => {
     const env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -381,49 +402,45 @@ describe("Resilience: Tool execution error", () => {
 describe("Resilience: Rapid abort", () => {
   test("send message then immediately abort — clean shutdown", async () => {
     const env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
     });
 
-    // Use a slow server so we have time to abort
-    const slowServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
-        return new Response("data: [DONE]\n\n", {
-          headers: { "Content-Type": "text/event-stream" },
-        });
-      },
-    });
-
     try {
-      const config = { ...env.config, apiBase: `http://localhost:${slowServer.port}` };
-      const cm = new ConversationManager(config, env.registry);
+      await withRawServer(
+        async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5_000));
+          return new Response("data: [DONE]\n\n", {
+            headers: { "Content-Type": "text/event-stream" },
+          });
+        },
+        async ({ apiBase, customFetch }) => {
+          const config = { ...env.config, apiBase, customFetch };
+          const cm = new ConversationManager(config, env.registry);
 
-      const events: StreamEvent[] = [];
-      const gen = cm.sendMessage("hello");
+          const events: StreamEvent[] = [];
+          const gen = cm.sendMessage("hello");
 
-      // Start collecting but abort almost immediately
-      const collectPromise = (async () => {
-        for await (const event of gen) {
-          events.push(event);
-        }
-      })();
+          const collectPromise = (async () => {
+            for await (const event of gen) {
+              events.push(event);
+            }
+          })();
 
-      // Abort after a short delay to ensure the request has started
-      setTimeout(() => cm.abort(), 50);
+          // Abort after a short delay to ensure the request has started
+          setTimeout(() => cm.abort(), 50);
 
-      await collectPromise;
+          await collectPromise;
 
-      // Should have completed without hanging
-      // May have turn_end with "aborted" stop reason or error
-      const turnEnds = eventsOfType(events, "turn_end");
-      const errors = eventsOfType(events, "error");
-      expect(turnEnds.length + errors.length).toBeGreaterThanOrEqual(0);
-      // The key assertion: this test completes (doesn't hang)
+          // Should have completed without hanging
+          const turnEnds = eventsOfType(events, "turn_end");
+          const errors = eventsOfType(events, "error");
+          expect(turnEnds.length + errors.length).toBeGreaterThanOrEqual(0);
+        },
+      );
     } finally {
-      slowServer.stop(true);
       await env.cleanup();
     }
   }, 10_000);
@@ -436,6 +453,7 @@ describe("Resilience: Double finish", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -443,13 +461,12 @@ describe("Resilience: Double finish", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("provider sends two finish events — no duplicate processing", async () => {
-    const rawServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         const body = [
           `data: ${JSON.stringify({
             id: "chatcmpl-1", object: "chat.completion.chunk", model: "fake",
@@ -459,7 +476,6 @@ describe("Resilience: Double finish", () => {
             id: "chatcmpl-2", object: "chat.completion.chunk", model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
           })}\n\n`,
-          // Second finish — should be ignored
           `data: ${JSON.stringify({
             id: "chatcmpl-3", object: "chat.completion.chunk", model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
@@ -475,20 +491,16 @@ describe("Resilience: Double finish", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const config = { ...env.config, apiBase, customFetch };
+        const cm = new ConversationManager(config, env.registry);
+        const { events, text } = await sendAndCollect(cm, "test");
 
-    try {
-      const config = { ...env.config, apiBase: `http://localhost:${rawServer.port}` };
-      const cm = new ConversationManager(config, env.registry);
-      const { events, text } = await sendAndCollect(cm, "test");
-
-      // Should complete without crash
-      const turnEnds = eventsOfType(events, "turn_end");
-      expect(turnEnds.length).toBeGreaterThanOrEqual(1);
-      expect(text).toContain("hello");
-    } finally {
-      rawServer.stop(true);
-    }
+        const turnEnds = eventsOfType(events, "turn_end");
+        expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+        expect(text).toContain("hello");
+      },
+    );
   });
 });
 
@@ -499,6 +511,7 @@ describe("Resilience: Unicode in response", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -506,12 +519,10 @@ describe("Resilience: Unicode in response", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("ASCII and common unicode — no corruption or crash", async () => {
-    // Use the FakeProvider which splits by words (space-separated)
-    // to ensure basic unicode handling works end-to-end
     env.provider.addResponse("Hello world these are ASCII words and the response completes successfully without any issues at all");
 
     const cm = new ConversationManager(env.config, env.registry);
@@ -524,11 +535,8 @@ describe("Resilience: Unicode in response", () => {
   });
 
   test("emoji and CJK in SSE stream — graceful handling, no crash", async () => {
-    // Send emoji and CJK via raw SSE to test the parser handles them
-    const rawServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
-        // Send each unicode group in separate content chunks via SSE
+    await withRawServer(
+      async () => {
         const sseLines: string[] = [];
         const chunks = [
           "prefix ",
@@ -557,24 +565,16 @@ describe("Resilience: Unicode in response", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const config = { ...env.config, apiBase, customFetch };
+        const cm = new ConversationManager(config, env.registry);
+        const { events, text } = await sendAndCollect(cm, "send unicode");
 
-    try {
-      const config = { ...env.config, apiBase: `http://localhost:${rawServer.port}` };
-      const cm = new ConversationManager(config, env.registry);
-      const { events, text } = await sendAndCollect(cm, "send unicode");
-
-      // The key assertion: the stream completes without crashing
-      const turnEnds = eventsOfType(events, "turn_end");
-      expect(turnEnds.length).toBeGreaterThanOrEqual(1);
-
-      // At minimum the prefix should be present
-      expect(text).toContain("prefix");
-      // Emoji and CJK may or may not survive depending on SSE parser
-      // byte-boundary handling, but the stream must not crash
-    } finally {
-      rawServer.stop(true);
-    }
+        const turnEnds = eventsOfType(events, "turn_end");
+        expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+        expect(text).toContain("prefix");
+      },
+    );
   });
 });
 
@@ -585,6 +585,7 @@ describe("Resilience: SSE with no newline terminator", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -592,32 +593,27 @@ describe("Resilience: SSE with no newline terminator", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("partial buffer at stream end — flush and complete", async () => {
-    // Server that sends data without the trailing \n\n on the last chunk before [DONE]
-    const rawServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           start(controller) {
-            // Normal chunk with terminator
             controller.enqueue(encoder.encode(
               `data: ${JSON.stringify({
                 id: "chatcmpl-1", object: "chat.completion.chunk", model: "fake",
                 choices: [{ index: 0, delta: { content: "buffered content here for testing" }, finish_reason: null }],
               })}\n\n`,
             ));
-            // Finish chunk (properly terminated)
             controller.enqueue(encoder.encode(
               `data: ${JSON.stringify({
                 id: "chatcmpl-2", object: "chat.completion.chunk", model: "fake",
                 choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
               })}\n\n`,
             ));
-            // Usage
             controller.enqueue(encoder.encode(
               `data: ${JSON.stringify({
                 id: "chatcmpl-u", object: "chat.completion.chunk", model: "fake",
@@ -634,19 +630,16 @@ describe("Resilience: SSE with no newline terminator", () => {
           headers: { "Content-Type": "text/event-stream" },
         });
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const config = { ...env.config, apiBase, customFetch };
+        const cm = new ConversationManager(config, env.registry);
+        const { events, text } = await sendAndCollect(cm, "test");
 
-    try {
-      const config = { ...env.config, apiBase: `http://localhost:${rawServer.port}` };
-      const cm = new ConversationManager(config, env.registry);
-      const { events, text } = await sendAndCollect(cm, "test");
-
-      const turnEnds = eventsOfType(events, "turn_end");
-      expect(turnEnds.length).toBeGreaterThanOrEqual(1);
-      expect(text).toContain("buffered");
-    } finally {
-      rawServer.stop(true);
-    }
+        const turnEnds = eventsOfType(events, "turn_end");
+        expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+        expect(text).toContain("buffered");
+      },
+    );
   });
 });
 
@@ -657,6 +650,7 @@ describe("Resilience: Interleaved content and tool calls", () => {
 
   beforeEach(async () => {
     env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
@@ -664,7 +658,7 @@ describe("Resilience: Interleaved content and tool calls", () => {
   });
 
   afterEach(async () => {
-    await env.cleanup();
+    try { await env.cleanup(); } catch { /* setup may have failed */ }
   });
 
   test("text then tool call then text — correct ordering preserved", async () => {
@@ -702,9 +696,8 @@ describe("Resilience: Interleaved content and tool calls", () => {
 
 describe("Resilience: Provider returns non-SSE response", () => {
   test("provider returns plain JSON instead of SSE — graceful error", async () => {
-    const jsonServer = Bun.serve({
-      port: 0,
-      fetch: async () => {
+    await withRawServer(
+      async () => {
         return new Response(
           JSON.stringify({
             error: { message: "The model is currently overloaded", type: "server_error" },
@@ -715,28 +708,29 @@ describe("Resilience: Provider returns non-SSE response", () => {
           },
         );
       },
-    });
+      async ({ apiBase, customFetch }) => {
+        const env = await createTestEnv({
+          inProcess: true,
+          configOverrides: {
+            systemPromptOverride: "You are a test assistant.",
+            apiBase,
+            customFetch,
+          },
+        });
 
-    const env = await createTestEnv({
-      configOverrides: {
-        systemPromptOverride: "You are a test assistant.",
-        apiBase: `http://localhost:${jsonServer.port}`,
+        try {
+          const cm = new ConversationManager(env.config, env.registry);
+          const { events } = await sendAndCollect(cm, "test");
+
+          const errors = eventsOfType(events, "error");
+          const turnEnds = eventsOfType(events, "turn_end");
+          const hasError = errors.length > 0 || turnEnds.some((e) => e.stopReason === "error");
+          expect(hasError).toBe(true);
+        } finally {
+          await env.cleanup();
+        }
       },
-    });
-
-    try {
-      const cm = new ConversationManager(env.config, env.registry);
-      const { events } = await sendAndCollect(cm, "test");
-
-      // Should get error, not crash
-      const errors = eventsOfType(events, "error");
-      const turnEnds = eventsOfType(events, "turn_end");
-      const hasError = errors.length > 0 || turnEnds.some((e) => e.stopReason === "error");
-      expect(hasError).toBe(true);
-    } finally {
-      jsonServer.stop(true);
-      await env.cleanup();
-    }
+    );
   });
 });
 
@@ -745,6 +739,7 @@ describe("Resilience: Provider returns non-SSE response", () => {
 describe("Resilience: Multiple tool calls with mixed success/failure", () => {
   test("one tool succeeds, one tool fails — both results reported", async () => {
     const env = await createTestEnv({
+      inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a test assistant.",
       },
