@@ -481,10 +481,25 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     ? "~" + cwd.slice(home.length)
     : cwd;
 
+  // ─── Paste collapse: show summary for large inputs ──────────
+  const PASTE_THRESHOLD = 200; // chars before collapsing display
+  const isPastedLong = value.length > PASTE_THRESHOLD && !value.startsWith("/");
+  let displayValue = value;
+  let pasteHint = "";
+  if (isPastedLong) {
+    const lines = value.split("\n").length;
+    const chars = value.length;
+    pasteHint = lines > 1
+      ? `[paste ${chars.toLocaleString()} chars, ${lines} lines]`
+      : `[paste ${chars.toLocaleString()} chars]`;
+    // Show first 40 chars + … + last 20 chars
+    displayValue = value.slice(0, 40) + "…" + value.slice(-20);
+  }
+
   // Render value with cursor
-  const before = value.slice(0, cursor);
-  const cursorChar = value[cursor] ?? " ";
-  const after = value.slice(cursor + 1);
+  const before = displayValue.slice(0, Math.min(cursor, displayValue.length));
+  const cursorChar = displayValue[Math.min(cursor, displayValue.length)] ?? " ";
+  const after = displayValue.slice(Math.min(cursor, displayValue.length) + 1);
 
   // Compute hint text for tab completion
   let hint = "";
@@ -509,6 +524,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
           {before}
           <Text inverse>{cursorChar}</Text>
           {after}
+          {pasteHint && <Text color={theme.dimmed}> {pasteHint}</Text>}
           {hint && <Text color={theme.dimmed}>{hint}</Text>}
           {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
         </Text>
