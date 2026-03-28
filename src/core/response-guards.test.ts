@@ -113,6 +113,31 @@ describe("looksIncomplete", () => {
   test("returns false for text ending with period", () => {
     expect(looksIncomplete(pad("The algorithm works correctly."))).toBe(false);
   });
+
+  // Spanish truncation detection
+  test("detects ending with 'del' (Spanish)", () => {
+    expect(looksIncomplete(pad("preservando la equivalencia observacional del"))).toBe(true);
+  });
+
+  test("detects ending with 'de' (Spanish)", () => {
+    expect(looksIncomplete(pad("el resultado de"))).toBe(true);
+  });
+
+  test("detects ending with 'para' (Spanish)", () => {
+    expect(looksIncomplete(pad("un algoritmo que explote esas restricciones para"))).toBe(true);
+  });
+
+  test("detects ending with 'con' (Spanish)", () => {
+    expect(looksIncomplete(pad("el problema se resuelve con"))).toBe(true);
+  });
+
+  test("detects ending with 'que' (Spanish)", () => {
+    expect(looksIncomplete(pad("la propiedad más importante es que"))).toBe(true);
+  });
+
+  test("detects ending with 'mediante' (Spanish)", () => {
+    expect(looksIncomplete(pad("esto se logra mediante"))).toBe(true);
+  });
 });
 
 // ─── detectNonShellExpression ───────────────────────────────────

@@ -56,6 +56,17 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
 
   // Anchor to workspace — validate path doesn't escape
   const workspace = getToolWorkspace();
+  const home = process.env.HOME ?? "";
+  if (home && resolve(workspace) === resolve(home) && !opts.path) {
+    return Promise.resolve({
+      tool_use_id: "",
+      content: `Warning: Workspace is your home directory (${workspace}). ` +
+        `Grep will search your entire home. ` +
+        `Specify a path parameter or run KCode from a project directory.`,
+      is_error: true,
+    } as ToolResult);
+  }
+
   let searchCwd = workspace;
   if (opts.path) {
     const resolved = resolve(workspace, opts.path);

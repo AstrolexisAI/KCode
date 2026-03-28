@@ -36,6 +36,18 @@ export async function executeGlob(input: Record<string, unknown>): Promise<ToolR
   const { pattern, path: searchPath } = input as unknown as GlobInput;
   const workspace = getToolWorkspace();
 
+  // Warn if workspace is HOME — too broad for code search
+  const home = process.env.HOME ?? "";
+  if (home && resolve(workspace) === resolve(home) && !searchPath) {
+    return {
+      tool_use_id: "",
+      content: `Warning: Workspace is your home directory (${workspace}). ` +
+        `Glob patterns like "${pattern}" will search your entire home. ` +
+        `Specify a path parameter (e.g. path: "src/") or run KCode from a project directory.`,
+      is_error: true,
+    };
+  }
+
   // Resolve the search directory — anchor to workspace
   let cwd: string;
   if (searchPath) {
