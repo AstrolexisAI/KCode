@@ -186,6 +186,7 @@ program
   .option("--mcp-config <path>", "Load MCP server configuration from a JSON file")
   .option("--agents <json>", "Inline agent definitions as JSON array")
   .option("--tmux", "Open worktree agents in separate tmux panes")
+  .option("--profile <name>", "Use an execution profile (safe, fast, review, implement, ops)")
   .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
@@ -239,7 +240,7 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; file?: string },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string },
 ) {
   const cwd = process.cwd();
 
@@ -339,6 +340,20 @@ async function runMain(
   // Auto-start LSP language servers (non-blocking)
   const lsp = getLspManager(cwd);
   if (lsp) lsp.autoStart().catch(() => {});
+
+  // Apply execution profile (before CLI overrides, so flags can override profile settings)
+  if (opts.profile) {
+    const { getProfile, applyProfile } = await import("./core/profiles");
+    const profile = getProfile(opts.profile);
+    if (profile) {
+      applyProfile(config, profile);
+      console.error(`\x1b[36mProfile: ${profile.icon} ${profile.name}\x1b[0m — ${profile.description}`);
+    } else {
+      const { listProfiles } = await import("./core/profiles");
+      const available = listProfiles().map(p => p.name).join(", ");
+      console.error(`\x1b[33mWarning: unknown profile "${opts.profile}". Available: ${available}\x1b[0m`);
+    }
+  }
 
   // Apply CLI overrides (respecting managed policy)
   if (opts.model) {

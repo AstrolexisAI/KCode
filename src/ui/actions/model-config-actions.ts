@@ -114,6 +114,60 @@ export async function handleModelConfigAction(
       (appConfig as any).effortLevel = level;
       return `  Effort level set to: ${level}`;
     }
+    case "profile": {
+      const { getProfile, listProfiles, applyProfile, getCurrentProfileName } = await import("../../core/profiles.js");
+      const arg = (args ?? "").trim().toLowerCase();
+
+      // /profile — list all profiles
+      if (!arg || arg === "list") {
+        const profiles = listProfiles();
+        const current = getCurrentProfileName(appConfig);
+        const lines = ["  Execution Profiles\n"];
+        const maxName = Math.max(...profiles.map(p => p.name.length));
+        for (const p of profiles) {
+          const active = p.name === current ? " \x1b[32m(active)\x1b[0m" : "";
+          lines.push(`  ${p.icon} \x1b[1m${p.name.padEnd(maxName)}\x1b[0m — ${p.description}${active}`);
+          const flags = [
+            `perm:${p.settings.permissionMode}`,
+            `effort:${p.settings.effortLevel}`,
+            p.settings.thinking ? "thinking" : null,
+            p.settings.maxTokens ? `maxTokens:${p.settings.maxTokens}` : null,
+            p.settings.allowedTools ? `tools:${p.settings.allowedTools.join(",")}` : null,
+            p.settings.disallowedTools ? `blocked:${p.settings.disallowedTools.join(",")}` : null,
+          ].filter(Boolean).join(", ");
+          lines.push(`    ${flags}`);
+        }
+        lines.push("");
+        lines.push("  Usage: /profile <name>  — switch profile");
+        lines.push("         /profile off     — deactivate profile, return to defaults");
+        return lines.join("\n");
+      }
+
+      // /profile off — deactivate
+      if (arg === "off" || arg === "none" || arg === "default") {
+        // Reset profile-specific settings to defaults
+        (appConfig as any).activeProfile = undefined;
+        (appConfig as any).permissionMode = "ask";
+        (appConfig as any).effortLevel = undefined;
+        (appConfig as any).thinking = undefined;
+        (appConfig as any).allowedTools = undefined;
+        (appConfig as any).disallowedTools = undefined;
+        // Remove profile system prompt append (we can't easily undo just the profile part,
+        // so clear it entirely — this is the expected behavior for /profile off)
+        (appConfig as any).systemPromptAppend = undefined;
+        return "  Profile deactivated. Using default settings.";
+      }
+
+      // /profile <name> — switch to profile
+      const profile = getProfile(arg);
+      if (!profile) {
+        const available = listProfiles().map(p => p.name).join(", ");
+        return `  Unknown profile "${arg}". Available: ${available}`;
+      }
+
+      applyProfile(appConfig, profile);
+      return `  ${profile.icon} Profile switched to: \x1b[1m${profile.name}\x1b[0m — ${profile.description}`;
+    }
     case "model_health": {
       const { listModels: getModels } = await import("../../core/models.js");
       const models = await getModels();

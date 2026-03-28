@@ -554,6 +554,13 @@ IMPORTANT: Always prefer combining both changes when they don't conflict semanti
     template: `__builtin_auto_test__`,
   },
   {
+    name: "change-review",
+    description: "Review working tree changes with risk classification and suggestions",
+    aliases: ["cr", "review-changes"],
+    args: ["--staged (optional, review only staged changes)"],
+    template: `__builtin_change_review__`,
+  },
+  {
     name: "stashes",
     description: "List, show, apply, or drop git stashes",
     aliases: ["stash-list"],
@@ -1150,6 +1157,13 @@ Display each password on its own line. Warn that passwords are shown in plain te
     aliases: ["reasoning", "depth"],
     args: ["low | medium | high | max"],
     template: `__builtin_effort__`,
+  },
+  {
+    name: "profile",
+    description: "Switch execution profile (safe, fast, review, implement, ops)",
+    aliases: ["mode", "preset"],
+    args: ["profile name | off | list"],
+    template: `__builtin_profile__`,
   },
   {
     name: "agents",

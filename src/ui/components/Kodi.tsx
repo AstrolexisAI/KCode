@@ -29,6 +29,7 @@ interface KodiProps {
   version: string;
   workingDirectory: string;
   permissionMode?: string;
+  activeProfile?: string;
   contextWindowSize?: number;
   sessionName?: string;
   sessionStartTime?: number;
@@ -468,7 +469,7 @@ function buildContext(event: KodiEvent, stats: { tools: number; tokens: number; 
 export default function KodiCompanion({
   mode, toolUseCount, tokenCount, activeToolName, isThinking,
   runningAgents, sessionElapsedMs, lastEvent, model, version,
-  workingDirectory, permissionMode, contextWindowSize, sessionName,
+  workingDirectory, permissionMode, activeProfile, contextWindowSize, sessionName,
   sessionStartTime,
 }: KodiProps) {
   const { theme } = useTheme();
@@ -662,6 +663,12 @@ export default function KodiCompanion({
             <>
               <Text color={theme.dimmed}>•</Text>
               <Text color={pmColor}>{permissionMode}</Text>
+            </>
+          )}
+          {activeProfile && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={theme.info ?? theme.primary}>[{activeProfile}]</Text>
             </>
           )}
           <Text color={theme.dimmed}>•</Text>

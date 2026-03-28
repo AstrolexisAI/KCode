@@ -242,7 +242,7 @@ export async function handleToolAction(
       // Categorize builtin skills
       const categories: Record<string, typeof builtinSkills> = {
         "Git": builtinSkills.filter(s => ["commit", "diff", "branch", "log", "stash", "stashes", "blame", "resolve"].includes(s.name)),
-        "Code Quality": builtinSkills.filter(s => ["simplify", "lint", "find-bug", "security", "security-review", "type", "test", "test-for", "auto-test"].includes(s.name)),
+        "Code Quality": builtinSkills.filter(s => ["simplify", "lint", "find-bug", "security", "security-review", "type", "test", "test-for", "auto-test", "change-review"].includes(s.name)),
         "Session": builtinSkills.filter(s => ["context", "usage", "analytics", "budget", "compact", "export", "replay", "note", "bookmark", "search-chat", "diff-session", "profile", "session-tags", "auto-compact"].includes(s.name)),
         "Models": builtinSkills.filter(s => ["models", "compare", "consensus", "model-health", "ratelimit", "estimate", "project-cost"].includes(s.name)),
         "Utilities": builtinSkills.filter(s => ["explain", "doc", "deps", "depgraph", "todo", "batch", "loop", "env", "snippet", "alias", "chain", "workspace", "index", "retry"].includes(s.name)),
@@ -353,6 +353,12 @@ export async function handleToolAction(
       }
       lines.push(`  Run all: paste the commands above, or use /test`);
       return lines.join("\n");
+    }
+    case "change_review": {
+      const { reviewChanges, formatReview } = await import("../../core/change-review.js");
+      const staged = args?.trim() === "--staged";
+      const review = await reviewChanges(appConfig.workingDirectory, staged);
+      return formatReview(review);
     }
     case "swarm": {
       if (!args?.trim()) return [

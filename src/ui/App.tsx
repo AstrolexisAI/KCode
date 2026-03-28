@@ -1271,6 +1271,7 @@ export default function App({ config, conversationManager, tools, initialSession
         version={config.version ?? "?"}
         workingDirectory={config.workingDirectory}
         permissionMode={conversationManager.getPermissions().getMode()}
+        activeProfile={config.activeProfile}
         contextWindowSize={config.contextWindowSize}
         sessionName={sessionName}
         sessionStartTime={sessionStart}
