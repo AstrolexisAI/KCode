@@ -389,16 +389,28 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
   const limit = input.limit as number | undefined;
   const pages = input.pages as string | undefined;
 
-  // Warn if reading outside workspace when workspace is HOME
+  // Workspace guard: when workspace is HOME, warn about broad reads
   const workspace = getToolWorkspace();
   const home = process.env.HOME ?? "";
-  if (home && resolve(workspace) === resolve(home)) {
-    const rel = relative(workspace, resolve(file_path));
-    // If path is deeply nested outside typical project dirs, warn
-    if (rel.startsWith("..") || resolve(file_path) === resolve("/")) {
+  const isHomeWorkspace = home && resolve(workspace) === resolve(home);
+
+  if (isHomeWorkspace) {
+    const resolved = resolve(file_path);
+    const rel = relative(workspace, resolved);
+    // Block paths outside HOME
+    if (rel.startsWith("..") || resolved === "/") {
       return {
         tool_use_id: "",
         content: `Error: Path "${file_path}" is outside the workspace. Run KCode from a project directory.`,
+        is_error: true,
+      };
+    }
+    // If file doesn't exist and workspace is HOME, give a specific warning
+    // instead of a generic ENOENT — the model likely invented this path
+    try { statSync(file_path); } catch {
+      return {
+        tool_use_id: "",
+        content: `Error: File "${file_path}" does not exist. Your workspace is your home directory (~) — this is too broad for code exploration. Run KCode from a project directory, or specify an existing file path.`,
         is_error: true,
       };
     }
