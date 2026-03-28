@@ -67,38 +67,41 @@ const EYES: Record<KodiMood, string[]> = {
   smug:         ["~  -~", "- -- ", "^ -^ "],
 };
 
+// Body sprites: the `|` (torso) must be at position 5 to align under `┬`.
+// Head: " ╭───────╮" → ┬ at pos 5.  So body: "    /|\\" puts | at pos 5.
 const BODY: Record<KodiMood, string[]> = {
-  idle:         ["   /|\\  ", "   /|\\  ", "   /|\\  "],
-  happy:        ["  \\|/   ", "   /|\\  ", "   /|\\  "],
-  excited:      [" \\(|)/ ", "  \\|/   ", " \\(|)/ "],
-  thinking:     ["   /|   ", "    |\\  ", "   /|   "],
-  reasoning:    ["   /|\\  ", "    |\\  ", "   /|   "],
-  working:      ["   /|\\ |", "   /|\\ |", "   /|\\  "],
-  worried:      ["   /|\\  ", " .-|-.  ", "  \\|    "],
-  sleeping:     ["   /|\\  ", "  \\|    ", "  __|__ "],
-  celebrating:  [" \\(|)/ +", " \\(|)/  ", " \\(|)/  "],
-  curious:      ["   /|   ", "    |\\  ", "   /|   "],
-  mischievous:  ["  /|--. ", " .-|/   ", " _/|\\   "],
-  crazy:        ["~\\(|)/~", " /(|)\\  ", "~\\(|)/~"],
-  angry:        [" =/|\\=  ", " [/|\\]  ", " =/|\\=  "],
-  smug:         [" ._/|\\  ", " -/|--  ", " ._/|\\ "],
+  idle:         ["    /|\\  ", "    /|\\  ", "    /|\\  "],
+  happy:        ["   \\|/   ", "    /|\\  ", "    /|\\  "],
+  excited:      ["  \\(|)/  ", "   \\|/   ", "  \\(|)/  "],
+  thinking:     ["    /|   ", "     |\\  ", "    /|   "],
+  reasoning:    ["    /|\\  ", "     |\\  ", "    /|   "],
+  working:      ["    /|\\ |", "    /|\\ |", "    /|\\  "],
+  worried:      ["    /|\\  ", "  .-|-.  ", "   \\|    "],
+  sleeping:     ["    /|\\  ", "   \\|    ", "   __|__ "],
+  celebrating:  ["  \\(|)/ +", "  \\(|)/  ", "  \\(|)/  "],
+  curious:      ["    /|   ", "     |\\  ", "    /|   "],
+  mischievous:  ["   /|--. ", "  .-|/   ", "  _/|\\   "],
+  crazy:        [" ~\\(|)/~ ", "  /(|)\\  ", " ~\\(|)/~ "],
+  angry:        ["  =/|\\=  ", "  [/|\\]  ", "  =/|\\=  "],
+  smug:         ["  ._/|\\  ", "  -/|--  ", "  ._/|\\ "],
 };
 
+// Legs: `/ \` should center under `|` at pos 5 → `/` at 4, `\` at 6.
 const LEGS: Record<KodiMood, string[]> = {
-  idle:         ["   / \\  "],
-  happy:        ["   / \\  "],
-  excited:      ["  _/ \\_ ", "   / \\  "],
-  thinking:     ["   / \\  "],
-  reasoning:    ["   / \\  "],
-  working:      ["   / \\  "],
-  worried:      ["  </ \\> ", "   / \\  "],
-  sleeping:     ["   / \\  "],
-  celebrating:  ["  _/ \\_ ", "   / \\  "],
-  curious:      ["   / \\  "],
-  mischievous:  ["   / \\  ", "  // \\\\  "],
-  crazy:        ["  </ \\> ", " ~/   \\~", " _/   \\_"],
-  angry:        ["   / \\  ", "  _/ \\_ "],
-  smug:         ["   / \\  "],
+  idle:         ["    / \\  "],
+  happy:        ["    / \\  "],
+  excited:      ["   _/ \\_ ", "    / \\  "],
+  thinking:     ["    / \\  "],
+  reasoning:    ["    / \\  "],
+  working:      ["    / \\  "],
+  worried:      ["   </ \\> ", "    / \\  "],
+  sleeping:     ["    / \\  "],
+  celebrating:  ["   _/ \\_ ", "    / \\  "],
+  curious:      ["    / \\  "],
+  mischievous:  ["    / \\  ", "   // \\\\  "],
+  crazy:        ["   </ \\> ", "  ~/   \\~", "  _/   \\_"],
+  angry:        ["    / \\  ", "   _/ \\_ "],
+  smug:         ["    / \\  "],
 };
 
 // Accessories — all entries must be 1-2 chars; padded to W_ACC in output
@@ -343,8 +346,8 @@ export class KodiAnimEngine {
       padFixed(` ╭───────╮`,    LINE_WIDTH),   // head
       padFixed(`${face}${acc}`, LINE_WIDTH),    // face + accessory
       padFixed(` ╰───┬───╯`,    LINE_WIDTH),   // neck
-      padFixed(`${bodyStr}`,     LINE_WIDTH),   // body (sprites already have correct indent)
-      padFixed(` ${legsStr}`,    LINE_WIDTH),   // legs (1 extra space to center under torso)
+      padFixed(`${bodyStr}`,     LINE_WIDTH),   // body (| at pos 5 = under ┬)
+      padFixed(`${legsStr}`,     LINE_WIDTH),   // legs (/ \ centered under |)
     ];
 
     return {
