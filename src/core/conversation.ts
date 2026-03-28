@@ -102,6 +102,46 @@ export function looksIncomplete(text: string): boolean {
   return false;
 }
 
+/**
+ * Heuristic: does the prompt look like a theoretical/formal question
+ * that should be answered with text only, no tools?
+ */
+export function looksTheoretical(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  // Strong signals: formal proof/analysis language
+  const strongPatterns = [
+    /\bdemuestra\s+(formalmente|que)\b/,
+    /\bprove\s+(that|formally)\b/,
+    /\bdemostrar\s+que\b/,
+    /\bformal(ly)?\s+(prove|verify|demonstrate|analysis)\b/,
+    /\breducible\s+(al?|to)\b/,
+    /\bdecidib(le|ility)\b/,
+    /\bequivalencia\s+observacional\b/,
+    /\bobservational\s+equivalence\b/,
+    /\balgorit(hm|mo)\s+(que|that|which)\b.*\b(decid|optim|preserv)/,
+    /\bcaracteriza\s+(el|bajo|the)\b/,
+    /\bcharacterize\s+(the|under|when)\b/,
+    /\bespacio\s+de\s+trade-?offs\b/,
+    /\btrade-?off\s+space\b/,
+    /\bsistema\s+de\s+transici[oó]n\b/,
+    /\btransition\s+system\b/,
+  ];
+  if (strongPatterns.some(p => p.test(lower))) return true;
+
+  // Moderate signals: multiple formal keywords in the same prompt
+  const formalKeywords = [
+    "demuestra", "prove", "formalmente", "formally", "reducible",
+    "decidible", "decidability", "equivalencia", "equivalence",
+    "alcanzabilidad", "reachability", "idempotent", "append-only",
+    "subsecuencia", "subsequence", "compaction", "preservar",
+    "filesystem", "tool calls", "restricciones", "constraints",
+  ];
+  const matches = formalKeywords.filter(kw => lower.includes(kw));
+  if (matches.length >= 3) return true;
+
+  return false;
+}
+
 
 // ─── Retry Logic ─────────────────────────────────────────────────
 
@@ -336,6 +376,15 @@ export class ConversationManager {
       } else {
         this.transcript.append("user", "user_message", userMessage);
       }
+    }
+
+    // Auto-detect theoretical/formal prompts and hint the model to avoid tools
+    if (looksTheoretical(userMessage)) {
+      log.info("session", "Detected theoretical prompt — injecting no-tools hint");
+      this.state.messages.push({
+        role: "user",
+        content: "[SYSTEM] The user's question is theoretical/formal. Respond with text only — do NOT use Bash, Glob, Grep, Read, or any tools. No code exploration needed.",
+      });
     }
 
     this.state.messages.push({

@@ -4,8 +4,9 @@
 
 import { readFileSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { extname } from "node:path";
+import { extname, resolve, relative } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
+import { getToolWorkspace } from "./workspace";
 
 const MAX_LINES = 2000;
 const MAX_LINE_LENGTH = 2000;
@@ -387,6 +388,21 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
   const offset = input.offset as number | undefined;
   const limit = input.limit as number | undefined;
   const pages = input.pages as string | undefined;
+
+  // Warn if reading outside workspace when workspace is HOME
+  const workspace = getToolWorkspace();
+  const home = process.env.HOME ?? "";
+  if (home && resolve(workspace) === resolve(home)) {
+    const rel = relative(workspace, resolve(file_path));
+    // If path is deeply nested outside typical project dirs, warn
+    if (rel.startsWith("..") || resolve(file_path) === resolve("/")) {
+      return {
+        tool_use_id: "",
+        content: `Error: Path "${file_path}" is outside the workspace. Run KCode from a project directory.`,
+        is_error: true,
+      };
+    }
+  }
 
   try {
     const stat = statSync(file_path);
