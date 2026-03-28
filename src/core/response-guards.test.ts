@@ -138,6 +138,36 @@ describe("looksIncomplete", () => {
   test("detects ending with 'mediante' (Spanish)", () => {
     expect(looksIncomplete(pad("esto se logra mediante"))).toBe(true);
   });
+
+  // Structural truncation: hyphens, brackets, prefixes
+  test("detects ending with hyphen (word split)", () => {
+    expect(looksIncomplete(pad("preservar la equivalencia observa-"))).toBe(true);
+  });
+
+  test("detects ending with 'no-de' (compound fragment)", () => {
+    expect(looksIncomplete(pad("el resultado del análisis es no-de"))).toBe(true);
+  });
+
+  test("detects ending with open parenthesis", () => {
+    expect(looksIncomplete(pad("la complejidad es O("))).toBe(true);
+  });
+
+  test("detects ending with open bracket", () => {
+    expect(looksIncomplete(pad("los valores son ["))).toBe(true);
+  });
+
+  test("detects ending with backtick (broken inline code)", () => {
+    expect(looksIncomplete(pad("el campo `"))).toBe(true);
+  });
+
+  test("detects truncated short prefix (inde, pres, etc)", () => {
+    expect(looksIncomplete(pad("la propiedad de inde"))).toBe(true);
+    expect(looksIncomplete(pad("el algoritmo de pres"))).toBe(true);
+  });
+
+  test("does not false-positive on 'ok' or 'done'", () => {
+    expect(looksIncomplete(pad("Everything is ok"))).toBe(false);
+  });
 });
 
 // ─── detectNonShellExpression ───────────────────────────────────
