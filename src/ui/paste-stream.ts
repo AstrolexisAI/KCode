@@ -1,113 +1,76 @@
 // KCode - Stdin paste interceptor
-// Detects multiline paste at the stdin byte level, BEFORE Ink processes it.
+// Uses prependListener on stdin to detect and capture multiline paste
+// BEFORE Ink processes the characters. A pasting flag tells useInput
+// to ignore all character events while the paste is being captured.
 //
-// Detection methods:
-// 1. Bracketed paste sequences — with or without \x1b prefix (Bun may
-//    consume the escape char before our handler sees it)
-// 2. Byte heuristic: a single stdin data event with both printable
-//    characters AND newlines is a multiline paste
+// This approach doesn't try to prevent Ink from seeing the data
+// (which failed with Bun's emit handling). Instead, it captures the
+// paste content first, and the useInput handler skips processing.
 
-type PasteCallback = (text: string) => void;
+/** Shared pasting state — checked by InputPrompt's useInput handler */
+export let isPasting = false;
 
-// Bracketed paste sequences — detect with and without \x1b prefix
-const PASTE_STARTS = ["\x1b[200~", "[200~"];
-const PASTE_ENDS = ["\x1b[201~", "[201~"];
+/** Reset pasting flag (called after paste characters have been processed) */
+let pasteTimer: ReturnType<typeof setTimeout> | null = null;
 
-function findSequence(str: string, sequences: string[]): { index: number; length: number } | null {
-  for (const seq of sequences) {
-    const idx = str.indexOf(seq);
-    if (idx !== -1) return { index: idx, length: seq.length };
-  }
-  return null;
-}
-
-export function installPasteInterceptor(onPaste: PasteCallback): () => void {
-  const originalEmit = process.stdin.emit.bind(process.stdin);
-
+/**
+ * Install a paste interceptor using prependListener on stdin.
+ *
+ * The handler fires BEFORE Ink's data listeners, detects multiline paste
+ * by content analysis, and calls onPaste with the clean text.
+ * Sets isPasting=true so useInput can skip character events.
+ *
+ * @returns cleanup function
+ */
+export function installPasteInterceptor(onPaste: (text: string) => void): () => void {
   // Enable bracketed paste mode
   process.stdout.write("\x1b[?2004h");
 
-  let inBracketedPaste = false;
-  let bracketBuffer = "";
+  const handler = (chunk: Buffer | string) => {
+    const str = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8");
 
-  const safePaste = (text: string) => {
-    try { onPaste(text); } catch { /* don't break stdin */ }
-  };
+    // Strip bracketed paste sequences (with or without \x1b prefix)
+    const cleaned = str
+      .replace(/\x1b\[200~/g, "")
+      .replace(/\x1b\[201~/g, "")
+      .replace(/\[200~/g, "")
+      .replace(/\[201~/g, "");
 
-  (process.stdin as any).emit = function (event: string, ...args: any[]): boolean {
-    if (event !== "data") {
-      return originalEmit(event, ...args);
+    if (cleaned.length === 0) {
+      // Only bracket sequences — mark as pasting to suppress Ink
+      isPasting = true;
+      if (pasteTimer) clearTimeout(pasteTimer);
+      pasteTimer = setTimeout(() => { isPasting = false; }, 100);
+      return;
     }
 
-    const raw = args[0];
-    const str = typeof raw === "string" ? raw : Buffer.from(raw).toString("utf-8");
+    // Detect multiline paste: data chunk with both printable chars and newlines.
+    // Single keystrokes in raw mode never produce this pattern:
+    // - Enter sends just \r (no printable chars)
+    // - Regular keys send 1-8 bytes (no newlines)
+    const hasNewline = cleaned.includes("\n") || cleaned.includes("\r");
+    const printable = cleaned.replace(/[\r\n\x1b\x00-\x1f]/g, "");
 
-    // ── Continue buffering if inside a bracketed paste ────────
-    if (inBracketedPaste) {
-      const end = findSequence(str, PASTE_ENDS);
-      if (end) {
-        bracketBuffer += str.slice(0, end.index);
-        inBracketedPaste = false;
-        const normalized = bracketBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        safePaste(normalized);
-        bracketBuffer = "";
-        // Pass through anything after the end bracket
-        const after = str.slice(end.index + end.length);
-        if (after.length > 0) {
-          return originalEmit("data", Buffer.from(after, "utf-8"));
-        }
-      } else {
-        bracketBuffer += str;
-      }
-      return true;
-    }
-
-    // ── Detect bracketed paste start ─────────────────────────
-    const start = findSequence(str, PASTE_STARTS);
-    if (start) {
-      // Pass through anything before the start bracket
-      const before = str.slice(0, start.index);
-      if (before.length > 0) {
-        originalEmit("data", Buffer.from(before, "utf-8"));
-      }
-
-      const afterStart = str.slice(start.index + start.length);
-
-      // Check if end bracket is in the same chunk
-      const end = findSequence(afterStart, PASTE_ENDS);
-      if (end) {
-        // Complete paste in one chunk
-        const content = afterStart.slice(0, end.index);
-        const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        safePaste(normalized);
-        // Pass through anything after the end bracket
-        const after = afterStart.slice(end.index + end.length);
-        if (after.length > 0) {
-          return originalEmit("data", Buffer.from(after, "utf-8"));
-        }
-      } else {
-        // Paste spans multiple chunks
-        inBracketedPaste = true;
-        bracketBuffer = afterStart;
-      }
-      return true;
-    }
-
-    // ── Byte heuristic: detect multiline paste without brackets ──
-    const hasNewline = str.includes("\n") || str.includes("\r");
-    const printable = str.replace(/[\r\n\x1b\x00-\x1f]/g, "");
     if (hasNewline && printable.length > 0) {
-      const normalized = str.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-      safePaste(normalized);
-      return true;
-    }
+      const normalized = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      isPasting = true;
+      if (pasteTimer) clearTimeout(pasteTimer);
 
-    // ── Normal input — let Ink handle it ─────────────────────
-    return originalEmit(event, ...args);
+      try { onPaste(normalized); } catch { /* don't break stdin */ }
+
+      // Keep isPasting true long enough for Ink's handlers to be skipped.
+      // All chars from this chunk will hit useInput in the same event loop
+      // tick; the timer fires after they've all been ignored.
+      pasteTimer = setTimeout(() => { isPasting = false; }, 100);
+    }
   };
+
+  process.stdin.prependListener("data", handler);
 
   return () => {
-    (process.stdin as any).emit = originalEmit;
+    process.stdin.removeListener("data", handler);
+    if (pasteTimer) { clearTimeout(pasteTimer); pasteTimer = null; }
+    isPasting = false;
     process.stdout.write("\x1b[?2004l");
   };
 }
