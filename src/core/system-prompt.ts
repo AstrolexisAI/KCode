@@ -6,6 +6,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { execSync } from "node:child_process";
 import { homedir } from "node:os";
+import { log } from "./logger";
 import { loadLearnings } from "../tools/learn";
 import { loadDistilledExamples } from "./distillation";
 import { getStyleInstructions, getCurrentStyle } from "./output-styles";
@@ -115,7 +116,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       if (distilled) {
         sections.push({ content: distilled, priority: SectionPriority.LOW, label: "distillation" });
       }
-    } catch { /* non-critical */ }
+    } catch (err) { log.debug("distillation", "Failed to load distilled examples: " + err); }
 
     // World Model — recent discrepancies
     try {
@@ -127,7 +128,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
         }
         sections.push({ content: lines.join("\n"), priority: SectionPriority.LOW, label: "world-model" });
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("world-model", "Failed to load recent discrepancies: " + err); }
 
     // Inner Narrative — session continuity
     try {
@@ -135,7 +136,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       if (narrative) {
         sections.push({ content: narrative, priority: SectionPriority.LOW, label: "narrative" });
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("narrative", "Failed to load session narrative: " + err); }
 
     // ─── Optional (dropped first) ──────────────────────────────
     // User Model — dynamic profiling
@@ -144,7 +145,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       if (userPrompt) {
         sections.push({ content: userPrompt, priority: SectionPriority.OPTIONAL, label: "user-model" });
       }
-    } catch { /* ignore on first run */ }
+    } catch (err) { log.debug("user-model", "Failed to load user model for prompt: " + err); }
 
     // Path-specific rules
     try {
@@ -152,7 +153,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       if (rulesPrompt) {
         sections.push({ content: rulesPrompt, priority: SectionPriority.OPTIONAL, label: "rules" });
       }
-    } catch { /* ignore */ }
+    } catch (err) { log.debug("rules", "Failed to load path-specific rules: " + err); }
 
     // ─── Output Style (user-selected formatting override) ──────
     const styleInstructions = getStyleInstructions();
@@ -186,7 +187,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       if (metadata) {
         sections.push({ content: `## Skills\n${metadata}`, priority: SectionPriority.LOW, label: "skill-metadata" });
       }
-    } catch { /* non-critical */ }
+    } catch (err) { log.debug("skills", "Failed to load skill metadata: " + err); }
 
     // Apply token budget — drops low-priority sections if over limit
     return budgetManager.apply(sections.filter((s) => s.content));
@@ -538,8 +539,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
           if (content) {
             loaded.push(`# Project Instructions (${filename})\n\n${content}`);
           }
-        } catch {
-          // Skip unreadable files
+        } catch (err) {
+          log.debug("prompt", "Failed to read project instructions file " + filename + ": " + err);
         }
       }
     }
@@ -560,8 +561,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
               const rel = dir === cwd ? filename : `${basename(dir)}/${filename}`;
               loaded.push(`# Inherited Instructions (${rel})\n\n${content}`);
             }
-          } catch {
-            // Skip unreadable files
+          } catch (err) {
+            log.debug("prompt", "Failed to read inherited instructions file " + filename + ": " + err);
           }
         }
       }
@@ -584,8 +585,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
           if (content) {
             return `# Memory\n\nThe following is persisted context from previous conversations:\n\n${content}`;
           }
-        } catch {
-          // Skip unreadable
+        } catch (err) {
+          log.debug("memory", "Failed to read memory file: " + err);
         }
       }
     }
@@ -687,7 +688,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
       const content = readFileSync(identityPath, "utf-8").trim();
       if (!content) return null;
       return `# Extended Identity\n\n${content}`;
-    } catch {
+    } catch (err) {
+      log.debug("identity", "Failed to read identity.md: " + err);
       return null;
     }
   }
@@ -729,12 +731,12 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
 
           const scope = projectDir ? "Project" : "Global";
           modules.push(`# ${scope} Awareness: ${title}\n\n${content}`);
-        } catch {
-          // Skip unreadable files
+        } catch (err) {
+          log.debug("awareness", "Failed to read awareness module " + entry.name + ": " + err);
         }
       }
-    } catch {
-      // Directory doesn't exist or not readable
+    } catch (err) {
+      log.debug("awareness", "Failed to read awareness directory: " + err);
     }
 
     return modules;
@@ -781,8 +783,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
       if (files.includes("vite.config.ts") || files.includes("vite.config.js")) keywords.push("vite");
       if (files.includes("tailwind.config.ts") || files.includes("tailwind.config.js")) keywords.push("tailwind");
       if (files.includes(".eslintrc.js") || files.includes("eslint.config.js") || files.includes(".eslintrc.json")) keywords.push("eslint");
-    } catch {
-      // Can't read directory — return empty keywords, fall back to unfiltered
+    } catch (err) {
+      log.debug("prompt", "Failed to detect project keywords: " + err);
     }
 
     return keywords;
@@ -827,7 +829,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
       if (files.length > 0) parts.push(`  Root files: ${files.slice(0, 10).join(", ")}${files.length > 10 ? ` (+${files.length - 10} more)` : ""}`);
 
       return parts.length > 0 ? parts.join("\n") : null;
-    } catch {
+    } catch (err) {
+      log.debug("prompt", "Failed to scan project directory: " + err);
       return null;
     }
   }
@@ -845,7 +848,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
         return n >= 1024 && n <= 65535; // Only user ports
       });
       return ports.length > 0 ? ports.join(", ") : null;
-    } catch {
+    } catch (err) {
+      log.debug("prompt", "Failed to detect listening ports: " + err);
       return null;
     }
   }
@@ -857,7 +861,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
         timeout: 2000,
       }).toString().trim();
       return output || null;
-    } catch {
+    } catch (err) {
+      log.debug("prompt", "Failed to get disk usage: " + err);
       return null;
     }
   }
@@ -876,7 +881,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
       if (load) parts.push(`load ${load}`);
       if (mem) parts.push(`RAM ${mem}`);
       return parts.length > 0 ? parts.join(", ") : null;
-    } catch {
+    } catch (err) {
+      log.debug("prompt", "Failed to get system load: " + err);
       return null;
     }
   }
@@ -900,7 +906,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
             .trim();
           branch = `detached at ${branch}`;
         }
-      } catch {
+      } catch (err) {
+        log.debug("git", "Failed to detect git branch: " + err);
         branch = undefined;
       }
 
@@ -912,18 +919,20 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
             execSync(`git rev-parse --verify refs/heads/${name}`, { cwd, stdio: "pipe", timeout: 3000 });
             mainBranch = name;
             break;
-          } catch { /* try next */ }
+          } catch (err) { log.debug("git", "Branch " + name + " not found: " + err); }
         }
         if (!mainBranch) {
           try {
             const ref = execSync("git symbolic-ref refs/remotes/origin/HEAD --short", { cwd, stdio: "pipe", timeout: 3000 })
               .toString().trim();
             mainBranch = ref.replace("origin/", "");
-          } catch {
+          } catch (err) {
+            log.debug("git", "Failed to detect remote HEAD, defaulting to main: " + err);
             mainBranch = "main";
           }
         }
-      } catch {
+      } catch (err) {
+        log.debug("git", "Failed to detect main branch: " + err);
         mainBranch = undefined;
       }
 
@@ -933,7 +942,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
         const commits = execSync("git log --oneline -n 5 --no-decorate", { cwd, stdio: "pipe", timeout: 3000 })
           .toString().trim();
         if (commits) recentCommits = commits;
-      } catch {
+      } catch (err) {
+        log.debug("git", "Failed to load recent commits: " + err);
         recentCommits = undefined;
       }
 
@@ -952,13 +962,15 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
             changedFiles = statusOutput;
           }
         }
-      } catch {
+      } catch (err) {
+        log.debug("git", "Failed to get git status: " + err);
         dirty = undefined;
         changedFiles = undefined;
       }
 
       return { isRepo: true, branch, dirty, mainBranch, recentCommits, changedFiles };
-    } catch {
+    } catch (err) {
+      log.debug("git", "Directory is not a git repo: " + err);
       return { isRepo: false };
     }
   }
@@ -973,8 +985,8 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
           .trim();
         return `macOS ${version}`;
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      log.debug("prompt", "Failed to detect OS version: " + err);
     }
     return null;
   }
