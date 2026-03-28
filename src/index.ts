@@ -188,6 +188,7 @@ program
   .option("--tmux", "Open worktree agents in separate tmux panes")
   .option("--profile <name>", "Use an execution profile (safe, fast, review, implement, ops)")
   .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
+  .option("--debug", "Enable agent debug tracing (shows decision reasoning)")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
     // Validate permission mode
@@ -240,7 +241,7 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string; debug?: boolean },
 ) {
   const cwd = process.cwd();
 
@@ -654,6 +655,15 @@ async function runMain(
 
   // Create conversation manager
   const conversationManager = new ConversationManager(config, tools);
+
+  // Enable debug tracing if --debug flag is set
+  if (opts.debug) {
+    const { getDebugTracer } = await import("./core/debug-tracer");
+    const tracer = getDebugTracer();
+    tracer.enable();
+    conversationManager.setDebugTracer(tracer);
+    console.error("\x1b[36mDebug tracing enabled. Use /debug trace to view agent decisions.\x1b[0m");
+  }
 
   // Apply explicit session ID if provided
   if (opts.sessionId) {

@@ -1345,4 +1345,11 @@ This lets the user trade quality for speed on simpler tasks.`,
     args: ["[limit] | diff <id1> <id2> | view <id>"],
     template: `__builtin_snapshots__`,
   },
+  {
+    name: "debug",
+    description: "Toggle agent debug tracing (shows decision reasoning and state transitions)",
+    aliases: ["trace", "debug-trace"],
+    args: ["on | off | trace [category] | clear"],
+    template: `__builtin_debug__`,
+  },
 ];

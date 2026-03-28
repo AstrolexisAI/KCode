@@ -230,4 +230,8 @@ function initSchema(db: Database): void {
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_branches_parent ON conversation_branches(parent_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_branches_status ON conversation_branches(status)`);
+
+  // memory-store.ts tables — enhanced structured memory with categories, confidence, expiry
+  const { initMemoryStoreSchema } = require("./memory-store") as typeof import("./memory-store");
+  initMemoryStoreSchema(db);
 }

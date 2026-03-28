@@ -27,6 +27,7 @@ import { getIntentionEngine } from "./intentions";
 import { type SSEChunk } from "./sse-parser";
 import { getBranchManager } from "./branch-manager";
 import { extractToolCallsFromText } from "./tool-call-extractor";
+import type { DebugTracer } from "./debug-tracer";
 
 // Extracted modules
 import { executeModelRequest } from "./request-builder";
@@ -121,6 +122,7 @@ export class ConversationManager {
   private sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   private static MAX_TURN_COSTS = 500; // cap to prevent unbounded memory growth
   private turnCosts: TurnCostEntry[] = [];
+  private debugTracer: DebugTracer | null = null;
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
@@ -209,6 +211,16 @@ export class ConversationManager {
   /** Override the session ID (e.g., from --session-id flag). */
   setSessionId(id: string): void {
     this.sessionId = id;
+  }
+
+  /** Attach a debug tracer for agent decision logging. */
+  setDebugTracer(tracer: DebugTracer): void {
+    this.debugTracer = tracer;
+  }
+
+  /** Get the attached debug tracer (if any). */
+  getDebugTracer(): DebugTracer | null {
+    return this.debugTracer;
   }
 
   /** Get the effective max agent turns based on effort level. */
@@ -436,6 +448,9 @@ export class ConversationManager {
         return;
       } else if (turnCount > effectiveMaxTurns) {
         log.warn("session", `Agent loop exceeded ${effectiveMaxTurns} turns, forcing stop`);
+        if (this.debugTracer?.isEnabled()) {
+          this.debugTracer.traceGuard("max-turns", true, `Turn ${turnCount} exceeds limit of ${effectiveMaxTurns} (effort: ${this.config.effortLevel ?? "medium"})`);
+        }
         this.state.messages.push({
           role: "user",
           content: `[SYSTEM] STOP. You have used ${turnCount} consecutive tool turns. Summarize what you accomplished and stop. Do NOT make any more tool calls.`,
@@ -455,6 +470,13 @@ export class ConversationManager {
       }
 
       // Prune context if approaching the limit (auto-compacts via LLM when possible)
+      if (this.debugTracer?.isEnabled()) {
+        const preTokens = estimateContextTokens(this.systemPrompt, this.state.messages);
+        const threshold = this.contextWindowSize * this.compactThreshold;
+        if (preTokens >= threshold) {
+          this.debugTracer.trace("context", "Compaction triggered", `Estimated ${preTokens} tokens >= threshold ${Math.floor(threshold)} (${Math.round(this.compactThreshold * 100)}% of ${this.contextWindowSize})`, { tokens: preTokens, threshold: Math.floor(threshold) });
+        }
+      }
       yield* pruneMessagesIfNeeded(this.state, this.systemPrompt, this.contextWindowSize, this.compactThreshold, this.config);
 
       // Hard safety: emergency prune if still over 95%
@@ -735,6 +757,9 @@ export class ConversationManager {
         if (stopReason === "max_tokens" && guardState.maxTokensContinuations < 3) {
           guardState.maxTokensContinuations++;
           log.info("session", `Model hit output token limit (continuation ${guardState.maxTokensContinuations}/3) — injecting continue prompt`);
+          if (this.debugTracer?.isEnabled()) {
+            this.debugTracer.trace("decision", `max_tokens continuation ${guardState.maxTokensContinuations}/3`, "Model output was truncated, auto-continuing", { turn: turnCount });
+          }
           this.state.messages.push({
             role: "user",
             content: "[SYSTEM] Your previous response was cut off because you hit the output token limit. Continue EXACTLY where you left off. Do not repeat what you already said — pick up mid-sentence if needed.",
@@ -842,6 +867,7 @@ export class ConversationManager {
           contextWindowSize: this.contextWindowSize,
           abortController: this.abortController,
           toolUseCount: this.state.toolUseCount,
+          debugTracer: this.debugTracer,
         };
         const gen = executeToolsParallel(toolCalls, toolExecCtx);
         let genResult = await gen.next();
@@ -875,6 +901,7 @@ export class ConversationManager {
         contextWindowSize: this.contextWindowSize,
         abortController: this.abortController,
         toolUseCount: this.state.toolUseCount,
+        debugTracer: this.debugTracer,
       };
       const seqGen = executeToolsSequential(toolCalls, toolExecCtx, guardState);
       let seqResult = await seqGen.next();
@@ -1001,6 +1028,9 @@ export class ConversationManager {
         if (this.config.autoRoute !== false && !this.config.modelExplicitlySet) {
           const recentText = this.getRecentMessageText();
           effectiveModel = await routeToModel(this.config.model, recentText);
+          if (this.debugTracer?.isEnabled() && effectiveModel !== this.config.model) {
+            this.debugTracer.traceModelSwitch(this.config.model, effectiveModel, "Auto-router selected different model based on message content");
+          }
         }
 
         const requestStart = Date.now();
@@ -1039,6 +1069,9 @@ export class ConversationManager {
         // Fallback model
         if (this.config.fallbackModel && this.config.fallbackModel !== this.config.model) {
           log.warn("llm", `Primary model failed, switching to fallback: ${this.config.fallbackModel}`);
+          if (this.debugTracer?.isEnabled()) {
+            this.debugTracer.traceModelSwitch(this.config.model, this.config.fallbackModel, `Primary model failed after ${attempt + 1} attempts: ${lastError?.message}`);
+          }
           try {
             const stream = await executeModelRequest(this.config.fallbackModel, this.config, this.systemPrompt, this.state.messages, this.tools, this.abortController);
             log.info("llm", `Fallback model ${this.config.fallbackModel} connected`);

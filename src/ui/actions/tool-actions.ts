@@ -81,37 +81,229 @@ export async function handleToolAction(
       return lines.join("\n");
     }
     case "memory": {
-      const { getMemoryDir, loadAllMemories, searchMemories, readMemoryFile, deleteMemoryFile, readMemoryIndex } = await import("../../core/memory.js");
       const cwd = appConfig.workingDirectory;
-      const arg = args?.trim() ?? "list";
+      const arg = args?.trim() ?? "";
 
-      if (arg === "list") {
-        const memories = await loadAllMemories(cwd);
-        if (memories.length === 0) return "  No memories found. The AI creates memories during conversations.";
-
-        const lines = [`  Memories (${memories.length}):\n`];
-        for (const m of memories) {
-          const typeTag = `[${m.meta.type}]`;
-          lines.push(`  ${typeTag.padEnd(12)} ${m.meta.title}  (${m.filename})`);
+      // ── Enhanced memory store subcommands ──
+      if (arg.startsWith("add ")) {
+        const rest = arg.slice(4).trim();
+        const spaceIdx = rest.indexOf(" ");
+        if (spaceIdx === -1) return "  Usage: /memory add <category> <content>\n  Categories: preference, convention, fact, decision, learned";
+        const category = rest.slice(0, spaceIdx);
+        const validCategories = ["preference", "convention", "fact", "decision", "learned"];
+        if (!validCategories.includes(category)) {
+          return `  Invalid category: ${category}\n  Valid: ${validCategories.join(", ")}`;
         }
-        return lines.join("\n");
+        const content = rest.slice(spaceIdx + 1).trim();
+        if (!content) return "  Content cannot be empty.";
+
+        const { addMemory, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const key = content.slice(0, 40).replace(/\s+/g, "-").toLowerCase();
+        const id = addMemory({
+          category: category as any,
+          key,
+          content,
+          project: cwd,
+          confidence: 1.0,
+          source: "user",
+          approved: true,
+        });
+        return `  Memory #${id} added [${category}]: ${content.slice(0, 80)}${content.length > 80 ? "..." : ""}`;
+      }
+
+      if (arg.startsWith("edit ")) {
+        const rest = arg.slice(5).trim();
+        const spaceIdx = rest.indexOf(" ");
+        if (spaceIdx === -1) return "  Usage: /memory edit <id> <new-content>";
+        const id = parseInt(rest.slice(0, spaceIdx));
+        if (isNaN(id)) return "  Invalid ID. Usage: /memory edit <id> <new-content>";
+        const content = rest.slice(spaceIdx + 1).trim();
+        if (!content) return "  Content cannot be empty.";
+
+        const { updateMemory, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const updated = updateMemory(id, { content });
+        return updated ? `  Memory #${id} updated.` : `  Memory #${id} not found.`;
+      }
+
+      if (arg.startsWith("delete ")) {
+        const idStr = arg.slice(7).trim();
+
+        // Check if it's a numeric ID (enhanced store) or a filename (legacy)
+        const id = parseInt(idStr);
+        if (!isNaN(id) && String(id) === idStr) {
+          const { deleteMemory, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+          const { getDb } = await import("../../core/db.js");
+          const db = getDb();
+          initMemoryStoreSchema(db);
+          const deleted = deleteMemory(id);
+          return deleted ? `  Memory #${id} deleted.` : `  Memory #${id} not found.`;
+        }
+
+        // Fall through to legacy file-based delete
+        const { getMemoryDir, deleteMemoryFile } = await import("../../core/memory.js");
+        const { join } = await import("node:path");
+        const dir = getMemoryDir(cwd);
+        const deleted = await deleteMemoryFile(join(dir, idStr));
+        return deleted ? `  Deleted: ${idStr}` : `  File "${idStr}" not found.`;
+      }
+
+      if (arg.startsWith("approve ")) {
+        const id = parseInt(arg.slice(8).trim());
+        if (isNaN(id)) return "  Usage: /memory approve <id>";
+
+        const { promoteMemory, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const ok = promoteMemory(id);
+        return ok ? `  Memory #${id} approved and promoted.` : `  Memory #${id} not found.`;
       }
 
       if (arg.startsWith("search ")) {
         const query = arg.slice(7).trim();
         if (!query) return "  Usage: /memory search <query>";
 
-        const results = await searchMemories(cwd, query);
-        if (results.length === 0) return `  No memories matching "${query}"`;
+        // Search enhanced store first
+        const { searchMemories: searchStore, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const storeResults = searchStore(query);
 
-        const lines = [`  Search results for "${query}" (${results.length}):\n`];
-        for (const m of results) {
-          lines.push(`  [${m.meta.type}] ${m.meta.title}  (${m.filename})`);
+        // Also search legacy file-based memories
+        const { searchMemories: searchFiles } = await import("../../core/memory.js");
+        const fileResults = await searchFiles(cwd, query);
+
+        if (storeResults.length === 0 && fileResults.length === 0) {
+          return `  No memories matching "${query}"`;
+        }
+
+        const lines = [`  Search results for "${query}":\n`];
+
+        if (storeResults.length > 0) {
+          for (const m of storeResults) {
+            const approvedTag = m.approved ? "" : " (pending)";
+            lines.push(`  #${String(m.id).padEnd(4)} [${m.category}] ${m.key}${approvedTag}`);
+            lines.push(`         ${m.content.slice(0, 70)}${m.content.length > 70 ? "..." : ""}`);
+          }
+        }
+
+        if (fileResults.length > 0) {
+          lines.push(`\n  Legacy file memories:`);
+          for (const m of fileResults) {
+            lines.push(`  [${m.meta.type}] ${m.meta.title}  (${m.filename})`);
+          }
+        }
+
+        return lines.join("\n");
+      }
+
+      if (arg === "stats") {
+        const { getMemoryStats, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const stats = getMemoryStats();
+
+        const lines = [`  Memory Statistics\n`];
+        lines.push(`  Total entries:    ${stats.total}`);
+        lines.push(`  Expiring soon:    ${stats.expiringSoon}\n`);
+
+        if (Object.keys(stats.byCategory).length > 0) {
+          lines.push(`  By category:`);
+          for (const [cat, cnt] of Object.entries(stats.byCategory)) {
+            lines.push(`    ${cat.padEnd(14)} ${cnt}`);
+          }
+          lines.push(``);
+        }
+
+        if (Object.keys(stats.bySource).length > 0) {
+          lines.push(`  By source:`);
+          for (const [src, cnt] of Object.entries(stats.bySource)) {
+            lines.push(`    ${src.padEnd(14)} ${cnt}`);
+          }
+        }
+
+        return lines.join("\n");
+      }
+
+      if (arg === "expire") {
+        const { expireStaleMemories, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const count = expireStaleMemories();
+        return count > 0 ? `  Expired ${count} stale memor${count === 1 ? "y" : "ies"}.` : "  No expired memories to clean up.";
+      }
+
+      if (arg === "global") {
+        const { getMemories, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const memories = getMemories({ project: "" });
+
+        if (memories.length === 0) return "  No global memories. Use /memory add <category> <content> without project scope.";
+
+        const lines = [`  Global Memories (${memories.length}):\n`];
+        for (const m of memories) {
+          const approvedTag = m.approved ? "" : " (pending)";
+          const confTag = m.confidence < 1.0 ? ` [${Math.round(m.confidence * 100)}%]` : "";
+          lines.push(`  #${String(m.id).padEnd(4)} [${m.category}] ${m.key}${confTag}${approvedTag}`);
+          lines.push(`         ${m.content.slice(0, 70)}${m.content.length > 70 ? "..." : ""}`);
         }
         return lines.join("\n");
       }
 
+      // Default: list project memories (enhanced + legacy)
+      if (arg === "" || arg === "list") {
+        const { getMemories, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getDb } = await import("../../core/db.js");
+        const db = getDb();
+        initMemoryStoreSchema(db);
+        const storeMemories = getMemories({ project: cwd });
+
+        const { loadAllMemories } = await import("../../core/memory.js");
+        const fileMemories = await loadAllMemories(cwd);
+
+        if (storeMemories.length === 0 && fileMemories.length === 0) {
+          return "  No memories found.\n  Add one: /memory add <category> <content>\n  Categories: preference, convention, fact, decision, learned";
+        }
+
+        const lines: string[] = [];
+
+        if (storeMemories.length > 0) {
+          lines.push(`  Structured Memories (${storeMemories.length}):\n`);
+          lines.push(`  ${"ID".padEnd(6)} ${"Category".padEnd(14)} ${"Key".padEnd(30)} Conf  Status`);
+          lines.push(`  ${"--".padEnd(6)} ${"--------".padEnd(14)} ${"---".padEnd(30)} ----  ------`);
+          for (const m of storeMemories) {
+            const conf = `${Math.round(m.confidence * 100)}%`.padEnd(6);
+            const status = m.approved ? "approved" : "pending";
+            lines.push(`  ${String(m.id).padEnd(6)} ${m.category.padEnd(14)} ${m.key.slice(0, 28).padEnd(30)} ${conf}${status}`);
+          }
+        }
+
+        if (fileMemories.length > 0) {
+          if (lines.length > 0) lines.push(``);
+          lines.push(`  File Memories (${fileMemories.length}):\n`);
+          for (const m of fileMemories) {
+            const typeTag = `[${m.meta.type}]`;
+            lines.push(`  ${typeTag.padEnd(12)} ${m.meta.title}  (${m.filename})`);
+          }
+        }
+
+        return lines.join("\n");
+      }
+
+      // Legacy subcommands
       if (arg.startsWith("show ")) {
+        const { getMemoryDir, readMemoryFile } = await import("../../core/memory.js");
         const filename = arg.slice(5).trim();
         const { join } = await import("node:path");
         const dir = getMemoryDir(cwd);
@@ -129,20 +321,27 @@ export async function handleToolAction(
         return (lines as string[]).join("\n");
       }
 
-      if (arg.startsWith("delete ")) {
-        const filename = arg.slice(7).trim();
-        const { join } = await import("node:path");
-        const dir = getMemoryDir(cwd);
-        const deleted = await deleteMemoryFile(join(dir, filename));
-        return deleted ? `  Deleted: ${filename}` : `  File "${filename}" not found.`;
-      }
-
       if (arg === "index") {
+        const { readMemoryIndex } = await import("../../core/memory.js");
         const index = await readMemoryIndex(cwd);
         return index ? `  MEMORY.md:\n\n${index}` : "  No MEMORY.md index found.";
       }
 
-      return "  Usage: /memory list | search <query> | show <file> | delete <file> | index";
+      return [
+        "  Usage: /memory [subcommand]\n",
+        "  Subcommands:",
+        "    (none), list      List all memories for current project",
+        "    add <cat> <text>  Add memory (preference|convention|fact|decision|learned)",
+        "    edit <id> <text>  Edit a memory's content",
+        "    delete <id>       Delete a memory by ID",
+        "    approve <id>      Promote to persistent/approved",
+        "    search <query>    Full-text search across memories",
+        "    stats             Show memory statistics",
+        "    expire            Clean up expired entries",
+        "    global            Show global (non-project) memories",
+        "    show <file>       Show a legacy file memory",
+        "    index             Show MEMORY.md index",
+      ].join("\n");
     }
     case "snippet": {
       const { saveSnippet, loadSnippet, listSnippets, deleteSnippet } = await import("../../core/snippets.js");

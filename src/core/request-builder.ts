@@ -14,6 +14,7 @@ import {
 import type { ToolRegistry } from "./tool-registry";
 import { log } from "./logger";
 import { readFileSync } from "node:fs";
+import { getDebugTracer } from "./debug-tracer";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -80,6 +81,14 @@ export async function buildRequestForModel(
   const maxTokens = opts?.maxTokens ?? config.maxTokens;
   const includeTools = opts?.includeTools ?? true;
   const effort = (opts?.effortLevel ?? config.effortLevel ?? "medium") as string;
+
+  const tracer = getDebugTracer();
+  if (tracer.isEnabled()) {
+    const resolvedKey = provider === "anthropic"
+      ? (config.anthropicApiKey ? "anthropic-key" : config.apiKey ? "config-key" : "none")
+      : (resolveApiKey(modelName, apiBase, config) ? "resolved" : "none");
+    tracer.trace("model", `Build request: ${modelName}`, `Provider: ${provider}, base: ${apiBase}, effort: ${effort}, key: ${resolvedKey}`, { provider, apiBase, effort, maxTokens: opts?.maxTokens ?? config.maxTokens });
+  }
 
   const effortMaxTokens = effort === "low" ? Math.min(maxTokens, 4096)
     : effort === "max" ? Math.max(maxTokens, 65536)
