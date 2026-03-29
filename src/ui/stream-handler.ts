@@ -144,11 +144,13 @@ export async function processStreamEvents(
         const detail = summary ? summary.slice(0, 60) : "";
         setLoadingMessage(detail ? `Running ${event.name}: ${detail}` : `Running ${event.name}...`);
         setSpinnerPhase("tool");
-        // Add to active tabs
-        setActiveTabs(prev => [
-          ...prev.filter(t => t.toolUseId !== event.toolUseId),
-          { toolUseId: event.toolUseId, name: event.name, summary: detail, status: "running", startTime: Date.now() },
-        ]);
+        // Add to active tabs, except for Plan which has its own persistent panel.
+        if (event.name !== "Plan") {
+          setActiveTabs(prev => [
+            ...prev.filter(t => t.toolUseId !== event.toolUseId),
+            { toolUseId: event.toolUseId, name: event.name, summary: detail, status: "running", startTime: Date.now() },
+          ]);
+        }
         break;
       }
 
@@ -217,18 +219,21 @@ export async function processStreamEvents(
             setRunningAgentCount(getRunningAgentCount());
           } catch { /* ignore */ }
         }
-        // Update tab: mark as done/error, then remove after 1.5s
-        setActiveTabs(prev => prev.map(t =>
-          t.toolUseId === event.toolUseId
-            ? { ...t, status: (event.isError ? "error" : "done") as "done" | "error", durationMs: event.durationMs }
-            : t
-        ));
-        {
-          const timerId = setTimeout(() => {
-            setActiveTabs(prev => prev.filter(t => t.toolUseId !== event.toolUseId));
-            tabRemovalTimers.current.delete(timerId);
-          }, 1500);
-          tabRemovalTimers.current.add(timerId);
+        // Update tab: mark as done/error, then remove after 1.5s.
+        // Plan is excluded from ToolTabs because it lives in the fixed ActivePlanPanel.
+        if (event.name !== "Plan") {
+          setActiveTabs(prev => prev.map(t =>
+            t.toolUseId === event.toolUseId
+              ? { ...t, status: (event.isError ? "error" : "done") as "done" | "error", durationMs: event.durationMs }
+              : t
+          ));
+          {
+            const timerId = setTimeout(() => {
+              setActiveTabs(prev => prev.filter(t => t.toolUseId !== event.toolUseId));
+              tabRemovalTimers.current.delete(timerId);
+            }, 1500);
+            tabRemovalTimers.current.add(timerId);
+          }
         }
         setLoadingMessage("Thinking...");
         setSpinnerPhase("thinking");
