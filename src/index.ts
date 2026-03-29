@@ -404,11 +404,13 @@ async function runMain(
     if (isModelAllowedByPolicy(opts.model, policy)) {
       config.model = opts.model;
       config.modelExplicitlySet = true;
-      // Warn if model is not in the registry (will fall back to KCODE_API_BASE or default endpoint)
-      const { loadModelsConfig } = await import("./core/models");
+      // Re-resolve apiBase for the selected model (may differ from default)
+      const { loadModelsConfig, getModelBaseUrl: resolveBase } = await import("./core/models");
       const modelsConfig = await loadModelsConfig();
       const registered = modelsConfig.models.find((m) => m.name === opts.model);
-      if (!registered) {
+      if (registered) {
+        config.apiBase = await resolveBase(opts.model, config.apiBase);
+      } else {
         console.error(`\x1b[33mWarning: model "${opts.model}" is not registered. Use 'kcode models add' to register it. Falling back to ${process.env.KCODE_API_BASE ?? "http://localhost:10091"}.\x1b[0m`);
       }
     } else {
