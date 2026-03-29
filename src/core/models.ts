@@ -8,7 +8,7 @@ import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type ModelProvider = "openai" | "anthropic";
+export type ModelProvider = "openai" | "anthropic" | "mnemocuda";
 
 export interface ModelEntry {
   name: string;
@@ -17,7 +17,7 @@ export interface ModelEntry {
   capabilities?: string[]; // e.g. ["code", "vision", "general"]
   gpu?: string; // e.g. "RTX 5090", informational only
   description?: string;
-  provider?: ModelProvider; // "openai" (default) or "anthropic" — auto-detected from name if not set
+  provider?: ModelProvider; // "openai" (default), "anthropic", or "mnemocuda" — auto-detected from name if not set
 }
 
 export interface ModelsConfig {
@@ -177,9 +177,10 @@ export async function getModelProvider(modelName: string): Promise<ModelProvider
   const entry = config.models.find((m) => m.name === modelName);
   if (entry?.provider) return entry.provider;
 
-  // Name-based detection: claude-* models use Anthropic API
+  // Name-based detection
   const lower = modelName.toLowerCase();
   if (lower.startsWith("claude-") || lower.startsWith("claude_")) return "anthropic";
+  if (lower.includes("titan") || lower.includes("mnemocuda")) return "mnemocuda";
 
   return "openai";
 }
