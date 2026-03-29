@@ -957,10 +957,11 @@ export class ConversationManager {
       // Checkpoint mode: after enough tools for initial setup, force stop
       // This prevents the model from continuing to implement features
       // beyond what the user asked for (e.g., "just the initial structure").
-      // Threshold: 8 tool calls is enough for project init + basic config.
+      // Threshold: 4 tool calls — a tight limit for "first step only".
+      // Scaffold typically needs: mkdir/create (1) + config write (2-3) + install (4).
       if (this._checkpointMode && toolCalls.length > 0) {
         this._checkpointToolCount += toolCalls.length;
-        if (this._checkpointToolCount >= 8) {
+        if (this._checkpointToolCount >= 4) {
           log.info("session", `Checkpoint mode: ${this._checkpointToolCount} tools used — forcing stop for stage summary`);
           const textOnly = assistantContent.filter(b => b.type === "text");
           this.state.messages[this.state.messages.length - 1] = {
