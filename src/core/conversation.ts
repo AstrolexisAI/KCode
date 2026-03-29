@@ -1145,11 +1145,12 @@ export class ConversationManager {
 
           log.info("session", `Empty response (${guardState.lastEmptyType}) on turn ${turnCount} — retry ${guardState.emptyEndTurnCount}/2`);
 
-          // Context-aware retry prompt
+          // Context-aware retry prompt — include what was done so the model can summarize
+          const toolCount = this.state.toolUseCount;
           const retryPrompt = guardState.lastEmptyType === "thinking_only"
             ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
-            : guardState.lastEmptyType === "tools_only"
-            ? "[SYSTEM] You executed tools but didn't provide any response. Summarize your findings in 3-6 sentences now."
+            : guardState.lastEmptyType === "tools_only" || toolCount > 0
+            ? `[SYSTEM] You executed ${toolCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
             : guardState.lastEmptyType === "thinking_and_tools"
             ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
             : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";

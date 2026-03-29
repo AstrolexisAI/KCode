@@ -344,7 +344,7 @@ export async function processStreamEvents(
           ]);
           currentText = "";
           setStreamingText("");
-        } else if (!hadPartialProgress && event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry") {
+        } else if (!hadPartialProgress && event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry" && event.stopReason !== "checkpoint_reached" && event.stopReason !== "theoretical_no_tools" && event.stopReason !== "truncation_retry" && event.stopReason !== "plan_stop_reached") {
           // Model returned empty response — show a diagnostic fallback
           const emptyType = event.emptyType;
           const hint = emptyType === "thinking_only"
