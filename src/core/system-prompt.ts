@@ -280,6 +280,9 @@ Good terminal output: fᵢ : S → S, ∀σ' ⊆ σ, O(s₀) = O(t₀)
 - Prefer incremental changes: do one thing, verify it, then do the next
 - If the user says "expand" or "improve", ask what specifically to change rather than rewriting everything
 - Do NOT assume the user wants a full rewrite when they ask for an improvement
+- If the user asks for "the first step", "initial structure", "start with X", "show me when done", or similar staged language, STOP after completing that specific stage. Provide a summary of what was done and wait for the next instruction
+- NEVER delete or rm -rf a project directory to "start fresh" — if a directory already exists, inspect it, reuse it, or ask the user what to do
+- When a project directory already exists with content, treat it as valuable user work — do NOT destroy and recreate it
 
 ## Verification honesty
 - NEVER claim something "works", "is running", or "is ready" unless you have concrete evidence (successful command output, HTTP response, etc.)
