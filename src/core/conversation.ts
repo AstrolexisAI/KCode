@@ -1178,7 +1178,7 @@ export class ConversationManager {
       }
 
       // Pre-filter tool calls by managed policy and allowed/disallowed lists (delegated to tool-executor)
-      const { filtered: filteredToolCalls, blockedResults } = preFilterToolCalls(toolCalls, guardState, this.config);
+      let { filtered: filteredToolCalls, blockedResults } = preFilterToolCalls(toolCalls, guardState, this.config);
       const toolResultBlocks: ContentBlock[] = [...blockedResults];
 
       // Check if any burned error fingerprints match — block tools that failed 2+ times with the same error
@@ -1188,18 +1188,21 @@ export class ConversationManager {
           const toolName = fp.split("|")[0];
           if (toolName) burnedNames.add(toolName);
         }
-        const stillBurning = filteredToolCalls.filter(tc => burnedNames.has(tc.name));
-        if (stillBurning.length > 0) {
-          log.warn("session", `Blocking ${stillBurning.length} tool call(s) matching burned error fingerprints: ${stillBurning.map(t => t.name).join(", ")}`);
-          for (const tc of stillBurning) {
+        const notBurned: typeof filteredToolCalls = [];
+        for (const tc of filteredToolCalls) {
+          if (burnedNames.has(tc.name)) {
+            log.warn("session", `Blocking tool call ${tc.name} — burned error fingerprint`);
             toolResultBlocks.push({
               type: "tool_result",
               tool_use_id: tc.id,
               content: `BLOCKED: This tool (${tc.name}) failed twice with the same error. You MUST try a completely different approach or explain why you cannot proceed.`,
               is_error: true,
             } as any);
+          } else {
+            notBurned.push(tc);
           }
         }
+        filteredToolCalls = notBurned;
       }
 
       if (filteredToolCalls.length === 0) {
@@ -1226,7 +1229,12 @@ export class ConversationManager {
         const gen = executeToolsParallel(toolCalls, toolExecCtx);
         let genResult = await gen.next();
         while (!genResult.done) {
-          yield genResult.value;
+          const ev = genResult.value;
+          // Record error fingerprints inline so they're available for the next iteration
+          if (ev.type === "tool_result" && ev.isError && ev.result) {
+            guardState.recordToolError(ev.name, ev.result);
+          }
+          yield ev;
           genResult = await gen.next();
         }
         const parallelResults = genResult.value;
@@ -1260,7 +1268,12 @@ export class ConversationManager {
       const seqGen = executeToolsSequential(toolCalls, toolExecCtx, guardState);
       let seqResult = await seqGen.next();
       while (!seqResult.done) {
-        yield seqResult.value;
+        const ev = seqResult.value;
+        // Record error fingerprints inline for retry discipline
+        if (ev.type === "tool_result" && ev.isError && ev.result) {
+          guardState.recordToolError(ev.name, ev.result);
+        }
+        yield ev;
         seqResult = await seqGen.next();
       }
       const { toolResultBlocks: seqToolResults, turnHadDenial } = seqResult.value;
