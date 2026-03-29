@@ -624,10 +624,10 @@ describe("E2E: Recovery summary on empty response after tools", () => {
       const toolExecs = eventsOfType(events, "tool_executing");
       expect(toolExecs.length).toBe(1);
 
-      // Should have the recovery note since the final text was empty
-      const textDeltas = eventsOfType(events, "text_delta");
-      const allText = textDeltas.map(e => e.text).join("");
-      expect(allText).toContain("Turn ended without a summary");
+      // Should have a partial_progress event since tools ran but no text
+      const progress = eventsOfType(events, "partial_progress");
+      expect(progress.length).toBeGreaterThanOrEqual(1);
+      expect(progress[0]!.toolsUsed).toBeGreaterThan(0);
     } finally {
       await env.cleanup();
     }

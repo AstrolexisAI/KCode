@@ -33,6 +33,24 @@ export function getActivePlan(): Plan | null {
   return _activePlan;
 }
 
+/**
+ * Check if the active plan has a step currently in_progress.
+ * Returns the step if found, null otherwise.
+ */
+export function getActiveStep(): PlanStep | null {
+  if (!_activePlan) return null;
+  return _activePlan.steps.find(s => s.status === "in_progress") ?? null;
+}
+
+/**
+ * Check if there are multiple steps simultaneously in_progress (invalid state).
+ * Returns the count of in_progress steps.
+ */
+export function countInProgressSteps(): number {
+  if (!_activePlan) return 0;
+  return _activePlan.steps.filter(s => s.status === "in_progress").length;
+}
+
 export function onPlanChange(listener: (plan: Plan | null) => void): () => void {
   _planListeners.push(listener);
   return () => {

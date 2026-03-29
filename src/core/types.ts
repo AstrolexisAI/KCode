@@ -203,7 +203,8 @@ export type StreamEvent =
   | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }
   | { type: "budget_warning"; costUsd: number; limitUsd: number; pct: number }
   | { type: "tool_progress"; toolUseId: string; name: string; status: "queued" | "running" | "done" | "error"; index: number; total: number; durationMs?: number }
-  | { type: "tool_stream"; toolUseId: string; name: string; chunk: string };
+  | { type: "tool_stream"; toolUseId: string; name: string; chunk: string }
+  | { type: "partial_progress"; toolsUsed: number; elapsedMs: number; filesModified: string[]; lastError?: string; summary: string };
 
 // ─── Tool Input/Output Schemas ───────────────────────────────────
 
