@@ -142,6 +142,24 @@ export async function buildRequestForModel(
     }
 
     return { url, headers, body, provider, parser: parseAnthropicSSEStream };
+  } else if (provider === "mnemocuda") {
+    // MnemoCUDA: custom /v1/completions with ChatML prompt formatting
+    const { buildMnemoCudaRequest, parseMnemoCudaStream } = await import("./mnemocuda-provider.js");
+    const req = buildMnemoCudaRequest(
+      apiBase,
+      systemPrompt,
+      messages,
+      effortMaxTokens,
+      effortTemperature ?? profileTemperature,
+      config.apiKey,
+    );
+
+    // MnemoCUDA parser wraps its SSE format into OpenAI-compatible chunks
+    const mnemoCudaParser = (response: Response): AsyncGenerator<SSEChunk> => {
+      return parseMnemoCudaStream(response) as unknown as AsyncGenerator<SSEChunk>;
+    };
+
+    return { url: req.url, headers: req.headers, body: req.body, provider, parser: mnemoCudaParser };
   } else {
     // OpenAI-compatible API: /v1/chat/completions with Bearer token
     const url = `${apiBase}/v1/chat/completions`;
