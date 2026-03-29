@@ -77,7 +77,7 @@ export function looksIncomplete(text: string): boolean {
   // Last word looks like a truncated prefix (2-4 chars, no punctuation, not a common word)
   const lastWord = trimmed.match(/(\S+)\s*$/)?.[1] ?? "";
   if (lastWord.length >= 2 && lastWord.length <= 4 && /^[a-zA-Z]+$/.test(lastWord)) {
-    const commonShortWords = new Set(["ok", "no", "yes", "is", "it", "or", "an", "if", "do", "so", "to", "go", "on", "at", "be", "we", "he", "up", "as", "by", "my", "me", "us", "am", "oh", "si", "ya", "que"]);
+    const commonShortWords = new Set(["ok", "yes", "is", "it", "or", "if", "do", "so", "go", "at", "be", "we", "he", "up", "by", "my", "me", "us", "am", "oh", "ya"]);
     if (!commonShortWords.has(lastWord.toLowerCase()) && !/[.!?:;)]$/.test(trimmed)) return true;
   }
   // Ends mid-sentence: preposition, article, conjunction (English + Spanish)
