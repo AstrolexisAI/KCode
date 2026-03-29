@@ -72,7 +72,13 @@ export interface PartialProgressEntry {
   summary: string;
 }
 
-export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry | PlanEntry | DiffEntry | PartialProgressEntry;
+export interface IncompleteResponseEntry {
+  kind: "incomplete_response";
+  continuations: number;
+  stopReason: string;
+}
+
+export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry | PlanEntry | DiffEntry | PartialProgressEntry | IncompleteResponseEntry;
 
 interface MessageListProps {
   /** Completed message entries (rendered via <Static>) */
@@ -178,6 +184,8 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
       return <DiffMessage filePath={entry.filePath} hunks={entry.hunks} />;
     case "partial_progress":
       return <PartialProgressMessage toolsUsed={entry.toolsUsed} elapsedMs={entry.elapsedMs} filesModified={entry.filesModified} lastError={entry.lastError} summary={entry.summary} />;
+    case "incomplete_response":
+      return <IncompleteResponseMessage continuations={entry.continuations} stopReason={entry.stopReason} />;
   }
 }
 
@@ -452,6 +460,22 @@ function PartialProgressMessage({ toolsUsed, elapsedMs, filesModified, lastError
           <Text color={theme.error}>{"Last error: "}{lastError}</Text>
         </Box>
       )}
+    </Box>
+  );
+}
+
+function IncompleteResponseMessage({ continuations, stopReason }: { continuations: number; stopReason: string }) {
+  const { theme } = useTheme();
+  return (
+    <Box paddingLeft={2} marginTop={0}>
+      <Text color={theme.warning} dimColor>
+        {"--- "}
+        {stopReason === "max_tokens" || stopReason === "truncation_retry"
+          ? `Response incomplete — model reached output limit (${continuations} continuation${continuations !== 1 ? "s" : ""} attempted)`
+          : `Response may be incomplete (${stopReason})`
+        }
+        {" ---"}
+      </Text>
     </Box>
   );
 }

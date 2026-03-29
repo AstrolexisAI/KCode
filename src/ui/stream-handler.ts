@@ -370,6 +370,18 @@ export async function processStreamEvents(
             { kind: "text", role: "assistant", text: `  ${hint}` },
           ]);
         }
+        // Show incomplete response banner if the session ended incomplete
+        try {
+          const { getLastSession } = require("../core/response-session.js");
+          const lastSession = getLastSession();
+          if (lastSession && (lastSession.status === "incomplete" || lastSession.status === "failed") && lastSession.continuationCount > 0) {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "incomplete_response" as const, continuations: lastSession.continuationCount, stopReason: event.stopReason },
+            ]);
+          }
+        } catch { /* module not loaded */ }
+
         // Show any pending file change suggestions
         {
           const suggester = getFileChangeSuggester(config.workingDirectory);
