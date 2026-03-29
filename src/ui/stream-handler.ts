@@ -374,11 +374,21 @@ export async function processStreamEvents(
         try {
           const { getLastSession } = require("../core/response-session.js");
           const lastSession = getLastSession();
-          if (lastSession && (lastSession.status === "incomplete" || lastSession.status === "failed")) {
-            setCompleted((prev) => [
-              ...prev,
-              { kind: "incomplete_response" as const, continuations: lastSession.continuationCount, stopReason: event.stopReason },
-            ]);
+          // Only show the incomplete banner once: on the final turn_end, for
+          // sessions that closed recently (within 5s) and with terminal stop reasons.
+          const isTerminalStop = event.stopReason === "end_turn" || event.stopReason === "error"
+            || event.stopReason === "force_stop" || event.stopReason === "aborted";
+          const isRecent = lastSession && (Date.now() - lastSession.updatedAt < 5000);
+          if (lastSession && isRecent && isTerminalStop
+              && (lastSession.status === "incomplete" || lastSession.status === "failed")) {
+            setCompleted((prev) => {
+              // Don't add duplicate banners
+              if (prev.some(e => e.kind === "incomplete_response")) return prev;
+              return [
+                ...prev,
+                { kind: "incomplete_response" as const, continuations: lastSession.continuationCount, stopReason: event.stopReason },
+              ];
+            });
           }
         } catch { /* module not loaded */ }
 
