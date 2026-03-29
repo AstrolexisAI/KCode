@@ -1204,10 +1204,11 @@ export class ConversationManager {
 
           // Dedup: if this is a continuation and the model repeated content
           if (previousTurnTail.length > 0 && fullText.length > 0) {
-            const deduped = dedupContinuation(previousTurnTail, fullText);
-            if (deduped !== fullText) {
-              log.info("session", `Stripped ${fullText.length - deduped.length} chars of duplicated content from continuation`);
-              fullText = deduped;
+            const { mergeContinuation: mergeContFn } = await import("./continuation-merge.js");
+            const mergeResult = mergeContFn(previousTurnTail, fullText);
+            if (mergeResult.merged !== fullText) {
+              log.info("session", `Continuation merge: stripped ${mergeResult.strippedChars} chars, ${mergeResult.strippedLines} lines${mergeResult.repeatedPrefixDetected ? " (heading restart)" : ""}`);
+              fullText = mergeResult.merged;
               const lastMsg = this.state.messages[this.state.messages.length - 1];
               if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
                 const textBlocks = (lastMsg.content as ContentBlock[]).filter(b => b.type === "text");
