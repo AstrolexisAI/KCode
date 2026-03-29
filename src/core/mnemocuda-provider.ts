@@ -177,8 +177,12 @@ export async function* parseMnemoCudaStream(
 
           if (chunk.token) {
             tokenCount++;
-            // Replace \u0010 (DLE control char used as token separator) with space
-            const text = chunk.token === "\u0010" ? " " : chunk.token;
+            // MnemoCUDA token post-processing:
+            // \u0010 (DLE) = space separator between tokens
+            // \uFFFD (�) = newline in some quantizations
+            let text = chunk.token;
+            text = text.replace(/\u0010/g, " ");
+            text = text.replace(/\uFFFD/g, "\n");
             yield { type: "content_delta", content: text };
           }
 
