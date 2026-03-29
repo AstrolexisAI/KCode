@@ -96,6 +96,20 @@ export async function buildRequestForModel(
     : maxTokens;
   const effortTemperature = effort === "low" ? 0.3 : effort === "max" ? 0.9 : effort === "high" ? 0.7 : undefined;
 
+  // Model profile: filter tools and adjust temperature for small models
+  let profileToolFilter: ((name: string) => boolean) | null = null;
+  let profileTemperature: number | undefined;
+  try {
+    const { getModelProfile, isToolAllowedForProfile } = require("./model-profile") as typeof import("./model-profile");
+    const profile = getModelProfile(modelName);
+    if (profile.tools !== "all") {
+      profileToolFilter = (name: string) => isToolAllowedForProfile(name, profile);
+    }
+    if (profile.temperature !== null && !effortTemperature) {
+      profileTemperature = profile.temperature;
+    }
+  } catch { /* module not loaded */ }
+
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   if (provider === "anthropic") {
@@ -121,7 +135,9 @@ export async function buildRequestForModel(
     }
 
     if (includeTools) {
-      const toolDefs = convertToAnthropicTools(tools.getDefinitions());
+      let defs = tools.getDefinitions();
+      if (profileToolFilter) defs = defs.filter(d => profileToolFilter!(d.name));
+      const toolDefs = convertToAnthropicTools(defs);
       if (toolDefs.length > 0) body.tools = toolDefs;
     }
 
@@ -136,7 +152,9 @@ export async function buildRequestForModel(
     }
 
     const convertedMessages = convertToOpenAIMessages(systemPrompt, messages);
-    const toolDefs = includeTools ? convertToOpenAITools(tools.getDefinitions()) : [];
+    let filteredDefs = tools.getDefinitions();
+    if (profileToolFilter) filteredDefs = filteredDefs.filter(d => profileToolFilter!(d.name));
+    const toolDefs = includeTools ? convertToOpenAITools(filteredDefs) : [];
 
     const body: Record<string, unknown> = {
       model: modelName,
@@ -146,8 +164,9 @@ export async function buildRequestForModel(
       stream_options: { include_usage: true },
     };
 
-    if (effortTemperature !== undefined) {
-      body.temperature = effortTemperature;
+    const finalTemp = effortTemperature ?? profileTemperature;
+    if (finalTemp !== undefined) {
+      body.temperature = finalTemp;
     }
 
     if (toolDefs.length > 0) body.tools = toolDefs;
