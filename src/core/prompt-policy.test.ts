@@ -5,6 +5,7 @@ import { describe, test, expect } from "bun:test";
 import { SystemPromptBuilder } from "./system-prompt";
 import { looksIncomplete, looksTheoretical, looksCheckpointed, detectLanguage } from "./conversation";
 import { LoopGuardState } from "./agent-loop-guards";
+import { classifyToolCoherence } from "../tools/plan";
 import type { KCodeConfig } from "./types";
 
 // ─── Minimal config for prompt generation ───────────────────────
@@ -284,5 +285,37 @@ describe("LoopGuardState error fingerprinting", () => {
     g.recordToolError("Write", "cannot write to /home/curly/project/file.tsx");
     const burned = g.recordToolError("Write", "cannot write to /home/other/different/file.tsx");
     expect(burned).toBe(true); // Both normalize to "cannot write to <path>"
+  });
+});
+
+// ─── classifyToolCoherence — plan vs execution ──────────────────
+
+describe("classifyToolCoherence", () => {
+  test("setup step + scaffold command = ok", () => {
+    expect(classifyToolCoherence("Bash", { command: "bun create next-app my-project" }, "Initialize project setup")).toBe("ok");
+  });
+
+  test("setup step + npm install = ok", () => {
+    expect(classifyToolCoherence("Bash", { command: "npm install tailwindcss" }, "Set up project structure")).toBe("ok");
+  });
+
+  test("setup step + writing config = ok", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/tailwind.config.ts" }, "Configure project setup")).toBe("ok");
+  });
+
+  test("setup step + writing page component = warn", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/app/about/page.tsx" }, "Initialize project setup")).toBe("warn");
+  });
+
+  test("git step + git command = ok", () => {
+    expect(classifyToolCoherence("Bash", { command: "git add -A && git commit -m 'init'" }, "Git commit and push")).toBe("ok");
+  });
+
+  test("git step + writing new files = warn", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/components/Hero.tsx" }, "Final git commit")).toBe("warn");
+  });
+
+  test("unclassified step = ok (default)", () => {
+    expect(classifyToolCoherence("Bash", { command: "echo test" }, "Build the landing page")).toBe("ok");
   });
 });
