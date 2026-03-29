@@ -163,7 +163,8 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
     case "suggestion":
       return <SuggestionMessage suggestions={entry.suggestions} />;
     case "plan":
-      return <PlanMessage title={entry.title} steps={entry.steps} />;
+      // Plan is rendered in the persistent ActivePlanPanel instead
+      return null;
     case "diff":
       return <DiffMessage filePath={entry.filePath} hunks={entry.hunks} />;
   }
