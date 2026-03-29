@@ -271,6 +271,45 @@ async function runMain(
 
     // Auto-start llama-server and wait for model to be fully loaded
     if (isSetupComplete()) {
+      // Check if the selected model has a registered baseUrl (external server like MnemoCUDA)
+      let externalServerUrl: string | null = null;
+      try {
+        const { getModelBaseUrl, getModelProvider } = await import("./core/models");
+        const modelName = opts.model || process.env.KCODE_MODEL || "";
+        const modelBase = await getModelBaseUrl(modelName);
+        const provider = await getModelProvider(modelName);
+        // If the model has a non-default baseUrl or a non-openai provider, it's external
+        if (provider === "mnemocuda" || provider === "anthropic" ||
+            (modelBase && !modelBase.includes("localhost:10091"))) {
+          externalServerUrl = modelBase;
+        }
+      } catch { /* fallback to normal server management */ }
+
+      if (externalServerUrl) {
+        // External server: just check it's reachable, don't try to start llama.cpp
+        const maxWait = 15_000;
+        const start = Date.now();
+        let ready = false;
+        const healthEndpoints = ["/ready", "/health", "/v1/models"];
+        while (Date.now() - start < maxWait) {
+          for (const endpoint of healthEndpoints) {
+            try {
+              const resp = await fetch(`${externalServerUrl}${endpoint}`, { signal: AbortSignal.timeout(2000) });
+              if (resp.ok) { ready = true; break; }
+            } catch { /* retry */ }
+          }
+          if (ready) break;
+          await new Promise(r => setTimeout(r, 500));
+        }
+        if (ready) {
+          process.stderr.write(`\x1b[32m✓\x1b[0m Model loaded on ${externalServerUrl}\x1b[K\n`);
+        } else {
+          console.error(`\x1b[31m✗ External server not reachable: ${externalServerUrl}\x1b[0m`);
+          console.error(`  Make sure your inference server is running.`);
+          await exitWithPause(1, `External server not reachable: ${externalServerUrl}`);
+        }
+      } else {
+      // Local llama.cpp server management
       const serverRunning = await isServerRunning();
       let port: number = 0;
 
@@ -326,6 +365,7 @@ async function runMain(
         console.error(`\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s. Check ~/.kcode/server.log\x1b[0m`);
         process.exit(1);
       }
+      } // close else (local llama.cpp server management)
     }
   }
 
