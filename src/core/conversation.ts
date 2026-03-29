@@ -481,13 +481,19 @@ export class ConversationManager {
     // Auto-detect theoretical/formal prompts — disable tools at execution level
     if (looksTheoretical(userMessage)) {
       const lang = detectLanguage(userMessage);
-      log.info("session", `Detected theoretical prompt (lang=${lang}) — disabling tools for this turn`);
+      log.info("session", `Detected theoretical prompt (lang=${lang}) — strict analysis mode`);
       this._theoreticalMode = true;
       this._theoreticalRetries = 0;
       const langHint = lang !== "en" ? ` You MUST respond in ${lang === "es" ? "Spanish" : lang === "fr" ? "French" : lang === "pt" ? "Portuguese" : "the user's language"}.` : "";
       this.state.messages.push({
         role: "user",
-        content: `[SYSTEM] The user's question is theoretical/formal. Respond with text only — do NOT use any tools. Use Unicode for math (fᵢ : S → S, not LaTeX).${langHint}`,
+        content: `[SYSTEM] STRICT ANALYSIS MODE: The user's question is theoretical/formal. Rules:\n` +
+          `1. Respond with text only — do NOT use any tools.\n` +
+          `2. Use Unicode for math (fᵢ : S → S, not LaTeX).\n` +
+          `3. Be precise and concise — avoid verbose introductions and repetitive conclusions.\n` +
+          `4. If data is missing for some items, state "No data provided for X" — do NOT invent values.\n` +
+          `5. End with a single, clear conclusion — do NOT repeat the conclusion.\n` +
+          `6. If your response will be long, prioritize structure over length.${langHint}`,
       });
     } else {
       this._theoreticalMode = false;
@@ -516,6 +522,25 @@ export class ConversationManager {
     } else {
       this._checkpointMode = false;
     }
+
+    // Output budget: estimate if response will exceed output limit
+    try {
+      const { evaluateOutputBudget } = await import("./output-budget.js");
+      const contextPct = this.state.tokenCount > 0
+        ? Math.round((this.state.tokenCount / this.contextWindowSize) * 100)
+        : 0;
+      const budget = evaluateOutputBudget(userMessage, this.config.maxTokens, contextPct);
+      if (budget.strategy !== "normal" && budget.systemHint) {
+        log.info("session", `Output budget: ${budget.strategy} (est. ${budget.estimatedOutputTokens} tokens, max ${budget.maxAllowedTokens})`);
+        this.state.messages.push({ role: "user", content: budget.systemHint });
+      }
+    } catch { /* module not loaded */ }
+
+    // Begin response session for turn isolation
+    try {
+      const { beginResponseSession } = await import("./response-session.js");
+      beginResponseSession(this.state.messages.length);
+    } catch { /* module not loaded */ }
 
     this.state.messages.push({
       role: "user",
@@ -1290,6 +1315,21 @@ export class ConversationManager {
             summary: `Turn ended after ${this.state.toolUseCount} tool uses over ${Math.round(elapsed / 1000)}s`,
           };
         }
+
+        // Close response session with appropriate status
+        try {
+          const { closeResponseSession, getActiveResponseSession } = await import("./response-session.js");
+          const session = getActiveResponseSession();
+          if (session) {
+            const finalText = textChunks.join("").trim();
+            const isComplete = finalText.length >= 20 && !looksIncomplete(finalText);
+            closeResponseSession(
+              isComplete ? "completed" : (finalTextLen < 20 ? "failed" : "incomplete"),
+              stopReason,
+              guardState.lastEmptyType === "no_output" ? "Model returned no text" : undefined,
+            );
+          }
+        } catch { /* module not loaded */ }
 
         yield { type: "turn_end", stopReason, emptyType: guardState.lastEmptyType };
         this.abortController = null;
