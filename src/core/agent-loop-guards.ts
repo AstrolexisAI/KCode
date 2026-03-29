@@ -245,6 +245,10 @@ export class LoopGuardState {
   lastEmptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output";
   readonly crossTurnSigs = new Map<string, number>();
   readonly loopPatterns = new Map<string, LoopPatternEntry>();
+  /** Track error fingerprints to block retrying the same failing technique */
+  readonly errorFingerprints = new Map<string, number>();
+  /** Set of "burned" fingerprints that should not be retried */
+  readonly burnedFingerprints = new Set<string>();
 
   // Pre-computed tool filter sets
   readonly managedDisallowedSet: Set<string>;
@@ -259,6 +263,41 @@ export class LoopGuardState {
     this.managedDisallowedSet = new Set(managedDisallowedTools?.map(t => t.toLowerCase()));
     this.allowedToolsSet = allowedTools?.length ? new Set(allowedTools.map(t => t.toLowerCase())) : null;
     this.disallowedToolsSet = disallowedTools?.length ? new Set(disallowedTools.map(t => t.toLowerCase())) : null;
+  }
+
+  /**
+   * Record a tool error. Returns true if this fingerprint is now "burned"
+   * (2+ failures with the same root cause → should not be retried).
+   */
+  recordToolError(toolName: string, errorMessage: string): boolean {
+    // Normalize error to a canonical fingerprint
+    const normalized = errorMessage
+      .replace(/\/[^\s"']+/g, "<path>")       // normalize paths
+      .replace(/\d+/g, "N")                    // normalize numbers
+      .replace(/["'][^"']*["']/g, "<str>")     // normalize strings
+      .slice(0, 100);                           // cap length
+    const fp = `${toolName}|${normalized}`;
+
+    const count = (this.errorFingerprints.get(fp) ?? 0) + 1;
+    this.errorFingerprints.set(fp, count);
+
+    if (count >= 2) {
+      this.burnedFingerprints.add(fp);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if a tool call matches a burned error fingerprint.
+   */
+  isErrorBurned(toolName: string, errorMessage: string): boolean {
+    const normalized = errorMessage
+      .replace(/\/[^\s"']+/g, "<path>")
+      .replace(/\d+/g, "N")
+      .replace(/["'][^"']*["']/g, "<str>")
+      .slice(0, 100);
+    return this.burnedFingerprints.has(`${toolName}|${normalized}`);
   }
 
   /**

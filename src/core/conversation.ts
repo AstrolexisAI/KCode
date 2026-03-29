@@ -179,6 +179,29 @@ export function looksTheoretical(prompt: string): boolean {
 }
 
 
+/**
+ * Detect if the user is requesting staged/incremental execution
+ * (i.e., "do the first step and show me", "just the initial structure").
+ * When detected, KCode should stop after completing that stage.
+ */
+export function looksCheckpointed(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  const patterns = [
+    /\b(primer|first)\s+(paso|step)\b/,
+    /\b(estructura|structure)\s+(inicial|initial|base|básica)\b/,
+    /\b(solo|only|just)\s+(la base|the base|el setup|the setup|el esqueleto|the skeleton)\b/,
+    /\bmuéstrame\s+(cuando|el resultado|qué hiciste)\b/,
+    /\bshow\s+me\s+when\s+(done|finished|ready)\b/,
+    /\bcuando\s+termines\b/,
+    /\bhaz\s+primero\b/,
+    /\bstart\s+with\b.*\b(then|and)\s+(show|tell|stop)\b/,
+    /\bsolo\s+(la|el|las|los)\s+\w+\s+(inicial|base|primero|first)\b/,
+    /\b(empieza|empezá|comienza|comenzá)\s+(con|por)\b.*\b(muéstrame|y\s+par[áa])\b/,
+    /\b(start|begin)\s+(with|by)\b.*\b(show|stop|then)\b/,
+  ];
+  return patterns.some(p => p.test(lower));
+}
+
 // ─── Retry Logic ─────────────────────────────────────────────────
 
 function isRetryableError(error: unknown): boolean {
@@ -240,6 +263,9 @@ export class ConversationManager {
   private abortController: AbortController | null = null;
   private _theoreticalMode = false;
   private _theoreticalRetries = 0;
+  private _checkpointMode = false;
+  private _checkpointToolCount = 0;
+  private _activeGuardState: import("./agent-loop-guards").LoopGuardState | null = null;
   private turnsSincePromptRebuild = 0;
   private systemPromptHash = "";
   private sessionStartTime = Date.now();
@@ -431,6 +457,19 @@ export class ConversationManager {
       this._theoreticalMode = false;
     }
 
+    // Auto-detect staged/checkpoint requests — limit execution scope
+    if (looksCheckpointed(userMessage)) {
+      log.info("session", "Detected checkpoint request — will limit tool execution to initial stage");
+      this._checkpointMode = true;
+      this._checkpointToolCount = 0;
+      this.state.messages.push({
+        role: "user",
+        content: "[SYSTEM] The user asked for ONLY the first step or initial structure. Complete ONLY that stage, then STOP and provide a summary. Do NOT continue to additional features, pages, or implementation beyond the initial setup.",
+      });
+    } else {
+      this._checkpointMode = false;
+    }
+
     this.state.messages.push({
       role: "user",
       content: userMessage,
@@ -524,6 +563,13 @@ export class ConversationManager {
           content: (event.result ?? "").slice(0, 2000),
           is_error: event.isError,
         }));
+        // Track error fingerprints for retry discipline
+        if (event.isError && event.result && this._activeGuardState) {
+          const burned = this._activeGuardState.recordToolError(event.name, event.result);
+          if (burned) {
+            log.warn("session", `Tool error fingerprint burned: ${event.name} — same error seen twice, will block retries`);
+          }
+        }
         break;
       case "error":
         this.transcript.append("system", "error", event.error.message);
@@ -557,6 +603,7 @@ export class ConversationManager {
       this.config.allowedTools,
       this.config.disallowedTools,
     );
+    this._activeGuardState = guardState;
     const turnStartMs = Date.now();
     // Track the tail of text from previous turn iteration (for dedup on truncation retry)
     let previousTurnTail = "";
@@ -896,6 +943,30 @@ export class ConversationManager {
         continue;
       }
 
+      // Checkpoint mode: after enough tools for initial setup, force stop
+      // This prevents the model from continuing to implement features
+      // beyond what the user asked for (e.g., "just the initial structure").
+      // Threshold: 8 tool calls is enough for project init + basic config.
+      if (this._checkpointMode && toolCalls.length > 0) {
+        this._checkpointToolCount += toolCalls.length;
+        if (this._checkpointToolCount >= 8) {
+          log.info("session", `Checkpoint mode: ${this._checkpointToolCount} tools used — forcing stop for stage summary`);
+          const textOnly = assistantContent.filter(b => b.type === "text");
+          this.state.messages[this.state.messages.length - 1] = {
+            role: "assistant",
+            content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
+          };
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] CHECKPOINT REACHED: You have completed enough work for the initial stage the user requested. STOP executing tools NOW. Provide a clear summary of: (1) what was created, (2) what still needs to be done, (3) suggested next step. Do NOT continue implementing.",
+          });
+          this._checkpointMode = false; // Disable after firing once
+          guardState.forceStopLoop = true;
+          yield { type: "turn_end", stopReason: "checkpoint_reached" };
+          continue;
+        }
+      }
+
       // Record per-turn cost entry
       if (turnInputTokens > 0 || turnOutputTokens > 0) {
         try {
@@ -1109,6 +1180,27 @@ export class ConversationManager {
       // Pre-filter tool calls by managed policy and allowed/disallowed lists (delegated to tool-executor)
       const { filtered: filteredToolCalls, blockedResults } = preFilterToolCalls(toolCalls, guardState, this.config);
       const toolResultBlocks: ContentBlock[] = [...blockedResults];
+
+      // Check if any burned error fingerprints match — block tools that failed 2+ times with the same error
+      if (guardState.burnedFingerprints.size > 0) {
+        const burnedNames = new Set<string>();
+        for (const fp of guardState.burnedFingerprints) {
+          const toolName = fp.split("|")[0];
+          if (toolName) burnedNames.add(toolName);
+        }
+        const stillBurning = filteredToolCalls.filter(tc => burnedNames.has(tc.name));
+        if (stillBurning.length > 0) {
+          log.warn("session", `Blocking ${stillBurning.length} tool call(s) matching burned error fingerprints: ${stillBurning.map(t => t.name).join(", ")}`);
+          for (const tc of stillBurning) {
+            toolResultBlocks.push({
+              type: "tool_result",
+              tool_use_id: tc.id,
+              content: `BLOCKED: This tool (${tc.name}) failed twice with the same error. You MUST try a completely different approach or explain why you cannot proceed.`,
+              is_error: true,
+            } as any);
+          }
+        }
+      }
 
       if (filteredToolCalls.length === 0) {
         this.state.messages.push({ role: "user", content: toolResultBlocks });
