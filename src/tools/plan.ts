@@ -82,22 +82,43 @@ export function classifyToolCoherence(
   const command = String(toolInput.command ?? "").toLowerCase();
 
   // Setup/init phase: allow scaffold, config, install
-  if (/\b(setup|init|initialize|install|config|structure|scaffold)\b/.test(stepLower)) {
+  if (/\b(setup|init|initialize|install|config|structure|scaffold|dependencies)\b/.test(stepLower)) {
     if (toolName === "Bash" && /\b(create|init|install|npm|bun|npx|mkdir|git init)\b/.test(command)) return "ok";
     if (toolName === "Write" && /\.(json|config|ts|js|css|md)$/i.test(filePath)) return "ok";
     // Writing full page components during setup is a deviation
     if (toolName === "Write" && /\/(pages?|app)\/.+\.(tsx|jsx)$/i.test(filePath) && !/layout|root|config/i.test(filePath)) return "warn";
-    return "ok"; // Default: allow during setup
-  }
-
-  // Git/commit phase: block new feature creation
-  if (/\b(git|commit|push|version|tag)\b/.test(stepLower)) {
-    if (toolName === "Bash" && /\bgit\b/.test(command)) return "ok";
-    if (toolName === "Write" || toolName === "Edit") return "warn"; // Writing files during git phase = deviation
     return "ok";
   }
 
-  // Default: allow (we can't classify all phases)
+  // Build/create page phase: allow page/component writes
+  if (/\b(build|create|implement|add|design)\s+.*(page|component|landing|home|hero|chart|footer|header|nav)\b/.test(stepLower)) {
+    if (toolName === "Write" || toolName === "Edit") return "ok";
+    if (toolName === "Bash" && /\b(npm|bun|npx)\b/.test(command)) return "ok";
+    return "ok";
+  }
+
+  // Test/verify phase: allow read/bash, warn on writes
+  if (/\b(test|verify|check|validate|review)\b/.test(stepLower)) {
+    if (toolName === "Bash" || toolName === "Read" || toolName === "Glob" || toolName === "Grep") return "ok";
+    if (toolName === "Write" || toolName === "Edit") return "warn";
+    return "ok";
+  }
+
+  // Docs/readme phase: allow doc writes, warn on code writes
+  if (/\b(doc|readme|documentation|changelog)\b/.test(stepLower)) {
+    if (toolName === "Write" && /\.(md|txt|rst)$/i.test(filePath)) return "ok";
+    if (toolName === "Write" && /\.(tsx?|jsx?|css|html)$/i.test(filePath)) return "warn";
+    return "ok";
+  }
+
+  // Git/commit phase: block new feature creation
+  if (/\b(git|commit|push|version|tag|release|polish|finalize)\b/.test(stepLower)) {
+    if (toolName === "Bash" && /\bgit\b/.test(command)) return "ok";
+    if (toolName === "Write" || toolName === "Edit") return "block";
+    return "ok";
+  }
+
+  // Default: allow (can't classify all phases)
   return "ok";
 }
 

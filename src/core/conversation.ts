@@ -1009,19 +1009,45 @@ export class ConversationManager {
           });
         }
 
-        // Check tool coherence against active step
+        // Check tool coherence against active step — warn or block
         const activeStep = getActiveStep();
         if (activeStep && toolCalls.length > 0) {
+          const blocked: typeof toolCalls = [];
+          const kept: typeof toolCalls = [];
+          let warned = false;
+
           for (const tc of toolCalls) {
             const coherence = classifyToolCoherence(tc.name, tc.input as Record<string, unknown>, activeStep.title);
-            if (coherence === "warn") {
+            if (coherence === "block") {
+              log.warn("session", `Plan block: tool ${tc.name} contradicts step "${activeStep.title}" — blocking`);
+              blocked.push(tc);
+            } else if (coherence === "warn" && !warned) {
+              warned = true;
               log.warn("session", `Plan deviation: tool ${tc.name} may not match step "${activeStep.title}"`);
               this.state.messages.push({
                 role: "user",
                 content: `[SYSTEM] Plan deviation detected: your action (${tc.name}) doesn't seem to match the current plan step "${activeStep.id}. ${activeStep.title}". Finish the current step first, or update the plan if you're intentionally changing approach.`,
               });
-              break; // One warning per iteration is enough
+              kept.push(tc); // Warn but still allow
+            } else {
+              kept.push(tc);
             }
+          }
+
+          if (blocked.length > 0) {
+            // Inject synthetic tool results for blocked calls
+            const blockedResults: any[] = blocked.map(tc => ({
+              type: "tool_result",
+              tool_use_id: tc.id,
+              content: `BLOCKED by plan: "${tc.name}" contradicts the current step "${activeStep.id}. ${activeStep.title}". Finish or update the current step first.`,
+              is_error: true,
+            }));
+            this.state.messages.push({ role: "user", content: blockedResults });
+            for (const tc of blocked) {
+              yield { type: "tool_result" as const, name: tc.name, toolUseId: tc.id, result: blockedResults.find((r: any) => r.tool_use_id === tc.id)?.content ?? "Blocked", isError: true };
+            }
+            toolCalls = kept;
+            if (kept.length === 0) continue; // All tools blocked, retry
           }
         }
       } catch { /* plan module not loaded */ }
