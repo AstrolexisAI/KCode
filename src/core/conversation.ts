@@ -317,6 +317,22 @@ export class ConversationManager {
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = config;
     this.tools = tools;
+
+    // Apply model profile adjustments for small models
+    try {
+      const { getModelProfile } = require("./model-profile") as typeof import("./model-profile");
+      const profile = getModelProfile(config.model);
+      log.info("session", `Model profile: ${profile.size} (maxTokens=${profile.maxTokens}, turns=${profile.maxAgentTurns}, prompt=${profile.promptMode})`);
+
+      // Only override if user hasn't set explicit values
+      if (!config.maxTokens || config.maxTokens === 16384) {
+        config.maxTokens = profile.maxTokens;
+      }
+      if (profile.compactThreshold < (config.compactThreshold ?? 0.75)) {
+        config.compactThreshold = profile.compactThreshold;
+      }
+    } catch { /* module not loaded */ }
+
     this.systemPrompt = ""; // initialized async via initSystemPrompt()
     this.systemPromptHash = "";
     this._systemPromptReady = this.initSystemPrompt();

@@ -25,11 +25,44 @@ export class SystemPromptBuilder {
    * Build the full system prompt from config and environment context.
    * Each section is independently generated and can be toggled.
    */
+  /**
+   * Build a minimal system prompt for small models (<10B params).
+   * ~200 tokens instead of ~8,000. Focuses on core tool usage only.
+   */
+  static buildLitePrompt(config: KCodeConfig, version?: string): string {
+    const cwd = config.workingDirectory;
+    return `You are KCode v${version ?? "?"}, a coding assistant by Astrolexis. Working directory: ${cwd}
+
+TOOLS: Use tools directly — never show JSON to the user.
+- Read: read files (absolute paths)
+- Write: create/edit files (absolute paths)
+- Edit: replace text in files
+- Bash: run shell commands
+- Glob: find files by pattern
+- Grep: search file contents
+
+RULES:
+- Be concise. Do one task, show result.
+- Never rm -rf directories without asking.
+- If data is missing, say so — don't invent.
+- End every response with a complete sentence.
+- After using tools, summarize what you did.`;
+  }
+
   static async build(config: KCodeConfig, version?: string): Promise<string> {
     // If the user overrides the entire system prompt, return it directly
     if (config.systemPromptOverride) {
       return config.systemPromptOverride;
     }
+
+    // Check if model profile requests lite prompt
+    try {
+      const { getModelProfile } = await import("./model-profile.js");
+      const profile = getModelProfile(config.model);
+      if (profile.promptMode === "lite") {
+        return this.buildLitePrompt(config, version);
+      }
+    } catch { /* module not loaded */ }
 
     const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000);
     const sections: PromptSection[] = [];
