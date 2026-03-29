@@ -337,7 +337,18 @@ export async function processStreamEvents(
         }
         // Finalize any remaining streamed text
         if (currentText.length > 0) {
-          const text = currentText;
+          let text = currentText;
+          // Clean up truncated questions/confirmations at the end
+          try {
+            const { isTruncatedQuestion } = require("../core/continuation-merge.js");
+            if (isTruncatedQuestion(text)) {
+              // Strip the truncated question from the end
+              const lastNewline = text.lastIndexOf("\n");
+              if (lastNewline > text.length * 0.5) {
+                text = text.slice(0, lastNewline).trimEnd();
+              }
+            }
+          } catch { /* module not loaded */ }
           setCompleted((prev) => [
             ...prev,
             { kind: "text", role: "assistant", text },
