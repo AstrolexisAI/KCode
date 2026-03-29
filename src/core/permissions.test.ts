@@ -265,6 +265,49 @@ describe("analyzeBashCommand", () => {
   });
 });
 
+// ─── detectDestructiveRemoval ──────────────────────────────────
+
+describe("detectDestructiveRemoval", () => {
+  test("blocks rm -rf on project directory", () => {
+    const result = analyzeBashCommand("rm -rf /home/user/bitcoin-sovereign");
+    expect(result.safe).toBe(false);
+    expect(result.riskLevel).toBe("dangerous");
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+  });
+
+  test("blocks rm -rf on relative path", () => {
+    const result = analyzeBashCommand("rm -rf bitcoin-sovereign");
+    expect(result.safe).toBe(false);
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+  });
+
+  test("blocks rm -rf .", () => {
+    const result = analyzeBashCommand("rm -rf .");
+    expect(result.safe).toBe(false);
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+  });
+
+  test("allows rm -rf node_modules", () => {
+    const result = analyzeBashCommand("rm -rf node_modules");
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+  });
+
+  test("allows rm -rf .next", () => {
+    const result = analyzeBashCommand("rm -rf .next");
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+  });
+
+  test("allows rm -rf dist", () => {
+    const result = analyzeBashCommand("rm -rf dist");
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+  });
+
+  test("does not trigger on rm without -rf", () => {
+    const result = analyzeBashCommand("rm file.txt");
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+  });
+});
+
 // ─── validateFileWritePath ─────────────────────────────────────
 
 describe("validateFileWritePath", () => {

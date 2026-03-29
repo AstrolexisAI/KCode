@@ -1083,6 +1083,17 @@ export class ConversationManager {
           sendDesktopNotification("KCode", `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`);
         }
 
+        // If turn had tool use but ends with no text output, emit recovery summary
+        // so the user isn't left with just "(empty response)" after minutes of work.
+        if (!hasTextOutput && this.state.toolUseCount > 0 && turnCount > 1) {
+          const toolCount = this.state.toolUseCount;
+          const elapsed = Math.round((Date.now() - turnStartMs) / 1000);
+          yield {
+            type: "text_delta" as const,
+            text: `\n---\n*[Turn ended without a summary after ${toolCount} tool uses over ${elapsed}s. Check the tool results above for what was accomplished.]*\n`,
+          };
+        }
+
         yield { type: "turn_end", stopReason, emptyType: guardState.lastEmptyType };
         this.abortController = null;
         break;

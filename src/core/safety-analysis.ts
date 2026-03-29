@@ -225,6 +225,43 @@ export function detectNonShellExpression(command: string): string | null {
   return null;
 }
 
+// ─── Destructive Removal Detection ─────────────────────────────
+
+/**
+ * Detect recursive directory deletion that could destroy user work.
+ * Blocks `rm -rf`, `rm -r`, and similar destructive patterns on
+ * non-trivial paths. Does NOT block removal of individual files
+ * or clearly temporary paths.
+ */
+export function detectDestructiveRemoval(command: string): string | null {
+  // Match rm with recursive + force flags in any order
+  const rmRecursive = /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)\s+/;
+  if (!rmRecursive.test(command)) return null;
+
+  // Extract the target path(s) after rm -rf
+  const match = command.match(/\brm\s+-[rfRF]+\s+(.+)/);
+  if (!match) return null;
+
+  const targets = match[1].trim();
+
+  // Allow removal of clearly safe targets
+  const safePatterns = [
+    /^node_modules\/?$/,           // node_modules cleanup
+    /^\.next\/?$/,                 // Next.js build cache
+    /^dist\/?$/,                   // build output
+    /^build\/?$/,                  // build output
+    /^\.cache\/?$/,                // generic cache
+    /^__pycache__\/?$/,            // Python cache
+    /^\.turbo\/?$/,                // Turborepo cache
+    /^coverage\/?$/,               // test coverage
+    /^tmp\/?$|^\/tmp\//,           // temp directories
+  ];
+
+  if (safePatterns.some(p => p.test(targets))) return null;
+
+  return `Bash safety issue: destructive removal (rm -rf) of "${targets.slice(0, 60)}". This requires explicit user confirmation`;
+}
+
 // ─── Full Analysis ──────────────────────────────────────────────
 
 /** Full bash command safety analysis */
@@ -256,10 +293,13 @@ export function analyzeBashCommand(command: string): {
   const nonShell = detectNonShellExpression(command);
   if (nonShell) issues.push(nonShell);
 
+  const destructiveRm = detectDestructiveRemoval(command);
+  if (destructiveRm) issues.push(destructiveRm);
+
   let riskLevel: "safe" | "moderate" | "dangerous" =
     issues.length === 0 ? "safe" :
     issues.some((i) =>
-      i.includes("injection") || i.includes("shell invocation") || i.includes("sensitive system path") || i.includes("pipes to shell")
+      i.includes("injection") || i.includes("shell invocation") || i.includes("sensitive system path") || i.includes("pipes to shell") || i.includes("destructive removal")
     )
       ? "dangerous"
       : "moderate";
