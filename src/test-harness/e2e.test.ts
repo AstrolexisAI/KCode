@@ -632,6 +632,35 @@ describe("E2E: Recovery summary on empty response after tools", () => {
       await env.cleanup();
     }
   });
+
+  test("emits partial_progress when tools ran but only minimal text", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    try {
+      // Model calls a tool, then returns only whitespace/minimal text
+      env.provider.addToolCallResponse([
+        { name: "Bash", arguments: { command: "ls", description: "list" } },
+      ]);
+      // Returns just a few chars — below the 20-char threshold
+      env.provider.addResponse("OK");
+      env.provider.addResponse("OK");
+      env.provider.addResponse("OK");
+
+      const cm = new ConversationManager(env.config, env.registry);
+      const { events } = await sendAndCollect(cm, "Inspect the project structure");
+
+      // Should have partial_progress because text was minimal
+      const progress = eventsOfType(events, "partial_progress");
+      expect(progress.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await env.cleanup();
+    }
+  });
 });
 
 // ─── P2.1: Long Scaffold E2E ──────────────────────────────────

@@ -3,7 +3,7 @@
 
 import { describe, test, expect } from "bun:test";
 import { SystemPromptBuilder } from "./system-prompt";
-import { looksIncomplete, looksTheoretical, looksCheckpointed, detectLanguage } from "./conversation";
+import { looksIncomplete, looksTheoretical, looksCheckpointed, dedupContinuation, detectLanguage } from "./conversation";
 import { LoopGuardState } from "./agent-loop-guards";
 import { classifyToolCoherence } from "../tools/plan";
 import type { KCodeConfig } from "./types";
@@ -341,5 +341,71 @@ describe("classifyToolCoherence", () => {
 
   test("unclassified step = ok (default)", () => {
     expect(classifyToolCoherence("Bash", { command: "echo test" }, "Something custom")).toBe("ok");
+  });
+});
+
+// ─── dedupContinuation — line and char level dedup ──────────────
+
+describe("dedupContinuation", () => {
+  test("strips repeated paragraph from continuation", () => {
+    const tail = "Line one of the conclusion.\nLine two of the conclusion.\nFinal sentence of the section.";
+    const continuation = "Line two of the conclusion.\nFinal sentence of the section.\nNew content that follows.";
+    const result = dedupContinuation(tail, continuation);
+    expect(result).toBe("New content that follows.");
+  });
+
+  test("strips exact char overlap at boundary", () => {
+    const tail = "x".repeat(50) + "The answer is 42. This is the final result.";
+    const continuation = "This is the final result. And here is more content.";
+    const result = dedupContinuation(tail, continuation);
+    expect(result).toBe(" And here is more content.");
+  });
+
+  test("returns original if no overlap", () => {
+    const tail = "Something completely different.";
+    const continuation = "Brand new content starts here.";
+    const result = dedupContinuation(tail, continuation);
+    expect(result).toBe("Brand new content starts here.");
+  });
+
+  test("handles empty inputs", () => {
+    expect(dedupContinuation("", "new text")).toBe("new text");
+    expect(dedupContinuation("old text", "")).toBe("");
+  });
+
+  test("strips repeated conclusion section", () => {
+    const tail = [
+      "## Paso 4: Verificación",
+      "Los cálculos son consistentes.",
+      "",
+      "## Conclusión",
+      "La demanda acumulada refleja correctamente la estructura.",
+    ].join("\n");
+
+    const continuation = [
+      "## Conclusión",
+      "La demanda acumulada refleja correctamente la estructura.",
+      "Este resultado confirma la hipótesis inicial.",
+    ].join("\n");
+
+    const result = dedupContinuation(tail, continuation);
+    expect(result).toBe("Este resultado confirma la hipótesis inicial.");
+  });
+
+  test("strips repeated final lines of a proof", () => {
+    const tail = [
+      "Por lo tanto, SUBSEQ-OPT ≤ₚ MAX-FLOW.",
+      "Como MAX-FLOW ∈ P, se deduce que SUBSEQ-OPT ∈ P.",
+      "QED.",
+    ].join("\n");
+
+    const continuation = [
+      "Como MAX-FLOW ∈ P, se deduce que SUBSEQ-OPT ∈ P.",
+      "QED.",
+      "Nota adicional sobre la complejidad.",
+    ].join("\n");
+
+    const result = dedupContinuation(tail, continuation);
+    expect(result).toBe("Nota adicional sobre la complejidad.");
   });
 });
