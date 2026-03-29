@@ -202,6 +202,42 @@ export function looksCheckpointed(prompt: string): boolean {
   return patterns.some(p => p.test(lower));
 }
 
+/**
+ * Strip overlapping content between a previous response tail and a continuation.
+ * Uses line-level matching first, then falls back to char-level.
+ * Returns the cleaned continuation text.
+ */
+export function dedupContinuation(previousTail: string, continuation: string): string {
+  if (previousTail.length === 0 || continuation.length === 0) return continuation;
+
+  // Line-level dedup: check if continuation starts with lines from the tail
+  const tailLines = previousTail.split("\n");
+  const newLines = continuation.split("\n");
+  if (tailLines.length >= 2 && newLines.length >= 2) {
+    for (let i = 0; i < Math.min(newLines.length, 10); i++) {
+      const line = newLines[i].trim();
+      if (line.length < 10) continue;
+      const tailIdx = tailLines.findIndex(tl => tl.trim() === line);
+      if (tailIdx >= 0 && tailIdx >= tailLines.length - 10) {
+        const remainingTailLines = tailLines.length - tailIdx;
+        const stripCount = Math.min(remainingTailLines, newLines.length);
+        return newLines.slice(stripCount).join("\n").trim();
+      }
+    }
+  }
+
+  // Char-level dedup fallback
+  const tailToMatch = previousTail.slice(-200);
+  for (let overlapLen = Math.min(tailToMatch.length, continuation.length); overlapLen >= 20; overlapLen--) {
+    const tailSuffix = tailToMatch.slice(-overlapLen);
+    if (continuation.startsWith(tailSuffix)) {
+      return continuation.slice(overlapLen);
+    }
+  }
+
+  return continuation;
+}
+
 // ─── Retry Logic ─────────────────────────────────────────────────
 
 function isRetryableError(error: unknown): boolean {
@@ -1166,48 +1202,12 @@ export class ConversationManager {
         if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use")) {
           let fullText = textChunks.join("").trim();
 
-          // Dedup: if this is a continuation and the model repeated content,
-          // strip the overlapping prefix. Uses both char-level and line-level matching.
+          // Dedup: if this is a continuation and the model repeated content
           if (previousTurnTail.length > 0 && fullText.length > 0) {
-            let stripped = false;
-
-            // Line-level dedup: check if continuation starts with lines from the tail
-            const tailLines = previousTurnTail.split("\n");
-            const newLines = fullText.split("\n");
-            if (tailLines.length >= 2 && newLines.length >= 2) {
-              // Find the first line of newLines that matches a line in the tail
-              for (let i = 0; i < Math.min(newLines.length, 10); i++) {
-                const line = newLines[i].trim();
-                if (line.length < 10) continue; // Skip short/empty lines
-                const tailIdx = tailLines.findIndex(tl => tl.trim() === line);
-                if (tailIdx >= 0 && tailIdx >= tailLines.length - 10) {
-                  // Found overlap — strip all lines up to where the tail ended
-                  const remainingTailLines = tailLines.length - tailIdx;
-                  const stripCount = Math.min(remainingTailLines, newLines.length);
-                  log.info("session", `Stripping ${stripCount} duplicated lines from continuation`);
-                  fullText = newLines.slice(stripCount).join("\n").trim();
-                  stripped = true;
-                  break;
-                }
-              }
-            }
-
-            // Char-level dedup fallback
-            if (!stripped) {
-              const tailToMatch = previousTurnTail.slice(-200);
-              for (let overlapLen = Math.min(tailToMatch.length, fullText.length); overlapLen >= 20; overlapLen--) {
-                const tailSuffix = tailToMatch.slice(-overlapLen);
-                if (fullText.startsWith(tailSuffix)) {
-                  log.info("session", `Stripping ${overlapLen} chars of duplicated tail from continuation`);
-                  fullText = fullText.slice(overlapLen);
-                  stripped = true;
-                  break;
-                }
-              }
-            }
-
-            // Update state if dedup happened
-            if (stripped) {
+            const deduped = dedupContinuation(previousTurnTail, fullText);
+            if (deduped !== fullText) {
+              log.info("session", `Stripped ${fullText.length - deduped.length} chars of duplicated content from continuation`);
+              fullText = deduped;
               const lastMsg = this.state.messages[this.state.messages.length - 1];
               if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
                 const textBlocks = (lastMsg.content as ContentBlock[]).filter(b => b.type === "text");
