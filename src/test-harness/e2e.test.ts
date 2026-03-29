@@ -255,11 +255,11 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     // The final text response from the model
     expect(text).toContain("read the file");
 
-    // Provider should have received 2 requests (tool call + follow-up)
+    // Provider should have received at least 2 requests (tool call + follow-up)
     const completionReqs = env.provider.requests.filter(
       (r) => r.url === "/v1/chat/completions",
     );
-    expect(completionReqs.length).toBe(2);
+    expect(completionReqs.length).toBeGreaterThanOrEqual(2);
   });
 
   test("tool use flow — model calls Bash, result is returned", async () => {

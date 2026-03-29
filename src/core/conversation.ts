@@ -61,7 +61,7 @@ const MAX_RETRY_DELAY_MS = 8000;
  * Catches responses that end in prepositions, articles, open brackets, etc.
  */
 export function looksIncomplete(text: string): boolean {
-  if (text.length < 10) return false;
+  if (text.length < 5) return false;
   const trimmed = text.trimEnd();
   // Ends with an open code block that was never closed
   const openFences = (trimmed.match(/```/g) || []).length;
@@ -74,6 +74,10 @@ export function looksIncomplete(text: string): boolean {
   if (/[(\[{]\s*$/.test(trimmed)) return true;
   // Ends with a backtick (broken inline code)
   if (/`\s*$/.test(trimmed) && openFences % 2 === 0) return true;
+  // Ends with a single letter (truncated mid-word: "Next.js 15 c", "la")
+  if (/\s[a-zA-ZáéíóúñÁÉÍÓÚÑ]$/.test(trimmed)) return true;
+  // Ends with a number not followed by terminal punctuation (truncated mid-sentence: "total 4", "total=45")
+  if (/\d$/.test(trimmed) && !/[.!?:;)%]$/.test(trimmed)) return true;
   // Last word looks like a truncated prefix (2-4 chars, no punctuation, not a common word)
   const lastWord = trimmed.match(/(\S+)\s*$/)?.[1] ?? "";
   if (lastWord.length >= 2 && lastWord.length <= 4 && /^[a-zA-Z]+$/.test(lastWord)) {

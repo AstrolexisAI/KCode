@@ -374,7 +374,7 @@ export async function processStreamEvents(
         try {
           const { getLastSession } = require("../core/response-session.js");
           const lastSession = getLastSession();
-          if (lastSession && (lastSession.status === "incomplete" || lastSession.status === "failed") && lastSession.continuationCount > 0) {
+          if (lastSession && (lastSession.status === "incomplete" || lastSession.status === "failed")) {
             setCompleted((prev) => [
               ...prev,
               { kind: "incomplete_response" as const, continuations: lastSession.continuationCount, stopReason: event.stopReason },
