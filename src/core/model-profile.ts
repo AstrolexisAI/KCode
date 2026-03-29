@@ -96,7 +96,20 @@ export function detectModelSize(modelName: string): ModelSize {
  */
 export function getModelProfile(modelName: string): ModelProfile {
   const size = detectModelSize(modelName);
-  return { ...PROFILES[size] };
+  const profile = { ...PROFILES[size] };
+
+  // MnemoCUDA models have limited context (8K) — force lite prompt
+  // and reduced tools regardless of model size classification.
+  const lower = modelName.toLowerCase();
+  if (lower.includes("titan") || lower.includes("mnemocuda")) {
+    profile.promptMode = "lite";
+    profile.maxTokens = Math.min(profile.maxTokens, 4096);
+    if (profile.tools === "all") {
+      profile.tools = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"];
+    }
+  }
+
+  return profile;
 }
 
 /**
