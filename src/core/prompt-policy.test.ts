@@ -311,11 +311,35 @@ describe("classifyToolCoherence", () => {
     expect(classifyToolCoherence("Bash", { command: "git add -A && git commit -m 'init'" }, "Git commit and push")).toBe("ok");
   });
 
-  test("git step + writing new files = warn", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/components/Hero.tsx" }, "Final git commit")).toBe("warn");
+  test("git step + writing new files = block", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/components/Hero.tsx" }, "Final git commit")).toBe("block");
+  });
+
+  test("build page step + Write component = ok", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/components/Hero.tsx" }, "Build Home/Landing page with hero")).toBe("ok");
+  });
+
+  test("test/verify step + Bash = ok", () => {
+    expect(classifyToolCoherence("Bash", { command: "bun test" }, "Verify and test the project")).toBe("ok");
+  });
+
+  test("test/verify step + Write = warn", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/app/page.tsx" }, "Test and validate")).toBe("warn");
+  });
+
+  test("docs step + Write .md = ok", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/README.md" }, "Create documentation and README")).toBe("ok");
+  });
+
+  test("docs step + Write .tsx = warn", () => {
+    expect(classifyToolCoherence("Write", { file_path: "/project/app/page.tsx" }, "Update documentation")).toBe("warn");
+  });
+
+  test("finalize step + Edit code = block", () => {
+    expect(classifyToolCoherence("Edit", { file_path: "/project/app/page.tsx" }, "Finalize and polish")).toBe("block");
   });
 
   test("unclassified step = ok (default)", () => {
-    expect(classifyToolCoherence("Bash", { command: "echo test" }, "Build the landing page")).toBe("ok");
+    expect(classifyToolCoherence("Bash", { command: "echo test" }, "Something custom")).toBe("ok");
   });
 });
