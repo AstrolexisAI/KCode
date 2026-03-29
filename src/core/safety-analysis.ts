@@ -234,12 +234,13 @@ export function detectNonShellExpression(command: string): string | null {
  * or clearly temporary paths.
  */
 export function detectDestructiveRemoval(command: string): string | null {
-  // Match rm with recursive + force flags in any order
-  const rmRecursive = /\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)\s+/;
-  if (!rmRecursive.test(command)) return null;
+  // Match rm with any flag combination that includes both -r and -f
+  // Covers: rm -rf, rm -fr, rm -rfv, rm -rvf, rm -frv, etc.
+  const rmRecursiveForce = /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*/;
+  if (!rmRecursiveForce.test(command)) return null;
 
-  // Extract the target path(s) after rm -rf
-  const match = command.match(/\brm\s+-[rfRF]+\s+(.+)/);
+  // Extract target: skip `rm`, skip all flag groups (-rf, -v, etc.), take the rest
+  const match = command.match(/\brm\s+(?:-[a-zA-Z]+\s+)+(.+)/);
   if (!match) return null;
 
   const targets = match[1].trim();
