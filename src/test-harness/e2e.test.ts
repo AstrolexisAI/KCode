@@ -647,7 +647,7 @@ describe("E2E: Long scaffold flows", () => {
 
     try {
       // Model keeps making tool calls (simulating scaffold + extra work)
-      // 10 tool calls — should be stopped at 8 by checkpoint
+      // 10 tool calls — should be stopped at 4 by checkpoint
       for (let i = 0; i < 10; i++) {
         env.provider.addToolCallResponse([
           { name: "Bash", arguments: { command: `echo step${i}`, description: `Step ${i}` } },
@@ -670,7 +670,7 @@ describe("E2E: Long scaffold flows", () => {
 
       // Tool executions should be capped (not all 10)
       const toolExecs = eventsOfType(events, "tool_executing");
-      expect(toolExecs.length).toBeLessThanOrEqual(8);
+      expect(toolExecs.length).toBeLessThanOrEqual(4);
     } finally {
       await env.cleanup();
     }

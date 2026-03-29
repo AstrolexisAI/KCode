@@ -56,6 +56,7 @@ export async function processStreamEvents(
   } = deps;
 
   let currentText = "";
+  let hadPartialProgress = false;
   let currentThinking = "";
 
   for await (const event of events) {
@@ -271,6 +272,7 @@ export async function processStreamEvents(
         break;
 
       case "partial_progress":
+        hadPartialProgress = true;
         setCompleted((prev) => [
           ...prev,
           {
@@ -342,7 +344,7 @@ export async function processStreamEvents(
           ]);
           currentText = "";
           setStreamingText("");
-        } else if (event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry") {
+        } else if (!hadPartialProgress && event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry") {
           // Model returned empty response — show a diagnostic fallback
           const emptyType = event.emptyType;
           const hint = emptyType === "thinking_only"
