@@ -270,6 +270,20 @@ export async function processStreamEvents(
         }
         break;
 
+      case "partial_progress":
+        setCompleted((prev) => [
+          ...prev,
+          {
+            kind: "partial_progress" as const,
+            toolsUsed: event.toolsUsed,
+            elapsedMs: event.elapsedMs,
+            filesModified: event.filesModified,
+            lastError: event.lastError,
+            summary: event.summary,
+          },
+        ]);
+        break;
+
       case "compaction_start":
         setLastKodiEvent({ type: "compaction" });
         setCompleted((prev) => [

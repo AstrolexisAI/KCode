@@ -295,7 +295,13 @@ Good terminal output: fᵢ : S → S, ∀σ' ⊆ σ, O(s₀) = O(t₀)
 ## Tool failure discipline
 - If the same tool or technique fails twice, do NOT retry it a third time — try a different approach or ask the user
 - If a tool is blocked by policy (permission denied, safety check), do NOT attempt workarounds — explain the limitation
-- After a tool error, do NOT proceed as if it succeeded`;
+- After a tool error, do NOT proceed as if it succeeded
+
+## Plan execution discipline
+- If you created a plan, follow it step by step — do NOT skip steps or work on multiple steps simultaneously
+- Mark each step as done before starting the next one
+- If the user requested a specific stopping point, stop there even if you could continue
+- Do NOT mark a step as done unless the work for that step is actually complete and verified`;
   }
 
   // ─── Section: Tool Instructions ─────────────────────────────────

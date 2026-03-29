@@ -967,6 +967,19 @@ export class ConversationManager {
         }
       }
 
+      // Plan coherence: warn if multiple steps are in_progress simultaneously
+      try {
+        const { countInProgressSteps, getActiveStep } = await import("../tools/plan.js");
+        const inProgress = countInProgressSteps();
+        if (inProgress > 1) {
+          log.warn("session", `Plan coherence: ${inProgress} steps in_progress simultaneously — injecting correction`);
+          this.state.messages.push({
+            role: "user",
+            content: `[SYSTEM] Plan coherence warning: you have ${inProgress} steps marked as in_progress simultaneously. Finish the current step before starting another. Update the plan to reflect actual progress.`,
+          });
+        }
+      } catch { /* plan module not loaded */ }
+
       // Record per-turn cost entry
       if (turnInputTokens > 0 || turnOutputTokens > 0) {
         try {
@@ -1154,14 +1167,25 @@ export class ConversationManager {
           sendDesktopNotification("KCode", `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`);
         }
 
-        // If turn had tool use but ends with no text output, emit recovery summary
-        // so the user isn't left with just "(empty response)" after minutes of work.
+        // If turn had tool use but ends with no/empty text output, emit structured
+        // partial progress so the user sees what was accomplished.
         if (!hasTextOutput && this.state.toolUseCount > 0) {
-          const toolCount = this.state.toolUseCount;
-          const elapsed = Math.round((Date.now() - turnStartMs) / 1000);
+          const elapsed = Date.now() - turnStartMs;
+          const summary = this.collectSessionData();
+          const lastError = summary.errorsEncountered > 0
+            ? this.state.messages.flatMap(m => Array.isArray(m.content) ? m.content : [])
+                .filter((b: any) => b.type === "tool_result" && b.is_error)
+                .map((b: any) => String(b.content ?? "").slice(0, 100))
+                .pop() ?? ""
+            : "";
+
           yield {
-            type: "text_delta" as const,
-            text: `\n---\n*[Turn ended without a summary after ${toolCount} tool uses over ${elapsed}s. Check the tool results above for what was accomplished.]*\n`,
+            type: "partial_progress" as const,
+            toolsUsed: this.state.toolUseCount,
+            elapsedMs: elapsed,
+            filesModified: summary.filesModified,
+            lastError: lastError || undefined,
+            summary: `Turn ended after ${this.state.toolUseCount} tool uses over ${Math.round(elapsed / 1000)}s`,
           };
         }
 

@@ -63,7 +63,16 @@ export interface DiffEntry {
   hunks: string;
 }
 
-export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry | PlanEntry | DiffEntry;
+export interface PartialProgressEntry {
+  kind: "partial_progress";
+  toolsUsed: number;
+  elapsedMs: number;
+  filesModified: string[];
+  lastError?: string;
+  summary: string;
+}
+
+export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry | PlanEntry | DiffEntry | PartialProgressEntry;
 
 interface MessageListProps {
   /** Completed message entries (rendered via <Static>) */
@@ -167,6 +176,8 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
       return null;
     case "diff":
       return <DiffMessage filePath={entry.filePath} hunks={entry.hunks} />;
+    case "partial_progress":
+      return <PartialProgressMessage toolsUsed={entry.toolsUsed} elapsedMs={entry.elapsedMs} filesModified={entry.filesModified} lastError={entry.lastError} summary={entry.summary} />;
   }
 }
 
@@ -413,6 +424,34 @@ function DiffMessage({ filePath, hunks }: { filePath: string; hunks: string }) {
           );
         })}
       </Box>
+    </Box>
+  );
+}
+
+function PartialProgressMessage({ toolsUsed, elapsedMs, filesModified, lastError, summary }: {
+  toolsUsed: number; elapsedMs: number; filesModified: string[]; lastError?: string; summary: string;
+}) {
+  const { theme } = useTheme();
+  const elapsed = Math.round(elapsedMs / 1000);
+
+  return (
+    <Box flexDirection="column" paddingLeft={2} marginTop={1} marginBottom={1}>
+      <Text color={theme.warning} bold>{"--- Partial Progress ---"}</Text>
+      <Text color={theme.dimmed}>{summary}</Text>
+      <Text color={theme.dimmed}>{"  Tools used: "}{toolsUsed}{" | Time: "}{elapsed}{"s"}</Text>
+      {filesModified.length > 0 && (
+        <Box flexDirection="column" paddingLeft={2}>
+          <Text color={theme.success}>{"Files modified:"}</Text>
+          {filesModified.map((f, i) => (
+            <Text key={i} color={theme.dimmed}>{"  "}{f}</Text>
+          ))}
+        </Box>
+      )}
+      {lastError && (
+        <Box paddingLeft={2}>
+          <Text color={theme.error}>{"Last error: "}{lastError}</Text>
+        </Box>
+      )}
     </Box>
   );
 }
