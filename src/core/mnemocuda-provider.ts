@@ -136,29 +136,18 @@ export function buildMnemoCudaRequest(
 }
 
 /**
- * Parse MnemoCUDA's SSE stream into KCode's expected SSE chunk format.
- * Converts { token, done } → OpenAI-compatible { choices: [{ delta: { content } }] }
+ * Parse MnemoCUDA's SSE stream into KCode's SSEChunk format.
+ * Converts { token, done } → SSEChunk { type: "content_delta", content }
  */
 export async function* parseMnemoCudaStream(
   response: Response,
-): AsyncGenerator<{
-  id: string;
-  object: string;
-  model: string;
-  choices: Array<{
-    index: number;
-    delta: { content?: string; role?: string };
-    finish_reason: string | null;
-  }>;
-  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-}> {
+): AsyncGenerator<{ type: string; content?: string; finishReason?: string; promptTokens?: number; completionTokens?: number }> {
   if (!response.body) return;
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let tokenCount = 0;
-  const id = `mnemocuda-${Date.now()}`;
 
   try {
     while (true) {
@@ -174,21 +163,11 @@ export async function* parseMnemoCudaStream(
         const data = line.slice(6).trim();
 
         if (data === "[DONE]") {
-          // Emit final chunk with finish_reason
           yield {
-            id,
-            object: "chat.completion.chunk",
-            model: "mnemocuda",
-            choices: [{
-              index: 0,
-              delta: {},
-              finish_reason: "stop",
-            }],
-            usage: {
-              prompt_tokens: 0, // MnemoCUDA doesn't report prompt tokens in SSE
-              completion_tokens: tokenCount,
-              total_tokens: tokenCount,
-            },
+            type: "finish",
+            finishReason: "stop",
+            promptTokens: 0,
+            completionTokens: tokenCount,
           };
           return;
         }
@@ -198,33 +177,17 @@ export async function* parseMnemoCudaStream(
 
           if (chunk.token) {
             tokenCount++;
-            yield {
-              id,
-              object: "chat.completion.chunk",
-              model: "mnemocuda",
-              choices: [{
-                index: 0,
-                delta: { content: chunk.token },
-                finish_reason: null,
-              }],
-            };
+            // Replace \u0010 (DLE control char used as token separator) with space
+            const text = chunk.token === "\u0010" ? " " : chunk.token;
+            yield { type: "content_delta", content: text };
           }
 
           if (chunk.done) {
             yield {
-              id,
-              object: "chat.completion.chunk",
-              model: "mnemocuda",
-              choices: [{
-                index: 0,
-                delta: {},
-                finish_reason: "stop",
-              }],
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: tokenCount,
-                total_tokens: tokenCount,
-              },
+              type: "finish",
+              finishReason: "stop",
+              promptTokens: 0,
+              completionTokens: tokenCount,
             };
             return;
           }
