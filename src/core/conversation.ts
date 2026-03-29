@@ -1166,29 +1166,54 @@ export class ConversationManager {
         if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use")) {
           let fullText = textChunks.join("").trim();
 
-          // Dedup: if this is a continuation and the model repeated the tail
-          // from the previous turn, strip the overlapping prefix
+          // Dedup: if this is a continuation and the model repeated content,
+          // strip the overlapping prefix. Uses both char-level and line-level matching.
           if (previousTurnTail.length > 0 && fullText.length > 0) {
-            // Find the longest suffix of previousTurnTail that matches a prefix of fullText
-            const tailToMatch = previousTurnTail.slice(-200);
-            for (let overlapLen = Math.min(tailToMatch.length, fullText.length); overlapLen >= 20; overlapLen--) {
-              const tailSuffix = tailToMatch.slice(-overlapLen);
-              if (fullText.startsWith(tailSuffix)) {
-                log.info("session", `Stripping ${overlapLen} chars of duplicated tail from continuation`);
-                fullText = fullText.slice(overlapLen);
-                // Update the text in the conversation state too
-                const lastMsg = this.state.messages[this.state.messages.length - 1];
-                if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
-                  const textBlocks = (lastMsg.content as ContentBlock[]).filter(b => b.type === "text");
-                  if (textBlocks.length > 0) {
-                    (textBlocks[0] as any).text = fullText;
-                  }
+            let stripped = false;
+
+            // Line-level dedup: check if continuation starts with lines from the tail
+            const tailLines = previousTurnTail.split("\n");
+            const newLines = fullText.split("\n");
+            if (tailLines.length >= 2 && newLines.length >= 2) {
+              // Find the first line of newLines that matches a line in the tail
+              for (let i = 0; i < Math.min(newLines.length, 10); i++) {
+                const line = newLines[i].trim();
+                if (line.length < 10) continue; // Skip short/empty lines
+                const tailIdx = tailLines.findIndex(tl => tl.trim() === line);
+                if (tailIdx >= 0 && tailIdx >= tailLines.length - 10) {
+                  // Found overlap — strip all lines up to where the tail ended
+                  const remainingTailLines = tailLines.length - tailIdx;
+                  const stripCount = Math.min(remainingTailLines, newLines.length);
+                  log.info("session", `Stripping ${stripCount} duplicated lines from continuation`);
+                  fullText = newLines.slice(stripCount).join("\n").trim();
+                  stripped = true;
+                  break;
                 }
-                // Re-emit the cleaned text
-                if (fullText.length > 0) {
-                  yield { type: "text_delta" as const, text: "" }; // trigger re-render
+              }
+            }
+
+            // Char-level dedup fallback
+            if (!stripped) {
+              const tailToMatch = previousTurnTail.slice(-200);
+              for (let overlapLen = Math.min(tailToMatch.length, fullText.length); overlapLen >= 20; overlapLen--) {
+                const tailSuffix = tailToMatch.slice(-overlapLen);
+                if (fullText.startsWith(tailSuffix)) {
+                  log.info("session", `Stripping ${overlapLen} chars of duplicated tail from continuation`);
+                  fullText = fullText.slice(overlapLen);
+                  stripped = true;
+                  break;
                 }
-                break;
+              }
+            }
+
+            // Update state if dedup happened
+            if (stripped) {
+              const lastMsg = this.state.messages[this.state.messages.length - 1];
+              if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
+                const textBlocks = (lastMsg.content as ContentBlock[]).filter(b => b.type === "text");
+                if (textBlocks.length > 0) {
+                  (textBlocks[0] as any).text = fullText;
+                }
               }
             }
           }
@@ -1241,9 +1266,11 @@ export class ConversationManager {
           sendDesktopNotification("KCode", `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`);
         }
 
-        // If turn had tool use but ends with no/empty text output, emit structured
+        // If turn had tool use but ends with no/minimal text output, emit structured
         // partial progress so the user sees what was accomplished.
-        if (!hasTextOutput && this.state.toolUseCount > 0) {
+        // "Minimal" = less than 20 chars of actual text (not just whitespace).
+        const finalTextLen = textChunks.join("").trim().length;
+        if (this.state.toolUseCount > 0 && finalTextLen < 20) {
           const elapsed = Date.now() - turnStartMs;
           const summary = this.collectSessionData();
           const lastError = summary.errorsEncountered > 0
