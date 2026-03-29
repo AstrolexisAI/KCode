@@ -344,6 +344,32 @@ describe("classifyToolCoherence", () => {
   });
 });
 
+// ─── System prompt data discipline ──────────────────────────────
+
+describe("System prompt data discipline", () => {
+  test("contains data discipline rule about not inventing values", async () => {
+    const prompt = await SystemPromptBuilder.build(minConfig());
+    expect(prompt).toContain("Do NOT invent");
+    expect(prompt).toContain("items not mentioned in the data");
+  });
+
+  test("contains rule to state missing data explicitly", async () => {
+    const prompt = await SystemPromptBuilder.build(minConfig());
+    expect(prompt).toContain("No data provided");
+  });
+
+  test("contains rule about never presenting assumed values as given", async () => {
+    const prompt = await SystemPromptBuilder.build(minConfig());
+    expect(prompt).toContain("Never present assumed values");
+  });
+
+  test("contains response completion rules", async () => {
+    const prompt = await SystemPromptBuilder.build(minConfig());
+    expect(prompt).toContain("always end with a complete sentence");
+    expect(prompt).toContain("never leave the turn empty");
+  });
+});
+
 // ─── dedupContinuation — line and char level dedup ──────────────
 
 describe("dedupContinuation", () => {
