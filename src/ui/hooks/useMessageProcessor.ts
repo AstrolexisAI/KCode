@@ -242,6 +242,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         config.workingDirectory = newDir;
         conversationManager.getConfig().workingDirectory = newDir;
         process.chdir(newDir);
+        // Update tool workspace so Read/Glob/Grep resolve relative to the new dir
+        const { setToolWorkspace } = await import("../../tools/workspace.js");
+        setToolWorkspace(newDir);
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Working directory changed to: ${newDir}` }]);
         return;
       }

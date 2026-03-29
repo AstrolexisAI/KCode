@@ -326,6 +326,21 @@ describe("detectDestructiveRemoval", () => {
   });
 });
 
+// ─── detectScaffoldConflict ────────────────────────────────────
+
+describe("detectScaffoldConflict", () => {
+  test("detects scaffold on existing non-empty directory", () => {
+    // Use a directory that definitely exists and is non-empty
+    const result = analyzeBashCommand(`bun create next-app ${process.env.HOME}`);
+    expect(result.issues.some(i => i.includes("Scaffold conflict"))).toBe(true);
+  });
+
+  test("does not trigger on non-existent directory", () => {
+    const result = analyzeBashCommand("bun create next-app /tmp/definitely-not-existing-dir-12345");
+    expect(result.issues.some(i => i.includes("Scaffold conflict"))).toBe(false);
+  });
+});
+
 // ─── validateFileWritePath ─────────────────────────────────────
 
 describe("validateFileWritePath", () => {

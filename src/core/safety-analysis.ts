@@ -263,6 +263,40 @@ export function detectDestructiveRemoval(command: string): string | null {
   return `Bash safety issue: destructive removal (rm -rf) of "${targets.slice(0, 60)}". This requires explicit user confirmation`;
 }
 
+// ─── Scaffold Conflict Detection ────────────────────────────────
+
+/**
+ * Detect scaffold commands that target an existing non-empty directory.
+ * Returns a warning (not a block) so the model can inspect and decide.
+ */
+export function detectScaffoldConflict(command: string): string | null {
+  const scaffoldPatterns = [
+    /\b(?:bun\s+create|bunx\s+create-[\w-]+|npx\s+create-[\w-]+|npm\s+init)\s+\S+\s+(\S+)/,
+    /\b(?:bun\s+create|npx\s+create-[\w-]+)\s+(\S+)\s*$/,
+  ];
+
+  for (const pattern of scaffoldPatterns) {
+    const match = command.match(pattern);
+    if (!match) continue;
+    const targetDir = match[1];
+    if (!targetDir) continue;
+
+    try {
+      const { resolve } = require("node:path");
+      const { existsSync, readdirSync } = require("node:fs");
+      const fullPath = resolve(process.cwd(), targetDir);
+      if (existsSync(fullPath)) {
+        const entries = readdirSync(fullPath);
+        if (entries.length > 0) {
+          return `Scaffold conflict: directory "${targetDir}" already exists with ${entries.length} files. Inspect it before proceeding — do NOT delete and recreate.`;
+        }
+      }
+    } catch { /* directory check failed, allow command */ }
+  }
+
+  return null;
+}
+
 // ─── Full Analysis ──────────────────────────────────────────────
 
 /** Full bash command safety analysis */
@@ -296,6 +330,9 @@ export function analyzeBashCommand(command: string): {
 
   const destructiveRm = detectDestructiveRemoval(command);
   if (destructiveRm) issues.push(destructiveRm);
+
+  const scaffoldConflict = detectScaffoldConflict(command);
+  if (scaffoldConflict) issues.push(scaffoldConflict);
 
   let riskLevel: "safe" | "moderate" | "dangerous" =
     issues.length === 0 ? "safe" :

@@ -491,6 +491,32 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
       const output = stdout + (stderr ? `\n${stderr}` : "");
 
+      // Auto-detect project creation: if a scaffold command succeeded and
+      // we're still in ~, update the workspace to the new project directory.
+      if (code === 0) {
+        try {
+          const { getToolWorkspace, setToolWorkspace } = require("./workspace");
+          const { resolve: resolvePath } = require("node:path");
+          const { existsSync, statSync: statSyncFn } = require("node:fs");
+          const home = process.env.HOME ?? "";
+          const workspace = getToolWorkspace();
+          if (home && resolvePath(workspace) === resolvePath(home)) {
+            // Check if the command created a project directory
+            const scaffoldMatch = command.match(/\b(?:bun\s+create|npx\s+create-[\w-]+|npm\s+init)\s+\S+\s+(\S+)/);
+            const mkdirMatch = command.match(/\bmkdir\s+(?:-p\s+)?(\S+)/);
+            const targetDir = scaffoldMatch?.[1] ?? mkdirMatch?.[1];
+            if (targetDir) {
+              const fullPath = resolvePath(process.cwd(), targetDir);
+              if (existsSync(fullPath) && statSyncFn(fullPath).isDirectory()) {
+                setToolWorkspace(fullPath);
+                process.chdir(fullPath);
+                log.info("tool", `Auto-updated workspace to: ${fullPath}`);
+              }
+            }
+          }
+        } catch (err) { log.debug("tool", `Workspace auto-detect failed: ${err}`); }
+      }
+
       resolve({
         tool_use_id: "",
         content: output || `(exit code ${code})`,
