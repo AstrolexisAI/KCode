@@ -81,8 +81,8 @@ export function detectModelSize(modelName: string): ModelSize {
   const lower = modelName.toLowerCase();
   if (/pico|tiny|1b|2b|3b|4b/.test(lower)) return "tiny";
   if (/nano|small|7b|8b/.test(lower)) return "small";
-  if (/mini|mid|14b|27b|30b|32b/.test(lower)) return "medium";
-  if (/max|80b|70b|titan|235b|claude|gpt-4|opus|sonnet/.test(lower)) return "large";
+  if (/mini|mid|14b|27b|30b|32b|titan/.test(lower)) return "medium"; // titan = MoE served via MnemoCUDA, limited context
+  if (/max|80b|70b|235b|claude|gpt-4|opus|sonnet/.test(lower)) return "large";
 
   // Cloud models are always "large"
   if (/anthropic|openai|gemini|groq|deepseek|together/.test(lower)) return "large";
