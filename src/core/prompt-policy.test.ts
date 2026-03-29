@@ -3,7 +3,8 @@
 
 import { describe, test, expect } from "bun:test";
 import { SystemPromptBuilder } from "./system-prompt";
-import { looksIncomplete, looksTheoretical, detectLanguage } from "./conversation";
+import { looksIncomplete, looksTheoretical, looksCheckpointed, detectLanguage } from "./conversation";
+import { LoopGuardState } from "./agent-loop-guards";
 import type { KCodeConfig } from "./types";
 
 // ─── Minimal config for prompt generation ───────────────────────
@@ -209,5 +210,79 @@ describe("detectLanguage", () => {
   test("detects Spanish in the KCode test prompt", () => {
     const prompt = "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema";
     expect(detectLanguage(prompt)).toBe("es");
+  });
+});
+
+// ─── looksCheckpointed — scope checkpoint detection ─────────────
+
+describe("looksCheckpointed", () => {
+  test("detects 'primer paso' (Spanish)", () => {
+    expect(looksCheckpointed("Crea el proyecto y muéstrame el primer paso")).toBe(true);
+  });
+
+  test("detects 'first step' (English)", () => {
+    expect(looksCheckpointed("Create the project and show me the first step")).toBe(true);
+  });
+
+  test("detects 'estructura inicial'", () => {
+    expect(looksCheckpointed("Solo la estructura inicial por ahora")).toBe(true);
+  });
+
+  test("detects 'show me when done'", () => {
+    expect(looksCheckpointed("Build the base and show me when done")).toBe(true);
+  });
+
+  test("detects 'haz primero'", () => {
+    expect(looksCheckpointed("Haz primero la base del proyecto")).toBe(true);
+  });
+
+  test("detects 'empieza con...muéstrame'", () => {
+    expect(looksCheckpointed("Empieza con la estructura y muéstrame el resultado")).toBe(true);
+  });
+
+  test("does not trigger on normal request", () => {
+    expect(looksCheckpointed("Create a complete website with all pages")).toBe(false);
+  });
+
+  test("does not trigger on simple question", () => {
+    expect(looksCheckpointed("How do I install Next.js?")).toBe(false);
+  });
+});
+
+// ─── Error fingerprinting — retry discipline ────────────────────
+
+describe("LoopGuardState error fingerprinting", () => {
+  test("first error is not burned", () => {
+    const g = new LoopGuardState();
+    const burned = g.recordToolError("Write", "embedding HTML inside TypeScript");
+    expect(burned).toBe(false);
+  });
+
+  test("second identical error is burned", () => {
+    const g = new LoopGuardState();
+    g.recordToolError("Write", "embedding HTML inside TypeScript");
+    const burned = g.recordToolError("Write", "embedding HTML inside TypeScript");
+    expect(burned).toBe(true);
+  });
+
+  test("burned fingerprint is detected via isErrorBurned", () => {
+    const g = new LoopGuardState();
+    g.recordToolError("Write", "embedding HTML inside TypeScript");
+    g.recordToolError("Write", "embedding HTML inside TypeScript");
+    expect(g.isErrorBurned("Write", "embedding HTML inside TypeScript")).toBe(true);
+  });
+
+  test("different errors are tracked independently", () => {
+    const g = new LoopGuardState();
+    g.recordToolError("Write", "embedding HTML inside TypeScript");
+    const burned = g.recordToolError("Write", "Permission denied: /etc/shadow");
+    expect(burned).toBe(false);
+  });
+
+  test("normalizes paths in fingerprints", () => {
+    const g = new LoopGuardState();
+    g.recordToolError("Write", "cannot write to /home/curly/project/file.tsx");
+    const burned = g.recordToolError("Write", "cannot write to /home/other/different/file.tsx");
+    expect(burned).toBe(true); // Both normalize to "cannot write to <path>"
   });
 });
