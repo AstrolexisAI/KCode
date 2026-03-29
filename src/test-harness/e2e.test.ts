@@ -594,3 +594,42 @@ Analizá el trade-off entre las opciones disponibles.`;
     }
   });
 });
+
+// ─── Recovery Summary E2E ──────────────────────────────────────
+
+describe("E2E: Recovery summary on empty response after tools", () => {
+  test("emits recovery note when tools ran but no text response", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    try {
+      // Model calls a tool
+      env.provider.addToolCallResponse([
+        { name: "Bash", arguments: { command: "ls", description: "list" } },
+      ]);
+      // Then returns empty text (simulates model failing to produce summary)
+      // Need 3 empty responses: original + 2 empty retries
+      env.provider.addResponse("");
+      env.provider.addResponse("");
+      env.provider.addResponse("");
+
+      const cm = new ConversationManager(env.config, env.registry);
+      const { events, text } = await sendAndCollect(cm, "Create the project structure");
+
+      // Tool should have executed
+      const toolExecs = eventsOfType(events, "tool_executing");
+      expect(toolExecs.length).toBe(1);
+
+      // Should have the recovery note since the final text was empty
+      const textDeltas = eventsOfType(events, "text_delta");
+      const allText = textDeltas.map(e => e.text).join("");
+      expect(allText).toContain("Turn ended without a summary");
+    } finally {
+      await env.cleanup();
+    }
+  });
+});

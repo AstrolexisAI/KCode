@@ -1085,7 +1085,7 @@ export class ConversationManager {
 
         // If turn had tool use but ends with no text output, emit recovery summary
         // so the user isn't left with just "(empty response)" after minutes of work.
-        if (!hasTextOutput && this.state.toolUseCount > 0 && turnCount > 1) {
+        if (!hasTextOutput && this.state.toolUseCount > 0) {
           const toolCount = this.state.toolUseCount;
           const elapsed = Math.round((Date.now() - turnStartMs) / 1000);
           yield {

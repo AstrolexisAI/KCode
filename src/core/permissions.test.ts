@@ -306,6 +306,24 @@ describe("detectDestructiveRemoval", () => {
     const result = analyzeBashCommand("rm file.txt");
     expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
   });
+
+  test("blocks rm -rfv (verbose flag bypass)", () => {
+    const result = analyzeBashCommand("rm -rfv bitcoin-sovereign");
+    expect(result.safe).toBe(false);
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+  });
+
+  test("blocks rm -frv (reordered flags)", () => {
+    const result = analyzeBashCommand("rm -frv bitcoin-sovereign");
+    expect(result.safe).toBe(false);
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+  });
+
+  test("blocks rm -rvf (another flag order)", () => {
+    const result = analyzeBashCommand("rm -rvf bitcoin-sovereign");
+    expect(result.safe).toBe(false);
+    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+  });
 });
 
 // ─── validateFileWritePath ─────────────────────────────────────
