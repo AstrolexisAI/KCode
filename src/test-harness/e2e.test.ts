@@ -633,3 +633,106 @@ describe("E2E: Recovery summary on empty response after tools", () => {
     }
   });
 });
+
+// ─── P2.1: Long Scaffold E2E ──────────────────────────────────
+
+describe("E2E: Long scaffold flows", () => {
+  test("checkpoint stops execution after initial setup stage", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    try {
+      // Model keeps making tool calls (simulating scaffold + extra work)
+      // 10 tool calls — should be stopped at 8 by checkpoint
+      for (let i = 0; i < 10; i++) {
+        env.provider.addToolCallResponse([
+          { name: "Bash", arguments: { command: `echo step${i}`, description: `Step ${i}` } },
+        ]);
+      }
+      // Final text response after checkpoint forces stop
+      env.provider.addResponse("Here is a summary of what was created in the initial structure for the project as requested.");
+
+      const cm = new ConversationManager(env.config, env.registry);
+
+      // Prompt with checkpoint language
+      const { events, text } = await sendAndCollect(cm,
+        "Crea un sitio web completo sobre Bitcoin. Empieza con la estructura inicial y muéstrame el primer paso cuando termines."
+      );
+
+      // Should have a checkpoint_reached stop reason
+      const turnEnds = eventsOfType(events, "turn_end");
+      const checkpoint = turnEnds.find(e => e.stopReason === "checkpoint_reached");
+      expect(checkpoint).toBeDefined();
+
+      // Tool executions should be capped (not all 10)
+      const toolExecs = eventsOfType(events, "tool_executing");
+      expect(toolExecs.length).toBeLessThanOrEqual(8);
+    } finally {
+      await env.cleanup();
+    }
+  });
+
+  test("error fingerprinting tracks repeated failures", async () => {
+    const env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        systemPromptOverride: "You are a test assistant.",
+      },
+    });
+
+    // Register a Write tool that always fails with the same error
+    const failDef = {
+      name: "Write",
+      description: "Write file",
+      input_schema: {
+        type: "object" as const,
+        properties: { file_path: { type: "string" }, content: { type: "string" } },
+        required: ["file_path", "content"],
+      },
+    };
+    let writeCallCount = 0;
+    const failHandler = async () => {
+      writeCallCount++;
+      return { tool_use_id: "", content: "Error: embedding HTML inside TypeScript is not allowed", is_error: true };
+    };
+    env.registry.register("Write", failDef, failHandler);
+
+    try {
+      // Model tries Write, fails, tries again, fails, then gives text
+      env.provider.addToolCallResponse([
+        { name: "Write", arguments: { file_path: "/tmp/test.tsx", content: "<div>test</div>" } },
+      ]);
+      // After first failure, model tries Write again
+      env.provider.addToolCallResponse([
+        { name: "Write", arguments: { file_path: "/tmp/test2.tsx", content: "<div>test2</div>" } },
+      ]);
+      // After second failure (now burned), model tries a third time
+      env.provider.addToolCallResponse([
+        { name: "Write", arguments: { file_path: "/tmp/test3.tsx", content: "<div>test3</div>" } },
+      ]);
+      // Finally responds with text
+      env.provider.addResponse("I could not write the files due to repeated errors with HTML in TypeScript. Trying different approach.");
+
+      const cm = new ConversationManager(env.config, env.registry);
+      const { events } = await sendAndCollect(cm, "Create the component files");
+
+      // The tool should have been called at most 2 times (handler executes)
+      // Third call should be blocked before execution
+      const toolResults = eventsOfType(events, "tool_result");
+      const errorResults = toolResults.filter(r => r.isError);
+
+      // At least one error result should exist
+      expect(errorResults.length).toBeGreaterThanOrEqual(1);
+
+      // The Write handler should be called at most 2 times
+      // (third is blocked by burned fingerprint before execution)
+      expect(writeCallCount).toBeLessThanOrEqual(2);
+    } finally {
+      await env.cleanup();
+    }
+  });
+});
