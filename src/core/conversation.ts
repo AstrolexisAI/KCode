@@ -462,6 +462,17 @@ export class ConversationManager {
       log.info("session", "Detected checkpoint request — will limit tool execution to initial stage");
       this._checkpointMode = true;
       this._checkpointToolCount = 0;
+      // If a plan gets created during this turn, auto-set stopAfterStepId to the first step
+      try {
+        const { onPlanChange } = await import("../tools/plan.js");
+        const unsubCheckpoint = onPlanChange((plan) => {
+          if (plan && plan.steps.length > 0 && !plan.stopAfterStepId) {
+            plan.stopAfterStepId = plan.steps[0].id;
+            log.info("session", `Checkpoint: auto-set stopAfterStepId to "${plan.steps[0].id}"`);
+          }
+          unsubCheckpoint(); // Only need to catch the first plan creation
+        });
+      } catch { /* plan module not loaded */ }
       this.state.messages.push({
         role: "user",
         content: "[SYSTEM] The user asked for ONLY the first step or initial structure. Complete ONLY that stage, then STOP and provide a summary. Do NOT continue to additional features, pages, or implementation beyond the initial setup.",
@@ -967,9 +978,28 @@ export class ConversationManager {
         }
       }
 
-      // Plan coherence: warn if multiple steps are in_progress simultaneously
+      // Plan coherence: validate execution against active plan step
       try {
-        const { countInProgressSteps, getActiveStep } = await import("../tools/plan.js");
+        const { countInProgressSteps, getActiveStep, shouldStopAfterCurrentStep, classifyToolCoherence } = await import("../tools/plan.js");
+
+        // Check if stopAfterStep was reached
+        if (shouldStopAfterCurrentStep()) {
+          log.info("session", "Plan stopAfterStep reached — forcing stop");
+          const textOnly = assistantContent.filter(b => b.type === "text");
+          this.state.messages[this.state.messages.length - 1] = {
+            role: "assistant",
+            content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
+          };
+          this.state.messages.push({
+            role: "user",
+            content: "[SYSTEM] The plan's stop-after step has been completed. STOP and provide a summary of what was done. Do NOT continue to further steps.",
+          });
+          guardState.forceStopLoop = true;
+          yield { type: "turn_end", stopReason: "plan_stop_reached" };
+          continue;
+        }
+
+        // Check multiple in_progress
         const inProgress = countInProgressSteps();
         if (inProgress > 1) {
           log.warn("session", `Plan coherence: ${inProgress} steps in_progress simultaneously — injecting correction`);
@@ -977,6 +1007,22 @@ export class ConversationManager {
             role: "user",
             content: `[SYSTEM] Plan coherence warning: you have ${inProgress} steps marked as in_progress simultaneously. Finish the current step before starting another. Update the plan to reflect actual progress.`,
           });
+        }
+
+        // Check tool coherence against active step
+        const activeStep = getActiveStep();
+        if (activeStep && toolCalls.length > 0) {
+          for (const tc of toolCalls) {
+            const coherence = classifyToolCoherence(tc.name, tc.input as Record<string, unknown>, activeStep.title);
+            if (coherence === "warn") {
+              log.warn("session", `Plan deviation: tool ${tc.name} may not match step "${activeStep.title}"`);
+              this.state.messages.push({
+                role: "user",
+                content: `[SYSTEM] Plan deviation detected: your action (${tc.name}) doesn't seem to match the current plan step "${activeStep.id}. ${activeStep.title}". Finish the current step first, or update the plan if you're intentionally changing approach.`,
+              });
+              break; // One warning per iteration is enough
+            }
+          }
         }
       } catch { /* plan module not loaded */ }
 

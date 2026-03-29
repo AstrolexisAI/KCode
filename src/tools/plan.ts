@@ -22,6 +22,8 @@ export interface Plan {
   steps: PlanStep[];
   createdAt: number;
   updatedAt: number;
+  /** If set, execution should stop after this step reaches 'done'. */
+  stopAfterStepId?: string;
 }
 
 // ─── In-memory active plan ──────────────────────────────────────
@@ -49,6 +51,54 @@ export function getActiveStep(): PlanStep | null {
 export function countInProgressSteps(): number {
   if (!_activePlan) return 0;
   return _activePlan.steps.filter(s => s.status === "in_progress").length;
+}
+
+/**
+ * Check if the stop-after step has been completed.
+ * Returns true if execution should stop now.
+ */
+export function shouldStopAfterCurrentStep(): boolean {
+  if (!_activePlan?.stopAfterStepId) return false;
+  const step = _activePlan.steps.find(s => s.id === _activePlan!.stopAfterStepId);
+  return step?.status === "done";
+}
+
+/**
+ * Classify whether a tool call is coherent with the active plan step.
+ * Uses simple keyword heuristics — not NLP.
+ *
+ * Returns: "ok" | "warn" | "block"
+ * - "ok": tool call seems consistent with the active step
+ * - "warn": tool call may be deviating (inject correction message)
+ * - "block": tool call clearly contradicts the plan phase
+ */
+export function classifyToolCoherence(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  activeStepTitle: string,
+): "ok" | "warn" | "block" {
+  const stepLower = activeStepTitle.toLowerCase();
+  const filePath = String(toolInput.file_path ?? toolInput.path ?? "").toLowerCase();
+  const command = String(toolInput.command ?? "").toLowerCase();
+
+  // Setup/init phase: allow scaffold, config, install
+  if (/\b(setup|init|initialize|install|config|structure|scaffold)\b/.test(stepLower)) {
+    if (toolName === "Bash" && /\b(create|init|install|npm|bun|npx|mkdir|git init)\b/.test(command)) return "ok";
+    if (toolName === "Write" && /\.(json|config|ts|js|css|md)$/i.test(filePath)) return "ok";
+    // Writing full page components during setup is a deviation
+    if (toolName === "Write" && /\/(pages?|app)\/.+\.(tsx|jsx)$/i.test(filePath) && !/layout|root|config/i.test(filePath)) return "warn";
+    return "ok"; // Default: allow during setup
+  }
+
+  // Git/commit phase: block new feature creation
+  if (/\b(git|commit|push|version|tag)\b/.test(stepLower)) {
+    if (toolName === "Bash" && /\bgit\b/.test(command)) return "ok";
+    if (toolName === "Write" || toolName === "Edit") return "warn"; // Writing files during git phase = deviation
+    return "ok";
+  }
+
+  // Default: allow (we can't classify all phases)
+  return "ok";
 }
 
 export function onPlanChange(listener: (plan: Plan | null) => void): () => void {
