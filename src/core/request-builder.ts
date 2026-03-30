@@ -132,14 +132,15 @@ export async function buildRequestForModel(
     }
   } catch { /* module not loaded */ }
 
-  // Tool budget cap: if tool definitions would consume >15% of context window,
-  // fall back to essential tools only. Prevents bloating simple prompts with 27K+ tokens.
+  // Tool budget cap: local models can't handle 47 tools (27K tokens).
+  // Cloud APIs: reduce if tools > 15% of context. Local: always use essentials.
   const contextWindow = config.contextWindowSize ?? 32_000;
+  const isLocalModel = apiBase.includes("localhost") || apiBase.includes("127.0.0.1") || apiBase.startsWith("http://[::1]");
   const toolOverhead = estimateToolDefinitionTokens(tools, profileToolFilter ?? undefined);
-  if (toolOverhead > contextWindow * 0.15 && !profileToolFilter) {
+  if ((isLocalModel || toolOverhead > contextWindow * 0.15) && !profileToolFilter) {
     const ESSENTIAL_TOOLS = new Set(["Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "GrepReplace", "LS"]);
     profileToolFilter = (name: string) => ESSENTIAL_TOOLS.has(name);
-    log.info("llm", `Tool budget cap: ${toolOverhead} tokens > 15% of ${contextWindow}. Reduced to essential tools.`);
+    log.info("llm", `Tool budget cap: ${isLocalModel ? "local model" : `${toolOverhead} tok > 15%`}. Reduced to ${ESSENTIAL_TOOLS.size} essential tools.`);
   }
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
