@@ -1066,9 +1066,10 @@ export class ConversationManager {
         }
 
         // Truncation heuristic: detect suspiciously incomplete responses
-        // Check on any terminal stop (end_turn or tool_use — text before tools may be truncated)
-        // Allow up to 2 retries for continuation
-        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "tool_use")) {
+        // Only check when the model was cut off by token limit (max_tokens) — if the model
+        // chose to stop (end_turn), respect that decision. Short responses like "Hola" are
+        // legitimate end_turn completions, not truncations.
+        if (hasTextOutput && stopReason === "max_tokens") {
           let fullText = textChunks.join("").trim();
 
           // Dedup: if this is a continuation and the model repeated content

@@ -6,7 +6,7 @@
  * Catches responses that end in prepositions, articles, open brackets, etc.
  */
 export function looksIncomplete(text: string): boolean {
-  if (text.length < 5) return false;
+  if (text.length < 80) return false; // Short responses are intentionally complete
   const trimmed = text.trimEnd();
   // Ends with an open code block that was never closed
   const openFences = (trimmed.match(/```/g) || []).length;
