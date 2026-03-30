@@ -177,9 +177,8 @@ export async function buildRequestForModel(
   } else if (provider === "mnemocuda") {
     // MnemoCUDA: custom /v1/completions with ChatML prompt formatting
     // Thinking models embed <think>...</think> in the output, sharing max_tokens.
-    // Increase max_tokens to give room for both thinking and response.
     const mnemocudaMaxTokens = config.thinking
-      ? effortMaxTokens + 8192
+      ? effortMaxTokens * 2
       : effortMaxTokens;
 
     const { buildMnemoCudaRequest, parseMnemoCudaStream } = await import("./mnemocuda-provider.js");
@@ -233,13 +232,16 @@ export async function buildRequestForModel(
     // on thinking, leaving nothing for the visible response.
     if (config.thinking) {
       body.chat_template_kwargs = { enable_thinking: true };
-      const thinkingBudget = config.reasoningBudget === -1 || config.reasoningBudget === undefined
-        ? 8192   // Default cap: 8K thinking tokens (prevents starving the response)
-        : config.reasoningBudget;
+      // For llama.cpp: reasoning_budget may not be enforced by all servers.
+      // Use a conservative cap and double max_tokens as a safety margin.
+      const thinkingBudget = (config.reasoningBudget !== undefined && config.reasoningBudget > 0)
+        ? config.reasoningBudget
+        : 4096;  // Conservative default — many servers ignore reasoning_budget
       body.reasoning_budget = thinkingBudget;
-      // Increase max_tokens to cover thinking + response
-      body.max_tokens = effortMaxTokens + thinkingBudget;
-      log.info("llm", `Thinking mode: max_tokens=${body.max_tokens} (response=${effortMaxTokens} + thinking=${thinkingBudget})`);
+      // Double max_tokens: even if the server ignores reasoning_budget,
+      // the model gets 2x the space to fit thinking + response.
+      body.max_tokens = effortMaxTokens * 2;
+      log.info("llm", `Thinking mode: max_tokens=${body.max_tokens} (2x ${effortMaxTokens}), reasoning_budget=${thinkingBudget}`);
     } else {
       body.chat_template_kwargs = { enable_thinking: false };
     }
