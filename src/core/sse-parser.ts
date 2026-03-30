@@ -58,6 +58,14 @@ export async function* parseSSEStream(
         if (!trimmed || trimmed.startsWith(":")) continue; // Skip empty lines and comments
 
         if (trimmed === "data: [DONE]") {
+          // Flush any remaining think-tag buffer before ending
+          for (const ev of thinkParser.flush()) {
+            if (ev.type === "thinking") {
+              yield { type: "thinking_delta", thinking: ev.text };
+            } else {
+              yield { type: "content_delta", content: ev.text };
+            }
+          }
           return;
         }
 

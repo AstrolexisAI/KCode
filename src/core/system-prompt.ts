@@ -49,7 +49,7 @@ RULES:
 - After using tools, summarize what you did.`;
   }
 
-  static async build(config: KCodeConfig, version?: string, toolTokenOverhead = 0): Promise<string> {
+  static async build(config: KCodeConfig, version?: string, toolTokenOverhead = 0, userMessage?: string): Promise<string> {
     // If the user overrides the entire system prompt, return it directly
     if (config.systemPromptOverride) {
       return config.systemPromptOverride;
@@ -64,12 +64,34 @@ RULES:
       }
     } catch { /* module not loaded */ }
 
-    // Local models (llama.cpp, Ollama) struggle with massive prompts.
-    // Detect local by checking if apiBase points to localhost.
-    const apiBase = config.apiBase ?? "";
+    // Adaptive prompt for local models: use lite prompt for simple/general queries.
+    // Local models degrade with large system prompts (curl with 21 tokens works,
+    // but 8K+ tokens causes truncated garbage). Full prompt only for code/reasoning.
+    // Resolve apiBase from model registry (config.apiBase is often undefined for registry models).
+    // Only use registry lookup, not the fallback — unknown models should not be assumed local.
+    let apiBase = config.apiBase ?? "";
+    if (!apiBase && config.model) {
+      try {
+        const { loadModelsConfig } = await import("./models.js");
+        const modelsConfig = await loadModelsConfig();
+        const entry = modelsConfig.models.find((m: { name: string }) => m.name === config.model);
+        if (entry?.baseUrl) apiBase = entry.baseUrl;
+      } catch { /* models module not loaded */ }
+    }
     const isLocal = apiBase.includes("localhost") || apiBase.includes("127.0.0.1") || apiBase.startsWith("http://[::1]");
-    const maxPromptTokens = isLocal ? 2_000 : undefined; // 2K for local (~7K chars), 24K default for cloud
+    if (isLocal && userMessage) {
+      try {
+        const { classifyTask } = await import("./router.js");
+        const taskType = classifyTask(userMessage);
+        if (taskType !== "code" && taskType !== "reasoning") {
+          return this.buildLitePrompt(config, version);
+        }
+      } catch { /* router not loaded */ }
+    }
 
+    // Local models need a hard cap — 2K tokens (~7K chars) leaves room for response.
+    // Without this, the full 24K default consumes most of a 32K context window.
+    const maxPromptTokens = isLocal ? 2_000 : undefined;
     const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000, toolTokenOverhead, maxPromptTokens);
     const sections: PromptSection[] = [];
 
