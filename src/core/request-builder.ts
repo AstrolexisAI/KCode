@@ -222,12 +222,17 @@ export async function buildRequestForModel(
     if (toolDefs.length > 0) body.tools = toolDefs;
 
     // Qwen3: control thinking mode via chat_template_kwargs
+    // llama.cpp shares max_tokens between thinking + response output.
+    // With unlimited reasoning (-1), the model can spend almost all tokens
+    // on thinking, leaving nothing for the visible response.
     if (config.thinking) {
       body.chat_template_kwargs = { enable_thinking: true };
-      // Set reasoning budget (-1 = unlimited, matching llama-server config)
-      if (config.reasoningBudget !== undefined) {
-        body.reasoning_budget = config.reasoningBudget;
-      }
+      const thinkingBudget = config.reasoningBudget === -1 || config.reasoningBudget === undefined
+        ? 8192   // Default cap: 8K thinking tokens (prevents starving the response)
+        : config.reasoningBudget;
+      body.reasoning_budget = thinkingBudget;
+      // Increase max_tokens to cover thinking + response
+      body.max_tokens = effortMaxTokens + thinkingBudget;
     } else {
       body.chat_template_kwargs = { enable_thinking: false };
     }
