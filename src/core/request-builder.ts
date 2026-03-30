@@ -226,19 +226,29 @@ export async function buildRequestForModel(
 
     if (toolDefs.length > 0) body.tools = toolDefs;
 
-    // Qwen3: control thinking mode via chat_template_kwargs
-    // llama.cpp shares max_tokens between thinking + response output.
-    // With unlimited reasoning (-1), the model can spend almost all tokens
-    // on thinking, leaving nothing for the visible response.
+    // Adaptive thinking: only enable when the prompt needs reasoning.
+    // llama.cpp shares max_tokens between thinking + response — simple prompts
+    // like "hola" get starved if thinking is always on.
     if (config.thinking) {
-      body.chat_template_kwargs = { enable_thinking: true };
-      // Pass through the user's reasoning budget unchanged.
-      // Double max_tokens so thinking + response both fit.
-      if (config.reasoningBudget !== undefined) {
-        body.reasoning_budget = config.reasoningBudget;
+      const lastUserMsg = messages.filter(m => m.role === "user").pop();
+      const userText = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
+
+      const { classifyTask } = await import("./router.js");
+      const { looksTheoretical } = await import("./prompt-analysis.js");
+      const taskType = classifyTask(userText);
+      const needsThinking = taskType === "code" || taskType === "reasoning" || looksTheoretical(userText);
+
+      if (needsThinking) {
+        body.chat_template_kwargs = { enable_thinking: true };
+        if (config.reasoningBudget !== undefined) {
+          body.reasoning_budget = config.reasoningBudget;
+        }
+        body.max_tokens = effortMaxTokens * 2;
+        log.info("llm", `Thinking ON (${taskType}): max_tokens=${body.max_tokens}`);
+      } else {
+        body.chat_template_kwargs = { enable_thinking: false };
+        log.info("llm", `Thinking OFF (${taskType}): simple prompt, saving tokens`);
       }
-      body.max_tokens = effortMaxTokens * 2;
-      log.info("llm", `Thinking mode: max_tokens=${body.max_tokens} (2x ${effortMaxTokens}), reasoning_budget=${config.reasoningBudget ?? "not set"}`);
     } else {
       body.chat_template_kwargs = { enable_thinking: false };
     }
