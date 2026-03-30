@@ -31,13 +31,13 @@ export interface PromptSection {
 export class TokenBudgetManager {
   private maxTokens: number;
 
-  constructor(contextWindowSize: number, toolTokenOverhead = 0) {
+  constructor(contextWindowSize: number, toolTokenOverhead = 0, maxTokensCap = ABSOLUTE_MAX_TOKENS) {
     // Subtract tool definition tokens from available space before computing budget.
     // On small context windows (e.g., 32K with 27K of tools), this prevents the
     // system prompt from consuming space the tools already claimed.
     const availableForPrompt = Math.max(contextWindowSize - toolTokenOverhead, 0);
     const budgetFromContext = Math.floor(availableForPrompt * MAX_SYSTEM_PROMPT_RATIO);
-    this.maxTokens = Math.min(budgetFromContext, ABSOLUTE_MAX_TOKENS);
+    this.maxTokens = Math.min(budgetFromContext, maxTokensCap);
   }
 
   /**
