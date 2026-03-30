@@ -232,16 +232,13 @@ export async function buildRequestForModel(
     // on thinking, leaving nothing for the visible response.
     if (config.thinking) {
       body.chat_template_kwargs = { enable_thinking: true };
-      // For llama.cpp: reasoning_budget may not be enforced by all servers.
-      // Use a conservative cap and double max_tokens as a safety margin.
-      const thinkingBudget = (config.reasoningBudget !== undefined && config.reasoningBudget > 0)
-        ? config.reasoningBudget
-        : 4096;  // Conservative default — many servers ignore reasoning_budget
-      body.reasoning_budget = thinkingBudget;
-      // Double max_tokens: even if the server ignores reasoning_budget,
-      // the model gets 2x the space to fit thinking + response.
+      // Pass through the user's reasoning budget unchanged.
+      // Double max_tokens so thinking + response both fit.
+      if (config.reasoningBudget !== undefined) {
+        body.reasoning_budget = config.reasoningBudget;
+      }
       body.max_tokens = effortMaxTokens * 2;
-      log.info("llm", `Thinking mode: max_tokens=${body.max_tokens} (2x ${effortMaxTokens}), reasoning_budget=${thinkingBudget}`);
+      log.info("llm", `Thinking mode: max_tokens=${body.max_tokens} (2x ${effortMaxTokens}), reasoning_budget=${config.reasoningBudget ?? "not set"}`);
     } else {
       body.chat_template_kwargs = { enable_thinking: false };
     }
