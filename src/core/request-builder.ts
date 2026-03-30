@@ -176,12 +176,18 @@ export async function buildRequestForModel(
     return { url, headers, body, provider, parser: parseAnthropicSSEStream };
   } else if (provider === "mnemocuda") {
     // MnemoCUDA: custom /v1/completions with ChatML prompt formatting
+    // Thinking models embed <think>...</think> in the output, sharing max_tokens.
+    // Increase max_tokens to give room for both thinking and response.
+    const mnemocudaMaxTokens = config.thinking
+      ? effortMaxTokens + 8192
+      : effortMaxTokens;
+
     const { buildMnemoCudaRequest, parseMnemoCudaStream } = await import("./mnemocuda-provider.js");
     const req = buildMnemoCudaRequest(
       apiBase,
       systemPrompt,
       messages,
-      effortMaxTokens,
+      mnemocudaMaxTokens,
       effortTemperature ?? profileTemperature,
       config.apiKey,
     );
@@ -233,6 +239,7 @@ export async function buildRequestForModel(
       body.reasoning_budget = thinkingBudget;
       // Increase max_tokens to cover thinking + response
       body.max_tokens = effortMaxTokens + thinkingBudget;
+      log.info("llm", `Thinking mode: max_tokens=${body.max_tokens} (response=${effortMaxTokens} + thinking=${thinkingBudget})`);
     } else {
       body.chat_template_kwargs = { enable_thinking: false };
     }
