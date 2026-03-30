@@ -68,7 +68,7 @@ RULES:
     // Detect local by checking if apiBase points to localhost.
     const apiBase = config.apiBase ?? "";
     const isLocal = apiBase.includes("localhost") || apiBase.includes("127.0.0.1") || apiBase.startsWith("http://[::1]");
-    const maxPromptTokens = isLocal ? 4_000 : undefined; // 4K for local, 24K default for cloud
+    const maxPromptTokens = isLocal ? 2_000 : undefined; // 2K for local (~7K chars), 24K default for cloud
 
     const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000, toolTokenOverhead, maxPromptTokens);
     const sections: PromptSection[] = [];
