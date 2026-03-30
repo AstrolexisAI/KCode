@@ -81,7 +81,7 @@ export async function executeGitStatus(input: Record<string, unknown>): Promise<
     // Ahead/behind remote
     try {
       const tracking = runGit(["rev-list", "--left-right", "--count", `@{upstream}...HEAD`], cwd);
-      const [behind, ahead] = tracking.split("\t").map(Number);
+      const [behind, ahead] = tracking.split("\t").map(Number) as [number, number];
       if (ahead > 0 || behind > 0) {
         const parts: string[] = [];
         if (ahead > 0) parts.push(`${ahead} ahead`);

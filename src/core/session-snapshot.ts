@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { kcodeHome } from "./paths";
 import type { Message, KCodeConfig, ConversationState, TokenUsage, ContentBlock } from "./types";
 import { log } from "./logger";
+import { CHARS_PER_TOKEN } from "./token-budget";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -97,8 +98,7 @@ function generateId(): string {
 }
 
 function estimateTokens(text: string): number {
-  // Rough estimate: ~4 chars per token
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
 /**
@@ -333,7 +333,7 @@ export function exportSnapshot(
   lines.push("## Messages");
   lines.push("");
   for (let i = 0; i < snapshot.messages.length; i++) {
-    const msg = snapshot.messages[i];
+    const msg = snapshot.messages[i]!;
     const prefix = `${i + 1}.`;
     if (msg.type === "tool_use") {
       lines.push(`${prefix} [${msg.role}] Tool: ${msg.toolName ?? msg.content}`);
@@ -497,9 +497,9 @@ function pruneSnapshots(): void {
       const { unlinkSync } = require("node:fs");
       for (let i = 0; i < excess; i++) {
         try {
-          unlinkSync(join(getSnapshotsDir(), files[i]));
+          unlinkSync(join(getSnapshotsDir(), files[i]!));
         } catch (err) {
-          log.debug("snapshot", `Failed to delete old snapshot ${files[i]}: ${err}`);
+          log.debug("snapshot", `Failed to delete old snapshot ${files[i]!}: ${err}`);
         }
       }
     }

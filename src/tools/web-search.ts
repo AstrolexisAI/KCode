@@ -70,7 +70,7 @@ function checkRateLimit(): boolean {
   const now = Date.now();
   const cutoff = now - 60_000;
   // Remove timestamps older than 1 minute
-  while (searchTimestamps.length > 0 && searchTimestamps[0] < cutoff) {
+  while (searchTimestamps.length > 0 && searchTimestamps[0]! < cutoff) {
     searchTimestamps.shift();
   }
   if (searchTimestamps.length >= MAX_SEARCHES_PER_MINUTE) {
@@ -206,20 +206,19 @@ async function fallbackScrapeSearch(query: string): Promise<SearchResult[]> {
 
   const resultBlocks = html.split(/class="result__body"/);
   for (let i = 1; i < Math.min(resultBlocks.length, 21); i++) {
-    const block = resultBlocks[i];
-
+    const block = resultBlocks[i]!;
     const titleMatch = block.match(/class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/);
     const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/td/);
 
     if (titleMatch) {
-      let url = titleMatch[1];
+      let url = titleMatch[1]!;
       const uddgMatch = url.match(/uddg=([^&]+)/);
       if (uddgMatch) {
-        url = decodeURIComponent(uddgMatch[1]);
+        url = decodeURIComponent(uddgMatch[1]!);
       }
 
-      const title = sanitizeHtml(titleMatch[2]);
-      const snippet = snippetMatch ? sanitizeHtml(snippetMatch[1]) : "";
+      const title = sanitizeHtml(titleMatch[2]!);
+      const snippet = snippetMatch ? sanitizeHtml(snippetMatch[1]!) : "";
 
       results.push({ title, url, snippet });
     }

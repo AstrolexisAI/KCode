@@ -120,7 +120,7 @@ export async function installMlxEngine(onProgress?: (msg: string) => void): Prom
     stdout: "pipe", stderr: "pipe",
   });
   const pyVer = verProc.stdout.toString().trim();
-  const [major, minor] = pyVer.split(".").map(Number);
+  const [major, minor] = pyVer.split(".").map(Number) as [number, number];
   if (major < 3 || (major === 3 && minor < 9)) {
     throw new Error(`Python ${pyVer} is too old. MLX requires Python 3.9+.`);
   }
@@ -730,7 +730,7 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
       const pctMatch = clean.match(/(\d+)%/);
       if (pctMatch) {
         engineSpinner.stop();
-        const pct = parseInt(pctMatch[1], 10);
+        const pct = parseInt(pctMatch[1]!, 10);
         const bar = renderProgressBar(pct);
         const detail = clean.replace(/.*?\d+%\s*/, "").trim();
         const line = `    ${C.cyan}↓${C.reset} Engine: ${bar} ${C.dim}${detail}${C.reset}`;
@@ -775,7 +775,7 @@ export async function runSetup(options?: { model?: string; force?: boolean }): P
       const clean = msg.replace(/\n/g, "");
       const pctMatch = clean.match(/(\d+)%/);
       if (pctMatch) {
-        const pct = parseInt(pctMatch[1], 10);
+        const pct = parseInt(pctMatch[1]!, 10);
         const bar = renderProgressBar(pct, 35);
         const detail = clean.replace(/.*?\d+%\s*/, "").trim();
         const line = `    ${C.cyan}↓${C.reset} Model: ${bar} ${C.dim}${detail}${C.reset}`;
@@ -1143,8 +1143,8 @@ function createLibSymlinks(dir: string): void {
       const match = file.match(/^(lib.+\.so)\.(\d+)\.(\d+)\.(\d+)$/);
       if (!match) continue;
 
-      const base = match[1];          // libfoo.so
-      const major = match[2];         // X
+      const base = match[1]!;          // libfoo.so
+      const major = match[2]!;         // X
       const soMajor = `${base}.${major}`; // libfoo.so.X
 
       // Create libfoo.so.X → libfoo.so.X.Y.Z

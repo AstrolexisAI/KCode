@@ -77,6 +77,9 @@ export class CodebaseIndex {
     this.saveToDb();
 
     const elapsed = Date.now() - startMs;
+    if (this.entries.length >= MAX_FILES) {
+      log.warn("indexer", `Indexing capped at ${MAX_FILES} files. Some files may not appear in search results. Consider adding directories to .kcode/ignore or .gitignore.`);
+    }
     log.info("indexer", `Indexed ${this.entries.length} files in ${elapsed}ms`);
     return this.entries.length;
   }
@@ -143,7 +146,7 @@ export class CodebaseIndex {
       let lo = 0, hi = lineStarts.length - 1;
       while (lo < hi) {
         const mid = (lo + hi + 1) >> 1;
-        if (lineStarts[mid] <= offset) lo = mid; else hi = mid - 1;
+        if (lineStarts[mid]! <= offset) lo = mid; else hi = mid - 1;
       }
       return lo + 1; // 1-based
     };
@@ -158,25 +161,25 @@ export class CodebaseIndex {
       const re = /export\s+(?:default\s+)?(?:(function|class|const|let|var|type|interface|enum))\s+(\w+)/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        defs.push({ name: m[2], line: offsetToLine(m.index), kind: kindMap[m[1]] ?? "other" });
+        defs.push({ name: m[2]!, line: offsetToLine(m.index), kind: kindMap[m[1]!] ?? "other" });
       }
     } else if (ext === ".py") {
       const re = /^(def|class)\s+(\w+)/gm;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        defs.push({ name: m[2], line: offsetToLine(m.index), kind: m[1] === "class" ? "class" : "function" });
+        defs.push({ name: m[2]!, line: offsetToLine(m.index), kind: m[1] === "class" ? "class" : "function" });
       }
     } else if (ext === ".go") {
       const re = /^func\s+(?:\(\w+\s+\*?\w+\)\s+)?([A-Z]\w*)/gm;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        defs.push({ name: m[1], line: offsetToLine(m.index), kind: "function" });
+        defs.push({ name: m[1]!, line: offsetToLine(m.index), kind: "function" });
       }
     } else if (ext === ".rs") {
       const re = /pub\s+(fn|struct|enum|trait|type)\s+(\w+)/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        defs.push({ name: m[2], line: offsetToLine(m.index), kind: kindMap[m[1]] ?? "other" });
+        defs.push({ name: m[2]!, line: offsetToLine(m.index), kind: kindMap[m[1]!] ?? "other" });
       }
     }
 
@@ -190,13 +193,13 @@ export class CodebaseIndex {
       const re = /(?:import|from)\s+["']([^"']+)["']/g;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        imports.push(m[1]);
+        imports.push(m[1]!);
       }
     } else if (ext === ".py") {
       const re = /^(?:from\s+(\S+)\s+import|import\s+(\S+))/gm;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        imports.push(m[1] ?? m[2]);
+        imports.push((m[1] ?? m[2])!);
       }
     }
 
@@ -504,7 +507,7 @@ export class CodebaseIndex {
 let _index: CodebaseIndex | null = null;
 
 export function getCodebaseIndex(cwd: string): CodebaseIndex {
-  if (!_index || (_index as any).cwd !== cwd) {
+  if (!_index || (_index as unknown as { cwd: string }).cwd !== cwd) {
     _index = new CodebaseIndex(cwd);
   }
   return _index;

@@ -26,7 +26,7 @@ describe("web search tool", () => {
 
   test("freshness property has correct enum values", () => {
     const props = webSearchDefinition.input_schema.properties as Record<string, { enum?: string[] }>;
-    expect(props.freshness.enum).toEqual(["day", "week", "month", "year"]);
+    expect(props.freshness!.enum).toEqual(["day", "week", "month", "year"]);
   });
 
   // ─── filterResults via executeWebSearch ───

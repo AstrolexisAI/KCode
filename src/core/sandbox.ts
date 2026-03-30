@@ -54,7 +54,7 @@ function hasBwrap(): boolean {
     try {
       execSync("which bwrap", { stdio: "pipe" });
       _hasBwrap = true;
-      log.info("sandbox" as any, "bubblewrap (bwrap) detected");
+      log.info("sandbox", "bubblewrap (bwrap) detected");
     } catch {
       _hasBwrap = false;
     }
@@ -114,7 +114,7 @@ export function wrapWithSandbox(
   }
 
   if (config.mode === "strict" && !hasBwrap()) {
-    log.warn("sandbox" as any, "bwrap not available, falling back to light sandbox. Install bubblewrap for strict mode.");
+    log.warn("sandbox", "bwrap not available, falling back to light sandbox. Install bubblewrap for strict mode.");
   }
 
   // Light sandbox: use restricted bash with safety guards
@@ -219,7 +219,7 @@ function wrapWithBwrap(
   // The actual command
   bwrapArgs.push("--", "bash", "-c", command);
 
-  log.info("sandbox" as any, `bwrap sandbox: writable=[${config.allowWritePaths.join(", ")}], network=${config.allowNetwork}`);
+  log.info("sandbox", `bwrap sandbox: writable=[${config.allowWritePaths.join(", ")}], network=${config.allowNetwork}`);
 
   return {
     command: bwrapArgs.map(shellQuote).join(" "),

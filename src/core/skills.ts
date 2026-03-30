@@ -46,18 +46,18 @@ function parseSkillFile(content: string): SkillDefinition | null {
   const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
   if (!match) return null;
 
-  const frontmatter = match[1];
-  const template = match[2].trim();
+  const frontmatter = match[1]!;
+  const template = match[2]!.trim();
 
   // Simple YAML parsing for the fields we care about
   const name = extractYamlString(frontmatter, "name");
   if (!name) return null;
 
-  const description = extractYamlString(frontmatter, "description") ?? "";
-  const aliases = extractYamlArray(frontmatter, "aliases");
-  const args = extractYamlArray(frontmatter, "args");
-  const autoInvoke = extractYamlString(frontmatter, "auto_invoke") === "true";
-  const triggers = extractYamlTriggers(frontmatter);
+  const description = extractYamlString(frontmatter!, "description") ?? "";
+  const aliases = extractYamlArray(frontmatter!, "aliases");
+  const args = extractYamlArray(frontmatter!, "args");
+  const autoInvoke = extractYamlString(frontmatter!, "auto_invoke") === "true";
+  const triggers = extractYamlTriggers(frontmatter!);
 
   return {
     name,
@@ -75,14 +75,14 @@ function extractYamlString(yaml: string, key: string): string | null {
   const match = yaml.match(re);
   if (!match) return null;
   // Strip surrounding quotes
-  return match[1].trim().replace(/^["']|["']$/g, "");
+  return match[1]!.trim().replace(/^["']|["']$/g, "");
 }
 
 function extractYamlArray(yaml: string, key: string): string[] {
   const re = new RegExp(`^${key}:\\s*\\[(.*)\\]$`, "m");
   const match = yaml.match(re);
   if (!match) return [];
-  return match[1]
+  return match[1]!
     .split(",")
     .map((s) => s.trim().replace(/^["']|["']$/g, ""))
     .filter(Boolean);
@@ -93,9 +93,9 @@ function extractYamlTriggers(yaml: string): SkillTrigger[] {
   const triggerBlock = yaml.match(/^triggers:\s*\n((?:\s+-\s+.*\n?)*)/m);
   if (!triggerBlock) return triggers;
 
-  const entries = triggerBlock[1].matchAll(/pattern:\s*["']?([^"'\n]+)["']?\s*\n\s*type:\s*["']?(regex|contains|startsWith)["']?/g);
+  const entries = triggerBlock[1]!.matchAll(/pattern:\s*["']?([^"'\n]+)["']?\s*\n\s*type:\s*["']?(regex|contains|startsWith)["']?/g);
   for (const entry of entries) {
-    triggers.push({ pattern: entry[1].trim(), type: entry[2].trim() as SkillTrigger["type"] });
+    triggers.push({ pattern: entry[1]!.trim(), type: entry[2]!.trim() as SkillTrigger["type"] });
   }
   return triggers;
 }

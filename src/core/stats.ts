@@ -87,29 +87,29 @@ function parseLogFiles(files: string[]): LogStats {
       // Count errors
       if (level === "ERROR") {
         stats.errorCount++;
-        stats.errorsByCategory[category] = (stats.errorsByCategory[category] || 0) + 1;
+        stats.errorsByCategory[category!] = (stats.errorsByCategory[category!] || 0) + 1;
       }
 
       // Extract model from LLM requests
       if (category === "llm") {
-        const modelMatch = message.match(MODEL_RE);
+        const modelMatch = message?.match(MODEL_RE);
         if (modelMatch) {
-          const model = modelMatch[1];
+          const model = modelMatch[1]!;
           stats.requestsByModel[model] = (stats.requestsByModel[model] || 0) + 1;
         }
 
         // Extract response times
-        const timeMatch = message.match(STREAM_TIME_RE);
+        const timeMatch = message?.match(STREAM_TIME_RE);
         if (timeMatch) {
-          stats.responseTimes.push(parseFloat(timeMatch[1]));
+          stats.responseTimes.push(parseFloat(timeMatch[1]!));
         }
       }
 
       // Count tool executions from log entries
       if (category === "tool") {
-        const toolMatch = message.match(TOOL_EXEC_RE) || message.match(TOOL_NAME_RE);
+        const toolMatch = message?.match(TOOL_EXEC_RE) || message?.match(TOOL_NAME_RE);
         if (toolMatch) {
-          const toolName = toolMatch[1];
+          const toolName = toolMatch[1]!;
           stats.toolUsageByName[toolName] = (stats.toolUsageByName[toolName] || 0) + 1;
         }
       }

@@ -3,6 +3,28 @@
 
 import type { Message, StreamEvent, ConversationState, KCodeConfig } from "./types";
 import { log } from "./logger";
+import { CHARS_PER_TOKEN } from "./token-budget";
+
+// ─── Constants ──────────────────────────────────────────────────
+
+/** Default char estimate for non-string tool_result blocks. */
+const DEFAULT_BLOCK_CHARS = 100;
+/** Minimum tool_result size (chars) before compression kicks in. */
+const COMPRESS_THRESHOLD_CHARS = 500;
+/** Number of recent messages to protect from compression/pruning. */
+const KEEP_RECENT_MESSAGES = 10;
+/** Number of initial messages to always preserve (first user message). */
+const KEEP_FIRST_MESSAGES = 1;
+/** Minimum messages required before pruning is attempted. */
+const MIN_MESSAGES_FOR_PRUNING = 4;
+/** Emergency prune: context usage fraction that triggers hard drop. */
+const EMERGENCY_THRESHOLD = 0.95;
+/** Emergency prune: minimum number of messages to keep before allowing emergency drop. */
+const EMERGENCY_MIN_MESSAGES = 6;
+/** Emergency prune: fraction of messages to drop. */
+const EMERGENCY_DROP_RATIO = 0.3;
+/** Emergency prune: absolute minimum messages to drop. */
+const EMERGENCY_MIN_DROP = 2;
 
 // ─── Context Token Estimation ────────────────────────────────────
 
@@ -16,14 +38,14 @@ export function estimateContextTokens(systemPrompt: string, messages: Message[])
       for (const block of msg.content) {
         if (block.type === "text") chars += block.text.length;
         else if (block.type === "tool_result") {
-          chars += typeof block.content === "string" ? block.content.length : 100;
+          chars += typeof block.content === "string" ? block.content.length : DEFAULT_BLOCK_CHARS;
         } else if (block.type === "tool_use") {
           chars += JSON.stringify(block.input).length;
         }
       }
     }
   }
-  return Math.ceil(chars / 4); // ~4 chars per token
+  return Math.ceil(chars / CHARS_PER_TOKEN);
 }
 
 // ─── Context Pruning ─────────────────────────────────────────────
@@ -48,23 +70,23 @@ export async function* pruneMessagesIfNeeded(
   }
 
   const messages = state.messages;
-  if (messages.length <= 4) {
+  if (messages.length <= MIN_MESSAGES_FOR_PRUNING) {
     return;
   }
 
   log.info("session", `Context pruning triggered: ~${estimatedTokens} tokens, threshold ${Math.floor(threshold)}`);
 
-  // Phase 1: Compress large tool results in older messages (keep last 10 messages intact)
-  const compressibleEnd = Math.max(0, messages.length - 10);
+  // Phase 1: Compress large tool results in older messages (keep recent messages intact)
+  const compressibleEnd = Math.max(0, messages.length - KEEP_RECENT_MESSAGES);
   let compressed = 0;
   for (let i = 0; i < compressibleEnd; i++) {
-    const msg = messages[i];
+    const msg = messages[i]!;
     if (Array.isArray(msg.content)) {
       for (let j = 0; j < msg.content.length; j++) {
-        const block = msg.content[j];
-        if (block.type === "tool_result" && typeof block.content === "string" && block.content.length > 500) {
+        const block = msg.content[j]!;
+        if (block.type === "tool_result" && typeof block.content === "string" && block.content.length > COMPRESS_THRESHOLD_CHARS) {
           // Summarize tool results: keep first line + truncate
-          const firstLine = block.content.split("\n")[0].slice(0, 200);
+          const firstLine = block.content.split("\n")[0]!.slice(0, 200);
           const wasError = block.is_error ? " (error)" : "";
           msg.content[j] = {
             ...block,
@@ -90,8 +112,8 @@ export async function* pruneMessagesIfNeeded(
   }
 
   // Phase 2: Auto-compact via LLM summary instead of blind pruning
-  const keepFirst = 1;
-  const keepLast = 10; // Keep enough recent messages to preserve tool call/result pairs
+  const keepFirst = KEEP_FIRST_MESSAGES;
+  const keepLast = KEEP_RECENT_MESSAGES;
 
   if (messages.length <= keepFirst + keepLast) {
     return;
@@ -146,12 +168,12 @@ export function emergencyPrune(
   contextWindowSize: number,
 ): StreamEvent[] {
   const postPruneTokens = estimateContextTokens(systemPrompt, state.messages);
-  const hardLimit = contextWindowSize * 0.95;
-  if (postPruneTokens < hardLimit || state.messages.length <= 6) {
+  const hardLimit = contextWindowSize * EMERGENCY_THRESHOLD;
+  if (postPruneTokens < hardLimit || state.messages.length <= EMERGENCY_MIN_MESSAGES) {
     return [];
   }
 
-  const dropCount = Math.max(2, Math.floor(state.messages.length * 0.3));
+  const dropCount = Math.max(EMERGENCY_MIN_DROP, Math.floor(state.messages.length * EMERGENCY_DROP_RATIO));
   log.warn("session", `Emergency prune: ~${postPruneTokens} tokens >= 95% of ${contextWindowSize}. Dropping ${dropCount} oldest messages.`);
   const kept = state.messages.slice(0, 1); // keep system/first message
   const rest = state.messages.slice(1);

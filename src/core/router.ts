@@ -258,7 +258,7 @@ export async function withCloudFailover<T>(
 ): Promise<T> {
   const { isPro } = await import("./pro.js");
   if (!(await isPro()) || models.length <= 1) {
-    return fn(models[0]);
+    return fn(models[0]!);
   }
 
   let lastError: Error | undefined;
@@ -296,22 +296,22 @@ export async function getModelCapabilities(): Promise<Record<string, string[]>> 
   for (const m of models) {
     const caps = m.capabilities ?? [];
     if (caps.includes("vision") || caps.includes("ocr")) {
-      capabilities.vision.push(m.name);
+      capabilities.vision!.push(m.name);
     }
     if (caps.includes("code")) {
-      capabilities.code.push(m.name);
+      capabilities.code!.push(m.name);
     }
     if (caps.includes("chat")) {
-      capabilities.chat.push(m.name);
+      capabilities.chat!.push(m.name);
     }
     if (caps.includes("fast")) {
-      capabilities.fast.push(m.name);
+      capabilities.fast!.push(m.name);
     }
     if (caps.includes("reasoning")) {
-      capabilities.reasoning.push(m.name);
+      capabilities.reasoning!.push(m.name);
     }
     // All models are general-purpose
-    capabilities.general.push(m.name);
+    capabilities.general!.push(m.name);
   }
 
   return capabilities;

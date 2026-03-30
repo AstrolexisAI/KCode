@@ -32,19 +32,19 @@ export async function handleFileAction(
       const imports: string[] = [];
       let match;
       while ((match = importRegex.exec(content)) !== null) {
-        imports.push(match[1] ?? match[2]);
+        imports.push((match[1] ?? match[2])!);
       }
 
       // Extract exports
       const exportRegex = /export\s+(?:default\s+)?(?:function|class|const|let|var|type|interface|enum)\s+(\w+)/g;
       const exports: string[] = [];
       while ((match = exportRegex.exec(content)) !== null) {
-        exports.push(match[1]);
+        exports.push(match[1]!);
       }
       // Also check for `export { ... }`
       const reExportRegex = /export\s*\{([^}]+)\}/g;
       while ((match = reExportRegex.exec(content)) !== null) {
-        const names = match[1].split(",").map(s => s.trim().split(/\s+as\s+/).pop()?.trim()).filter(Boolean);
+        const names = match[1]!.split(",").map(s => s.trim().split(/\s+as\s+/).pop()?.trim()).filter(Boolean);
         exports.push(...(names as string[]));
       }
 
@@ -57,7 +57,7 @@ export async function handleFileAction(
         for (let i = 0; i < imports.length; i++) {
           const isLast = i === imports.length - 1;
           const prefix = isLast ? "\u2514\u2500" : "\u251C\u2500";
-          const imp = imports[i];
+          const imp = imports[i]!;
           const isLocal = imp.startsWith(".") || imp.startsWith("/");
           const tag = isLocal ? "" : " (external)";
           lines.push(`    ${prefix} ${imp}${tag}`);
@@ -104,7 +104,7 @@ export async function handleFileAction(
           for (const line of output.split("\n")) {
             const [sizeStr, ...pathParts] = line.split("\t");
             const filePath = pathParts.join("\t");
-            const size = parseInt(sizeStr) || 0;
+            const size = parseInt(sizeStr ?? "0") || 0;
             if (filePath) files.push({ path: filePath.replace(/^\.\//, ""), size });
           }
         }
@@ -145,8 +145,8 @@ export async function handleFileAction(
       const { execSync } = await import("node:child_process");
       const cwd = appConfig.workingDirectory;
 
-      const file1 = resolvePath(cwd, parts[0]);
-      const file2 = resolvePath(cwd, parts[1]);
+      const file1 = resolvePath(cwd, parts[0]!);
+      const file2 = resolvePath(cwd, parts[1]!);
 
       if (!existsSync(file1)) return `  File not found: ${parts[0]}`;
       if (!existsSync(file2)) return `  File not found: ${parts[1]}`;

@@ -36,7 +36,7 @@ export function mergeContinuation(previousText: string, continuation: string): M
   // the model restarted from that section — strip everything up to new content.
   const headingMatch = result.match(/^(#{1,4}\s+.+)/m);
   if (headingMatch) {
-    const heading = headingMatch[1].trim();
+    const heading = headingMatch[1]!.trim();
     if (heading.length >= 8 && previousText.includes(heading)) {
       repeatedPrefixDetected = true;
       // Find where the previous text's version of this section ends
@@ -51,7 +51,7 @@ export function mergeContinuation(previousText: string, continuation: string): M
           // Find first line in continuation that's genuinely new
           let newContentStart = headingContIdx;
           for (let i = headingContIdx; i < contLines.length; i++) {
-            const line = contLines[i].trim();
+            const line = contLines[i]!.trim();
             if (line.length < 5) continue;
             if (!previousText.includes(line)) {
               newContentStart = i;
@@ -71,7 +71,7 @@ export function mergeContinuation(previousText: string, continuation: string): M
     const tailLines = previousText.split("\n").slice(-15);
     const newLines = result.split("\n");
     for (let i = 0; i < Math.min(newLines.length, 10); i++) {
-      const line = newLines[i].trim();
+      const line = newLines[i]!.trim();
       if (line.length < 10) continue;
       const tailIdx = tailLines.findIndex(tl => tl.trim() === line);
       if (tailIdx >= 0) {
@@ -99,7 +99,7 @@ export function mergeContinuation(previousText: string, continuation: string): M
   if (result.length > 0) {
     const contParagraphs = result.split(/\n\n+/);
     if (contParagraphs.length >= 2) {
-      const firstPara = contParagraphs[0].trim();
+      const firstPara = contParagraphs[0]!.trim();
       // Only strip if the paragraph is in the LAST portion of previous text
       const prevTail = previousText.slice(-Math.max(500, firstPara.length * 2));
       if (firstPara.length >= 20 && prevTail.includes(firstPara)) {

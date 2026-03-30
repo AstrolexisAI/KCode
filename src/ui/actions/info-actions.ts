@@ -244,8 +244,8 @@ export async function handleInfoAction(
           const stat = execSync(`git diff --numstat -- "${f}" 2>/dev/null`, { cwd, timeout: 3000 }).toString().trim();
           if (stat) {
             const parts = stat.split("\t");
-            const added = parseInt(parts[0]) || 0;
-            const removed = parseInt(parts[1]) || 0;
+            const added = parseInt(parts[0] ?? "0") || 0;
+            const removed = parseInt(parts[1] ?? "0") || 0;
             totalAdded += added;
             totalRemoved += removed;
             lines.push(`  ${f}`);
@@ -312,7 +312,7 @@ export async function handleInfoAction(
 
       const detect = (cmd: string): string => {
         try {
-          return execSync(`${cmd} 2>/dev/null`, { cwd, timeout: 5000 }).toString().trim().split("\n")[0];
+          return execSync(`${cmd} 2>/dev/null`, { cwd, timeout: 5000 }).toString().trim().split("\n")[0] ?? "";
         } catch {
           return "";
         }
@@ -383,14 +383,13 @@ export async function handleInfoAction(
         } catch { /* use input as text */ }
       }
 
-      // Simple token estimation: ~4 chars per token for English text, ~3 for code
       const charCount = text.length;
       const wordCount = text.split(/\s+/).filter(Boolean).length;
       const lineCount = text.split("\n").length;
 
-      // Heuristic: code has more special chars
+      // Adaptive heuristic: code tokenizes more densely than prose
       const codeRatio = (text.match(/[{}()\[\];=<>|&]/g)?.length ?? 0) / Math.max(charCount, 1);
-      const charsPerToken = codeRatio > 0.02 ? 3.2 : 4.0;
+      const charsPerToken = codeRatio > 0.02 ? 3.2 : 3.5;
       const estimatedTokens = Math.round(charCount / charsPerToken);
 
       const contextSize = appConfig.contextWindowSize ?? 200000;
@@ -446,7 +445,7 @@ export async function handleInfoAction(
         lines.push(`  Top 5 Tools:`);
         const maxNameLen = Math.max(...topTools.map(t => t.tool.length));
         for (const t of topTools) {
-          const bar = "\u2588".repeat(Math.max(1, Math.round((t.count / topTools[0].count) * 20)));
+          const bar = "\u2588".repeat(Math.max(1, Math.round((t.count / topTools[0]!.count) * 20)));
           lines.push(`    ${t.tool.padEnd(maxNameLen + 2)}${bar} ${t.count} calls (${t.avgMs}ms avg)`);
         }
       }
@@ -560,7 +559,7 @@ export async function handleInfoAction(
           return `  Unknown category: "${category}"\n  Valid categories: ${validCategories.join(", ")}`;
         }
         const events = tracer.getEvents({
-          category: category as any,
+          category: category as "decision" | "routing" | "tool" | "context" | "permission" | "guard" | "hook" | "model" | undefined,
           limit: 50,
         });
         if (!tracer.isEnabled()) {

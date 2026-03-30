@@ -128,15 +128,15 @@ function parsePagesParam(pages: string): { first: number; last: number } | null 
   // Single page: "3"
   const singleMatch = trimmed.match(/^(\d+)$/);
   if (singleMatch) {
-    const page = parseInt(singleMatch[1], 10);
+    const page = parseInt(singleMatch[1]!, 10);
     return { first: page, last: page };
   }
 
   // Range: "1-5"
   const rangeMatch = trimmed.match(/^(\d+)-(\d+)$/);
   if (rangeMatch) {
-    const first = parseInt(rangeMatch[1], 10);
-    const last = parseInt(rangeMatch[2], 10);
+    const first = parseInt(rangeMatch[1]!, 10);
+    const last = parseInt(rangeMatch[2]!, 10);
     if (first > last) return null;
     return { first, last };
   }
@@ -151,7 +151,7 @@ function getPdfPageCount(filePath: string): number | null {
       timeout: 10000,
     }).trim();
     const match = output.match(/Pages:\s*(\d+)/i);
-    return match ? parseInt(match[1], 10) : null;
+    return match ? parseInt(match[1]!, 10) : null;
   } catch {
     return null;
   }
@@ -315,7 +315,7 @@ function readNotebook(filePath: string): ToolResult {
   ];
 
   for (let i = 0; i < notebook.cells.length; i++) {
-    const cell = notebook.cells[i];
+    const cell = notebook.cells[i]!;
     const source = Array.isArray(cell.source) ? cell.source.join("") : String(cell.source);
     const typeLabel = cell.cell_type === "code" ? "Code" : cell.cell_type === "markdown" ? "Markdown" : cell.cell_type;
     const execCount =
@@ -474,7 +474,7 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
     const msg = error instanceof Error ? error.message : String(error);
     return {
       tool_use_id: "",
-      content: `Error reading file: ${msg}`,
+      content: `Error reading "${file_path}": ${msg}`,
       is_error: true,
     };
   }

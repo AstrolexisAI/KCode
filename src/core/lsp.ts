@@ -167,7 +167,7 @@ export class LspManager {
             continue;
           }
 
-          const contentLength = parseInt(lengthMatch[1], 10);
+          const contentLength = parseInt(lengthMatch[1]!, 10);
           const bodyStart = headerEnd + 4;
           if (buffer.length < bodyStart + contentLength) break;
 

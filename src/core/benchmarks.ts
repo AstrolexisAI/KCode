@@ -155,11 +155,11 @@ export function getBenchmarkSummary(model?: string, days: number = 30): Benchmar
         if (!byTaskType[row.task_type]) {
           byTaskType[row.task_type] = { runs: 0, avgScore: 0 };
         }
-        byTaskType[row.task_type].runs++;
-        byTaskType[row.task_type].avgScore += row.score;
+        byTaskType[row.task_type]!.runs++;
+        byTaskType[row.task_type]!.avgScore += row.score;
       }
       for (const key of Object.keys(byTaskType)) {
-        byTaskType[key].avgScore /= byTaskType[key].runs;
+        byTaskType[key]!.avgScore /= byTaskType[key]!.runs;
       }
 
       // Trend: compare first half vs second half

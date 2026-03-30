@@ -277,7 +277,7 @@ export async function handleNetworkAction(
           const procInfo = parts[5] ?? "";
           const procName = procInfo.replace(/.*users:\(\("(.+?)".*/, "$1") || procInfo;
           const portMatch = addr.match(/:(\d+)$/);
-          const port = portMatch ? parseInt(portMatch[1]) : 0;
+          const port = portMatch ? parseInt(portMatch[1]!) : 0;
           const label = knownPorts[port] ? ` (${knownPorts[port]})` : "";
           lines.push(`  ${addr.padEnd(maxAddrLen)}  ${procName}${label}`);
         }

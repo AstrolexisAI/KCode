@@ -129,8 +129,8 @@ export class TranscriptManager {
       // Parse timestamp and prompt from filename
       // Format: 2026-03-12T10-30-00-some-prompt-slug.jsonl
       const match = filename.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)\.jsonl$/);
-      const startedAt = match ? match[1].replace(/-/g, (m, i) => (i > 9 ? ":" : m)) : filename;
-      const prompt = match ? match[2].replace(/-/g, " ") : filename;
+      const startedAt = match ? match[1]!.replace(/-/g, (m, i) => (i > 9 ? ":" : m)) : filename;
+      const prompt = match ? match[2]!.replace(/-/g, " ") : filename;
 
       return { filename, startedAt, prompt };
     });
@@ -171,7 +171,7 @@ export class TranscriptManager {
       if (excess > 0) {
         for (let i = 0; i < excess; i++) {
           try {
-            unlinkSync(join(TRANSCRIPTS_DIR, files[i]));
+            unlinkSync(join(TRANSCRIPTS_DIR, files[i]!));
           } catch (err) {
             log.debug("transcript", `Failed to delete old transcript ${files[i]}: ${err}`);
           }
@@ -183,7 +183,7 @@ export class TranscriptManager {
       for (const f of files) {
         const match = f.match(/^(\d{4}-\d{2}-\d{2})/);
         if (match) {
-          const fileDate = new Date(match[1]);
+          const fileDate = new Date(match[1]!);
           if (fileDate < cutoffDate) {
             try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch (err) { log.debug("transcript", `Failed to delete expired transcript ${f}: ${err}`); }
           }
@@ -212,7 +212,7 @@ export class TranscriptManager {
       .sort();
 
     if (files.length === 0) return null;
-    return files[files.length - 1];
+    return files[files.length - 1] ?? null;
   }
 
   /**
@@ -367,8 +367,8 @@ export class TranscriptManager {
 
     let duration = "unknown";
     try {
-      const startTime = new Date(entries[0].timestamp).getTime();
-      const endTime = new Date(lastEntry.timestamp).getTime();
+      const startTime = new Date(entries[0]!.timestamp).getTime();
+      const endTime = new Date(lastEntry!.timestamp).getTime();
       const mins = Math.round((endTime - startTime) / 60_000);
       duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
     } catch (err) { log.debug("transcript", `Failed to calculate session duration: ${err}`); }

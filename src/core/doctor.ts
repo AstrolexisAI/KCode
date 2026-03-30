@@ -49,7 +49,7 @@ async function dirSizeBytes(path: string): Promise<number> {
   try {
     const result = await runCommand(["du", "-sb", path]);
     if (result.ok) {
-      const bytes = parseInt(result.output.split("\t")[0], 10);
+      const bytes = parseInt(result.output.split("\t")[0]!, 10);
       return isNaN(bytes) ? 0 : bytes;
     }
   } catch (err) { log.debug("doctor", `Failed to get directory size for ${path}: ${err}`); }
@@ -130,7 +130,7 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
   // 6. Ripgrep
   const rgResult = await runCommand(["rg", "--version"]);
   if (rgResult.ok) {
-    const version = rgResult.output.split("\n")[0];
+    const version = rgResult.output.split("\n")[0]!;
     results.push({ name: "Ripgrep", status: "ok", message: version });
   } else {
     results.push({ name: "Ripgrep", status: "warn", message: "rg not found — file search may be limited" });
@@ -374,7 +374,7 @@ export async function runDeepDiagnostics(): Promise<DeepDiagnosticSection[]> {
       pluginItems.push({ label: "Plugins", value: "none installed" });
     } else {
       for (const p of plugins) {
-        const m = (p as any).manifest ?? p;
+        const m = (p as unknown as Record<string, unknown>).manifest as typeof p ?? p;
         pluginItems.push({
           label: m.name,
           value: `v${m.version} — ${m.description || "no description"}`,

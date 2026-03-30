@@ -212,7 +212,7 @@ export function convertToAnthropicMessages(
   }
 
   // Anthropic requires conversation to start with user message
-  if (result.length > 0 && result[0].role !== "user") {
+  if (result.length > 0 && result[0]!.role !== "user") {
     result.unshift({ role: "user", content: "Hello." });
   }
 

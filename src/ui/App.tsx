@@ -8,6 +8,7 @@ import type { KCodeConfig } from "../core/types.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
 import { SkillManager } from "../core/skills.js";
 import { useTheme } from "./ThemeContext.js";
+import { CHARS_PER_TOKEN } from "../core/token-budget.js";
 
 import Header from "./components/Header.js";
 import ToolTabs from "./components/ToolTabs.js";
@@ -402,18 +403,18 @@ export default function App({ config, conversationManager, tools, initialSession
           let toolTokens = 0;
           for (const msg of state.messages) {
             if (typeof msg.content === "string") {
-              const est = Math.round(msg.content.length / 4);
+              const est = Math.round(msg.content.length / CHARS_PER_TOKEN);
               if (msg.role === "user") messageTokens += est;
               else messageTokens += est;
             } else if (Array.isArray(msg.content)) {
               for (const block of msg.content) {
                 if (block.type === "text") {
-                  messageTokens += Math.round(block.text.length / 4);
+                  messageTokens += Math.round(block.text.length / CHARS_PER_TOKEN);
                 } else if (block.type === "tool_result") {
                   const c = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
-                  toolTokens += Math.round(c.length / 4);
+                  toolTokens += Math.round(c.length / CHARS_PER_TOKEN);
                 } else if (block.type === "tool_use") {
-                  toolTokens += Math.round(JSON.stringify(block.input).length / 4);
+                  toolTokens += Math.round(JSON.stringify(block.input).length / CHARS_PER_TOKEN);
                 }
               }
             }

@@ -198,8 +198,8 @@ export async function executeTaskList(input: Record<string, unknown>): Promise<T
   }
 
   const where = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rows = (db.query(`SELECT * FROM tasks${where} ORDER BY CAST(id AS INTEGER)`) as any).all(...params) as Record<string, unknown>[];
+  const stmt = db.prepare(`SELECT * FROM tasks${where} ORDER BY CAST(id AS INTEGER)`);
+  const rows = stmt.all(...params as string[]) as Record<string, unknown>[];
 
   if (rows.length === 0) {
     return { tool_use_id: "", content: "No tasks found." };
@@ -321,8 +321,7 @@ export async function executeTaskUpdate(input: Record<string, unknown>): Promise
   }
 
   params.push(id);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (db.query(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`) as any).run(...params);
+  db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).run(...params as string[]);
 
   // Re-read the updated row
   const updated = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown>;

@@ -91,7 +91,7 @@ export function detectPipeToShell(command: string): string | null {
 
   // Check each segment after the first
   for (let i = 1; i < segments.length; i++) {
-    const segment = segments[i].trimStart();
+    const segment = segments[i]!.trimStart();
     const prefix = extractCommandPrefix(segment);
     const basename = prefix.split("/").pop() ?? prefix;
 
@@ -215,7 +215,7 @@ export function detectNonShellExpression(command: string): string | null {
   // Extract the identifier before any parenthesis
   const funcMatch = trimmed.match(/^([A-Z][a-zA-Z]+)\s*\(/);
   if (funcMatch && !trimmed.includes("$(")) {
-    const funcName = funcMatch[1];
+    const funcName = funcMatch[1]!;
     const shellLikePascal = new Set(["Test", "Set", "New", "Get", "Install", "Remove", "Start", "Stop"]);
     if (!shellLikePascal.has(funcName)) {
       return `Non-shell expression: looks like a function call, not a shell command`;
@@ -235,15 +235,17 @@ export function detectNonShellExpression(command: string): string | null {
  */
 export function detectDestructiveRemoval(command: string): string | null {
   // Match rm with any flag combination that includes both -r and -f
-  // Covers: rm -rf, rm -fr, rm -rfv, rm -rvf, rm -frv, etc.
-  const rmRecursiveForce = /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*/;
-  if (!rmRecursiveForce.test(command)) return null;
+  // Covers short flags: rm -rf, rm -fr, rm -rfv, rm -rvf, rm -frv, etc.
+  const rmShortFlags = /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*/;
+  // Covers long flags: rm --recursive --force, rm --force --recursive (with optional short flags mixed in)
+  const rmLongFlags = /\brm\s+(?:--?\S+\s+)*--recursive\b.*--force\b|\brm\s+(?:--?\S+\s+)*--force\b.*--recursive\b/;
+  if (!rmShortFlags.test(command) && !rmLongFlags.test(command)) return null;
 
-  // Extract target: skip `rm`, skip all flag groups (-rf, -v, etc.), take the rest
-  const match = command.match(/\brm\s+(?:-[a-zA-Z]+\s+)+(.+)/);
+  // Extract target: skip `rm`, skip all flag groups (-rf, --recursive, --force, etc.), take the rest
+  const match = command.match(/\brm\s+(?:--?[a-zA-Z][\w-]*(?:=[^\s]*)?\s+)+(.+)/);
   if (!match) return null;
 
-  const targets = match[1].trim();
+  const targets = match[1]!.trim();
 
   // Allow removal of clearly safe targets
   const safePatterns = [

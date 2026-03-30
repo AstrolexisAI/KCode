@@ -2,7 +2,7 @@
 // Extracted from conversation.ts — side effects after the model responds:
 // response caching, knowledge distillation, benchmark scoring, suggestions, notifications
 
-import type { Message, StreamEvent, ConversationState } from "./types";
+import type { Message, StreamEvent, ConversationState, TextBlock } from "./types";
 import { log } from "./logger";
 import { getIntentionEngine } from "./intentions";
 import type { Suggestion } from "./intentions";
@@ -68,7 +68,7 @@ export function processKnowledgeAndBenchmark(
     initBenchmarkSchema();
     const lastAssistant = messages.filter(m => m.role === "assistant").pop();
     const responseText = lastAssistant
-      ? (typeof lastAssistant.content === "string" ? lastAssistant.content : lastAssistant.content.filter(b => b.type === "text").map(b => (b as any).text).join(""))
+      ? (typeof lastAssistant.content === "string" ? lastAssistant.content : lastAssistant.content.filter((b): b is TextBlock => b.type === "text").map(b => b.text).join(""))
       : "";
     const errorCount = messages.filter(m =>
       m.role === "assistant" && Array.isArray(m.content) &&

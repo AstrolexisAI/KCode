@@ -34,8 +34,8 @@ describe("extractToolCallsFromText: JSON code blocks", () => {
 \`\`\``;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Read");
-    expect(results[0].input).toEqual({ file_path: "/src/index.ts" });
+    expect(results[0]!.name).toBe("Read");
+    expect(results[0]!.input).toEqual({ file_path: "/src/index.ts" });
   });
 
   test("extracts tool call from ``` code block (no json label)", () => {
@@ -44,8 +44,8 @@ describe("extractToolCallsFromText: JSON code blocks", () => {
 \`\`\``;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Bash");
-    expect(results[0].input).toEqual({ command: "ls -la" });
+    expect(results[0]!.name).toBe("Bash");
+    expect(results[0]!.input).toEqual({ command: "ls -la" });
   });
 
   test("handles 'parameters' key as alias for 'arguments'", () => {
@@ -54,15 +54,15 @@ describe("extractToolCallsFromText: JSON code blocks", () => {
 \`\`\``;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Edit");
-    expect(results[0].input.old_string).toBe("a");
+    expect(results[0]!.name).toBe("Edit");
+    expect(results[0]!.input.old_string).toBe("a");
   });
 
   test("captures prefix text before the tool call", () => {
     const text = `I'll check the file now.\n\`\`\`json\n{"name": "Read", "arguments": {"file_path": "/x"}}\n\`\`\``;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].prefixText).toContain("I'll check the file now.");
+    expect(results[0]!.prefixText).toContain("I'll check the file now.");
   });
 });
 
@@ -73,8 +73,8 @@ describe("extractToolCallsFromText: raw JSON", () => {
     const text = `Sure, here: {"name": "Grep", "arguments": {"pattern": "TODO"}}`;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Grep");
-    expect(results[0].input).toEqual({ pattern: "TODO" });
+    expect(results[0]!.name).toBe("Grep");
+    expect(results[0]!.input).toEqual({ pattern: "TODO" });
   });
 
   test("handles 'function' key as alias for 'name'", () => {
@@ -82,7 +82,7 @@ describe("extractToolCallsFromText: raw JSON", () => {
     // Raw JSON pattern uses "name" or "function" or "tool"
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Bash");
+    expect(results[0]!.name).toBe("Bash");
   });
 });
 
@@ -93,8 +93,8 @@ describe("extractToolCallsFromText: bash code blocks", () => {
     const text = `Let me run this:\n\`\`\`bash\nls -la /tmp\n\`\`\``;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Bash");
-    expect(results[0].input.command).toBe("ls -la /tmp");
+    expect(results[0]!.name).toBe("Bash");
+    expect(results[0]!.input.command).toBe("ls -la /tmp");
   });
 
   test("ignores multiline bash blocks (explanation, not a command)", () => {
@@ -128,7 +128,7 @@ describe("extractToolCallsFromText: edge cases", () => {
     const text = `\`\`\`json\n{"name": "bash", "arguments": {"command": "echo hi"}}\n\`\`\``;
     const results = extractToolCallsFromText(text, defaultTools);
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe("Bash"); // Normalized to canonical case
+    expect(results[0]!.name).toBe("Bash"); // Normalized to canonical case
   });
 
   test("returns empty for empty text", () => {

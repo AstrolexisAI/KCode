@@ -111,11 +111,11 @@ function getFileCompletions(partial: string): string[] {
  */
 function commonPrefix(strings: string[]): string {
   if (strings.length === 0) return "";
-  if (strings.length === 1) return strings[0];
+  if (strings.length === 1) return strings[0]!;
 
-  let prefix = strings[0];
+  let prefix = strings[0]!;
   for (let i = 1; i < strings.length; i++) {
-    while (!strings[i].startsWith(prefix)) {
+    while (!strings[i]!.startsWith(prefix)) {
       prefix = prefix.slice(0, -1);
       if (prefix.length === 0) return "";
     }
@@ -263,7 +263,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     if (tabMatches.length > 1) {
       const nextIndex = (tabIndex + 1) % tabMatches.length;
       setTabIndex(nextIndex);
-      const completed = tabMatches[nextIndex];
+      const completed = tabMatches[nextIndex]!;
       setValue(completed);
       setCursor(completed.length);
       return;
@@ -302,8 +302,8 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
         setTabMatches(matches);
         setTabIndex(0);
         setTabOriginal(currentValue);
-        setValue(matches[0]);
-        setCursor(matches[0].length);
+        setValue(matches[0]!);
+        setCursor(matches[0]!.length);
       }
       return;
     }
@@ -343,8 +343,8 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       setTabMatches(fullMatches);
       setTabIndex(0);
       setTabOriginal(currentValue);
-      setValue(fullMatches[0]);
-      setCursor(fullMatches[0].length);
+      setValue(fullMatches[0]!);
+      setCursor(fullMatches[0]!.length);
     }
   }, [value, tabMatches, tabIndex, tabOriginal, completions, resetTabState]);
 

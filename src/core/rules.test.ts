@@ -42,9 +42,9 @@ describe("RulesManager", () => {
     rm_.load(tempDir);
     const rules = rm_.getMatchingRules("anything.ts");
     expect(rules).toHaveLength(1);
-    expect(rules[0].name).toBe("general");
-    expect(rules[0].content).toBe("Always use semicolons.");
-    expect(rules[0].paths).toEqual([]);
+    expect(rules[0]!.name).toBe("general");
+    expect(rules[0]!.content).toBe("Always use semicolons.");
+    expect(rules[0]!.paths).toEqual([]);
   });
 
   test("loading rules from .md files with YAML frontmatter", () => {
@@ -59,9 +59,9 @@ Use REST conventions.`);
     rm_.load(tempDir);
     const rules = rm_.getMatchingRules("src/api/users.ts");
     expect(rules).toHaveLength(1);
-    expect(rules[0].name).toBe("API Guidelines");
-    expect(rules[0].content).toBe("Use REST conventions.");
-    expect(rules[0].paths).toEqual(["src/api/**", "src/routes/**"]);
+    expect(rules[0]!.name).toBe("API Guidelines");
+    expect(rules[0]!.content).toBe("Use REST conventions.");
+    expect(rules[0]!.paths).toEqual(["src/api/**", "src/routes/**"]);
   });
 
   test("formatForPrompt() returns null with no global rules", () => {
@@ -136,7 +136,7 @@ Use describe/test blocks.`);
     rm_.load(tempDir);
     const rules = rm_.getMatchingRules("any.ts");
     expect(rules).toHaveLength(1);
-    expect(rules[0].name).toBe("actual");
+    expect(rules[0]!.name).toBe("actual");
   });
 });
 

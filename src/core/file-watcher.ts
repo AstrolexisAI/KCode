@@ -331,7 +331,7 @@ export class FileChangeSuggester {
 let _watcher: FileWatcher | null = null;
 
 export function getFileWatcher(cwd: string): FileWatcher {
-  if (!_watcher || (_watcher as any).cwd !== cwd) {
+  if (!_watcher || (_watcher as unknown as { cwd: string }).cwd !== cwd) {
     _watcher?.stop();
     _watcher = new FileWatcher(cwd);
   }
@@ -351,7 +351,7 @@ export function getFileChangeSuggester(cwd: string): FileChangeSuggester {
 
   // Always wire to the current watcher (handles cwd changes)
   const watcher = getFileWatcher(cwd);
-  if (!(watcher as any)._suggesterWired) {
+  if (!(watcher as FileWatcher & { _suggesterWired?: boolean })._suggesterWired) {
     const originalStart = watcher.start.bind(watcher);
     watcher.start = (callback: FileChangeCallback) => {
       originalStart((changes) => {
@@ -359,7 +359,7 @@ export function getFileChangeSuggester(cwd: string): FileChangeSuggester {
         callback(changes);
       });
     };
-    (watcher as any)._suggesterWired = true;
+    (watcher as FileWatcher & { _suggesterWired?: boolean })._suggesterWired = true;
   }
   return _suggester;
 }

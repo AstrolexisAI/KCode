@@ -20,7 +20,7 @@ export function registerResumeCommand(program: Command): void {
       console.log(`\nRecent sessions (${count} of ${sessions.length}):\n`);
 
       for (let i = 0; i < count; i++) {
-        const s = sessions[i];
+        const s = sessions[i]!;
         const date = s.startedAt.replace("T", " ");
         const prompt = s.prompt.slice(0, 60);
         console.log(`  \x1b[36m${i + 1}.\x1b[0m ${date}  ${prompt}`);

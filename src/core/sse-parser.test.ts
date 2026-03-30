@@ -86,10 +86,10 @@ describe("parseSSEStream", () => {
     const chunks = await collect(parseSSEStream(resp));
     const toolChunks = chunks.filter((c) => c.type === "tool_call_delta");
     expect(toolChunks.length).toBe(2);
-    expect(toolChunks[0].toolCallId).toBe("call_abc");
-    expect(toolChunks[0].functionName).toBe("Read");
-    expect(toolChunks[0].functionArgDelta).toBe('{"file');
-    expect(toolChunks[1].functionArgDelta).toBe('_path":"/x"}');
+    expect(toolChunks[0]!.toolCallId).toBe("call_abc");
+    expect(toolChunks[0]!.functionName).toBe("Read");
+    expect(toolChunks[0]!.functionArgDelta).toBe('{"file');
+    expect(toolChunks[1]!.functionArgDelta).toBe('_path":"/x"}');
   });
 
   test("parses reasoning_content as thinking_delta", async () => {
@@ -100,7 +100,7 @@ describe("parseSSEStream", () => {
     const chunks = await collect(parseSSEStream(resp));
     const thinking = chunks.filter((c) => c.type === "thinking_delta");
     expect(thinking.length).toBe(1);
-    expect(thinking[0].thinking).toBe("Let me think...");
+    expect(thinking[0]!.thinking).toBe("Let me think...");
   });
 
   test("parses finish reason", async () => {
@@ -111,7 +111,7 @@ describe("parseSSEStream", () => {
     const chunks = await collect(parseSSEStream(resp));
     const finish = chunks.filter((c) => c.type === "finish");
     expect(finish.length).toBe(1);
-    expect(finish[0].finishReason).toBe("stop");
+    expect(finish[0]!.finishReason).toBe("stop");
   });
 
   test("parses usage information", async () => {
@@ -125,8 +125,8 @@ describe("parseSSEStream", () => {
     const chunks = await collect(parseSSEStream(resp));
     const usage = chunks.filter((c) => c.type === "usage");
     expect(usage.length).toBe(1);
-    expect(usage[0].promptTokens).toBe(100);
-    expect(usage[0].completionTokens).toBe(50);
+    expect(usage[0]!.promptTokens).toBe(100);
+    expect(usage[0]!.completionTokens).toBe(50);
   });
 
   test("parses usage-only messages (no choices)", async () => {
@@ -137,7 +137,7 @@ describe("parseSSEStream", () => {
     const chunks = await collect(parseSSEStream(resp));
     const usage = chunks.filter((c) => c.type === "usage");
     expect(usage.length).toBe(1);
-    expect(usage[0].promptTokens).toBe(200);
+    expect(usage[0]!.promptTokens).toBe(200);
   });
 
   test("skips malformed JSON lines gracefully", async () => {
@@ -213,8 +213,8 @@ describe("parseSSEStream", () => {
     const chunks = await collect(parseSSEStream(resp));
     const tools = chunks.filter((c) => c.type === "tool_call_delta");
     expect(tools.length).toBe(2);
-    expect(tools[0].functionName).toBe("Read");
-    expect(tools[1].functionName).toBe("Glob");
+    expect(tools[0]!.functionName).toBe("Read");
+    expect(tools[1]!.functionName).toBe("Glob");
   });
 });
 
@@ -232,8 +232,8 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const content = chunks.filter((c) => c.type === "content_delta");
     expect(content.length).toBe(2);
-    expect(content[0].content).toBe("Hello");
-    expect(content[1].content).toBe(" world");
+    expect(content[0]!.content).toBe("Hello");
+    expect(content[1]!.content).toBe(" world");
   });
 
   test("parses thinking_delta", async () => {
@@ -246,7 +246,7 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const thinking = chunks.filter((c) => c.type === "thinking_delta");
     expect(thinking.length).toBe(1);
-    expect(thinking[0].thinking).toBe("reasoning...");
+    expect(thinking[0]!.thinking).toBe("reasoning...");
   });
 
   test("parses tool_use blocks", async () => {
@@ -269,10 +269,10 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const toolChunks = chunks.filter((c) => c.type === "tool_call_delta");
     expect(toolChunks.length).toBe(3); // start + 2 input deltas
-    expect(toolChunks[0].functionName).toBe("Bash");
-    expect(toolChunks[0].toolCallId).toBe("tu_1");
-    expect(toolChunks[1].functionArgDelta).toBe('{"command":');
-    expect(toolChunks[2].functionArgDelta).toBe('"ls"}');
+    expect(toolChunks[0]!.functionName).toBe("Bash");
+    expect(toolChunks[0]!.toolCallId).toBe("tu_1");
+    expect(toolChunks[1]!.functionArgDelta).toBe('{"command":');
+    expect(toolChunks[2]!.functionArgDelta).toBe('"ls"}');
   });
 
   test("parses message_start usage", async () => {
@@ -285,7 +285,7 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const usage = chunks.filter((c) => c.type === "usage");
     expect(usage.length).toBe(1);
-    expect(usage[0].promptTokens).toBe(500);
+    expect(usage[0]!.promptTokens).toBe(500);
   });
 
   test("maps Anthropic stop reasons to internal format", async () => {
@@ -296,7 +296,7 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const finish = chunks.filter((c) => c.type === "finish");
     expect(finish.length).toBe(1);
-    expect(finish[0].finishReason).toBe("stop");
+    expect(finish[0]!.finishReason).toBe("stop");
   });
 
   test("maps tool_use stop reason to tool_calls", async () => {
@@ -306,7 +306,7 @@ describe("parseAnthropicSSEStream", () => {
     ]);
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const finish = chunks.filter((c) => c.type === "finish");
-    expect(finish[0].finishReason).toBe("tool_calls");
+    expect(finish[0]!.finishReason).toBe("tool_calls");
   });
 
   test("maps max_tokens stop reason to length", async () => {
@@ -316,7 +316,7 @@ describe("parseAnthropicSSEStream", () => {
     ]);
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const finish = chunks.filter((c) => c.type === "finish");
-    expect(finish[0].finishReason).toBe("length");
+    expect(finish[0]!.finishReason).toBe("length");
   });
 
   test("parses error events", async () => {
@@ -326,7 +326,7 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const errors = chunks.filter((c) => c.type === "error");
     expect(errors.length).toBe(1);
-    expect(errors[0].content).toBe("rate limit exceeded");
+    expect(errors[0]!.content).toBe("rate limit exceeded");
   });
 
   test("handles message_delta with output usage", async () => {
@@ -340,7 +340,7 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const usage = chunks.filter((c) => c.type === "usage");
     expect(usage.length).toBe(1);
-    expect(usage[0].completionTokens).toBe(250);
+    expect(usage[0]!.completionTokens).toBe(250);
   });
 
   test("skips malformed JSON in Anthropic stream", async () => {
@@ -352,7 +352,7 @@ describe("parseAnthropicSSEStream", () => {
     const chunks = await collect(parseAnthropicSSEStream(resp));
     const content = chunks.filter((c) => c.type === "content_delta");
     expect(content.length).toBe(1);
-    expect(content[0].content).toBe("ok");
+    expect(content[0]!.content).toBe("ok");
   });
 });
 
@@ -373,7 +373,7 @@ describe("SSE Parser — empty response edge cases", () => {
     expect(thinking.length).toBe(2);
     expect(content.length).toBe(0);
     expect(finish.length).toBe(1);
-    expect(finish[0].finishReason).toBe("stop");
+    expect(finish[0]!.finishReason).toBe("stop");
   });
 
   test("tool-calls-only stream: tool_calls but no content", async () => {
@@ -428,6 +428,6 @@ describe("SSE Parser — empty response edge cases", () => {
     const chunks = await collect(parseSSEStream(resp));
     const finish = chunks.filter(c => c.type === "finish");
     expect(finish.length).toBe(1);
-    expect(finish[0].finishReason).toBe("length");
+    expect(finish[0]!.finishReason).toBe("length");
   });
 });

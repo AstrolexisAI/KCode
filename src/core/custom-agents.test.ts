@@ -253,8 +253,8 @@ test`);
     const agents = loadCustomAgents(tmpDir);
     const agent = agents.find(a => a.name === "mcp-agent");
     expect(agent!.mcpServers).toBeDefined();
-    expect(agent!.mcpServers!.github.command).toBe("npx");
-    expect(agent!.mcpServers!.github.args).toEqual(["@mcp/github"]);
+    expect(agent!.mcpServers!.github!.command).toBe("npx");
+    expect(agent!.mcpServers!.github!.args).toEqual(["@mcp/github"]);
   });
 
   test("parses hooks from JSON", async () => {

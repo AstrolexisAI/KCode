@@ -33,7 +33,7 @@ export async function executeCronList(_input: Record<string, unknown>): Promise<
     const jobs: string[] = [];
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+      const line = lines[i]!.trim();
       // Parse: min hour dom mon dow command
       const match = line.match(/^(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)$/);
       if (match) {
@@ -258,5 +258,5 @@ export async function executeCronDelete(input: Record<string, unknown>): Promise
 
 function extractKcodeId(line: string): string | null {
   const match = line.match(/#kcode:(\S+)/);
-  return match ? match[1] : null;
+  return match ? match[1]! : null;
 }

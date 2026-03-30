@@ -72,7 +72,7 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
     const msg = error instanceof Error ? error.message : String(error);
     return {
       tool_use_id: "",
-      content: `Error writing file: ${msg}`,
+      content: `Error writing "${file_path}": ${msg}`,
       is_error: true,
     };
   }

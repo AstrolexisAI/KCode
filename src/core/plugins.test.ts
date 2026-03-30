@@ -49,9 +49,9 @@ describe("PluginManager", () => {
     pm.load(tempDir);
     const plugins = pm.getPlugins();
     expect(plugins).toHaveLength(1);
-    expect(plugins[0].name).toBe("my-plugin");
-    expect(plugins[0].version).toBe("1.0.0");
-    expect(plugins[0].description).toBe("A test plugin");
+    expect(plugins[0]!.name).toBe("my-plugin");
+    expect(plugins[0]!.version).toBe("1.0.0");
+    expect(plugins[0]!.description).toBe("A test plugin");
   });
 
   test("duplicate plugin name detection skips second", () => {
@@ -73,7 +73,7 @@ describe("PluginManager", () => {
     pm.load(tempDir);
     const plugins = pm.getPlugins();
     expect(plugins).toHaveLength(1);
-    expect(plugins[0].name).toBe("dupe");
+    expect(plugins[0]!.name).toBe("dupe");
   });
 
   test("getMcpConfigs() prefixes with plugin name", () => {
@@ -92,9 +92,9 @@ describe("PluginManager", () => {
     pm.load(tempDir);
     const configs = pm.getMcpConfigs();
     expect(configs).toHaveProperty("mcp-plugin__myServer");
-    expect(configs["mcp-plugin__myServer"].command).toBe("node");
-    expect(configs["mcp-plugin__myServer"].args).toEqual(["server.js"]);
-    expect(configs["mcp-plugin__myServer"].env).toEqual({ FOO: "bar" });
+    expect(configs["mcp-plugin__myServer"]!.command).toBe("node");
+    expect(configs["mcp-plugin__myServer"]!.args).toEqual(["server.js"]);
+    expect(configs["mcp-plugin__myServer"]!.env).toEqual({ FOO: "bar" });
   });
 
   test("getHookConfigs() returns proper structure", () => {
@@ -115,12 +115,12 @@ describe("PluginManager", () => {
     pm.load(tempDir);
     const hooks = pm.getHookConfigs();
     expect(hooks).toHaveLength(2);
-    expect(hooks[0].pluginName).toBe("hook-plugin");
-    expect(hooks[0].event).toBe("pre-commit");
-    expect(hooks[0].command).toBe("lint");
-    expect(hooks[0].args).toEqual(["--fix"]);
-    expect(hooks[1].event).toBe("post-edit");
-    expect(hooks[1].command).toBe("format");
+    expect(hooks[0]!.pluginName).toBe("hook-plugin");
+    expect(hooks[0]!.event).toBe("pre-commit");
+    expect(hooks[0]!.command).toBe("lint");
+    expect(hooks[0]!.args).toEqual(["--fix"]);
+    expect(hooks[1]!.event).toBe("post-edit");
+    expect(hooks[1]!.command).toBe("format");
   });
 
   test("getSkillPaths() resolves absolute paths", () => {
@@ -149,7 +149,7 @@ describe("PluginManager", () => {
     pm.load(tempDir);
     const paths = pm.getSkillPaths();
     expect(paths).toHaveLength(1);
-    expect(paths[0]).toContain("exists.md");
+    expect(paths[0]!).toContain("exists.md");
   });
 
   test("formatList() with 0 plugins", () => {

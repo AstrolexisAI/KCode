@@ -139,7 +139,7 @@ serve({ port: 3000, fetch() { return new Response(html); } });
     });
 
     expect(result.is_error).toBe(true);
-    expect(result.content).toContain("Error writing file");
+    expect(result.content).toContain("Error writing");
   });
 
   // ─── Empty content ───

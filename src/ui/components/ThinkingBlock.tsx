@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Text } from "ink";
 import { useTheme } from "../ThemeContext.js";
+import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
 
 interface ThinkingBlockProps {
   /** The thinking text content */
@@ -55,7 +56,7 @@ export default function ThinkingBlock({
     // Show last few lines as live preview
     const lines = text.split("\n");
     const previewLines = lines.slice(-MAX_PREVIEW_LINES);
-    const tokEstimate = Math.round(charCount / 4);
+    const tokEstimate = Math.round(charCount / CHARS_PER_TOKEN);
     const statsText = `${tokEstimate > 0 ? `~${tokEstimate} tok` : ""}${elapsed > 0 ? ` · ${elapsed}s` : ""}`;
 
     return (
@@ -99,7 +100,7 @@ export default function ThinkingBlock({
 
   // Completed thinking — collapsed view
   if (!expanded) {
-    const tokEstimate = Math.round(charCount / 4);
+    const tokEstimate = Math.round(charCount / CHARS_PER_TOKEN);
     return (
       <Box paddingLeft={1}>
         <Text color={violet}>

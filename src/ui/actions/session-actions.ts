@@ -2,6 +2,7 @@
 // Auto-extracted from builtin-actions.ts
 
 import type { ActionContext } from "./action-helpers.js";
+import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
 
 export async function handleSessionAction(
   action: string,
@@ -117,10 +118,10 @@ export async function handleSessionAction(
         `  Messages: ${state.messages.length} | Tool calls: ${state.toolUseCount}`,
         ``,
         `  Breakdown by category:`,
-        `  User prompts   ${miniBar(pctOf(userChars))} ${pctOf(userChars)}% (${Math.round(userChars / 4).toLocaleString()} est. tokens)`,
-        `  Assistant text  ${miniBar(pctOf(assistantChars))} ${pctOf(assistantChars)}% (${Math.round(assistantChars / 4).toLocaleString()} est. tokens)`,
-        `  Tool results    ${miniBar(pctOf(toolResultChars))} ${pctOf(toolResultChars)}% (${Math.round(toolResultChars / 4).toLocaleString()} est. tokens)`,
-        `  Thinking        ${miniBar(pctOf(thinkingChars))} ${pctOf(thinkingChars)}% (${Math.round(thinkingChars / 4).toLocaleString()} est. tokens)`,
+        `  User prompts   ${miniBar(pctOf(userChars))} ${pctOf(userChars)}% (${Math.round(userChars / CHARS_PER_TOKEN).toLocaleString()} est. tokens)`,
+        `  Assistant text  ${miniBar(pctOf(assistantChars))} ${pctOf(assistantChars)}% (${Math.round(assistantChars / CHARS_PER_TOKEN).toLocaleString()} est. tokens)`,
+        `  Tool results    ${miniBar(pctOf(toolResultChars))} ${pctOf(toolResultChars)}% (${Math.round(toolResultChars / CHARS_PER_TOKEN).toLocaleString()} est. tokens)`,
+        `  Thinking        ${miniBar(pctOf(thinkingChars))} ${pctOf(thinkingChars)}% (${Math.round(thinkingChars / CHARS_PER_TOKEN).toLocaleString()} est. tokens)`,
       ];
 
       if (usage.cacheReadInputTokens > 0 || usage.cacheCreationInputTokens > 0) {
@@ -309,8 +310,8 @@ export async function handleSessionAction(
       const parts = args.trim().split(/\s+/);
       if (parts.length < 3) return "  Usage: /compare <model1> <model2> <prompt>";
 
-      const model1 = parts[0];
-      const model2 = parts[1];
+      const model1 = parts[0]!;
+      const model2 = parts[1]!;
       const prompt = parts.slice(2).join(" ");
 
       const { getModelBaseUrl } = await import("../../core/models.js");
@@ -336,9 +337,11 @@ export async function handleSessionAction(
             }),
             signal: AbortSignal.timeout(30000),
           });
-          const data = await resp.json() as any;
-          const text = data.choices?.[0]?.message?.content ?? "(no response)";
-          const tokens = data.usage?.total_tokens ?? 0;
+          const data = await resp.json() as Record<string, unknown>;
+          const choices = data.choices as Record<string, unknown>[] | undefined;
+          const usage = data.usage as Record<string, unknown> | undefined;
+          const text = String((choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(no response)");
+          const tokens = Number(usage?.total_tokens ?? 0);
           return { text, tokens, timeMs: Date.now() - start };
         } catch (err) {
           return { text: `Error: ${err instanceof Error ? err.message : String(err)}`, tokens: 0, timeMs: Date.now() - start };
@@ -548,11 +551,11 @@ export async function handleSessionAction(
       let toolCallCount = 0;
 
       for (let i = 0; i < state.messages.length; i++) {
-        const msg = state.messages[i];
+        const msg = state.messages[i]!;
         const num = `#${(i + 1).toString().padStart(3)}`;
 
         if (typeof msg.content === "string") {
-          const preview = msg.content.split("\n")[0].slice(0, 70);
+          const preview = msg.content.split("\n")[0]!.slice(0, 70);
           const icon = msg.role === "user" ? "\u25B6" : "\u25C0";
           lines.push(`  ${num} ${icon} [${msg.role}] ${preview}${msg.content.length > 70 ? "..." : ""}`);
         } else {
@@ -563,8 +566,8 @@ export async function handleSessionAction(
           toolCallCount += toolBlocks.length;
 
           if (textBlocks.length > 0) {
-            const firstText = textBlocks[0].type === "text" ? textBlocks[0].text : "";
-            const preview = firstText.split("\n")[0].slice(0, 60);
+            const firstText = textBlocks[0]!.type === "text" ? textBlocks[0]!.text : "";
+            const preview = firstText.split("\n")[0]!.slice(0, 60);
             const icon = msg.role === "user" ? "\u25B6" : "\u25C0";
             lines.push(`  ${num} ${icon} [${msg.role}] ${preview}${firstText.length > 60 ? "..." : ""}`);
           }
@@ -633,7 +636,7 @@ export async function handleSessionAction(
       const matches: string[] = [];
 
       for (let i = 0; i < state.messages.length; i++) {
-        const msg = state.messages[i];
+        const msg = state.messages[i]!;
         let texts: string[] = [];
 
         if (typeof msg.content === "string") {
@@ -775,8 +778,8 @@ export async function handleSessionAction(
         const parts = arg.slice(5).trim().split(/\s+/);
         if (parts.length < 2) return "  Usage: /snapshots diff <id1> <id2>";
 
-        const snapA = loadSnapshot(parts[0]);
-        const snapB = loadSnapshot(parts[1]);
+        const snapA = loadSnapshot(parts[0]!);
+        const snapB = loadSnapshot(parts[1]!);
         if (!snapA) return `  Snapshot not found: ${parts[0]}`;
         if (!snapB) return `  Snapshot not found: ${parts[1]}`;
 

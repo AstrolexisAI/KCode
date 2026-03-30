@@ -63,7 +63,7 @@ export function extractExample(
   let queryIdx = -1;
 
   for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
+    const msg = messages[i]!;
     if (msg.role === "user" && typeof msg.content === "string") {
       // Skip system injections
       if (msg.content.startsWith("[SYSTEM]")) continue;
@@ -84,7 +84,7 @@ export function extractExample(
   let hasErrors = false;
 
   for (let i = queryIdx + 1; i < messages.length; i++) {
-    const msg = messages[i];
+    const msg = messages[i]!;
 
     if (msg.role === "assistant" && Array.isArray(msg.content)) {
       for (const block of msg.content) {

@@ -49,7 +49,7 @@ RULES:
 - After using tools, summarize what you did.`;
   }
 
-  static async build(config: KCodeConfig, version?: string): Promise<string> {
+  static async build(config: KCodeConfig, version?: string, toolTokenOverhead = 0): Promise<string> {
     // If the user overrides the entire system prompt, return it directly
     if (config.systemPromptOverride) {
       return config.systemPromptOverride;
@@ -64,7 +64,7 @@ RULES:
       }
     } catch { /* module not loaded */ }
 
-    const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000);
+    const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000, toolTokenOverhead);
     const sections: PromptSection[] = [];
 
     // ─── Critical sections (never truncated) ───────────────────
@@ -101,14 +101,14 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
     }
 
     // User-defined awareness modules (~/.kcode/awareness/*.md)
-    // HIGH priority — these contain critical operational knowledge (networking, smart home, etc.)
+    // MEDIUM priority — droppable when token budget is tight (e.g., small context windows)
     for (const mod of this.loadAwarenessModules()) {
-      sections.push({ content: mod, priority: SectionPriority.HIGH, label: "awareness-global" });
+      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-global" });
     }
 
     // Project-level awareness (.kcode/awareness/*.md in project)
     for (const mod of this.loadAwarenessModules(config.workingDirectory)) {
-      sections.push({ content: mod, priority: SectionPriority.HIGH, label: "awareness-project" });
+      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-project" });
     }
 
     // Project-specific instructions

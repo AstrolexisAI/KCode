@@ -33,7 +33,7 @@ export function registerMcpCommand(program: Command): void {
           found = true;
           console.log(`\n  ${scope === "user" ? "User" : "Project"} servers (${path}):`);
           for (const [name, config] of entries) {
-            const cfg = config as any;
+            const cfg = config as { command?: string; args?: string[] };
             const cmd = cfg.command ?? "(unknown)";
             const args = cfg.args ? ` ${cfg.args.join(" ")}` : "";
             console.log(`    ${name} — ${cmd}${args}`);

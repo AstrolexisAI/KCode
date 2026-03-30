@@ -114,9 +114,9 @@ async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boo
       const parts = line.split(",").map((s) => s.trim());
       if (parts.length >= 3) {
         gpus.push({
-          index: parseInt(parts[0], 10),
-          name: parts[1],
-          vramMB: parseInt(parts[2], 10),
+          index: parseInt(parts[0]!, 10),
+          name: parts[1]!,
+          vramMB: parseInt(parts[2]!, 10),
         });
       }
     }

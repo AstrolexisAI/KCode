@@ -66,7 +66,7 @@ export async function executeUndo(input: Record<string, unknown>): Promise<ToolR
     }
     const lines: string[] = [`Undo stack (${all.length} action${all.length === 1 ? "" : "s"}, most recent first):`];
     for (let i = 0; i < Math.min(all.length, 10); i++) {
-      const a = all[i];
+      const a = all[i]!;
       const age = Math.round((Date.now() - a.timestamp) / 1000);
       const files = a.snapshots.length <= 2
         ? a.snapshots.map((s) => s.filePath.split("/").pop()).join(", ")

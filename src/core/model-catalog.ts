@@ -197,7 +197,7 @@ export function recommendModel(hw: HardwareInfo): CatalogEntry {
     }
   }
 
-  return cpuBest ?? MODEL_CATALOG[0];
+  return cpuBest ?? MODEL_CATALOG[0]!;
 }
 
 /** Find a catalog entry by codename */
