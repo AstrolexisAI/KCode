@@ -57,7 +57,7 @@ describe("System prompt policy sections", () => {
 describe("looksIncomplete — tool_use path coverage", () => {
   // These simulate text that would appear before tool calls
   // where stopReason is "tool_use" but text is truncated
-  const pad = (s: string) => "x".repeat(80) + " " + s;
+  const pad = (s: string) => "x".repeat(60) + " " + s;
 
   test("detects 'with' at end (common tool_use truncation)", () => {
     expect(looksIncomplete(pad("The algorithm works best with"))).toBe(true);
@@ -108,11 +108,11 @@ describe("looksIncomplete — tool_use path coverage", () => {
   });
 
   test("detects short post-tool truncation ending with 'en'", () => {
-    expect(looksIncomplete(pad("Para ver los cambios, abre ese URL en"))).toBe(true);
+    expect(looksIncomplete("Para ver los cambios, abre ese URL en")).toBe(true);
   });
 
   test("detects short truncation ending mid-word", () => {
-    expect(looksIncomplete(pad("Ahora voy a verificar que todo funcione co"))).toBe(true);
+    expect(looksIncomplete("Ahora voy a verificar que todo funcione co")).toBe(true);
   });
 
   test("does not trigger on intentionally short complete sentence", () => {

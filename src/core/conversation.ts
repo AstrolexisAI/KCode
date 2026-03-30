@@ -1066,10 +1066,9 @@ export class ConversationManager {
         }
 
         // Truncation heuristic: detect suspiciously incomplete responses
-        // Only check when the model was cut off by token limit (max_tokens) — if the model
-        // chose to stop (end_turn), respect that decision. Short responses like "Hola" are
-        // legitimate end_turn completions, not truncations.
-        if (hasTextOutput && stopReason === "max_tokens") {
+        // Check on end_turn too — llama.cpp reports "stop" even when the model hit token limits
+        // (especially with thinking mode consuming most of max_tokens).
+        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "max_tokens")) {
           let fullText = textChunks.join("").trim();
 
           // Dedup: if this is a continuation and the model repeated content
