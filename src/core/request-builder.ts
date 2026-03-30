@@ -132,6 +132,16 @@ export async function buildRequestForModel(
     }
   } catch { /* module not loaded */ }
 
+  // Tool budget cap: if tool definitions would consume >15% of context window,
+  // fall back to essential tools only. Prevents bloating simple prompts with 27K+ tokens.
+  const contextWindow = config.contextWindowSize ?? 32_000;
+  const toolOverhead = estimateToolDefinitionTokens(tools, profileToolFilter ?? undefined);
+  if (toolOverhead > contextWindow * 0.15 && !profileToolFilter) {
+    const ESSENTIAL_TOOLS = new Set(["Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep", "GrepReplace", "LS"]);
+    profileToolFilter = (name: string) => ESSENTIAL_TOOLS.has(name);
+    log.info("llm", `Tool budget cap: ${toolOverhead} tokens > 15% of ${contextWindow}. Reduced to essential tools.`);
+  }
+
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   if (provider === "anthropic") {

@@ -67,8 +67,8 @@ describe("Think tag parser — <thinking> variant", () => {
 // ─── looksIncomplete — truncation detection ─────────────────────
 
 describe("looksIncomplete", () => {
-  // Pad short strings to exceed the 50-char minimum
-  const pad = (s: string) => "x".repeat(60) + " " + s;
+  // Pad short strings to exceed the 80-char minimum
+  const pad = (s: string) => "x".repeat(80) + " " + s;
 
   test("returns false for short text", () => {
     expect(looksIncomplete("ok")).toBe(false);
