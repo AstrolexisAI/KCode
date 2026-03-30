@@ -64,7 +64,13 @@ RULES:
       }
     } catch { /* module not loaded */ }
 
-    const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000, toolTokenOverhead);
+    // Local models (llama.cpp, Ollama) struggle with massive prompts.
+    // Detect local by checking if apiBase points to localhost.
+    const apiBase = config.apiBase ?? "";
+    const isLocal = apiBase.includes("localhost") || apiBase.includes("127.0.0.1") || apiBase.startsWith("http://[::1]");
+    const maxPromptTokens = isLocal ? 4_000 : undefined; // 4K for local, 24K default for cloud
+
+    const budgetManager = new TokenBudgetManager(config.contextWindowSize ?? 32_000, toolTokenOverhead, maxPromptTokens);
     const sections: PromptSection[] = [];
 
     // ─── Critical sections (never truncated) ───────────────────
