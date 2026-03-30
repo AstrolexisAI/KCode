@@ -289,6 +289,15 @@ export class ConversationManager {
     // Ensure system prompt is built (async due to Pro check in distillation)
     await this._systemPromptReady;
 
+    // Adaptive prompt: rebuild on first message so local models get lite prompt
+    // for simple queries (e.g., "hola") instead of the full 8K+ prompt.
+    if (this.state.messages.length === 0) {
+      const toolOverhead = estimateToolDefinitionTokens(this.tools);
+      const candidate = await SystemPromptBuilder.build(this.config, this.config.version, toolOverhead, userMessage);
+      this.systemPrompt = candidate;
+      this.systemPromptHash = this.hashString(candidate);
+    }
+
     // Session limit check: enforce 50/month cap for free users (first message only)
     if (this.state.messages.length === 0) {
       const { checkSessionLimit } = await import("./pro.js");
