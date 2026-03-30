@@ -120,13 +120,13 @@ describe("tool-cache", () => {
     expect(cache.size).toBe(200);
 
     // The first entry (oldest, never accessed again) should have been evicted
-    const firstKey = cache.makeKey("Read", files[0]);
-    const firstResult = cache.get(firstKey, files[0]);
+    const firstKey = cache.makeKey("Read", files[0]!);
+    const firstResult = cache.get(firstKey, files[0]!);
     expect(firstResult).toBeNull();
 
     // The last entry should still be present
-    const lastKey = cache.makeKey("Read", files[200]);
-    const lastResult = cache.get(lastKey, files[200]);
+    const lastKey = cache.makeKey("Read", files[200]!);
+    const lastResult = cache.get(lastKey, files[200]!);
     expect(lastResult).toBe("result-200");
   });
 

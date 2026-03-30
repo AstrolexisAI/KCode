@@ -28,10 +28,10 @@ describe("debug-tracer", () => {
     tracer.trace("decision", "chose plan A", "it was faster");
     expect(tracer.size).toBe(1);
     const events = tracer.getEvents();
-    expect(events[0].category).toBe("decision");
-    expect(events[0].action).toBe("chose plan A");
-    expect(events[0].reason).toBe("it was faster");
-    expect(events[0].timestamp).toBeGreaterThan(0);
+    expect(events[0]!.category).toBe("decision");
+    expect(events[0]!.action).toBe("chose plan A");
+    expect(events[0]!.reason).toBe("it was faster");
+    expect(events[0]!.timestamp).toBeGreaterThan(0);
   });
 
   test("trace is a no-op when disabled", () => {
@@ -43,7 +43,7 @@ describe("debug-tracer", () => {
     tracer.enable();
     tracer.trace("tool", "selected Grep", "pattern match", { pattern: "foo" });
     const events = tracer.getEvents();
-    expect(events[0].details).toEqual({ pattern: "foo" });
+    expect(events[0]!.details).toEqual({ pattern: "foo" });
   });
 
   // ─── Filtering ───
@@ -66,7 +66,7 @@ describe("debug-tracer", () => {
     }
     const limited = tracer.getEvents({ limit: 3 });
     expect(limited.length).toBe(3);
-    expect(limited[0].action).toBe("action-7"); // last 3
+    expect(limited[0]!.action).toBe("action-7"); // last 3
   });
 
   test("getEvents filters by since timestamp", () => {
@@ -83,7 +83,7 @@ describe("debug-tracer", () => {
 
     const recent = tracer.getEvents({ since: cutoff });
     expect(recent.length).toBe(1);
-    expect(recent[0].action).toBe("new");
+    expect(recent[0]!.action).toBe("new");
   });
 
   test("getLastEvents returns the last N events", () => {
@@ -94,8 +94,8 @@ describe("debug-tracer", () => {
 
     const last2 = tracer.getLastEvents(2);
     expect(last2.length).toBe(2);
-    expect(last2[0].action).toBe("a2");
-    expect(last2[1].action).toBe("a3");
+    expect(last2[0]!.action).toBe("a2");
+    expect(last2[1]!.action).toBe("a3");
   });
 
   // ─── Formatting ───
@@ -103,7 +103,7 @@ describe("debug-tracer", () => {
   test("formatEvent produces a concise one-liner", () => {
     tracer.enable();
     tracer.trace("tool", "Selected Grep", "pattern needed");
-    const event = tracer.getEvents()[0];
+    const event = tracer.getEvents()[0]!;
     const line = tracer.formatEvent(event);
     expect(line).toContain("TOOL");
     expect(line).toContain("Selected Grep");
@@ -113,7 +113,7 @@ describe("debug-tracer", () => {
   test("formatEvent includes details in parentheses", () => {
     tracer.enable();
     tracer.trace("model", "switch", "fallback", { from: "gpt-4", to: "gpt-3.5" });
-    const event = tracer.getEvents()[0];
+    const event = tracer.getEvents()[0]!;
     const line = tracer.formatEvent(event);
     expect(line).toContain("from=gpt-4");
     expect(line).toContain("to=gpt-3.5");
@@ -153,9 +153,9 @@ describe("debug-tracer", () => {
     tracer.traceToolChoice("Grep", "need to search", ["Glob", "Read"]);
     const events = tracer.getEvents();
     expect(events.length).toBe(1);
-    expect(events[0].category).toBe("tool");
-    expect(events[0].action).toContain("Grep");
-    expect(events[0].details?.alternatives).toEqual(["Glob", "Read"]);
+    expect(events[0]!.category).toBe("tool");
+    expect(events[0]!.action).toContain("Grep");
+    expect(events[0]!.details?.alternatives).toEqual(["Glob", "Read"]);
   });
 
   test("traceModelSwitch records model change", () => {
@@ -163,11 +163,11 @@ describe("debug-tracer", () => {
     tracer.traceModelSwitch("gpt-4", "gpt-3.5", "primary failed");
     const events = tracer.getEvents();
     expect(events.length).toBe(1);
-    expect(events[0].category).toBe("model");
-    expect(events[0].action).toContain("gpt-4");
-    expect(events[0].action).toContain("gpt-3.5");
-    expect(events[0].details?.from).toBe("gpt-4");
-    expect(events[0].details?.to).toBe("gpt-3.5");
+    expect(events[0]!.category).toBe("model");
+    expect(events[0]!.action).toContain("gpt-4");
+    expect(events[0]!.action).toContain("gpt-3.5");
+    expect(events[0]!.details?.from).toBe("gpt-4");
+    expect(events[0]!.details?.to).toBe("gpt-3.5");
   });
 
   test("tracePermission records permission decision", () => {
@@ -175,9 +175,9 @@ describe("debug-tracer", () => {
     tracer.tracePermission("Bash", "allowed", "Bash(npm run *)");
     const events = tracer.getEvents();
     expect(events.length).toBe(1);
-    expect(events[0].category).toBe("permission");
-    expect(events[0].action).toContain("Bash");
-    expect(events[0].details?.rule).toBe("Bash(npm run *)");
+    expect(events[0]!.category).toBe("permission");
+    expect(events[0]!.action).toContain("Bash");
+    expect(events[0]!.details?.rule).toBe("Bash(npm run *)");
   });
 
   test("traceCompaction records context reduction", () => {
@@ -185,9 +185,9 @@ describe("debug-tracer", () => {
     tracer.traceCompaction(50000, 20000, "llm");
     const events = tracer.getEvents();
     expect(events.length).toBe(1);
-    expect(events[0].category).toBe("context");
-    expect(events[0].details?.saved).toBe(30000);
-    expect(events[0].details?.method).toBe("llm");
+    expect(events[0]!.category).toBe("context");
+    expect(events[0]!.details?.saved).toBe(30000);
+    expect(events[0]!.details?.method).toBe("llm");
   });
 
   test("traceGuard records guard state", () => {
@@ -195,8 +195,8 @@ describe("debug-tracer", () => {
     tracer.traceGuard("loop-detector", true, "3 similar bash commands");
     const events = tracer.getEvents();
     expect(events.length).toBe(1);
-    expect(events[0].category).toBe("guard");
-    expect(events[0].action).toContain("triggered");
+    expect(events[0]!.category).toBe("guard");
+    expect(events[0]!.action).toContain("triggered");
   });
 
   test("traceRouting records routing decision", () => {
@@ -204,9 +204,9 @@ describe("debug-tracer", () => {
     tracer.traceRouting("vision", "llava-v1.5", ["gpt-4", "llava-v1.5"]);
     const events = tracer.getEvents();
     expect(events.length).toBe(1);
-    expect(events[0].category).toBe("routing");
-    expect(events[0].details?.taskType).toBe("vision");
-    expect(events[0].details?.candidates).toEqual(["gpt-4", "llava-v1.5"]);
+    expect(events[0]!.category).toBe("routing");
+    expect(events[0]!.details?.taskType).toBe("vision");
+    expect(events[0]!.details?.candidates).toEqual(["gpt-4", "llava-v1.5"]);
   });
 
   // ─── Convenience methods are no-ops when disabled ───
@@ -231,7 +231,7 @@ describe("debug-tracer", () => {
     expect(tracer.size).toBeLessThanOrEqual(2000);
     // Oldest events should have been trimmed
     const events = tracer.getEvents();
-    expect(events[0].action).toBe("action-100"); // 2100 - 2000 = first kept is 100
+    expect(events[0]!.action).toBe("action-100"); // 2100 - 2000 = first kept is 100
   });
 
   // ─── Singleton ───

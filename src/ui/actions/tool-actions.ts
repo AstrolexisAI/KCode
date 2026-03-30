@@ -104,7 +104,7 @@ export async function handleToolAction(
         initMemoryStoreSchema(db);
         const key = content.slice(0, 40).replace(/\s+/g, "-").toLowerCase();
         const id = addMemory({
-          category: category as any,
+          category: category as "preference" | "convention" | "fact" | "decision" | "learned",
           key,
           content,
           project: cwd,
@@ -353,7 +353,7 @@ export async function handleToolAction(
         if (snippets.length === 0) return "  No snippets saved. Usage: /snippet save <name> <content>";
         const lines = [`  Saved Snippets (${snippets.length}):\n`];
         for (const s of snippets) {
-          const preview = s.content.split("\n")[0].slice(0, 60);
+          const preview = s.content.split("\n")[0]!.slice(0, 60);
           lines.push(`  ${s.name.padEnd(20)} ${preview}${s.content.length > 60 ? "..." : ""}`);
         }
         return lines.join("\n");
@@ -432,7 +432,7 @@ export async function handleToolAction(
         lines.push(`  \u2500\u2500 User Templates (${templates.length}) \u2500\u2500`);
         for (const t of templates) {
           const argStr = t.args.length > 0 ? ` [${t.args.join(", ")}]` : "";
-          const preview = t.body.split("\n")[0].slice(0, 50);
+          const preview = t.body.split("\n")[0]!.slice(0, 50);
           lines.push(`  /${t.name}${argStr}`);
           lines.push(`    ${t.description || preview}${t.body.length > 50 ? "..." : ""}`);
         }
@@ -494,7 +494,7 @@ export async function handleToolAction(
           lines.push(`  ── ${src.label} ──`);
           for (const [event, configs] of Object.entries(hooks)) {
             if (!Array.isArray(configs)) continue;
-            for (const config of configs as any[]) {
+            for (const config of configs as Array<{ matcher?: string; hooks?: Array<{ type?: string; url?: string; command?: string }> }>) {
               const hookCount = config.hooks?.length ?? 0;
               totalHooks += hookCount;
               lines.push(`  ${event} [${config.matcher}] - ${hookCount} action(s)`);
@@ -780,8 +780,9 @@ INSTRUCTIONS:
 
         if (!resp.ok) return `  /btw error: ${resp.status} ${resp.statusText}`;
 
-        const data = await resp.json() as any;
-        const answer = data.choices?.[0]?.message?.content ?? "(no response)";
+        const data = await resp.json() as Record<string, unknown>;
+        const choices = data.choices as Record<string, unknown>[] | undefined;
+        const answer = (choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(no response)";
         return `  [btw] ${answer}`;
       } catch (err) {
         return `  /btw error: ${err instanceof Error ? err.message : err}`;

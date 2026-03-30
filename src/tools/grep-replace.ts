@@ -196,7 +196,7 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
       let fileReplacements = 0;
 
       for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        const line = lines[i]!;
         regex.lastIndex = 0;
         if (regex.test(line)) {
           regex.lastIndex = 0;

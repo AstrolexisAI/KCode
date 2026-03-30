@@ -337,7 +337,7 @@ async function runMain(
             signal: AbortSignal.timeout(3000),
           });
           if (healthResp.ok) {
-            const health = await healthResp.json() as any;
+            const health = await healthResp.json() as Record<string, unknown>;
             if (health.status === "ok") {
               const modelsResp = await fetch(`http://localhost:${port}/v1/models`, {
                 signal: AbortSignal.timeout(3000),

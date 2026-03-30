@@ -49,7 +49,7 @@ export async function* executeToolsParallel(
 
   // Emit tool_executing + queued progress events
   for (let i = 0; i < toolCalls.length; i++) {
-    const call = toolCalls[i];
+    const call = toolCalls[i]!;
     yield { type: "tool_executing", name: call.name, toolUseId: call.id, input: call.input };
     yield { type: "tool_progress", toolUseId: call.id, name: call.name, status: "queued" as const, index: i, total: toolCalls.length };
   }
@@ -66,8 +66,8 @@ export async function* executeToolsParallel(
 
   // Emit results and build tool_result blocks
   for (let i = 0; i < toolCalls.length; i++) {
-    const call = toolCalls[i];
-    const outcome = settled[i];
+    const call = toolCalls[i]!;
+    const outcome = settled[i]!;
     ctx.toolUseCount++;
 
     if (outcome.status === "fulfilled") {
@@ -138,7 +138,7 @@ export async function* executeToolsSequential(
       const currentOffset = (input.offset as number) || 1;
       const limit = (input.limit as number) || 200;
       const newOffset = currentOffset + (limit * crossCount);
-      (call as any)._autoAdvancedInput = { ...input, offset: newOffset, limit: limit };
+      (call as ToolUseBlock & { _autoAdvancedInput?: Record<string, unknown> })._autoAdvancedInput = { ...input, offset: newOffset, limit: limit };
       log.info("tool", `Auto-advancing Read offset to ${newOffset} (repeat #${crossCount + 1}): ${String(input.file_path ?? "").slice(0, 60)}`);
     }
 
@@ -226,7 +226,7 @@ export async function* executeToolsSequential(
     }
 
     // 2. Run PreToolUse hooks (may modify input or block)
-    let effectiveInput = (call as any)._autoAdvancedInput ?? permResult.updatedInput ?? call.input;
+    let effectiveInput = (call as ToolUseBlock & { _autoAdvancedInput?: Record<string, unknown> })._autoAdvancedInput ?? permResult.updatedInput ?? call.input;
     if (ctx.hooks.hasHooks("PreToolUse")) {
       const hookResult = await ctx.hooks.runPreToolUse(call);
       if (!hookResult.allowed) {
@@ -424,7 +424,8 @@ export async function* executeToolsSequential(
     if ((call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit") && !result.is_error) {
       try {
         const { getTestSuggestion } = await import("./auto-test.js");
-        const fp = String((call.input as any)?.file_path ?? (call.input as any)?.edits?.[0]?.file_path ?? "");
+        const inp = call.input as Record<string, unknown>;
+        const fp = String(inp?.file_path ?? (inp?.edits as Record<string, unknown>[] | undefined)?.[0]?.file_path ?? "");
         if (fp) {
           const suggestion = getTestSuggestion(fp, ctx.config.workingDirectory);
           if (suggestion) {

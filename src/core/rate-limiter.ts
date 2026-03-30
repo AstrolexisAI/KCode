@@ -37,7 +37,7 @@ export class RateLimiter {
       // Need to wait - figure out how long
       if (!rateLimitOk) {
         // Wait until the oldest timestamp in the window expires
-        const oldestInWindow = this.timestamps[0];
+        const oldestInWindow = this.timestamps[0]!;
         const waitMs = oldestInWindow + WINDOW_MS - Date.now() + 1;
         if (waitMs > 0) {
           await this.delay(waitMs);
@@ -85,7 +85,7 @@ export class RateLimiter {
 
   private pruneOldTimestamps(): void {
     const cutoff = Date.now() - WINDOW_MS;
-    while (this.timestamps.length > 0 && this.timestamps[0] <= cutoff) {
+    while (this.timestamps.length > 0 && this.timestamps[0]! <= cutoff) {
       this.timestamps.shift();
     }
   }

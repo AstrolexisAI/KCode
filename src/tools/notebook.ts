@@ -140,7 +140,7 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
         };
       }
 
-      const type = cell_type ?? notebook.cells[cell_index].cell_type;
+      const type = cell_type ?? notebook.cells[cell_index]!.cell_type;
       notebook.cells[cell_index] = makeCell(content, type);
       writeNotebook(file_path, notebook);
 

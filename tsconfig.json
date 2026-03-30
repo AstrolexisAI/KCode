@@ -19,7 +19,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": false, // TODO: re-enable after fixing ~680 indexed access warnings
+    "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
 
     // Some stricter flags (disabled by default)

@@ -69,7 +69,7 @@ function runCommand(cmd: string, cwd: string): string {
       maxBuffer: 10 * 1024 * 1024,
     }).toString().trim();
   } catch (err) {
-    const msg = err instanceof Error ? (err as any).stderr?.toString() || err.message : String(err);
+    const msg = err instanceof Error ? (err as Error & { stderr?: Buffer }).stderr?.toString() || err.message : String(err);
     throw new Error(`Command failed: ${cmd}\n${msg}`);
   }
 }

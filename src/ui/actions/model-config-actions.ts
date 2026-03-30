@@ -2,6 +2,7 @@
 // Auto-extracted from builtin-actions.ts
 
 import type { ActionContext } from "./action-helpers.js";
+import type { KCodeConfig } from "../../core/types.js";
 import { listModels, loadModelsConfig } from "../../core/models.js";
 import { getAvailableThemes, getCurrentThemeName } from "../../core/theme.js";
 import { log } from "../../core/logger.js";
@@ -112,7 +113,7 @@ export async function handleModelConfigAction(
           "  max    — Maximum reasoning, max 64K tokens, temp 0.9",
         ].join("\n");
       }
-      (appConfig as any).effortLevel = level;
+      appConfig.effortLevel = level as KCodeConfig["effortLevel"];
       return `  Effort level set to: ${level}`;
     }
     case "profile": {
@@ -147,15 +148,15 @@ export async function handleModelConfigAction(
       // /profile off — deactivate
       if (arg === "off" || arg === "none" || arg === "default") {
         // Reset profile-specific settings to defaults
-        (appConfig as any).activeProfile = undefined;
-        (appConfig as any).permissionMode = "ask";
-        (appConfig as any).effortLevel = undefined;
-        (appConfig as any).thinking = undefined;
-        (appConfig as any).allowedTools = undefined;
-        (appConfig as any).disallowedTools = undefined;
+        appConfig.activeProfile = undefined;
+        appConfig.permissionMode = "ask";
+        appConfig.effortLevel = undefined;
+        appConfig.thinking = undefined;
+        appConfig.allowedTools = undefined;
+        appConfig.disallowedTools = undefined;
         // Remove profile system prompt append (we can't easily undo just the profile part,
         // so clear it entirely — this is the expected behavior for /profile off)
-        (appConfig as any).systemPromptAppend = undefined;
+        appConfig.systemPromptAppend = undefined;
         return "  Profile deactivated. Using default settings.";
       }
 
@@ -290,8 +291,9 @@ export async function handleModelConfigAction(
             }),
             signal: AbortSignal.timeout(30000),
           });
-          const data = await resp.json() as any;
-          return { name: model.name, text: data.choices?.[0]?.message?.content ?? "(no response)", timeMs: Date.now() - start };
+          const data = await resp.json() as Record<string, unknown>;
+          const choices = data.choices as Record<string, unknown>[] | undefined;
+          return { name: model.name, text: (choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string ?? "(no response)", timeMs: Date.now() - start };
         } catch (err) {
           return { name: model.name, text: `Error: ${err instanceof Error ? err.message : String(err)}`, timeMs: Date.now() - start };
         }
@@ -317,7 +319,7 @@ export async function handleModelConfigAction(
         const normalized = validResults.map(r => r.text.toLowerCase().slice(0, 100));
         const allSimilar = normalized.every(n => {
           const words1 = new Set(n.split(/\s+/));
-          const words2 = new Set(normalized[0].split(/\s+/));
+          const words2 = new Set(normalized[0]!.split(/\s+/));
           const overlap = [...words1].filter(w => words2.has(w)).length;
           return overlap / Math.max(words1.size, words2.size) > 0.3;
         });

@@ -114,7 +114,7 @@ function walkAndCollect(
       let count = 0;
 
       for (let i = 0; i < lines.length; i++) {
-        const lineMatches = lines[i].match(regex);
+        const lineMatches = lines[i]!.match(regex);
         if (lineMatches) {
           count += lineMatches.length;
           matchLines.push(i + 1);

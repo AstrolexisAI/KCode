@@ -247,7 +247,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
     ]);
     const portMatch = command.match(/(?:-[plP]\s*|--port[= ]\s*|-l\s+|:)(\d{2,5})\b/);
     if (portMatch) {
-      const port = parseInt(portMatch[1], 10);
+      const port = parseInt(portMatch[1]!, 10);
       if (CHROME_BLOCKED_PORTS.has(port)) {
         return {
           tool_use_id: "",

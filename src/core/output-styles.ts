@@ -60,7 +60,7 @@ export function getStyleInstructions(): string {
 
   // Check built-in styles first
   if (currentStyle in BUILTIN_STYLES) {
-    return BUILTIN_STYLES[currentStyle];
+    return BUILTIN_STYLES[currentStyle]!;
   }
 
   // Load from custom style files

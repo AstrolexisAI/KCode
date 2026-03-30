@@ -106,7 +106,7 @@ function findClosestMatch(
   for (let i = 0; i < candidateCount; i++) {
     let totalSim = 0;
     for (let j = 0; j < oldLineCount; j++) {
-      totalSim += lineSimilarity(oldLines[j], searchLines[i + j]);
+      totalSim += lineSimilarity(oldLines[j]!, searchLines[i + j]!);
     }
     const avgSim = totalSim / oldLineCount;
     if (avgSim > bestScore) {
@@ -183,7 +183,7 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
     const msg = error instanceof Error ? error.message : String(error);
     return {
       tool_use_id: "",
-      content: `Error editing file: ${msg}`,
+      content: `Error editing "${file_path}": ${msg}`,
       is_error: true,
     };
   }

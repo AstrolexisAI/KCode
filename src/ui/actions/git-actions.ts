@@ -53,7 +53,7 @@ export async function handleGitAction(
           for (const line of output.split("\n")) {
             const parts = line.match(/^(\S+)\s+(\S+)\s*(.*)$/);
             if (parts) {
-              lines.push(`  ${parts[2].padEnd(20)} ${parts[1]}  ${parts[3] || ""}`);
+              lines.push(`  ${parts[2]!.padEnd(20)} ${parts[1]!}  ${parts[3] || ""}`);
             } else {
               lines.push(`  ${line}`);
             }
@@ -443,7 +443,7 @@ export async function handleGitAction(
         const contributors = shortlog.split("\n").map(line => {
           const match = line.trim().match(/^(\d+)\s+(.+?)\s+<(.+?)>$/);
           if (!match) return null;
-          return { commits: parseInt(match[1]), name: match[2], email: match[3] };
+          return { commits: parseInt(match[1]!), name: match[2]!, email: match[3]! };
         }).filter(Boolean) as Array<{ commits: number; name: string; email: string }>;
 
         if (contributors.length === 0) return "  No contributors found.";

@@ -2,6 +2,8 @@
 // Estimates if a prompt will likely produce a response that exceeds
 // the model's output token limit, and suggests strategies to avoid truncation.
 
+import { CHARS_PER_TOKEN } from "./token-budget";
+
 export type BudgetStrategy = "normal" | "summarize" | "sectioned" | "warn";
 
 export interface OutputBudgetDecision {
@@ -13,21 +15,20 @@ export interface OutputBudgetDecision {
   systemHint?: string;
 }
 
-// Rough token estimation: ~4 chars per token for English, ~3 for Spanish
-const CHARS_PER_TOKEN = 3.5;
+// CHARS_PER_TOKEN imported from token-budget.ts
 
 /**
  * Signals in the prompt that suggest the response will be very long.
  */
 const LONG_RESPONSE_SIGNALS = [
   // N words ≈ N*5 chars ≈ N*5/3.5 tokens ≈ N*1.4 tokens
-  { pattern: /\b(\d{3,})\s*(words?|palabras)\b/i, multiplier: (m: RegExpMatchArray) => Math.round(parseInt(m[1]) * 1.4) },
+  { pattern: /\b(\d{3,})\s*(words?|palabras)\b/i, multiplier: (m: RegExpMatchArray) => Math.round(parseInt(m[1]!) * 1.4) },
   { pattern: /\bextens[oa]?\b|\bexhaustiv/i, multiplier: () => 2000 },
   { pattern: /\bcada\s+década\b|\beach\s+decade\b/i, multiplier: () => 1500 },
   { pattern: /\bhistoria\s+completa\b|\bcomplete\s+history\b/i, multiplier: () => 2000 },
   { pattern: /\btodos?\s+los\s+(?:cálculos|pasos|detalles)\b|\ball\s+(?:calculations|steps|details)\b/i, multiplier: () => 1500 },
   { pattern: /\bmostrá?\s+(?:todos?|cada)\b|\bshow\s+(?:all|every)\b/i, multiplier: () => 1200 },
-  { pattern: /\b(5|6|7|8|9|10)\s*(?:partes?|parts?|secciones?|sections?)\b/i, multiplier: (m: RegExpMatchArray) => parseInt(m[1]) * 400 },
+  { pattern: /\b(5|6|7|8|9|10)\s*(?:partes?|parts?|secciones?|sections?)\b/i, multiplier: (m: RegExpMatchArray) => parseInt(m[1]!) * 400 },
 ];
 
 /**

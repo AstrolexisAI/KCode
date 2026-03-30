@@ -357,7 +357,7 @@ export class PermissionManager {
         return extractCommandPrefix(input.command);
       }
       case "MultiEdit": {
-        const edits = ((tool.input as any).edits ?? []) as Array<{ file_path?: string }>;
+        const edits = ((tool.input as Record<string, unknown>).edits ?? []) as Array<{ file_path?: string }>;
         const firstPath = edits[0]?.file_path ?? "";
         const parts = firstPath.split("/");
         parts.pop();

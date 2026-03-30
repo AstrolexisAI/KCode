@@ -20,8 +20,8 @@ export async function handleTextAction(
 
       const quotedMatch = input.match(/^["'](.+?)["']\s+(.+)$/);
       if (quotedMatch) {
-        pattern = quotedMatch[1];
-        target = quotedMatch[2];
+        pattern = quotedMatch[1]!;
+        target = quotedMatch[2]!;
       } else {
         const spaceIdx = input.indexOf(" ");
         if (spaceIdx === -1) return "  Usage: /regex <pattern> <text or file path>";
@@ -68,7 +68,7 @@ export async function handleTextAction(
       const lines = [`  Regex: /${pattern}/g${isFile ? ` in ${target}` : ""}\n  ${matches.length} match(es)\n`];
 
       for (let i = 0; i < Math.min(matches.length, 20); i++) {
-        const match = matches[i];
+        const match = matches[i]!;
         const context = text.slice(Math.max(0, match.index - 20), match.index + match.match.length + 20).replace(/\n/g, "\\n");
         lines.push(`  [${i + 1}] "${match.match}" at index ${match.index}`);
         if (match.groups) {

@@ -91,9 +91,9 @@ export function registerHistoryCommand(program: Command): void {
             // Extract date and slug from filename: 2026-03-17T12-30-45-slug.jsonl
             const match = f.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}-\d{2}-\d{2})-(.+)\.jsonl$/);
             if (match) {
-              const date = match[1];
-              const time = match[2].replace(/-/g, ":");
-              const slug = match[3].replace(/-/g, " ");
+              const date = match[1]!;
+              const time = match[2]!.replace(/-/g, ":");
+              const slug = match[3]!.replace(/-/g, " ");
               console.log(`  \x1b[36m${date} ${time}\x1b[0m  ${slug.slice(0, 50).padEnd(52)} \x1b[2m${sizeKB}KB\x1b[0m`);
             } else {
               console.log(`  ${f}  \x1b[2m${sizeKB}KB\x1b[0m`);

@@ -32,6 +32,28 @@ export interface BuildRequestOptions {
   effortLevel?: string;
 }
 
+// ─── Tool Token Estimation ───────────────────────────────────────
+
+import { CHARS_PER_TOKEN } from "./token-budget";
+
+/**
+ * Estimate how many tokens the tool definitions will consume in the request body.
+ * This accounts for name, description, and JSON schema of each tool.
+ */
+export function estimateToolDefinitionTokens(
+  tools: ToolRegistry,
+  profileFilter?: (name: string) => boolean,
+): number {
+  let defs = tools.getDefinitions();
+  if (profileFilter) defs = defs.filter(d => profileFilter(d.name));
+  if (defs.length === 0) return 0;
+  const totalChars = defs.reduce((sum, d) => {
+    return sum + d.name.length + (d.description?.length ?? 0)
+      + JSON.stringify(d.input_schema ?? {}).length + 50; // 50 chars overhead per tool (keys, formatting)
+  }, 0);
+  return Math.ceil(totalChars / CHARS_PER_TOKEN);
+}
+
 // ─── API Key Resolution ──────────────────────────────────────────
 
 /**
@@ -231,6 +253,16 @@ export async function executeModelRequest(
   opts?: BuildRequestOptions,
 ): Promise<AsyncGenerator<SSEChunk>> {
   const req = await buildRequestForModel(modelName, config, systemPrompt, messages, tools, opts);
+
+  // Pre-flight safety: if serialized request exceeds 95% of context window, strip tools
+  if (config.contextWindowSize) {
+    const bodyStr = JSON.stringify(req.body);
+    const estimatedTokens = Math.ceil(bodyStr.length / CHARS_PER_TOKEN);
+    if (estimatedTokens > config.contextWindowSize * 0.95) {
+      log.warn("llm", `Pre-flight: ~${estimatedTokens} tokens > 95% of ${config.contextWindowSize}. Stripping tools to fit.`);
+      delete req.body.tools;
+    }
+  }
 
   log.info("llm", `Request to ${modelName} (${req.provider}) at ${req.url}`);
 

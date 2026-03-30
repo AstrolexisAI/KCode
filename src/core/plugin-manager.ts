@@ -313,7 +313,7 @@ export class PluginManager {
    * Load all plugin skills into a SkillManager.
    * Calls skillManager.load() to refresh, then returns the count of skill files found.
    */
-  async loadSkills(skillManager: any): Promise<number> {
+  async loadSkills(skillManager: { load?: () => void; loaded?: boolean }): Promise<number> {
     const plugins = await this.listResolved();
     let count = 0;
 
@@ -325,7 +325,7 @@ export class PluginManager {
     if (typeof skillManager.load === "function") {
       // Reset the loaded flag so load() rediscovers plugins
       if ("loaded" in skillManager) {
-        (skillManager as any).loaded = false;
+        skillManager.loaded = false;
       }
       skillManager.load();
     }

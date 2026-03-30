@@ -82,7 +82,7 @@ export async function handleSystemAction(
         const entries = output.split("\n").map(line => {
           const match = line.match(/^([\d.]+[BKMGT]?)\s+(.+)$/);
           if (!match) return null;
-          return { size: match[1], path: match[2].replace(/^\.\//, "") || "." };
+          return { size: match[1]!, path: match[2]!.replace(/^\.\//, "") || "." };
         }).filter(Boolean) as Array<{ size: string; path: string }>;
 
         // Parse sizes for bar chart
@@ -272,7 +272,7 @@ export async function handleSystemAction(
 
       try {
         execSync(clipCmd, { input: text, timeout: 5000 });
-        const preview = text.split("\n")[0].slice(0, 60);
+        const preview = text.split("\n")[0]!.slice(0, 60);
         return `  Copied to clipboard (${text.length} chars)${isFile ? ` from ${args.trim()}` : ""}\n  ${preview}${text.length > 60 ? "..." : ""}`;
       } catch (err: any) {
         return `  Clipboard error: ${err.message}`;
@@ -497,10 +497,12 @@ export async function handleSystemAction(
             continue;
           }
 
-          const data = await resp.json() as any;
-          const reply = data.choices?.[0]?.message?.content ?? "(empty)";
-          const tokens = data.usage?.total_tokens ?? 0;
-          const completionTokens = data.usage?.completion_tokens ?? 0;
+          const data = await resp.json() as Record<string, unknown>;
+          const choices = data.choices as Record<string, unknown>[] | undefined;
+          const usage = data.usage as Record<string, unknown> | undefined;
+          const reply = String((choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(empty)");
+          const tokens = (usage?.total_tokens as number) ?? 0;
+          const completionTokens = (usage?.completion_tokens as number) ?? 0;
           const tokPerSec = latency > 0 ? Math.round((completionTokens / latency) * 1000) : 0;
           totalTokens += tokens;
 

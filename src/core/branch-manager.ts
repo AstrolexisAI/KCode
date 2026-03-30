@@ -206,7 +206,7 @@ export function getBranchManager(): BranchManager {
 export function formatBranchTree(tree: BranchTree, indent = 0): string[] {
   const lines: string[] = [];
   for (let i = 0; i < tree.length; i++) {
-    const node = tree[i];
+    const node = tree[i]!;
     const isLast = i === tree.length - 1;
     const prefix = indent === 0 ? "" : "  ".repeat(indent - 1) + (isLast ? "  └─ " : "  ├─ ");
     const label = node.label || node.sessionFile.slice(0, 40);

@@ -47,10 +47,10 @@ describe("convertToOpenAIMessages", () => {
     ];
     const result = convertToOpenAIMessages("", messages);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("assistant");
-    expect(result[0].content).toBe("Let me check.");
-    expect(result[0].tool_calls).toHaveLength(1);
-    expect(result[0].tool_calls![0]).toEqual({
+    expect(result[0]!.role).toBe("assistant");
+    expect(result[0]!.content).toBe("Let me check.");
+    expect(result[0]!.tool_calls).toHaveLength(1);
+    expect(result[0]!.tool_calls![0]).toEqual({
       id: "tc_1",
       type: "function",
       function: { name: "Read", arguments: '{"file_path":"/foo.ts"}' },
@@ -68,8 +68,8 @@ describe("convertToOpenAIMessages", () => {
       },
     ];
     const result = convertToOpenAIMessages("", messages);
-    expect(result[0].content).toContain("<thinking>step by step</thinking>");
-    expect(result[0].content).toContain("Answer");
+    expect(result[0]!.content).toContain("<thinking>step by step</thinking>");
+    expect(result[0]!.content).toContain("Answer");
   });
 
   test("converts user tool_result blocks to tool role messages", () => {
@@ -83,9 +83,9 @@ describe("convertToOpenAIMessages", () => {
     ];
     const result = convertToOpenAIMessages("", messages);
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("tool");
-    expect(result[0].tool_call_id).toBe("tc_1");
-    expect(result[0].content).toBe("file contents here");
+    expect(result[0]!.role).toBe("tool");
+    expect(result[0]!.tool_call_id).toBe("tc_1");
+    expect(result[0]!.content).toBe("file contents here");
   });
 
   test("handles user message with both text and tool_result", () => {
@@ -101,8 +101,8 @@ describe("convertToOpenAIMessages", () => {
     const result = convertToOpenAIMessages("", messages);
     // tool result first, then user text
     expect(result).toHaveLength(2);
-    expect(result[0].role).toBe("tool");
-    expect(result[1]).toEqual({ role: "user", content: "Also this note" });
+    expect(result[0]!.role).toBe("tool");
+    expect(result[1]!).toEqual({ role: "user", content: "Also this note" });
   });
 
   test("handles tool_result with array content", () => {
@@ -119,7 +119,7 @@ describe("convertToOpenAIMessages", () => {
       },
     ];
     const result = convertToOpenAIMessages("", messages);
-    expect(result[0].content).toBe("line 1\nline 2");
+    expect(result[0]!.content).toBe("line 1\nline 2");
   });
 
   test("assistant with only tool_use (no text) sets content to null", () => {
@@ -132,8 +132,8 @@ describe("convertToOpenAIMessages", () => {
       },
     ];
     const result = convertToOpenAIMessages("", messages);
-    expect(result[0].content).toBeNull();
-    expect(result[0].tool_calls).toHaveLength(1);
+    expect(result[0]!.content).toBeNull();
+    expect(result[0]!.tool_calls).toHaveLength(1);
   });
 });
 
@@ -146,10 +146,10 @@ describe("convertToOpenAITools", () => {
     ];
     const result = convertToOpenAITools(tools);
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe("function");
-    expect(result[0].function.name).toBe("Read");
-    expect(result[0].function.description).toBe("Read a file");
-    expect(result[0].function.parameters).toEqual(tools[0].input_schema);
+    expect(result[0]!.type).toBe("function");
+    expect(result[0]!.function.name).toBe("Read");
+    expect(result[0]!.function.description).toBe("Read a file");
+    expect(result[0]!.function.parameters).toEqual(tools[0]!.input_schema);
   });
 
   test("handles empty tool list", () => {
@@ -178,8 +178,8 @@ describe("convertToAnthropicMessages", () => {
     ];
     const result = convertToAnthropicMessages(messages);
     expect(result).toHaveLength(1);
-    expect(result[0].content).toContain("Part 1");
-    expect(result[0].content).toContain("Part 2");
+    expect(result[0]!.content).toContain("Part 1");
+    expect(result[0]!.content).toContain("Part 2");
   });
 
   test("prepends user message if conversation starts with assistant", () => {
@@ -187,8 +187,8 @@ describe("convertToAnthropicMessages", () => {
       { role: "assistant", content: "I am ready" },
     ];
     const result = convertToAnthropicMessages(messages);
-    expect(result[0].role).toBe("user");
-    expect(result[1].role).toBe("assistant");
+    expect(result[0]!.role).toBe("user");
+    expect(result[1]!.role).toBe("assistant");
   });
 
   test("converts tool_use blocks in assistant messages", () => {
@@ -227,7 +227,7 @@ describe("convertToAnthropicMessages", () => {
       },
     ];
     const result = convertToAnthropicMessages(messages);
-    const lastUser = result[result.length - 1];
+    const lastUser = result[result.length - 1]!;
     expect(lastUser.role).toBe("user");
     const blocks = lastUser.content as any[];
     expect(blocks[0].type).toBe("tool_result");
@@ -243,7 +243,7 @@ describe("convertToAnthropicMessages", () => {
     const result = convertToAnthropicMessages(messages);
     // Empty assistant content should be skipped
     expect(result).toHaveLength(1);
-    expect(result[0].role).toBe("user");
+    expect(result[0]!.role).toBe("user");
   });
 });
 

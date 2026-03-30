@@ -50,7 +50,7 @@ export function registerSearchCommand(program: Command): void {
 
           const entries = transcript.loadSession(session.filename);
           for (let i = 0; i < entries.length; i++) {
-            const entry = entries[i];
+            const entry = entries[i]!;
             if (entry.content.toLowerCase().includes(queryLower)) {
               const preview = entry.content.slice(0, 120).replace(/\n/g, " ");
               console.log(`  \x1b[36m${session.startedAt}\x1b[0m [${entry.role}]`);

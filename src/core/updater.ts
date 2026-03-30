@@ -223,13 +223,13 @@ export async function performUpdate(
 
   try {
     // Download to first path
-    await downloadBinary(release.downloadUrl, binaryPaths[0]);
+    await downloadBinary(release.downloadUrl, binaryPaths[0]!);
 
     // Copy to other paths
     for (let i = 1; i < binaryPaths.length; i++) {
       try {
-        copyFileSync(binaryPaths[0], binaryPaths[i]);
-        chmodSync(binaryPaths[i], 0o755);
+        copyFileSync(binaryPaths[0]!, binaryPaths[i]!);
+        chmodSync(binaryPaths[i]!, 0o755);
       } catch (err) {
         log.warn("updater", `Failed to copy to ${binaryPaths[i]}: ${err}`);
       }

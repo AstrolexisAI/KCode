@@ -58,6 +58,27 @@ function generateState(): string {
   return randomBytes(16).toString("hex");
 }
 
+// ─── URL Validation ─────────────────────────────────────────────
+
+/** Validate that an OAuth endpoint URL uses HTTPS. HTTP is only allowed for localhost (local dev). */
+function requireHttpsEndpoint(url: string, purpose: string): void {
+  if (!url) return; // Empty URLs are valid for operations that don't use them (e.g., revocation)
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid ${purpose}: "${url}" is not a valid URL`);
+  }
+  if (parsed.protocol === "https:") return;
+  // Allow localhost for local development servers
+  const host = parsed.hostname;
+  if (parsed.protocol === "http:" && (host === "localhost" || host === "127.0.0.1" || host === "::1")) return;
+  throw new Error(
+    `${purpose} must use HTTPS (got "${parsed.protocol}//${parsed.hostname}"). ` +
+    `HTTP is only allowed for localhost. A malicious MCP server could intercept OAuth tokens over plain HTTP.`
+  );
+}
+
 // ─── Encryption ─────────────────────────────────────────────────
 
 // Persistent random salt for key derivation — NOT guessable from public info
@@ -262,6 +283,9 @@ export class McpOAuthClient {
   }
 
   async startAuthFlow(): Promise<{ url: string; port: number; waitForCallback: () => Promise<OAuthTokens> }> {
+    requireHttpsEndpoint(this.config.authorizationUrl, "OAuth authorization URL");
+    requireHttpsEndpoint(this.config.tokenUrl, "OAuth token URL");
+
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
     const state = generateState();
@@ -359,6 +383,7 @@ export class McpOAuthClient {
       body.set("client_secret", this.config.clientSecret);
     }
 
+    requireHttpsEndpoint(this.config.tokenUrl, "OAuth token URL");
     const response = await fetch(this.config.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -386,6 +411,7 @@ export class McpOAuthClient {
       body.set("client_secret", this.config.clientSecret);
     }
 
+    requireHttpsEndpoint(this.config.tokenUrl, "OAuth token URL");
     const response = await fetch(this.config.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -571,6 +597,15 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
     const tokenUrl = data.token_endpoint;
 
     if (typeof authorizationUrl !== "string" || typeof tokenUrl !== "string") {
+      return null;
+    }
+
+    // Validate discovered endpoints use HTTPS
+    try {
+      requireHttpsEndpoint(authorizationUrl, "Discovered OAuth authorization URL");
+      requireHttpsEndpoint(tokenUrl, "Discovered OAuth token URL");
+    } catch (err) {
+      log.warn("mcp-oauth", `OAuth discovery rejected: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
 

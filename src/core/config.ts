@@ -410,7 +410,7 @@ function applyManagedPolicy(settings: Settings, policy: ManagedPolicy): Settings
   if (policy.locked) {
     for (const [key, value] of Object.entries(policy.locked)) {
       if (value !== undefined) {
-        (result as any)[key] = value;
+        (result as Record<string, unknown>)[key] = value;
       }
     }
   }

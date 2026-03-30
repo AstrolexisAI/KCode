@@ -60,8 +60,8 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; content
     return { meta: {}, content: raw };
   }
 
-  const yamlBlock = match[1];
-  const content = match[2].trim();
+  const yamlBlock = match[1]!;
+  const content = match[2]!.trim();
   const meta: Record<string, unknown> = {};
 
   // Simple YAML parser for flat key-value pairs and arrays
@@ -69,19 +69,19 @@ function parseFrontmatter(raw: string): { meta: Record<string, unknown>; content
     const kvMatch = line.match(/^(\w+):\s*(.*)$/);
     if (!kvMatch) continue;
     const [, key, rawValue] = kvMatch;
-    const value = rawValue.trim();
+    const value = rawValue!.trim();
 
     if (value.startsWith("[") && value.endsWith("]")) {
       // Inline array: [tag1, tag2]
-      meta[key] = value
+      meta[key!] = value
         .slice(1, -1)
         .split(",")
         .map((s) => s.trim().replace(/^["']|["']$/g, ""))
         .filter(Boolean);
     } else if (value === "" || value === "~" || value === "null") {
-      meta[key] = undefined;
+      meta[key!] = undefined;
     } else {
-      meta[key] = value.replace(/^["']|["']$/g, "");
+      meta[key!] = value.replace(/^["']|["']$/g, "");
     }
   }
 
@@ -264,7 +264,7 @@ export async function resolveIncludes(content: string, baseDir: string): Promise
 
   let resolved = content;
   for (const match of matches) {
-    const includePath = match[1].trim();
+    const includePath = match[1]!.trim();
     const fullPath = includePath.startsWith("/") ? includePath : join(baseDir, includePath);
 
     // Prevent path traversal — includes must resolve within baseDir

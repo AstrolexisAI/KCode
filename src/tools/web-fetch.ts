@@ -2,6 +2,7 @@
 // Fetches URL content and converts HTML to plain text
 
 import type { ToolDefinition, ToolResult } from "../core/types";
+import { resolve4, resolve6 } from "node:dns/promises";
 
 export interface WebFetchInput {
   url: string;
@@ -73,6 +74,38 @@ export function validateFetchUrl(url: string): string | null {
   } catch {
     return `Blocked: invalid URL`;
   }
+}
+
+/** Check if a hostname string is an IP literal (not a domain that needs DNS resolution) */
+function isIPLiteral(hostname: string): boolean {
+  return /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname.includes(":");
+}
+
+/**
+ * Pre-resolve DNS for a hostname and validate ALL resolved IPs against the SSRF blocklist.
+ * Prevents DNS rebinding attacks where a domain passes hostname validation but resolves
+ * to a private IP at fetch time.
+ */
+async function resolveDnsAndValidate(url: string): Promise<string | null> {
+  const hostname = new URL(url).hostname.replace(/^\[|\]$/g, "");
+
+  // IP literals are already validated by validateFetchUrl — no DNS to resolve
+  if (isIPLiteral(hostname)) return null;
+
+  const addresses: string[] = [];
+  try { addresses.push(...await resolve4(hostname)); } catch { /* no A records */ }
+  try { addresses.push(...await resolve6(hostname)); } catch { /* no AAAA records */ }
+
+  if (addresses.length === 0) {
+    return `Blocked: DNS resolution failed for "${hostname}"`;
+  }
+
+  for (const addr of addresses) {
+    if (isPrivateIP(addr)) {
+      return `Blocked: "${hostname}" resolves to private/reserved IP ${addr}`;
+    }
+  }
+  return null;
 }
 
 interface CacheEntry {
@@ -165,6 +198,12 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
     const MAX_REDIRECTS = 5;
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+      // DNS rebinding protection: resolve and validate IPs just before fetch
+      const dnsError = await resolveDnsAndValidate(currentUrl);
+      if (dnsError) {
+        return { tool_use_id: "", content: dnsError, is_error: true };
+      }
+
       response = await fetch(currentUrl, {
         headers: {
           "User-Agent": "KCode/0.1 (AI coding assistant)",

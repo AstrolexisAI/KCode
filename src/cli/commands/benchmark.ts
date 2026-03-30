@@ -33,10 +33,12 @@ export function registerBenchmarkCommands(program: Command): void {
           signal: AbortSignal.timeout(30000),
         });
 
-        const data = await resp.json() as any;
+        const data = await resp.json() as Record<string, unknown>;
         const elapsed = Date.now() - start;
-        const text = data.choices?.[0]?.message?.content ?? "(no response)";
-        const tokens = data.usage?.total_tokens ?? 0;
+        const choices = data.choices as Record<string, unknown>[] | undefined;
+        const usage = data.usage as Record<string, unknown> | undefined;
+        const text = ((choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string) ?? "(no response)";
+        const tokens = (usage?.total_tokens as number) ?? 0;
 
         console.log(`\x1b[32m✓\x1b[0m Model ready (${elapsed}ms, ${tokens} tok)`);
         console.log(`  Response: ${text.slice(0, 50)}`);

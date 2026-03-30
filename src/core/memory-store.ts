@@ -9,6 +9,11 @@ import { getDb } from "./db";
 export type MemoryCategory = "preference" | "convention" | "fact" | "decision" | "learned";
 export type MemorySource = "auto" | "user" | "promoted";
 
+// Internal row types for typed SQLite queries
+interface DbCountRow { cnt: number }
+interface DbCategoryRow { category: string; cnt: number }
+interface DbSourceRow { source: string; cnt: number }
+
 export interface MemoryEntry {
   id: number;
   category: MemoryCategory;
@@ -207,7 +212,7 @@ export function expireStaleMemories(db?: Database): number {
   // Count first since DELETE triggers (FTS sync) inflate result.changes
   const count = (d.prepare(
     "SELECT COUNT(*) as cnt FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now')"
-  ).get() as any).cnt;
+  ).get() as DbCountRow | undefined)?.cnt ?? 0;
   if (count > 0) {
     d.prepare(
       "DELETE FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now')"
@@ -221,19 +226,19 @@ export function expireStaleMemories(db?: Database): number {
 export function getMemoryStats(db?: Database): MemoryStats {
   const d = resolveDb(db);
 
-  const total = (d.prepare("SELECT COUNT(*) as cnt FROM memory_store").get() as any).cnt;
+  const total = (d.prepare("SELECT COUNT(*) as cnt FROM memory_store").get() as DbCountRow | undefined)?.cnt ?? 0;
 
-  const catRows = d.prepare("SELECT category, COUNT(*) as cnt FROM memory_store GROUP BY category").all() as any[];
+  const catRows = d.prepare("SELECT category, COUNT(*) as cnt FROM memory_store GROUP BY category").all() as DbCategoryRow[];
   const byCategory: Record<string, number> = {};
   for (const r of catRows) byCategory[r.category] = r.cnt;
 
-  const srcRows = d.prepare("SELECT source, COUNT(*) as cnt FROM memory_store GROUP BY source").all() as any[];
+  const srcRows = d.prepare("SELECT source, COUNT(*) as cnt FROM memory_store GROUP BY source").all() as DbSourceRow[];
   const bySource: Record<string, number> = {};
   for (const r of srcRows) bySource[r.source] = r.cnt;
 
   const expiring = (d.prepare(
     "SELECT COUNT(*) as cnt FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now', '+7 days')"
-  ).get() as any).cnt;
+  ).get() as DbCountRow | undefined)?.cnt ?? 0;
 
   return { total, byCategory, bySource, expiringSoon: expiring };
 }

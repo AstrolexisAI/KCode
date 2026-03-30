@@ -125,9 +125,9 @@ function parseTestOutput(output: string, framework: string): { passed: number; f
         const passMatch = line.match(/(\d+)\s+pass/);
         const failMatch = line.match(/(\d+)\s+fail/);
         const skipMatch = line.match(/(\d+)\s+skip/);
-        if (passMatch) passed = parseInt(passMatch[1], 10);
-        if (failMatch) failed = parseInt(failMatch[1], 10);
-        if (skipMatch) skipped = parseInt(skipMatch[1], 10);
+        if (passMatch) passed = parseInt(passMatch[1]!, 10);
+        if (failMatch) failed = parseInt(failMatch[1]!, 10);
+        if (skipMatch) skipped = parseInt(skipMatch[1]!, 10);
       }
       break;
     }
@@ -137,15 +137,15 @@ function parseTestOutput(output: string, framework: string): { passed: number; f
       for (const line of lines) {
         const summaryMatch = line.match(/(\d+)\s+failed.*?(\d+)\s+passed/);
         if (summaryMatch) {
-          failed = parseInt(summaryMatch[1], 10);
-          passed = parseInt(summaryMatch[2], 10);
+          failed = parseInt(summaryMatch[1]!, 10);
+          passed = parseInt(summaryMatch[2]!, 10);
         }
         const passOnly = line.match(/Tests:\s+(\d+)\s+passed/);
         if (passOnly && !summaryMatch) {
-          passed = parseInt(passOnly[1], 10);
+          passed = parseInt(passOnly[1]!, 10);
         }
         const skipMatch = line.match(/(\d+)\s+skipped/);
-        if (skipMatch) skipped = parseInt(skipMatch[1], 10);
+        if (skipMatch) skipped = parseInt(skipMatch[1]!, 10);
       }
       break;
     }
@@ -155,9 +155,9 @@ function parseTestOutput(output: string, framework: string): { passed: number; f
         const passMatch = line.match(/(\d+)\s+passed/);
         const failMatch = line.match(/(\d+)\s+failed/);
         const skipMatch = line.match(/(\d+)\s+skipped/);
-        if (passMatch) passed = parseInt(passMatch[1], 10);
-        if (failMatch) failed = parseInt(failMatch[1], 10);
-        if (skipMatch) skipped = parseInt(skipMatch[1], 10);
+        if (passMatch) passed = parseInt(passMatch[1]!, 10);
+        if (failMatch) failed = parseInt(failMatch[1]!, 10);
+        if (skipMatch) skipped = parseInt(skipMatch[1]!, 10);
       }
       break;
     }
@@ -182,9 +182,9 @@ function parseTestOutput(output: string, framework: string): { passed: number; f
       for (const line of lines) {
         const m = line.match(/test result:.*?(\d+)\s+passed.*?(\d+)\s+failed.*?(\d+)\s+ignored/);
         if (m) {
-          passed = parseInt(m[1], 10);
-          failed = parseInt(m[2], 10);
-          skipped = parseInt(m[3], 10);
+          passed = parseInt(m[1]!, 10);
+          failed = parseInt(m[2]!, 10);
+          skipped = parseInt(m[3]!, 10);
         }
       }
       break;
