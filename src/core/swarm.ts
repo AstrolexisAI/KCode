@@ -5,6 +5,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { log } from "./logger";
 
 export interface SwarmTask {
   id: number;
@@ -57,12 +58,40 @@ function runAgent(
   const kcodebin = findKCodeBinary();
 
   return new Promise((resolve, reject) => {
-    // Strip sensitive API keys from subagent environment to prevent credential leakage
+    // Inherit the parent's environment including API keys so subagents
+    // can authenticate with cloud providers.  Subagents are child processes
+    // of the same user — there is no additional credential-leakage surface.
     const subEnv = { ...process.env };
-    const sensitiveKeyPatterns = /^(KCODE_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|DEEPSEEK_API_KEY|TOGETHER_API_KEY|GEMINI_API_KEY|ASTROLEXIS_API_KEY)$/i;
-    for (const key of Object.keys(subEnv)) {
-      if (sensitiveKeyPatterns.test(key)) {
-        delete subEnv[key];
+
+    // Warn when a cloud model appears to lack an API key
+    if (model) {
+      const lower = model.toLowerCase();
+      const isLikelyCloud =
+        lower.startsWith("claude-") ||
+        lower.startsWith("claude_") ||
+        lower.startsWith("gpt-") ||
+        lower.startsWith("o1") ||
+        lower.startsWith("o3") ||
+        lower.startsWith("o4") ||
+        lower.includes("gemini") ||
+        lower.includes("deepseek") ||
+        lower.includes("groq") ||
+        lower.includes("together");
+      if (
+        isLikelyCloud &&
+        !subEnv.KCODE_API_KEY &&
+        !subEnv.ANTHROPIC_API_KEY &&
+        !subEnv.OPENAI_API_KEY &&
+        !subEnv.GROQ_API_KEY &&
+        !subEnv.DEEPSEEK_API_KEY &&
+        !subEnv.TOGETHER_API_KEY &&
+        !subEnv.GEMINI_API_KEY
+      ) {
+        log.warn(
+          "swarm",
+          `Subagent model "${model}" looks like a cloud model but no API key ` +
+            `env var is set — the subagent will likely fail to authenticate.`,
+        );
       }
     }
 

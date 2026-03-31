@@ -5,6 +5,21 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "
 import { resolve, relative } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
+const SENSITIVE_PATTERNS = [
+  /\.(env|env\.\w+)$/,
+  /\.(pem|key|crt|cert)$/,
+  /\.ssh\//,
+  /credentials/i,
+  /\.aws\//,
+  /\.kube\/config/,
+  /id_rsa/,
+  /id_ed25519/,
+  /\.(bashrc|bash_profile|zshrc|zprofile|profile)$/,
+  /\.(gitconfig)$/,
+  /crontab$/,
+  /systemd\/.*\.service$/,
+];
+
 export const renameDefinition: ToolDefinition = {
   name: "Rename",
   description:
@@ -99,6 +114,9 @@ function walkAndCollect(
 
     const ext = fullPath.substring(fullPath.lastIndexOf("."));
     if (!allowedExts.has(ext)) continue;
+
+    // Block renaming inside sensitive files
+    if (SENSITIVE_PATTERNS.some(p => p.test(fullPath))) continue;
 
     try {
       const stat = statSync(fullPath);
