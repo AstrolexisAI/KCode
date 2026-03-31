@@ -189,3 +189,44 @@ export async function getModelProvider(modelName: string): Promise<ModelProvider
 export function invalidateCache(): void {
   cachedConfig = null;
 }
+
+/**
+ * Enrich model entries with hardware-based recommendations.
+ * Adds a `recommended` flag and optional `hardwareNotes` to models that match
+ * the detected hardware profile's optimal configuration.
+ */
+export async function getRecommendedModels(): Promise<Array<ModelEntry & { recommended?: boolean; hardwareNotes?: string }>> {
+  const { HardwareDetector } = await import("./hardware/detector.js");
+  const { HardwareOptimizer } = await import("./hardware/optimizer.js");
+
+  const detector = new HardwareDetector();
+  const optimizer = new HardwareOptimizer();
+  const profile = await detector.detect();
+  const recommendations = optimizer.recommend(profile);
+
+  const config = await loadModelsConfig();
+  const enriched = config.models.map(model => {
+    const rec = recommendations.find(r => r.model === model.name);
+    return {
+      ...model,
+      recommended: !!rec,
+      hardwareNotes: rec?.reason,
+    };
+  });
+
+  // Add recommended models that are not yet in the registry
+  for (const rec of recommendations) {
+    if (!enriched.find(m => m.name === rec.model)) {
+      enriched.push({
+        name: rec.model,
+        baseUrl: "http://localhost:10091",
+        contextSize: rec.contextWindow,
+        description: rec.reason,
+        recommended: true,
+        hardwareNotes: rec.reason,
+      });
+    }
+  }
+
+  return enriched;
+}

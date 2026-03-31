@@ -279,6 +279,49 @@ export function resetRoutingRules(): void {
 }
 
 /**
+ * Select models for ensemble execution based on task type and available models.
+ * Returns a list of recommended models for ensemble, or empty if not enough models.
+ */
+export async function selectEnsembleModels(
+  userMessage: string,
+  maxModels: number = 3,
+): Promise<string[]> {
+  const models = await listModels();
+  if (models.length < 2) return [];
+
+  const taskType = classifyTask(userMessage);
+  const capabilityMap: Record<string, string[]> = {
+    code: ["code"],
+    reasoning: ["reasoning"],
+    simple: ["fast"],
+    vision: ["vision", "ocr"],
+  };
+
+  const caps = capabilityMap[taskType];
+  const selected: string[] = [];
+
+  // First, add models that match the task capability
+  if (caps) {
+    for (const m of models) {
+      if (caps.some(cap => m.capabilities?.includes(cap))) {
+        selected.push(m.name);
+        if (selected.length >= maxModels) break;
+      }
+    }
+  }
+
+  // Fill remaining slots with general models
+  for (const m of models) {
+    if (!selected.includes(m.name)) {
+      selected.push(m.name);
+      if (selected.length >= maxModels) break;
+    }
+  }
+
+  return selected;
+}
+
+/**
  * Get all available models grouped by capability.
  * Useful for showing the user what models are available for what tasks.
  */
