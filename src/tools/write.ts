@@ -1,7 +1,7 @@
 // KCode - Write Tool
 // Creates or overwrites files
 
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ToolDefinition, ToolResult, FileWriteInput } from "../core/types";
 
@@ -44,6 +44,20 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
       content: `BLOCKED: Writing to "${file_path}" is blocked because it matches a sensitive file pattern (.env, .pem, .ssh, credentials, etc.). If you need to write this file, ask the user to do it manually.`,
       is_error: true,
     };
+  }
+
+  // Resolve symlinks to prevent path traversal (parity with Edit tool)
+  try {
+    const realPath = realpathSync(file_path);
+    if (realPath !== file_path && SENSITIVE_PATTERNS.some(p => p.test(realPath))) {
+      return {
+        tool_use_id: "",
+        content: `BLOCKED: "${file_path}" is a symlink to "${realPath}" which matches a sensitive file pattern.`,
+        is_error: true,
+      };
+    }
+  } catch {
+    // File doesn't exist yet — will be created by writeFileSync
   }
 
   try {
