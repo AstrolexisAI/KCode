@@ -1,11 +1,17 @@
 // KCode - Plugin Registry
 // Install plugins from the official registry or GitHub
+// Supports component types: skills, hooks, MCP servers, agents, output styles
 
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
+import type { ExtendedManifestFields } from "./marketplace/types";
+
 const REGISTRY_URL = "https://registry.kulvex.ai/plugins";
+
+/** Plugin component types that can be registered */
+export type PluginComponentType = "skill" | "hook" | "mcpServer" | "agent" | "outputStyle";
 
 export interface RegistryEntry {
   name: string;
@@ -14,6 +20,51 @@ export interface RegistryEntry {
   author: string;
   url: string; // git clone URL or tarball
   tags: string[];
+  /** Extended marketplace fields */
+  agents?: string[];
+  outputStyles?: string[];
+  marketplace?: string;
+  sha256?: string;
+  verified?: boolean;
+  downloads?: number;
+  rating?: number;
+  kcode?: string;
+  license?: string;
+}
+
+/** Track which component types a plugin provides */
+const registeredComponents = new Map<string, Set<PluginComponentType>>();
+
+/**
+ * Register a component type for a plugin.
+ */
+export function registerComponent(pluginName: string, componentType: PluginComponentType): void {
+  if (!registeredComponents.has(pluginName)) {
+    registeredComponents.set(pluginName, new Set());
+  }
+  registeredComponents.get(pluginName)!.add(componentType);
+}
+
+/**
+ * Get all registered component types for a plugin.
+ */
+export function getRegisteredComponents(pluginName: string): PluginComponentType[] {
+  const components = registeredComponents.get(pluginName);
+  return components ? [...components] : [];
+}
+
+/**
+ * Check if a plugin provides a specific component type.
+ */
+export function hasComponent(pluginName: string, componentType: PluginComponentType): boolean {
+  return registeredComponents.get(pluginName)?.has(componentType) ?? false;
+}
+
+/**
+ * Clear all registered components (for testing).
+ */
+export function clearRegisteredComponents(): void {
+  registeredComponents.clear();
 }
 
 /**

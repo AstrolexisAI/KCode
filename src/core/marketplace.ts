@@ -1,10 +1,14 @@
 // KCode - Plugin Marketplace
 // Plugin discovery and distribution system with local registry fallback.
+// Supports CDN-based atomic downloads with SHA verification.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
 import { kcodeHome, kcodePath } from "./paths";
+import { CDNFetcher } from "./marketplace/cdn-fetcher";
+import { verifyPlugin } from "./marketplace/verifier";
+import type { MarketplaceSource, MarketplaceSettings } from "./marketplace/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -22,7 +26,9 @@ export interface MarketplacePlugin {
 
 export interface MarketplaceConfig {
   registryUrl: string;
-  installed: Record<string, { version: string; installedAt: string }>;
+  installed: Record<string, { version: string; installedAt: string; marketplace?: string }>;
+  /** Marketplace settings for CDN sources, integrity, etc. */
+  marketplace?: MarketplaceSettings;
 }
 
 // ─── Paths ──────────────────────────────────────────────────────
@@ -221,7 +227,7 @@ export async function getPluginDetails(name: string): Promise<MarketplacePlugin 
   return registry.find(p => p.name === name) ?? null;
 }
 
-export async function installFromMarketplace(name: string): Promise<boolean> {
+export async function installFromMarketplace(name: string, options?: { forceCdn?: boolean }): Promise<boolean> {
   const plugin = await getPluginDetails(name);
   if (!plugin) {
     log.warn("marketplace", `Plugin "${name}" not found in marketplace`);
@@ -236,6 +242,20 @@ export async function installFromMarketplace(name: string): Promise<boolean> {
     return false;
   }
 
+  const config = loadConfig();
+  const cdnSource = getCDNSource(config);
+
+  // Try CDN first if available, then fall back to git clone
+  if (cdnSource || options?.forceCdn) {
+    try {
+      const result = await installViaCDN(name, plugin.version, config);
+      if (result) return true;
+    } catch (err) {
+      log.warn("marketplace", `CDN install failed for ${name}, falling back to git: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // Fallback: git clone
   try {
     const proc = Bun.spawnSync(["git", "clone", "--depth", "1", plugin.repository, pluginDir]);
     if (proc.exitCode !== 0) {
@@ -244,12 +264,26 @@ export async function installFromMarketplace(name: string): Promise<boolean> {
       return false;
     }
 
-    const config = loadConfig();
+    // Verify plugin integrity if enabled
+    if (config.marketplace?.verifyIntegrity !== false) {
+      const verification = verifyPlugin(pluginDir);
+      if (!verification.valid) {
+        log.warn("marketplace", `Plugin "${name}" has verification issues: ${verification.issues.map(i => i.message).join("; ")}`);
+      }
+      for (const issue of verification.issues.filter(i => i.severity === "warning")) {
+        log.warn("marketplace", `Plugin "${name}": ${issue.message}`);
+      }
+    }
+
     config.installed[name] = {
       version: plugin.version,
       installedAt: new Date().toISOString(),
     };
     saveConfig(config);
+
+    if (!plugin.verified) {
+      log.warn("marketplace", `Plugin "${name}" is not verified by the marketplace`);
+    }
 
     log.info("marketplace", `Installed plugin: ${name} v${plugin.version}`);
     return true;
@@ -257,6 +291,46 @@ export async function installFromMarketplace(name: string): Promise<boolean> {
     log.error("marketplace", `Install failed: ${err instanceof Error ? err.message : String(err)}`);
     return false;
   }
+}
+
+/**
+ * Install a plugin via CDN with atomic download.
+ */
+async function installViaCDN(name: string, version: string, config: MarketplaceConfig): Promise<boolean> {
+  const cdnSource = getCDNSource(config);
+  if (!cdnSource) return false;
+
+  const cacheDir = kcodePath("plugins", "marketplace-cache");
+  const fetcher = new CDNFetcher({
+    cacheDir,
+    cdnBaseUrl: cdnSource.url,
+    timeoutMs: 30_000,
+  });
+
+  const result = await fetcher.fetchPlugin(name, version);
+
+  // Copy from cache to plugins dir
+  const { cpSync } = await import("node:fs");
+  const pluginDir = join(PLUGINS_DIR, name);
+  cpSync(result.pluginDir, pluginDir, { recursive: true });
+
+  config.installed[name] = {
+    version: result.version,
+    installedAt: new Date().toISOString(),
+    marketplace: cdnSource.name,
+  };
+  saveConfig(config);
+
+  log.info("marketplace", `Installed plugin: ${name} v${result.version} from CDN (${result.fromCache ? "cached" : "downloaded"})`);
+  return true;
+}
+
+/**
+ * Get the first CDN source from marketplace config, if any.
+ */
+function getCDNSource(config: MarketplaceConfig): MarketplaceSource | null {
+  if (!config.marketplace?.sources) return null;
+  return config.marketplace.sources.find(s => s.type === "cdn") ?? null;
 }
 
 export async function updatePlugin(name: string): Promise<boolean> {

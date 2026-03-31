@@ -213,6 +213,15 @@ export async function runSwarmOnFiles(
   return runSwarm(prompt, tasks, cwd, model);
 }
 
+// ─── Coordinator Mode Integration ──────────────────────────────
+
+export { Coordinator, detectCoordinatorSession, loadCoordinatorProgress, parseCoordinatorConfig } from "./coordinator/coordinator";
+export { Scratchpad } from "./coordinator/scratchpad";
+export { MessageBus } from "./coordinator/message-bus";
+export { getWorkerTools, WORKER_TOOLS, COORDINATOR_ONLY_TOOLS } from "./coordinator/worker";
+export type { CoordinatorConfig, WorkerConfig, WorkerResult, WorkerMode } from "./coordinator/types";
+export { DEFAULT_COORDINATOR_CONFIG } from "./coordinator/types";
+
 /**
  * Format swarm results for display.
  */
