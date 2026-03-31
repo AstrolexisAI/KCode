@@ -152,6 +152,12 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       sections.push({ content: memory, priority: SectionPriority.MEDIUM, label: "memory" });
     }
 
+    // Coordinator mode instructions
+    const coordinatorSection = this.buildCoordinatorInstructions();
+    if (coordinatorSection) {
+      sections.push({ content: coordinatorSection, priority: SectionPriority.HIGH, label: "coordinator" });
+    }
+
     // ─── Active plan (injected if present) ─────────────────────
     loadLatestPlan(); // restore from DB if not already loaded
     const planPrompt = formatPlanForPrompt();
@@ -813,6 +819,58 @@ You do NOT need to explicitly save memories. The auto-memory extractor handles t
 - Auto-extracted memories are stored with \`auto_extracted: true\` in their frontmatter.
 - The system respects a cooldown between extractions to avoid excessive writes.
 - Duplicate memories are detected and skipped.`;
+  }
+
+  // ─── Section: Coordinator Mode ─────────────────────────────────
+
+  /**
+   * Build coordinator mode instructions when KCODE_COORDINATOR_MODE is set.
+   * Returns null if not in coordinator mode.
+   */
+  static buildCoordinatorInstructions(): string | null {
+    const mode = process.env.KCODE_COORDINATOR_MODE;
+    if (!mode) return null;
+
+    if (mode === "coordinator") {
+      return `# Coordinator Mode
+
+You are running in **Coordinator Mode**. You orchestrate multiple worker agents to complete tasks in parallel.
+
+## Capabilities
+- Use the Agent tool to spawn worker agents with specific tasks
+- Workers have restricted tool access based on their mode (simple or complex)
+- A shared scratchpad directory is available for coordination
+- Use the message bus to communicate with workers
+
+## Worker Modes
+- **simple**: Workers can use Bash, Read, Edit, Write, Glob, Grep only
+- **complex**: Workers have access to all tools except Agent, Skill, Plan, SendMessage
+
+## Best Practices
+- Break large tasks into independent subtasks for workers
+- Write a clear plan to the scratchpad before assigning work
+- Monitor progress via the scratchpad progress.md file
+- Collect and merge worker results when all tasks complete
+- Keep worker tasks focused and self-contained`;
+    }
+
+    if (mode === "worker") {
+      const workerId = process.env.KCODE_WORKER_ID ?? "unknown";
+      const scratchpadDir = process.env.KCODE_SCRATCHPAD_DIR ?? "";
+      return `# Worker Mode
+
+You are running as **Worker ${workerId}** in a coordinated multi-agent session.
+
+## Rules
+- Focus only on your assigned task
+- Write your results to worker-${workerId}.md in the scratchpad
+- You can read plan.md and other workers' output files for context
+- Do not attempt to use tools outside your allowed set
+- When finished, write your final result and stop
+${scratchpadDir ? `\nScratchpad directory: ${scratchpadDir}` : ""}`;
+    }
+
+    return null;
   }
 
   // ─── Extensible Consciousness ──────────────────────────────────

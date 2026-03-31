@@ -12,6 +12,8 @@ export interface PluginManifest {
   version: string;
   description?: string;
   author?: string;
+  license?: string;
+  kcode?: string; // Minimum KCode version required
 
   // What the plugin provides
   skills?: string[];      // Paths to skill .md files relative to plugin dir
@@ -24,6 +26,15 @@ export interface PluginManifest {
     args?: string[];
     env?: Record<string, string>;
   }>;
+  agents?: string[];       // Paths to agent .md files relative to plugin dir
+  outputStyles?: string[]; // Paths to output style .md files relative to plugin dir
+
+  // Marketplace metadata
+  marketplace?: string;    // Source marketplace identifier
+  sha256?: string;         // Content hash for verification
+  verified?: boolean;      // Passed marketplace verification
+  downloads?: number;      // Download count
+  rating?: number;         // User rating
 }
 
 export interface LoadedPlugin {
@@ -33,6 +44,8 @@ export interface LoadedPlugin {
   dir: string;
   manifest: PluginManifest;
   skillFiles: string[];   // Absolute paths to skill .md files
+  agentFiles: string[];   // Absolute paths to agent .md files
+  outputStyleFiles: string[]; // Absolute paths to output style .md files
 }
 
 export class PluginManager {
@@ -114,22 +127,13 @@ export class PluginManager {
     }
 
     // Resolve skill file paths
-    const skillFiles: string[] = [];
-    if (manifest.skills) {
-      for (const skillPath of manifest.skills) {
-        // Path traversal guard: reject paths that escape the plugin directory
-        if (skillPath.includes("..") || skillPath.startsWith("/") || skillPath.startsWith("\\")) {
-          log.warn("config", `Plugin "${manifest.name}": skill path rejected (traversal attempt): ${skillPath}`);
-          continue;
-        }
-        const fullPath = join(dir, skillPath);
-        if (existsSync(fullPath)) {
-          skillFiles.push(fullPath);
-        } else {
-          log.warn("config", `Plugin "${manifest.name}": skill file not found: ${skillPath}`);
-        }
-      }
-    }
+    const skillFiles = this.resolvePluginPaths(dir, manifest.name, manifest.skills, "skill");
+
+    // Resolve agent file paths
+    const agentFiles = this.resolvePluginPaths(dir, manifest.name, manifest.agents, "agent");
+
+    // Resolve output style file paths
+    const outputStyleFiles = this.resolvePluginPaths(dir, manifest.name, manifest.outputStyles, "output style");
 
     this.plugins.push({
       name: manifest.name,
@@ -138,7 +142,32 @@ export class PluginManager {
       dir,
       manifest,
       skillFiles,
+      agentFiles,
+      outputStyleFiles,
     });
+  }
+
+  /**
+   * Resolve relative paths from a plugin manifest, with path traversal guards.
+   */
+  private resolvePluginPaths(dir: string, pluginName: string, paths: string[] | undefined, label: string): string[] {
+    const resolved: string[] = [];
+    if (!paths) return resolved;
+
+    for (const relPath of paths) {
+      // Path traversal guard
+      if (relPath.includes("..") || relPath.startsWith("/") || relPath.startsWith("\\")) {
+        log.warn("config", `Plugin "${pluginName}": ${label} path rejected (traversal attempt): ${relPath}`);
+        continue;
+      }
+      const fullPath = join(dir, relPath);
+      if (existsSync(fullPath)) {
+        resolved.push(fullPath);
+      } else {
+        log.warn("config", `Plugin "${pluginName}": ${label} file not found: ${relPath}`);
+      }
+    }
+    return resolved;
   }
 
   /**

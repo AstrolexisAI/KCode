@@ -259,6 +259,31 @@ export class ConversationManager {
     this.sessionId = id;
   }
 
+  /**
+   * Detect and restore coordinator mode from a previous session.
+   * Checks if a scratchpad exists for this session ID and injects progress context.
+   */
+  async detectAndRestoreCoordinatorMode(): Promise<boolean> {
+    const { detectCoordinatorSession, loadCoordinatorProgress } = await import("./coordinator/coordinator.js");
+    if (!this.sessionId || !detectCoordinatorSession(this.sessionId)) {
+      return false;
+    }
+
+    // Restore coordinator env
+    process.env.KCODE_COORDINATOR_MODE = "coordinator";
+
+    // Load previous progress and inject as context
+    const progress = loadCoordinatorProgress(this.sessionId);
+    if (progress) {
+      this.messages.unshift({
+        role: "user",
+        content: `[Coordinator session restored]\n\nPrevious progress:\n${progress}`,
+      });
+    }
+
+    return true;
+  }
+
   /** Attach a debug tracer for agent decision logging. */
   setDebugTracer(tracer: DebugTracer): void {
     this.debugTracer = tracer;

@@ -1,9 +1,11 @@
 // KCode - Output Styles System
 // Loads and manages output style definitions that modify the system prompt tone/format
+// Supports built-in, custom (.md files), and plugin-provided output styles
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { kcodePath } from "./paths";
+import type { PluginOutputStyle } from "./marketplace/types";
 
 // ─── Built-in Styles ─────────────────────────────────────────────
 
@@ -13,6 +15,25 @@ const BUILTIN_STYLES: Record<string, string> = {
   verbose: "Be thorough and detailed. Explain your reasoning. Show alternatives considered.",
   "code-only": "Only output code. No explanations, no markdown headers, no commentary. Just the code.",
 };
+
+// ─── Plugin Styles Cache ─────────────────────────────────────────
+
+let pluginStyles: PluginOutputStyle[] = [];
+
+/**
+ * Register output styles from plugins.
+ * Called during startup after plugins are loaded.
+ */
+export function registerPluginStyles(styles: PluginOutputStyle[]): void {
+  pluginStyles = [...styles];
+}
+
+/**
+ * Get all registered plugin output styles.
+ */
+export function getPluginStyles(): PluginOutputStyle[] {
+  return [...pluginStyles];
+}
 
 // ─── State ───────────────────────────────────────────────────────
 
@@ -41,12 +62,15 @@ export function setCurrentStyle(name: string): boolean {
 }
 
 /**
- * List all available style names (built-in + custom).
+ * List all available style names (built-in + custom + plugin).
  */
 export function listStyles(): string[] {
   const names = new Set<string>(Object.keys(BUILTIN_STYLES));
   for (const name of loadCustomStyleNames()) {
     names.add(name);
+  }
+  for (const ps of pluginStyles) {
+    names.add(ps.name);
   }
   return [...names].sort();
 }
@@ -54,6 +78,7 @@ export function listStyles(): string[] {
 /**
  * Get the formatting instructions for the current style.
  * Returns empty string for "default" or if no style is set.
+ * Checks: built-in -> plugin styles -> custom files.
  */
 export function getStyleInstructions(): string {
   if (currentStyle === "default") return "";
@@ -61,6 +86,12 @@ export function getStyleInstructions(): string {
   // Check built-in styles first
   if (currentStyle in BUILTIN_STYLES) {
     return BUILTIN_STYLES[currentStyle]!;
+  }
+
+  // Check plugin styles
+  const pluginStyle = pluginStyles.find(s => s.name === currentStyle);
+  if (pluginStyle) {
+    return pluginStyle.instructions;
   }
 
   // Load from custom style files

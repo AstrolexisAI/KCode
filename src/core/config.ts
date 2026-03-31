@@ -10,6 +10,7 @@ import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models"
 import { isPro } from "./pro";
 import { log } from "./logger";
 import { isWorkspaceTrusted } from "./hook-trust";
+import type { MarketplaceSettings } from "./marketplace/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -47,6 +48,15 @@ export interface Settings {
   reasoningBudget?: number; // -1 = unlimited, positive = max thinking tokens
   noCache?: boolean; // Disable response cache (always call the model)
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
+  marketplace?: MarketplaceSettings; // Plugin marketplace CDN config
+  coordinator?: {
+    enabled?: boolean;
+    maxWorkers?: number;
+    defaultWorkerMode?: "simple" | "complex";
+    workerTimeoutMs?: number;
+    scratchpadEnabled?: boolean;
+    preserveScratchpadOnExit?: boolean;
+  };
   featureFlags?: {
     enableAutoRoute?: boolean;
     enableDistillation?: boolean;

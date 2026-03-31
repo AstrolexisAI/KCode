@@ -676,6 +676,24 @@ export interface TeamResult {
   durationMs?: number;
 }
 
+/**
+ * Check if the current process is a coordinator worker (env-based detection).
+ * Workers have restricted tool access and communicate via the message bus.
+ */
+export function isCoordinatorWorker(): boolean {
+  return process.env.KCODE_COORDINATOR_MODE === "worker";
+}
+
+/**
+ * Get the coordinator mode of the current process.
+ * Returns "coordinator", "worker", or null if not in coordinator mode.
+ */
+export function getCoordinatorMode(): "coordinator" | "worker" | null {
+  const mode = process.env.KCODE_COORDINATOR_MODE;
+  if (mode === "coordinator" || mode === "worker") return mode;
+  return null;
+}
+
 /** Get completed results from agents in a team (for context injection into running agents). */
 export function getTeamResults(teamId: string): TeamResult[] {
   const results: TeamResult[] = [];
