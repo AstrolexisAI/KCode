@@ -607,10 +607,10 @@ describe("PermissionManager", () => {
       expect(result.allowed).toBe(false);
     });
 
-    test("unknown tool names are allowed in auto mode", async () => {
+    test("unknown tool names are denied in auto mode", async () => {
       const pm = new PermissionManager("auto", "/tmp/test");
       const result = await pm.checkPermission(makeToolUse("CustomTool", { arg: "value" }));
-      expect(result.allowed).toBe(true);
+      expect(result.allowed).toBe(false);
     });
   });
 });

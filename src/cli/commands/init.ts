@@ -6,7 +6,8 @@ export function registerInitCommand(program: Command): void {
     .description("Initialize KCode in the current project")
     .option("--force", "Overwrite existing files")
     .option("--hooks", "Install git hooks (pre-commit, pre-push)")
-    .action(async (opts: { force?: boolean; hooks?: boolean }) => {
+    .option("--trust", "Trust this workspace (allow .kcode/ hooks, plugins, and MCP servers)")
+    .action(async (opts: { force?: boolean; hooks?: boolean; trust?: boolean }) => {
       const { mkdirSync, existsSync, writeFileSync } = await import("node:fs");
       const { join } = await import("node:path");
       const cwd = process.cwd();
@@ -164,6 +165,17 @@ fi
         }
       }
 
+      // 8. Trust workspace if --trust flag is set
+      if (opts.trust) {
+        const { trustWorkspace, isWorkspaceTrusted } = await import("../../core/hook-trust");
+        if (!isWorkspaceTrusted(cwd)) {
+          trustWorkspace(cwd);
+          created.push("workspace trust (added to ~/.kcode/trusted-workspaces.json)");
+        } else {
+          skipped.push("workspace trust (already trusted)");
+        }
+      }
+
       // Report
       if (created.length > 0) {
         console.log("\x1b[32m✓\x1b[0m KCode initialized:");
@@ -176,6 +188,12 @@ fi
       console.log("Add awareness modules: \x1b[1mkcode teach add <name>\x1b[0m");
       if (!opts.hooks) {
         console.log("Install git hooks:    \x1b[1mkcode init --hooks\x1b[0m");
+      }
+      if (!opts.trust) {
+        const { isWorkspaceTrusted } = await import("../../core/hook-trust");
+        if (!isWorkspaceTrusted(cwd)) {
+          console.log("Trust workspace:      \x1b[1mkcode init --trust\x1b[0m");
+        }
       }
     });
 }

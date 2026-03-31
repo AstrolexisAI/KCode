@@ -5,6 +5,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
+import { isWorkspaceTrusted } from "./hook-trust";
 
 export interface PluginManifest {
   name: string;
@@ -44,15 +45,26 @@ export class PluginManager {
 
   /**
    * Discover and load plugins from standard directories.
+   * Project-level plugins require workspace trust.
    */
   load(cwd: string): void {
     this.plugins = [];
 
-    // Load from user plugins directory
+    // Load from user plugins directory (always trusted)
     this.loadFromDir(this.userPluginsDir);
 
-    // Load from project plugins directory (higher priority)
-    this.loadFromDir(join(cwd, ".kcode", "plugins"));
+    // Load from project plugins directory (higher priority) — requires workspace trust
+    const projectPluginsDir = join(cwd, ".kcode", "plugins");
+    if (isWorkspaceTrusted(cwd)) {
+      this.loadFromDir(projectPluginsDir);
+    } else if (existsSync(projectPluginsDir)) {
+      try {
+        const entries = readdirSync(projectPluginsDir, { withFileTypes: true });
+        if (entries.some(e => e.isDirectory())) {
+          console.error(`[plugins] Skipping project .kcode/plugins/ — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`);
+        }
+      } catch { /* ignore */ }
+    }
 
     if (this.plugins.length > 0) {
       log.info("config", `Loaded ${this.plugins.length} plugin(s): ${this.plugins.map(p => p.name).join(", ")}`);

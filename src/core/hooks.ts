@@ -27,6 +27,8 @@ export {
   setTrustPromptCallback,
   trustWorkspace,
   isWorkspaceTrusted,
+  untrustWorkspace,
+  _resetTrustCache,
 } from "./hook-trust";
 
 // ─── Internal imports from extracted modules ────────────────────

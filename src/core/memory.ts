@@ -147,6 +147,10 @@ export async function writeMemoryFile(
   meta: MemoryMeta,
   content: string,
 ): Promise<string> {
+  // Path traversal guard: reject filenames with ".." or absolute paths
+  if (filename.includes("..") || filename.startsWith("/") || filename.startsWith("\\")) {
+    throw new Error(`Invalid memory filename: "${filename}" — path traversal not allowed`);
+  }
   await ensureDir(dir);
   const now = new Date().toISOString();
   const fullMeta: MemoryMeta = {
@@ -222,7 +226,7 @@ export async function searchMemories(projectPath: string, pattern: string): Prom
   return new Promise((resolve) => {
     const results: string[] = [];
 
-    const proc = spawn("grep", ["-rl", "-i", pattern, dir], {
+    const proc = spawn("grep", ["-rl", "-i", "--", pattern, dir], {
       timeout: 10_000,
     });
 

@@ -306,10 +306,10 @@ export class LoopGuardState {
 
   /**
    * Track a cross-turn tool call signature. Returns the count BEFORE incrementing.
-   * Write/Edit use a higher threshold since rewriting a file with different content
-   * is normal, but writing the same path 3+ times across turns indicates a loop.
+   * Skips tracking for Write/Edit (rewriting same file with different content is normal).
    */
   trackCrossTurnSig(toolName: string, sig: string): number {
+    if (toolName === "Write" || toolName === "Edit") return 0;
     const count = this.crossTurnSigs.get(sig) ?? 0;
     this.crossTurnSigs.set(sig, count + 1);
     // Cap to prevent unbounded growth

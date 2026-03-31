@@ -104,6 +104,7 @@ export class CompactionManager {
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(60_000), // 60s timeout to prevent hanging
       });
 
       if (!response.ok) {

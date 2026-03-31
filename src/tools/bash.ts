@@ -278,14 +278,14 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         const bgHasHeredoc = /<<[-~]?\s*['"]?\w+['"]?/.test(command);
         if (bgHasHeredoc) {
           // Heredoc consumes stdin — use SUDO_ASKPASS instead
-          const bgAskpass = `/tmp/.kcode-askpass-bg-${process.pid}-${Date.now()}`;
+          const bgAskpass = `/tmp/.kcode-askpass-bg-${require("node:crypto").randomBytes(8).toString("hex")}`;
           const b64Pw = Buffer.from(sudoPassword).toString("base64");
           writeFileSync(bgAskpass, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
           bgCommand = `SUDO_ASKPASS=${bgAskpass} ${bgCommand} ; rm -f ${bgAskpass}`;
         } else {
           // Use SUDO_ASKPASS for all background sudo — avoids password in process list
-          const bgAskpassStdin = `/tmp/.kcode-askpass-bg2-${process.pid}-${Date.now()}`;
+          const bgAskpassStdin = `/tmp/.kcode-askpass-bg2-${require("node:crypto").randomBytes(8).toString("hex")}`;
           const b64Pw = Buffer.from(sudoPassword).toString("base64");
           writeFileSync(bgAskpassStdin, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
@@ -378,7 +378,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       // SUDO_ASKPASS approach: heredocs redirect stdin, blocking sudo -S.
       // Write a temp askpass script via Node.js fs (password never in command line).
       useAskpass = true;
-      askpassPath = `/tmp/.kcode-askpass-${process.pid}-${Date.now()}`;
+      askpassPath = `/tmp/.kcode-askpass-${require("node:crypto").randomBytes(8).toString("hex")}`;
       const b64Pw = Buffer.from(sudoPassword).toString("base64");
       writeFileSync(askpassPath, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
       const rewrittenCmd = finalCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");

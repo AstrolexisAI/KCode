@@ -13,6 +13,7 @@ import { invalidateCache } from "./models.ts";
 // we test them indirectly through loadSettings.
 
 import { loadSettings, type Settings } from "./config.ts";
+import { trustWorkspace } from "./hook-trust";
 
 let tempDir: string;
 
@@ -25,6 +26,8 @@ async function createSettingsFile(dir: string, filename: string, content: unknow
 describe("config", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "kcode-config-test-"));
+    // Trust the temp workspace so project-level settings load in tests
+    trustWorkspace(tempDir);
   });
 
   afterEach(async () => {

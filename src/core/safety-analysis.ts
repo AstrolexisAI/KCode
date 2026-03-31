@@ -51,6 +51,16 @@ export function detectCommandInjection(command: string): string | null {
     return "Command contains subshell invocation";
   }
 
+  // Command chaining via ; or && — can append arbitrary commands
+  // Strip quoted strings first so we don't flag ; inside strings
+  const unquoted = stripQuotedStrings(command);
+  if (/;\s*\S/.test(unquoted)) {
+    return "Command contains semicolon chaining";
+  }
+  if (/&&\s*\S/.test(unquoted)) {
+    return "Command contains && chaining";
+  }
+
   return null;
 }
 

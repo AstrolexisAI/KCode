@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginManager } from "./plugins.ts";
+import { trustWorkspace } from "./hook-trust";
 
 let tempDir: string;
 let userPluginsDir: string;
@@ -27,6 +28,8 @@ describe("PluginManager", () => {
     userPluginsDir = join(tempDir, "user-plugins");
     mkdirSync(userPluginsDir, { recursive: true });
     pm = new PluginManager(userPluginsDir);
+    // Trust the temp workspace so project-level plugins load in tests
+    trustWorkspace(tempDir);
   });
 
   afterEach(async () => {

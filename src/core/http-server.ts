@@ -853,7 +853,16 @@ export async function startHttpServer(options: ServeOptions): Promise<void> {
   const { requirePro } = await import("./pro.js");
   await requirePro("http-server");
 
-  const { port, host, apiKey } = options;
+  const { port, apiKey } = options;
+  // Default to loopback — binding to 0.0.0.0 without auth is RCE from the network
+  const host = options.host === "0.0.0.0" || options.host === "::" ? options.host : (options.host || "127.0.0.1");
+  const isExposed = host === "0.0.0.0" || host === "::";
+
+  if (isExposed && !apiKey) {
+    console.error(`\x1b[33m⚠ WARNING: HTTP server binding to ${host} WITHOUT authentication.\x1b[0m`);
+    console.error(`  Anyone on your network can execute commands via /api/prompt.`);
+    console.error(`  Set --api-key to require authentication, or bind to 127.0.0.1.\n`);
+  }
 
   serverState.startTime = Date.now();
 
@@ -880,6 +889,8 @@ export async function startHttpServer(options: ServeOptions): Promise<void> {
   console.log(`    GET  /v1/skills      — List available skills`);
   if (apiKey) {
     console.log(`\n  Auth: Bearer token required (set via --api-key)`);
+  } else {
+    console.log(`\n  \x1b[33mAuth: NONE — set --api-key for production use\x1b[0m`);
   }
   console.log(`\n  Press Ctrl+C to stop.\n`);
 

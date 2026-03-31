@@ -138,7 +138,7 @@ export class ConversationManager {
   private debugTracer: DebugTracer | null = null;
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
-    this.config = config;
+    this.config = { ...config }; // shallow copy to avoid mutating caller's config
     this.tools = tools;
 
     // Apply model profile adjustments for small models
@@ -1777,7 +1777,7 @@ export class ConversationManager {
     filesModified: string[];
   } {
     const toolsUsed: string[] = [];
-    const filesModified: string[] = [];
+    const filesModifiedSet = new Set<string>();
     let errorsEncountered = 0;
 
     for (const msg of this.state.messages) {
@@ -1787,7 +1787,7 @@ export class ConversationManager {
             toolsUsed.push(block.name);
             if (block.name === "Write" || block.name === "Edit") {
               const fp = String((block.input as Record<string, unknown>)?.file_path ?? "");
-              if (fp && !filesModified.includes(fp)) filesModified.push(fp);
+              if (fp) filesModifiedSet.add(fp);
             }
           }
           if (block.type === "tool_result" && block.is_error) {
@@ -1804,7 +1804,7 @@ export class ConversationManager {
       actionsCount: this.state.toolUseCount,
       topicsDiscussed: [],
       errorsEncountered,
-      filesModified,
+      filesModified: [...filesModifiedSet],
     };
   }
 

@@ -1,15 +1,30 @@
 // KCode - Workspace Trust System
-// Manages workspace trust for project-level hook execution
+// Manages workspace trust for project-level hook, plugin, and MCP execution.
+// Trust is persisted to ~/.kcode/trusted-workspaces.json so users only need
+// to approve a workspace once.
 
 import { resolve } from "node:path";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { kcodePath, kcodeHome } from "./paths";
+import { log } from "./logger";
+
+// ─── Trust Store Path ──────────────────────────────────────────
+
+const TRUST_STORE_PATH = kcodePath("trusted-workspaces.json");
 
 // ─── Workspace Trust ────────────────────────────────────────────
 
 /**
  * Session-only set of workspace paths the user has approved for
- * running project-level hooks. Not persisted to disk.
+ * running project-level hooks. Supplements the persistent store.
  */
-const trustedWorkspaces = new Set<string>();
+const sessionTrustedWorkspaces = new Set<string>();
+
+/**
+ * Cached persistent trust store. Loaded lazily on first access.
+ * null means not yet loaded.
+ */
+let _persistentTrustCache: Set<string> | null = null;
 
 /**
  * Optional callback for prompting the user to trust a workspace.
@@ -35,12 +50,89 @@ export function normalizePath(path: string): string {
   return resolve(path).replace(/\/+$/, "");
 }
 
-/** Explicitly trust a workspace path for the current session. */
-export function trustWorkspace(path: string): void {
-  trustedWorkspaces.add(normalizePath(path));
+// ─── Persistent Trust Store ─────────────────────────────────────
+
+/** Load the persistent trust store from disk. */
+function loadPersistentTrustStore(): Set<string> {
+  if (_persistentTrustCache) return _persistentTrustCache;
+
+  _persistentTrustCache = new Set<string>();
+  try {
+    if (existsSync(TRUST_STORE_PATH)) {
+      const raw = readFileSync(TRUST_STORE_PATH, "utf-8");
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) {
+        for (const entry of data) {
+          if (typeof entry === "string") {
+            _persistentTrustCache.add(normalizePath(entry));
+          }
+        }
+      }
+    }
+  } catch (err) {
+    log.debug("trust", `Failed to load trusted-workspaces.json: ${err}`);
+  }
+  return _persistentTrustCache;
 }
 
-/** Check if a workspace path is currently trusted. */
+/** Save the persistent trust store to disk. */
+function savePersistentTrustStore(store: Set<string>): void {
+  try {
+    const dir = kcodeHome();
+    mkdirSync(dir, { recursive: true });
+    const sorted = [...store].sort();
+    writeFileSync(TRUST_STORE_PATH, JSON.stringify(sorted, null, 2) + "\n", "utf-8");
+  } catch (err) {
+    log.debug("trust", `Failed to save trusted-workspaces.json: ${err}`);
+  }
+}
+
+// ─── Public API ─────────────────────────────────────────────────
+
+/**
+ * Explicitly trust a workspace path. Persists to ~/.kcode/trusted-workspaces.json
+ * and also marks it trusted for the current session.
+ */
+export function trustWorkspace(path: string): void {
+  const normalized = normalizePath(path);
+  sessionTrustedWorkspaces.add(normalized);
+
+  const store = loadPersistentTrustStore();
+  if (!store.has(normalized)) {
+    store.add(normalized);
+    savePersistentTrustStore(store);
+  }
+}
+
+/**
+ * Check if a workspace path is currently trusted (either session or persistent).
+ */
 export function isWorkspaceTrusted(path: string): boolean {
-  return trustedWorkspaces.has(normalizePath(path));
+  const normalized = normalizePath(path);
+  if (sessionTrustedWorkspaces.has(normalized)) return true;
+
+  const store = loadPersistentTrustStore();
+  return store.has(normalized);
+}
+
+/**
+ * Remove trust for a workspace path (both session and persistent).
+ */
+export function untrustWorkspace(path: string): void {
+  const normalized = normalizePath(path);
+  sessionTrustedWorkspaces.delete(normalized);
+
+  const store = loadPersistentTrustStore();
+  if (store.has(normalized)) {
+    store.delete(normalized);
+    savePersistentTrustStore(store);
+  }
+}
+
+/**
+ * Reset the in-memory trust caches (useful for testing).
+ */
+export function _resetTrustCache(): void {
+  sessionTrustedWorkspaces.clear();
+  _persistentTrustCache = null;
 }

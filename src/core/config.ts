@@ -9,6 +9,7 @@ import { getGitRoot } from "./git";
 import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models";
 import { isPro } from "./pro";
 import { log } from "./logger";
+import { isWorkspaceTrusted } from "./hook-trust";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -464,13 +465,16 @@ function applyManagedPolicy(settings: Settings, policy: ManagedPolicy): Settings
  * Format: { "allow": ["Read(*)"], "deny": ["Bash(rm -rf *)"], "ask": ["Edit(*)"] }
  * or: { "rules": [{ "pattern": "Bash(git *)", "action": "allow" }] }
  */
-async function loadPermissionsFile(cwd: string): Promise<PermissionRule[]> {
-  const paths = [
-    join(KCODE_HOME, "permissions.json"),
-    join(cwd, ".kcode", "permissions.json"),
+async function loadPermissionsFile(cwd: string, trusted: boolean): Promise<PermissionRule[]> {
+  const sources: Array<{ path: string; isProject: boolean }> = [
+    { path: join(KCODE_HOME, "permissions.json"), isProject: false },
+    { path: join(cwd, ".kcode", "permissions.json"), isProject: true },
   ];
   const rules: PermissionRule[] = [];
-  for (const path of paths) {
+  for (const { path, isProject } of sources) {
+    // Skip project-level permissions if workspace is not trusted
+    if (isProject && !trusted) continue;
+
     try {
       const file = Bun.file(path);
       if (!(await file.exists())) continue;
@@ -493,11 +497,21 @@ async function loadPermissionsFile(cwd: string): Promise<PermissionRule[]> {
 }
 
 export async function loadSettings(cwd: string): Promise<Settings> {
+  const trusted = isWorkspaceTrusted(cwd);
+
+  // Gate project-level config behind workspace trust
+  const projectSettingsPromise = trusted
+    ? readJsonFile(projectSettingsPath(cwd))
+    : warnUntrustedProjectConfig(projectSettingsPath(cwd));
+  const localSettingsPromise = trusted
+    ? readJsonFile(localSettingsPath(cwd))
+    : warnUntrustedProjectConfig(localSettingsPath(cwd));
+
   const [userRaw, projectRaw, localRaw, permissionFileRules, policy] = await Promise.all([
     readJsonFile(USER_SETTINGS_PATH),
-    readJsonFile(projectSettingsPath(cwd)),
-    readJsonFile(localSettingsPath(cwd)),
-    loadPermissionsFile(cwd),
+    projectSettingsPromise,
+    localSettingsPromise,
+    loadPermissionsFile(cwd, trusted),
     loadManagedPolicy(),
   ]);
 
@@ -518,6 +532,17 @@ export async function loadSettings(cwd: string): Promise<Settings> {
   merged = applyManagedPolicy(merged, policy);
 
   return merged;
+}
+
+/** Check if an untrusted project config file exists and warn. Returns null (skipped). */
+async function warnUntrustedProjectConfig(path: string): Promise<null> {
+  try {
+    const file = Bun.file(path);
+    if (await file.exists()) {
+      console.error(`[config] Skipping project .kcode/ config — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`);
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 export async function saveUserSettings(settings: Settings): Promise<void> {
