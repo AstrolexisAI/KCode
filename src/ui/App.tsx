@@ -29,6 +29,7 @@ import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js
 import { useKeyBindings } from "./hooks/useKeyBindings.js";
 import { useAppEffects } from "./hooks/useAppEffects.js";
 import { useMessageProcessor } from "./hooks/useMessageProcessor.js";
+import { KeybindingProvider } from "./components/KeybindingContext.js";
 import type { TabInfo } from "./stream-handler.js";
 import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 
@@ -344,6 +345,7 @@ export default function App({ config, conversationManager, tools, initialSession
   );
 
   return (
+    <KeybindingProvider>
     <Box flexDirection="column">
       {useVirtualScrollEnabled ? (
           <VirtualMessageList
@@ -485,5 +487,6 @@ export default function App({ config, conversationManager, tools, initialSession
         commandDescriptions={commandDescriptions}
       />
     </Box>
+    </KeybindingProvider>
   );
 }

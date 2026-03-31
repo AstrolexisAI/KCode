@@ -15,11 +15,21 @@ import { isWorkspaceTrusted } from "./hook-trust";
 
 export type EffortLevel = "low" | "medium" | "high" | "max";
 
+/** Structured auto-memory configuration (replaces simple boolean toggle) */
+export interface AutoMemorySettings {
+  enabled?: boolean;
+  model?: string | null;
+  minConfidence?: number;
+  maxPerTurn?: number;
+  cooldownTurns?: number;
+  excludeTypes?: string[];
+}
+
 export interface Settings {
   model?: string;
   maxTokens?: number;
   permissionMode?: PermissionMode;
-  autoMemory?: boolean;
+  autoMemory?: boolean | AutoMemorySettings;
   effortLevel?: EffortLevel;
   apiKey?: string;
   apiBase?: string;
@@ -133,7 +143,9 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     model: typeof raw.model === "string" ? raw.model : undefined,
     maxTokens: typeof raw.maxTokens === "number" ? raw.maxTokens : undefined,
     permissionMode: isPermissionMode(raw.permissionMode) ? raw.permissionMode : undefined,
-    autoMemory: typeof raw.autoMemory === "boolean" ? raw.autoMemory : undefined,
+    autoMemory: typeof raw.autoMemory === "boolean" ? raw.autoMemory
+      : (raw.autoMemory && typeof raw.autoMemory === "object") ? raw.autoMemory as AutoMemorySettings
+      : undefined,
     effortLevel: isEffortLevel(raw.effortLevel) ? raw.effortLevel : undefined,
     apiKey: typeof raw.apiKey === "string" ? raw.apiKey : undefined,
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
