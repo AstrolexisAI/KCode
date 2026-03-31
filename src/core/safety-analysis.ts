@@ -60,6 +60,9 @@ export function detectCommandInjection(command: string): string | null {
   if (/&&\s*\S/.test(unquoted)) {
     return "Command contains && chaining";
   }
+  if (/\|\|\s*\S/.test(unquoted)) {
+    return "Command contains || chaining";
+  }
 
   return null;
 }

@@ -117,6 +117,11 @@ export class PluginManager {
     const skillFiles: string[] = [];
     if (manifest.skills) {
       for (const skillPath of manifest.skills) {
+        // Path traversal guard: reject paths that escape the plugin directory
+        if (skillPath.includes("..") || skillPath.startsWith("/") || skillPath.startsWith("\\")) {
+          log.warn("config", `Plugin "${manifest.name}": skill path rejected (traversal attempt): ${skillPath}`);
+          continue;
+        }
         const fullPath = join(dir, skillPath);
         if (existsSync(fullPath)) {
           skillFiles.push(fullPath);

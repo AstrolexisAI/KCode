@@ -41,6 +41,17 @@ function isPrivateIP(hostname: string): boolean {
       if (octet1 === 127 || octet1 === 10 || octet1 === 0) return true;
       if (octet1 === 172 && ((num >>> 16) & 0xff) >= 16 && ((num >>> 16) & 0xff) <= 31) return true;
       if (octet1 === 192 && ((num >>> 16) & 0xff) === 168) return true;
+    // Octal IP representations (e.g., 0177.0.0.1 = 127.0.0.1)
+    } else if (/^0\d+\./.test(hostname)) {
+      try {
+        const octets = hostname.split(".").map(o => parseInt(o, 8));
+        if (octets.length === 4 && octets.every(o => !isNaN(o) && o >= 0 && o <= 255)) {
+          const [a, b, c, d] = octets;
+          if (a === 127 || a === 10 || a === 0) return true;
+          if (a === 172 && b! >= 16 && b! <= 31) return true;
+          if (a === 192 && b === 168) return true;
+        }
+      } catch {}
     } else if (/^\d+$/.test(hostname) && hostname.length > 3) {
       const num = parseInt(hostname, 10);
       if (num > 0 && num <= 0xffffffff) {

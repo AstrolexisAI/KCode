@@ -169,7 +169,10 @@ export function validateJsonSchema(data: unknown, schema: Record<string, unknown
     }
     if (typeof schema.pattern === "string") {
       try {
-        if (!new RegExp(schema.pattern).test(data)) {
+        // Guard against ReDoS: reject patterns with known catastrophic backtracking constructs
+        if (/(\([^)]*[+*][^)]*\))[+*]/.test(schema.pattern) || schema.pattern.length > 200) {
+          errors.push(`${path}: regex pattern rejected (potential ReDoS or too long)`);
+        } else if (!new RegExp(schema.pattern).test(data)) {
           errors.push(`${path}: string does not match pattern "${schema.pattern}"`);
         }
       } catch {

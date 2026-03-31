@@ -81,7 +81,7 @@ function savePersistentTrustStore(store: Set<string>): void {
     const dir = kcodeHome();
     mkdirSync(dir, { recursive: true });
     const sorted = [...store].sort();
-    writeFileSync(TRUST_STORE_PATH, JSON.stringify(sorted, null, 2) + "\n", "utf-8");
+    writeFileSync(TRUST_STORE_PATH, JSON.stringify(sorted, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
   } catch (err) {
     log.debug("trust", `Failed to save trusted-workspaces.json: ${err}`);
   }
