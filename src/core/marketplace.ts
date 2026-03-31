@@ -190,6 +190,15 @@ function getDefaultRegistry(): MarketplacePlugin[] {
 }
 
 async function fetchRemoteRegistry(registryUrl: string): Promise<MarketplacePlugin[] | null> {
+  // Skip remote fetch if offline mode is active
+  try {
+    const { getOfflineMode } = await import("./offline/mode");
+    if (getOfflineMode().isActive()) {
+      log.debug("marketplace", "Offline mode active, skipping remote registry fetch");
+      return null;
+    }
+  } catch { /* offline module not loaded yet */ }
+
   try {
     const resp = await fetch(`${registryUrl}/plugins`, {
       signal: AbortSignal.timeout(5000),

@@ -469,6 +469,25 @@ export class ConversationManager {
       }
     } catch (err) { log.debug("context", "Failed to inject smart context hints: " + err); }
 
+    // Auto-RAG: inject semantically relevant code context from the local RAG engine
+    try {
+      const { getRAGEngine } = await import("./rag/engine.js");
+      const rag = getRAGEngine(this.config.workingDirectory);
+      await rag.init();
+      if (rag.stats().total > 0) {
+        const ragResults = await rag.search(userMessage, { limit: 5, queryType: "code" });
+        if (ragResults.length > 0 && ragResults[0]!.similarity > 0.01) {
+          const ragContext = rag.formatAsContext(ragResults, 3000);
+          if (ragContext) {
+            this.state.messages.push({
+              role: "user",
+              content: `[SYSTEM CONTEXT] ${ragContext}`,
+            });
+          }
+        }
+      }
+    } catch (err) { log.debug("context", "Failed to inject RAG context: " + err); }
+
     // Auto-invoke skills: match user message against trigger patterns
     // Injects Level 2 (full body) of matched skills as system context
     try {

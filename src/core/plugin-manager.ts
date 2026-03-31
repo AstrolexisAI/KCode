@@ -166,7 +166,20 @@ export class PluginManager {
 
     const isGitUrl = source.startsWith("https://") || source.startsWith("git@") || source.endsWith(".git");
 
+    // Block remote installs when offline
     if (isGitUrl) {
+      try {
+        const { getOfflineMode } = await import("./offline/mode");
+        if (getOfflineMode().isActive()) {
+          throw new Error(
+            `Cannot install from remote URL "${source}" while in offline mode. ` +
+            `Use a local path or disable offline mode first.`,
+          );
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes("offline mode")) throw err;
+        /* offline module not loaded, proceed */
+      }
       return this.installFromGit(source);
     } else {
       return this.installFromLocal(source);

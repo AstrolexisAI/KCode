@@ -229,6 +229,7 @@ program
   .option("--profile <name>", "Use an execution profile (safe, fast, review, implement, ops)")
   .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
   .option("--debug", "Enable agent debug tracing (shows decision reasoning)")
+  .option("--offline", "Force offline mode (block all remote network requests)")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
     // Validate permission mode
@@ -284,7 +285,7 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; noCache?: boolean; reasoningBudget?: string; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string; debug?: boolean },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; noCache?: boolean; reasoningBudget?: string; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string; debug?: boolean; offline?: boolean },
 ) {
   const cwd = process.cwd();
 
@@ -292,6 +293,23 @@ async function runMain(
   // When KCODE_MANAGED=1, an external server (Jarvis) manages the llama-server.
   // Skip wizard and server auto-start — just connect to KCODE_API_BASE.
   const isManaged = process.env.KCODE_MANAGED === "1";
+
+  // ─── Offline mode initialization ─────────────────────────
+  {
+    const { initOfflineMode } = await import("./core/offline/mode");
+    const config = await buildConfig(cwd);
+    const offlineInstance = initOfflineMode({
+      settings: config.offline,
+      forced: !!opts.offline,
+    });
+    // Auto-detect connectivity if not forced and autoDetect is not disabled
+    if (!opts.offline && config.offline?.autoDetect !== false) {
+      await offlineInstance.checkConnectivity();
+    }
+    if (offlineInstance.isActive()) {
+      log.info("index", "Running in offline mode");
+    }
+  }
 
   if (!isManaged) {
     // Auto-setup on first run — launch the installation wizard

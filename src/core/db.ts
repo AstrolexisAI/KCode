@@ -246,6 +246,26 @@ function initSchema(db: Database): void {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_branches_parent ON conversation_branches(parent_id)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_branches_status ON conversation_branches(status)`);
 
+  // rag/vector-store.ts tables — RAG engine chunk + embedding storage
+  db.exec(`CREATE TABLE IF NOT EXISTS rag_chunks (
+    id TEXT PRIMARY KEY,
+    file_path TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    language TEXT NOT NULL,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    signature TEXT,
+    start_line INTEGER,
+    end_line INTEGER,
+    embedding BLOB,
+    token_estimate INTEGER,
+    indexed_at TEXT DEFAULT (datetime('now')),
+    file_modified_at TEXT
+  )`);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_rag_file ON rag_chunks(file_path)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_rag_type ON rag_chunks(type)");
+
   // memory-store.ts tables — enhanced structured memory with categories, confidence, expiry
   const { initMemoryStoreSchema } = require("./memory-store") as typeof import("./memory-store");
   initMemoryStoreSchema(db);
