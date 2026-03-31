@@ -382,6 +382,57 @@ function readTextFile(filePath: string, offset?: number, limit?: number): TextFi
   };
 }
 
+// ─── Sensitive Path Blocklist ───────────────────────────────────
+// These paths contain secrets/credentials and must never be read,
+// regardless of workspace location. This prevents data exfiltration
+// even when the workspace is a subdirectory (not HOME).
+
+const BLOCKED_READ_PATHS = [
+  "/etc/shadow",
+  "/etc/passwd",
+  "/etc/sudoers",
+  "/etc/master.passwd",      // BSD equivalent
+  "/proc/self/environ",      // leaks env vars with secrets
+];
+
+const home = process.env.HOME ?? "";
+
+const BLOCKED_READ_PREFIXES = [
+  `${home}/.ssh/`,
+  `${home}/.aws/`,
+  `${home}/.gnupg/`,
+  `${home}/.kube/`,
+  "/etc/sudoers.d/",
+];
+
+const SENSITIVE_READ_PATTERNS = [
+  /\.(env|env\.\w+)$/,
+  /\.(pem|key|crt|cert)$/,
+  /\.ssh\//,
+  /credentials/i,
+  /\.aws\//,
+  /\.kube\/config/,
+  /id_rsa/,
+  /id_ed25519/,
+  /\.gitconfig$/,
+  /\.gnupg\//,
+  /\/proc\/self\/environ$/,
+];
+
+function isSensitiveReadPath(filePath: string): boolean {
+  const resolved = resolve(filePath);
+
+  if (BLOCKED_READ_PATHS.includes(resolved)) return true;
+
+  for (const prefix of BLOCKED_READ_PREFIXES) {
+    if (prefix && resolved.startsWith(prefix)) return true;
+  }
+
+  if (SENSITIVE_READ_PATTERNS.some(p => p.test(resolved))) return true;
+
+  return false;
+}
+
 // ─── Main Entry Point ───────────────────────────────────────────
 
 export async function executeRead(input: Record<string, unknown>): Promise<ToolResult> {
@@ -390,10 +441,19 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
   const limit = input.limit as number | undefined;
   const pages = input.pages as string | undefined;
 
+  // Block reads of sensitive system/credential files regardless of workspace
+  if (isSensitiveReadPath(file_path)) {
+    return {
+      tool_use_id: "",
+      content: `BLOCKED: Reading "${file_path}" is blocked because it matches a sensitive file pattern (credentials, keys, secrets, etc.). This protects against accidental exposure of secrets.`,
+      is_error: true,
+    };
+  }
+
   // Workspace guard: when workspace is HOME, warn about broad reads
   const workspace = getToolWorkspace();
-  const home = process.env.HOME ?? "";
-  const isHomeWorkspace = home && resolve(workspace) === resolve(home);
+  const homeDir = process.env.HOME ?? "";
+  const isHomeWorkspace = homeDir && resolve(workspace) === resolve(homeDir);
 
   if (isHomeWorkspace) {
     const resolved = resolve(file_path);

@@ -545,12 +545,21 @@ async function warnUntrustedProjectConfig(path: string): Promise<null> {
   return null;
 }
 
-export async function saveUserSettings(settings: Settings): Promise<void> {
-  const dir = KCODE_HOME;
-  await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
-  await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
-  // Restrict permissions — settings may contain API keys and Pro license keys
-  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod user settings: ${err}`); }
+// Promise-based write queue for user settings. Bun is single-threaded, so
+// chaining onto a shared promise is sufficient to serialise read-modify-write
+// cycles and prevent concurrent writes from losing data (M3 race fix).
+let _settingsSaveLock: Promise<void> = Promise.resolve();
+
+export function saveUserSettings(settings: Settings): Promise<void> {
+  const op = async () => {
+    const dir = KCODE_HOME;
+    await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
+    await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    // Restrict permissions — settings may contain API keys and Pro license keys
+    try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod user settings: ${err}`); }
+  };
+  _settingsSaveLock = _settingsSaveLock.then(op, op);
+  return _settingsSaveLock;
 }
 
 /** Load raw user settings JSON (preserves extra fields like provider-specific API keys). */
@@ -559,18 +568,22 @@ export async function loadUserSettingsRaw(): Promise<Record<string, unknown>> {
 }
 
 /** Save raw user settings JSON (merges with existing to prevent data loss). */
-export async function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void> {
-  const dir = KCODE_HOME;
-  await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
-  // Merge with existing settings to prevent losing fields (e.g., proKey) due to concurrent writes
-  const existing = (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
-  const merged = { ...existing, ...raw };
-  // Explicitly delete fields set to undefined (allows intentional removal)
-  for (const [k, v] of Object.entries(raw)) {
-    if (v === undefined) delete merged[k];
-  }
-  await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
-  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod raw user settings: ${err}`); }
+export function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void> {
+  const op = async () => {
+    const dir = KCODE_HOME;
+    await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
+    // Merge with existing settings to prevent losing fields (e.g., proKey) due to concurrent writes
+    const existing = (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+    const merged = { ...existing, ...raw };
+    // Explicitly delete fields set to undefined (allows intentional removal)
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === undefined) delete merged[k];
+    }
+    await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
+    try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod raw user settings: ${err}`); }
+  };
+  _settingsSaveLock = _settingsSaveLock.then(op, op);
+  return _settingsSaveLock;
 }
 
 export async function saveProjectSettings(cwd: string, settings: Settings): Promise<void> {

@@ -222,9 +222,14 @@ describe("Read — HOME workspace guard", () => {
     const home = process.env.HOME ?? "";
     if (!home) return;
     setToolWorkspace(home);
+    // /etc/passwd is now blocked by the sensitive path blocklist (takes priority)
     const result = await executeRead({ file_path: "/etc/passwd" });
     expect(result.is_error).toBe(true);
-    expect(result.content).toContain("outside the workspace");
+    expect(result.content).toContain("BLOCKED");
+    // Also test a non-sensitive path outside HOME
+    const result2 = await executeRead({ file_path: "/usr/nonexistent-kcode-test" });
+    expect(result2.is_error).toBe(true);
+    expect(result2.content).toContain("outside the workspace");
   });
 
   test("allows reading existing files in HOME workspace", async () => {

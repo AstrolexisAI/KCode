@@ -49,6 +49,15 @@ import {
   evaluateIntentionSuggestions,
   sendDesktopNotification,
 } from "./post-turn";
+import { handleForceStop, handleTheoreticalMode, handleCheckpointMode, handlePlanCoherence } from "./stop-conditions";
+import {
+  handleMaxTokensContinue,
+  handleIntentionSuggestions,
+  classifyEmptyResponse,
+  handleEmptyResponseRetry,
+  handleTruncationRetry,
+  handlePostTurnNotifications,
+} from "./response-handlers";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -824,148 +833,85 @@ export class ConversationManager {
       // Store assistant message in conversation history
       this.state.messages.push({ role: "assistant", content: assistantContent });
 
-      // If force-stop is set, refuse to execute any more tools
-      if (guardState.forceStopLoop && toolCalls.length > 0) {
-        log.warn("session", `Force-stop active but model returned ${toolCalls.length} tool calls — dropping them`);
-        const textOnly = assistantContent.filter(b => b.type === "text");
-        if (textOnly.length > 0) {
-          this.state.messages[this.state.messages.length - 1] = { role: "assistant", content: textOnly };
+      // ─── Stop condition checks (delegated to stop-conditions.ts) ───
+
+      // Force-stop: refuse to execute any more tools
+      const forceStopResult = handleForceStop(guardState.forceStopLoop, toolCalls, assistantContent);
+      if (forceStopResult.action !== "pass") {
+        if (forceStopResult.updatedContent) {
+          this.state.messages[this.state.messages.length - 1] = { role: "assistant", content: forceStopResult.updatedContent };
         }
-        yield { type: "turn_end", stopReason: "force_stop" };
+        yield { type: "turn_end", stopReason: forceStopResult.stopReason! };
         this.abortController = null;
         return;
       }
 
-      // Theoretical mode: drop all tool calls and force text-only response
-      if (this._theoreticalMode && toolCalls.length > 0) {
-        this._theoreticalRetries = (this._theoreticalRetries ?? 0) + 1;
-        log.info("session", `Theoretical mode: dropping ${toolCalls.length} tool call(s) (attempt ${this._theoreticalRetries})`);
-        const textOnly = assistantContent.filter(b => b.type === "text");
-        this.state.messages[this.state.messages.length - 1] = {
-          role: "assistant",
-          content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
-        };
-
-        // After 2 retries, accept whatever text exists and stop.
-        // Do NOT disable theoretical mode — tools must never execute.
-        if (this._theoreticalRetries >= 2) {
-          log.warn("session", "Theoretical mode: model persists with tool calls after 2 retries — accepting text and stopping");
-          // If there's any text content, the user gets that. If not, yield
-          // an error so the user knows the model refused to comply.
-          if (textOnly.length === 0 || textOnly.every(b => b.type === "text" && !b.text)) {
-            yield { type: "error", error: new Error("The model could not produce a text-only response for this theoretical question. Try rephrasing or using a different model."), retryable: false };
-          }
-          yield { type: "turn_end", stopReason: "theoretical_no_tools" };
-          this._theoreticalRetries = 0;
-          return;
+      // Theoretical mode: drop tool calls and force text-only
+      const theoreticalResult = handleTheoreticalMode(this._theoreticalMode, toolCalls, assistantContent, this._theoreticalRetries ?? 0);
+      if (theoreticalResult.action !== "pass") {
+        this._theoreticalRetries = theoreticalResult.newRetryCount;
+        if (theoreticalResult.updatedContent) {
+          this.state.messages[this.state.messages.length - 1] = { role: "assistant", content: theoreticalResult.updatedContent };
         }
-
-        this.state.messages.push({
-          role: "user",
-          content: "[SYSTEM] Tools are disabled for theoretical questions. Answer with text only. Do not attempt any tool calls.",
-        });
-        yield { type: "turn_end", stopReason: "theoretical_no_tools" };
+        if (theoreticalResult.error) {
+          yield { type: "error", error: theoreticalResult.error, retryable: false };
+        }
+        if (theoreticalResult.injectMessage) {
+          this.state.messages.push({ role: "user", content: theoreticalResult.injectMessage });
+        }
+        yield { type: "turn_end", stopReason: theoreticalResult.stopReason! };
+        if (theoreticalResult.action === "break") return;
         continue;
       }
 
-      // Checkpoint mode: after enough tools for initial setup, force stop
-      // This prevents the model from continuing to implement features
-      // beyond what the user asked for (e.g., "just the initial structure").
-      // Threshold: 4 tool calls — a tight limit for "first step only".
-      // Scaffold typically needs: mkdir/create (1) + config write (2-3) + install (4).
-      if (this._checkpointMode && toolCalls.length > 0) {
-        this._checkpointToolCount += toolCalls.length;
-        if (this._checkpointToolCount >= 4) {
-          log.info("session", `Checkpoint mode: ${this._checkpointToolCount} tools used — forcing stop for stage summary`);
-          const textOnly = assistantContent.filter(b => b.type === "text");
-          this.state.messages[this.state.messages.length - 1] = {
-            role: "assistant",
-            content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
-          };
-          this.state.messages.push({
-            role: "user",
-            content: "[SYSTEM] CHECKPOINT REACHED: You have completed enough work for the initial stage the user requested. STOP executing tools NOW. Provide a clear summary of: (1) what was created, (2) what still needs to be done, (3) suggested next step. Do NOT continue implementing.",
-          });
-          this._checkpointMode = false; // Disable after firing once
-          guardState.forceStopLoop = true;
-          yield { type: "turn_end", stopReason: "checkpoint_reached" };
-          continue;
+      // Checkpoint mode: stop after enough tools for initial setup
+      const checkpointResult = handleCheckpointMode(this._checkpointMode, toolCalls, this._checkpointToolCount, assistantContent);
+      if (checkpointResult.action !== "pass") {
+        this._checkpointToolCount = checkpointResult.newToolCount;
+        if (checkpointResult.updatedContent) {
+          this.state.messages[this.state.messages.length - 1] = { role: "assistant", content: checkpointResult.updatedContent };
         }
+        if (checkpointResult.injectMessage) {
+          this.state.messages.push({ role: "user", content: checkpointResult.injectMessage });
+        }
+        if (checkpointResult.setForceStop) {
+          this._checkpointMode = false;
+          guardState.forceStopLoop = true;
+        }
+        yield { type: "turn_end", stopReason: checkpointResult.stopReason! };
+        continue;
+      } else {
+        this._checkpointToolCount = checkpointResult.newToolCount;
       }
 
-      // Plan coherence: validate execution against active plan step
-      try {
-        const { countInProgressSteps, getActiveStep, shouldStopAfterCurrentStep, classifyToolCoherence } = await import("../tools/plan.js");
-
-        // Check if stopAfterStep was reached
-        if (shouldStopAfterCurrentStep()) {
-          log.info("session", "Plan stopAfterStep reached — forcing stop");
-          const textOnly = assistantContent.filter(b => b.type === "text");
-          this.state.messages[this.state.messages.length - 1] = {
-            role: "assistant",
-            content: textOnly.length > 0 ? textOnly : [{ type: "text", text: "" }],
-          };
-          this.state.messages.push({
-            role: "user",
-            content: "[SYSTEM] The plan's stop-after step has been completed. STOP and provide a summary of what was done. Do NOT continue to further steps.",
-          });
-          guardState.forceStopLoop = true;
-          yield { type: "turn_end", stopReason: "plan_stop_reached" };
-          continue;
+      // Plan coherence: validate execution against active plan step (delegated to stop-conditions.ts)
+      const planResult = await handlePlanCoherence(toolCalls, assistantContent);
+      if (planResult.setForceStop) {
+        guardState.forceStopLoop = true;
+        const textOnly = assistantContent.filter(b => b.type === "text");
+        this.state.messages[this.state.messages.length - 1] = {
+          role: "assistant",
+          content: textOnly.length > 0 ? textOnly : [{ type: "text" as const, text: "" }],
+        };
+      }
+      for (const msg of planResult.injectMessages) {
+        this.state.messages.push({ role: "user", content: msg });
+      }
+      if (planResult.stopReason) {
+        yield { type: "turn_end", stopReason: planResult.stopReason };
+        continue;
+      }
+      if (planResult.blockedResults.length > 0) {
+        const blockedBlocks: any[] = planResult.blockedResults.map(r => ({
+          type: "tool_result", tool_use_id: r.tool_use_id, content: r.content, is_error: true,
+        }));
+        this.state.messages.push({ role: "user", content: blockedBlocks });
+        for (const r of planResult.blockedResults) {
+          yield { type: "tool_result" as const, name: r.name, toolUseId: r.tool_use_id, result: r.content, isError: true };
         }
-
-        // Check multiple in_progress
-        const inProgress = countInProgressSteps();
-        if (inProgress > 1) {
-          log.warn("session", `Plan coherence: ${inProgress} steps in_progress simultaneously — injecting correction`);
-          this.state.messages.push({
-            role: "user",
-            content: `[SYSTEM] Plan coherence warning: you have ${inProgress} steps marked as in_progress simultaneously. Finish the current step before starting another. Update the plan to reflect actual progress.`,
-          });
-        }
-
-        // Check tool coherence against active step — warn or block
-        const activeStep = getActiveStep();
-        if (activeStep && toolCalls.length > 0) {
-          const blocked: typeof toolCalls = [];
-          const kept: typeof toolCalls = [];
-          let warned = false;
-
-          for (const tc of toolCalls) {
-            const coherence = classifyToolCoherence(tc.name, tc.input as Record<string, unknown>, activeStep.title);
-            if (coherence === "block") {
-              log.warn("session", `Plan block: tool ${tc.name} contradicts step "${activeStep.title}" — blocking`);
-              blocked.push(tc);
-            } else if (coherence === "warn" && !warned) {
-              warned = true;
-              log.warn("session", `Plan deviation: tool ${tc.name} may not match step "${activeStep.title}"`);
-              this.state.messages.push({
-                role: "user",
-                content: `[SYSTEM] Plan deviation detected: your action (${tc.name}) doesn't seem to match the current plan step "${activeStep.id}. ${activeStep.title}". Finish the current step first, or update the plan if you're intentionally changing approach.`,
-              });
-              kept.push(tc); // Warn but still allow
-            } else {
-              kept.push(tc);
-            }
-          }
-
-          if (blocked.length > 0) {
-            // Inject synthetic tool results for blocked calls
-            const blockedResults: any[] = blocked.map(tc => ({
-              type: "tool_result",
-              tool_use_id: tc.id,
-              content: `BLOCKED by plan: "${tc.name}" contradicts the current step "${activeStep.id}. ${activeStep.title}". Finish or update the current step first.`,
-              is_error: true,
-            }));
-            this.state.messages.push({ role: "user", content: blockedResults });
-            for (const tc of blocked) {
-              yield { type: "tool_result" as const, name: tc.name, toolUseId: tc.id, result: blockedResults.find((r: any) => r.tool_use_id === tc.id)?.content ?? "Blocked", isError: true };
-            }
-            toolCalls = kept;
-            if (kept.length === 0) continue; // All tools blocked, retry
-          }
-        }
-      } catch { /* plan module not loaded */ }
+        toolCalls = planResult.keptCalls;
+        if (toolCalls.length === 0) continue;
+      }
 
       // Record per-turn cost entry
       if (turnInputTokens > 0 || turnOutputTokens > 0) {
@@ -1409,8 +1355,8 @@ export class ConversationManager {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      let effectiveModel = this.config.model;
       try {
-        let effectiveModel = this.config.model;
         if (this.config.autoRoute !== false && !this.config.modelExplicitlySet) {
           const recentText = this.getRecentMessageText();
           effectiveModel = await routeToModel(this.config.model, recentText);
@@ -1427,21 +1373,14 @@ export class ConversationManager {
         lastError = error instanceof Error ? error : new Error(String(error));
 
         // If the router sent us to a different model and it failed, fall back to primary
-        {
-          let effectiveModel = this.config.model;
-          if (this.config.autoRoute !== false && !this.config.modelExplicitlySet) {
-            const recentText = this.getRecentMessageText();
-            effectiveModel = await routeToModel(this.config.model, recentText);
-          }
-          if (effectiveModel !== this.config.model) {
-            log.warn("llm", `Routed model ${effectiveModel} failed, falling back to primary ${this.config.model}`);
-            try {
-              const stream = await executeModelRequest(this.config.model, this.config, this.systemPrompt, this.state.messages, this.tools, this.abortController);
-              log.info("llm", `Primary model ${this.config.model} connected after routed model failure`);
-              return stream;
-            } catch (primaryErr) {
-              log.error("llm", `Primary model also failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
-            }
+        if (effectiveModel !== this.config.model) {
+          log.warn("llm", `Routed model ${effectiveModel} failed, falling back to primary ${this.config.model}`);
+          try {
+            const stream = await executeModelRequest(this.config.model, this.config, this.systemPrompt, this.state.messages, this.tools, this.abortController);
+            log.info("llm", `Primary model ${this.config.model} connected after routed model failure`);
+            return stream;
+          } catch (primaryErr) {
+            log.error("llm", `Primary model also failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`);
           }
         }
 
