@@ -410,11 +410,11 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
           const { lstatSync } = require("node:fs") as typeof import("node:fs");
           const lstat = lstatSync(resolve(realDir, basename));
           if (lstat.isSymbolicLink()) {
-            // Dangling symlink — resolve its target to prevent symlink-based traversal
-            const target = require("node:fs").readlinkSync(resolve(realDir, basename));
-            const { resolve: pathResolve, isAbsolute: pathIsAbsolute } = require("node:path") as typeof import("node:path");
-            const resolvedTarget = pathIsAbsolute(target) ? target : pathResolve(realDir, target);
-            resolved = resolvedTarget;
+            // Reject writes to any symlink (dangling or not) to prevent symlink-based traversal
+            return {
+              allowed: false,
+              reason: `Write blocked: "${filePath}" is a symlink. Refusing to write through symlinks for security.`,
+            };
           }
         } catch (err) {
           log.debug("permissions", `Symlink check failed for ${resolve(realDir, basename)}: ${err}`);

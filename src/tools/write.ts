@@ -74,10 +74,7 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
       };
     }
 
-    mkdirSync(dirname(file_path), { recursive: true });
-
-    // TOCTOU mitigation: check for symlink right before write to narrow the race window.
-    // This catches symlinks created between the earlier realpathSync check and the actual write.
+    // Check for symlink BEFORE creating directories to prevent symlink-based traversal
     try {
       const stat = lstatSync(file_path);
       if (stat.isSymbolicLink()) {
@@ -90,6 +87,8 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
     } catch {
       // File doesn't exist yet — safe to create
     }
+
+    mkdirSync(dirname(file_path), { recursive: true });
 
     writeFileSync(file_path, content, "utf-8");
 

@@ -98,7 +98,15 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
       // mx.set_wired_limit() controls how much RAM is locked (non-swappable).
       // Excess model weights stream from NVMe SSD via OS page cache (~7 GB/s).
       // We monkey-patch set_wired_limit after our call so main() can't override it.
-      const wiredBytes = config.mlxWiredLimitMB * 1024 * 1024;
+      const wiredBytes = Math.floor(Number(config.mlxWiredLimitMB) * 1024 * 1024);
+      if (!Number.isFinite(wiredBytes) || wiredBytes <= 0) {
+        throw new Error(`Invalid mlxWiredLimitMB: ${config.mlxWiredLimitMB} — must be a positive number`);
+      }
+      // Validate port as integer to prevent Python injection via interpolation
+      const safePort = Math.floor(Number(port));
+      if (!Number.isInteger(safePort) || safePort <= 0 || safePort > 65535) {
+        throw new Error(`Invalid port: ${port} — must be integer 1-65535`);
+      }
       // Sanitize model name to prevent injection (only allow alphanumeric, -, /, .)
       const safeModel = mlxModel.replace(/[^a-zA-Z0-9\-\/._]/g, "");
       const wrapperScript =
@@ -108,7 +116,7 @@ if hasattr(mx, 'set_wired_limit'):
     _orig = mx.set_wired_limit
     mx.set_wired_limit = lambda *a, **kw: _orig(${wiredBytes})
 import sys
-sys.argv = ['mlx_lm.server', '--model', '${safeModel}', '--port', '${port}', '--host', '127.0.0.1']
+sys.argv = ['mlx_lm.server', '--model', '${safeModel}', '--port', '${safePort}', '--host', '127.0.0.1']
 from mlx_lm.server import main
 main()`;
       args = ["-c", wrapperScript];

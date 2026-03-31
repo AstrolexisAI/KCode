@@ -235,7 +235,8 @@ export class CodebaseIndex {
 
       db.exec("BEGIN");
       // Clear old entries for this project
-      db.run(`DELETE FROM codebase_index WHERE path LIKE ?`, [`${this.cwd}%`]);
+      const escapedCwd = this.cwd.replace(/[%_\\]/g, (ch) => `\\${ch}`);
+      db.run(`DELETE FROM codebase_index WHERE path LIKE ? ESCAPE '\\'`, [`${escapedCwd}%`]);
       for (const e of this.entries) {
         stmt.run(e.path, e.relativePath, e.ext, e.size, JSON.stringify(e.exports), JSON.stringify(e.imports), JSON.stringify(e.definitions), e.modifiedAt);
       }
@@ -255,8 +256,8 @@ export class CodebaseIndex {
       const db = getDb();
       const rows = db.query(
         `SELECT path, relative_path, ext, size, exports, imports, definitions, modified_at
-         FROM codebase_index WHERE path LIKE ? ORDER BY relative_path`,
-      ).all(`${this.cwd}%`) as Array<{ path: string; relative_path: string; ext: string; size: number; exports: string; imports: string; definitions: string | null; modified_at: string }>;
+         FROM codebase_index WHERE path LIKE ? ESCAPE '\\' ORDER BY relative_path`,
+      ).all(`${this.cwd.replace(/[%_\\]/g, (ch) => `\\${ch}`)}%`) as Array<{ path: string; relative_path: string; ext: string; size: number; exports: string; imports: string; definitions: string | null; modified_at: string }>;
 
       if (!rows || rows.length === 0) return false;
 

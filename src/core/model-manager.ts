@@ -187,6 +187,11 @@ export async function downloadMlxModel(entry: CatalogEntry, onProgress?: (msg: s
 
   progress(`Downloading ${entry.codename} (MLX ${entry.mlxQuant})...`);
 
+  // Validate mlxRepo against HuggingFace naming pattern to prevent Python code injection
+  if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(entry.mlxRepo)) {
+    throw new Error(`Invalid MLX model repo name: "${entry.mlxRepo}" — must match owner/model format`);
+  }
+
   // Use mlx_lm.load to trigger HuggingFace download and cache
   const proc = Bun.spawnSync([
     venvPython, "-c",

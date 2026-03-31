@@ -70,6 +70,16 @@ function isValidServerConfig(value: unknown): value is McpServerConfig {
       if (typeof oauth.clientId !== "string") return false;
       if (typeof oauth.authorizationUrl !== "string") return false;
       if (typeof oauth.tokenUrl !== "string") return false;
+      // Validate OAuth URLs use HTTPS (or http://localhost for dev). Block data:, javascript:, file: protocols.
+      for (const urlField of ["authorizationUrl", "tokenUrl"] as const) {
+        try {
+          const parsed = new URL(oauth[urlField] as string);
+          const isLocalhost = parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1");
+          if (parsed.protocol !== "https:" && !isLocalhost) return false;
+        } catch {
+          return false;
+        }
+      }
     }
     // Validate allowedTools/blockedTools for HTTP transport too
     if (obj.allowedTools !== undefined) {
