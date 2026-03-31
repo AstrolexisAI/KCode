@@ -567,3 +567,212 @@ describe("ConversationManager: fork", () => {
     expect(fork.messageCount).toBeLessThanOrEqual(2);
   });
 });
+
+// ─── Abort During Tool Execution (H4 fix) ──────────────────────
+
+describe("ConversationManager: abort during tool execution", () => {
+  let env: TestEnv;
+
+  beforeEach(async () => {
+    env = await createTestEnv({ inProcess: true });
+  });
+  afterEach(async () => { await env.cleanup(); });
+
+  test("abort mid-tool-execution terminates generator cleanly", async () => {
+    // Register a tool that we can abort during
+    let handlerCalled = false;
+    env.registry.register("SlowTool", {
+      name: "SlowTool",
+      description: "A tool that takes a while",
+      input_schema: { type: "object" as const, properties: {}, required: [] },
+    }, async () => {
+      handlerCalled = true;
+      await new Promise((r) => setTimeout(r, 50));
+      return { tool_use_id: "", content: "done", is_error: false };
+    });
+
+    env.provider.addToolCallResponse([
+      { name: "SlowTool", arguments: {} },
+    ]);
+    env.provider.addResponse("Finished.");
+
+    const cm = new ConversationManager(env.config, env.registry);
+    const gen = cm.sendMessage("Run slow tool");
+
+    // Drain a few events to let the loop start, then abort
+    const events: StreamEvent[] = [];
+    let aborted = false;
+    let eventCount = 0;
+    for await (const event of gen) {
+      events.push(event);
+      eventCount++;
+      // Abort after the first couple of events (turn_start, text_delta, etc.)
+      if (eventCount >= 2 && !aborted) {
+        cm.abort();
+        aborted = true;
+      }
+    }
+
+    // Generator should have terminated without throwing
+    expect(aborted).toBe(true);
+    expect(cm.isRunning).toBe(false);
+    // Should not crash — just verify we got here
+  });
+});
+
+// ─── Burned Fingerprints ────────────────────────────────────────
+
+describe("ConversationManager: burnedFingerprints", () => {
+  let env: TestEnv;
+
+  beforeEach(async () => {
+    env = await createTestEnv({ inProcess: true });
+  });
+  afterEach(async () => { await env.cleanup(); });
+
+  test("tool that fails twice with same error is blocked on 3rd call", async () => {
+    // Override the Glob tool to always fail with the same error.
+    // Glob is in READ_ONLY_TOOLS so it passes the permission system in auto mode.
+    let callCount = 0;
+    env.registry.register("Glob", {
+      name: "Glob",
+      description: "Find files (fake, always fails)",
+      input_schema: { type: "object" as const, properties: { pattern: { type: "string" } }, required: ["pattern"] },
+    }, async () => {
+      callCount++;
+      return {
+        tool_use_id: "",
+        content: "Error: connection refused to host xyz",
+        is_error: true,
+      };
+    });
+
+    // Turn 1: model calls Glob -> fails (fingerprint count = 1)
+    env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
+    // Turn 2: model calls Glob again -> fails (fingerprint count = 2, now burned)
+    env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
+    // Turn 3: model calls Glob again -> should be BLOCKED before execution
+    env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
+    // Final text response after blocked tool
+    env.provider.addResponse("OK, I will try something else.");
+
+    const cm = new ConversationManager(env.config, env.registry);
+    const { events } = await sendAndCollect(cm, "Use the tool");
+
+    // The handler should have been called at most 2 times (3rd blocked before exec)
+    expect(callCount).toBeLessThanOrEqual(2);
+
+    // Should have at least one blocked tool result in events
+    const toolResults = eventsOfType(events, "tool_result");
+    const blockedResults = toolResults.filter(
+      (r) => r.result?.includes("BLOCKED") || r.isError,
+    );
+    expect(blockedResults.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Error Fingerprint Dedup (different errors NOT blocked) ─────
+
+describe("ConversationManager: error fingerprint dedup", () => {
+  let env: TestEnv;
+
+  beforeEach(async () => {
+    env = await createTestEnv({ inProcess: true });
+  });
+  afterEach(async () => { await env.cleanup(); });
+
+  test("one failure does not burn a tool — needs 2 identical failures", async () => {
+    // After just 1 failure, the tool executes. After 2 identical failures, it's burned.
+    let callCount = 0;
+    env.registry.register("Glob", {
+      name: "Glob",
+      description: "Fails with same error",
+      input_schema: { type: "object" as const, properties: { pattern: { type: "string" } }, required: ["pattern"] },
+    }, async () => {
+      callCount++;
+      return { tool_use_id: "", content: "Error: temporary failure", is_error: true };
+    });
+
+    // Single call — should execute (1 failure, not yet burned)
+    env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
+    env.provider.addResponse("Tool failed once.");
+
+    const cm = new ConversationManager(env.config, env.registry);
+    await sendAndCollect(cm, "Try the tool");
+
+    // Tool should have been called exactly once
+    expect(callCount).toBe(1);
+  });
+});
+
+// ─── Fallback Chain ─────────────────────────────────────────────
+
+describe("ConversationManager: fallback chain", () => {
+  let env: TestEnv;
+
+  beforeEach(async () => {
+    env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        maxRetries: 1, // Allow one retry so it tries fallback
+        fallbackModel: "fake-model", // Same fake-model will serve the fallback
+      },
+    });
+  });
+  afterEach(async () => { await env.cleanup(); });
+
+  test("falls back to secondary model when primary fails", async () => {
+    // First request fails, second (fallback) succeeds
+    env.provider.addErrorResponse("Primary model overloaded");
+    env.provider.addResponse("Response from fallback model.");
+
+    const cm = new ConversationManager(env.config, env.registry);
+    const { events, text } = await sendAndCollect(cm, "Hello");
+
+    // Should have completed with text from fallback
+    expect(text).toContain("fallback");
+    const turnEnds = eventsOfType(events, "turn_end");
+    expect(turnEnds.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ─── Max Turns Enforcement ──────────────────────────────────────
+
+describe("ConversationManager: max turns enforcement", () => {
+  let env: TestEnv;
+
+  beforeEach(async () => {
+    env = await createTestEnv({
+      inProcess: true,
+      configOverrides: {
+        effortLevel: "low", // low effort = 5 max turns
+      },
+    });
+  });
+  afterEach(async () => { await env.cleanup(); });
+
+  test("loop stops after exceeding max agent turns", async () => {
+    // Queue many tool call + text responses to keep the loop going
+    for (let i = 0; i < 10; i++) {
+      env.provider.addToolCallResponse([
+        { name: "Read", arguments: { file_path: `/tmp/file${i}.txt` } },
+      ]);
+    }
+    // Final response after force-stop injection
+    env.provider.addResponse("OK, I will stop now.");
+
+    const cm = new ConversationManager(env.config, env.registry);
+    const { events } = await sendAndCollect(cm, "Read all the files");
+
+    // Count how many tool_executing events occurred
+    const toolExecs = eventsOfType(events, "tool_executing");
+    // With effortLevel "low" the limit is 5 turns. The loop allows effectiveMaxTurns + 1
+    // for the force-stop turn, then hard-kills. So tool executions should be <= 7.
+    expect(toolExecs.length).toBeLessThanOrEqual(7);
+
+    // Should have a force_stop turn_end
+    const turnEnds = eventsOfType(events, "turn_end");
+    const forceStops = turnEnds.filter((e) => e.stopReason === "force_stop");
+    expect(forceStops.length).toBeGreaterThanOrEqual(1);
+  });
+});

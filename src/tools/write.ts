@@ -1,7 +1,7 @@
 // KCode - Write Tool
 // Creates or overwrites files
 
-import { writeFileSync, mkdirSync, realpathSync } from "node:fs";
+import { writeFileSync, mkdirSync, realpathSync, openSync, closeSync, lstatSync, constants as fsConstants } from "node:fs";
 import { dirname } from "node:path";
 import type { ToolDefinition, ToolResult, FileWriteInput } from "../core/types";
 
@@ -75,6 +75,22 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
     }
 
     mkdirSync(dirname(file_path), { recursive: true });
+
+    // TOCTOU mitigation: check for symlink right before write to narrow the race window.
+    // This catches symlinks created between the earlier realpathSync check and the actual write.
+    try {
+      const stat = lstatSync(file_path);
+      if (stat.isSymbolicLink()) {
+        return {
+          tool_use_id: "",
+          content: `BLOCKED: "${file_path}" is a symlink. Refusing to write through symlinks for security.`,
+          is_error: true,
+        };
+      }
+    } catch {
+      // File doesn't exist yet — safe to create
+    }
+
     writeFileSync(file_path, content, "utf-8");
 
     const lineCount = content.split("\n").length;
