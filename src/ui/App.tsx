@@ -13,6 +13,7 @@ import { CHARS_PER_TOKEN } from "../core/token-budget.js";
 import Header from "./components/Header.js";
 import ToolTabs from "./components/ToolTabs.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
+import VirtualMessageList from "./components/VirtualMessageList.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import InputPrompt from "./components/InputPrompt.js";
 import ActivePlanPanel from "./components/ActivePlanPanel.js";
@@ -126,6 +127,9 @@ export default function App({ config, conversationManager, tools, initialSession
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
   // Plan panel: starts null, only set by onPlanChange (not from DB restore)
   const [activePlan, setActivePlan] = useState<Plan | null>(null);
+
+  // Virtual scroll feature flag — set via KCODE_VIRTUAL_SCROLL=1 env var
+  const [useVirtualScrollEnabled] = useState(() => process.env.KCODE_VIRTUAL_SCROLL === "1");
 
   // Message queue — user can type while KCode is responding
   const [messageQueue, setMessageQueue] = useState<string[]>([]);
@@ -341,18 +345,34 @@ export default function App({ config, conversationManager, tools, initialSession
 
   return (
     <Box flexDirection="column">
-      <MessageList
-          completed={completed}
-          streamingText={streamingText}
-          isLoading={mode === "responding"}
-          loadingMessage={loadingMessage}
-          streamingThinking={streamingThinking}
-          isThinking={isThinking}
-          turnTokens={turnTokens}
-          turnStartTime={turnStartTime}
-          spinnerPhase={spinnerPhase}
-          bashStreamOutput={bashStreamOutput}
-        />
+      {useVirtualScrollEnabled ? (
+          <VirtualMessageList
+            completed={completed}
+            streamingText={streamingText}
+            isLoading={mode === "responding"}
+            loadingMessage={loadingMessage}
+            streamingThinking={streamingThinking}
+            isThinking={isThinking}
+            turnTokens={turnTokens}
+            turnStartTime={turnStartTime}
+            spinnerPhase={spinnerPhase}
+            bashStreamOutput={bashStreamOutput}
+            scrollActive={mode === "input"}
+          />
+        ) : (
+          <MessageList
+            completed={completed}
+            streamingText={streamingText}
+            isLoading={mode === "responding"}
+            loadingMessage={loadingMessage}
+            streamingThinking={streamingThinking}
+            isThinking={isThinking}
+            turnTokens={turnTokens}
+            turnStartTime={turnStartTime}
+            spinnerPhase={spinnerPhase}
+            bashStreamOutput={bashStreamOutput}
+          />
+        )}
 
         {watcherSuggestions.length > 0 && mode === "input" && (
           <Box marginLeft={2} marginBottom={1} flexDirection="column">
