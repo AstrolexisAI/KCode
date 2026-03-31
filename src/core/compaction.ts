@@ -3,6 +3,7 @@
 
 import type { Message, ContentBlock, TextBlock } from "./types.js";
 import { getModelBaseUrl, getModelProvider } from "./models.js";
+import { log } from "./logger.js";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -33,7 +34,12 @@ export class CompactionManager {
   private circuitBreakerTripped = false;
 
   constructor(apiKey?: string, model?: string, apiBase?: string) {
-    this.model = model ?? SUMMARY_MODEL;
+    if (model) {
+      this.model = model;
+    } else {
+      log.warn("compaction", `No model configured for compaction, falling back to hardcoded "${SUMMARY_MODEL}". Configure a model to avoid this.`);
+      this.model = SUMMARY_MODEL;
+    }
     this.apiKey = apiKey;
     this.apiBase = apiBase; // resolved lazily via getModelBaseUrl if not provided
   }

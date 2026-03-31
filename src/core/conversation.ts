@@ -539,7 +539,12 @@ export class ConversationManager {
     );
     this._activeGuardState = guardState;
     const turnStartMs = Date.now();
-    // Track the tail of text from previous turn iteration (for dedup on truncation retry)
+    // Track the last ~300 chars of text from the previous turn iteration so that
+    // when a truncation retry re-streams overlapping content we can deduplicate it
+    // via mergeContFn. This variable is read/written deep inside the while-loop
+    // (~500 lines below) but must be declared here because its value persists
+    // across loop iterations. A future refactor of runAgentLoop into smaller
+    // functions should encapsulate this state (see L5 audit finding).
     let previousTurnTail = "";
 
     while (true) {

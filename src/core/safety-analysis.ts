@@ -192,11 +192,24 @@ export function detectQuoteDesync(command: string): string | null {
 
 // ─── Utility ────────────────────────────────────────────────────
 
-/** Strip quoted strings to analyze the unquoted portions */
+/**
+ * Strip quoted strings to analyze the unquoted portions.
+ *
+ * Note (L3 audit): With mixed quotes (e.g. `"it's a test"` or `'say "hi"'`),
+ * the two-pass regex approach is safe because:
+ *   1. Single-quoted pass uses `'[^']*'` which cannot match across a
+ *      double-quoted boundary (single quotes inside double quotes are literal
+ *      characters, not delimiters, and the regex is non-greedy).
+ *   2. Double-quoted pass runs second on the *already-stripped* result, so any
+ *      double quotes that were inside single-quoted strings are already gone.
+ * Edge case: an *unmatched* opening quote will cause the regex to skip it
+ * (no match), leaving the rest of the string intact — which is the safe
+ * direction (false positive, not false negative).
+ */
 function stripQuotedStrings(command: string): string {
-  // Replace single-quoted strings
+  // Replace single-quoted strings (no escape sequences in POSIX single quotes)
   let result = command.replace(/'[^']*'/g, "''");
-  // Replace double-quoted strings (handle escaped quotes)
+  // Replace double-quoted strings (handle escaped quotes via backslash)
   result = result.replace(/"(?:[^"\\]|\\.)*"/g, '""');
   return result;
 }

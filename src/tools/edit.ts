@@ -1,7 +1,7 @@
 // KCode - Edit Tool
 // Performs exact string replacements in files with visual diff output
 
-import { readFileSync, writeFileSync, realpathSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync, lstatSync } from "node:fs";
 import type { ToolDefinition, ToolResult, FileEditInput } from "../core/types";
 
 const SENSITIVE_PATTERNS = [
@@ -205,6 +205,17 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
     }
 
     const updated = replace_all ? content.replaceAll(old_string, new_string) : content.replace(old_string, new_string);
+
+    // TOCTOU mitigation: verify file hasn't been replaced with a symlink between read and write
+    try {
+      if (lstatSync(file_path).isSymbolicLink()) {
+        return {
+          tool_use_id: "",
+          content: `BLOCKED: "${file_path}" is a symlink. Refusing to write through symlinks for security.`,
+          is_error: true,
+        };
+      }
+    } catch { /* file gone — writeFileSync will fail naturally */ }
 
     writeFileSync(file_path, updated, "utf-8");
 

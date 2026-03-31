@@ -350,7 +350,17 @@ export class PermissionManager {
     }
   }
 
-  /** Extract a pattern string for allowlist matching. */
+  /**
+   * Extract a pattern string for allowlist matching.
+   *
+   * Known limitation (L1): For Write/Edit/MultiEdit tools the pattern is the
+   * parent *directory* of the target file. This means approving one file in a
+   * directory effectively approves ALL files in that directory. A more granular
+   * (per-file) allowlist would require prompting the user on every distinct
+   * file path, which degrades UX for typical workflows. Accept the trade-off
+   * and rely on safety analysis (protected dirs, sensitive files) as the
+   * secondary guard.
+   */
   private getToolPattern(tool: ToolUseBlock): string {
     switch (tool.name) {
       case "Bash": {
