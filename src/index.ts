@@ -369,6 +369,43 @@ async function runMain(
     }
   }
 
+  // ─── Workspace trust prompt ──────────────────────────────────
+  // If the workspace has .kcode/ config but isn't trusted, prompt the user
+  // before loading anything from it (VS Code-style workspace trust).
+  {
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { isWorkspaceTrusted, trustWorkspace } = await import("./core/hook-trust");
+    const kcodeDir = join(cwd, ".kcode");
+    if (existsSync(kcodeDir) && !isWorkspaceTrusted(cwd)) {
+      const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+      if (isTTY) {
+        process.stderr.write(`\n\x1b[33m⚠ This workspace has a .kcode/ directory with project-specific config.\x1b[0m\n`);
+        process.stderr.write(`  Path: ${kcodeDir}\n`);
+        process.stderr.write(`  Trusting a workspace allows it to run hooks, MCP servers, and plugins.\n\n`);
+        process.stderr.write(`  \x1b[1mDo you trust this workspace? (y/N)\x1b[0m `);
+
+        const answer = await new Promise<string>((resolve) => {
+          const onData = (data: Buffer) => {
+            process.stdin.removeListener("data", onData);
+            process.stdin.setRawMode?.(false);
+            resolve(data.toString().trim().toLowerCase());
+          };
+          process.stdin.setRawMode?.(true);
+          process.stdin.resume();
+          process.stdin.once("data", onData);
+        });
+
+        if (answer === "y" || answer === "yes" || answer === "s" || answer === "si") {
+          trustWorkspace(cwd);
+          process.stderr.write(`\x1b[32m✓\x1b[0m Workspace trusted.\n\n`);
+        } else {
+          process.stderr.write(`\x1b[2m  Skipping .kcode/ config. Run \`kcode init --trust\` to trust later.\x1b[0m\n\n`);
+        }
+      }
+    }
+  }
+
   const config = await buildConfig(cwd);
   config.version = VERSION;
   log.init();
