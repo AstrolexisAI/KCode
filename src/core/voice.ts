@@ -173,17 +173,28 @@ export async function voiceToText(durationSec?: number): Promise<string> {
   try {
     // Try backends in order of preference
 
-    // 1. Kulvex voice API
+    // 1. Kulvex voice API (skip if offline)
+    let skipKulvex = false;
     try {
-      const resp = await fetch(`${KULVEX_API_BASE}/api/monitoring/health`, {
-        signal: AbortSignal.timeout(2000),
-      });
-      if (resp.ok) {
-        const text = await transcribeViaKulvex(audioPath);
-        log.info("voice", `Transcribed via Kulvex: ${text.slice(0, 50)}`);
-        return text;
+      const { getOfflineMode } = await import("./offline/mode");
+      if (getOfflineMode().isActive()) {
+        skipKulvex = true;
+        log.debug("voice", "Offline mode: skipping Kulvex voice API, using local whisper");
       }
-    } catch (err) { log.debug("voice", `Kulvex voice API not available: ${err}`); }
+    } catch { /* offline module not loaded */ }
+
+    if (!skipKulvex) {
+      try {
+        const resp = await fetch(`${KULVEX_API_BASE}/api/monitoring/health`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (resp.ok) {
+          const text = await transcribeViaKulvex(audioPath);
+          log.info("voice", `Transcribed via Kulvex: ${text.slice(0, 50)}`);
+          return text;
+        }
+      } catch (err) { log.debug("voice", `Kulvex voice API not available: ${err}`); }
+    }
 
     // 2. faster-whisper (Python, CUDA-accelerated)
     try {

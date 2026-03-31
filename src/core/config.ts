@@ -11,6 +11,7 @@ import { isPro } from "./pro";
 import { log } from "./logger";
 import { isWorkspaceTrusted } from "./hook-trust";
 import type { MarketplaceSettings } from "./marketplace/types";
+import type { OfflineSettings } from "./offline/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export interface Settings {
   noCache?: boolean; // Disable response cache (always call the model)
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
   marketplace?: MarketplaceSettings; // Plugin marketplace CDN config
+  offline?: OfflineSettings; // Offline mode configuration
   coordinator?: {
     enabled?: boolean;
     maxWorkers?: number;
@@ -177,6 +179,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     thinking: typeof raw.thinking === "boolean" ? raw.thinking : undefined,
     reasoningBudget: typeof raw.reasoningBudget === "number" ? raw.reasoningBudget : undefined,
     noCache: typeof raw.noCache === "boolean" ? raw.noCache : undefined,
+    offline: (raw.offline && typeof raw.offline === "object") ? raw.offline as OfflineSettings : undefined,
   };
 }
 
@@ -282,6 +285,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.thinking !== undefined) result.thinking = layer.thinking;
     if (layer.reasoningBudget !== undefined) result.reasoningBudget = layer.reasoningBudget;
     if (layer.noCache !== undefined) result.noCache = layer.noCache;
+    if (layer.offline !== undefined) result.offline = { ...result.offline, ...layer.offline };
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
       result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
@@ -678,6 +682,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     disableWebAccess: policy.disableWebAccess,
     auditLog: policy.auditLog,
     orgId: policy.orgId,
+    offline: settings.offline,
   };
 }
 

@@ -3,6 +3,8 @@
 // Features: domain filtering, freshness filter, result caching, rate limiting, deduplication.
 
 import type { ToolDefinition, ToolResult } from "../core/types";
+import { getOfflineMode } from "../core/offline/mode";
+import { localSearch } from "../core/offline/local-search";
 
 export interface WebSearchInput {
   query: string;
@@ -344,6 +346,28 @@ export async function executeWebSearch(input: Record<string, unknown>): Promise<
   } = input as unknown as WebSearchInput;
 
   const maxCount = Math.min(Math.max(1, max_results), 20);
+
+  // ─── Offline fallback: use local search instead of web ───
+  try {
+    const offline = getOfflineMode();
+    if (offline.isActive()) {
+      const results = await localSearch(query, maxCount);
+      if (results.length === 0) {
+        return {
+          tool_use_id: "",
+          content: `No offline results found for "${query}". Network is unavailable. Ask the user to search manually or disable offline mode.`,
+          is_error: true,
+        };
+      }
+      const formatted = results
+        .map((r, i) => `${i + 1}. [${r.source}] ${r.title}\n   ${r.content}`)
+        .join("\n\n");
+      return {
+        tool_use_id: "",
+        content: `Search: "${query}" (offline mode — local sources only)\n\n${formatted}`,
+      };
+    }
+  } catch { /* offline module not initialized, proceed normally */ }
 
   // Rate limiting
   if (!checkRateLimit()) {

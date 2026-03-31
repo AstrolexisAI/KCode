@@ -3,6 +3,8 @@
 
 import type { ToolDefinition, ToolResult } from "../core/types";
 import { resolve4, resolve6 } from "node:dns/promises";
+import { getOfflineMode } from "../core/offline/mode";
+import { OfflineError } from "../core/offline/network-guard";
 
 export interface WebFetchInput {
   url: string;
@@ -215,7 +217,7 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
     return { tool_use_id: "", content: ssrfError, is_error: true };
   }
 
-  // Check cache
+  // Check cache (serves both online and offline modes)
   const cached = responseCache.get(url);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     const output = prompt
@@ -224,6 +226,18 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
 
     return { tool_use_id: "", content: output };
   }
+
+  // ─── Offline mode: block remote fetch if no cached content ───
+  try {
+    const offline = getOfflineMode();
+    if (offline.isActive()) {
+      return {
+        tool_use_id: "",
+        content: `Offline mode active: cannot fetch ${url}. No cached version available. Ask the user to fetch this URL manually or disable offline mode.`,
+        is_error: true,
+      };
+    }
+  } catch { /* offline module not initialized, proceed normally */ }
 
   try {
     // Manual redirect following with SSRF re-validation on each hop
