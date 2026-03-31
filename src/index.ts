@@ -5,7 +5,6 @@
 import { Command } from "commander";
 import { resolve } from "node:path";
 import { ConversationManager } from "./core/conversation";
-import { registerBuiltinTools } from "./tools";
 import { startUI } from "./ui/render";
 import { runPrintMode } from "./ui/print-mode";
 import { buildConfig } from "./core/config";
@@ -13,17 +12,53 @@ import type { PermissionMode } from "./core/types";
 import { setTheme } from "./core/theme";
 import { log } from "./core/logger";
 import { TranscriptManager } from "./core/transcript";
-import { getNarrativeManager } from "./core/narrative";
-import { closeDb } from "./core/db";
-import { shutdownMcpManager } from "./core/mcp";
 import { clearSudoPasswordCache } from "./tools/bash";
-import { getRulesManager } from "./core/rules";
-import { getPluginManager } from "./core/plugins";
-import { getLspManager, shutdownLsp } from "./core/lsp";
 import { isSetupComplete } from "./core/model-manager";
 import { startServer, isServerRunning, getServerPort } from "./core/llama-server";
 import { setSandboxMode } from "./tools/bash";
-import { voiceToText, isVoiceAvailable } from "./core/voice";
+import { profileCheckpoint } from "./core/startup-profiler";
+
+// Lazy-loaded modules (deferred until needed)
+async function lazyGetRulesManager() {
+  const { getRulesManager } = await import("./core/rules");
+  return getRulesManager();
+}
+async function lazyGetPluginManager() {
+  const { getPluginManager } = await import("./core/plugins");
+  return getPluginManager();
+}
+async function lazyGetLspManager(cwd: string) {
+  const { getLspManager } = await import("./core/lsp");
+  return getLspManager(cwd);
+}
+async function lazyGetNarrativeManager() {
+  const { getNarrativeManager } = await import("./core/narrative");
+  return getNarrativeManager();
+}
+async function lazyRegisterBuiltinTools() {
+  const { registerBuiltinTools } = await import("./tools");
+  return registerBuiltinTools();
+}
+async function lazyCloseDb() {
+  const { closeDb } = await import("./core/db");
+  closeDb();
+}
+async function lazyShutdownMcpManager() {
+  const { shutdownMcpManager } = await import("./core/mcp");
+  shutdownMcpManager();
+}
+async function lazyShutdownLsp() {
+  const { shutdownLsp } = await import("./core/lsp");
+  shutdownLsp();
+}
+async function lazyVoiceToText() {
+  const { voiceToText } = await import("./core/voice");
+  return voiceToText();
+}
+async function lazyIsVoiceAvailable() {
+  const { isVoiceAvailable } = await import("./core/voice");
+  return isVoiceAvailable();
+}
 
 // CLI subcommand registrations
 import {
@@ -134,9 +169,9 @@ process.on("unhandledRejection", (reason) => {
 // Graceful cleanup on signals
 function cleanupAndExit() {
   clearSudoPasswordCache();
-  shutdownLsp();
-  shutdownMcpManager();
-  closeDb();
+  lazyShutdownLsp().catch(() => {});
+  lazyShutdownMcpManager().catch(() => {});
+  lazyCloseDb().catch(() => {});
   log.shutdown();
   process.exit(0);
 }
@@ -145,6 +180,8 @@ process.on("SIGINT", cleanupAndExit);
 process.on("SIGTERM", cleanupAndExit);
 
 // ─── CLI Setup ──────────────────────────────────────────────────
+
+profileCheckpoint("process_start");
 
 const program = new Command()
   .name("kcode")
@@ -236,6 +273,7 @@ registerServeCommand(program, VERSION);
 
 // ─── Parse ──────────────────────────────────────────────────────
 
+profileCheckpoint("cli_defined");
 program.parse();
 
 // ─── Main (interactive / single-prompt) ─────────────────────────
@@ -406,18 +444,23 @@ async function runMain(
     }
   }
 
+  profileCheckpoint("config_loading");
   const config = await buildConfig(cwd);
   config.version = VERSION;
   log.init();
+  profileCheckpoint("config_loaded");
 
-  // Load path-specific rules
-  getRulesManager().load(cwd);
+  // Load path-specific rules (lazy)
+  const rulesManager = await lazyGetRulesManager();
+  rulesManager.load(cwd);
 
-  // Load plugins
-  getPluginManager().load(cwd);
+  // Load plugins (lazy)
+  const pluginManager = await lazyGetPluginManager();
+  pluginManager.load(cwd);
+  profileCheckpoint("plugins_loaded");
 
-  // Auto-start LSP language servers (non-blocking)
-  const lsp = getLspManager(cwd);
+  // Auto-start LSP language servers (non-blocking, lazy)
+  const lsp = await lazyGetLspManager(cwd);
   if (lsp) lsp.autoStart().catch(() => {});
 
   // Apply execution profile (before CLI overrides, so flags can override profile settings)
@@ -617,14 +660,14 @@ async function runMain(
     setTelemetryEnabled(config.telemetry);
   }
 
-  // Voice input: record and transcribe before starting
+  // Voice input: record and transcribe before starting (lazy)
   if (opts.voice && !promptText) {
     try {
-      const voiceStatus = isVoiceAvailable();
+      const voiceStatus = await lazyIsVoiceAvailable();
       if (!voiceStatus.available) {
         console.error("\x1b[31mVoice input not available. Install arecord/sox and faster-whisper.\x1b[0m");
       } else {
-        const text = await voiceToText();
+        const text = await lazyVoiceToText();
         if (text) {
           promptText = text;
           console.error(`\x1b[36mVoice:\x1b[0m ${text}`);
@@ -670,10 +713,12 @@ async function runMain(
   // No API key required for local LLMs (llama-server).
   // If ASTROLEXIS_API_KEY is set, it will be sent as a Bearer token.
 
-  // Register tools (empty registry in --no-tools chat mode)
+  // Register tools (empty registry in --no-tools chat mode, lazy-loaded)
+  profileCheckpoint("tools_registering");
   const tools = opts.noTools
     ? new (await import("./core/tool-registry.js")).ToolRegistry()
-    : registerBuiltinTools();
+    : await lazyRegisterBuiltinTools();
+  profileCheckpoint("tools_registered");
 
   if (opts.noTools) {
     console.error("\x1b[33mChat-only mode (no tools)\x1b[0m");
@@ -1021,24 +1066,26 @@ async function runMain(
   } catch (err) { log.debug("index", `File watcher initialization failed: ${err}`); }
 
   // Interactive mode: start the Ink-based terminal UI
+  profileCheckpoint("ui_rendering");
   const app = startUI({ config, conversationManager, tools });
   await app.waitUntilExit();
 
   // Stop file watcher
   fileWatcher?.stop();
 
-  // Layer 10: Save session narrative before exiting
+  // Layer 10: Save session narrative before exiting (lazy)
   try {
     const sessionData = conversationManager.collectSessionData();
     if (sessionData.messagesCount > 1) {
-      getNarrativeManager().updateNarrative(sessionData);
+      const narrativeManager = await lazyGetNarrativeManager();
+      narrativeManager.updateNarrative(sessionData);
     }
   } catch (err) { log.debug("index", `Failed to save session narrative: ${err}`); }
 
   log.info("session", "Session ended");
-  shutdownLsp();
-  shutdownMcpManager();
-  closeDb();
+  await lazyShutdownLsp();
+  await lazyShutdownMcpManager();
+  await lazyCloseDb();
   log.shutdown();
 }
 

@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { runDiagnostics, runDeepDiagnostics, formatDeepDiagnostics } from "../../core/doctor";
+import { getProfileReport, printProfileReport } from "../../core/startup-profiler";
 
 export function registerDoctorCommand(program: Command): void {
   program
@@ -26,6 +27,14 @@ export function registerDoctorCommand(program: Command): void {
         console.log(`\x1b[33m${warns} warning(s), but KCode should work.\x1b[0m`);
       } else {
         console.log("\x1b[32mAll checks passed!\x1b[0m");
+      }
+
+      // Startup performance profile
+      const profileEntries = getProfileReport();
+      if (profileEntries.length > 0) {
+        console.log("\n\x1b[1mPerformance:\x1b[0m");
+        printProfileReport();
+        console.log();
       }
 
       // Deep diagnostics

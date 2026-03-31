@@ -3,6 +3,7 @@
 
 import { getDb } from "./db";
 import { log } from "./logger";
+import { getTelemetry, trackEvent } from "../telemetry/index";
 
 // ─── Telemetry Gate ─────────────────────────────────────────────
 // undefined = not yet decided (first run) — recording is disabled until explicit opt-in.
@@ -58,6 +59,19 @@ export function recordToolEvent(event: ToolEvent): void {
         event.costUsd ?? 0,
       ],
     );
+    // Forward to professional telemetry pipeline (if enabled)
+    if (getTelemetry()) {
+      trackEvent("kcode.tool.execute", {
+        tool_name: event.toolName,
+        model: event.model,
+        duration_ms: event.durationMs,
+        is_error: event.isError,
+        input_tokens: event.inputTokens ?? 0,
+        output_tokens: event.outputTokens ?? 0,
+        cost_usd: event.costUsd ?? 0,
+        session_id: event.sessionId,
+      }, event.durationMs);
+    }
   } catch (err) {
     log.debug("analytics", `Failed to record tool event: ${err}`);
   }

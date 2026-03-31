@@ -42,11 +42,22 @@ async function build() {
     // Build the standalone binary
     // --sourcemap=none: Ensure no source maps are embedded
     // --minify: Minify the bundled JS (saves ~1.4 MB)
+    // --define: Build-time feature flags for dead code elimination (DCE)
+    const featureDefines = [
+      "--define:FEATURE_VOICE=false",      // Voice mode (experimental)
+      "--define:FEATURE_BRIDGE=true",      // Bridge/daemon mode
+      "--define:FEATURE_REMOTE=false",     // Remote mode (experimental)
+      "--define:FEATURE_ENTERPRISE=true",  // Enterprise features
+      "--define:FEATURE_TELEMETRY=true",   // OpenTelemetry
+      "--define:FEATURE_LSP=true",         // LSP integration
+      "--define:FEATURE_SWARM=true",       // Multi-agent swarm
+    ];
+
     let proc;
     if (minify) {
-      proc = await Bun.$`bun build ${ENTRY} --compile --minify --sourcemap=none --outfile ${OUT_FILE}`.quiet();
+      proc = await Bun.$`bun build ${ENTRY} --compile --minify --sourcemap=none ${featureDefines} --outfile ${OUT_FILE}`.quiet();
     } else {
-      proc = await Bun.$`bun build ${ENTRY} --compile --sourcemap=none --outfile ${OUT_FILE}`.quiet();
+      proc = await Bun.$`bun build ${ENTRY} --compile --sourcemap=none ${featureDefines} --outfile ${OUT_FILE}`.quiet();
     }
 
     if (proc.exitCode !== 0) {
