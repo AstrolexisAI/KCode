@@ -315,9 +315,16 @@ export async function executeModelRequest(
     const errorText = await response.text().catch(() => "");
     const msgCount = Array.isArray(req.body.messages) ? req.body.messages.length : "?";
     const bodyLen = JSON.stringify(req.body).length;
-    log.warn("llm", `Request failed ${response.status}: ${msgCount} messages, ${bodyLen} bytes body${errorText ? `, server: ${errorText.slice(0, 200)}` : ""}`);
+    const estimatedTokens = Math.round(bodyLen / 4);
+    log.warn("llm", `Request failed ${response.status}: ${msgCount} messages, ${bodyLen} bytes (~${estimatedTokens} tokens)${errorText ? `, server: ${errorText.slice(0, 200)}` : ""}`);
+
+    // Provide actionable hint for common errors
+    let hint = "";
+    if (response.status === 400 && estimatedTokens > 8000) {
+      hint = " (hint: request may exceed model context window — try /compact or reduce conversation length)";
+    }
     throw new Error(
-      `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
+      `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}${hint}`,
     );
   }
 
