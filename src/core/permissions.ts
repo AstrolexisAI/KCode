@@ -344,8 +344,57 @@ export class PermissionManager {
       case "ToolSearch":
         return { allowed: true };
 
+      // Read-only tools — safe, no side effects
+      case "Read":
+      case "Glob":
+      case "Grep":
+      case "LS":
+        return { allowed: true };
+
+      // Agent/messaging — orchestration tools (safe, subagents have own permissions)
+      case "Agent":
+      case "SendMessage":
+        return { allowed: true };
+
+      // Web tools — read from internet (safe, SSRF checked in tool itself)
+      case "WebFetch":
+      case "WebSearch":
+        return { allowed: true };
+
+      // Task management — in-memory state tracking (safe)
+      case "TaskCreate":
+      case "TaskList":
+      case "TaskGet":
+      case "TaskUpdate":
+      case "TaskStop":
+        return { allowed: true };
+
+      // Notebook editing — modifies files, treated like Edit
+      case "NotebookEdit":
+        return { allowed: true };
+
+      // Learning — stores distilled examples (safe)
+      case "Learn":
+        return { allowed: true };
+
+      // Plan tool — modifies plan state (safe)
+      case "Plan":
+        return { allowed: true };
+
+      // MCP resource tools — read-only from MCP servers (safe)
+      case "ListMcpResources":
+      case "ReadMcpResource":
+        return { allowed: true };
+
+      // Pro/cloud tools — safe, gated by Pro check internally
+      case "Kulvex":
+      case "Browser":
+      case "ImageGen":
+      case "Deploy":
+        return { allowed: true };
+
       default:
-        // Unknown tools (including MCP) require explicit approval — don't auto-approve
+        // Unknown tools (including dynamically added MCP tools) require explicit approval
         return { allowed: false, reason: `Unknown tool "${tool.name}" requires manual approval` };
     }
   }
