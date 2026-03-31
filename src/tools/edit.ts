@@ -1,8 +1,19 @@
 // KCode - Edit Tool
 // Performs exact string replacements in files with visual diff output
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, realpathSync } from "node:fs";
 import type { ToolDefinition, ToolResult, FileEditInput } from "../core/types";
+
+const SENSITIVE_PATTERNS = [
+  /\.(env|env\.\w+)$/,
+  /\.(pem|key|crt|cert)$/,
+  /\.ssh\//,
+  /credentials/i,
+  /\.aws\//,
+  /\.kube\/config/,
+  /id_rsa/,
+  /id_ed25519/,
+];
 
 export const editDefinition: ToolDefinition = {
   name: "Edit",
@@ -127,6 +138,33 @@ function findClosestMatch(
 
 export async function executeEdit(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, old_string, new_string, replace_all } = input as unknown as FileEditInput;
+
+  // Block edits to sensitive files (parity with Write tool)
+  const isSensitive = SENSITIVE_PATTERNS.some(p => p.test(file_path));
+  if (isSensitive) {
+    return {
+      tool_use_id: "",
+      content: `BLOCKED: Editing "${file_path}" is blocked because it matches a sensitive file pattern (.env, .pem, .ssh, credentials, etc.). If you need to edit this file, ask the user to do it manually.`,
+      is_error: true,
+    };
+  }
+
+  // Resolve symlinks to prevent path traversal via symlink
+  try {
+    const realPath = realpathSync(file_path);
+    if (realPath !== file_path) {
+      const realIsSensitive = SENSITIVE_PATTERNS.some(p => p.test(realPath));
+      if (realIsSensitive) {
+        return {
+          tool_use_id: "",
+          content: `BLOCKED: "${file_path}" is a symlink to "${realPath}" which matches a sensitive file pattern.`,
+          is_error: true,
+        };
+      }
+    }
+  } catch {
+    // File doesn't exist yet or can't resolve — will fail naturally at readFileSync
+  }
 
   try {
     const content = readFileSync(file_path, "utf-8");
