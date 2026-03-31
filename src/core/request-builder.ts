@@ -313,6 +313,9 @@ export async function executeModelRequest(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
+    const msgCount = Array.isArray(req.body.messages) ? req.body.messages.length : "?";
+    const bodyLen = JSON.stringify(req.body).length;
+    log.warn("llm", `Request failed ${response.status}: ${msgCount} messages, ${bodyLen} bytes body${errorText ? `, server: ${errorText.slice(0, 200)}` : ""}`);
     throw new Error(
       `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
     );

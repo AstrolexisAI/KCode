@@ -143,7 +143,9 @@ export async function* executeToolsSequential(
     }
 
     // Hard block after many repeats (genuine stuck loop)
-    if (crossCount >= 6) {
+    // Write/Edit get a softer threshold (3) — rewriting once is normal, 3+ times is a loop
+    const crossThreshold = (call.name === "Write" || call.name === "Edit") ? 3 : 6;
+    if (crossCount >= crossThreshold) {
       const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times. STOP this approach entirely. Tell the user what you've tried, what failed, and ask if they want you to try something different. Do NOT retry this same call.`;
       log.warn("tool", `Cross-turn dedup blocked: ${sig.slice(0, 80)} (attempt ${crossCount + 1})`);
       yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
@@ -396,7 +398,9 @@ export async function* executeToolsSequential(
     };
 
     // Truncate large tool results to protect context window
-    const maxResultChars = Math.floor(ctx.contextWindowSize * 0.6);
+    // contextWindowSize is in tokens; multiply by ~4 to convert to chars
+    const CHARS_PER_TOKEN = 4;
+    const maxResultChars = Math.floor(ctx.contextWindowSize * CHARS_PER_TOKEN * 0.6);
     let contextContent = result.content;
     if (contextContent.length > maxResultChars) {
       contextContent = contextContent.slice(0, maxResultChars)

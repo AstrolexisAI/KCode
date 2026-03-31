@@ -1545,7 +1545,7 @@ export class ConversationManager {
           } else if (block.type === "tool_result") {
             if (typeof block.content === "string") {
               parts.push(block.content);
-            } else {
+            } else if (Array.isArray(block.content)) {
               for (const sub of block.content) {
                 if (sub.type === "text") {
                   parts.push(sub.text);

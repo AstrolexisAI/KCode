@@ -3,7 +3,7 @@
 // Supports images (PNG, JPG, GIF, WEBP), PDFs, and Jupyter notebooks
 
 import { readFileSync, statSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { extname, resolve, relative } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 import { getToolWorkspace } from "./workspace";
@@ -146,11 +146,12 @@ function parsePagesParam(pages: string): { first: number; last: number } | null 
 
 function getPdfPageCount(filePath: string): number | null {
   try {
-    const output = execSync(`pdfinfo "${filePath}" 2>/dev/null | grep -i "^Pages:"`, {
+    const output = execFileSync("pdfinfo", [filePath], {
       encoding: "utf-8",
       timeout: 10000,
-    }).trim();
-    const match = output.match(/Pages:\s*(\d+)/i);
+    });
+    const pagesLine = output.split("\n").find(l => /^Pages:/i.test(l))?.trim() ?? "";
+    const match = pagesLine.match(/Pages:\s*(\d+)/i);
     return match ? parseInt(match[1]!, 10) : null;
   } catch {
     return null;
@@ -195,13 +196,13 @@ function readPdf(filePath: string, pages?: string): ToolResult {
 
   // Try pdftotext
   try {
-    let cmd = `pdftotext -layout`;
+    const args = ["-layout"];
     if (pageRange) {
-      cmd += ` -f ${pageRange.first} -l ${pageRange.last}`;
+      args.push("-f", String(pageRange.first), "-l", String(pageRange.last));
     }
-    cmd += ` "${filePath}" -`;
+    args.push(filePath, "-");
 
-    const text = execSync(cmd, {
+    const text = execFileSync("pdftotext", args, {
       encoding: "utf-8",
       timeout: 30000,
       maxBuffer: 10 * 1024 * 1024,
