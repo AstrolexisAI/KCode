@@ -81,6 +81,8 @@ import {
   registerCompletionsCommand,
   registerHistoryCommand,
   registerServeCommand,
+  registerRemoteCommand,
+  registerDaemonCommand,
 } from "./cli/commands";
 
 // Version — read from package.json at build time via Bun's JSON import
@@ -270,6 +272,8 @@ registerBenchmarkCommands(program);
 registerCompletionsCommand(program);
 registerHistoryCommand(program);
 registerServeCommand(program, VERSION);
+registerRemoteCommand(program);
+registerDaemonCommand(program);
 
 // ─── Parse ──────────────────────────────────────────────────────
 
