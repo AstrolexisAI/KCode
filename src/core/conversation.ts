@@ -823,10 +823,12 @@ export class ConversationManager {
           } catch (err) {
             log.debug("parse", "Failed to parse tool call JSON (" + fullJson.length + " chars): " + err);
             if (fullJson.length > 50000) {
-              parsedInput = { _raw: `[truncated: ${fullJson.length} chars of malformed JSON]` };
+              parsedInput = { _parseError: true, _raw: `[truncated: ${fullJson.length} chars of malformed JSON]` };
               log.warn("llm", `Truncated malformed tool args: ${fullJson.length} chars`);
             } else {
-              parsedInput = { _raw: fullJson };
+              // Store raw text for debugging but mark as unparsed — tool handlers should
+              // check for _parseError and reject the input rather than using _raw directly
+              parsedInput = { _parseError: true, _raw: fullJson };
             }
           }
         }

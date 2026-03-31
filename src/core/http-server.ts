@@ -81,11 +81,16 @@ function jsonError(message: string, code: number, corsHeaders: Record<string, st
   return Response.json({ error: message, code }, { status: code, headers: corsHeaders });
 }
 
-/**
- * Sanitize and validate a cwd path for use as workspace.
- * Returns the resolved real path, or null if invalid.
- * Same rules as getOrCreateSession: absolute, exists, not root/home, resolved via realpath.
- */
+/** The server's initial working directory, captured at module load time. */
+const SERVER_ROOT_CWD = process.cwd();
+
+/** System directories that must never be used as a workspace. */
+const BLOCKED_SYSTEM_DIRS = [
+  "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64",
+  "/proc", "/sys", "/dev", "/boot",
+  "/var/run", "/var/lock",
+];
+
 function sanitizeCwd(rawCwd: string): string | null {
   const { resolve, isAbsolute } = require("node:path") as typeof import("node:path");
   const { existsSync, realpathSync } = require("node:fs") as typeof import("node:fs");
@@ -99,6 +104,14 @@ function sanitizeCwd(rawCwd: string): string | null {
 
   const home = process.env.HOME ?? "/root";
   if (real === "/" || real === home) return null;
+
+  // cwd must be under the server's initial working directory
+  if (!real.startsWith(SERVER_ROOT_CWD + "/") && real !== SERVER_ROOT_CWD) return null;
+
+  // Block system directories — reject if real path equals or is under any blocked dir
+  for (const blocked of BLOCKED_SYSTEM_DIRS) {
+    if (real === blocked || real.startsWith(blocked + "/")) return null;
+  }
 
   return real;
 }

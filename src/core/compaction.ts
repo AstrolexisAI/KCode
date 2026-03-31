@@ -126,10 +126,12 @@ export class CompactionManager {
       const summaryText = isAnthropic
         ? data.content?.[0]?.text
         : data.choices?.[0]?.message?.content;
-      if (!summaryText) {
+      if (!summaryText || typeof summaryText !== "string") {
         this.recordFailure();
         return null;
       }
+      // Cap summary length to prevent context pollution from malformed model output
+      const safeSummary = summaryText.length > 10_000 ? summaryText.slice(0, 10_000) + "\n[summary truncated]" : summaryText;
 
       this.consecutiveFailures = 0;
       this.compactionCount++;
@@ -142,7 +144,7 @@ export class CompactionManager {
             text:
               `[Conversation Summary - Compaction #${this.compactionCount}]\n` +
               `The following is a summary of ${messagesToPrune.length} earlier messages ` +
-              `that were compacted to save context space:\n\n${summaryText}`,
+              `that were compacted to save context space:\n\n${safeSummary}`,
           } as TextBlock,
         ],
       };

@@ -226,7 +226,10 @@ export async function searchMemories(projectPath: string, pattern: string): Prom
   return new Promise((resolve) => {
     const results: string[] = [];
 
-    const proc = spawn("grep", ["-rl", "-i", "--", pattern, dir], {
+    // Guard against excessively long/complex patterns that could cause grep to hang
+    const safePattern = pattern.length > 200 ? pattern.slice(0, 200) : pattern;
+
+    const proc = spawn("grep", ["-rl", "-i", "-F", "--", safePattern, dir], {
       timeout: 10_000,
     });
 
@@ -280,6 +283,20 @@ export async function resolveIncludes(content: string, baseDir: string): Promise
     }
 
     try {
+      const { realpathSync } = await import("node:fs");
+      const { resolve: resolvePath2 } = await import("node:path");
+      // Resolve symlinks to prevent traversal via symlinks inside baseDir
+      let realFull: string;
+      try {
+        realFull = realpathSync(resolvedFull);
+        if (!realFull.startsWith(resolvePath2(baseDir))) {
+          resolved = resolved.replace(match[0], `<!-- include blocked: symlink escapes memory directory -->`);
+          continue;
+        }
+      } catch {
+        // File doesn't exist — check below handles it
+      }
+
       const file = Bun.file(resolvedFull);
       if (await file.exists()) {
         const includeContent = await file.text();
