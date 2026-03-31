@@ -37,6 +37,13 @@ export interface Settings {
   reasoningBudget?: number; // -1 = unlimited, positive = max thinking tokens
   noCache?: boolean; // Disable response cache (always call the model)
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
+  featureFlags?: {
+    enableAutoRoute?: boolean;
+    enableDistillation?: boolean;
+    enableWorldModel?: boolean;
+    enableCodebaseIndex?: boolean;
+    enableExperimentalTools?: boolean;
+  };
 }
 
 // ─── Managed Policy ──────────────────────────────────────────────
@@ -614,6 +621,10 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   // Don't cap context for local models — the cap only applies to cloud API usage
   const isLocalModel = apiBase && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(apiBase);
   const effectiveContextSize = (cap && !isLocalModel) ? Math.min(contextSize ?? 32_000, cap) : (contextSize ?? 32_000);
+
+  // Initialize runtime feature flags (settings → env overrides)
+  const { loadRuntimeFlags } = await import("./feature-flags.js");
+  loadRuntimeFlags(settings.featureFlags);
 
   return {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
