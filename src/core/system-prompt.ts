@@ -121,6 +121,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
     // ─── Medium priority ───────────────────────────────────────
     sections.push({ content: this.buildSituationalAwareness(config), priority: SectionPriority.MEDIUM, label: "situational" });
     sections.push({ content: this.buildMetacognition(config), priority: SectionPriority.MEDIUM, label: "metacognition" });
+    sections.push({ content: this.buildAutoMemoryInstructions(), priority: SectionPriority.MEDIUM, label: "auto-memory" });
 
     // User-defined identity extensions (~/.kcode/identity.md)
     const identityExt = this.loadExtensibleIdentity();
@@ -798,6 +799,20 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
 - If the user's request is ambiguous, ask ONE clarifying question rather than guessing wrong.
 - If you launch a background service, verify it is actually running and accessible before reporting success.
 - After creating multi-file projects, do a quick sanity check: are all imports correct? Are all referenced files created? Do file paths match?`;
+  }
+
+  // ─── Section: Auto-Memory ────────────────────────────────────────
+
+  static buildAutoMemoryInstructions(): string {
+    return `# Auto-Memory
+
+KCode has an automatic memory system that runs in the background after each conversation turn. It analyzes the conversation for memorable information — user preferences, corrections, project decisions, and external references — and saves them automatically.
+
+You do NOT need to explicitly save memories. The auto-memory extractor handles this transparently. However:
+- If a user explicitly asks you to remember something, use the existing memory tools directly.
+- Auto-extracted memories are stored with \`auto_extracted: true\` in their frontmatter.
+- The system respects a cooldown between extractions to avoid excessive writes.
+- Duplicate memories are detected and skipped.`;
   }
 
   // ─── Extensible Consciousness ──────────────────────────────────

@@ -29,6 +29,8 @@ import { type SSEChunk } from "./sse-parser";
 import { getBranchManager } from "./branch-manager";
 import { extractToolCallsFromText } from "./tool-call-extractor";
 import type { DebugTracer } from "./debug-tracer";
+import { parseAutoMemoryConfig } from "./auto-memory/types";
+import { runAutoMemoryExtraction, getMemoryTitles } from "./auto-memory/extractor";
 
 // Extracted modules
 import { executeModelRequest, estimateToolDefinitionTokens } from "./request-builder";
@@ -145,6 +147,7 @@ export class ConversationManager {
   private static MAX_TURN_COSTS = 500; // cap to prevent unbounded memory growth
   private turnCosts: TurnCostEntry[] = [];
   private debugTracer: DebugTracer | null = null;
+  private turnsSinceLastExtraction = 0;
 
   constructor(config: KCodeConfig, tools: ToolRegistry) {
     this.config = { ...config }; // shallow copy to avoid mutating caller's config
@@ -1136,6 +1139,31 @@ export class ConversationManager {
             );
           }
         } catch { /* module not loaded */ }
+
+        // Auto-memory extraction: fire-and-forget background LLM call
+        this.turnsSinceLastExtraction++;
+        try {
+          const autoMemConfig = parseAutoMemoryConfig(this.config.autoMemory ?? true);
+          if (
+            autoMemConfig.enabled &&
+            stopReason === "end_turn" &&
+            this.turnsSinceLastExtraction >= autoMemConfig.cooldownTurns
+          ) {
+            this.turnsSinceLastExtraction = 0;
+            const recentMessages = this.state.messages.slice(-6);
+            getMemoryTitles(this.config.workingDirectory).then((existingTitles) => {
+              runAutoMemoryExtraction({
+                recentMessages,
+                existingTitles,
+                config: autoMemConfig,
+                projectPath: this.config.workingDirectory,
+                model: this.config.tertiaryModel,
+              }).catch((err) => log.debug("auto-memory", `extraction failed: ${err?.message ?? err}`));
+            }).catch((err) => log.debug("auto-memory", `title fetch failed: ${err?.message ?? err}`));
+          }
+        } catch (err) {
+          log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);
+        }
 
         yield { type: "turn_end", stopReason, emptyType: guardState.lastEmptyType };
         this.abortController = null;

@@ -7,7 +7,7 @@ import { getDb } from "./db";
 // ─── Types ──────────────────────────────────────────────────────
 
 export type MemoryCategory = "preference" | "convention" | "fact" | "decision" | "learned";
-export type MemorySource = "auto" | "user" | "promoted";
+export type MemorySource = "auto" | "user" | "promoted" | "auto-extract";
 
 // Internal row types for typed SQLite queries
 interface DbCountRow { cnt: number }

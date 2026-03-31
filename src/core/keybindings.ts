@@ -1,7 +1,9 @@
 // KCode - Configurable Keybindings
-// Supports readline-style shortcuts and vim normal mode
+// Legacy interface — delegates to the new keybindings/ module.
+// Kept for backward compatibility with existing imports.
 
-import { kcodePath } from "./paths";
+import { kcodePath } from "./paths.js";
+import { loadUserBindings } from "./keybindings/loader.js";
 
 export interface KeybindingConfig {
   /** Enable vim-style normal/insert mode toggle */
@@ -31,3 +33,26 @@ export function loadKeybindings(): KeybindingConfig {
 export function isVimModeEnabled(): boolean {
   return loadKeybindings().vimMode === true;
 }
+
+// Re-export new module for consumers that want the advanced system
+export {
+  KeybindingResolver,
+  parseKeyChord,
+  parseKeyCombo,
+  formatKeyChord,
+  serializeChord,
+  serializeCombo,
+  validateBindings,
+  DEFAULT_BINDINGS,
+  RESERVED_KEYS,
+  loadUserBindings,
+} from "./keybindings/index.js";
+
+export type {
+  KeyCombo,
+  KeyChord,
+  KeyBinding,
+  BindingSource,
+  BindingContext,
+  ValidationResult,
+} from "./keybindings/index.js";
