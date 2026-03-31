@@ -13,6 +13,7 @@ import { isWorkspaceTrusted } from "./hook-trust";
 import type { MarketplaceSettings } from "./marketplace/types";
 import type { OfflineSettings } from "./offline/types";
 import type { EnsembleStrategy, EnsembleTrigger } from "./ensemble/types";
+import type { MeshSettings } from "./mesh/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ export interface Settings {
   marketplace?: MarketplaceSettings; // Plugin marketplace CDN config
   offline?: OfflineSettings; // Offline mode configuration
   ensemble?: EnsembleSettings; // Multi-model ensemble configuration
+  mesh?: MeshSettings; // P2P agent mesh configuration
   hardware?: {
     autoOptimize?: boolean; // Enable hardware auto-optimization
     contextWindow?: number; // Override auto-detected context window
