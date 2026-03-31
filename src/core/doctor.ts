@@ -252,7 +252,47 @@ export async function runDiagnostics(): Promise<CheckResult[]> {
     results.push({ name: "Pricing data", status: "ok", message: "No custom pricing data (using defaults)" });
   }
 
-  // 16. Disk space
+  // 16. Database migrations
+  try {
+    const { getDb } = await import("./db.js");
+    const { MigrationRunner } = await import("../migrations/runner.js");
+    const { ALL_MIGRATIONS } = await import("../migrations/registry.js");
+    const db = getDb();
+    const runner = new MigrationRunner(db, ALL_MIGRATIONS);
+    const status = runner.getStatus();
+
+    if (status.failed.length > 0) {
+      const failedVersions = status.failed.map((f) => f.version).join(", ");
+      results.push({
+        name: "Database migrations",
+        status: "fail",
+        message: `Migration(s) ${failedVersions} failed — run \`kcode migrate --retry\` to re-attempt`,
+      });
+    } else if (status.pending > 0) {
+      results.push({
+        name: "Database migrations",
+        status: "warn",
+        message: `${status.applied}/${status.total} applied, ${status.pending} pending`,
+      });
+    } else {
+      const lastInfo = status.lastApplied
+        ? ` — last: ${status.lastApplied.version}_${status.lastApplied.name} (${status.lastApplied.applied_at})`
+        : "";
+      results.push({
+        name: "Database migrations",
+        status: "ok",
+        message: `${status.applied}/${status.total} applied${lastInfo}`,
+      });
+    }
+  } catch (err: any) {
+    results.push({
+      name: "Database migrations",
+      status: "warn",
+      message: `Could not check migration status — ${err?.message ?? "unknown error"}`,
+    });
+  }
+
+  // 17. Disk space
   if (existsSync(kcodeDir)) {
     const bytes = await dirSizeBytes(kcodeDir);
     const mb = bytes / (1024 * 1024);

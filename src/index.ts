@@ -83,6 +83,8 @@ import {
   registerServeCommand,
   registerRemoteCommand,
   registerDaemonCommand,
+  registerMeshCommand,
+  registerDistillCommand,
 } from "./cli/commands";
 
 // Version — read from package.json at build time via Bun's JSON import
@@ -275,6 +277,8 @@ registerHistoryCommand(program);
 registerServeCommand(program, VERSION);
 registerRemoteCommand(program);
 registerDaemonCommand(program);
+registerMeshCommand(program);
+registerDistillCommand(program);
 
 // ─── Parse ──────────────────────────────────────────────────────
 

@@ -19,3 +19,5 @@ export { registerHistoryCommand } from "./history";
 export { registerServeCommand } from "./serve";
 export { registerRemoteCommand } from "./remote";
 export { registerDaemonCommand } from "./daemon";
+export { registerMeshCommand } from "./mesh";
+export { registerDistillCommand } from "./distill";
