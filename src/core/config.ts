@@ -12,10 +12,23 @@ import { log } from "./logger";
 import { isWorkspaceTrusted } from "./hook-trust";
 import type { MarketplaceSettings } from "./marketplace/types";
 import type { OfflineSettings } from "./offline/types";
+import type { EnsembleStrategy, EnsembleTrigger } from "./ensemble/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export type EffortLevel = "low" | "medium" | "high" | "max";
+
+/** Ensemble configuration for multi-model consensus */
+export interface EnsembleSettings {
+  enabled?: boolean;
+  strategy?: EnsembleStrategy;
+  models?: string[];
+  judgeModel?: string | null;
+  maxParallel?: number;
+  timeout?: number;
+  minResponses?: number;
+  triggerOn?: EnsembleTrigger;
+}
 
 /** Structured auto-memory configuration (replaces simple boolean toggle) */
 export interface AutoMemorySettings {
@@ -51,6 +64,14 @@ export interface Settings {
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
   marketplace?: MarketplaceSettings; // Plugin marketplace CDN config
   offline?: OfflineSettings; // Offline mode configuration
+  ensemble?: EnsembleSettings; // Multi-model ensemble configuration
+  hardware?: {
+    autoOptimize?: boolean; // Enable hardware auto-optimization
+    contextWindow?: number; // Override auto-detected context window
+    batchSize?: number;     // Override auto-detected batch size
+    threads?: number;       // Override auto-detected thread count
+    gpuLayers?: number;     // Override auto-detected GPU layer count
+  };
   coordinator?: {
     enabled?: boolean;
     maxWorkers?: number;
@@ -180,7 +201,33 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     reasoningBudget: typeof raw.reasoningBudget === "number" ? raw.reasoningBudget : undefined,
     noCache: typeof raw.noCache === "boolean" ? raw.noCache : undefined,
     offline: (raw.offline && typeof raw.offline === "object") ? raw.offline as OfflineSettings : undefined,
+    ensemble: (raw.ensemble && typeof raw.ensemble === "object") ? parseEnsembleSettings(raw.ensemble as Record<string, unknown>) : undefined,
+    hardware: (raw.hardware && typeof raw.hardware === "object") ? parseHardwareSettings(raw.hardware as Record<string, unknown>) : undefined,
   };
+}
+
+function parseEnsembleSettings(raw: Record<string, unknown>): EnsembleSettings {
+  const settings: EnsembleSettings = {};
+  if (typeof raw.enabled === "boolean") settings.enabled = raw.enabled;
+  if (typeof raw.strategy === "string") settings.strategy = raw.strategy as EnsembleStrategy;
+  if (Array.isArray(raw.models)) settings.models = raw.models.filter((m: unknown) => typeof m === "string") as string[];
+  if (typeof raw.judgeModel === "string") settings.judgeModel = raw.judgeModel;
+  if (raw.judgeModel === null) settings.judgeModel = null;
+  if (typeof raw.maxParallel === "number") settings.maxParallel = raw.maxParallel;
+  if (typeof raw.timeout === "number") settings.timeout = raw.timeout;
+  if (typeof raw.minResponses === "number") settings.minResponses = raw.minResponses;
+  if (typeof raw.triggerOn === "string") settings.triggerOn = raw.triggerOn as EnsembleTrigger;
+  return settings;
+}
+
+function parseHardwareSettings(raw: Record<string, unknown>): Settings["hardware"] {
+  const settings: NonNullable<Settings["hardware"]> = {};
+  if (typeof raw.autoOptimize === "boolean") settings.autoOptimize = raw.autoOptimize;
+  if (typeof raw.contextWindow === "number" && raw.contextWindow > 0) settings.contextWindow = raw.contextWindow;
+  if (typeof raw.batchSize === "number" && raw.batchSize > 0) settings.batchSize = raw.batchSize;
+  if (typeof raw.threads === "number" && raw.threads > 0) settings.threads = raw.threads;
+  if (typeof raw.gpuLayers === "number") settings.gpuLayers = raw.gpuLayers;
+  return Object.keys(settings).length > 0 ? settings : undefined;
 }
 
 function isPermissionMode(v: unknown): v is PermissionMode {
@@ -286,6 +333,8 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.reasoningBudget !== undefined) result.reasoningBudget = layer.reasoningBudget;
     if (layer.noCache !== undefined) result.noCache = layer.noCache;
     if (layer.offline !== undefined) result.offline = { ...result.offline, ...layer.offline };
+    if (layer.ensemble !== undefined) result.ensemble = { ...result.ensemble, ...layer.ensemble };
+    if (layer.hardware !== undefined) result.hardware = { ...result.hardware, ...layer.hardware };
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
       result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
