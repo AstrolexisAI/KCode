@@ -678,7 +678,7 @@ export async function handleRoute(
     log.info("http", `GET /api/session/${filename}`);
 
     // Validate filename — must not contain path traversal
-    if (!filename || filename.includes("..") || filename.includes("/")) {
+    if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\0")) {
       return jsonError("Invalid filename", 400, corsHeaders);
     }
 
