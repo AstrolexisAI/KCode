@@ -4,6 +4,8 @@
 import type { Message, StreamEvent, ConversationState, KCodeConfig } from "./types";
 import { log } from "./logger";
 import { CHARS_PER_TOKEN } from "./token-budget";
+import { compact as multiStrategyCompact, CompactionCircuitBreaker } from "./compaction/index.js";
+import type { LlmSummarizer } from "./compaction/types.js";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -185,4 +187,103 @@ export function emergencyPrune(
     { type: "compaction_start", messageCount: dropCount, tokensBefore: postPruneTokens },
     { type: "compaction_end", tokensAfter: state.tokenCount, method: "pruned" },
   ];
+}
+
+// ─── Multi-Strategy Compaction Circuit Breaker (shared) ────────
+
+let _sharedCircuitBreaker: CompactionCircuitBreaker | null = null;
+
+function getSharedCircuitBreaker(): CompactionCircuitBreaker {
+  if (!_sharedCircuitBreaker) {
+    _sharedCircuitBreaker = new CompactionCircuitBreaker();
+  }
+  return _sharedCircuitBreaker;
+}
+
+/** Reset the shared circuit breaker (e.g., on conversation reset). */
+export function resetCompactionCircuitBreaker(): void {
+  _sharedCircuitBreaker?.reset();
+}
+
+/**
+ * Multi-strategy compaction: progressively applies image stripping, micro-compact,
+ * full LLM-based compact, and emergency pruning based on context usage level.
+ *
+ * This is the preferred compaction entry point for new code. It replaces the
+ * separate Phase 1/Phase 2 logic in pruneMessagesIfNeeded.
+ */
+export async function* compactMultiStrategy(
+  state: ConversationState,
+  systemPrompt: string,
+  contextWindowSize: number,
+  config: KCodeConfig,
+  summarizer?: LlmSummarizer,
+): AsyncGenerator<StreamEvent> {
+  const estimatedTokens = estimateContextTokens(systemPrompt, state.messages);
+  const contextUsage = estimatedTokens / contextWindowSize;
+
+  if (contextUsage < 0.60) return;
+
+  const tokensBefore = estimatedTokens;
+  yield { type: "compaction_start", messageCount: state.messages.length, tokensBefore };
+
+  // Build an LLM summarizer from config if none provided
+  const llmSummarizer: LlmSummarizer | null = summarizer ?? await buildLlmSummarizer(config);
+
+  try {
+    const result = await multiStrategyCompact(
+      state.messages,
+      contextUsage,
+      llmSummarizer,
+      undefined, // use default config
+      getSharedCircuitBreaker(),
+    );
+
+    state.messages = result.messages;
+    state.tokenCount = estimateContextTokens(systemPrompt, state.messages);
+
+    const method = result.strategiesApplied.includes("full-compact")
+      ? "llm"
+      : result.strategiesApplied.includes("micro-compact")
+        ? "compressed"
+        : "pruned";
+
+    log.info(
+      "session",
+      `Multi-strategy compaction: [${result.strategiesApplied.join(", ")}] ~${result.tokensRecovered} tokens recovered`,
+    );
+
+    yield { type: "compaction_end", tokensAfter: state.tokenCount, method };
+  } catch (err) {
+    log.error("session", `Multi-strategy compaction failed: ${err}`);
+    // Fall through — the caller can still use emergencyPrune as a last resort
+  }
+}
+
+/**
+ * Build an LLM summarizer function from the current config,
+ * using the CompactionManager from the legacy compaction module.
+ */
+async function buildLlmSummarizer(config: KCodeConfig): Promise<LlmSummarizer | null> {
+  try {
+    const { CompactionManager } = await import("./compaction.js");
+    const compactModel = config.tertiaryModel ?? config.fallbackModel ?? config.model;
+    const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase);
+
+    return async (prompt: string, systemPrompt: string, maxTokens: number): Promise<string | null> => {
+      // Wrap the CompactionManager's compact call as a summarizer
+      const fakeMessages: Message[] = [{ role: "user", content: prompt }];
+      const result = await compactor.compact(fakeMessages);
+      if (!result) return null;
+      // Extract text from the result message
+      if (Array.isArray(result.content)) {
+        for (const block of result.content) {
+          if (block.type === "text") return block.text;
+        }
+      }
+      return typeof result.content === "string" ? result.content : null;
+    };
+  } catch {
+    return null;
+  }
 }

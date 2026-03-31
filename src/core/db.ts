@@ -39,6 +39,7 @@ export function getDb(): Database {
   _db.exec("PRAGMA busy_timeout=5000");
 
   initSchema(_db);
+  runPendingMigrations(_db);
 
   log.info("db", `Opened shared DB connection: ${isMemory ? ":memory:" : dbPath}`);
   return _db;
@@ -248,4 +249,30 @@ function initSchema(db: Database): void {
   // memory-store.ts tables — enhanced structured memory with categories, confidence, expiry
   const { initMemoryStoreSchema } = require("./memory-store") as typeof import("./memory-store");
   initMemoryStoreSchema(db);
+}
+
+/**
+ * Run any pending database/config/data migrations.
+ * Called synchronously during DB init — migrations run via .run() which is async,
+ * but we fire-and-forget since migrations must not block startup fatally.
+ */
+function runPendingMigrations(db: Database): void {
+  try {
+    const { MigrationRunner } = require("../migrations/runner") as typeof import("../migrations/runner");
+    const { ALL_MIGRATIONS } = require("../migrations/registry") as typeof import("../migrations/registry");
+    const runner = new MigrationRunner(db, ALL_MIGRATIONS);
+    // Fire and forget — migrations are fast and synchronous in practice
+    runner.run().then((report) => {
+      if (report.applied.length > 0) {
+        log.info("db", `Applied ${report.applied.length} migration(s): ${report.applied.map((m) => m.version).join(", ")}`);
+      }
+      if (report.failed) {
+        log.error("db", `Migration ${report.failed.version} failed: ${report.failed.error}`);
+      }
+    }).catch((err) => {
+      log.error("db", `Migration runner failed: ${err}`);
+    });
+  } catch (err) {
+    log.error("db", `Failed to load migration system: ${err}`);
+  }
 }
