@@ -143,9 +143,7 @@ export async function* executeToolsSequential(
     }
 
     // Hard block after many repeats (genuine stuck loop)
-    // Write/Edit get a softer threshold (3) — rewriting once is normal, 3+ times is a loop
-    const crossThreshold = (call.name === "Write" || call.name === "Edit") ? 3 : 6;
-    if (crossCount >= crossThreshold) {
+    if (crossCount >= 6) {
       const skipMsg = `BLOCKED: You have called ${call.name} with identical parameters ${crossCount + 1} times. STOP this approach entirely. Tell the user what you've tried, what failed, and ask if they want you to try something different. Do NOT retry this same call.`;
       log.warn("tool", `Cross-turn dedup blocked: ${sig.slice(0, 80)} (attempt ${crossCount + 1})`);
       yield { type: "tool_result", name: call.name, toolUseId: call.id, result: skipMsg, isError: true };
@@ -308,7 +306,7 @@ export async function* executeToolsSequential(
         yield { type: "tool_stream" as const, toolUseId: call.id, name: call.name, chunk };
       }
       setBashStreamCallback(undefined);
-      result = toolResult!;
+      result = toolResult ?? { tool_use_id: call.id, content: "Aborted by user", is_error: true };
     } else {
       result = await ctx.tools.execute(call.name, effectiveInput);
     }

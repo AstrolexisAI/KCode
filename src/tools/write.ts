@@ -27,6 +27,10 @@ const SENSITIVE_PATTERNS = [
   /\.kube\/config/,
   /id_rsa/,
   /id_ed25519/,
+  /\.(bashrc|bash_profile|zshrc|zprofile|profile)$/,
+  /\.(gitconfig)$/,
+  /crontab$/,
+  /systemd\/.*\.service$/,
 ];
 
 export async function executeWrite(input: Record<string, unknown>): Promise<ToolResult> {

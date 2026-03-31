@@ -44,6 +44,7 @@ import {
 import { registerMcpTools, discoverMcpTools } from "./mcp-tools";
 import { McpHealthMonitor } from "./mcp-health";
 import { resolveAlias } from "./mcp-aliases";
+import { isWorkspaceTrusted } from "./hook-trust";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -184,16 +185,34 @@ export class McpManager {
 
   /**
    * Load MCP server configs from .kcode/settings.json and ~/.kcode/settings.json.
+   * Project-level configs require workspace trust.
    */
   private async loadConfigs(cwd: string): Promise<McpServersConfig> {
-    const paths = [
-      kcodePath("settings.json"),
-      join(cwd, ".kcode", "settings.json"),
+    const userPath = kcodePath("settings.json");
+    const projectPath = join(cwd, ".kcode", "settings.json");
+
+    const sources: Array<{ path: string; isProject: boolean }> = [
+      { path: userPath, isProject: false },
+      { path: projectPath, isProject: true },
     ];
 
     const merged: McpServersConfig = {};
 
-    for (const path of paths) {
+    for (const { path, isProject } of sources) {
+      // Skip project-level config if workspace is not trusted
+      if (isProject && !isWorkspaceTrusted(cwd)) {
+        try {
+          const file = Bun.file(path);
+          if (await file.exists()) {
+            const data = await file.json();
+            if (data?.mcpServers && typeof data.mcpServers === "object" && Object.keys(data.mcpServers).length > 0) {
+              console.error(`[MCP] Skipping project .kcode/ MCP servers — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`);
+            }
+          }
+        } catch { /* ignore */ }
+        continue;
+      }
+
       try {
         const file = Bun.file(path);
         if (await file.exists()) {

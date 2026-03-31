@@ -345,7 +345,8 @@ export class PermissionManager {
         return { allowed: true };
 
       default:
-        return { allowed: true };
+        // Unknown tools (including MCP) require explicit approval — don't auto-approve
+        return { allowed: false, reason: `Unknown tool "${tool.name}" requires manual approval` };
     }
   }
 

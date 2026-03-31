@@ -32,14 +32,37 @@ function isPrivateIP(hostname: string): boolean {
   if (/^169\.254\./.test(hostname)) return true;    // Link-local / AWS metadata
   if (/^0\./.test(hostname)) return true;           // "This" network
   if (hostname === "0.0.0.0") return true;
+  if (hostname === "255.255.255.255") return true;     // IPv4 broadcast
+  // Hex/octal/decimal representations of loopback (e.g., 0x7f000001, 2130706433)
+  try {
+    if (/^0x[0-9a-f]+$/i.test(hostname)) {
+      const num = parseInt(hostname, 16);
+      const octet1 = (num >>> 24) & 0xff;
+      if (octet1 === 127 || octet1 === 10 || octet1 === 0) return true;
+      if (octet1 === 172 && ((num >>> 16) & 0xff) >= 16 && ((num >>> 16) & 0xff) <= 31) return true;
+      if (octet1 === 192 && ((num >>> 16) & 0xff) === 168) return true;
+    } else if (/^\d+$/.test(hostname) && hostname.length > 3) {
+      const num = parseInt(hostname, 10);
+      if (num > 0 && num <= 0xffffffff) {
+        const octet1 = (num >>> 24) & 0xff;
+        if (octet1 === 127 || octet1 === 10 || octet1 === 0) return true;
+        if (octet1 === 172 && ((num >>> 16) & 0xff) >= 16 && ((num >>> 16) & 0xff) <= 31) return true;
+        if (octet1 === 192 && ((num >>> 16) & 0xff) === 168) return true;
+      }
+    }
+  } catch {}
   // IPv6
   if (hostname === "::1" || hostname === "[::1]") return true;
+  if (hostname === "::" || hostname === "[::]") return true; // Unspecified IPv6 (binds all)
   if (/^fe80:/i.test(hostname)) return true;          // Link-local IPv6
   if (/^fd/i.test(hostname)) return true;             // Unique local IPv6
   if (/^fc/i.test(hostname)) return true;             // Unique local IPv6
   // IPv4-mapped IPv6 (::ffff:127.0.0.1, ::ffff:10.0.0.1, etc.)
   const v4mapped = hostname.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
   if (v4mapped && isPrivateIP(v4mapped[1]!)) return true;
+  // Bracketed IPv4-mapped IPv6 (e.g., [::ffff:127.0.0.1])
+  const v4mappedBracketed = hostname.match(/^\[::ffff:(\d+\.\d+\.\d+\.\d+)\]$/i);
+  if (v4mappedBracketed && isPrivateIP(v4mappedBracketed[1]!)) return true;
   return false;
 }
 
