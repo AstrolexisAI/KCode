@@ -77,6 +77,7 @@ export function hookGlobMatch(pattern: string, value: string): boolean {
   let regex = pattern.replace(/([.+^${}()|[\]\\])/g, "\\$1");
   regex = regex.replace(/\*\*/g, "<<GLOBSTAR>>");
   regex = regex.replace(/\*/g, "[^/]*");
+  regex = regex.replace(/\?/g, "[^/]"); // glob ? = any single non-/ char
   regex = regex.replace(/<<GLOBSTAR>>/g, ".*");
   return new RegExp(`^${regex}$`).test(value);
 }

@@ -197,10 +197,13 @@ export async function handleInfoAction(
         // Try to get a short git diff stat for each file
         let diffStat = "";
         try {
-          diffStat = execSync(`git diff --stat -- "${f}" 2>/dev/null`, {
+          const { execFileSync } = await import("node:child_process");
+          diffStat = execFileSync("git", ["diff", "--stat", "--", f], {
             cwd: appConfig.workingDirectory,
             timeout: 3000,
-          }).toString().trim();
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
         } catch { /* not in git or no changes */ }
 
         if (diffStat) {
@@ -241,7 +244,8 @@ export async function handleInfoAction(
       for (const f of files) {
         try {
           // Get diff stat for each file
-          const stat = execSync(`git diff --numstat -- "${f}" 2>/dev/null`, { cwd, timeout: 3000 }).toString().trim();
+          const { execFileSync: execFileSync2 } = await import("node:child_process");
+          const stat = execFileSync2("git", ["diff", "--numstat", "--", f], { cwd, timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
           if (stat) {
             const parts = stat.split("\t");
             const added = parseInt(parts[0] ?? "0") || 0;
@@ -252,7 +256,7 @@ export async function handleInfoAction(
             lines.push(`    +${added} -${removed}`);
           } else {
             // Check if it's a new untracked file
-            const isUntracked = execSync(`git ls-files --others --exclude-standard -- "${f}" 2>/dev/null`, { cwd, timeout: 3000 }).toString().trim();
+            const isUntracked = execFileSync2("git", ["ls-files", "--others", "--exclude-standard", "--", f], { cwd, timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
             if (isUntracked) {
               lines.push(`  ${f} (new file)`);
             } else {
@@ -270,8 +274,7 @@ export async function handleInfoAction(
 
       // Show combined diff preview (truncated)
       try {
-        const fileArgs = files.map(f => `"${f}"`).join(" ");
-        const diff = execSync(`git diff --stat -- ${fileArgs} 2>/dev/null`, { cwd, timeout: 5000 }).toString().trim();
+        const diff = execFileSync2("git", ["diff", "--stat", "--", ...files], { cwd, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
         if (diff) {
           lines.push(``);
           const lastLine = diff.split("\n").pop() ?? "";

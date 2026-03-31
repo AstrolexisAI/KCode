@@ -83,7 +83,7 @@ export async function handleFileAction(
       return lines.join("\n");
     }
     case "filesize": {
-      const { execSync } = await import("node:child_process");
+      const { execFileSync } = await import("node:child_process");
       const cwd = appConfig.workingDirectory;
 
       const rawPattern = args?.trim() || "**/*.*";
@@ -95,13 +95,25 @@ export async function handleFileAction(
       let files: Array<{ path: string; size: number }> = [];
       try {
         const namePattern = pattern.includes("*") ? pattern.split("/").pop() || "*" : pattern;
-        const output = execSync(`find . -type f -name '${namePattern.replace(/'/g, "")}' -not -path '*/node_modules/*' -not -path '*/.git/*' -printf '%s\\t%p\\n' 2>/dev/null | sort -rn | head -30`, {
+        const output = execFileSync("find", [
+          ".", "-type", "f", "-name", namePattern,
+          "-not", "-path", "*/node_modules/*",
+          "-not", "-path", "*/.git/*",
+          "-printf", "%s\\t%p\\n",
+        ], {
           cwd,
           timeout: 10000,
-        }).toString().trim();
-
-        if (output) {
-          for (const line of output.split("\n")) {
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
+        // Sort by size descending and limit to 30
+        const sorted = output.split("\n")
+          .filter(l => l.trim())
+          .sort((a, b) => parseInt(b.split("\t")[0] ?? "0") - parseInt(a.split("\t")[0] ?? "0"))
+          .slice(0, 30)
+          .join("\n");
+        if (sorted) {
+          for (const line of sorted.split("\n")) {
             const [sizeStr, ...pathParts] = line.split("\t");
             const filePath = pathParts.join("\t");
             const size = parseInt(sizeStr ?? "0") || 0;

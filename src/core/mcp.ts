@@ -401,7 +401,7 @@ export class McpManager {
   private startHealthChecks(): void {
     if (this.healthCheckInterval) return;
 
-    this.healthCheckInterval = setInterval(async () => {
+    const interval = setInterval(async () => {
       // Collect dead servers first, then act — avoids Map mutation during async iteration
       const deadServers: Array<[string, typeof this.servers extends Map<string, infer V> ? V : never]> = [];
       for (const [name, connection] of this.servers) {
@@ -421,6 +421,9 @@ export class McpManager {
         }
       }
     }, 30_000);
+    // Unref so the interval doesn't prevent process exit
+    if (typeof interval.unref === "function") interval.unref();
+    this.healthCheckInterval = interval;
   }
 
   /**
