@@ -1,36 +1,15 @@
 // Feature Flags System
 // Two types: build-time (DCE via Bun's define) and runtime (settings/env overrides)
+//
+// Build-time: src/core/feature-flags/flags.ts (10 flags, 3 profiles)
+// Runtime: this file (5 flags, env/settings overrides)
 
 // ─── Build-time Feature Flags ───────────────────────────────────
-// These are replaced by Bun's `define` at build time.
-// When false, the bundler eliminates dead branches entirely.
-// At dev time (bun run src/index.ts), they default to true.
-
-declare const FEATURE_VOICE: boolean;
-declare const FEATURE_BRIDGE: boolean;
-declare const FEATURE_REMOTE: boolean;
-declare const FEATURE_ENTERPRISE: boolean;
-declare const FEATURE_TELEMETRY: boolean;
-declare const FEATURE_LSP: boolean;
-declare const FEATURE_SWARM: boolean;
-
-/** Check if a build-time feature is enabled. Falls back to true in dev mode. */
-export function isBuildFeatureEnabled(name: string): boolean {
-  try {
-    switch (name) {
-      case "FEATURE_VOICE": return typeof FEATURE_VOICE !== "undefined" ? FEATURE_VOICE : true;
-      case "FEATURE_BRIDGE": return typeof FEATURE_BRIDGE !== "undefined" ? FEATURE_BRIDGE : true;
-      case "FEATURE_REMOTE": return typeof FEATURE_REMOTE !== "undefined" ? FEATURE_REMOTE : true;
-      case "FEATURE_ENTERPRISE": return typeof FEATURE_ENTERPRISE !== "undefined" ? FEATURE_ENTERPRISE : true;
-      case "FEATURE_TELEMETRY": return typeof FEATURE_TELEMETRY !== "undefined" ? FEATURE_TELEMETRY : true;
-      case "FEATURE_LSP": return typeof FEATURE_LSP !== "undefined" ? FEATURE_LSP : true;
-      case "FEATURE_SWARM": return typeof FEATURE_SWARM !== "undefined" ? FEATURE_SWARM : true;
-      default: return true;
-    }
-  } catch {
-    return true; // Dev mode: globals not defined → default to enabled
-  }
-}
+// Re-export the enhanced build-time flags from feature-flags/
+export { Features, activeFeatures, inactiveFeatures, ALL_FEATURE_NAMES } from "./feature-flags/flags";
+export { isFeatureEnabled as isBuildFeatureEnabled } from "./feature-flags/flags";
+export { getDefinesForProfile, getAvailableProfiles, getProfileFeatures, describeProfile } from "./feature-flags/build-defines";
+export type { FeatureName, BuildProfile } from "./feature-flags/types";
 
 // ─── Runtime Feature Flags ──────────────────────────────────────
 

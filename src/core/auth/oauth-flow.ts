@@ -1,0 +1,302 @@
+// OAuth 2.0 PKCE Flow — Secure browser-based authentication for KCode.
+// Supports KCode Cloud, Anthropic, OpenAI, and custom providers.
+
+import { randomBytes } from "node:crypto";
+import type { OAuthConfig, OAuthTokens } from "./types";
+import { setSecret, getSecret, deleteSecret } from "./keychain";
+
+const DEFAULT_REDIRECT_PORT = 19284;
+const TOKEN_ACCOUNT_PREFIX = "oauth-token-";
+const REFRESH_ACCOUNT_PREFIX = "oauth-refresh-";
+
+export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
+  "kcode-cloud": {
+    provider: "kcode-cloud",
+    authorizationUrl: "https://cloud.kcode.dev/oauth/authorize",
+    tokenUrl: "https://cloud.kcode.dev/oauth/token",
+    clientId: "kcode-cli",
+    scopes: ["api", "sync"],
+  },
+};
+
+// ── PKCE utilities ──
+
+function generateCodeVerifier(): string {
+  // Generate enough random bytes to guarantee 43+ alphanumeric chars after filtering
+  return randomBytes(48)
+    .toString("base64url")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 43)
+    .padEnd(43, "x");
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(verifier),
+  );
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function generateState(): string {
+  return randomBytes(16).toString("hex");
+}
+
+// ── OAuth Flow ──
+
+export interface OAuthFlowResult {
+  tokens: OAuthTokens;
+  provider: string;
+}
+
+/**
+ * Start the full OAuth 2.0 PKCE flow:
+ * 1. Generate code_verifier + code_challenge
+ * 2. Open browser with authorization URL
+ * 3. Start local callback server
+ * 4. Wait for callback with authorization code
+ * 5. Exchange code for tokens
+ * 6. Store tokens in keychain
+ */
+export async function startOAuthFlow(
+  config: OAuthConfig,
+): Promise<OAuthFlowResult> {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+  const state = generateState();
+  const redirectPort = config.redirectPort || DEFAULT_REDIRECT_PORT;
+  const redirectUri = `http://127.0.0.1:${redirectPort}/callback`;
+
+  // Build authorization URL
+  const authUrl = new URL(config.authorizationUrl);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("client_id", config.clientId);
+  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("scope", config.scopes.join(" "));
+  authUrl.searchParams.set("state", state);
+  authUrl.searchParams.set("code_challenge", codeChallenge);
+  authUrl.searchParams.set("code_challenge_method", "S256");
+
+  // Wait for the callback
+  const code = await waitForCallback(redirectPort, state);
+
+  // Exchange code for tokens
+  const tokens = await exchangeCode(config, code, codeVerifier, redirectUri);
+
+  // Store in keychain
+  await storeTokens(config.provider, tokens);
+
+  return { tokens, provider: config.provider };
+}
+
+/** Build the authorization URL without starting the flow */
+export function buildAuthUrl(config: OAuthConfig, codeChallenge: string, state: string): string {
+  const redirectUri = `http://127.0.0.1:${config.redirectPort || DEFAULT_REDIRECT_PORT}/callback`;
+  const authUrl = new URL(config.authorizationUrl);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("client_id", config.clientId);
+  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("scope", config.scopes.join(" "));
+  authUrl.searchParams.set("state", state);
+  authUrl.searchParams.set("code_challenge", codeChallenge);
+  authUrl.searchParams.set("code_challenge_method", "S256");
+  return authUrl.toString();
+}
+
+/** Open browser (platform-aware) */
+export async function openBrowser(url: string): Promise<void> {
+  const cmd =
+    process.platform === "darwin"
+      ? ["open", url]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", url]
+        : ["xdg-open", url];
+  try {
+    const proc = Bun.spawn(cmd, { stderr: "pipe" });
+    await proc.exited;
+  } catch {
+    // Ignore — user may not have a desktop environment
+  }
+}
+
+/** Start temporary HTTP server and wait for OAuth callback */
+async function waitForCallback(port: number, expectedState: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      server.stop();
+      reject(new Error("OAuth callback timed out after 5 minutes"));
+    }, 5 * 60 * 1000);
+
+    const server = Bun.serve({
+      port,
+      fetch(req) {
+        const url = new URL(req.url);
+        if (url.pathname !== "/callback") {
+          return new Response("Not Found", { status: 404 });
+        }
+
+        const code = url.searchParams.get("code");
+        const state = url.searchParams.get("state");
+        const error = url.searchParams.get("error");
+
+        if (error) {
+          clearTimeout(timeout);
+          server.stop();
+          reject(new Error(`OAuth error: ${error}`));
+          return new Response(
+            "<html><body><h2>Authentication failed</h2><p>You can close this tab.</p></body></html>",
+            { headers: { "Content-Type": "text/html" } },
+          );
+        }
+
+        if (state !== expectedState) {
+          clearTimeout(timeout);
+          server.stop();
+          reject(new Error("OAuth state mismatch — possible CSRF"));
+          return new Response("State mismatch", { status: 400 });
+        }
+
+        if (!code) {
+          clearTimeout(timeout);
+          server.stop();
+          reject(new Error("No authorization code in callback"));
+          return new Response("Missing code", { status: 400 });
+        }
+
+        clearTimeout(timeout);
+        server.stop();
+        resolve(code);
+        return new Response(
+          "<html><body><h2>Authenticated!</h2><p>You can close this tab and return to KCode.</p></body></html>",
+          { headers: { "Content-Type": "text/html" } },
+        );
+      },
+    });
+  });
+}
+
+/** Exchange authorization code for tokens */
+async function exchangeCode(
+  config: OAuthConfig,
+  code: string,
+  codeVerifier: string,
+  redirectUri: string,
+): Promise<OAuthTokens> {
+  const response = await fetch(config.tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri,
+      client_id: config.clientId,
+      code_verifier: codeVerifier,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Token exchange failed (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as Record<string, unknown>;
+  return {
+    accessToken: data.access_token as string,
+    refreshToken: data.refresh_token as string | undefined,
+    expiresAt: data.expires_in
+      ? Date.now() + (data.expires_in as number) * 1000
+      : undefined,
+    tokenType: (data.token_type as string) ?? "Bearer",
+    scope: data.scope as string | undefined,
+  };
+}
+
+// ── Token management ──
+
+/** Store tokens securely in keychain */
+export async function storeTokens(
+  provider: string,
+  tokens: OAuthTokens,
+): Promise<void> {
+  await setSecret(
+    `${TOKEN_ACCOUNT_PREFIX}${provider}`,
+    JSON.stringify(tokens),
+  );
+}
+
+/** Retrieve stored tokens from keychain */
+export async function getStoredTokens(
+  provider: string,
+): Promise<OAuthTokens | null> {
+  const raw = await getSecret(`${TOKEN_ACCOUNT_PREFIX}${provider}`);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as OAuthTokens;
+  } catch {
+    return null;
+  }
+}
+
+/** Check if tokens are expired */
+export function isTokenExpired(tokens: OAuthTokens): boolean {
+  if (!tokens.expiresAt) return false;
+  return Date.now() >= tokens.expiresAt - 60_000; // 1 minute buffer
+}
+
+/** Refresh an expired access token using the refresh token */
+export async function refreshAccessToken(
+  config: OAuthConfig,
+  refreshToken: string,
+): Promise<OAuthTokens> {
+  const response = await fetch(config.tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: config.clientId,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Token refresh failed (${response.status})`);
+  }
+
+  const data = (await response.json()) as Record<string, unknown>;
+  return {
+    accessToken: data.access_token as string,
+    refreshToken: (data.refresh_token as string) ?? refreshToken,
+    expiresAt: data.expires_in
+      ? Date.now() + (data.expires_in as number) * 1000
+      : undefined,
+    tokenType: (data.token_type as string) ?? "Bearer",
+    scope: data.scope as string | undefined,
+  };
+}
+
+/** Clear stored tokens for a provider */
+export async function clearTokens(provider: string): Promise<void> {
+  await deleteSecret(`${TOKEN_ACCOUNT_PREFIX}${provider}`);
+  await deleteSecret(`${REFRESH_ACCOUNT_PREFIX}${provider}`);
+}
+
+// ── API key migration ──
+
+/** Migrate a plaintext API key to keychain storage */
+export async function migrateApiKey(
+  provider: string,
+  apiKey: string,
+): Promise<boolean> {
+  return setSecret(`apikey-${provider}`, apiKey);
+}
+
+/** Retrieve an API key from keychain */
+export async function getApiKey(provider: string): Promise<string | null> {
+  return getSecret(`apikey-${provider}`);
+}
+
+// Re-export PKCE helpers for testing
+export { generateCodeVerifier, generateCodeChallenge, generateState };
