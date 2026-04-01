@@ -85,6 +85,11 @@ import {
   registerDaemonCommand,
   registerMeshCommand,
   registerDistillCommand,
+  registerCloudCommand,
+  registerTriggersCommand,
+  registerSessionsCommand,
+  registerDashboardCommand,
+  registerTemplateCommand,
 } from "./cli/commands";
 
 // Version — read from package.json at build time via Bun's JSON import
@@ -279,6 +284,11 @@ registerRemoteCommand(program);
 registerDaemonCommand(program);
 registerMeshCommand(program);
 registerDistillCommand(program);
+registerCloudCommand(program);
+registerTriggersCommand(program);
+registerSessionsCommand(program);
+registerDashboardCommand(program);
+registerTemplateCommand(program);
 
 // ─── Parse ──────────────────────────────────────────────────────
 

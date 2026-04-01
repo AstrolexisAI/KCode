@@ -48,6 +48,7 @@ import { sendMessageDefinition, executeSendMessage } from "./send-message";
 import { lsDefinition, executeLs } from "./ls";
 import { toolSearchDefinition, executeToolSearch } from "./tool-search";
 import { deployDefinition, executeDeploy } from "./deploy";
+import { syntheticOutputDefinition, executeSyntheticOutput } from "./synthetic-output";
 
 /**
  * Register all built-in tools and optionally MCP-discovered tools.
@@ -151,6 +152,9 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
 
   // Deploy — deploy automation (Pro)
   registry.register("Deploy", deployDefinition, executeDeploy);
+
+  // SyntheticOutput — inject content into conversation stream
+  registry.register("SyntheticOutput", syntheticOutputDefinition, executeSyntheticOutput);
 
   // MCP resource tools (always available, gracefully handle no servers)
   registry.register("ListMcpResources", listMcpResourcesDefinition, executeListMcpResources);
