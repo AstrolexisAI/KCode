@@ -11,7 +11,7 @@ import {
   writeMemoryFile,
   writeMemoryIndex,
 } from "../memory";
-import { addMemory as addMemoryToStore } from "../memory-store";
+import { addMemory as addMemoryToStore, type MemoryCategory, type MemorySource } from "../memory-store";
 import type { Message } from "../types";
 import { extractTitlesFromIndex, filterMemories } from "./relevance-filter";
 import type { AutoMemoryConfig, ExtractedMemory, ExtractionResult } from "./types";
@@ -184,11 +184,11 @@ export async function saveExtractedMemories(
         };
         addMemoryToStore(
           {
-            category: (categoryMap[memory.type] ?? "fact") as any,
+            category: (categoryMap[memory.type] ?? "fact") as MemoryCategory,
             key: memory.title,
             content: memory.content,
             confidence: memory.confidence,
-            source: "auto" as any,
+            source: "auto" as MemorySource,
             approved: false,
           },
           db,

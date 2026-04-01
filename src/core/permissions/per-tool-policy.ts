@@ -163,8 +163,6 @@ export function evaluateToolPolicy(
  */
 export function loadPolicies(settingsPath: string): ToolPolicy[] {
   try {
-    const file = Bun.file(settingsPath);
-    // Use a synchronous check since Bun.file().exists() is async
     const { existsSync } = require("node:fs");
     if (!existsSync(settingsPath)) {
       return [];
