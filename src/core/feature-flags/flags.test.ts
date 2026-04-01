@@ -21,8 +21,8 @@ describe("feature-flags", () => {
       }
     });
 
-    test("has all 10 features", () => {
-      expect(ALL_FEATURE_NAMES).toHaveLength(10);
+    test("has all 11 features", () => {
+      expect(ALL_FEATURE_NAMES).toHaveLength(11);
       expect(ALL_FEATURE_NAMES).toContain("voice");
       expect(ALL_FEATURE_NAMES).toContain("bridge");
       expect(ALL_FEATURE_NAMES).toContain("enterprise");
@@ -33,6 +33,7 @@ describe("feature-flags", () => {
       expect(ALL_FEATURE_NAMES).toContain("mesh");
       expect(ALL_FEATURE_NAMES).toContain("distillation");
       expect(ALL_FEATURE_NAMES).toContain("collab");
+      expect(ALL_FEATURE_NAMES).toContain("rag");
     });
 
     test("in dev mode (no --define) all features default to true", () => {
@@ -48,7 +49,7 @@ describe("feature-flags", () => {
       const active = activeFeatures();
       expect(Array.isArray(active)).toBe(true);
       // In dev mode, all are active
-      expect(active).toHaveLength(10);
+      expect(active).toHaveLength(11);
     });
   });
 
@@ -109,9 +110,9 @@ describe("build-defines", () => {
       expect(defines["__FEATURE_VOICE__"]).toBe("true");
     });
 
-    test("produces 10 define entries", () => {
+    test("produces 11 define entries", () => {
       const defines = getDefinesForProfile("full");
-      expect(Object.keys(defines)).toHaveLength(10);
+      expect(Object.keys(defines)).toHaveLength(11);
     });
 
     test("all keys follow __FEATURE_*__ pattern", () => {

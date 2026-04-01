@@ -41,6 +41,7 @@ describe("StartupProfiler", () => {
       expect(r.checkpoints[0].name).toBe("a");
       expect(r.checkpoints[1].name).toBe("b");
       expect(r.totalMs).toBeGreaterThanOrEqual(0);
+      expect(r.categoryTotals).toBeDefined();
     });
 
     test("no-op when disabled", () => {
@@ -91,6 +92,33 @@ describe("StartupProfiler", () => {
       expect(r.totalMs).toBe(0);
       expect(r.peakMemoryMB).toBe(0);
       expect(r.slowestPhase).toBe("N/A");
+      expect(r.categoryTotals).toBeDefined();
+      expect(r.categoryTotals.init).toBe(0);
+    });
+
+    test("assigns categories to known checkpoint names", () => {
+      const p = new StartupProfiler(true);
+      p.checkpoint("process_start");
+      p.checkpoint("config_loaded");
+      p.checkpoint("tools_registered");
+      const r = p.report();
+      expect(r.checkpoints[0].category).toBe("init");
+      expect(r.checkpoints[1].category).toBe("config");
+      expect(r.checkpoints[2].category).toBe("tools");
+    });
+
+    test("assigns 'other' category to unknown checkpoint names", () => {
+      const p = new StartupProfiler(true);
+      p.checkpoint("custom_phase");
+      expect(p.report().checkpoints[0].category).toBe("other");
+    });
+
+    test("categoryTotals sums deltas per category", () => {
+      const p = new StartupProfiler(true);
+      p.checkpoint("process_start");
+      p.checkpoint("cli_defined");
+      const r = p.report();
+      expect(r.categoryTotals.init).toBeGreaterThanOrEqual(0);
     });
 
     test("report returns copy", () => {
@@ -103,6 +131,7 @@ describe("StartupProfiler", () => {
         deltaMs: 0,
         memoryMB: 0,
         importsLoaded: 0,
+        category: "other",
       });
       expect(p.report().checkpoints).toHaveLength(1);
     });

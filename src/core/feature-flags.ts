@@ -1,7 +1,7 @@
 // Feature Flags System
 // Two types: build-time (DCE via Bun's define) and runtime (settings/env overrides)
 //
-// Build-time: src/core/feature-flags/flags.ts (10 flags, 3 profiles)
+// Build-time: src/core/feature-flags/flags.ts (11 flags, 3 profiles)
 // Runtime: this file (5 flags, env/settings overrides)
 
 // ─── Build-time Feature Flags ───────────────────────────────────
