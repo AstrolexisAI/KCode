@@ -17,20 +17,20 @@ class Kcode < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-macos-arm64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_MACOS_ARM64"
+      sha256 "8f7924a8d7d407921e3901ba84182ad192e311a03d03b3d9f9036ca2504d32df"
     else
       url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-macos-x64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_MACOS_X64"
+      sha256 "dbeb4071fddec057fd0815bbc3aabaa966573be72cc65d63662a0ab8dc3afaf1"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-arm64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_LINUX_ARM64"
+      sha256 "a2a7f1ba3ecddb568cd71af089e1a6fe199e061bf43739db80ca9643e2da4802"
     else
       url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-x64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256_LINUX_X64"
+      sha256 "914657f4b51022b7d6341cf8901594adbdd7fe5969d40f719b2d1b4027e23ae8"
     end
   end
 
