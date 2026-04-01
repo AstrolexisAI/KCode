@@ -237,7 +237,7 @@ export function recommendModel(hw: HardwareInfo): CatalogEntry {
       // Full speed: model fits in 80% of RAM (leave room for KV cache + OS)
       // Offloaded: model up to 2x RAM — disk offloading kicks in, slower but works
       const maxModelMB = ramMB * 2;
-      if (modelMB <= maxModelMB) {
+      if (modelMB <= maxModelMB && (!best || entry.sizeGB > best.sizeGB)) {
         best = entry;
       }
     }
@@ -254,7 +254,7 @@ export function recommendModel(hw: HardwareInfo): CatalogEntry {
     const totalCapacityMB = hw.totalVramMB + hw.ramMB * 0.7;
     for (const entry of MODEL_CATALOG) {
       const modelMB = entry.sizeGB * 1024;
-      if (modelMB <= totalCapacityMB) {
+      if (modelMB <= totalCapacityMB && (!best || entry.sizeGB > best.sizeGB)) {
         best = entry;
       }
     }
@@ -268,9 +268,16 @@ export function recommendModel(hw: HardwareInfo): CatalogEntry {
   let cpuBest: CatalogEntry | null = null;
   for (const entry of MODEL_CATALOG) {
     const neededRamMB = entry.sizeGB * 1024 * 1.2; // 20% overhead for KV cache
-    if (neededRamMB <= availableRAM) {
+    if (neededRamMB <= availableRAM && (!cpuBest || entry.sizeGB > cpuBest.sizeGB)) {
       cpuBest = entry;
     }
+  }
+
+  // Fallback to smallest model if nothing fits
+  if (!cpuBest && MODEL_CATALOG.length > 0) {
+    cpuBest = MODEL_CATALOG.reduce((smallest, entry) =>
+      entry.sizeGB < smallest.sizeGB ? entry : smallest,
+    );
   }
 
   return cpuBest ?? MODEL_CATALOG[0]!;

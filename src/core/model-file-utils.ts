@@ -2,9 +2,23 @@
 // File download, extraction, binary discovery, library management, and PATH installation helpers.
 // Extracted from model-manager.ts for modularity.
 
-import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
+import {
+  appendFileSync,
+  chmodSync,
+  closeSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  symlinkSync,
+  unlinkSync,
+  writeSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { log } from "./logger";
 import { kcodeHome } from "./paths";
 
@@ -29,7 +43,6 @@ export async function downloadFile(
   let resumeOffset = 0;
 
   if (existsSync(partialPath)) {
-    const { statSync } = require("node:fs");
     resumeOffset = statSync(partialPath).size;
     if (resumeOffset > 0) {
       const resumeMB = (resumeOffset / (1024 * 1024)).toFixed(1);
@@ -91,7 +104,6 @@ export async function downloadFile(
   if (!reader) throw new Error("No response body");
 
   // Open file for writing — append if resuming, create if fresh
-  const { openSync, writeSync, closeSync } = require("node:fs");
   const fd = openSync(partialPath, resumeOffset > 0 && response.status === 206 ? "a" : "w");
 
   let downloaded = resumeOffset;
@@ -132,7 +144,6 @@ export async function downloadFile(
 
   // Verify final file size if expected size is known
   if (expectedSizeBytes && expectedSizeBytes > 0) {
-    const { statSync } = require("node:fs");
     const finalSize = statSync(partialPath).size;
     if (finalSize !== expectedSizeBytes) {
       throw new Error(
@@ -174,12 +185,15 @@ export async function extractArchive(archivePath: string, destDir: string): Prom
 
       // Method 2: PowerShell Expand-Archive
       if (!extracted) {
+        // Escape single quotes in paths for PowerShell ('' is the escape for ' in PS strings)
+        const psArchive = archivePath.replace(/'/g, "''");
+        const psDest = destDir.replace(/'/g, "''");
         const psProc = Bun.spawnSync(
           [
             "powershell",
             "-NoProfile",
             "-Command",
-            `Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force`,
+            `Expand-Archive -Path '${psArchive}' -DestinationPath '${psDest}' -Force`,
           ],
           { stdout: "pipe", stderr: "pipe" },
         );
@@ -287,9 +301,8 @@ export function findLibraryFiles(dir: string): string[] {
 /** Create symlinks for versioned .so files so the dynamic linker can find them.
  *  e.g. libmtmd.so.0.0.8368 → libmtmd.so.0 → libmtmd.so */
 export function createLibSymlinks(dir: string): void {
-  const { symlinkSync, readdirSync } = require("node:fs");
-
   try {
+    const { readdirSync } = require("node:fs") as typeof import("node:fs");
     const files = readdirSync(dir) as string[];
     for (const file of files) {
       // Match versioned .so files: libfoo.so.X.Y.Z
@@ -333,8 +346,8 @@ export function installToPath(): string | null {
   const whichCmd = isWin ? "where" : "which";
   const whichProc = Bun.spawnSync([whichCmd, "kcode"], { stdout: "pipe", stderr: "pipe" });
   if (whichProc.exitCode === 0) {
-    const existing = whichProc.stdout.toString().trim().split("\n")[0]?.trim();
-    if (existing && existsSync(existing)) return null; // already installed
+    const existing = whichProc.stdout.toString().trim().split("\n")[0]?.trim() ?? "";
+    if (existing.length > 0 && existsSync(existing)) return null; // already installed
   }
 
   // Platform-specific candidate install locations
@@ -354,13 +367,13 @@ export function installToPath(): string | null {
 
   for (const dest of candidates) {
     try {
-      const dir = join(dest, "..");
+      const dir = dirname(dest);
       mkdirSync(dir, { recursive: true });
       copyFileSync(execPath, dest);
       if (!isWin) chmodSync(dest, 0o755);
 
       // Ensure the install directory is in PATH
-      ensureInPath(join(dest, ".."));
+      ensureInPath(dir);
 
       log.info("setup", `Installed kcode to ${dest}`);
       return dest;
@@ -375,9 +388,9 @@ export function installToPath(): string | null {
 
 /** Ensure a directory is in PATH (platform-aware) */
 export function ensureInPath(dir: string): void {
-  const resolvedDir = require("node:path").resolve(dir);
+  const resolvedDir = resolve(dir);
   const sep = process.platform === "win32" ? ";" : ":";
-  if (process.env.PATH?.split(sep).some((p) => require("node:path").resolve(p) === resolvedDir))
+  if (process.env.PATH?.split(sep).some((p) => resolve(p) === resolvedDir))
     return;
 
   if (process.platform === "win32") {
@@ -433,9 +446,9 @@ export function ensureInPath(dir: string): void {
 
     const exportLine = `export PATH="${resolvedDir}:$PATH"`;
     try {
-      const existing = existsSync(rcFile) ? require("node:fs").readFileSync(rcFile, "utf-8") : "";
+      const existing = existsSync(rcFile) ? readFileSync(rcFile, "utf-8") : "";
       if (!existing.includes(resolvedDir)) {
-        require("node:fs").appendFileSync(rcFile, `\n# KCode\n${exportLine}\n`);
+        appendFileSync(rcFile, `\n# KCode\n${exportLine}\n`);
       }
     } catch (err) {
       log.debug("model-manager", `FS operation failed: ${err}`);

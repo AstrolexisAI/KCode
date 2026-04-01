@@ -46,7 +46,9 @@ export async function installMlxEngine(onProgress?: (msg: string) => void): Prom
     },
   );
   const pyVer = verProc.stdout.toString().trim();
-  const [major, minor] = pyVer.split(".").map(Number) as [number, number];
+  const verParts = pyVer.split(".").map(Number);
+  const major = verParts[0] ?? 0;
+  const minor = verParts[1] ?? 0;
   if (major < 3 || (major === 3 && minor < 9)) {
     throw new Error(`Python ${pyVer} is too old. MLX requires Python 3.9+.`);
   }
@@ -122,24 +124,27 @@ export async function downloadMlxModel(
 
   progress(`Downloading ${entry.codename} (MLX ${entry.mlxQuant})...`);
 
-  // Validate mlxRepo against HuggingFace naming pattern to prevent Python code injection
+  // Validate mlxRepo against HuggingFace naming pattern to prevent code injection.
+  // HF repos allow alphanumeric, dots, dashes, underscores in both owner and model.
   if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(entry.mlxRepo)) {
     throw new Error(
       `Invalid MLX model repo name: "${entry.mlxRepo}" — must match owner/model format`,
     );
   }
 
-  // Use mlx_lm.load to trigger HuggingFace download and cache
+  // Use mlx_lm.load to trigger HuggingFace download and cache.
+  // Pass repo name via env var instead of string interpolation to prevent injection.
   const proc = Bun.spawnSync(
     [
       venvPython,
       "-c",
-      `from mlx_lm import load; model, tokenizer = load("${entry.mlxRepo}"); print("OK")`,
+      'import os; from mlx_lm import load; model, tokenizer = load(os.environ["KCODE_MLX_REPO"]); print("OK")',
     ],
     {
       stdout: "pipe",
       stderr: "pipe",
       timeout: 600_000, // 10 min for large models
+      env: { ...process.env, KCODE_MLX_REPO: entry.mlxRepo },
     },
   );
 
