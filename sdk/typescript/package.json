@@ -1,0 +1,23 @@
+{
+  "name": "@kulvex/kcode-sdk",
+  "version": "1.0.0",
+  "description": "TypeScript client SDK for KCode HTTP API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "bun test"
+  },
+  "keywords": ["kcode", "kulvex", "ai", "coding-assistant", "sdk"],
+  "author": "Astrolexis",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kulvex/kcode.git",
+    "directory": "sdk/typescript"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

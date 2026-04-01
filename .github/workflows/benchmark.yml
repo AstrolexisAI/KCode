@@ -1,0 +1,55 @@
+name: Benchmarks
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      model_url:
+        description: "Model API URL (default: mock server)"
+        required: false
+        default: "http://localhost:19555"
+      model_name:
+        description: "Model name for results"
+        required: false
+        default: "ci-mock"
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+
+      - name: Start mock server
+        run: |
+          bun run benchmarks/mock-server.ts &
+          sleep 2
+          curl -sf http://localhost:19555/v1/models || (echo "Mock server failed to start" && exit 1)
+
+      - name: Run general benchmarks
+        run: bun run benchmarks/run.ts --model http://localhost:19555 --name ci-mock
+        continue-on-error: true
+
+      - name: Run certification suite
+        run: bun run benchmarks/certification/run.ts --model http://localhost:19555 --name ci-mock
+        continue-on-error: true
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmarks/results/
+
+      - name: Comment on release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESULTS=$(cat benchmarks/results/ci-mock.json 2>/dev/null || echo '{"note": "No results"}')
+          gh release view ${{ github.event.release.tag_name }} --json body -q .body > /dev/null 2>&1 || true
+          echo "Benchmark results uploaded as artifacts for ${{ github.event.release.tag_name }}"

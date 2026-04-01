@@ -25,6 +25,21 @@ jobs:
         run: bun run typecheck
       - run: bun test
 
+  test-windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Run tests (Windows)
+        run: bun test
+        env:
+          # Skip Linux-only tests on Windows
+          KCODE_SKIP_PLATFORM_TESTS: "1"
+
   build:
     name: Build (${{ matrix.target }})
     needs: test
@@ -40,6 +55,8 @@ jobs:
             os: macos-13
           - target: macos-arm64
             os: macos-14
+          - target: windows-x64
+            os: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -47,7 +64,8 @@ jobs:
           bun-version: latest
       - run: bun install
 
-      - name: Build binary
+      - name: Build binary (Unix)
+        if: runner.os != 'Windows'
         run: |
           mkdir -p release
           if [ "${{ matrix.target }}" = "linux-arm64" ]; then
@@ -56,11 +74,17 @@ jobs:
             bun build src/index.ts --compile --minify --outfile release/kcode-${{ matrix.target }}
           fi
 
+      - name: Build binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          New-Item -ItemType Directory -Force -Path release
+          bun build src/index.ts --compile --minify --outfile release/kcode-${{ matrix.target }}.exe
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: kcode-${{ matrix.target }}
-          path: release/kcode-${{ matrix.target }}
+          path: release/kcode-${{ matrix.target }}*
 
   release:
     name: Release
