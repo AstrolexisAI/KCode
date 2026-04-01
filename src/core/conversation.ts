@@ -55,6 +55,8 @@ import {
   injectSmartContext,
 } from "./conversation-message-prep";
 import type { SSEChunk } from "./sse-parser";
+import { processSSEStream, type StreamAccumulator } from "./conversation-streaming";
+import { handlePostTurn, type PostTurnContext } from "./conversation-post-turn";
 import {
   handleCheckpointMode,
   handleForceStop,
@@ -650,15 +652,12 @@ export class ConversationManager {
 
       yield { type: "turn_start" };
 
-      const assistantContent: ContentBlock[] = [];
-      let toolCalls: ToolUseBlock[] = [];
-      let stopReason = "end_turn";
-      let turnInputTokens = 0;
-      let turnOutputTokens = 0;
-      let thinkingChunks: string[] = [];
-
-      const activeToolCalls = new Map<number, { id: string; name: string; argChunks: string[] }>();
-      const textChunks: string[] = [];
+      let assistantContent: ContentBlock[];
+      let toolCalls: ToolUseBlock[];
+      let stopReason: string;
+      let turnInputTokens: number;
+      let turnOutputTokens: number;
+      let textChunks: string[];
 
       // Check response cache before making API call
       const cacheDisabled = this.config.noCache || this.config.thinking;
@@ -745,7 +744,7 @@ export class ConversationManager {
         log.debug("ensemble", `Ensemble skipped: ${err}`);
       }
 
-      // Stream the API response with retry logic
+      // Stream the API response with retry logic (delegated to conversation-streaming.ts)
       let sseStream: AsyncGenerator<SSEChunk>;
       try {
         await this.rateLimiter.acquire();
@@ -761,107 +760,21 @@ export class ConversationManager {
         return;
       }
 
-      let streamedOutputChars = 0;
-
+      let streamResult: StreamAccumulator;
       try {
-        for await (const chunk of sseStream) {
-          switch (chunk.type) {
-            case "thinking_delta": {
-              if (chunk.thinking) {
-                thinkingChunks.push(chunk.thinking);
-                streamedOutputChars += chunk.thinking.length;
-                yield { type: "thinking_delta", thinking: chunk.thinking };
-              }
-              break;
-            }
-
-            case "content_delta": {
-              if (chunk.content) {
-                if (thinkingChunks.length > 0) {
-                  const fullThinking = thinkingChunks.join("");
-                  if (fullThinking.trim()) {
-                    assistantContent.push({ type: "thinking", thinking: fullThinking });
-                  }
-                  thinkingChunks = [];
-                }
-                textChunks.push(chunk.content);
-                streamedOutputChars += chunk.content.length;
-                yield { type: "text_delta", text: chunk.content };
-                const estimatedTokens = Math.round(streamedOutputChars / CHARS_PER_TOKEN);
-                yield { type: "token_count", tokens: estimatedTokens };
-              }
-              break;
-            }
-
-            case "tool_call_delta": {
-              const idx = chunk.toolCallIndex ?? 0;
-              let active = activeToolCalls.get(idx);
-
-              if (chunk.toolCallId && chunk.functionName) {
-                active = { id: chunk.toolCallId, name: chunk.functionName, argChunks: [] };
-                activeToolCalls.set(idx, active);
-                yield {
-                  type: "tool_use_start",
-                  toolUseId: chunk.toolCallId,
-                  name: chunk.functionName,
-                };
-              } else if (!active && chunk.toolCallId) {
-                active = { id: chunk.toolCallId, name: "", argChunks: [] };
-                activeToolCalls.set(idx, active);
-              } else if (!active && chunk.functionName) {
-                const id = `call_${Date.now()}_${idx}`;
-                active = { id, name: chunk.functionName, argChunks: [] };
-                activeToolCalls.set(idx, active);
-                yield { type: "tool_use_start", toolUseId: id, name: chunk.functionName };
-              }
-
-              if (active && chunk.functionName && !active.name) {
-                active.name = chunk.functionName;
-                yield { type: "tool_use_start", toolUseId: active.id, name: active.name };
-              }
-
-              if (active && chunk.functionArgDelta) {
-                active.argChunks.push(chunk.functionArgDelta);
-                streamedOutputChars += chunk.functionArgDelta.length;
-                yield {
-                  type: "tool_input_delta",
-                  toolUseId: active.id,
-                  partialJson: chunk.functionArgDelta,
-                };
-                const estimatedTokens = Math.round(streamedOutputChars / CHARS_PER_TOKEN);
-                yield { type: "token_count", tokens: estimatedTokens };
-              }
-              break;
-            }
-
-            case "finish": {
-              if (chunk.finishReason === "tool_calls") {
-                stopReason = "tool_use";
-              } else if (chunk.finishReason === "stop") {
-                stopReason = "end_turn";
-              } else if (chunk.finishReason === "length") {
-                stopReason = "max_tokens";
-              } else {
-                stopReason = chunk.finishReason ?? "end_turn";
-              }
-              break;
-            }
-
-            case "usage": {
-              const usage: TokenUsage = {
-                inputTokens: chunk.promptTokens ?? 0,
-                outputTokens: chunk.completionTokens ?? 0,
-                cacheCreationInputTokens: 0,
-                cacheReadInputTokens: 0,
-              };
-              turnInputTokens += usage.inputTokens;
-              turnOutputTokens += usage.outputTokens;
-              this.accumulateUsage(usage);
-              yield { type: "usage_update", usage: { ...this.cumulativeUsage } };
-              break;
-            }
-          }
+        const streamGen = processSSEStream({
+          sseStream,
+          tools: this.tools,
+          accumulateUsage: (usage) => this.accumulateUsage(usage),
+          cumulativeUsage: this.cumulativeUsage,
+        });
+        // Forward all events from the stream processor
+        let genResult = await streamGen.next();
+        while (!genResult.done) {
+          yield genResult.value;
+          genResult = await streamGen.next();
         }
+        streamResult = genResult.value;
       } catch (error) {
         yield {
           type: "error",
@@ -874,77 +787,9 @@ export class ConversationManager {
         this.rateLimiter.release();
       }
 
-      // Finalize any remaining thinking
-      if (thinkingChunks.length > 0) {
-        const fullThinking = thinkingChunks.join("");
-        if (fullThinking.trim()) {
-          assistantContent.push({ type: "thinking", thinking: fullThinking });
-        }
-        thinkingChunks = [];
-      }
-
-      // Finalize text content
+      // Destructure accumulated stream state
+      ({ assistantContent, toolCalls, stopReason, textChunks, turnInputTokens, turnOutputTokens } = streamResult);
       const fullText = textChunks.join("");
-
-      // Extract tool calls from text when the model doesn't use native tool_calls
-      if (activeToolCalls.size === 0 && fullText.length > 0) {
-        const extracted = extractToolCallsFromText(fullText, this.tools);
-        if (extracted.length > 0) {
-          if (extracted[0]!.prefixText.trim()) {
-            assistantContent.push({ type: "text", text: extracted[0]!.prefixText.trim() });
-          }
-          for (const ext of extracted) {
-            const toolBlock: ToolUseBlock = {
-              type: "tool_use",
-              id: `toolu_text_${crypto.randomUUID().slice(0, 8)}`,
-              name: ext.name,
-              input: ext.input,
-            };
-            assistantContent.push(toolBlock);
-            toolCalls.push(toolBlock);
-          }
-          stopReason = "tool_use";
-        } else if (fullText.length > 0) {
-          assistantContent.push({ type: "text", text: fullText });
-        }
-      } else if (fullText.length > 0) {
-        assistantContent.push({ type: "text", text: fullText });
-      }
-
-      // Finalize tool calls from streaming
-      for (const [, active] of activeToolCalls) {
-        const fullJson = active.argChunks.join("");
-        let parsedInput: Record<string, unknown> = {};
-        if (fullJson.length > 0) {
-          try {
-            parsedInput = JSON.parse(fullJson);
-          } catch (err) {
-            log.debug(
-              "parse",
-              "Failed to parse tool call JSON (" + fullJson.length + " chars): " + err,
-            );
-            if (fullJson.length > 50000) {
-              parsedInput = {
-                _parseError: true,
-                _raw: `[truncated: ${fullJson.length} chars of malformed JSON]`,
-              };
-              log.warn("llm", `Truncated malformed tool args: ${fullJson.length} chars`);
-            } else {
-              // Store raw text for debugging but mark as unparsed — tool handlers should
-              // check for _parseError and reject the input rather than using _raw directly
-              parsedInput = { _parseError: true, _raw: fullJson };
-            }
-          }
-        }
-        const toolBlock: ToolUseBlock = {
-          type: "tool_use",
-          id: active.id,
-          name: active.name,
-          input: parsedInput,
-        };
-        assistantContent.push(toolBlock);
-        toolCalls.push(toolBlock);
-      }
 
       // Store assistant message in conversation history
       this.state.messages.push({ role: "assistant", content: assistantContent });
@@ -1099,285 +944,49 @@ export class ConversationManager {
         }
       }
 
-      // If no tool calls or stop reason is not tool_use, we're done
+      // If no tool calls or stop reason is not tool_use — handle post-turn (delegated to conversation-post-turn.ts)
       if (toolCalls.length === 0 || stopReason !== "tool_use") {
-        // Auto-continue on max_tokens
-        if (stopReason === "max_tokens" && guardState.maxTokensContinuations < 3) {
-          guardState.maxTokensContinuations++;
-          log.info(
-            "session",
-            `Model hit output token limit (continuation ${guardState.maxTokensContinuations}/3) — injecting continue prompt`,
-          );
-          if (this.debugTracer?.isEnabled()) {
-            this.debugTracer.trace(
-              "decision",
-              `max_tokens continuation ${guardState.maxTokensContinuations}/3`,
-              "Model output was truncated, auto-continuing",
-              { turn: turnCount },
-            );
-          }
-          this.state.messages.push({
-            role: "user",
-            content:
-              "[SYSTEM] Your previous response was cut off because you hit the output token limit. Continue EXACTLY where you left off. Do not repeat what you already said — pick up mid-sentence if needed.",
-          });
-          yield { type: "turn_end", stopReason: "max_tokens_continue" };
-          continue;
-        }
-
-        // Layer 9: Evaluate intentions and emit suggestions (delegated to post-turn)
-        const { suggestions, hasHighPrioritySuggestion } = evaluateIntentionSuggestions();
-        if (suggestions.length > 0) {
-          yield { type: "suggestion", suggestions };
-        }
-
-        // Auto-continue: if the model stopped but has incomplete tasks, push it to continue
-        if (hasHighPrioritySuggestion && turnCount <= 3) {
-          log.info("session", "Auto-continuing: model stopped with incomplete tasks");
-          this.state.messages.push({
-            role: "user",
-            content:
-              "You stopped before completing the task. Continue working — create the actual files and finish what you planned. Do not re-plan, just execute.",
-          });
-          yield { type: "turn_end", stopReason };
-          continue;
-        }
-
-        // Cache text-only responses (delegated to post-turn)
-        cacheResponseIfEligible(
+        const postTurnResult = await handlePostTurn({
+          config: this.config,
+          hooks: this.hooks,
+          messages: this.state.messages,
+          toolUseCount: this.state.toolUseCount,
+          tokenCount: this.state.tokenCount,
+          turnStartMs,
+          turnCount,
+          turnsSinceLastExtraction: this.turnsSinceLastExtraction,
           cacheKey,
           stopReason,
-          toolCalls.length,
           textChunks,
-          this.config.model,
-          this.state.messages,
-          this.state.tokenCount,
-        );
+          thinkingChunks: streamResult.thinkingChunks,
+          toolCalls,
+          previousTurnTail,
+          maxTokensContinuations: guardState.maxTokensContinuations,
+          emptyEndTurnCount: guardState.emptyEndTurnCount,
+          truncationRetries: guardState.truncationRetries,
+          lastEmptyType: guardState.lastEmptyType,
+          debugTracer: this.debugTracer,
+          collectSessionData: () => this.collectSessionData(),
+        });
 
-        // Knowledge distillation + benchmark scoring (delegated to post-turn)
-        processKnowledgeAndBenchmark(
-          stopReason,
-          turnCount,
-          this.state.messages,
-          this.config.workingDirectory,
-          this.config.model,
-          this.state.toolUseCount,
-          this.state.tokenCount,
-        );
+        // Apply state updates from post-turn handler
+        guardState.maxTokensContinuations = postTurnResult.maxTokensContinuations;
+        guardState.emptyEndTurnCount = postTurnResult.emptyEndTurnCount;
+        guardState.truncationRetries = postTurnResult.truncationRetries;
+        guardState.lastEmptyType = postTurnResult.lastEmptyType;
+        previousTurnTail = postTurnResult.previousTurnTail;
+        this.turnsSinceLastExtraction = postTurnResult.turnsSinceLastExtraction;
 
-        // Safety net: classify empty responses and retry with context-aware prompts
-        const hasTextOutput = textChunks.join("").trim().length > 0;
-        const hasThinkingOutput =
-          thinkingChunks.length > 0 ||
-          (this.state.messages.at(-1) as Record<string, unknown> | undefined)?.thinkingContent;
-        const hasToolOutput = toolCalls.length > 0;
+        // Emit events
+        for (const evt of postTurnResult.events) yield evt;
+        // Inject messages
+        for (const msg of postTurnResult.injectMessages) this.state.messages.push(msg);
 
-        // Classify empty responses — persisted so the final turn_end carries it
-        if (!hasTextOutput && stopReason === "end_turn") {
-          guardState.lastEmptyType =
-            hasThinkingOutput && !hasToolOutput
-              ? "thinking_only"
-              : hasToolOutput && !hasThinkingOutput
-                ? "tools_only"
-                : hasThinkingOutput && hasToolOutput
-                  ? "thinking_and_tools"
-                  : "no_output";
-        } else {
-          guardState.lastEmptyType = undefined;
+        if (postTurnResult.action === "break") {
+          this.abortController = null;
+          break;
         }
-
-        if (!hasTextOutput && stopReason === "end_turn" && guardState.emptyEndTurnCount < 2) {
-          guardState.emptyEndTurnCount++;
-
-          log.info(
-            "session",
-            `Empty response (${guardState.lastEmptyType}) on turn ${turnCount} — retry ${guardState.emptyEndTurnCount}/2`,
-          );
-
-          // Context-aware retry prompt — include what was done so the model can summarize
-          const toolCount = this.state.toolUseCount;
-          const retryPrompt =
-            guardState.lastEmptyType === "thinking_only"
-              ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
-              : guardState.lastEmptyType === "tools_only" || toolCount > 0
-                ? `[SYSTEM] You executed ${toolCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
-                : guardState.lastEmptyType === "thinking_and_tools"
-                  ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
-                  : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
-
-          this.state.messages.push({ role: "user", content: retryPrompt });
-          yield {
-            type: "turn_end",
-            stopReason: "empty_response_retry",
-            emptyType: guardState.lastEmptyType,
-          };
-          continue;
-        }
-
-        // Truncation heuristic: detect suspiciously incomplete responses
-        // Check on end_turn too — llama.cpp reports "stop" even when the model hit token limits
-        // (especially with thinking mode consuming most of max_tokens).
-        if (hasTextOutput && (stopReason === "end_turn" || stopReason === "max_tokens")) {
-          let fullText = textChunks.join("").trim();
-
-          // Dedup: if this is a continuation and the model repeated content
-          if (previousTurnTail.length > 0 && fullText.length > 0) {
-            const { mergeContinuation: mergeContFn } = await import("./continuation-merge.js");
-            const mergeResult = mergeContFn(previousTurnTail, fullText);
-            if (mergeResult.merged !== fullText) {
-              log.info(
-                "session",
-                `Continuation merge: stripped ${mergeResult.strippedChars} chars, ${mergeResult.strippedLines} lines${mergeResult.repeatedPrefixDetected ? " (heading restart)" : ""}`,
-              );
-              fullText = mergeResult.merged;
-              const lastMsg = this.state.messages[this.state.messages.length - 1];
-              if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
-                const textBlocks = (lastMsg.content as ContentBlock[]).filter(
-                  (b) => b.type === "text",
-                );
-                if (textBlocks.length > 0) {
-                  (textBlocks[0]! as { type: string; text: string }).text = fullText;
-                }
-              }
-            }
-          }
-
-          if (guardState.truncationRetries < 2 && looksIncomplete(fullText)) {
-            guardState.truncationRetries++;
-            log.info(
-              "session",
-              `Response looks truncated (attempt ${guardState.truncationRetries}) — pushing for continuation`,
-            );
-            previousTurnTail = fullText.slice(-300);
-            const tail = fullText.slice(-200);
-            this.state.messages.push({
-              role: "user",
-              content: `[SYSTEM] Your response was cut off. Here is how it ended:\n\n"…${tail}"\n\nContinue EXACTLY from that point. Do NOT repeat any previous content. Do NOT restart the response. Just write the next sentence.`,
-            });
-            yield { type: "turn_end", stopReason: "truncation_retry" };
-            continue;
-          }
-
-          // After all retries, if still incomplete, notify the user
-          if (guardState.truncationRetries >= 2 && looksIncomplete(fullText)) {
-            log.warn("session", "Response still incomplete after 2 continuation retries");
-            yield {
-              type: "text_delta" as const,
-              text: "\n\n---\n*[Response may be incomplete — model reached output limit]*\n",
-            };
-          }
-        }
-
-        // Fire Stop hook — can block the conversation from ending
-        if (this.hooks.hasHooks("Stop")) {
-          try {
-            const stopResult = await this.hooks.runStopHook("Stop", {
-              stopReason,
-              turnCount,
-              toolsUsed: this.state.toolUseCount,
-            });
-            if (stopResult.blocked) {
-              log.info("session", `Stop hook blocked conversation end: ${stopResult.reason}`);
-              this.state.messages.push({
-                role: "user",
-                content: `[SYSTEM] Stop hook prevented conversation end: ${stopResult.reason}. Continue the conversation.`,
-              });
-              yield { type: "turn_end", stopReason: "stop_hook_blocked" };
-              continue;
-            }
-          } catch (err) {
-            log.warn("hooks", `Stop hook error: ${err instanceof Error ? err.message : err}`);
-          }
-        }
-
-        // Desktop notification for long-running tasks (delegated to post-turn)
-        const elapsedMs = Date.now() - turnStartMs;
-        if (elapsedMs > 30_000 || turnCount >= 3) {
-          sendDesktopNotification(
-            "KCode",
-            `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`,
-          );
-        }
-
-        // If turn had tool use but ends with no/minimal text output, emit structured
-        // partial progress so the user sees what was accomplished.
-        // "Minimal" = less than 20 chars of actual text (not just whitespace).
-        const finalTextLen = textChunks.join("").trim().length;
-        if (this.state.toolUseCount > 0 && finalTextLen < 20) {
-          const elapsed = Date.now() - turnStartMs;
-          const summary = this.collectSessionData();
-          const lastError =
-            summary.errorsEncountered > 0
-              ? (this.state.messages
-                  .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
-                  .filter((b: any) => b.type === "tool_result" && b.is_error)
-                  .map((b: any) => String(b.content ?? "").slice(0, 100))
-                  .pop() ?? "")
-              : "";
-
-          yield {
-            type: "partial_progress" as const,
-            toolsUsed: this.state.toolUseCount,
-            elapsedMs: elapsed,
-            filesModified: summary.filesModified,
-            lastError: lastError || undefined,
-            summary: `Turn ended after ${this.state.toolUseCount} tool uses over ${Math.round(elapsed / 1000)}s`,
-          };
-        }
-
-        // Close response session with appropriate status
-        try {
-          const { closeResponseSession, getActiveResponseSession } = await import(
-            "./response-session.js"
-          );
-          const session = getActiveResponseSession();
-          if (session) {
-            const finalText = textChunks.join("").trim();
-            const isComplete = finalText.length >= 20 && !looksIncomplete(finalText);
-            closeResponseSession(
-              isComplete ? "completed" : finalTextLen < 20 ? "failed" : "incomplete",
-              stopReason,
-              guardState.lastEmptyType === "no_output" ? "Model returned no text" : undefined,
-            );
-          }
-        } catch {
-          /* module not loaded */
-        }
-
-        // Auto-memory extraction: fire-and-forget background LLM call
-        this.turnsSinceLastExtraction++;
-        try {
-          const autoMemConfig = parseAutoMemoryConfig(this.config.autoMemory ?? true);
-          if (
-            autoMemConfig.enabled &&
-            stopReason === "end_turn" &&
-            this.turnsSinceLastExtraction >= autoMemConfig.cooldownTurns
-          ) {
-            this.turnsSinceLastExtraction = 0;
-            const recentMessages = this.state.messages.slice(-6);
-            getMemoryTitles(this.config.workingDirectory)
-              .then((existingTitles) => {
-                runAutoMemoryExtraction({
-                  recentMessages,
-                  existingTitles,
-                  config: autoMemConfig,
-                  projectPath: this.config.workingDirectory,
-                  model: this.config.tertiaryModel,
-                }).catch((err) =>
-                  log.debug("auto-memory", `extraction failed: ${err?.message ?? err}`),
-                );
-              })
-              .catch((err) =>
-                log.debug("auto-memory", `title fetch failed: ${err?.message ?? err}`),
-              );
-          }
-        } catch (err) {
-          log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);
-        }
-
-        yield { type: "turn_end", stopReason, emptyType: guardState.lastEmptyType };
-        this.abortController = null;
-        break;
+        if (postTurnResult.action === "continue") continue;
       }
 
       // Check abort between tool calls
