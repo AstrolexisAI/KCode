@@ -23,3 +23,12 @@ export {
   type TestEnv,
   type TestEnvOptions,
 } from "./test-env";
+
+export {
+  createMockLLMServer,
+  type MockLLMServer,
+  type MockResponseConfig,
+  type MockToolCall,
+} from "./mock-llm-server";
+
+export { createTestWorkspace, type TestWorkspace, type TestWorkspaceOptions } from "./test-workspace";
