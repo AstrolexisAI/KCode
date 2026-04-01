@@ -1,0 +1,155 @@
+/* KCode - Terminal Theme CSS
+   Color themes inspired by terminal aesthetics */
+
+:root {
+  /* Dark theme (default) */
+  --bg-primary: #1a1b26;
+  --bg-secondary: #24283b;
+  --bg-tertiary: #2f3350;
+  --bg-input: #1f2335;
+  --bg-hover: #343a52;
+  --bg-code: #16171f;
+  --bg-user-msg: #2a4a7f;
+  --bg-assistant-msg: #2a2e3e;
+  --bg-tool: #1e2130;
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  --text-primary: #c0caf5;
+  --text-secondary: #a9b1d6;
+  --text-muted: #565f89;
+  --text-accent: #7aa2f7;
+  --text-link: #7dcfff;
+  --text-error: #f7768e;
+  --text-success: #9ece6a;
+  --text-warning: #e0af68;
+
+  --border-primary: #3b4261;
+  --border-accent: #7aa2f7;
+  --border-subtle: #2a2e3e;
+
+  --accent-blue: #7aa2f7;
+  --accent-purple: #bb9af7;
+  --accent-cyan: #7dcfff;
+  --accent-green: #9ece6a;
+  --accent-red: #f7768e;
+  --accent-orange: #ff9e64;
+  --accent-yellow: #e0af68;
+
+  --scrollbar-track: #1a1b26;
+  --scrollbar-thumb: #3b4261;
+  --scrollbar-thumb-hover: #565f89;
+
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Syntax highlighting */
+  --syn-keyword: #bb9af7;
+  --syn-string: #9ece6a;
+  --syn-number: #ff9e64;
+  --syn-comment: #565f89;
+  --syn-function: #7aa2f7;
+  --syn-type: #2ac3de;
+  --syn-variable: #c0caf5;
+  --syn-operator: #89ddff;
+  --syn-constant: #ff9e64;
+  --syn-punctuation: #a9b1d6;
+
+  /* ANSI color mappings */
+  --ansi-black: #1a1b26;
+  --ansi-red: #f7768e;
+  --ansi-green: #9ece6a;
+  --ansi-yellow: #e0af68;
+  --ansi-blue: #7aa2f7;
+  --ansi-magenta: #bb9af7;
+  --ansi-cyan: #7dcfff;
+  --ansi-white: #c0caf5;
+  --ansi-bright-black: #565f89;
+  --ansi-bright-red: #ff7a93;
+  --ansi-bright-green: #b9f27c;
+  --ansi-bright-yellow: #ff9e64;
+  --ansi-bright-blue: #7da6ff;
+  --ansi-bright-magenta: #c29df1;
+  --ansi-bright-cyan: #0db9d7;
+  --ansi-bright-white: #dfe6f5;
+}
+
+/* Light theme variant */
+.theme-light {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8e8e8;
+  --bg-input: #ffffff;
+  --bg-hover: #e0e0e0;
+  --bg-code: #f0f0f0;
+  --bg-user-msg: #d4e4ff;
+  --bg-assistant-msg: #f0f1f5;
+  --bg-tool: #f5f5f8;
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+
+  --text-primary: #1a1b2e;
+  --text-secondary: #4a4f6a;
+  --text-muted: #8890aa;
+  --text-accent: #3b6ee0;
+  --text-link: #0969da;
+  --text-error: #cf222e;
+  --text-success: #1a7f37;
+  --text-warning: #9a6700;
+
+  --border-primary: #d0d7de;
+  --border-accent: #3b6ee0;
+  --border-subtle: #e8e8e8;
+
+  --scrollbar-track: #f5f5f5;
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-thumb-hover: #a0a0a0;
+
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --syn-keyword: #8839ef;
+  --syn-string: #40a02b;
+  --syn-number: #fe640b;
+  --syn-comment: #8890aa;
+  --syn-function: #3b6ee0;
+  --syn-type: #0891b2;
+  --syn-variable: #1a1b2e;
+  --syn-operator: #0891b2;
+}
+
+/* Syntax highlighting classes for code blocks */
+.language-javascript .keyword,
+.language-typescript .keyword,
+.language-python .keyword,
+.language-rust .keyword,
+.language-go .keyword { color: var(--syn-keyword); }
+
+.language-javascript .string,
+.language-typescript .string,
+.language-python .string,
+.language-rust .string,
+.language-go .string { color: var(--syn-string); }
+
+.language-javascript .number,
+.language-typescript .number,
+.language-python .number,
+.language-rust .number,
+.language-go .number { color: var(--syn-number); }
+
+.language-javascript .comment,
+.language-typescript .comment,
+.language-python .comment,
+.language-rust .comment,
+.language-go .comment { color: var(--syn-comment); font-style: italic; }
+
+.language-javascript .function,
+.language-typescript .function,
+.language-python .function,
+.language-rust .function,
+.language-go .function { color: var(--syn-function); }

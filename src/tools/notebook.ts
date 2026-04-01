@@ -6,10 +6,14 @@ import type { ToolDefinition, ToolResult } from "../core/types";
 
 export interface NotebookEditInput {
   file_path: string;
-  operation: "read" | "replace" | "insert" | "delete";
+  operation: "read" | "replace" | "insert" | "delete" | "move" | "clear_outputs";
   cell_index?: number;
   cell_type?: "code" | "markdown";
   content?: string;
+  /** Find cell by content match (alternative to cell_index) */
+  cell_contains?: string;
+  /** Target index for move operation */
+  target_index?: number;
 }
 
 interface NotebookCell {
@@ -36,12 +40,16 @@ export const notebookEditDefinition: ToolDefinition = {
       file_path: { type: "string", description: "Absolute path to the .ipynb file" },
       operation: {
         type: "string",
-        enum: ["read", "replace", "insert", "delete"],
+        enum: ["read", "replace", "insert", "delete", "move", "clear_outputs"],
         description: "Operation to perform on the notebook",
       },
       cell_index: {
         type: "number",
         description: "Zero-based index of the cell to operate on (required for replace/delete, insertion point for insert)",
+      },
+      cell_contains: {
+        type: "string",
+        description: "Find cell by content match (alternative to cell_index)",
       },
       cell_type: {
         type: "string",
@@ -51,6 +59,10 @@ export const notebookEditDefinition: ToolDefinition = {
       content: {
         type: "string",
         description: "Cell content for insert/replace operations",
+      },
+      target_index: {
+        type: "number",
+        description: "Target position for move operation",
       },
     },
     required: ["file_path", "operation"],
@@ -91,6 +103,16 @@ function formatCellForDisplay(cell: NotebookCell, index: number): string {
   return display;
 }
 
+/** Resolve cell index from explicit index or content search */
+function resolveCell(notebook: Notebook, cellIndex: number | undefined, cellContains: string | undefined): number | null {
+  if (cellIndex !== undefined) return cellIndex;
+  if (cellContains) {
+    const idx = notebook.cells.findIndex((c) => c.source.join("").includes(cellContains));
+    return idx >= 0 ? idx : null;
+  }
+  return null;
+}
+
 function makeCell(content: string, cellType: string): NotebookCell {
   // Split content into lines preserving newlines
   const lines = content.split("\n").map((line, i, arr) => (i < arr.length - 1 ? line + "\n" : line));
@@ -111,7 +133,7 @@ function makeCell(content: string, cellType: string): NotebookCell {
 
 export async function executeNotebookEdit(input: Record<string, unknown>): Promise<ToolResult> {
   const opts = input as unknown as NotebookEditInput;
-  const { file_path, operation, cell_index, cell_type, content } = opts;
+  const { file_path, operation, cell_index, cell_type, content, cell_contains, target_index } = opts;
 
   try {
     if (operation === "read") {
@@ -124,29 +146,23 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
     }
 
     if (operation === "replace") {
-      if (cell_index === undefined) {
-        return { tool_use_id: "", content: "Error: cell_index is required for replace", is_error: true };
-      }
       if (content === undefined) {
         return { tool_use_id: "", content: "Error: content is required for replace", is_error: true };
       }
 
       const notebook = readNotebook(file_path);
-      if (cell_index < 0 || cell_index >= notebook.cells.length) {
-        return {
-          tool_use_id: "",
-          content: `Error: cell_index ${cell_index} out of range (0-${notebook.cells.length - 1})`,
-          is_error: true,
-        };
+      const idx = resolveCell(notebook, cell_index, cell_contains);
+      if (idx === null || idx < 0 || idx >= notebook.cells.length) {
+        return { tool_use_id: "", content: "Error: cell not found", is_error: true };
       }
 
-      const type = cell_type ?? notebook.cells[cell_index]!.cell_type;
-      notebook.cells[cell_index] = makeCell(content, type);
+      const type = cell_type ?? notebook.cells[idx]!.cell_type;
+      notebook.cells[idx] = makeCell(content, type);
       writeNotebook(file_path, notebook);
 
       return {
         tool_use_id: "",
-        content: `Replaced cell ${cell_index} in ${file_path}`,
+        content: `Replaced cell ${idx} in ${file_path}`,
       };
     }
 
@@ -178,31 +194,75 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
     }
 
     if (operation === "delete") {
-      if (cell_index === undefined) {
-        return { tool_use_id: "", content: "Error: cell_index is required for delete", is_error: true };
-      }
-
       const notebook = readNotebook(file_path);
-      if (cell_index < 0 || cell_index >= notebook.cells.length) {
-        return {
-          tool_use_id: "",
-          content: `Error: cell_index ${cell_index} out of range (0-${notebook.cells.length - 1})`,
-          is_error: true,
-        };
+      const idx = resolveCell(notebook, cell_index, cell_contains);
+      if (idx === null || idx < 0 || idx >= notebook.cells.length) {
+        return { tool_use_id: "", content: "Error: cell not found", is_error: true };
       }
 
-      notebook.cells.splice(cell_index, 1);
+      notebook.cells.splice(idx, 1);
       writeNotebook(file_path, notebook);
 
       return {
         tool_use_id: "",
-        content: `Deleted cell ${cell_index} from ${file_path} (now ${notebook.cells.length} cells)`,
+        content: `Deleted cell ${idx} from ${file_path} (now ${notebook.cells.length} cells)`,
       };
+    }
+
+    if (operation === "move") {
+      const notebook = readNotebook(file_path);
+      const idx = resolveCell(notebook, cell_index, cell_contains);
+      if (idx === null || idx < 0 || idx >= notebook.cells.length) {
+        return { tool_use_id: "", content: "Error: source cell not found", is_error: true };
+      }
+      const targetIdx = target_index ?? 0;
+      if (targetIdx < 0 || targetIdx >= notebook.cells.length) {
+        return { tool_use_id: "", content: `Error: target_index ${targetIdx} out of range`, is_error: true };
+      }
+
+      const [cell] = notebook.cells.splice(idx, 1);
+      notebook.cells.splice(targetIdx, 0, cell!);
+      writeNotebook(file_path, notebook);
+
+      return {
+        tool_use_id: "",
+        content: `Moved cell from ${idx} to ${targetIdx} in ${file_path}`,
+      };
+    }
+
+    if (operation === "clear_outputs") {
+      const notebook = readNotebook(file_path);
+
+      if (cell_index !== undefined || cell_contains !== undefined) {
+        const idx = resolveCell(notebook, cell_index, cell_contains);
+        if (idx === null || idx < 0 || idx >= notebook.cells.length) {
+          return { tool_use_id: "", content: "Error: cell not found", is_error: true };
+        }
+        const cell = notebook.cells[idx]!;
+        if (cell.cell_type === "code") {
+          cell.outputs = [];
+          cell.execution_count = null;
+        }
+        writeNotebook(file_path, notebook);
+        return { tool_use_id: "", content: `Cleared outputs of cell ${idx} in ${file_path}` };
+      }
+
+      // Clear all outputs
+      let cleared = 0;
+      for (const cell of notebook.cells) {
+        if (cell.cell_type === "code") {
+          cell.outputs = [];
+          cell.execution_count = null;
+          cleared++;
+        }
+      }
+      writeNotebook(file_path, notebook);
+      return { tool_use_id: "", content: `Cleared outputs of ${cleared} code cells in ${file_path}` };
     }
 
     return {
       tool_use_id: "",
-      content: `Error: Unknown operation "${operation}". Use: read, replace, insert, delete`,
+      content: `Error: Unknown operation "${operation}". Use: read, replace, insert, delete, move, clear_outputs`,
       is_error: true,
     };
   } catch (error) {

@@ -21,3 +21,8 @@ export { registerRemoteCommand } from "./remote";
 export { registerDaemonCommand } from "./daemon";
 export { registerMeshCommand } from "./mesh";
 export { registerDistillCommand } from "./distill";
+export { registerCloudCommand } from "./cloud";
+export { registerTriggersCommand } from "./triggers";
+export { registerSessionsCommand } from "./sessions";
+export { registerDashboardCommand } from "./dashboard";
+export { registerTemplateCommand } from "./template";
