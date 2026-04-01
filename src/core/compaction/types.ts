@@ -45,7 +45,15 @@ export interface MicroCompactConfig {
   toolResultThreshold: number;
   /** Threshold in chars for compressing an assistant message */
   assistantThreshold: number;
+  /** Tools whose results are compactable (heavy output). If empty/undefined, all tools are compactable. */
+  compactableTools?: string[];
+  /** Tools whose results should NEVER be compacted (needed for coherence). */
+  preserveTools?: string[];
 }
+
+/** Default sets of compactable and preserved tools */
+export const HEAVY_OUTPUT_TOOLS = new Set(["Read", "Bash", "Grep", "GrepReplace", "WebFetch", "LS", "GitLog", "DiffView"]);
+export const COHERENCE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "Rename", "GitCommit"]);
 
 export interface MicroCompactResult {
   messages: Message[];

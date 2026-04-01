@@ -20,6 +20,7 @@ const featureProfiles: Record<BuildProfile, Record<FeatureName, boolean>> = {
     mesh: true,
     distillation: true,
     collab: true,
+    rag: true,
   },
   free: {
     voice: false,
@@ -32,6 +33,7 @@ const featureProfiles: Record<BuildProfile, Record<FeatureName, boolean>> = {
     mesh: false,
     distillation: false,
     collab: false,
+    rag: true,
   },
   minimal: {
     voice: false,
@@ -44,6 +46,7 @@ const featureProfiles: Record<BuildProfile, Record<FeatureName, boolean>> = {
     mesh: false,
     distillation: false,
     collab: false,
+    rag: false,
   },
 };
 

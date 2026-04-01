@@ -5,6 +5,7 @@
 
 import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, TextBlock } from "../../types.js";
 import type { MicroCompactConfig, MicroCompactResult } from "../types.js";
+import { HEAVY_OUTPUT_TOOLS, COHERENCE_TOOLS } from "../types.js";
 import { CHARS_PER_TOKEN } from "../../token-budget.js";
 
 /**
@@ -18,6 +19,14 @@ export function microCompact(
   const preserveRecent = config?.preserveRecent ?? 10;
   const toolResultThreshold = config?.toolResultThreshold ?? 300;
   const assistantThreshold = config?.assistantThreshold ?? 500;
+
+  // Tool-aware compaction: only compact heavy tools, preserve coherence tools
+  const compactableTools = config?.compactableTools
+    ? new Set(config.compactableTools)
+    : HEAVY_OUTPUT_TOOLS;
+  const preserveTools = config?.preserveTools
+    ? new Set(config.preserveTools)
+    : COHERENCE_TOOLS;
 
   let compressedCount = 0;
   let charsRecovered = 0;
@@ -52,6 +61,16 @@ export function microCompact(
       const block = msg.content[i]!;
 
       if (block.type === "tool_use") {
+        // Skip compaction for coherence tools (Edit, Write, etc.)
+        if (preserveTools.has(block.name)) {
+          newContent.push(block);
+          continue;
+        }
+        // Only compact results from heavy-output tools
+        if (!compactableTools.has(block.name)) {
+          newContent.push(block);
+          continue;
+        }
         // Look for the corresponding tool_result in this message or nearby
         const toolResult = findToolResult(msg.content, block.id, i);
         if (toolResult && typeof toolResult.content === "string" && toolResult.content.length > toolResultThreshold) {
@@ -74,6 +93,17 @@ export function microCompact(
         const alreadyHandled = newContent.some(
           (b) => b.type === "tool_use" && (b as ToolUseBlock).id === block.tool_use_id,
         );
+
+        // Find the associated tool_use to determine tool name
+        const pairedToolUse = findToolUse(msg.content, block.tool_use_id);
+        if (pairedToolUse && preserveTools.has(pairedToolUse.name)) {
+          newContent.push(block);
+          continue;
+        }
+        if (pairedToolUse && !compactableTools.has(pairedToolUse.name)) {
+          newContent.push(block);
+          continue;
+        }
 
         if (typeof block.content === "string" && block.content.length > toolResultThreshold) {
           const summary = {
@@ -123,6 +153,18 @@ export function microCompact(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
+
+function findToolUse(
+  blocks: ContentBlock[],
+  toolUseId: string,
+): ToolUseBlock | null {
+  for (const b of blocks) {
+    if (b.type === "tool_use" && (b as ToolUseBlock).id === toolUseId) {
+      return b as ToolUseBlock;
+    }
+  }
+  return null;
+}
 
 function findToolResult(
   blocks: ContentBlock[],

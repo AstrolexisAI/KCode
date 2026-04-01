@@ -21,4 +21,5 @@ export type FeatureName =
   | "browser"
   | "mesh"
   | "distillation"
-  | "collab";
+  | "collab"
+  | "rag";

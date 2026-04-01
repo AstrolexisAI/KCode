@@ -17,6 +17,7 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
 import pkg from "./package.json";
+import { getDefinesForProfile, getAvailableProfiles, describeProfile } from "./src/core/feature-flags/build-defines";
 
 const ENTRY = "src/index.ts";
 const OUT_DIR = "dist";
@@ -26,16 +27,37 @@ const args = process.argv.slice(2);
 const isDev = args.includes("--dev");
 const minify = !isDev;
 
+// Build profile: --profile=minimal|free|full (default: full)
+const profileArg = args.find(a => a.startsWith("--profile="));
+const buildProfile = profileArg?.split("=")[1] ?? "full";
+if (args.includes("--list-profiles")) {
+  for (const p of getAvailableProfiles()) {
+    console.log(describeProfile(p));
+    console.log();
+  }
+  process.exit(0);
+}
+
 async function build() {
   const startTime = performance.now();
 
   // Ensure output directory exists
   await Bun.$`mkdir -p ${OUT_DIR}`;
 
+  const enabledFlags = Object.entries(getDefinesForProfile(buildProfile))
+    .filter(([, v]) => v === "true")
+    .map(([k]) => k.replace(/__FEATURE_|__/g, "").toLowerCase());
+  const disabledFlags = Object.entries(getDefinesForProfile(buildProfile))
+    .filter(([, v]) => v === "false")
+    .map(([k]) => k.replace(/__FEATURE_|__/g, "").toLowerCase());
+
   console.log(`\nBuilding KCode v${pkg.version} standalone binary...`);
   console.log(`  Entry:        ${ENTRY}`);
   console.log(`  Output:       ${OUT_FILE}`);
+  console.log(`  Profile:      ${buildProfile}`);
   console.log(`  Minification: ${minify ? "enabled" : "disabled (dev)"}`);
+  console.log(`  Features ON:  ${enabledFlags.join(", ") || "none"}`);
+  console.log(`  Features OFF: ${disabledFlags.join(", ") || "none"}`);
   console.log();
 
   try {
@@ -43,15 +65,10 @@ async function build() {
     // --sourcemap=none: Ensure no source maps are embedded
     // --minify: Minify the bundled JS (saves ~1.4 MB)
     // --define: Build-time feature flags for dead code elimination (DCE)
-    const featureDefines = [
-      "--define:FEATURE_VOICE=false",      // Voice mode (experimental)
-      "--define:FEATURE_BRIDGE=true",      // Bridge/daemon mode
-      "--define:FEATURE_REMOTE=false",     // Remote mode (experimental)
-      "--define:FEATURE_ENTERPRISE=true",  // Enterprise features
-      "--define:FEATURE_TELEMETRY=true",   // OpenTelemetry
-      "--define:FEATURE_LSP=true",         // LSP integration
-      "--define:FEATURE_SWARM=true",       // Multi-agent swarm
-    ];
+    const defines = getDefinesForProfile(buildProfile);
+    const featureDefines = Object.entries(defines).map(
+      ([key, value]) => `--define:${key}=${value}`,
+    );
 
     let proc;
     if (minify) {

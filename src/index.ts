@@ -4,9 +4,19 @@
 
 import { Command } from "commander";
 import { resolve } from "node:path";
-import { ConversationManager } from "./core/conversation";
-import { startUI } from "./ui/render";
-import { runPrintMode } from "./ui/print-mode";
+// Heavy modules — lazy-loaded to reduce cold start time
+async function lazyGetConversationManager() {
+  const { ConversationManager } = await import("./core/conversation");
+  return ConversationManager;
+}
+async function lazyGetStartUI() {
+  const { startUI } = await import("./ui/render");
+  return startUI;
+}
+async function lazyGetRunPrintMode() {
+  const { runPrintMode } = await import("./ui/print-mode");
+  return runPrintMode;
+}
 import { buildConfig } from "./core/config";
 import type { PermissionMode } from "./core/types";
 import { setTheme } from "./core/theme";
@@ -16,7 +26,8 @@ import { clearSudoPasswordCache } from "./tools/bash";
 import { isSetupComplete } from "./core/model-manager";
 import { startServer, isServerRunning, getServerPort } from "./core/llama-server";
 import { setSandboxMode } from "./tools/bash";
-import { profileCheckpoint } from "./core/startup-profiler";
+import { profileCheckpoint, isProfilingEnabled, printProfileReport } from "./core/startup-profiler";
+import { startPrefetch } from "./core/prefetch";
 
 // Lazy-loaded modules (deferred until needed)
 async function lazyGetRulesManager() {
@@ -192,6 +203,9 @@ process.on("SIGTERM", cleanupAndExit);
 
 profileCheckpoint("process_start");
 
+// Start prefetching credentials and config in parallel (non-blocking)
+startPrefetch();
+
 const program = new Command()
   .name("kcode")
   .description("Kulvex Code - AI-powered coding assistant by Astrolexis")
@@ -237,6 +251,7 @@ program
   .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
   .option("--debug", "Enable agent debug tracing (shows decision reasoning)")
   .option("--offline", "Force offline mode (block all remote network requests)")
+  .option("--startup-profile", "Show startup profiling breakdown (timing, memory, modules)")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
     // Validate permission mode
@@ -299,9 +314,17 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; noCache?: boolean; reasoningBudget?: string; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string; debug?: boolean; offline?: boolean },
+  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; noCache?: boolean; reasoningBudget?: string; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string; debug?: boolean; offline?: boolean; startupProfile?: boolean },
 ) {
   const cwd = process.cwd();
+
+  // Activate startup profiling if --startup-profile flag is set
+  if (opts.startupProfile) {
+    process.env.KCODE_PROFILE_STARTUP = "1";
+    const { _resetProfiler } = await import("./core/startup-profiler");
+    _resetProfiler(); // Re-create profiler with enabled=true
+    profileCheckpoint("process_start"); // Re-record since profiler was just enabled
+  }
 
   // ─── Managed mode (launched by Kulvex WebUI) ──────────────
   // When KCODE_MANAGED=1, an external server (Jarvis) manages the llama-server.
@@ -344,6 +367,7 @@ async function runMain(
     }
 
     // Auto-start llama-server and wait for model to be fully loaded
+    profileCheckpoint("server_check");
     if (isSetupComplete()) {
       // Check if the selected model has a registered baseUrl (external server like MnemoCUDA)
       let externalServerUrl: string | null = null;
@@ -376,6 +400,7 @@ async function runMain(
           await new Promise(r => setTimeout(r, 500));
         }
         if (ready) {
+          profileCheckpoint("server_ready");
           process.stderr.write(`\x1b[32m✓\x1b[0m Model loaded on ${externalServerUrl}\x1b[K\n`);
         } else {
           console.error(`\x1b[31m✗ External server not reachable: ${externalServerUrl}\x1b[0m`);
@@ -432,6 +457,7 @@ async function runMain(
       }
 
       if (ready) {
+        profileCheckpoint("server_ready");
         if (!serverRunning) {
           process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
         }
@@ -761,6 +787,7 @@ async function runMain(
   }
 
   // Load MCP servers from --mcp-config JSON file
+  profileCheckpoint("mcp_loading");
   if (opts.mcpConfig) {
     try {
       const mcpConfigPath = resolve(opts.mcpConfig);
@@ -814,8 +841,11 @@ async function runMain(
     setTmuxMode(true);
   }
 
-  // Create conversation manager
+  // Create conversation manager (lazy-loaded to reduce cold start)
+  profileCheckpoint("conversation_init");
+  const ConversationManager = await lazyGetConversationManager();
   const conversationManager = new ConversationManager(config, tools);
+  profileCheckpoint("conversation_ready");
 
   // Enable debug tracing if --debug flag is set
   if (opts.debug) {
@@ -1075,6 +1105,7 @@ async function runMain(
 
   if (promptText && opts.print) {
     // Print mode: output only text, suitable for piping
+    const runPrintMode = await lazyGetRunPrintMode();
     const exitCode = await runPrintMode(conversationManager, promptText, config.outputFormat ?? "text");
     process.exit(exitCode);
   }
@@ -1101,8 +1132,16 @@ async function runMain(
     });
   } catch (err) { log.debug("index", `File watcher initialization failed: ${err}`); }
 
+  profileCheckpoint("ready");
+
+  // Print startup profile if requested
+  if (opts.startupProfile || isProfilingEnabled()) {
+    printProfileReport();
+  }
+
   // Interactive mode: start the Ink-based terminal UI
   profileCheckpoint("ui_rendering");
+  const startUI = await lazyGetStartUI();
   const app = startUI({ config, conversationManager, tools });
   await app.waitUntilExit();
 
@@ -1128,7 +1167,7 @@ async function runMain(
 // ─── Non-interactive single-prompt mode ─────────────────────────
 
 async function runNonInteractive(
-  conversationManager: ConversationManager,
+  conversationManager: InstanceType<Awaited<ReturnType<typeof lazyGetConversationManager>>>,
   prompt: string,
 ): Promise<void> {
   let hadError = false;

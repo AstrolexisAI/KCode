@@ -353,6 +353,122 @@ describe("Micro-Compact", () => {
     expect(result.compressedCount).toBe(0);
     expect(result.tokensRecovered).toBe(0);
   });
+
+  test("preserves Edit tool results (coherence tool)", () => {
+    const msgs = [
+      makeMsg("user", "edit the file"),
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Edit",
+            input: { file_path: "/src/test.ts", old_string: "x", new_string: "y" },
+          } as ToolUseBlock,
+          {
+            type: "tool_result" as const,
+            tool_use_id: "t1",
+            content: "a".repeat(500),
+          } as ToolResultBlock,
+        ],
+      },
+      ...fillerMessages(10, 50),
+    ];
+
+    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    // Edit results should NOT be compacted
+    const blocks = result.messages[1]!.content as ContentBlock[];
+    const toolResult = blocks.find((b) => b.type === "tool_result") as ToolResultBlock;
+    expect(typeof toolResult.content === "string" && toolResult.content.length).toBe(500);
+  });
+
+  test("preserves Write tool results (coherence tool)", () => {
+    const msgs = [
+      makeMsg("user", "write the file"),
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Write",
+            input: { file_path: "/src/test.ts", content: "..." },
+          } as ToolUseBlock,
+          {
+            type: "tool_result" as const,
+            tool_use_id: "t1",
+            content: "b".repeat(500),
+          } as ToolResultBlock,
+        ],
+      },
+      ...fillerMessages(10, 50),
+    ];
+
+    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    const blocks = result.messages[1]!.content as ContentBlock[];
+    const toolResult = blocks.find((b) => b.type === "tool_result") as ToolResultBlock;
+    expect(typeof toolResult.content === "string" && toolResult.content.length).toBe(500);
+  });
+
+  test("compacts Read tool results (heavy tool)", () => {
+    const msgs = [
+      makeMsg("user", "read the file"),
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Read",
+            input: { file_path: "/src/test.ts" },
+          } as ToolUseBlock,
+          {
+            type: "tool_result" as const,
+            tool_use_id: "t1",
+            content: "c".repeat(500),
+          } as ToolResultBlock,
+        ],
+      },
+      ...fillerMessages(10, 50),
+    ];
+
+    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    expect(result.compressedCount).toBeGreaterThan(0);
+  });
+
+  test("allows custom compactableTools override", () => {
+    const msgs = [
+      makeMsg("user", "custom"),
+      {
+        role: "assistant" as const,
+        content: [
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "CustomTool",
+            input: {},
+          } as ToolUseBlock,
+          {
+            type: "tool_result" as const,
+            tool_use_id: "t1",
+            content: "d".repeat(500),
+          } as ToolResultBlock,
+        ],
+      },
+      ...fillerMessages(10, 50),
+    ];
+
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 100,
+      assistantThreshold: 500,
+      compactableTools: ["CustomTool"],
+      preserveTools: [],
+    });
+    expect(result.compressedCount).toBeGreaterThan(0);
+  });
 });
 
 // ─── Full Compact ───────────────────────────────────────────────

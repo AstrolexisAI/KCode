@@ -24,6 +24,7 @@ declare const __FEATURE_BROWSER__: boolean;
 declare const __FEATURE_MESH__: boolean;
 declare const __FEATURE_DISTILLATION__: boolean;
 declare const __FEATURE_COLLAB__: boolean;
+declare const __FEATURE_RAG__: boolean;
 
 /** Safe evaluation — defaults to true in development (no --define) */
 function featureEnabled(flag: boolean | undefined): boolean {
@@ -92,6 +93,11 @@ export const Features: Readonly<Record<FeatureName, boolean>> = {
     typeof __FEATURE_COLLAB__ !== "undefined"
       ? __FEATURE_COLLAB__
       : safeCheck("__FEATURE_COLLAB__"),
+  ),
+  rag: featureEnabled(
+    typeof __FEATURE_RAG__ !== "undefined"
+      ? __FEATURE_RAG__
+      : safeCheck("__FEATURE_RAG__"),
   ),
 };
 

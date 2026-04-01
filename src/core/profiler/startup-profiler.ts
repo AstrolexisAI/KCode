@@ -1,8 +1,27 @@
-// Startup Profiler — Enhanced version with memory tracking and recommendations.
+// Startup Profiler — Enhanced version with memory tracking, categories, and recommendations.
 // Records timestamps, memory usage, and module counts at key init phases.
-// Activated via KCODE_PROFILE=1 or KCODE_PROFILE_STARTUP=1.
+// Activated via KCODE_PROFILE=1, KCODE_PROFILE_STARTUP=1, or --startup-profile flag.
 
-import type { ProfileCheckpoint, ProfileReport } from "./types";
+import type { ProfileCheckpoint, ProfileReport, PhaseCategory } from "./types";
+import { STARTUP_TARGETS } from "./types";
+
+/** Map checkpoint names to categories for grouped reporting */
+const PHASE_CATEGORIES: Record<string, PhaseCategory> = {
+  process_start: "init",
+  cli_defined: "init",
+  config_loading: "config",
+  config_loaded: "config",
+  server_check: "server",
+  server_ready: "server",
+  plugins_loaded: "plugins",
+  mcp_loading: "plugins",
+  tools_registering: "tools",
+  tools_registered: "tools",
+  conversation_init: "tools",
+  conversation_ready: "tools",
+  ready: "ui",
+  ui_rendering: "ui",
+};
 
 class StartupProfiler {
   private checkpoints: ProfileCheckpoint[] = [];
@@ -35,11 +54,16 @@ class StartupProfiler {
       deltaMs: timestamp - prev,
       memoryMB: Math.round((process.memoryUsage.rss() / 1024 / 1024) * 10) / 10,
       importsLoaded: Object.keys(require.cache ?? {}).length,
+      category: PHASE_CATEGORIES[name] ?? "other",
     });
   }
 
   /** Generate report with automatic recommendations */
   report(): ProfileReport {
+    const emptyCategoryTotals: Record<PhaseCategory, number> = {
+      init: 0, config: 0, server: 0, plugins: 0, tools: 0, ui: 0, other: 0,
+    };
+
     if (this.checkpoints.length === 0) {
       return {
         checkpoints: [],
@@ -47,6 +71,7 @@ class StartupProfiler {
         peakMemoryMB: 0,
         slowestPhase: "N/A",
         recommendations: [],
+        categoryTotals: emptyCategoryTotals,
       };
     }
 
@@ -54,17 +79,46 @@ class StartupProfiler {
     const sorted = [...this.checkpoints].sort((a, b) => b.deltaMs - a.deltaMs);
     const recommendations: string[] = [];
 
+    // Build category totals
+    const categoryTotals = { ...emptyCategoryTotals };
     for (const cp of this.checkpoints) {
-      if (cp.deltaMs > 100) {
+      const cat = cp.category ?? "other";
+      categoryTotals[cat] += cp.deltaMs;
+    }
+
+    // Phase-level recommendations
+    for (const cp of this.checkpoints) {
+      if (cp.deltaMs > STARTUP_TARGETS.phaseCriticalMs) {
+        recommendations.push(
+          `"${cp.name}" took ${cp.deltaMs}ms [CRITICAL] — investigate or defer`,
+        );
+      } else if (cp.deltaMs > STARTUP_TARGETS.phaseWarningMs) {
         recommendations.push(
           `"${cp.name}" took ${cp.deltaMs}ms — consider lazy-loading or caching`,
         );
       }
     }
 
-    if (totalMs > 500) {
+    // Check if server phase is included (local model startup is expected to be slow)
+    const hasServerPhase = this.checkpoints.some(
+      (cp) => cp.name === "server_ready",
+    );
+    const target = hasServerPhase
+      ? STARTUP_TARGETS.coldStartWithServerMs
+      : STARTUP_TARGETS.coldStartNoServerMs;
+
+    if (totalMs > target) {
       recommendations.push(
-        `Total startup ${totalMs}ms exceeds 500ms target`,
+        `Total startup ${totalMs}ms exceeds ${target}ms target${hasServerPhase ? " (with server)" : ""}`,
+      );
+    }
+
+    // Category-level insights
+    const slowestCategory = (Object.entries(categoryTotals) as [PhaseCategory, number][])
+      .sort(([, a], [, b]) => b - a)[0];
+    if (slowestCategory && slowestCategory[1] > STARTUP_TARGETS.phaseWarningMs) {
+      recommendations.push(
+        `Slowest category: "${slowestCategory[0]}" at ${slowestCategory[1]}ms`,
       );
     }
 
@@ -74,6 +128,7 @@ class StartupProfiler {
       peakMemoryMB: Math.max(...this.checkpoints.map((c) => c.memoryMB)),
       slowestPhase: sorted[0]?.name ?? "N/A",
       recommendations,
+      categoryTotals,
     };
   }
 
@@ -82,7 +137,7 @@ class StartupProfiler {
     const r = this.report();
     if (r.checkpoints.length === 0) {
       console.error("  No startup profile data recorded.");
-      console.error("  Set KCODE_PROFILE=1 to enable profiling.");
+      console.error("  Set KCODE_PROFILE=1 or use --startup-profile to enable profiling.");
       return;
     }
 
@@ -90,20 +145,46 @@ class StartupProfiler {
     for (const cp of r.checkpoints) {
       const bar = "\u2588".repeat(Math.min(50, Math.round(cp.deltaMs / 10)));
       const mem = `${cp.memoryMB}MB`;
-      const slow = cp.deltaMs > 100 ? "  \x1b[33m[SLOW]\x1b[0m" : "";
+      const color =
+        cp.deltaMs > STARTUP_TARGETS.phaseCriticalMs
+          ? "\x1b[31m"
+          : cp.deltaMs > STARTUP_TARGETS.phaseWarningMs
+            ? "\x1b[33m"
+            : "\x1b[32m";
+      const label =
+        cp.deltaMs > STARTUP_TARGETS.phaseCriticalMs
+          ? "  \x1b[31m[CRITICAL]\x1b[0m"
+          : cp.deltaMs > STARTUP_TARGETS.phaseWarningMs
+            ? "  \x1b[33m[SLOW]\x1b[0m"
+            : "";
+      const cat = (cp.category ?? "other").padEnd(8);
       console.error(
-        `  ${cp.name.padEnd(25)} ${String(cp.deltaMs).padStart(6)}ms  ${mem.padStart(8)}  ${bar}${slow}`,
+        `  ${cat} ${cp.name.padEnd(22)} ${color}${String(cp.deltaMs).padStart(6)}ms\x1b[0m  ${mem.padStart(8)}  ${bar}${label}`,
       );
     }
 
+    // Category summary
+    console.error("\n\x1b[1m  Category Breakdown:\x1b[0m");
+    for (const [cat, ms] of Object.entries(r.categoryTotals) as [PhaseCategory, number][]) {
+      if (ms === 0) continue;
+      const bar = "\u2588".repeat(Math.min(30, Math.round(ms / 20)));
+      console.error(`    ${cat.padEnd(10)} ${String(ms).padStart(6)}ms  ${bar}`);
+    }
+
+    const hasServer = r.checkpoints.some((cp) => cp.name === "server_ready");
+    const target = hasServer
+      ? STARTUP_TARGETS.coldStartWithServerMs
+      : STARTUP_TARGETS.coldStartNoServerMs;
     const status =
-      r.totalMs < 200
-        ? "\x1b[32m[OK]\x1b[0m"
-        : r.totalMs < 500
-          ? "\x1b[33m[SLOW]\x1b[0m"
-          : "\x1b[31m[VERY SLOW]\x1b[0m";
+      r.totalMs <= target * 0.5
+        ? "\x1b[32m[FAST]\x1b[0m"
+        : r.totalMs <= target
+          ? "\x1b[32m[OK]\x1b[0m"
+          : r.totalMs <= target * 1.5
+            ? "\x1b[33m[SLOW]\x1b[0m"
+            : "\x1b[31m[VERY SLOW]\x1b[0m";
     console.error(
-      `  ${"TOTAL".padEnd(25)} ${String(r.totalMs).padStart(6)}ms  ${`${r.peakMemoryMB}MB`.padStart(8)}  ${status}`,
+      `\n  ${"TOTAL".padEnd(31)} ${String(r.totalMs).padStart(6)}ms  ${`${r.peakMemoryMB}MB`.padStart(8)}  ${status} (target: ${target}ms)`,
     );
 
     if (r.recommendations.length > 0) {
@@ -112,6 +193,7 @@ class StartupProfiler {
         console.error(`    ! ${rec}`);
       }
     }
+    console.error("");
   }
 
   /** Reset all entries (for testing) */
