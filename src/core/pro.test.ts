@@ -17,7 +17,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 // ── Resolve the REAL paths pro.ts uses ──────────────────────────
 import { kcodePath } from "./paths";
-import { clearProCache, FREE_LIMITS, loadProCache, PRO_FEATURES } from "./pro.ts";
+import { clearProCache, FREE_LIMITS, loadProCache, PRO_FEATURES, validateKeyChecksum } from "./pro.ts";
 
 const PRO_CACHE_FILE = kcodePath("pro-cache.json");
 const PRO_CACHE_SALT_FILE = kcodePath(".pro-cache-salt");
@@ -408,5 +408,97 @@ describe("key format rules", () => {
     const prefix = "kcode_pro_";
     expect((prefix + "a".repeat(19)).slice(prefix.length).length).toBeLessThan(20);
     expect((prefix + "a".repeat(20)).slice(prefix.length).length).toBe(20);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════
+// Key checksum validation
+// ═════════════════════════════════════════════════════════════════
+
+describe("validateKeyChecksum", () => {
+  test("rejects keys with wrong prefix", () => {
+    expect(validateKeyChecksum("sk-abc123def456ghij78901234")).toBe(false);
+  });
+
+  test("rejects keys with payload too short", () => {
+    expect(validateKeyChecksum("kcode_pro_short")).toBe(false);
+  });
+
+  test("accepts legacy all-hex keys (pre-checksum era)", () => {
+    // Legacy format: prefix + 20+ hex chars
+    expect(validateKeyChecksum("kcode_pro_" + "a".repeat(30))).toBe(true);
+    expect(validateKeyChecksum("klx_lic_" + "0123456789abcdef0123")).toBe(true);
+  });
+
+  test("rejects keys with invalid checksum", () => {
+    // Non-hex payload with wrong checksum
+    expect(validateKeyChecksum("kcode_pro_test_payload_data_hereXX")).toBe(false);
+  });
+
+  test("accepts keys with valid checksum", () => {
+    const { createHash } = require("node:crypto");
+    const body = "test_payload_data_here_valid";
+    const check = createHash("sha256").update(body).digest("hex").slice(0, 2);
+    expect(validateKeyChecksum("kcode_pro_" + body + check)).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════
+// Grace period enforcement
+// ═════════════════════════════════════════════════════════════════
+
+describe("grace period", () => {
+  let cacheBackup: string | null;
+  let saltBackup: string | null;
+
+  beforeEach(() => {
+    cacheBackup = backupFile(PRO_CACHE_FILE);
+    saltBackup = backupFile(PRO_CACHE_SALT_FILE);
+    removeCacheFile();
+    clearProCache();
+  });
+
+  afterEach(() => {
+    restoreFile(PRO_CACHE_FILE, cacheBackup);
+    restoreFile(PRO_CACHE_SALT_FILE, saltBackup);
+    clearProCache();
+  });
+
+  test("non-server-validated cache expires after 24h", () => {
+    // Write cache with old timestamp (25h ago) and serverValidated=false
+    const oldDate = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    writeCacheFile({
+      key: proKey("g"),
+      validatedAt: oldDate,
+      valid: true,
+      serverValidated: false,
+    });
+    // Should be null — grace period expired
+    expect(loadProCache()).toBeNull();
+  });
+
+  test("non-server-validated cache works within 24h", () => {
+    // Write cache with recent timestamp and serverValidated=false
+    writeCacheFile({
+      key: proKey("g"),
+      validatedAt: new Date().toISOString(),
+      valid: true,
+      serverValidated: false,
+    });
+    // Should still work
+    expect(loadProCache()).not.toBeNull();
+    expect(loadProCache()!.valid).toBe(true);
+  });
+
+  test("server-validated cache works beyond 24h", () => {
+    // Even old cache is fine if server-validated (will be rechecked via RECHECK_DAYS)
+    const oldDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    writeCacheFile({
+      key: proKey("g"),
+      validatedAt: oldDate,
+      valid: true,
+      serverValidated: true,
+    });
+    expect(loadProCache()).not.toBeNull();
   });
 });
