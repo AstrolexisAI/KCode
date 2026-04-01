@@ -10,28 +10,28 @@
 class Kcode < Formula
   desc "Terminal-based AI coding assistant for local LLMs and cloud APIs"
   homepage "https://kulvex.ai"
-  version "2.5.0"
+  version "2.5.2"
   license "AGPL-3.0-only"
 
   on_macos do
     on_arm do
-      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-darwin-arm64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256"
+      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-macos-arm64"
+      sha256 "ba381cb784adb24a3fc8078a3ebb1c0a3892a237570bbce34a42e22dc04a6f16"
     end
     on_intel do
-      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-darwin-x64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256"
+      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-macos-x64"
+      sha256 "15cf322ce9f3912fb6d80c8b52e33757a91b9c89684c6216cb9c3000969d6201"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-arm64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256"
+      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-arm64"
+      sha256 "d574ea863941e200b5a694c8b4a83d08b149c20ed55b94721e0bf00395653985"
     end
     on_intel do
-      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-x64.tar.gz"
-      sha256 "PLACEHOLDER_SHA256"
+      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-x64"
+      sha256 "212e26b9c426ef30d1f3c5330854040ab7b10c6d5677fa3c22018ab0b9203820"
     end
   end
 
