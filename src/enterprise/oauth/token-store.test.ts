@@ -2,7 +2,7 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveTokens, loadTokens, clearTokens } from "./token-store";
+import { saveTokens, loadTokens, clearTokens, normalizeIssuer } from "./token-store";
 import type { OAuthTokens } from "../types";
 
 let tempDir: string;
@@ -166,5 +166,31 @@ describe("oauth/token-store", () => {
       // Should not throw — just verify it completes
       await saveTokens(tokens);
     });
+  });
+});
+
+describe("normalizeIssuer", () => {
+  test("lowercases host", () => {
+    expect(normalizeIssuer("https://Auth.Example.COM")).toBe("https://auth.example.com");
+  });
+
+  test("removes trailing slash", () => {
+    expect(normalizeIssuer("https://auth.example.com/")).toBe("https://auth.example.com");
+  });
+
+  test("preserves path", () => {
+    expect(normalizeIssuer("https://auth.example.com/oauth2")).toBe("https://auth.example.com/oauth2");
+  });
+
+  test("adds https:// if missing", () => {
+    expect(normalizeIssuer("auth.example.com")).toBe("https://auth.example.com");
+  });
+
+  test("removes multiple trailing slashes", () => {
+    expect(normalizeIssuer("https://auth.example.com///")).toBe("https://auth.example.com");
+  });
+
+  test("handles already normalized input", () => {
+    expect(normalizeIssuer("https://auth.example.com")).toBe("https://auth.example.com");
   });
 });

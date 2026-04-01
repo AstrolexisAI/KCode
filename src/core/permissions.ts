@@ -51,10 +51,23 @@ export type PermissionPromptFn = (
   request: PermissionPromptRequest,
 ) => Promise<{ granted: boolean; alwaysAllow?: boolean }>;
 
-// ─── Read-Only Tools ────────────────────────────────────────────
+// ─── Tool Classification ────────────────────────────────────────
 
 /** Tools that only read data and don't modify anything */
 const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep"]);
+
+/**
+ * SAFE_TOOLS — Tools that never need confirmation in auto mode.
+ * These are read-only or purely informational tools with zero side effects.
+ * In auto mode, these skip the safety classifier entirely (0ms overhead).
+ */
+export const SAFE_TOOLS = new Set([
+  "Read", "Glob", "Grep", "LS", "DiffView",
+  "GitStatus", "GitLog",
+  "AskUser", "ToolSearch",
+  "TaskCreate", "TaskList", "TaskGet", "TaskUpdate",
+  "EnterPlanMode", "ExitPlanMode",
+]);
 
 /** Tools auto-allowed in acceptEdits mode (everything except Bash) */
 const ACCEPT_EDITS_TOOLS = new Set([
@@ -171,6 +184,11 @@ export class PermissionManager {
         return { allowed: true };
       }
       // ruleAction === "ask" falls through to normal mode-based logic
+    }
+
+    // Fast-path: SAFE_TOOLS skip classifier entirely in auto mode (0ms overhead)
+    if (this.mode === "auto" && SAFE_TOOLS.has(tool.name)) {
+      return { allowed: true };
     }
 
     // For read-only tools, always allow (in ask, auto, or acceptEdits mode)

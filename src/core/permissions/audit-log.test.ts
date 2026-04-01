@@ -2,7 +2,7 @@
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { AuditLog, type AuditEntry } from "./audit-log";
+import { AuditLog, type AuditEntry, computeEntryHmac, verifyEntryHmac } from "./audit-log";
 
 function createTestDb(): Database {
   return new Database(":memory:");
@@ -193,5 +193,88 @@ describe("AuditLog", () => {
   test("formatSummary handles empty data", () => {
     const output = audit.formatSummary([]);
     expect(output).toBe("No permission audit data recorded.");
+  });
+
+  // ─── New: HMAC integrity ─────────────────────────────────────
+
+  test("getHistory entries include HMAC", () => {
+    audit.log(makeEntry());
+    const history = audit.getHistory();
+    expect(history[0].hmac).toBeDefined();
+    expect(typeof history[0].hmac).toBe("string");
+    expect(history[0].hmac!.length).toBe(16);
+  });
+
+  test("HMAC is deterministic for same entry", () => {
+    const hmac1 = computeEntryHmac(1000, "Bash", "allowed", "s1");
+    const hmac2 = computeEntryHmac(1000, "Bash", "allowed", "s1");
+    expect(hmac1).toBe(hmac2);
+  });
+
+  test("HMAC differs for different entries", () => {
+    const hmac1 = computeEntryHmac(1000, "Bash", "allowed", "s1");
+    const hmac2 = computeEntryHmac(1000, "Bash", "denied", "s1");
+    expect(hmac1).not.toBe(hmac2);
+  });
+
+  test("verifyEntryHmac validates correct entries", () => {
+    audit.log(makeEntry({ timestamp: 5000, sessionId: "s1" }));
+    const entry = audit.getHistory()[0];
+    expect(verifyEntryHmac(entry)).toBe(true);
+  });
+
+  test("verifyEntryHmac rejects tampered entries", () => {
+    audit.log(makeEntry({ timestamp: 5000, sessionId: "s1" }));
+    const entry = audit.getHistory()[0];
+    entry.action = "denied"; // tamper
+    expect(verifyEntryHmac(entry)).toBe(false);
+  });
+
+  // ─── New: JSON export ────────────────────────────────────────
+
+  test("exportJSON returns NDJSON format", () => {
+    audit.log(makeEntry({ timestamp: 1000, toolName: "Bash" }));
+    audit.log(makeEntry({ timestamp: 2000, toolName: "Write" }));
+    const json = audit.exportJSON();
+    const lines = json.split("\n");
+    expect(lines).toHaveLength(2);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed["@timestamp"]).toBeDefined();
+    expect(parsed.event.action).toBeDefined();
+    expect(parsed.tool.name).toBeDefined();
+  });
+
+  test("exportJSON SIEM format has correct structure", () => {
+    audit.log(makeEntry({ timestamp: 1000, action: "denied", reason: "blocked" }));
+    const json = audit.exportJSON();
+    const parsed = JSON.parse(json);
+    expect(parsed.event.kind).toBe("event");
+    expect(parsed.event.category).toBe("process");
+    expect(parsed.event.type).toBe("access");
+    expect(parsed.event.outcome).toBe("failure");
+    expect(parsed.reason).toBe("blocked");
+  });
+
+  test("exportJSON filters by sessionId", () => {
+    audit.log(makeEntry({ sessionId: "s1" }));
+    audit.log(makeEntry({ sessionId: "s2" }));
+    const json = audit.exportJSON({ sessionId: "s1" });
+    const lines = json.split("\n");
+    expect(lines).toHaveLength(1);
+  });
+
+  // ─── New: File export ────────────────────────────────────────
+
+  test("exportToFile writes entries and returns count", () => {
+    audit.log(makeEntry());
+    audit.log(makeEntry());
+    const tmpPath = `/tmp/kcode-audit-test-${Date.now()}.ndjson`;
+    const count = audit.exportToFile(tmpPath);
+    expect(count).toBe(2);
+    // Verify file exists and has content
+    const file = Bun.file(tmpPath);
+    expect(file.size).toBeGreaterThan(0);
+    // Cleanup
+    require("node:fs").unlinkSync(tmpPath);
   });
 });

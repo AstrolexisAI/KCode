@@ -15,6 +15,26 @@ const SECRET_TOOL_LABEL = "KCode OAuth";
 const FALLBACK_PATH = () => join(kcodeHome(), "tokens.json");
 const SUBPROCESS_TIMEOUT_MS = 5_000;
 
+// ─── Issuer Normalization ───────────────────────────────────────
+
+/**
+ * Normalize an OAuth issuer URL for consistent cache lookups.
+ * - Lowercases the host
+ * - Removes trailing slashes
+ * - Ensures https:// prefix
+ */
+export function normalizeIssuer(issuer: string): string {
+  try {
+    const url = new URL(issuer.includes("://") ? issuer : `https://${issuer}`);
+    // Lowercase host, remove trailing slash, preserve path
+    const path = url.pathname.replace(/\/+$/, "") || "";
+    return `${url.protocol}//${url.host.toLowerCase()}${path}`;
+  } catch {
+    // If URL parsing fails, just normalize basic patterns
+    return issuer.toLowerCase().replace(/\/+$/, "");
+  }
+}
+
 // ─── Helpers ────────────────────────────────────────────────────
 
 async function runCommand(cmd: string, args: string[], stdin?: string): Promise<{ ok: boolean; stdout: string }> {
