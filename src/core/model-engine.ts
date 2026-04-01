@@ -2,8 +2,8 @@
 // Downloads and installs the llama.cpp inference engine binary.
 // Extracted from model-manager.ts for modularity.
 
-import { chmodSync, existsSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, readdirSync, rmSync, statSync, renameSync, unlinkSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { HardwareInfo } from "./hardware";
 import { log } from "./logger";
 import {
@@ -36,7 +36,7 @@ export async function downloadEngine(
   // Clean up corrupt engine dir from previous failed installs
   if (existsSync(ENGINE_DIR) && !getEnginePathLocal()) {
     try {
-      require("node:fs").rmSync(ENGINE_DIR, { recursive: true, force: true });
+      rmSync(ENGINE_DIR, { recursive: true, force: true });
     } catch (err) {
       log.debug("model-manager", `Failed to clean corrupt engine dir: ${err}`);
     }
@@ -91,7 +91,6 @@ export async function downloadEngine(
 
   // Log extracted files for diagnostics
   try {
-    const { readdirSync } = require("node:fs");
     const allFiles = readdirSync(ENGINE_DIR);
     log.info(
       "setup",
@@ -101,7 +100,7 @@ export async function downloadEngine(
     for (const f of allFiles) {
       const sub = join(ENGINE_DIR, f);
       try {
-        if (require("node:fs").statSync(sub).isDirectory()) {
+        if (statSync(sub).isDirectory()) {
           const subFiles = readdirSync(sub);
           log.info(
             "setup",
@@ -122,7 +121,6 @@ export async function downloadEngine(
     // Provide detailed error for diagnostics
     let contents = "";
     try {
-      const { readdirSync } = require("node:fs");
       contents = readdirSync(ENGINE_DIR).join(", ");
     } catch (err) {
       log.debug("model-manager", `FS operation failed: ${err}`);
@@ -170,14 +168,13 @@ export async function downloadEngine(
   // Move all shared libraries (.so, .dylib, .dll) next to the binary
   // so LD_LIBRARY_PATH / DYLD_LIBRARY_PATH / PATH can find them
   progress("Installing libraries...");
-  const binDir = join(serverBin, "..");
-  const sep = process.platform === "win32" ? "\\" : "/";
+  const binDir = dirname(serverBin);
   for (const libPath of findLibraryFiles(ENGINE_DIR)) {
-    const libName = libPath.split(sep).pop() ?? libPath.split("/").pop()!;
+    const libName = basename(libPath);
     const dest = join(binDir, libName);
     if (libPath !== dest && !existsSync(dest)) {
       try {
-        require("node:fs").renameSync(libPath, dest);
+        renameSync(libPath, dest);
       } catch (err) {
         log.debug("model-manager", `FS operation failed: ${err}`);
       }

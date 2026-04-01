@@ -72,10 +72,12 @@ export async function startServer(options?: {
 }): Promise<{ port: number; pid: number }> {
   // Check if already running
   if (await isServerRunning()) {
-    const port = getServerPort()!;
-    const pid = getServerPid() ?? 0;
-    log.info("server", `Server already running on port ${port}`);
-    return { port, pid };
+    const port = getServerPort();
+    const pid = getServerPid();
+    if (port) {
+      log.info("server", `Server already running on port ${port}`);
+      return { port, pid: pid ?? 0 };
+    }
   }
 
   const config = await getServerConfig();
@@ -223,9 +225,8 @@ main()`;
 
     serverProcess = proc;
 
-    // Write PID and port files
-    Bun.write(PID_FILE, `${proc.pid}\n`);
-    Bun.write(PORT_FILE, `${port}\n`);
+    // PID/PORT files are written AFTER the health check succeeds (in poll())
+    // to prevent isServerRunning() from returning true before the server is ready.
 
     proc.stdout?.on("data", (data: Buffer) => {
       logFile.write(data);
@@ -249,6 +250,12 @@ main()`;
 
     proc.on("exit", (code) => {
       log.info("server", `Server exited with code ${code}`);
+      try {
+        logFile.flush();
+        logFile.end();
+      } catch {
+        /* ignore — file may already be closed */
+      }
       cleanupPidFile();
       serverProcess = null;
     });
@@ -279,12 +286,15 @@ main()`;
           });
           if (resp.ok) {
             settled = true;
+            // Write PID/PORT files only after server is confirmed ready
+            await Bun.write(PID_FILE, `${proc.pid}\n`);
+            await Bun.write(PORT_FILE, `${port}\n`);
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             log.info(
               "server",
               `Server ready in ${elapsed}s (PID: ${proc.pid}, engine: ${isMlx ? "mlx" : "llama.cpp"})`,
             );
-            resolve({ port, pid: proc.pid! });
+            resolve({ port, pid: proc.pid ?? 0 });
             return;
           }
         } catch (err) {
@@ -357,8 +367,8 @@ export async function stopServer(): Promise<void> {
 /** Ensure the server is running, start if needed. Returns the base URL. */
 export async function ensureServer(): Promise<string> {
   if (await isServerRunning()) {
-    const port = getServerPort()!;
-    return `http://localhost:${port}`;
+    const port = getServerPort();
+    if (port) return `http://localhost:${port}`;
   }
 
   // Auto-start
