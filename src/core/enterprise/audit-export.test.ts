@@ -26,23 +26,23 @@ describe("enterprise/audit-export", () => {
 
   test("redactSensitiveData removes API keys", async () => {
     const { redactSensitiveData } = await import("./audit-export");
-    const input = 'api_key: "sk-abcdef1234567890abcdef1234567890"';
+    const input = 'api_key: "sk-FAKE0000TEST0000FAKE0000TEST0000"';
     const result = redactSensitiveData(input);
     expect(result).toContain("[REDACTED]");
-    expect(result).not.toContain("sk-abcdef1234567890abcdef1234567890");
+    expect(result).not.toContain("sk-FAKE0000TEST0000FAKE0000TEST0000");
   });
 
   test("redactSensitiveData removes Bearer tokens", async () => {
     const { redactSensitiveData } = await import("./audit-export");
-    const input = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.secret";
+    const input = "Authorization: Bearer FAKE-TEST-TOKEN-do-not-use.payload.signature";
     const result = redactSensitiveData(input);
     expect(result).toContain("[REDACTED]");
-    expect(result).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    expect(result).not.toContain("FAKE-TEST-TOKEN-do-not-use");
   });
 
   test("redactSensitiveData removes GitHub tokens", async () => {
     const { redactSensitiveData } = await import("./audit-export");
-    const input = "token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij";
+    const input = "token: ghp_FAKE0000TEST0000FAKE0000TEST0000fake00";
     const result = redactSensitiveData(input);
     expect(result).toContain("[REDACTED]");
   });
