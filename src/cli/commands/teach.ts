@@ -92,7 +92,7 @@ export function registerTeachCommand(program: Command): void {
     .action(async (opts: { model: string; method: string; epochs: string; lr: string; loraRank: string; output: string }) => {
       const { resolve, join } = await import("node:path");
       const { DataCollector } = await import("../../core/training/data-collector");
-      const { FineTuner, type FineTuneConfig } = await import("../../core/training/fine-tuner");
+      const { FineTuner } = await import("../../core/training/fine-tuner");
 
       // First export the data
       const collector = new DataCollector();
