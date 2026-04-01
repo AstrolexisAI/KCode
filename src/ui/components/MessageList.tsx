@@ -318,19 +318,50 @@ function ToolResultMessage({
     );
   }
 
-  const preview = safeResult.split("\n").slice(0, 3).join("\n    ");
+  // Parse result lines for diff-aware coloring
+  const lines = safeResult.split("\n");
+  const headerLine = lines[0] ?? "";
+  const bodyLines = lines.slice(1);
+
+  // Determine if this is a diff result (Edit/Write with + or - prefixed lines)
+  const hasDiffLines = bodyLines.some(
+    (l) => l.startsWith("  + ") || l.startsWith("  - "),
+  );
+
   return (
     <Box flexDirection="column" paddingLeft={2}>
-      <Text color={theme.toolResult} dimColor>
+      <Text color={theme.toolResult} bold>
         {"✓ "}
-        {name}
+        {headerLine}
         {durationStr}
       </Text>
-      {preview.length > 0 && preview.length < 500 && (
-        <Text dimColor>
-          {"    "}
-          {preview}
-        </Text>
+      {hasDiffLines &&
+        bodyLines.map((line, i) => {
+          if (line.startsWith("  + ")) {
+            return (
+              <Text key={i} color={theme.success ?? "#9ece6a"}>
+                {line}
+              </Text>
+            );
+          }
+          if (line.startsWith("  - ")) {
+            return (
+              <Text key={i} color={theme.error}>
+                {line}
+              </Text>
+            );
+          }
+          if (line.trim().length > 0) {
+            return (
+              <Text key={i} dimColor>
+                {line}
+              </Text>
+            );
+          }
+          return null;
+        })}
+      {!hasDiffLines && bodyLines.length > 0 && bodyLines.length <= 3 && (
+        <Text dimColor>{"    "}{bodyLines.join("\n    ")}</Text>
       )}
     </Box>
   );

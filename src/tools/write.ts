@@ -105,15 +105,23 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
 
     writeFileSync(file_path, content, "utf-8");
 
-    const lineCount = content.split("\n").length;
+    const lines = content.split("\n");
+    const lineCount = lines.length;
     let warning = "";
     if (hasInlineHTML) {
       warning =
         "\n⚠️ Warning: This file contains HTML inside TypeScript. Consider moving HTML/CSS/JS to separate files in public/ to avoid template literal issues.";
     }
+
+    // Include the complete file content with line numbers for professional display.
+    // The UI renders this with syntax-aware formatting (green for new files).
+    const numberedLines = lines
+      .map((line, i) => `  + ${String(i + 1).padStart(4)} | ${line}`)
+      .join("\n");
+
     return {
       tool_use_id: "",
-      content: `File written successfully: ${file_path} (${lineCount} lines)${warning}`,
+      content: `Created ${file_path} (${lineCount} lines)${warning}\n${numberedLines}`,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
