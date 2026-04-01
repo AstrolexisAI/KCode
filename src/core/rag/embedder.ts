@@ -1,12 +1,159 @@
-// KCode - Local Embedding Generator
+// KCode - Embedding Generator
 // Generates vector embeddings locally without external APIs.
 // Supports multiple backends: Ollama, llama.cpp, and TF-IDF fallback.
+// Also exports a pluggable EmbedderInterface + LocalEmbedder / CloudEmbedder for the RAG pipeline.
 
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { log } from "../logger";
 import type { EmbeddingBackend, EmbeddingConfig } from "./types";
+
+// ─── Pluggable Embedder Interface ─────────────────────────────
+
+/**
+ * Abstract interface for any embedding provider (local or cloud).
+ * Used by RagEngine for pluggable embedder injection.
+ */
+export interface EmbedderInterface {
+  /** Generate an embedding vector for a single text */
+  embed(text: string): Promise<number[]>;
+  /** Generate embeddings for multiple texts in batch */
+  embedBatch(texts: string[]): Promise<number[][]>;
+  /** Dimensionality of the embedding vectors */
+  dimensions: number;
+}
+
+export interface EmbedderInterfaceConfig {
+  type: "local" | "cloud";
+  /** For local: Ollama or llama.cpp endpoint (default: http://localhost:11434) */
+  endpoint?: string;
+  /** For local: model name (default: nomic-embed-text) */
+  model?: string;
+  /** For cloud: OpenAI API key */
+  apiKey?: string;
+  /** For cloud: embedding model (default: text-embedding-3-small) */
+  cloudModel?: string;
+  /** Override dimensions */
+  dimensions?: number;
+}
+
+/**
+ * Generates embeddings via a local Ollama or llama.cpp server.
+ */
+export class LocalEmbedder implements EmbedderInterface {
+  readonly dimensions: number;
+  private endpoint: string;
+  private model: string;
+
+  constructor(config: EmbedderInterfaceConfig = { type: "local" }) {
+    this.endpoint = config.endpoint ?? "http://localhost:11434";
+    this.model = config.model ?? "nomic-embed-text";
+    this.dimensions = config.dimensions ?? 768;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    try {
+      const res = await fetch(`${this.endpoint}/api/embeddings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: this.model, prompt: text }),
+      });
+      if (!res.ok) {
+        log.warn("rag", `Local embed request failed: ${res.status}`);
+        return [];
+      }
+      const data = (await res.json()) as { embedding?: number[] };
+      return data.embedding ?? [];
+    } catch (err) {
+      log.warn("rag", `Local embedder error: ${err}`);
+      return [];
+    }
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    const results: number[][] = [];
+    for (const text of texts) {
+      results.push(await this.embed(text));
+    }
+    return results;
+  }
+}
+
+/**
+ * Generates embeddings via OpenAI's text-embedding API.
+ */
+export class CloudEmbedder implements EmbedderInterface {
+  readonly dimensions: number;
+  private apiKey: string;
+  private model: string;
+
+  constructor(config: EmbedderInterfaceConfig = { type: "cloud" }) {
+    this.apiKey = config.apiKey ?? process.env.OPENAI_API_KEY ?? "";
+    this.model = config.cloudModel ?? "text-embedding-3-small";
+    this.dimensions = config.dimensions ?? 1536;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    try {
+      const res = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({ model: this.model, input: text }),
+      });
+      if (!res.ok) {
+        log.warn("rag", `Cloud embed request failed: ${res.status}`);
+        return [];
+      }
+      const data = (await res.json()) as {
+        data?: { embedding: number[] }[];
+      };
+      return data.data?.[0]?.embedding ?? [];
+    } catch (err) {
+      log.warn("rag", `Cloud embedder error: ${err}`);
+      return [];
+    }
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    try {
+      const res = await fetch("https://api.openai.com/v1/embeddings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({ model: this.model, input: texts }),
+      });
+      if (!res.ok) {
+        log.warn("rag", `Cloud batch embed request failed: ${res.status}`);
+        return texts.map(() => []);
+      }
+      const data = (await res.json()) as {
+        data?: { embedding: number[]; index: number }[];
+      };
+      if (!data.data) return texts.map(() => []);
+      const sorted = data.data.sort((a, b) => a.index - b.index);
+      return sorted.map((d) => d.embedding);
+    } catch (err) {
+      log.warn("rag", `Cloud batch embedder error: ${err}`);
+      return texts.map(() => []);
+    }
+  }
+}
+
+/**
+ * Factory: create an EmbedderInterface based on configuration.
+ */
+export function createEmbedder(config: EmbedderInterfaceConfig): EmbedderInterface {
+  if (config.type === "cloud") {
+    return new CloudEmbedder(config);
+  }
+  return new LocalEmbedder(config);
+}
 
 // ─── Backend Priority ──────────────────────────────────────────
 

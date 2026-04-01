@@ -1,0 +1,24 @@
+{
+  "name": "kcode-docker",
+  "version": "1.1.0",
+  "description": "Docker container management, Dockerfile generation, and compose tools",
+  "author": "Astrolexis",
+  "license": "MIT",
+  "kcode": ">=1.7.0",
+  "skills": [
+    "skills/docker-build.md",
+    "skills/docker-run.md",
+    "skills/docker-compose.md",
+    "skills/docker-logs.md"
+  ],
+  "hooks": {
+    "onFileWrite": [
+      {
+        "match": { "file": "**/Dockerfile" },
+        "action": "notify",
+        "command": "echo",
+        "args": ["Dockerfile modified -- consider rebuilding the image"]
+      }
+    ]
+  }
+}
