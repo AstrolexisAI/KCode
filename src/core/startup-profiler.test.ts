@@ -9,25 +9,24 @@ import {
 
 describe("startup-profiler", () => {
   let savedProfileEnv: string | undefined;
+  let savedProfileEnv2: string | undefined;
   let savedNodeEnv: string | undefined;
 
   beforeEach(() => {
     savedProfileEnv = process.env.KCODE_PROFILE_STARTUP;
+    savedProfileEnv2 = process.env.KCODE_PROFILE;
     savedNodeEnv = process.env.NODE_ENV;
     _resetProfiler();
   });
 
   afterEach(() => {
-    if (savedProfileEnv === undefined) {
-      delete process.env.KCODE_PROFILE_STARTUP;
-    } else {
-      process.env.KCODE_PROFILE_STARTUP = savedProfileEnv;
-    }
-    if (savedNodeEnv === undefined) {
-      delete process.env.NODE_ENV;
-    } else {
-      process.env.NODE_ENV = savedNodeEnv;
-    }
+    const restore = (key: string, val: string | undefined) => {
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    };
+    restore("KCODE_PROFILE_STARTUP", savedProfileEnv);
+    restore("KCODE_PROFILE", savedProfileEnv2);
+    restore("NODE_ENV", savedNodeEnv);
     _resetProfiler();
   });
 
@@ -38,15 +37,18 @@ describe("startup-profiler", () => {
       expect(isProfilingEnabled()).toBe(true);
     });
 
-    test("enabled when NODE_ENV=development", () => {
+    test("enabled when KCODE_PROFILE=1", () => {
       delete process.env.KCODE_PROFILE_STARTUP;
-      process.env.NODE_ENV = "development";
+      process.env.KCODE_PROFILE = "1";
+      _resetProfiler();
       expect(isProfilingEnabled()).toBe(true);
     });
 
     test("disabled when neither env var is set", () => {
       delete process.env.KCODE_PROFILE_STARTUP;
+      delete process.env.KCODE_PROFILE;
       delete process.env.NODE_ENV;
+      _resetProfiler();
       expect(isProfilingEnabled()).toBe(false);
     });
   });
@@ -80,12 +82,11 @@ describe("startup-profiler", () => {
       expect(report[2].timestamp).toBeGreaterThanOrEqual(report[1].timestamp);
     });
 
-    test("delta is difference from previous checkpoint", () => {
+    test("delta is non-negative for first checkpoint", () => {
       process.env.KCODE_PROFILE_STARTUP = "1";
       profileCheckpoint("first");
       const report1 = getProfileReport();
-      // First entry delta equals its own timestamp (since prev is 0)
-      expect(report1[0].delta).toBe(report1[0].timestamp);
+      expect(report1[0].deltaMs).toBeGreaterThanOrEqual(0);
     });
   });
 

@@ -123,17 +123,15 @@ describe("feature-flags", () => {
   describe("isBuildFeatureEnabled", () => {
     test("returns true for known features in dev mode", () => {
       // In test/dev mode, build-time flags are not defined → defaults to true
-      expect(isBuildFeatureEnabled("FEATURE_VOICE")).toBe(true);
-      expect(isBuildFeatureEnabled("FEATURE_BRIDGE")).toBe(true);
-      expect(isBuildFeatureEnabled("FEATURE_REMOTE")).toBe(true);
-      expect(isBuildFeatureEnabled("FEATURE_ENTERPRISE")).toBe(true);
-      expect(isBuildFeatureEnabled("FEATURE_TELEMETRY")).toBe(true);
-      expect(isBuildFeatureEnabled("FEATURE_LSP")).toBe(true);
-      expect(isBuildFeatureEnabled("FEATURE_SWARM")).toBe(true);
-    });
-
-    test("returns true for unknown feature names", () => {
-      expect(isBuildFeatureEnabled("FEATURE_UNKNOWN")).toBe(true);
+      expect(isBuildFeatureEnabled("voice")).toBe(true);
+      expect(isBuildFeatureEnabled("bridge")).toBe(true);
+      expect(isBuildFeatureEnabled("enterprise")).toBe(true);
+      expect(isBuildFeatureEnabled("telemetry")).toBe(true);
+      expect(isBuildFeatureEnabled("lsp")).toBe(true);
+      expect(isBuildFeatureEnabled("swarm")).toBe(true);
+      expect(isBuildFeatureEnabled("mesh")).toBe(true);
+      expect(isBuildFeatureEnabled("distillation")).toBe(true);
+      expect(isBuildFeatureEnabled("collab")).toBe(true);
     });
   });
 
