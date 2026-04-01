@@ -7,7 +7,15 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "bin": {
-    "kcode": "src/index.ts"
+    "kcode": "./dist/kcode"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "start": "bun run src/index.ts",
@@ -20,6 +28,7 @@
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
+    "prepublishOnly": "bun run build",
     "test": "bun test",
     "version:patch": "bun run --bun npm version patch",
     "version:minor": "bun run --bun npm version minor",

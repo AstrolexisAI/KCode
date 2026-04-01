@@ -41,6 +41,19 @@ import {
   handleTruncationRetry,
 } from "./response-handlers";
 // routeToModel moved to conversation-retry.ts
+import {
+  accumulateUsage as _accumulateUsage,
+  getModifiedFiles as _getModifiedFiles,
+  getRecentMessageText as _getRecentMessageText,
+  hashString as _hashString,
+} from "./conversation-state";
+import {
+  checkBudgetLimit,
+  detectCheckpointMode,
+  detectTheoreticalMode,
+  evaluateOutputBudgetHint,
+  injectSmartContext,
+} from "./conversation-message-prep";
 import type { SSEChunk } from "./sse-parser";
 import {
   handleCheckpointMode,
@@ -388,37 +401,10 @@ export class ConversationManager {
       await checkSessionLimit();
     }
 
-    // Budget guard: check if session has exceeded max budget
-    if (this.config.maxBudgetUsd && this.config.maxBudgetUsd > 0) {
-      try {
-        const { getModelPricing, calculateCost } = await import("./pricing.js");
-        const pricing = await getModelPricing(this.config.model);
-        if (pricing) {
-          const cost = calculateCost(
-            pricing,
-            this.cumulativeUsage.inputTokens,
-            this.cumulativeUsage.outputTokens,
-          );
-          if (cost >= this.config.maxBudgetUsd) {
-            yield {
-              type: "error",
-              error: new Error(
-                `Budget limit reached: $${cost.toFixed(2)} >= $${this.config.maxBudgetUsd.toFixed(2)}. Use --max-budget-usd to increase.`,
-              ),
-              retryable: false,
-            };
-            yield { type: "turn_end", stopReason: "error" };
-            return;
-          }
-        } else {
-          log.warn(
-            "budget",
-            `No pricing data for model "${this.config.model}" — budget limit ($${this.config.maxBudgetUsd}) cannot be enforced`,
-          );
-        }
-      } catch (err) {
-        log.debug("budget", "Failed to check budget limit: " + err);
-      }
+    // Budget guard: check if session has exceeded max budget (delegated to conversation-message-prep)
+    for await (const evt of checkBudgetLimit(this.config, this.cumulativeUsage)) {
+      yield evt;
+      if (evt.type === "turn_end") return;
     }
 
     // Start transcript session on first message (skip if --no-session-persistence)
@@ -430,79 +416,23 @@ export class ConversationManager {
       }
     }
 
-    // Auto-detect theoretical/formal prompts — disable tools at execution level
-    if (looksTheoretical(userMessage)) {
-      const lang = detectLanguage(userMessage);
-      log.info("session", `Detected theoretical prompt (lang=${lang}) — strict analysis mode`);
-      this._theoreticalMode = true;
-      this._theoreticalRetries = 0;
-      const langHint =
-        lang !== "en"
-          ? ` You MUST respond in ${lang === "es" ? "Spanish" : lang === "fr" ? "French" : lang === "pt" ? "Portuguese" : "the user's language"}.`
-          : "";
-      this.state.messages.push({
-        role: "user",
-        content:
-          `[SYSTEM] STRICT ANALYSIS MODE: The user's question is theoretical/formal. Rules:\n` +
-          `1. Respond with text only — do NOT use any tools.\n` +
-          `2. Use Unicode for math (fᵢ : S → S, not LaTeX).\n` +
-          `3. Be precise and concise — avoid verbose introductions and repetitive conclusions.\n` +
-          `4. If data is missing for some items, state "No data provided for X" — do NOT invent values.\n` +
-          `5. End with a single, clear conclusion — do NOT repeat the conclusion.\n` +
-          `6. If your response will be long, prioritize structure over length.${langHint}`,
-      });
-    } else {
-      this._theoreticalMode = false;
-    }
+    // Auto-detect theoretical/formal prompts (delegated to conversation-message-prep)
+    const theoreticalResult = detectTheoreticalMode(userMessage);
+    this._theoreticalMode = theoreticalResult.isTheoretical;
+    if (theoreticalResult.isTheoretical) this._theoreticalRetries = 0;
+    for (const msg of theoreticalResult.injectedMessages) this.state.messages.push(msg);
 
-    // Auto-detect staged/checkpoint requests — limit execution scope
-    if (looksCheckpointed(userMessage)) {
-      log.info(
-        "session",
-        "Detected checkpoint request — will limit tool execution to initial stage",
-      );
-      this._checkpointMode = true;
-      this._checkpointToolCount = 0;
-      // If a plan gets created during this turn, auto-set stopAfterStepId to the first step
-      try {
-        const { onPlanChange } = await import("../tools/plan.js");
-        const unsubCheckpoint = onPlanChange((plan) => {
-          if (plan && plan.steps.length > 0 && !plan.stopAfterStepId) {
-            plan.stopAfterStepId = plan.steps[0]!.id;
-            log.info("session", `Checkpoint: auto-set stopAfterStepId to "${plan.steps[0]!.id}"`);
-          }
-          unsubCheckpoint(); // Only need to catch the first plan creation
-        });
-      } catch {
-        /* plan module not loaded */
-      }
-      this.state.messages.push({
-        role: "user",
-        content:
-          "[SYSTEM] The user asked for ONLY the first step or initial structure. Complete ONLY that stage, then STOP and provide a summary. Do NOT continue to additional features, pages, or implementation beyond the initial setup.",
-      });
-    } else {
-      this._checkpointMode = false;
-    }
+    // Auto-detect staged/checkpoint requests (delegated to conversation-message-prep)
+    const checkpointResult = await detectCheckpointMode(userMessage);
+    this._checkpointMode = checkpointResult.isCheckpoint;
+    if (checkpointResult.isCheckpoint) this._checkpointToolCount = 0;
+    for (const msg of checkpointResult.injectedMessages) this.state.messages.push(msg);
 
-    // Output budget: estimate if response will exceed output limit
-    try {
-      const { evaluateOutputBudget } = await import("./output-budget.js");
-      const contextPct =
-        this.state.tokenCount > 0
-          ? Math.round((this.state.tokenCount / this.contextWindowSize) * 100)
-          : 0;
-      const budget = evaluateOutputBudget(userMessage, this.config.maxTokens, contextPct);
-      if (budget.strategy !== "normal" && budget.systemHint) {
-        log.info(
-          "session",
-          `Output budget: ${budget.strategy} (est. ${budget.estimatedOutputTokens} tokens, max ${budget.maxAllowedTokens})`,
-        );
-        this.state.messages.push({ role: "user", content: budget.systemHint });
-      }
-    } catch {
-      /* module not loaded */
-    }
+    // Output budget hint (delegated to conversation-message-prep)
+    const budgetHint = await evaluateOutputBudgetHint(
+      userMessage, this.config.maxTokens, this.state.tokenCount, this.contextWindowSize,
+    );
+    if (budgetHint) this.state.messages.push(budgetHint);
 
     // Begin response session for turn isolation
     try {
@@ -512,10 +442,7 @@ export class ConversationManager {
       /* module not loaded */
     }
 
-    this.state.messages.push({
-      role: "user",
-      content: userMessage,
-    });
+    this.state.messages.push({ role: "user", content: userMessage });
 
     // Layer 7: Update user model from message signals
     try {
@@ -531,79 +458,11 @@ export class ConversationManager {
       log.debug("intention", "Failed to reset intention engine: " + err);
     }
 
-    // Smart context: inject relevant file hints + code snippets based on user query
-    try {
-      const { getCodebaseIndex } = await import("./codebase-index.js");
-      const idx = getCodebaseIndex(this.config.workingDirectory);
-
-      if (this.state.messages.length <= 6) {
-        // Early messages: inject rich snippets with actual code
-        const snippets = idx.formatRelevantSnippets(userMessage, 60);
-        if (snippets) {
-          this.state.messages.push({
-            role: "user",
-            content: `[SYSTEM CONTEXT] ${snippets}`,
-          });
-        }
-      } else if (this.state.messages.length <= 20) {
-        // Later messages: inject lighter file hints only
-        const contextHint = idx.formatRelevantContext(userMessage);
-        if (contextHint) {
-          this.state.messages.push({
-            role: "user",
-            content: `[SYSTEM CONTEXT] ${contextHint}`,
-          });
-        }
-      }
-    } catch (err) {
-      log.debug("context", "Failed to inject smart context hints: " + err);
-    }
-
-    // Auto-RAG: inject semantically relevant code context from the local RAG engine
-    try {
-      const { getRAGEngine } = await import("./rag/engine.js");
-      const rag = getRAGEngine(this.config.workingDirectory);
-      await rag.init();
-      if (rag.stats().total > 0) {
-        const ragResults = await rag.search(userMessage, { limit: 5, queryType: "code" });
-        if (ragResults.length > 0 && ragResults[0]!.similarity > 0.01) {
-          const ragContext = rag.formatAsContext(ragResults, 3000);
-          if (ragContext) {
-            this.state.messages.push({
-              role: "user",
-              content: `[SYSTEM CONTEXT] ${ragContext}`,
-            });
-          }
-        }
-      }
-    } catch (err) {
-      log.debug("context", "Failed to inject RAG context: " + err);
-    }
-
-    // Auto-invoke skills: match user message against trigger patterns
-    // Injects Level 2 (full body) of matched skills as system context
-    try {
-      const { SkillManager } = await import("./skills.js");
-      const sm = new SkillManager(this.config.workingDirectory);
-      const matched = sm.matchAutoInvoke(userMessage);
-      if (matched.length > 0) {
-        const skillContext = matched
-          .map((s) => {
-            const body = sm.getLevel2Body(s.name);
-            return body ? `[SKILL: ${s.name}]\n${body}` : null;
-          })
-          .filter(Boolean)
-          .join("\n\n");
-        if (skillContext) {
-          this.state.messages.push({
-            role: "user",
-            content: `[SYSTEM CONTEXT — Auto-invoked skills]\n${skillContext}`,
-          });
-        }
-      }
-    } catch (err) {
-      log.debug("skills", "Failed to auto-invoke skills: " + err);
-    }
+    // Smart context + RAG + skills injection (delegated to conversation-message-prep)
+    const contextMessages = await injectSmartContext(
+      userMessage, this.state.messages, this.config.workingDirectory,
+    );
+    for (const msg of contextMessages) this.state.messages.push(msg);
 
     // Auto-save checkpoint before each agent loop starts
     try {
@@ -1808,50 +1667,16 @@ export class ConversationManager {
     return estimateContextTokens(this.systemPrompt, this.state.messages);
   }
 
-  // ─── Usage Tracking ─────────────────────────────────────────────
+  // ─── Usage Tracking (delegated to conversation-state.ts) ────────
 
   private accumulateUsage(usage: TokenUsage): void {
-    this.cumulativeUsage.inputTokens += usage.inputTokens;
-    this.cumulativeUsage.outputTokens += usage.outputTokens;
-    this.cumulativeUsage.cacheCreationInputTokens += usage.cacheCreationInputTokens;
-    this.cumulativeUsage.cacheReadInputTokens += usage.cacheReadInputTokens;
-
-    // Update legacy tokenCount
-    this.state.tokenCount = this.cumulativeUsage.inputTokens + this.cumulativeUsage.outputTokens;
+    _accumulateUsage(this.cumulativeUsage, usage, this.state);
   }
 
-  // ─── Router Helpers ────────────────────────────────────────────
+  // ─── Router Helpers (delegated to conversation-state.ts) ───────
 
-  /**
-   * Extract text from recent messages for routing heuristics.
-   * Looks at the last few messages (user + tool results) to detect content type.
-   */
   private getRecentMessageText(): string {
-    const parts: string[] = [];
-    // Check the last 4 messages (enough to catch recent tool results)
-    const recent = this.state.messages.slice(-4);
-    for (const msg of recent) {
-      if (typeof msg.content === "string") {
-        parts.push(msg.content);
-      } else {
-        for (const block of msg.content) {
-          if (block.type === "text") {
-            parts.push(block.text);
-          } else if (block.type === "tool_result") {
-            if (typeof block.content === "string") {
-              parts.push(block.content);
-            } else if (Array.isArray(block.content)) {
-              for (const sub of block.content) {
-                if (sub.type === "text") {
-                  parts.push(sub.text);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    return parts.join("\n");
+    return _getRecentMessageText(this.state.messages);
   }
 
   // ─── State Access ───────────────────────────────────────────────
@@ -1977,13 +1802,9 @@ export class ConversationManager {
     this.turnCosts = [];
   }
 
-  /** Fast string hash for cache comparison (djb2). */
+  /** Fast string hash for cache comparison (delegated to conversation-state.ts). */
   private hashString(str: string): string {
-    let hash = 5381;
-    for (let i = 0; i < str.length; i++) {
-      hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
-    }
-    return hash.toString(36);
+    return _hashString(str);
   }
 
   /** Get session start time for elapsed time tracking. */
@@ -1996,19 +1817,8 @@ export class ConversationManager {
     sendDesktopNotification(title, body);
   }
 
-  /** Get list of files modified in this session (from undo manager). */
+  /** Get list of files modified in this session (delegated to conversation-state.ts). */
   getModifiedFiles(): string[] {
-    const files: string[] = [];
-    for (const msg of this.state.messages) {
-      if (Array.isArray(msg.content)) {
-        for (const block of msg.content) {
-          if (block.type === "tool_use" && (block.name === "Write" || block.name === "Edit")) {
-            const fp = String((block.input as Record<string, unknown>)?.file_path ?? "");
-            if (fp && !files.includes(fp)) files.push(fp);
-          }
-        }
-      }
-    }
-    return files;
+    return _getModifiedFiles(this.state.messages);
   }
 }

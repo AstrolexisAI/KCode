@@ -1,0 +1,73 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Blog — KCode">
+  <section class="container blog">
+    <h1>Blog</h1>
+    <p class="subtitle">Updates, tutorials, and deep dives from the KCode team.</p>
+
+    <article class="post">
+      <time>April 1, 2026</time>
+      <h2><a href="/blog/kcode-v2-moat-tecnico">KCode v2.5: Building the Technical Moat</a></h2>
+      <p>
+        Phase 4 is here: local RAG with vector search, multi-GPU orchestration, model fine-tuning,
+        plugin marketplace with 5 seed plugins, and enterprise features. Here's what changed and why.
+      </p>
+      <div class="tags"><span>release</span><span>rag</span><span>multi-gpu</span></div>
+    </article>
+
+    <article class="post">
+      <time>March 25, 2026</time>
+      <h2><a href="/blog/monetization-launch">Launching KCode Pro: $19/mo for Unlimited AI Coding</a></h2>
+      <p>
+        We're launching KCode Pro with unlimited sessions, parallel agents, priority support,
+        and fine-tuning capabilities. Free tier stays generous at 200 sessions/month.
+      </p>
+      <div class="tags"><span>launch</span><span>pro</span><span>pricing</span></div>
+    </article>
+
+    <article class="post">
+      <time>March 15, 2026</time>
+      <h2><a href="/blog/local-vs-cloud">Local LLMs vs Cloud APIs for Coding: A Real Benchmark</a></h2>
+      <p>
+        We benchmarked Qwen 2.5 Coder 32B on RTX 4090/5090 against Claude Sonnet, GPT-4o,
+        and DeepSeek on 10 real coding tasks. The results might surprise you.
+      </p>
+      <div class="tags"><span>benchmark</span><span>local-llm</span><span>comparison</span></div>
+    </article>
+
+    <article class="post">
+      <time>March 5, 2026</time>
+      <h2><a href="/blog/voice-input">Voice Input: Code by Talking to Your Terminal</a></h2>
+      <p>
+        KCode v2.0 adds voice input with local speech-to-text. Dictate code changes,
+        ask questions, and control your workflow hands-free. Works offline.
+      </p>
+      <div class="tags"><span>feature</span><span>voice</span><span>accessibility</span></div>
+    </article>
+  </section>
+
+  <style>
+    .blog { padding: 2rem 0 4rem; max-width: 800px; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .post {
+      border-bottom: 1px solid #333;
+      padding: 1.5rem 0;
+    }
+    .post:last-child { border-bottom: none; }
+    .post time { color: #888; font-size: 0.85rem; }
+    .post h2 { margin: 0.5rem 0; font-size: 1.3rem; }
+    .post h2 a { color: #e0e0e0; text-decoration: none; }
+    .post h2 a:hover { color: #7c8cf8; }
+    .post p { color: #aaa; line-height: 1.6; }
+    .tags { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    .tags span {
+      background: #1a1a2e;
+      color: #7c8cf8;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+  </style>
+</Base>

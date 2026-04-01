@@ -139,7 +139,9 @@ function generatePlaywrightScript(input: Record<string, unknown>): string {
 
     case "evaluate":
       if (!script) throw new Error("script is required for evaluate action");
-      // Pass script as a string to page.evaluate to prevent Node.js context escape
+      // SECURITY: new Function() runs inside Playwright's browser sandbox (page.evaluate),
+      // NOT in Node.js. The browser context is isolated from the host. JSON.stringify prevents
+      // breaking out of the string literal. This is safe by design — equivalent to DevTools console.
       lines.push(`    const __script = ${JSON.stringify(script)};`);
       lines.push(
         `    const result = await page.evaluate((__s) => { return new Function(__s)(); }, __script);`,

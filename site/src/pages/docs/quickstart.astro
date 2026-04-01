@@ -1,0 +1,103 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Quickstart — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Quickstart</span>
+    </nav>
+
+    <h1>Quickstart Guide</h1>
+
+    <h2>1. Install KCode</h2>
+    <pre><code># One-line install (Linux / macOS)
+curl -fsSL https://kulvex.ai/install.sh | bash
+
+# Or via Homebrew
+brew install astrolexis/tap/kcode
+
+# Or via npm
+npm install -g kcode</code></pre>
+
+    <h2>2. Choose Your Model</h2>
+    <p>KCode works with local models or cloud APIs. Run the setup wizard:</p>
+    <pre><code>kcode setup</code></pre>
+    <p>The wizard detects your hardware (CPU, GPU, RAM) and recommends the best model. Options:</p>
+    <ul>
+      <li><strong>Local (recommended for privacy)</strong>: Downloads a GGUF model optimized for your GPU</li>
+      <li><strong>Cloud API</strong>: Use Anthropic, OpenAI, Gemini, Groq, DeepSeek, or Together AI</li>
+      <li><strong>Ollama</strong>: If you already have Ollama installed, KCode auto-detects your models</li>
+    </ul>
+
+    <h2>3. Start Coding</h2>
+    <pre><code># Interactive mode
+kcode
+
+# Single prompt
+kcode "fix the failing tests in src/utils.ts"
+
+# From a git PR
+kcode --from-pr 42</code></pre>
+
+    <h2>4. Key Shortcuts</h2>
+    <table>
+      <thead><tr><th>Action</th><th>Key</th></tr></thead>
+      <tbody>
+        <tr><td>Send message</td><td>Enter</td></tr>
+        <tr><td>Multi-line input</td><td>Shift+Enter</td></tr>
+        <tr><td>Abort current request</td><td>Esc</td></tr>
+        <tr><td>Compact conversation</td><td>/compact</td></tr>
+        <tr><td>Create a plan</td><td>/plan</td></tr>
+        <tr><td>Search codebase</td><td>/search &lt;query&gt;</td></tr>
+        <tr><td>Pin file to context</td><td>/pin &lt;file&gt;</td></tr>
+        <tr><td>Toggle vim mode</td><td>/vim</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. Next Steps</h2>
+    <ul>
+      <li><a href="/docs/tools">Explore the 46+ built-in tools</a></li>
+      <li><a href="/docs/slash-commands">Browse 152+ slash commands</a></li>
+      <li><a href="/docs/plugins">Install plugins from the marketplace</a></li>
+      <li><a href="/docs/configuration">Customize your configuration</a></li>
+      <li><a href="/pro">Upgrade to Pro for unlimited sessions</a></li>
+    </ul>
+
+    <nav class="doc-nav">
+      <a href="/docs">&larr; Back to Docs</a>
+      <a href="/docs/installation">Installation &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 800px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    h1 { margin-bottom: 1.5rem; }
+    h2 { margin-top: 2rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    pre {
+      background: #0d1117;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 0.75rem 0;
+    }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 1rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    ul { margin: 0.75rem 0; padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #7c8cf8; }
+    .doc-nav {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid #333;
+    }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>

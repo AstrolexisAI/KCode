@@ -1,0 +1,123 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Documentation — KCode">
+  <section class="container docs">
+    <h1>Documentation</h1>
+    <p class="subtitle">Everything you need to get started with KCode.</p>
+
+    <div class="docs-grid">
+      <!-- Getting Started -->
+      <div class="doc-card">
+        <h2>Getting Started</h2>
+        <ul>
+          <li><a href="/docs/quickstart">Quickstart Guide</a></li>
+          <li><a href="/docs/installation">Installation</a></li>
+          <li><a href="/docs/first-session">Your First Session</a></li>
+          <li><a href="/docs/configuration">Configuration</a></li>
+        </ul>
+      </div>
+
+      <!-- Core Concepts -->
+      <div class="doc-card">
+        <h2>Core Concepts</h2>
+        <ul>
+          <li><a href="/docs/conversation-loop">Conversation Loop</a></li>
+          <li><a href="/docs/tools">Built-in Tools (46+)</a></li>
+          <li><a href="/docs/slash-commands">Slash Commands (152+)</a></li>
+          <li><a href="/docs/permissions">Permissions & Safety</a></li>
+        </ul>
+      </div>
+
+      <!-- Models -->
+      <div class="doc-card">
+        <h2>Models & Providers</h2>
+        <ul>
+          <li><a href="/docs/local-models">Local Models (llama.cpp, Ollama)</a></li>
+          <li><a href="/docs/cloud-providers">Cloud APIs (Anthropic, OpenAI, etc.)</a></li>
+          <li><a href="/docs/model-setup">Model Setup Wizard</a></li>
+          <li><a href="/docs/multi-gpu">Multi-GPU Configuration</a></li>
+        </ul>
+      </div>
+
+      <!-- Advanced -->
+      <div class="doc-card">
+        <h2>Advanced</h2>
+        <ul>
+          <li><a href="/docs/plugins">Plugin System</a></li>
+          <li><a href="/docs/hooks">Hooks (25 events)</a></li>
+          <li><a href="/docs/mcp">MCP Servers</a></li>
+          <li><a href="/docs/swarm">Multi-Agent Swarm</a></li>
+        </ul>
+      </div>
+
+      <!-- IDE Integration -->
+      <div class="doc-card">
+        <h2>IDE Integration</h2>
+        <ul>
+          <li><a href="/docs/vscode">VS Code Extension</a></li>
+          <li><a href="/docs/jetbrains">JetBrains Plugin</a></li>
+          <li><a href="/docs/neovim">Neovim Plugin</a></li>
+          <li><a href="/docs/http-api">HTTP API</a></li>
+        </ul>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="doc-card">
+        <h2>Enterprise</h2>
+        <ul>
+          <li><a href="/docs/enterprise-sso">SSO (SAML / OIDC)</a></li>
+          <li><a href="/docs/enterprise-policy">Policy Enforcement</a></li>
+          <li><a href="/docs/enterprise-audit">Audit Logging</a></li>
+          <li><a href="/docs/enterprise-admin">Admin Console</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- API Reference -->
+    <section class="api-ref">
+      <h2>API Reference</h2>
+      <p>Full reference for the KCode HTTP API, plugin SDK, and configuration options.</p>
+      <div class="ctas">
+        <a href="/docs/api-reference" class="btn btn-secondary">API Reference</a>
+        <a href="/docs/plugin-sdk" class="btn btn-secondary">Plugin SDK</a>
+        <a href="/docs/cli-reference" class="btn btn-secondary">CLI Reference</a>
+      </div>
+    </section>
+  </section>
+
+  <style>
+    .docs { padding: 2rem 0 4rem; }
+    .docs h1 { margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .docs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+    .doc-card {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 1.5rem;
+    }
+    .doc-card h2 {
+      font-size: 1.2rem;
+      margin-bottom: 0.75rem;
+      color: #e0e0e0;
+    }
+    .doc-card ul { list-style: none; padding: 0; }
+    .doc-card li { margin-bottom: 0.5rem; }
+    .doc-card a {
+      color: #7c8cf8;
+      text-decoration: none;
+    }
+    .doc-card a:hover { text-decoration: underline; }
+    .api-ref { text-align: center; padding: 2rem 0; }
+    .api-ref h2 { margin-bottom: 0.5rem; }
+    .api-ref p { color: #888; margin-bottom: 1rem; }
+    .ctas { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+  </style>
+</Base>
