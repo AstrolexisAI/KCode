@@ -31,6 +31,10 @@ export interface EnsembleConfig {
   minResponses: number;
   /** When to trigger ensemble mode */
   triggerOn: EnsembleTrigger;
+  /** Max estimated cost (USD) before skipping ensemble and using single model */
+  maxCostUsd?: number;
+  /** Whether to track inter-model agreement rates for adaptive triggering */
+  trackAgreement?: boolean;
 }
 
 // ─── Candidate Response ─────────────────────────────────────────
@@ -54,6 +58,61 @@ export interface EnsembleResult {
   candidates: CandidateResponse[];
   /** Explanation of why this response was selected */
   reasoning: string;
+  /** Total estimated cost of this ensemble run (USD) */
+  estimatedCostUsd?: number;
+  /** Whether candidates agreed (for adaptive triggering) */
+  candidatesAgreed?: boolean;
+}
+
+// ─── Cost Estimation ───────────────────────────────────────────
+
+export interface ModelCostRate {
+  /** Cost per 1K input tokens in USD */
+  inputPer1k: number;
+  /** Cost per 1K output tokens in USD */
+  outputPer1k: number;
+}
+
+/** Default cost rates for common models (per 1K tokens) */
+export const MODEL_COST_RATES: Record<string, ModelCostRate> = {
+  // Anthropic
+  "claude-sonnet-4-5-20250514": { inputPer1k: 0.003, outputPer1k: 0.015 },
+  "claude-haiku-3-5-20241022": { inputPer1k: 0.0008, outputPer1k: 0.004 },
+  // OpenAI
+  "gpt-4o": { inputPer1k: 0.0025, outputPer1k: 0.01 },
+  "gpt-4o-mini": { inputPer1k: 0.00015, outputPer1k: 0.0006 },
+  // Gemini
+  "gemini-2.5-flash": { inputPer1k: 0.00015, outputPer1k: 0.0006 },
+  "gemini-2.5-pro": { inputPer1k: 0.00125, outputPer1k: 0.01 },
+  // DeepSeek
+  "deepseek-chat": { inputPer1k: 0.00014, outputPer1k: 0.00028 },
+  // Local models — free
+  "default": { inputPer1k: 0, outputPer1k: 0 },
+};
+
+/** Estimate cost for a single model call */
+export function estimateModelCost(
+  model: string,
+  inputTokens: number,
+  estimatedOutputTokens: number,
+): number {
+  // Find cost rate: exact match, then prefix match, then default
+  const rate = MODEL_COST_RATES[model]
+    ?? Object.entries(MODEL_COST_RATES).find(([k]) => model.startsWith(k))?.[1]
+    ?? MODEL_COST_RATES["default"]!;
+  return (inputTokens / 1000) * rate.inputPer1k + (estimatedOutputTokens / 1000) * rate.outputPer1k;
+}
+
+/** Estimate total cost for an ensemble run */
+export function estimateEnsembleCost(
+  models: string[],
+  inputTokens: number,
+  estimatedOutputTokens: number,
+): number {
+  return models.reduce(
+    (sum, model) => sum + estimateModelCost(model, inputTokens, estimatedOutputTokens),
+    0,
+  );
 }
 
 // ─── Specialization Config ──────────────────────────────────────

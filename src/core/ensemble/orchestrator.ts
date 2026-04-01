@@ -9,7 +9,7 @@ import type {
   EnsembleTrigger,
   ModelExecutor,
 } from "./types";
-import { DEFAULT_ENSEMBLE_CONFIG } from "./types";
+import { DEFAULT_ENSEMBLE_CONFIG, estimateEnsembleCost } from "./types";
 import { executeStrategy } from "./strategies";
 import { classifyTask, type TaskType } from "../router";
 import { log } from "../logger";
@@ -117,11 +117,38 @@ export class EnsembleOrchestrator {
   }
 
   /**
-   * Run ensemble only if trigger conditions are met.
+   * Estimate the cost of running the ensemble on the given messages.
+   * Returns estimated cost in USD.
+   */
+  estimateCost(inputTokens: number, estimatedOutputTokens: number = 1000): number {
+    return estimateEnsembleCost(this.config.models, inputTokens, estimatedOutputTokens);
+  }
+
+  /**
+   * Check if the estimated cost exceeds the configured threshold.
+   * Returns true if the ensemble should be skipped due to cost.
+   */
+  wouldExceedCostLimit(inputTokens: number, estimatedOutputTokens: number = 1000): boolean {
+    if (!this.config.maxCostUsd) return false;
+    const estimated = this.estimateCost(inputTokens, estimatedOutputTokens);
+    if (estimated > this.config.maxCostUsd) {
+      log.info("ensemble", `Skipping ensemble: estimated cost $${estimated.toFixed(4)} exceeds limit $${this.config.maxCostUsd}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Run ensemble only if trigger conditions are met and cost is within limits.
    * Returns null if ensemble was not triggered (caller should use single-model).
    */
-  async tryRun(messages: Message[], userMessage: string): Promise<EnsembleResult | null> {
+  async tryRun(messages: Message[], userMessage: string, inputTokens?: number): Promise<EnsembleResult | null> {
     if (!this.shouldTrigger(userMessage)) {
+      return null;
+    }
+
+    // Cost gate: skip ensemble if estimated cost exceeds threshold
+    if (inputTokens && this.wouldExceedCostLimit(inputTokens)) {
       return null;
     }
 
