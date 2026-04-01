@@ -14,6 +14,8 @@
     "dev": "bun --watch run src/index.ts",
     "build": "bun run build.ts",
     "build:dev": "bun run build.ts --dev",
+    "build:web": "cd src/web && bunx vite build",
+    "dev:web": "cd src/web && bunx vite",
     "typecheck": "bun run --bun tsc --noEmit",
     "test": "bun test",
     "version:patch": "bun run --bun npm version patch",

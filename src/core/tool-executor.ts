@@ -331,6 +331,15 @@ export async function* executeToolsSequential(
     // Intention Engine: Record action for post-task evaluation
     try { getIntentionEngine().recordAction(call.name, effectiveInput, result.content, result.is_error); } catch (err) { log.debug("intention", "Failed to record action for " + call.name + ": " + err); }
 
+    // Auto-pin: Track file accesses for intelligent auto-pinning
+    if (!result.is_error && typeof effectiveInput.file_path === "string") {
+      try {
+        const { getAutoPinManager } = await import("./auto-pin.js");
+        const isEdit = call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit";
+        getAutoPinManager(ctx.config.workingDirectory ?? process.cwd()).recordAccess(effectiveInput.file_path as string, isEdit);
+      } catch (err) { log.debug("auto-pin", `Failed to record access: ${err}`); }
+    }
+
     // LSP: notify file change and append diagnostics to result
     if (!result.is_error && (call.name === "Write" || call.name === "Edit")) {
       try {
