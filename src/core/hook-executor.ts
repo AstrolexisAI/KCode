@@ -224,6 +224,17 @@ export async function executeHookHttp(
     return { exitCode: 1, stdout: "", stderr: "HTTP hook missing url" };
   }
 
+  // Enforce network policy — check if the webhook URL is allowed
+  const { loadTeamPolicy, enforceWebhookPolicy } = await import("./enterprise/policy.js");
+  const policy = loadTeamPolicy();
+  if (policy) {
+    const netResult = enforceWebhookPolicy(action.url, policy);
+    if (!netResult.allowed) {
+      log.warn("hooks", `Webhook blocked by network policy: ${action.url} — ${netResult.reason}`);
+      return { exitCode: 1, stdout: "", stderr: `Webhook blocked: ${netResult.reason}` };
+    }
+  }
+
   // Validate URL protocol
   let parsed: URL;
   try {

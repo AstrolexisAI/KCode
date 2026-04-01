@@ -42,8 +42,8 @@ export class OfflineError extends Error {
 
 /**
  * Drop-in replacement for `fetch()` that blocks non-local requests
- * when offline mode is active. Import this instead of using global fetch
- * in modules that make outgoing HTTP calls.
+ * when offline mode is active and enforces network policy.
+ * Import this instead of using global fetch in modules that make outgoing HTTP calls.
  */
 export async function offlineAwareFetch(
   url: string | URL | Request,
@@ -56,6 +56,21 @@ export async function offlineAwareFetch(
     throw new OfflineError(
       `Blocked: ${urlStr} (offline mode active). Use a local resource or disable offline mode.`,
     );
+  }
+
+  // Enforce network policy (if configured)
+  try {
+    const { loadTeamPolicy, enforceNetworkPolicy } = await import("../enterprise/policy.js");
+    const policy = loadTeamPolicy();
+    if (policy?.network) {
+      const result = enforceNetworkPolicy(urlStr, policy);
+      if (!result.allowed) {
+        throw new OfflineError(`Blocked by network policy: ${urlStr} — ${result.reason}`);
+      }
+    }
+  } catch (err) {
+    if (err instanceof OfflineError) throw err;
+    // Policy loading failure shouldn't break fetch — log and continue
   }
 
   return fetch(url, init);

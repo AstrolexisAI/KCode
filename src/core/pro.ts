@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadUserSettingsRaw } from "./config.js";
+import { checkOfflineLicense, hasLicenseFeature } from "./license";
 import { log } from "./logger";
 import { kcodeHome, kcodePath } from "./paths";
 
@@ -173,6 +174,16 @@ export async function isPro(): Promise<boolean> {
 
 async function _doValidation(): Promise<boolean> {
   try {
+    // ── Priority 1: Offline license file (JWT) ──────────────────
+    // Check for a signed license file first — this never requires network.
+    // Supports air-gapped/on-prem deployments with permanent offline Pro.
+    const licenseResult = checkOfflineLicense();
+    if (licenseResult.valid) {
+      log.debug("pro", `Activated via offline license: ${licenseResult.claims!.sub}`);
+      return true;
+    }
+
+    // ── Priority 2: Online key validation ───────────────────────
     const settings = await loadUserSettingsRaw();
     const key = (settings as Record<string, unknown>).proKey;
     // Accept kcode_pro_ keys, klx_lic_ keys (KULVEX licenses), and kcode_trial_ keys
@@ -367,6 +378,7 @@ export async function requirePro(feature: ProFeature): Promise<void> {
         `\n` +
         `  This feature requires KCode Pro ($19/mo).\n` +
         `  Activate: kcode pro activate <your-pro-key>\n` +
+        `  License file: place a signed JWT at ~/.kcode/license.jwt (air-gap/on-prem)\n` +
         `  Get a key: https://kulvex.ai/pro\n`,
     );
   }
@@ -388,6 +400,7 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   console.log();
   console.log(`  ${C.dim}This feature requires KCode Pro ($19/mo).${C.reset}`);
   console.log(`  ${C.dim}Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}`);
+  console.log(`  ${C.dim}Air-gap: place a signed license at ~/.kcode/license.jwt${C.reset}`);
   console.log();
 
   // Prompt for key inline
