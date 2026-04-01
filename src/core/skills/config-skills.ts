@@ -122,4 +122,11 @@ export const configSkills: SkillDefinition[] = [
     args: ["on | off | status"],
     template: `__builtin_telemetry__`,
   },
+  {
+    name: "rag",
+    description: "Manage the RAG (Retrieval-Augmented Generation) index",
+    aliases: ["rag-index"],
+    args: ["status | rebuild | toggle"],
+    template: `__builtin_rag__`,
+  },
 ];

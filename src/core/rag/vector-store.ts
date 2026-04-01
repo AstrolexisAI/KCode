@@ -1,9 +1,12 @@
 // KCode - Vector Store
 // Stores embeddings in SQLite using BLOB for vectors.
 // Brute-force cosine similarity search — sufficient for <100K chunks (<100ms).
+// Also exports RagVectorStore: a simplified vector store using JSON-encoded embeddings
+// in a TEXT column, used by the code-chunker → rag-engine pipeline.
 
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import type { CodeChunk, SearchFilters, SearchResult, VectorStoreStats } from "./types";
+import type { CodeChunk as SimpleCodeChunk } from "./code-chunker";
 
 // ─── Cosine Similarity ─────────────────────────────────────────
 
@@ -185,6 +188,173 @@ export class VectorStore {
   /** Get the number of stored chunks */
   count(): number {
     const row = this.db.prepare("SELECT COUNT(*) as cnt FROM rag_chunks").get() as { cnt: number };
+    return row.cnt;
+  }
+}
+
+// ─── RagVectorStore ─────────────────────────────────────────────
+// Simplified vector store using the code-chunker pipeline.
+// Stores embeddings as JSON text instead of BLOB, with checksums for
+// incremental indexing. Used by RagEngine.
+
+export interface RagSearchResult {
+  id: number;
+  filepath: string;
+  lineStart: number;
+  lineEnd: number;
+  chunkType: string;
+  name: string;
+  content: string;
+  score: number;
+}
+
+export interface RagIndexedFileInfo {
+  filepath: string;
+  checksum: string;
+  indexedAt: string;
+}
+
+/**
+ * Cosine distance between two number[] vectors.
+ * Returns 0 for identical, 2 for opposite. 1 for degenerate inputs.
+ */
+export function cosineDistance(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 1;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denom === 0) return 1;
+  return 1 - dot / denom;
+}
+
+/**
+ * SQLite-backed vector store using JSON-encoded float arrays in a TEXT column.
+ * Designed for the code-chunker → rag-engine pipeline with incremental indexing.
+ */
+export class RagVectorStore {
+  private db: Database;
+
+  constructor(db: Database) {
+    this.db = db;
+    this.initSchema();
+  }
+
+  private initSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS rag_vectors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        filepath TEXT NOT NULL,
+        line_start INTEGER NOT NULL,
+        line_end INTEGER NOT NULL,
+        chunk_type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        embedding TEXT NOT NULL,
+        checksum TEXT NOT NULL,
+        indexed_at TEXT NOT NULL
+      )
+    `);
+    this.db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_rag_vectors_filepath ON rag_vectors(filepath)",
+    );
+  }
+
+  /** Insert a chunk with its embedding. */
+  insert(chunk: SimpleCodeChunk, embedding: number[], checksum: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO rag_vectors (filepath, line_start, line_end, chunk_type, name, content, embedding, checksum, indexed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        chunk.filepath,
+        chunk.lineStart,
+        chunk.lineEnd,
+        chunk.type,
+        chunk.name,
+        chunk.content,
+        JSON.stringify(embedding),
+        checksum,
+        new Date().toISOString(),
+      );
+  }
+
+  /** Search for the top-K most similar chunks to a query embedding. */
+  search(queryEmbedding: number[], topK: number = 10): RagSearchResult[] {
+    const rows = this.db
+      .prepare(
+        "SELECT id, filepath, line_start, line_end, chunk_type, name, content, embedding FROM rag_vectors",
+      )
+      .all() as {
+      id: number;
+      filepath: string;
+      line_start: number;
+      line_end: number;
+      chunk_type: string;
+      name: string;
+      content: string;
+      embedding: string;
+    }[];
+
+    const scored: RagSearchResult[] = [];
+    for (const row of rows) {
+      let stored: number[];
+      try {
+        stored = JSON.parse(row.embedding);
+      } catch {
+        continue;
+      }
+      const score = 1 - cosineDistance(queryEmbedding, stored);
+      scored.push({
+        id: row.id,
+        filepath: row.filepath,
+        lineStart: row.line_start,
+        lineEnd: row.line_end,
+        chunkType: row.chunk_type,
+        name: row.name,
+        content: row.content,
+        score,
+      });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topK);
+  }
+
+  /** Delete all vectors for a given filepath. */
+  deleteByFilepath(filepath: string): void {
+    this.db.prepare("DELETE FROM rag_vectors WHERE filepath = ?").run(filepath);
+  }
+
+  /** Get info about all indexed files. */
+  getIndexedFiles(): RagIndexedFileInfo[] {
+    return this.db
+      .prepare(
+        "SELECT DISTINCT filepath, checksum, indexed_at FROM rag_vectors GROUP BY filepath ORDER BY indexed_at DESC",
+      )
+      .all() as RagIndexedFileInfo[];
+  }
+
+  /** Check if a file's index is stale (checksum differs or not indexed). */
+  isFileStale(filepath: string, currentChecksum: string): boolean {
+    const row = this.db
+      .prepare("SELECT checksum FROM rag_vectors WHERE filepath = ? LIMIT 1")
+      .get(filepath) as { checksum: string } | undefined;
+    if (!row) return true;
+    return row.checksum !== currentChecksum;
+  }
+
+  /** Total number of vectors in the store. */
+  get count(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) as cnt FROM rag_vectors")
+      .get() as { cnt: number };
     return row.cnt;
   }
 }
