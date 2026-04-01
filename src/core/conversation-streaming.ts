@@ -9,6 +9,50 @@ import type { ContentBlock, StreamEvent, TokenUsage, ToolUseBlock } from "./type
 import type { SSEChunk } from "./sse-parser";
 import { log } from "./logger";
 
+// ─── Repetition Detection ──────────────────────────────────────
+// Detects when a model enters a generation loop (repeating the same
+// phrase/pattern). Common with local quantized models.
+
+const REPETITION_CHECK_INTERVAL = 500; // check every N chars of new content
+const MAX_OUTPUT_CHARS = 200_000;      // hard cap: 200K chars (~50K tokens)
+const REPETITION_MIN_PERIOD = 15;      // shortest repeating unit to detect
+const REPETITION_MAX_PERIOD = 500;     // longest repeating unit to detect
+const REPETITION_MIN_TEXT = 200;       // minimum text length before checking
+const REPETITION_CONSECUTIVE = 3;      // require 3 consecutive identical blocks
+
+/**
+ * Detect repeating patterns in generated text by checking if the tail
+ * consists of N consecutive identical blocks (periodicity detection).
+ *
+ * This catches the common local-model failure mode where output degenerates
+ * into "/now, /today, /tomorrow, /yesterday, /now, /today, ..." endlessly.
+ *
+ * Returns the repeated phrase if a loop is detected, null otherwise.
+ */
+export function detectRepetitionLoop(text: string): string | null {
+  if (text.length < REPETITION_MIN_TEXT) return null;
+
+  const maxPeriod = Math.min(REPETITION_MAX_PERIOD, Math.floor(text.length / REPETITION_CONSECUTIVE));
+
+  for (let pLen = REPETITION_MIN_PERIOD; pLen <= maxPeriod; pLen++) {
+    // Check if the last REPETITION_CONSECUTIVE blocks of length pLen are all identical
+    const tail = text.slice(-pLen);
+    let allMatch = true;
+    for (let i = 1; i < REPETITION_CONSECUTIVE; i++) {
+      const start = text.length - (i + 1) * pLen;
+      const block = text.slice(start, start + pLen);
+      if (block !== tail) {
+        allMatch = false;
+        break;
+      }
+    }
+    if (allMatch) {
+      return tail.length > 60 ? tail.slice(0, 60) + "..." : tail;
+    }
+  }
+  return null;
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface StreamAccumulator {
@@ -49,8 +93,13 @@ export async function* processSSEStream(
   const activeToolCalls = new Map<number, { id: string; name: string; argChunks: string[] }>();
   const textChunks: string[] = [];
   let streamedOutputChars = 0;
+  let charsSinceRepCheck = 0;
+  let repetitionAborted = false;
 
   for await (const chunk of cfg.sseStream) {
+    // Hard abort if repetition was already detected (drain remaining chunks)
+    if (repetitionAborted) continue;
+
     switch (chunk.type) {
       case "thinking_delta": {
         if (chunk.thinking) {
@@ -72,9 +121,37 @@ export async function* processSSEStream(
           }
           textChunks.push(chunk.content);
           streamedOutputChars += chunk.content.length;
+          charsSinceRepCheck += chunk.content.length;
           yield { type: "text_delta", text: chunk.content };
           const estimatedTokens = Math.round(streamedOutputChars / CHARS_PER_TOKEN);
           yield { type: "token_count", tokens: estimatedTokens };
+
+          // ── Repetition & runaway detection ──────────────────
+          if (charsSinceRepCheck >= REPETITION_CHECK_INTERVAL) {
+            charsSinceRepCheck = 0;
+
+            // Hard output cap
+            if (streamedOutputChars >= MAX_OUTPUT_CHARS) {
+              log.warn("llm", `Output exceeded ${MAX_OUTPUT_CHARS} chars — aborting generation`);
+              repetitionAborted = true;
+              stopReason = "end_turn";
+              yield { type: "text_delta", text: "\n\n[Output truncated: exceeded maximum length]" };
+              textChunks.push("\n\n[Output truncated: exceeded maximum length]");
+              break;
+            }
+
+            // Repetition loop detection
+            const fullSoFar = textChunks.join("");
+            const repeated = detectRepetitionLoop(fullSoFar);
+            if (repeated) {
+              log.warn("llm", `Repetition loop detected: "${repeated}" — aborting generation`);
+              repetitionAborted = true;
+              stopReason = "end_turn";
+              yield { type: "text_delta", text: `\n\n[Generation stopped: repetition loop detected]` };
+              textChunks.push(`\n\n[Generation stopped: repetition loop detected]`);
+              break;
+            }
+          }
         }
         break;
       }

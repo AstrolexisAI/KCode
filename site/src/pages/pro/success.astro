@@ -1,0 +1,85 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="KCode Pro - Activated" description="Your KCode Pro subscription is active.">
+  <section class="container" style="text-align: center; padding: 5rem 0;">
+    <div id="loading" style="display: block;">
+      <p style="color: var(--text-muted); font-size: 1.25rem;">Loading your Pro key...</p>
+    </div>
+
+    <div id="success" style="display: none; max-width: 560px; margin: 0 auto;">
+      <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">&#9889; KCode Pro Activated</h1>
+      <p style="color: var(--text-muted); margin-bottom: 2rem;">Your Pro features are ready. Here's your key:</p>
+
+      <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: left;">
+        <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 0.5rem;">Pro Key</span>
+        <code id="pro-key" style="font-size: 0.85rem; color: var(--accent); word-break: break-all; user-select: all;"></code>
+      </div>
+
+      <div style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 1.5rem 0; text-align: left;">
+        <code id="activate-cmd" style="color: var(--green);"></code>
+      </div>
+
+      <ol style="text-align: left; color: var(--text-muted); margin: 1.5rem 0; padding-left: 1.5rem;">
+        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text);">Copy</strong> the key above</li>
+        <li style="margin-bottom: 0.5rem;"><strong style="color: var(--text);">Run</strong> the command in your terminal</li>
+        <li><strong style="color: var(--text);">Done</strong> — all Pro features are unlocked</li>
+      </ol>
+
+      <p style="color: var(--text-muted); font-size: 0.85rem;">
+        This key was also sent to your email.<br/>
+        Manage subscription: <code>kcode pro manage</code>
+      </p>
+    </div>
+
+    <div id="pending" style="display: none; max-width: 480px; margin: 0 auto;">
+      <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">&#9203; Almost there...</h1>
+      <p style="color: var(--orange); margin-bottom: 1rem;" id="pending-msg">Your key is being generated.</p>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">
+        Check your email shortly for the Pro key.<br/>
+        <a href="/pro">Back to Pro page</a>
+      </p>
+    </div>
+  </section>
+
+  <script is:inline>
+    const API_BASE = 'https://kulvex.ai';
+
+    async function loadKey() {
+      const params = new URLSearchParams(window.location.search);
+      const sessionId = params.get('session_id');
+
+      if (!sessionId) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('pending').style.display = 'block';
+        document.getElementById('pending-msg').textContent = 'Missing session ID. Check your email for the Pro key.';
+        return;
+      }
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/pro/success?session_id=${sessionId}`);
+        const html = await resp.text();
+
+        // Parse the key from the response
+        const match = html.match(/id="proKey">([^<]+)</);
+        if (match) {
+          const key = match[1];
+          document.getElementById('pro-key').textContent = key;
+          document.getElementById('activate-cmd').textContent = `kcode pro activate ${key}`;
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('success').style.display = 'block';
+        } else {
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('pending').style.display = 'block';
+        }
+      } catch (err) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('pending').style.display = 'block';
+        document.getElementById('pending-msg').textContent = 'Could not load key. Check your email.';
+      }
+    }
+
+    loadKey();
+  </script>
+</Base>

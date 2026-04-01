@@ -9,11 +9,91 @@ import Base from "../layouts/Base.astro";
       Advanced features for professional developers. Supercharge your workflow with
       multi-agent orchestration, intelligent indexing, and deep analytics.
     </p>
-    <div class="ctas">
-      <a href="https://kulvex.ai/checkout" class="btn btn-primary">Start Pro &mdash; $19/mo</a>
+  </section>
+
+  <!-- Pricing tiers -->
+  <section class="container">
+    <div class="pricing-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 960px; margin: 0 auto;">
+
+      <!-- Free -->
+      <div class="pricing-card">
+        <h3>Free</h3>
+        <div class="price">$0<span>/mo</span></div>
+        <ul>
+          <li>46 built-in tools</li>
+          <li>152+ slash commands</li>
+          <li>Local LLM support</li>
+          <li>200 sessions/month</li>
+          <li>64K context window</li>
+          <li>7-day transcript search</li>
+          <li>Community support</li>
+        </ul>
+        <a href="/download" class="btn btn-secondary" style="width: 100%;">Download</a>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card featured">
+        <h3>Pro</h3>
+        <div class="price">$19<span>/mo</span></div>
+        <ul>
+          <li>Everything in Free</li>
+          <li>Unlimited sessions</li>
+          <li>Unlimited context window</li>
+          <li>8 parallel swarm agents</li>
+          <li>Full transcript history</li>
+          <li>HTTP API server</li>
+          <li>Browser automation</li>
+          <li>Smart model routing</li>
+          <li>Cloud failover</li>
+          <li>Deploy automation</li>
+          <li>Distilled learning</li>
+          <li>Image generation</li>
+          <li>Analytics export</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="btn btn-primary checkout-btn" data-plan="pro" style="width: 100%;">Start Pro</button>
+      </div>
+
+      <!-- Team -->
+      <div class="pricing-card">
+        <h3>Team</h3>
+        <div class="price">$49<span>/seat/mo</span></div>
+        <ul>
+          <li>Everything in Pro</li>
+          <li>Centralized admin dashboard</li>
+          <li>Team policy enforcement</li>
+          <li>SSO (SAML 2.0 + OIDC)</li>
+          <li>Audit log export</li>
+          <li>PII redaction</li>
+          <li>Dedicated Slack support</li>
+          <li>24h response SLA</li>
+        </ul>
+        <button class="btn btn-primary checkout-btn" data-plan="team" style="width: 100%;">Start Team</button>
+      </div>
+
     </div>
   </section>
 
+  <!-- Email modal -->
+  <div id="checkout-modal" class="modal" style="display:none;">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h3 id="modal-title">Start KCode Pro</h3>
+      <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Enter your email to continue to payment.</p>
+      <form id="checkout-form">
+        <input type="hidden" id="checkout-plan" name="plan" value="pro" />
+        <input type="email" id="checkout-email" name="email" placeholder="you@company.com" required
+          style="width: 100%; padding: 0.75rem 1rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 1rem; margin-bottom: 1rem;" />
+        <button type="submit" class="btn btn-primary" style="width: 100%;" id="checkout-submit">
+          Continue to payment
+        </button>
+        <p id="checkout-error" style="color: var(--red); margin-top: 0.75rem; font-size: 0.9rem; display: none;"></p>
+      </form>
+      <button class="modal-close" onclick="document.getElementById('checkout-modal').style.display='none'">&times;</button>
+    </div>
+  </div>
+
+  <!-- Feature details -->
   <section class="container">
     <h2>Pro Features</h2>
 
@@ -21,93 +101,244 @@ import Base from "../layouts/Base.astro";
       <div class="pricing-card">
         <h3>Multi-Agent Swarm</h3>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">
-          Spawn parallel sub-agents to divide and conquer complex tasks.
+          Spawn up to 8 parallel sub-agents to divide and conquer complex tasks.
           Each agent works in its own context, coordinating through message passing.
         </p>
       </div>
 
       <div class="pricing-card">
-        <h3>Codebase RAG Indexing</h3>
+        <h3>Smart Model Routing</h3>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">
-          Automatically index your codebase for semantic search.
-          The AI finds relevant code faster without you having to point it to files.
+          Auto-select the best model per task type. Simple queries use fast models,
+          complex reasoning routes to larger ones. Saves tokens automatically.
         </p>
       </div>
 
       <div class="pricing-card">
-        <h3>Advanced Analytics</h3>
+        <h3>Browser Automation</h3>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">
-          Detailed breakdowns of token usage, tool frequency, cost tracking,
-          and session performance metrics.
+          Playwright-powered browser automation. Let KCode interact with web UIs,
+          test web apps, and scrape documentation for context.
         </p>
       </div>
 
       <div class="pricing-card">
-        <h3>Adaptive Effort</h3>
+        <h3>Deploy Automation</h3>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">
-          Ensemble cost-awareness that automatically adjusts model effort levels
-          based on task complexity, saving tokens on simple queries.
+          One-command deployments to Docker, Vercel, Fly.io, or SSH targets.
+          KCode builds, tests, and deploys — all from your terminal.
         </p>
       </div>
 
       <div class="pricing-card">
-        <h3>Auto-Pin Context</h3>
+        <h3>Cloud Failover</h3>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">
-          Intelligently detects and pins the most relevant files to your conversation
-          context so the AI always has the right code in view.
+          Multi-provider failover chains. If your primary LLM is down, KCode
+          automatically routes to a backup — zero downtime coding.
         </p>
       </div>
 
       <div class="pricing-card">
-        <h3>Priority Support</h3>
+        <h3>Distilled Learning</h3>
         <p style="color: var(--text-muted); margin-top: 0.5rem;">
-          Get help faster. Pro users receive priority responses on GitHub issues
-          and access to a dedicated support channel.
+          KCode learns from your coding patterns across sessions. Accepted edits
+          train a personal LoRA adapter that improves suggestions over time.
         </p>
       </div>
     </div>
   </section>
 
+  <!-- Free trial CTA -->
+  <section class="container" style="text-align: center; padding-bottom: 2rem;">
+    <h2>Try Pro free for 14 days</h2>
+    <p style="color: var(--text-muted); max-width: 480px; margin: 0 auto 1.5rem;">
+      No credit card required. Get a trial key and unlock all Pro features instantly.
+    </p>
+    <form id="trial-form" style="max-width: 400px; margin: 0 auto; display: flex; gap: 0.5rem;">
+      <input type="email" id="trial-email" placeholder="you@company.com" required
+        style="flex: 1; padding: 0.75rem 1rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 1rem;" />
+      <button type="submit" class="btn btn-secondary" id="trial-submit">Get trial key</button>
+    </form>
+    <p id="trial-result" style="margin-top: 1rem; font-size: 0.9rem; display: none;"></p>
+  </section>
+
+  <!-- How to activate -->
   <section class="container">
     <h2>Activate Pro</h2>
     <div class="install-options">
       <div>
-        <h3>1. Purchase a license</h3>
+        <h3>1. Get your key</h3>
         <p style="color: var(--text-muted);">
-          Subscribe at <a href="https://kulvex.ai/checkout">kulvex.ai/checkout</a> to receive your Pro key.
+          Subscribe above or request a trial. Your Pro key will be shown on screen and sent to your email.
         </p>
       </div>
       <div>
         <h3>2. Activate in KCode</h3>
         <pre><code>kcode pro activate YOUR_PRO_KEY</code></pre>
-        <p style="color: var(--text-muted);">Your key is stored locally and never sent to third parties.</p>
+        <p style="color: var(--text-muted);">Or run <code>kcode pro checkout</code> to open this page directly from your terminal.</p>
+      </div>
+      <div>
+        <h3>3. Manage your subscription</h3>
+        <pre><code>kcode pro manage</code></pre>
+        <p style="color: var(--text-muted);">Update payment method, cancel, or change plans from the billing portal.</p>
       </div>
     </div>
   </section>
 
+  <!-- FAQ -->
   <section class="container">
     <h2>FAQ</h2>
     <div class="faq">
       <details>
         <summary>Can I try Pro features before buying?</summary>
-        <p>Yes. Run <code>kcode pro trial</code> to activate a 14-day free trial with full access to all Pro features.</p>
+        <p>Yes. Enter your email above or run <code>kcode pro trial</code> to activate a 14-day free trial with full access to all Pro features. No credit card required.</p>
       </details>
       <details>
         <summary>Does Pro require an internet connection?</summary>
-        <p>Only for license validation (once per session). All Pro features work fully offline with local models after validation.</p>
+        <p>Only for license validation (once per day, cached for 24h offline). All Pro features work fully offline with local models after validation.</p>
       </details>
       <details>
         <summary>Can I use Pro with my own API keys?</summary>
-        <p>Absolutely. Pro enhances KCode's capabilities regardless of which LLM provider you use. Bring your own Anthropic, OpenAI, or any other API key.</p>
+        <p>Absolutely. Pro enhances KCode's capabilities regardless of which LLM provider you use. Bring your own Anthropic, OpenAI, Gemini, Groq, DeepSeek, or any other API key.</p>
       </details>
       <details>
         <summary>What happens if I cancel?</summary>
-        <p>KCode reverts to the free tier. All your data, sessions, and configurations remain intact. You can resubscribe anytime.</p>
+        <p>KCode reverts to the free tier at the end of your billing period. All your data, sessions, and configurations remain intact. You can resubscribe anytime.</p>
       </details>
       <details>
-        <summary>Is there a team discount?</summary>
-        <p>Yes. The Team plan at $49/seat/month includes centralized management. For larger deployments, contact us for Enterprise pricing.</p>
+        <summary>Is there an Enterprise plan?</summary>
+        <p>Yes. For organizations needing SSO, custom SLAs, air-gapped deployment, or compliance packs (GDPR, HIPAA, SOC 2), contact us at <a href="mailto:enterprise@astrolexis.space">enterprise@astrolexis.space</a>.</p>
+      </details>
+      <details>
+        <summary>Can I switch between Pro and Team?</summary>
+        <p>Yes. Use <code>kcode pro manage</code> to open the billing portal where you can upgrade, downgrade, or change plans at any time. Changes are prorated.</p>
+      </details>
+      <details>
+        <summary>What payment methods are accepted?</summary>
+        <p>We accept all major credit and debit cards (Visa, Mastercard, AMEX), Google Pay, Apple Pay, and SEPA direct debit through Stripe.</p>
       </details>
     </div>
   </section>
+
+  <!-- Checkout JS -->
+  <script is:inline>
+    const API_BASE = 'https://kulvex.ai';
+
+    // Checkout modal
+    document.querySelectorAll('.checkout-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const plan = btn.dataset.plan;
+        document.getElementById('checkout-plan').value = plan;
+        document.getElementById('modal-title').textContent =
+          plan === 'team' ? 'Start KCode Team' : 'Start KCode Pro';
+        document.getElementById('checkout-modal').style.display = 'flex';
+        document.getElementById('checkout-email').focus();
+      });
+    });
+
+    // Checkout form submit
+    document.getElementById('checkout-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('checkout-email').value.trim();
+      const plan = document.getElementById('checkout-plan').value;
+      const submitBtn = document.getElementById('checkout-submit');
+      const errorEl = document.getElementById('checkout-error');
+
+      submitBtn.textContent = 'Redirecting...';
+      submitBtn.disabled = true;
+      errorEl.style.display = 'none';
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/pro/checkout-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, plan }),
+        });
+        const data = await resp.json();
+
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error(data.error || 'Failed to create checkout session');
+        }
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'block';
+        submitBtn.textContent = 'Continue to payment';
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Close modal on backdrop click
+    document.querySelector('.modal-backdrop')?.addEventListener('click', () => {
+      document.getElementById('checkout-modal').style.display = 'none';
+    });
+
+    // Trial form
+    document.getElementById('trial-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('trial-email').value.trim();
+      const submitBtn = document.getElementById('trial-submit');
+      const resultEl = document.getElementById('trial-result');
+
+      submitBtn.textContent = 'Generating...';
+      submitBtn.disabled = true;
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/pro/trial`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await resp.json();
+
+        if (data.trial_key) {
+          resultEl.innerHTML = `
+            <span style="color: var(--green);">&#10003; Trial key generated!</span><br/>
+            <code style="font-size: 0.85rem; word-break: break-all; color: var(--orange);">${data.trial_key}</code><br/>
+            <span style="color: var(--text-muted); font-size: 0.85rem;">
+              Run: <code>kcode pro activate ${data.trial_key}</code><br/>
+              Expires: ${new Date(data.expires_at).toLocaleDateString()} (${data.days} days)
+            </span>`;
+          resultEl.style.display = 'block';
+        } else {
+          throw new Error(data.error || 'Failed to create trial');
+        }
+      } catch (err) {
+        resultEl.innerHTML = `<span style="color: var(--red);">${err.message}</span>`;
+        resultEl.style.display = 'block';
+      } finally {
+        submitBtn.textContent = 'Get trial key';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+
+  <!-- Modal styles -->
+  <style>
+    .modal {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-backdrop {
+      position: absolute; inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+    }
+    .modal-content {
+      position: relative; z-index: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      max-width: 440px;
+      width: 90%;
+    }
+    .modal-close {
+      position: absolute; top: 1rem; right: 1rem;
+      background: none; border: none;
+      color: var(--text-muted); font-size: 1.5rem;
+      cursor: pointer; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text); }
+  </style>
 </Base>
