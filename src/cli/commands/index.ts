@@ -26,3 +26,4 @@ export { registerTriggersCommand } from "./triggers";
 export { registerSessionsCommand } from "./sessions";
 export { registerDashboardCommand } from "./dashboard";
 export { registerTemplateCommand } from "./template";
+export { registerWebCommand } from "./web";

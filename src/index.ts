@@ -101,6 +101,7 @@ import {
   registerSessionsCommand,
   registerDashboardCommand,
   registerTemplateCommand,
+  registerWebCommand,
 } from "./cli/commands";
 
 // Version — read from package.json at build time via Bun's JSON import
@@ -304,6 +305,7 @@ registerTriggersCommand(program);
 registerSessionsCommand(program);
 registerDashboardCommand(program);
 registerTemplateCommand(program);
+registerWebCommand(program);
 
 // ─── Parse ──────────────────────────────────────────────────────
 
