@@ -296,7 +296,23 @@ export class ConversationManager {
 
   /** Get the effective max agent turns based on effort level. */
   private getEffectiveMaxTurns(): number {
-    switch (this.config.effortLevel) {
+    // Use configured effort level, or auto-detect from recent messages
+    let level = this.config.effortLevel;
+    if (!level) {
+      try {
+        const { classifyEffort } = require("./effort-classifier") as typeof import("./effort-classifier");
+        const recentUserMsg = this.state.messages
+          .filter((m) => m.role === "user")
+          .map((m) => typeof m.content === "string" ? m.content : "")
+          .pop() ?? "";
+        if (recentUserMsg) {
+          const result = classifyEffort(recentUserMsg);
+          if (result.confidence >= 0.5) level = result.level;
+        }
+      } catch { /* effort-classifier not available, use default */ }
+    }
+
+    switch (level) {
       case "low": return 5;
       case "high": return 40;
       case "max": return 60;
@@ -701,6 +717,46 @@ export class ConversationManager {
         yield { type: "turn_end", stopReason: "end_turn" };
         break;
       }
+
+      // Ensemble: try multi-model consensus if enabled and triggered
+      try {
+        if (this.config.ensemble?.enabled && this.turnCount === 1) {
+          const { EnsembleOrchestrator } = await import("./ensemble/orchestrator.js");
+          const orchestrator = new EnsembleOrchestrator(
+            {
+              execute: async (model, msgs, maxTokens) => {
+                const start = Date.now();
+                const { executeModelRequest: execReq } = await import("./request-builder.js");
+                const stream = await execReq(model, this.config, this.systemPrompt, msgs, this.tools, null);
+                let content = "";
+                for await (const chunk of stream) {
+                  if (chunk.type === "content" && chunk.text) content += chunk.text;
+                }
+                return { content, tokensUsed: Math.round(content.length / 4), durationMs: Date.now() - start };
+              },
+            },
+            { ...this.config.ensemble, enabled: true },
+          );
+
+          const recentText = this.state.messages
+            .filter((m) => m.role === "user")
+            .map((m) => typeof m.content === "string" ? m.content : "")
+            .pop() ?? "";
+
+          const result = await orchestrator.tryRun(this.state.messages, recentText, this.cumulativeUsage.inputTokens);
+          if (result) {
+            // Ensemble produced a response — emit as text deltas
+            for (let i = 0; i < result.finalResponse.length; i += 20) {
+              yield { type: "text_delta" as const, text: result.finalResponse.slice(i, i + 20) };
+            }
+            assistantContent.push({ type: "text", text: result.finalResponse });
+            this.state.messages.push({ role: "assistant", content: result.finalResponse });
+            log.info("ensemble", `Ensemble response via ${result.strategy}: ${result.reasoning}`);
+            yield { type: "turn_end", stopReason: "end_turn" };
+            break;
+          }
+        }
+      } catch (err) { log.debug("ensemble", `Ensemble skipped: ${err}`); }
 
       // Stream the API response with retry logic
       let sseStream: AsyncGenerator<SSEChunk>;

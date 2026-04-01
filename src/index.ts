@@ -1124,6 +1124,13 @@ async function runMain(
     const { getFileWatcher } = await import("./core/file-watcher.js");
     const { getCodebaseIndex } = await import("./core/codebase-index.js");
     fileWatcher = getFileWatcher(cwd);
+    // Initialize RAG auto-indexer (lazy, non-blocking)
+    let ragAutoIndexer: Awaited<ReturnType<typeof import("./core/rag/auto-index")["getRagAutoIndexer"]>> | null = null;
+    try {
+      const { getRagAutoIndexer } = await import("./core/rag/auto-index");
+      ragAutoIndexer = getRagAutoIndexer(cwd);
+    } catch (err) { log.debug("index", `RAG auto-indexer init skipped: ${err}`); }
+
     fileWatcher.start((changes) => {
       // Rebuild codebase index when files change externally
       try {
@@ -1131,6 +1138,9 @@ async function runMain(
         idx.build();
         log.info("watcher", `Re-indexed after ${changes.length} external file change(s)`);
       } catch (err) { log.debug("index", `Failed to re-index after file changes: ${err}`); }
+
+      // Feed changes to RAG auto-indexer for incremental re-indexing
+      ragAutoIndexer?.onFileChanges(changes);
     });
   } catch (err) { log.debug("index", `File watcher initialization failed: ${err}`); }
 
