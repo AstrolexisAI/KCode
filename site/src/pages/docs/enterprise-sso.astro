@@ -19,7 +19,7 @@ import Base from "../../layouts/Base.astro";
 ~/.kcode/enterprise.json</code></pre>
 
     <h2>SAML 2.0</h2>
-    <pre><code>{
+    <pre><code set:html={`{
   "sso": {
     "provider": "saml",
     "entityId": "kcode-enterprise",
@@ -29,17 +29,17 @@ import Base from "../../layouts/Base.astro";
     "allowedDomains": ["yourcompany.com"],
     "forceSSO": true
   }
-}</code></pre>
+}`} /></pre>
     <table>
       <thead><tr><th>Provider</th><th>SSO URL</th></tr></thead>
       <tbody>
         <tr><td>Okta</td><td><code>https://yourorg.okta.com/app/xxx/sso/saml</code></td></tr>
-        <tr><td>Azure AD</td><td><code>https://login.microsoftonline.com/{tenant}/saml2</code></td></tr>
+        <tr><td>Azure AD</td><td><code>{"https://login.microsoftonline.com/{tenant}/saml2"}</code></td></tr>
       </tbody>
     </table>
 
     <h2>OIDC</h2>
-    <pre><code>{
+    <pre><code set:html={`{
   "sso": {
     "provider": "oidc",
     "clientId": "your-client-id",
@@ -50,7 +50,7 @@ import Base from "../../layouts/Base.astro";
     "callbackUrl": "http://localhost:19300/api/auth/oidc/callback",
     "allowedDomains": ["yourcompany.com"]
   }
-}</code></pre>
+}`} /></pre>
     <table>
       <thead><tr><th>Provider</th><th>Issuer</th></tr></thead>
       <tbody>

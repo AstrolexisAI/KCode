@@ -57,7 +57,7 @@ kcode plugin remove kcode-docker</code></pre>
 
     <h2>plugin.json Manifest</h2>
     <p>The manifest declares what the plugin provides:</p>
-    <pre><code>{
+    <pre><code set:html={`{
   "name": "kcode-docker",
   "version": "1.2.0",
   "description": "Docker and Docker Compose management skills",
@@ -101,7 +101,7 @@ kcode plugin remove kcode-docker</code></pre>
   "agents": [
     "agents/container-debugger.md"
   ]
-}</code></pre>
+}`} /></pre>
 
     <h2>Manifest Fields</h2>
     <table>
@@ -167,7 +167,7 @@ kcode plugin publish ./my-plugin</code></pre>
 
     <h3>Hook Match Filters</h3>
     <p>Hooks can use <code>match</code> to filter when they fire:</p>
-    <pre><code>{
+    <pre><code set:html={`{
   "post:Write": [
     {
       "match": { "file_path": "**/*.py" },
@@ -176,7 +176,7 @@ kcode plugin publish ./my-plugin</code></pre>
       "args": ["check", "--fix", "$FILE_PATH"]
     }
   ]
-}</code></pre>
+}`} /></pre>
 
     <h2>MCP Servers in Plugins</h2>
     <p>
@@ -184,16 +184,16 @@ kcode plugin publish ./my-plugin</code></pre>
       These are spawned automatically when the plugin loads and their tools become available with the
       <code>mcp__</code> prefix.
     </p>
-    <pre><code>"mcpServers": {
+    <pre><code set:html={`"mcpServers": {
   "my-server": {
     "command": "node",
     "args": ["mcp-servers/my-server/index.js"],
     "env": {
-      "MY_API_KEY": "${MY_API_KEY}"
+      "MY_API_KEY": "\${MY_API_KEY}"
     }
   }
-}</code></pre>
-    <p>Environment variable interpolation (<code>${VAR}</code>) is supported in the <code>env</code> block.</p>
+}`} /></pre>
+    <p>Environment variable interpolation (<code>$&#123;VAR&#125;</code>) is supported in the <code>env</code> block.</p>
 
     <h2>Workspace Trust</h2>
     <p>

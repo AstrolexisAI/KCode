@@ -127,7 +127,7 @@ bun run benchmarks/certification/run.ts \
                 {r.note && <span class="badge">{r.note}</span>}
               </td>
               <td>{r.type}</td>
-              <td><code>{r.quantization}</code></td>
+              <td><code set:html={`{r.quantization}`} /></td>
               <td>{r.gpu}</td>
               <td>{r.tasks}</td>
               <td>{r.passed}</td>

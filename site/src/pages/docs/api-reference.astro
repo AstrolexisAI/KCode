@@ -100,29 +100,29 @@ Authorization: Bearer MY_SECRET</code></pre>
     </table>
 
     <h4>Non-streaming example</h4>
-    <pre><code>curl -X POST http://localhost:10100/api/prompt \
+    <pre><code set:html={`curl -X POST http://localhost:10100/api/prompt \
   -H "Authorization: Bearer MY_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "List all TypeScript files in src/"}'</code></pre>
+  -d '{"prompt": "List all TypeScript files in src/"}'`} /></pre>
 
     <h4>Streaming example (SSE)</h4>
-    <pre><code>curl -N -X POST http://localhost:10100/api/prompt \
+    <pre><code set:html={`curl -N -X POST http://localhost:10100/api/prompt \
   -H "Authorization: Bearer MY_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Explain this codebase", "stream": true}'</code></pre>
+  -d '{"prompt": "Explain this codebase", "stream": true}'`} /></pre>
 
     <h4>SSE Events</h4>
     <table>
       <thead><tr><th>Event</th><th>Data</th><th>Description</th></tr></thead>
       <tbody>
-        <tr><td><code>session</code></td><td><code>{ sessionId }</code></td><td>Session ID assigned</td></tr>
-        <tr><td><code>text</code></td><td><code>{ text }</code></td><td>Incremental text token</td></tr>
-        <tr><td><code>tool_result</code></td><td><code>{ name, result, isError }</code></td><td>Tool execution result</td></tr>
-        <tr><td><code>tool_progress</code></td><td><code>{ name, status, index, total }</code></td><td>Tool progress update</td></tr>
-        <tr><td><code>turn_start</code></td><td><code>{}</code></td><td>New agent turn started</td></tr>
-        <tr><td><code>compaction</code></td><td><code>{ tokensAfter }</code></td><td>Context was compacted</td></tr>
-        <tr><td><code>done</code></td><td><code>{ sessionId, usage, model }</code></td><td>Stream complete</td></tr>
-        <tr><td><code>error</code></td><td><code>{ error }</code></td><td>Error occurred</td></tr>
+        <tr><td><code>session</code></td><td><code set:html={`{ sessionId }`} /></td><td>Session ID assigned</td></tr>
+        <tr><td><code>text</code></td><td><code set:html={`{ text }`} /></td><td>Incremental text token</td></tr>
+        <tr><td><code>tool_result</code></td><td><code set:html={`{ name, result, isError }`} /></td><td>Tool execution result</td></tr>
+        <tr><td><code>tool_progress</code></td><td><code set:html={`{ name, status, index, total }`} /></td><td>Tool progress update</td></tr>
+        <tr><td><code>turn_start</code></td><td><code set:html={`{}`} /></td><td>New agent turn started</td></tr>
+        <tr><td><code>compaction</code></td><td><code set:html={`{ tokensAfter }`} /></td><td>Context was compacted</td></tr>
+        <tr><td><code>done</code></td><td><code set:html={`{ sessionId, usage, model }`} /></td><td>Stream complete</td></tr>
+        <tr><td><code>error</code></td><td><code set:html={`{ error }`} /></td><td>Error occurred</td></tr>
       </tbody>
     </table>
 
@@ -164,7 +164,7 @@ Authorization: Bearer MY_SECRET</code></pre>
       </tbody>
     </table>
 
-    <pre><code># Read a file
+    <pre><code set:html={`# Read a file
 curl -X POST http://localhost:10100/api/tool \
   -H "Authorization: Bearer MY_SECRET" \
   -H "Content-Type: application/json" \
@@ -174,7 +174,7 @@ curl -X POST http://localhost:10100/api/tool \
 curl -X POST http://localhost:10100/api/tool \
   -H "Authorization: Bearer MY_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"name": "Grep", "input": {"pattern": "TODO", "path": "/home/user/project"}}'</code></pre>
+  -d '{"name": "Grep", "input": {"pattern": "TODO", "path": "/home/user/project"}}'`} /></pre>
 
     <h2 id="sessions">Session Endpoints</h2>
 
@@ -261,17 +261,17 @@ curl -X POST http://localhost:10100/api/tool \
     </table>
 
     <h3>POST /v1/chat</h3>
-    <pre><code>curl -X POST http://localhost:10100/v1/chat \
+    <pre><code set:html={`curl -X POST http://localhost:10100/v1/chat \
   -H "Authorization: Bearer MY_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello, what files are in this project?"}'</code></pre>
+  -d '{"message": "Hello, what files are in this project?"}'`} /></pre>
 
     <h2 id="errors">Error Handling</h2>
     <p>All errors return a consistent JSON format:</p>
-    <pre><code>{
+    <pre><code set:html={`{
   "error": "Human-readable error message",
   "code": 400
-}</code></pre>
+}`} /></pre>
     <table>
       <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
       <tbody>
