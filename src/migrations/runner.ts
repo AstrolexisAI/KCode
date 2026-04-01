@@ -157,9 +157,7 @@ export class MigrationRunner {
           name: migration.name,
           error: errorMsg,
         };
-        this.logger.error(
-          `Migration ${migration.version}_${migration.name} failed: ${errorMsg}`,
-        );
+        this.logger.error(`Migration ${migration.version}_${migration.name} failed: ${errorMsg}`);
         // Stop — do not execute subsequent migrations
         break;
       }
@@ -199,9 +197,7 @@ export class MigrationRunner {
 
       // Mark as rolled back
       this.db
-        .prepare(
-          "UPDATE schema_migrations SET status = 'rolled_back' WHERE version = ?",
-        )
+        .prepare("UPDATE schema_migrations SET status = 'rolled_back' WHERE version = ?")
         .run(version);
 
       this.logger.info(`Rolled back migration ${version}_${migration.name}`);
@@ -224,9 +220,7 @@ export class MigrationRunner {
   getAppliedVersions(): Set<string> {
     try {
       const rows = this.db
-        .prepare(
-          "SELECT version FROM schema_migrations WHERE status = 'applied'",
-        )
+        .prepare("SELECT version FROM schema_migrations WHERE status = 'applied'")
         .all() as Array<{ version: string }>;
       return new Set(rows.map((r) => r.version));
     } catch {
@@ -244,18 +238,14 @@ export class MigrationRunner {
     lastApplied: MigrationRow | null;
   } {
     const appliedVersions = this.getAppliedVersions();
-    const pending = this.migrations.filter(
-      (m) => !appliedVersions.has(m.version),
-    );
+    const pending = this.migrations.filter((m) => !appliedVersions.has(m.version));
 
     let failedRows: MigrationRow[] = [];
     let lastApplied: MigrationRow | null = null;
 
     try {
       failedRows = this.db
-        .prepare(
-          "SELECT * FROM schema_migrations WHERE status = 'failed' ORDER BY version",
-        )
+        .prepare("SELECT * FROM schema_migrations WHERE status = 'failed' ORDER BY version")
         .all() as MigrationRow[];
 
       const lastRow = this.db
@@ -298,15 +288,11 @@ export class MigrationRunner {
 
     try {
       const rows = this.db
-        .prepare(
-          "SELECT version, checksum FROM schema_migrations WHERE status = 'applied'",
-        )
+        .prepare("SELECT version, checksum FROM schema_migrations WHERE status = 'applied'")
         .all() as Array<{ version: string; checksum: string }>;
 
       for (const row of rows) {
-        const migration = this.migrations.find(
-          (m) => m.version === row.version,
-        );
+        const migration = this.migrations.find((m) => m.version === row.version);
         if (migration) {
           const currentChecksum = this.checksum(migration);
           if (currentChecksum !== row.checksum) {
@@ -354,12 +340,7 @@ export class MigrationRunner {
       .prepare(
         "INSERT OR REPLACE INTO schema_migrations (version, name, checksum, duration_ms, status) VALUES (?, ?, ?, ?, 'applied')",
       )
-      .run(
-        migration.version,
-        migration.name,
-        this.checksum(migration),
-        durationMs,
-      );
+      .run(migration.version, migration.name, this.checksum(migration), durationMs);
   }
 
   private recordFailed(migration: Migration, durationMs: number): void {
@@ -367,11 +348,6 @@ export class MigrationRunner {
       .prepare(
         "INSERT OR REPLACE INTO schema_migrations (version, name, checksum, duration_ms, status) VALUES (?, ?, ?, ?, 'failed')",
       )
-      .run(
-        migration.version,
-        migration.name,
-        this.checksum(migration),
-        durationMs,
-      );
+      .run(migration.version, migration.name, this.checksum(migration), durationMs);
   }
 }

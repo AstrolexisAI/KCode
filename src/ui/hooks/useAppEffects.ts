@@ -13,7 +13,9 @@ export interface UseAppEffectsParams {
   conversationManager: ConversationManager;
   workingDirectory: string;
   tabRemovalTimers: React.MutableRefObject<Set<ReturnType<typeof setTimeout>>>;
-  setMode: (mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle") => void;
+  setMode: (
+    mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle",
+  ) => void;
   setCompleted: (updater: (prev: MessageEntry[]) => MessageEntry[]) => void;
   setPermissionRequest: (req: { toolName: string; description: string } | null) => void;
   setPermissionResolver: (resolver: ((choice: PermissionChoice) => void) | null) => void;
@@ -49,7 +51,9 @@ export function useAppEffects({
         });
       });
     });
-    return () => { conversationManager.getPermissions().setPromptFn(undefined); };
+    return () => {
+      conversationManager.getPermissions().setPromptFn(undefined);
+    };
   }, [conversationManager]);
 
   // Wire up sudo password prompt callback so Bash tool can ask for password
@@ -62,7 +66,9 @@ export function useAppEffects({
         });
       });
     });
-    return () => { conversationManager.setSudoPasswordPromptFn(undefined); };
+    return () => {
+      conversationManager.setSudoPasswordPromptFn(undefined);
+    };
   }, [conversationManager]);
 
   // Wire up trust prompt callback so project hooks auto-trust with logging

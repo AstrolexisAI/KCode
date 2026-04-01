@@ -1,9 +1,9 @@
 // KCode - Keybinding conflict validator
 // Detects reserved key violations, duplicate chord conflicts, and prefix conflicts.
 
-import { serializeChord, serializeCombo } from "./parser.js";
 import { RESERVED_KEYS } from "./defaults.js";
-import type { KeyBinding, ValidationResult, ConflictInfo, ReservedViolation } from "./types.js";
+import { serializeChord, serializeCombo } from "./parser.js";
+import type { ConflictInfo, KeyBinding, ReservedViolation, ValidationResult } from "./types.js";
 
 /**
  * Validate a set of keybindings for conflicts and reserved key violations.

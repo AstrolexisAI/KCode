@@ -156,9 +156,7 @@ export class VectorStore {
       });
     }
 
-    return scored
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit);
+    return scored.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
   /** Remove all chunks for a given file path */
@@ -173,12 +171,14 @@ export class VectorStore {
 
   /** Get index statistics */
   stats(): VectorStoreStats {
-    const row = this.db.prepare(`
+    const row = this.db
+      .prepare(`
       SELECT COUNT(*) as total,
              COUNT(DISTINCT file_path) as files,
              COALESCE(SUM(token_estimate), 0) as totalTokens
       FROM rag_chunks
-    `).get() as VectorStoreStats;
+    `)
+      .get() as VectorStoreStats;
     return row;
   }
 

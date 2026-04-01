@@ -5,7 +5,10 @@ export type ExtensionEvent =
   | { type: "message.created"; data: { id: string; role: string; content: string } }
   | { type: "message.streaming"; data: { id: string; delta: string } }
   | { type: "tool.started"; data: { id: string; name: string } }
-  | { type: "tool.completed"; data: { id: string; name: string; success: boolean; durationMs: number } }
+  | {
+      type: "tool.completed";
+      data: { id: string; name: string; success: boolean; durationMs: number };
+    }
   | { type: "permission.requested"; data: { id: string; tool: string; input: string } }
   | { type: "session.started"; data: { sessionId: string; model: string } }
   | { type: "session.ended"; data: { sessionId: string; stats: SessionStats } }

@@ -1,7 +1,7 @@
 // KCode - Think Tag Parser Tests
 // Exhaustive edge-case testing for the streaming <think>/<reasoning> tag parser
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createThinkTagParser, type ThinkTagEvent } from "./think-tag-parser";
 
 // Helper: feed an array of string chunks and collect all events (including flush)
@@ -17,7 +17,10 @@ function parse(chunks: string[]): ThinkTagEvent[] {
 
 // Helper: concatenate all events of a given type
 function collect(events: ThinkTagEvent[], type: "thinking" | "content"): string {
-  return events.filter((e) => e.type === type).map((e) => e.text).join("");
+  return events
+    .filter((e) => e.type === type)
+    .map((e) => e.text)
+    .join("");
 }
 
 // ─── Basic functionality ─────────────────────────────────────────
@@ -106,13 +109,7 @@ describe("ThinkTagParser: realistic token sizes", () => {
   });
 
   test("close tag split across 3 chunks", () => {
-    const events = parse([
-      "<reasoning>thought",
-      "</",
-      "reason",
-      "ing>",
-      "answer",
-    ]);
+    const events = parse(["<reasoning>thought", "</", "reason", "ing>", "answer"]);
     expect(collect(events, "thinking")).toBe("thought");
     expect(collect(events, "content")).toBe("answer");
   });
@@ -175,17 +172,13 @@ describe("ThinkTagParser: partial tags at boundaries", () => {
 
 describe("ThinkTagParser: multiple blocks", () => {
   test("two consecutive reasoning blocks", () => {
-    const events = parse([
-      "<reasoning>first</reasoning>mid<reasoning>second</reasoning>end",
-    ]);
+    const events = parse(["<reasoning>first</reasoning>mid<reasoning>second</reasoning>end"]);
     expect(collect(events, "thinking")).toBe("firstsecond");
     expect(collect(events, "content")).toBe("midend");
   });
 
   test("mixed think and reasoning tags", () => {
-    const events = parse([
-      "<think>thought1</think>text1<reasoning>thought2</reasoning>text2",
-    ]);
+    const events = parse(["<think>thought1</think>text1<reasoning>thought2</reasoning>text2"]);
     expect(collect(events, "thinking")).toBe("thought1thought2");
     expect(collect(events, "content")).toBe("text1text2");
   });
@@ -317,32 +310,24 @@ describe("ThinkTagParser: stress tests", () => {
 
 describe("ThinkTagParser: special content", () => {
   test("HTML-like tags inside thinking block", () => {
-    const events = parse([
-      "<reasoning><div>not closing</div> <b>bold</b></reasoning>ok",
-    ]);
+    const events = parse(["<reasoning><div>not closing</div> <b>bold</b></reasoning>ok"]);
     expect(collect(events, "thinking")).toBe("<div>not closing</div> <b>bold</b>");
     expect(collect(events, "content")).toBe("ok");
   });
 
   test("newlines and special chars in thinking", () => {
-    const events = parse([
-      "<reasoning>\n\ttab\n  spaces\n```code```\n</reasoning>done",
-    ]);
+    const events = parse(["<reasoning>\n\ttab\n  spaces\n```code```\n</reasoning>done"]);
     expect(collect(events, "thinking")).toBe("\n\ttab\n  spaces\n```code```\n");
   });
 
   test("unicode and emoji in thinking", () => {
-    const events = parse([
-      "<reasoning>思考中 🧠 análisis ñ</reasoning>結果",
-    ]);
+    const events = parse(["<reasoning>思考中 🧠 análisis ñ</reasoning>結果"]);
     expect(collect(events, "thinking")).toBe("思考中 🧠 análisis ñ");
     expect(collect(events, "content")).toBe("結果");
   });
 
   test("XML-like content that looks like close tag", () => {
-    const events = parse([
-      "<reasoning>check </reason but not </reasoning>ok",
-    ]);
+    const events = parse(["<reasoning>check </reason but not </reasoning>ok"]);
     expect(collect(events, "thinking")).toBe("check </reason but not ");
     expect(collect(events, "content")).toBe("ok");
   });
@@ -420,9 +405,7 @@ describe("ThinkTagParser: near-miss tags", () => {
 
 describe("ThinkTagParser: ordering", () => {
   test("events maintain original order", () => {
-    const events = parse([
-      "A<reasoning>B</reasoning>C<think>D</think>E",
-    ]);
+    const events = parse(["A<reasoning>B</reasoning>C<think>D</think>E"]);
     const types = events.map((e) => e.type);
     const texts = events.map((e) => e.text);
 
@@ -434,8 +417,7 @@ describe("ThinkTagParser: ordering", () => {
   test("no duplicate or lost content", () => {
     const original = "Hello<reasoning>world</reasoning>foo<think>bar</think>baz";
     const events = parse(original.split(""));
-    const reconstructed =
-      collect(events, "content") + "|" + collect(events, "thinking");
+    const reconstructed = collect(events, "content") + "|" + collect(events, "thinking");
     expect(reconstructed).toBe("Hellofoobaz|worldbar");
   });
 });

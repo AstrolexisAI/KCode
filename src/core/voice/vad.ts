@@ -57,7 +57,10 @@ export class VoiceActivityDetector {
 
       if (this.speechFrames >= this.minSpeechFrames && this.state === "silence") {
         this.state = "speech";
-        log.debug("vad", `Speech start (RMS=${rms.toFixed(4)}, threshold=${this.config.energyThreshold.toFixed(4)})`);
+        log.debug(
+          "vad",
+          `Speech start (RMS=${rms.toFixed(4)}, threshold=${this.config.energyThreshold.toFixed(4)})`,
+        );
         return { type: "speech-start", timestamp: Date.now(), energy: rms };
       }
     } else {

@@ -1,14 +1,14 @@
 // KCode - Internationalization Engine
 
 import { detectLocale } from "./detector";
+import de from "./locales/de";
 import en from "./locales/en";
 import es from "./locales/es";
-import pt from "./locales/pt";
 import fr from "./locales/fr";
-import de from "./locales/de";
-import zh from "./locales/zh";
 import ja from "./locales/ja";
 import ko from "./locales/ko";
+import pt from "./locales/pt";
+import zh from "./locales/zh";
 
 type LocaleMessages = Record<string, string>;
 
@@ -18,7 +18,14 @@ interface I18nConfig {
 }
 
 const BUILTIN_LOCALES: Record<string, LocaleMessages> = {
-  en, es, pt, fr, de, zh, ja, ko,
+  en,
+  es,
+  pt,
+  fr,
+  de,
+  zh,
+  ja,
+  ko,
 };
 
 const customLocales: Record<string, LocaleMessages> = {};
@@ -32,9 +39,7 @@ class I18n {
     this.locale = config.locale;
     this.messages = resolveLocale(config.locale);
     this.fallbackMessages =
-      config.locale !== config.fallback
-        ? resolveLocale(config.fallback)
-        : this.messages;
+      config.locale !== config.fallback ? resolveLocale(config.fallback) : this.messages;
   }
 
   t(key: string, params?: Record<string, string | number>): string {
@@ -90,11 +95,7 @@ export function t(key: string, params?: Record<string, string | number>): string
   return ensureInit().t(key, params);
 }
 
-export function tp(
-  key: string,
-  count: number,
-  params?: Record<string, string | number>,
-): string {
+export function tp(key: string, count: number, params?: Record<string, string | number>): string {
   return ensureInit().tp(key, count, params);
 }
 
@@ -111,14 +112,8 @@ export function registerLocale(code: string, messages: LocaleMessages): void {
 }
 
 export function getAvailableLocales(): string[] {
-  return [
-    ...new Set([
-      ...Object.keys(BUILTIN_LOCALES),
-      ...Object.keys(customLocales),
-    ]),
-  ];
+  return [...new Set([...Object.keys(BUILTIN_LOCALES), ...Object.keys(customLocales)])];
 }
 
-export { detectLocale } from "./detector";
-export { SUPPORTED_LOCALES, isSupportedLocale } from "./detector";
 export type { SupportedLocale } from "./detector";
+export { detectLocale, isSupportedLocale, SUPPORTED_LOCALES } from "./detector";

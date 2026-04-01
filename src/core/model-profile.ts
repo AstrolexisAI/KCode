@@ -69,7 +69,7 @@ const PROFILES: Record<ModelSize, ModelProfile> = {
  */
 export function detectModelSize(modelName: string): ModelSize {
   // Check catalog first
-  const entry = MODEL_CATALOG.find(m => m.codename === modelName);
+  const entry = MODEL_CATALOG.find((m) => m.codename === modelName);
   if (entry) {
     if (entry.paramBillions <= 4) return "tiny";
     if (entry.paramBillions <= 10) return "small";

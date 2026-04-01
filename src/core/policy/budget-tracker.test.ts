@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BudgetTracker } from "./budget-tracker";
 
 describe("BudgetTracker", () => {

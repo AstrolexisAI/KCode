@@ -1,12 +1,12 @@
 // KCode - MCP Health Monitor & Aliases Tests
 // Tests for circuit breaker logic, health recording, latency tracking, and tool aliases
 
-import { describe, test, expect, beforeEach, afterAll, afterEach } from "bun:test";
-import { McpHealthMonitor, type ServerHealth } from "./mcp-health";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { closeDb } from "./db";
+import { McpHealthMonitor, type ServerHealth } from "./mcp-health";
 
 // ─── Health Monitor Tests ───────────────────────────────────────
 
@@ -14,7 +14,11 @@ describe("McpHealthMonitor", () => {
   let monitor: McpHealthMonitor;
 
   beforeEach(() => {
-    monitor = new McpHealthMonitor({ failureThreshold: 3, resetTimeoutMs: 100, halfOpenMaxAttempts: 2 });
+    monitor = new McpHealthMonitor({
+      failureThreshold: 3,
+      resetTimeoutMs: 100,
+      halfOpenMaxAttempts: 2,
+    });
   });
 
   test("unknown status for untracked server", () => {
@@ -73,7 +77,11 @@ describe("McpHealthMonitor", () => {
 
   test("circuit allows half-open probe after timeout", async () => {
     // Use a very short reset timeout
-    monitor = new McpHealthMonitor({ failureThreshold: 2, resetTimeoutMs: 50, halfOpenMaxAttempts: 1 });
+    monitor = new McpHealthMonitor({
+      failureThreshold: 2,
+      resetTimeoutMs: 50,
+      halfOpenMaxAttempts: 1,
+    });
 
     monitor.recordFailure("server-e");
     monitor.recordFailure("server-e");
@@ -87,7 +95,11 @@ describe("McpHealthMonitor", () => {
   });
 
   test("circuit closes after enough half-open successes", async () => {
-    monitor = new McpHealthMonitor({ failureThreshold: 2, resetTimeoutMs: 30, halfOpenMaxAttempts: 2 });
+    monitor = new McpHealthMonitor({
+      failureThreshold: 2,
+      resetTimeoutMs: 30,
+      halfOpenMaxAttempts: 2,
+    });
 
     monitor.recordFailure("server-f");
     monitor.recordFailure("server-f");
@@ -111,7 +123,11 @@ describe("McpHealthMonitor", () => {
   });
 
   test("half-open failure re-opens circuit", async () => {
-    monitor = new McpHealthMonitor({ failureThreshold: 2, resetTimeoutMs: 30, halfOpenMaxAttempts: 2 });
+    monitor = new McpHealthMonitor({
+      failureThreshold: 2,
+      resetTimeoutMs: 30,
+      halfOpenMaxAttempts: 2,
+    });
 
     monitor.recordFailure("server-g");
     monitor.recordFailure("server-g");

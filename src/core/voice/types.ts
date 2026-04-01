@@ -2,9 +2,9 @@
 
 export interface VADConfig {
   energyThreshold: number;
-  silenceDuration: number;      // ms
-  speechDuration: number;       // ms
-  calibrationDuration: number;  // ms
+  silenceDuration: number; // ms
+  speechDuration: number; // ms
+  calibrationDuration: number; // ms
   sensitivity: "low" | "medium" | "high";
 }
 

@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { CompactionManager, type CircuitBreakerState } from "./compaction.ts";
+import { describe, expect, test } from "bun:test";
+import { type CircuitBreakerState, CompactionManager } from "./compaction.ts";
 
 describe("CompactionManager", () => {
   test("can be instantiated", () => {
@@ -38,10 +38,12 @@ describe("Circuit Breaker", () => {
 
     // Force 3 failures by calling compact with unreachable server
     for (let i = 0; i < 3; i++) {
-      await manager.compact([{
-        role: "user",
-        content: [{ type: "text", text: "test message" }],
-      }]);
+      await manager.compact([
+        {
+          role: "user",
+          content: [{ type: "text", text: "test message" }],
+        },
+      ]);
     }
 
     const state = manager.getCircuitBreakerState();
@@ -49,10 +51,12 @@ describe("Circuit Breaker", () => {
     expect(state.tripped).toBe(true);
 
     // Further compaction attempts return null immediately
-    const result = await manager.compact([{
-      role: "user",
-      content: [{ type: "text", text: "another test" }],
-    }]);
+    const result = await manager.compact([
+      {
+        role: "user",
+        content: [{ type: "text", text: "another test" }],
+      },
+    ]);
     expect(result).toBeNull();
     // Failures should not increment further since we short-circuit
     expect(manager.getCircuitBreakerState().failures).toBe(3);
@@ -63,10 +67,12 @@ describe("Circuit Breaker", () => {
 
     // Trip the circuit breaker
     for (let i = 0; i < 3; i++) {
-      await manager.compact([{
-        role: "user",
-        content: [{ type: "text", text: "test" }],
-      }]);
+      await manager.compact([
+        {
+          role: "user",
+          content: [{ type: "text", text: "test" }],
+        },
+      ]);
     }
     expect(manager.getCircuitBreakerState().tripped).toBe(true);
 
@@ -81,10 +87,12 @@ describe("Circuit Breaker", () => {
 
     // Only 2 failures
     for (let i = 0; i < 2; i++) {
-      await manager.compact([{
-        role: "user",
-        content: [{ type: "text", text: "test" }],
-      }]);
+      await manager.compact([
+        {
+          role: "user",
+          content: [{ type: "text", text: "test" }],
+        },
+      ]);
     }
 
     const state = manager.getCircuitBreakerState();

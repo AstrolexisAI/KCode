@@ -1,12 +1,12 @@
 // KCode - Message Converter Tests
 // Tests for OpenAI and Anthropic message/tool format converters
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  convertToOpenAIMessages,
-  convertToOpenAITools,
   convertToAnthropicMessages,
   convertToAnthropicTools,
+  convertToOpenAIMessages,
+  convertToOpenAITools,
 } from "./message-converters";
 import type { Message } from "./types";
 
@@ -76,9 +76,7 @@ describe("convertToOpenAIMessages", () => {
     const messages: Message[] = [
       {
         role: "user",
-        content: [
-          { type: "tool_result", tool_use_id: "tc_1", content: "file contents here" },
-        ],
+        content: [{ type: "tool_result", tool_use_id: "tc_1", content: "file contents here" }],
       },
     ];
     const result = convertToOpenAIMessages("", messages);
@@ -113,7 +111,10 @@ describe("convertToOpenAIMessages", () => {
           {
             type: "tool_result",
             tool_use_id: "tc_2",
-            content: [{ type: "text", text: "line 1" }, { type: "text", text: "line 2" }],
+            content: [
+              { type: "text", text: "line 1" },
+              { type: "text", text: "line 2" },
+            ],
           },
         ],
       },
@@ -126,9 +127,7 @@ describe("convertToOpenAIMessages", () => {
     const messages: Message[] = [
       {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "tc_1", name: "Bash", input: { command: "ls" } },
-        ],
+        content: [{ type: "tool_use", id: "tc_1", name: "Bash", input: { command: "ls" } }],
       },
     ];
     const result = convertToOpenAIMessages("", messages);
@@ -142,7 +141,11 @@ describe("convertToOpenAIMessages", () => {
 describe("convertToOpenAITools", () => {
   test("converts tool definitions to function format", () => {
     const tools = [
-      { name: "Read", description: "Read a file", input_schema: { type: "object", properties: { path: { type: "string" } } } },
+      {
+        name: "Read",
+        description: "Read a file",
+        input_schema: { type: "object", properties: { path: { type: "string" } } },
+      },
     ];
     const result = convertToOpenAITools(tools);
     expect(result).toHaveLength(1);
@@ -183,9 +186,7 @@ describe("convertToAnthropicMessages", () => {
   });
 
   test("prepends user message if conversation starts with assistant", () => {
-    const messages: Message[] = [
-      { role: "assistant", content: "I am ready" },
-    ];
+    const messages: Message[] = [{ role: "assistant", content: "I am ready" }];
     const result = convertToAnthropicMessages(messages);
     expect(result[0]!.role).toBe("user");
     expect(result[1]!.role).toBe("assistant");
@@ -195,16 +196,11 @@ describe("convertToAnthropicMessages", () => {
     const messages: Message[] = [
       {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "tu_1", name: "Bash", input: { command: "ls" } },
-        ],
+        content: [{ type: "tool_use", id: "tu_1", name: "Bash", input: { command: "ls" } }],
       },
     ];
     // Need a leading user message
-    const withUser: Message[] = [
-      { role: "user", content: "do it" },
-      ...messages,
-    ];
+    const withUser: Message[] = [{ role: "user", content: "do it" }, ...messages];
     const result = convertToAnthropicMessages(withUser);
     const assistantMsg = result.find((m) => m.role === "assistant")!;
     expect(Array.isArray(assistantMsg.content)).toBe(true);
@@ -251,9 +247,7 @@ describe("convertToAnthropicMessages", () => {
 
 describe("convertToAnthropicTools", () => {
   test("passes through tool definitions (already Anthropic format)", () => {
-    const tools = [
-      { name: "Edit", description: "Edit a file", input_schema: { type: "object" } },
-    ];
+    const tools = [{ name: "Edit", description: "Edit a file", input_schema: { type: "object" } }];
     const result = convertToAnthropicTools(tools);
     expect(result).toEqual([
       { name: "Edit", description: "Edit a file", input_schema: { type: "object" } },

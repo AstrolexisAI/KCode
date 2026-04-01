@@ -38,7 +38,9 @@ export async function handleUtilityAction(
       // Current averages
       const avgInputPerMsg = Math.round(usage.inputTokens / msgCount);
       const avgOutputPerMsg = Math.round(usage.outputTokens / msgCount);
-      const currentCost = pricing ? calculateCost(pricing, usage.inputTokens, usage.outputTokens) : 0;
+      const currentCost = pricing
+        ? calculateCost(pricing, usage.inputTokens, usage.outputTokens)
+        : 0;
 
       // Project
       const projInputTokens = avgInputPerMsg * n;
@@ -70,10 +72,14 @@ export async function handleUtilityAction(
 
       // Context budget check
       const contextSize = appConfig.contextWindowSize ?? 200000;
-      const totalTokens = usage.inputTokens + usage.outputTokens + projInputTokens + projOutputTokens;
+      const totalTokens =
+        usage.inputTokens + usage.outputTokens + projInputTokens + projOutputTokens;
       const pct = Math.round((totalTokens / contextSize) * 100);
       if (pct > 80) {
-        lines.push(``, `  \u26A0 Projected to use ${pct}% of context window \u2014 may trigger auto-compact`);
+        lines.push(
+          ``,
+          `  \u26A0 Projected to use ${pct}% of context window \u2014 may trigger auto-compact`,
+        );
       }
 
       return lines.join("\n");

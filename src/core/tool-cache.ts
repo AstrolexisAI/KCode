@@ -81,7 +81,9 @@ export class ToolCache {
     let mtime = 0;
     try {
       mtime = statSync(filePath).mtimeMs;
-    } catch { /* file may not exist for Glob results */ }
+    } catch {
+      /* file may not exist for Glob results */
+    }
 
     const now = Date.now();
     this.cache.set(key, {
@@ -118,9 +120,15 @@ export class ToolCache {
     this._misses = 0;
   }
 
-  get hits(): number { return this._hits; }
-  get misses(): number { return this._misses; }
-  get size(): number { return this.cache.size; }
+  get hits(): number {
+    return this._hits;
+  }
+  get misses(): number {
+    return this._misses;
+  }
+  get size(): number {
+    return this.cache.size;
+  }
 
   /**
    * Format cache stats for display.

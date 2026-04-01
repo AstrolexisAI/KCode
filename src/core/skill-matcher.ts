@@ -13,10 +13,7 @@ export interface AutoInvokeSkill extends SkillDefinition {
   autoInvoke?: boolean;
 }
 
-export function matchSkills(
-  userMessage: string,
-  skills: AutoInvokeSkill[],
-): AutoInvokeSkill[] {
+export function matchSkills(userMessage: string, skills: AutoInvokeSkill[]): AutoInvokeSkill[] {
   const messageLower = userMessage.toLowerCase();
   const matched: AutoInvokeSkill[] = [];
 

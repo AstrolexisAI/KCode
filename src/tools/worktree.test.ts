@@ -1,13 +1,16 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { executeEnterWorktree, executeExitWorktree } from "./worktree.ts";
 
 let hasGit = false;
-try { execFileSync("git", ["--version"], { stdio: "pipe" }); hasGit = true; } catch {}
+try {
+  execFileSync("git", ["--version"], { stdio: "pipe" });
+  hasGit = true;
+} catch {}
 
 let tempDir: string;
 let originalCwd: string;

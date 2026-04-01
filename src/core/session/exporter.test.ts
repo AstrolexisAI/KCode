@@ -1,10 +1,10 @@
-import { describe, test, expect, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { SessionSearch } from "./search";
-import { SessionExporter } from "./exporter";
-import { unlinkSync, existsSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SessionExporter } from "./exporter";
+import { SessionSearch } from "./search";
 
 function createExporter(): { search: SessionSearch; exporter: SessionExporter } {
   const db = new Database(":memory:");
@@ -25,7 +25,9 @@ describe("SessionExporter", () => {
   afterEach(() => {
     for (const f of tmpFiles) {
       if (existsSync(f)) {
-        try { unlinkSync(f); } catch {}
+        try {
+          unlinkSync(f);
+        } catch {}
       }
     }
     tmpFiles.length = 0;
@@ -86,7 +88,7 @@ describe("SessionExporter", () => {
 
   test("html format escapes HTML entities", async () => {
     const { search, exporter } = createExporter();
-    search.indexTurn("s1", 0, "user", "Use <script> & \"quotes\"");
+    search.indexTurn("s1", 0, "user", 'Use <script> & "quotes"');
 
     const html = await exporter.exportSession({
       sessionId: "s1",

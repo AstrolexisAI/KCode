@@ -1,7 +1,7 @@
 // KCode - Extension API Tests
 // Covers: routing, middleware pipeline, SSE streaming, endpoint behavior
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { ExtensionAPI } from "./api";
 import { createAuthMiddleware } from "./middleware";
 import type { Middleware } from "./types";
@@ -10,7 +10,12 @@ import type { Middleware } from "./types";
 
 const BASE = "http://localhost:19300/api/ext/v1";
 
-function makeReq(method: string, path: string, body?: unknown, headers?: Record<string, string>): Request {
+function makeReq(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+): Request {
   const init: RequestInit = { method, headers: { ...headers } };
   if (body !== undefined) {
     init.body = JSON.stringify(body);
@@ -91,11 +96,9 @@ describe("auth middleware", () => {
     const secureApi = new ExtensionAPI({ authToken: "my-secret" });
     secureApi.use(createAuthMiddleware("my-secret"));
 
-    const { status, body } = await call(
-      secureApi, "GET", "/health",
-      undefined,
-      { Authorization: "Bearer my-secret" },
-    );
+    const { status, body } = await call(secureApi, "GET", "/health", undefined, {
+      Authorization: "Bearer my-secret",
+    });
     expect(status).toBe(200);
     expect(body.status).toBe("ok");
   });
@@ -282,7 +285,7 @@ describe("config endpoints", () => {
     const secureApi = new ExtensionAPI({ authToken: "secret" });
     const req = makeReq("GET", "/config");
     const res = await secureApi.handle(req);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body).not.toHaveProperty("authToken");
     expect(body).toHaveProperty("port");
   });

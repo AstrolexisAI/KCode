@@ -1,13 +1,8 @@
-import { test, expect, describe, afterAll } from "bun:test";
-import { join } from "node:path";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import {
-  exportSession,
-  importSession,
-  saveToFile,
-  loadFromFile,
-} from "./teleport";
+import { join } from "node:path";
+import { exportSession, importSession, loadFromFile, saveToFile } from "./teleport";
 import type { SessionCheckpoint } from "./types";
 
 function makeSession(overrides: Partial<SessionCheckpoint> = {}): SessionCheckpoint {
@@ -79,15 +74,13 @@ describe("teleport", () => {
     });
 
     test("throws on missing session", () => {
-      expect(() => importSession(JSON.stringify({ version: "1.0.0" }))).toThrow(
-        "missing session",
-      );
+      expect(() => importSession(JSON.stringify({ version: "1.0.0" }))).toThrow("missing session");
     });
 
     test("throws on missing conversationId", () => {
-      expect(() =>
-        importSession(JSON.stringify({ version: "1.0.0", session: {} })),
-      ).toThrow("missing conversationId");
+      expect(() => importSession(JSON.stringify({ version: "1.0.0", session: {} }))).toThrow(
+        "missing conversationId",
+      );
     });
   });
 
@@ -106,9 +99,7 @@ describe("teleport", () => {
     });
 
     test("loadFromFile throws for missing file", async () => {
-      await expect(loadFromFile("/nonexistent/file.ktp")).rejects.toThrow(
-        "not found",
-      );
+      await expect(loadFromFile("/nonexistent/file.ktp")).rejects.toThrow("not found");
     });
   });
 

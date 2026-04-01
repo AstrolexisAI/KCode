@@ -2,20 +2,20 @@
 // Analyzes recent conversation turns and extracts memorable information.
 // Uses the Forked Agent pattern for background LLM calls.
 
-import type { Message } from "../types";
-import type { ExtractedMemory, ExtractionResult, AutoMemoryConfig } from "./types";
-import { DEFAULT_AUTO_MEMORY_CONFIG, parseAutoMemoryConfig } from "./types";
-import { runForkedAgent, simplifyMessage, type ForkedAgentResult } from "../forked-agent";
-import { filterMemories, extractTitlesFromIndex } from "./relevance-filter";
+import { type ForkedAgentResult, runForkedAgent, simplifyMessage } from "../forked-agent";
+import { log } from "../logger";
 import {
-  writeMemoryFile,
-  readMemoryIndex,
-  writeMemoryIndex,
   getMemoryDir,
   type MemoryMeta,
+  readMemoryIndex,
+  writeMemoryFile,
+  writeMemoryIndex,
 } from "../memory";
 import { addMemory as addMemoryToStore } from "../memory-store";
-import { log } from "../logger";
+import type { Message } from "../types";
+import { extractTitlesFromIndex, filterMemories } from "./relevance-filter";
+import type { AutoMemoryConfig, ExtractedMemory, ExtractionResult } from "./types";
+import { DEFAULT_AUTO_MEMORY_CONFIG, parseAutoMemoryConfig } from "./types";
 
 // ─── Prompts ────────────────────────────────────────────────────
 
@@ -43,14 +43,10 @@ export function buildUserPrompt(
   existingTitles: string[],
   currentDate: string,
 ): string {
-  const formatted = contextMessages
-    .map((m) => `[${m.role}]: ${m.content}`)
-    .join("\n\n");
+  const formatted = contextMessages.map((m) => `[${m.role}]: ${m.content}`).join("\n\n");
 
   const titlesSection =
-    existingTitles.length > 0
-      ? existingTitles.map((t) => `- ${t}`).join("\n")
-      : "(none)";
+    existingTitles.length > 0 ? existingTitles.map((t) => `- ${t}`).join("\n") : "(none)";
 
   return `Analyze this recent conversation and extract memories if any.
 Current date: ${currentDate}
@@ -101,7 +97,8 @@ export function parseExtractionResponse(raw: string): ExtractionResult {
             title: String(m.title).slice(0, 80),
             description: typeof m.description === "string" ? m.description : m.title,
             content: m.content,
-            confidence: typeof m.confidence === "number" ? Math.max(0, Math.min(1, m.confidence)) : 0.5,
+            confidence:
+              typeof m.confidence === "number" ? Math.max(0, Math.min(1, m.confidence)) : 0.5,
           });
         }
       }
@@ -123,13 +120,15 @@ export function parseExtractionResponse(raw: string): ExtractionResult {
  * Generate a filesystem-safe slug from a title.
  */
 export function titleToSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "")
-    .slice(0, 60) || "untitled";
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 60) || "untitled"
+  );
 }
 
 /**
@@ -312,7 +311,11 @@ export async function runAutoMemoryExtraction(
           }
 
           // Filter against existing memories and config
-          const { accepted, rejected } = filterMemories(extraction.memories, existingTitles, config);
+          const { accepted, rejected } = filterMemories(
+            extraction.memories,
+            existingTitles,
+            config,
+          );
 
           for (const r of rejected) {
             log.debug("auto-memory", `Rejected "${r.memory.title}": ${r.reason}`);

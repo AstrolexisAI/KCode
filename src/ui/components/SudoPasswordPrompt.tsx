@@ -1,8 +1,8 @@
 // KCode - SudoPasswordPrompt component
 // Prompts the user for their sudo password with masked input
 
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import React, { useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 interface SudoPasswordPromptProps {
@@ -10,10 +10,7 @@ interface SudoPasswordPromptProps {
   isActive: boolean;
 }
 
-export default function SudoPasswordPrompt({
-  onSubmit,
-  isActive,
-}: SudoPasswordPromptProps) {
+export default function SudoPasswordPrompt({ onSubmit, isActive }: SudoPasswordPromptProps) {
   const { theme } = useTheme();
   const [password, setPassword] = useState("");
 
@@ -67,17 +64,24 @@ export default function SudoPasswordPrompt({
       </Box>
       <Box marginTop={1}>
         <Text>
-          Password: <Text bold color={theme.primary}>{"•".repeat(password.length)}</Text>
+          Password:{" "}
+          <Text bold color={theme.primary}>
+            {"•".repeat(password.length)}
+          </Text>
           <Text color={theme.accent}>{"█"}</Text>
         </Text>
       </Box>
       <Box marginTop={1} gap={2}>
         <Text>
-          <Text bold color={theme.success}>[Enter]</Text>
+          <Text bold color={theme.success}>
+            [Enter]
+          </Text>
           <Text> Submit</Text>
         </Text>
         <Text>
-          <Text bold color={theme.error}>[Esc]</Text>
+          <Text bold color={theme.error}>
+            [Esc]
+          </Text>
           <Text> Cancel</Text>
         </Text>
       </Box>

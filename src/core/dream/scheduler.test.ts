@@ -1,15 +1,11 @@
 // KCode - Dream Scheduler Tests
 
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { DreamScheduler } from "./scheduler";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { DreamEngine } from "./dream-engine";
+import { DreamScheduler } from "./scheduler";
 import type { DreamResult } from "./types";
 
-function makeTask(
-  id: string,
-  priority: number,
-  shouldRun: boolean = true
-) {
+function makeTask(id: string, priority: number, shouldRun: boolean = true) {
   return {
     id,
     name: `Task ${id}`,
@@ -110,7 +106,7 @@ describe("DreamScheduler", () => {
         taskName: "Manual",
         status: "completed",
         durationMs: 1,
-      })
+      }),
     );
 
     engine.register({

@@ -2,15 +2,15 @@
 // Long-running background process that manages KCode sessions via WebSocket.
 
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, chmodSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { log } from "../core/logger";
-import { SessionManager } from "./session-manager";
-import { BridgeWebSocketServer } from "./websocket-server";
 import { PermissionBridge } from "./permission-bridge";
 import { createMessage, serializeMessage } from "./protocol";
+import { SessionManager } from "./session-manager";
 import type { ShutdownMessage } from "./types";
+import { BridgeWebSocketServer } from "./websocket-server";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -146,7 +146,12 @@ export async function getDaemonStatus(): Promise<DaemonStatus> {
       signal: AbortSignal.timeout(2000),
     });
     if (resp.ok) {
-      const health = await resp.json() as { status: string; sessions: number; clients: number; uptime: number };
+      const health = (await resp.json()) as {
+        status: string;
+        sessions: number;
+        clients: number;
+        uptime: number;
+      };
       return {
         ...basic,
         uptime: health.uptime,
@@ -176,7 +181,9 @@ let activeDaemon: {
  * @param opts.port - Specific port to use (default: auto-find in 19100-19199).
  * @param opts.foreground - If true, run in foreground (don't detach). Default true for direct invocation.
  */
-export async function startDaemon(opts?: { port?: number }): Promise<{ port: number; token: string; pid: number }> {
+export async function startDaemon(opts?: {
+  port?: number;
+}): Promise<{ port: number; token: string; pid: number }> {
   // Check if already running
   const status = isDaemonRunning();
   if (status.running) {
@@ -294,7 +301,9 @@ export function stopRemoteDaemon(): boolean {
 /**
  * List sessions on the running daemon via the session manager (local) or health endpoint (remote).
  */
-export async function listDaemonSessions(): Promise<Array<{ id: string; dir: string; status: string; model: string }>> {
+export async function listDaemonSessions(): Promise<
+  Array<{ id: string; dir: string; status: string; model: string }>
+> {
   if (activeDaemon) {
     return activeDaemon.sessionManager.listSessions().map((s) => ({
       id: s.id,
@@ -317,7 +326,7 @@ export async function listDaemonSessions(): Promise<Array<{ id: string; dir: str
       signal: AbortSignal.timeout(2000),
     });
     if (resp.ok) {
-      const health = await resp.json() as { sessions: number };
+      const health = (await resp.json()) as { sessions: number };
       // Health endpoint doesn't list sessions in detail — return count indication
       return [{ id: "(remote)", dir: "-", status: `${health.sessions} session(s)`, model: "-" }];
     }

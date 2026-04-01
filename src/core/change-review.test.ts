@@ -2,20 +2,17 @@
 
 import { describe, expect, it } from "bun:test";
 import {
-  classifyChanges,
   assessRisk,
-  generateSuggestions,
-  formatReview,
-  type FileChange,
   type ChangeReview,
+  classifyChanges,
+  type FileChange,
+  formatReview,
+  generateSuggestions,
 } from "./change-review";
 
 // ─── Helper ─────────────────────────────────────────────────────
 
-function makeChange(
-  path: string,
-  overrides?: Partial<FileChange>,
-): FileChange {
+function makeChange(path: string, overrides?: Partial<FileChange>): FileChange {
   return {
     path,
     type: "modified",
@@ -29,10 +26,7 @@ function makeChange(
 
 describe("classifyChanges", () => {
   it("classifies test-only changes", () => {
-    const files = [
-      makeChange("src/core/foo.test.ts"),
-      makeChange("src/tools/__tests__/bar.ts"),
-    ];
+    const files = [makeChange("src/core/foo.test.ts"), makeChange("src/tools/__tests__/bar.ts")];
     const result = classifyChanges(files);
     expect(result.category).toBe("test");
     expect(result.confidence).toBeGreaterThan(0.9);
@@ -64,36 +58,25 @@ describe("classifyChanges", () => {
   });
 
   it("classifies security-dominant changes", () => {
-    const files = [
-      makeChange("src/core/auth.ts"),
-      makeChange("src/core/permissions.ts"),
-    ];
+    const files = [makeChange("src/core/auth.ts"), makeChange("src/core/permissions.ts")];
     const result = classifyChanges(files);
     expect(result.category).toBe("security");
   });
 
   it("classifies source + test as fix", () => {
-    const files = [
-      makeChange("src/core/config.ts"),
-      makeChange("src/core/config.test.ts"),
-    ];
+    const files = [makeChange("src/core/config.ts"), makeChange("src/core/config.test.ts")];
     const result = classifyChanges(files);
     expect(["fix", "feature"]).toContain(result.category);
   });
 
   it("classifies new source files as feature", () => {
-    const files = [
-      makeChange("src/core/new-module.ts", { type: "created", linesAdded: 100 }),
-    ];
+    const files = [makeChange("src/core/new-module.ts", { type: "created", linesAdded: 100 })];
     const result = classifyChanges(files);
     expect(result.category).toBe("feature");
   });
 
   it("classifies source-only modifications as refactor", () => {
-    const files = [
-      makeChange("src/core/conversation.ts"),
-      makeChange("src/core/system-prompt.ts"),
-    ];
+    const files = [makeChange("src/core/conversation.ts"), makeChange("src/core/system-prompt.ts")];
     const result = classifyChanges(files);
     expect(result.category).toBe("refactor");
   });
@@ -141,10 +124,7 @@ describe("assessRisk", () => {
   });
 
   it("rates tests-only as low risk", () => {
-    const files = [
-      makeChange("src/core/foo.test.ts"),
-      makeChange("src/core/bar.spec.ts"),
-    ];
+    const files = [makeChange("src/core/foo.test.ts"), makeChange("src/core/bar.spec.ts")];
     const result = assessRisk(files);
     expect(result.level).toBe("low");
   });
@@ -208,9 +188,7 @@ describe("generateSuggestions", () => {
     expect(
       suggestions.some(
         (s) =>
-          s.message.includes("test") ||
-          s.message.includes("API") ||
-          s.message.includes("Security"),
+          s.message.includes("test") || s.message.includes("API") || s.message.includes("Security"),
       ),
     ).toBe(false);
   });

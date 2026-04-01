@@ -78,29 +78,50 @@ export function renderDashboard(d: ProjectDashboard): string {
   lines.push(row(`Name: ${d.project.name}`, `Framework: ${d.tests.framework}`));
   lines.push(row(`Language: ${d.project.language}`, `Total: ${d.tests.total}`));
   lines.push(row(`Files: ${formatNumber(d.project.files)}`, `\u2713 Passing: ${d.tests.passing}`));
-  lines.push(row(`LoC: ${formatNumber(d.project.linesOfCode)}`, `\u2717 Failing: ${d.tests.failing}`));
-  lines.push(row(
-    `Last commit: ${timeAgo(d.project.lastCommit)}`,
-    d.tests.coverage !== undefined ? `Coverage: ${d.tests.coverage}%` : "Coverage: N/A",
-  ));
+  lines.push(
+    row(`LoC: ${formatNumber(d.project.linesOfCode)}`, `\u2717 Failing: ${d.tests.failing}`),
+  );
+  lines.push(
+    row(
+      `Last commit: ${timeAgo(d.project.lastCommit)}`,
+      d.tests.coverage !== undefined ? `Coverage: ${d.tests.coverage}%` : "Coverage: N/A",
+    ),
+  );
 
   // Row 2: Code Quality + Activity
   lines.push(midBorder("Code Quality", "Activity (7d)"));
   lines.push(row(`TODOs: ${d.codeQuality.todos}`, `Sessions: ${d.activity.sessionsLast7Days}`));
-  lines.push(row(`Long functions: ${d.codeQuality.longFunctions}`, `Tokens: ${formatTokens(d.activity.tokensLast7Days)}`));
-  lines.push(row(`Complexity: ${d.codeQuality.complexityScore}/100`, `Cost: ${formatCost(d.activity.costLast7Days)}`));
+  lines.push(
+    row(
+      `Long functions: ${d.codeQuality.longFunctions}`,
+      `Tokens: ${formatTokens(d.activity.tokensLast7Days)}`,
+    ),
+  );
+  lines.push(
+    row(
+      `Complexity: ${d.codeQuality.complexityScore}/100`,
+      `Cost: ${formatCost(d.activity.costLast7Days)}`,
+    ),
+  );
 
-  const topToolsStr = d.activity.topTools.slice(0, 3).map(t => `${t.name}(${t.count})`).join(" ");
+  const topToolsStr = d.activity.topTools
+    .slice(0, 3)
+    .map((t) => `${t.name}(${t.count})`)
+    .join(" ");
   lines.push(row(`Duplicates: ${d.codeQuality.duplicateCode}`, `Top: ${topToolsStr || "N/A"}`));
 
   // Row 3: Dependencies + AI Impact
   lines.push(midBorder("Dependencies", "AI Impact"));
-  lines.push(row(`Total: ${d.dependencies.total}`, `Files modified: ${d.activity.filesModifiedByAI}`));
+  lines.push(
+    row(`Total: ${d.dependencies.total}`, `Files modified: ${d.activity.filesModifiedByAI}`),
+  );
   lines.push(row(`Outdated: ${d.dependencies.outdated}`, ""));
-  lines.push(row(
-    `Vulnerable: ${d.dependencies.vulnerable}${d.dependencies.vulnerable === 0 ? " \u2713" : " \u26a0"}`,
-    "",
-  ));
+  lines.push(
+    row(
+      `Vulnerable: ${d.dependencies.vulnerable}${d.dependencies.vulnerable === 0 ? " \u2713" : " \u26a0"}`,
+      "",
+    ),
+  );
 
   lines.push(bottomBorder());
 
@@ -115,4 +136,4 @@ export function renderDashboardJson(d: ProjectDashboard): string {
 
 // ─── Exports for testing ───────────────────────────────────────
 
-export { padRight, formatNumber, formatCost, formatTokens, timeAgo };
+export { formatCost, formatNumber, formatTokens, padRight, timeAgo };

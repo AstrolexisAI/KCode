@@ -1,7 +1,7 @@
 // KCode - Theme System
 // Customizable color themes for terminal output
 
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -208,8 +208,18 @@ function loadCustomTheme(): Theme | null {
 
     // Validate that all required keys are present and are strings
     const requiredKeys: (keyof Theme)[] = [
-      "primary", "secondary", "accent", "error", "warning", "success",
-      "dimmed", "userPrompt", "assistantText", "codeBlock", "toolUse", "toolResult",
+      "primary",
+      "secondary",
+      "accent",
+      "error",
+      "warning",
+      "success",
+      "dimmed",
+      "userPrompt",
+      "assistantText",
+      "codeBlock",
+      "toolUse",
+      "toolResult",
     ];
 
     for (const key of requiredKeys) {

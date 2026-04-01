@@ -3,9 +3,9 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isWorkspaceTrusted } from "./hook-trust";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
-import { isWorkspaceTrusted } from "./hook-trust";
 
 export interface PluginManifest {
   name: string;
@@ -16,25 +16,33 @@ export interface PluginManifest {
   kcode?: string; // Minimum KCode version required
 
   // What the plugin provides
-  skills?: string[];      // Paths to skill .md files relative to plugin dir
-  hooks?: Record<string, {  // Hook event -> command
-    command: string;
-    args?: string[];
-  }>;
-  mcpServers?: Record<string, {  // MCP server configs
-    command: string;
-    args?: string[];
-    env?: Record<string, string>;
-  }>;
-  agents?: string[];       // Paths to agent .md files relative to plugin dir
+  skills?: string[]; // Paths to skill .md files relative to plugin dir
+  hooks?: Record<
+    string,
+    {
+      // Hook event -> command
+      command: string;
+      args?: string[];
+    }
+  >;
+  mcpServers?: Record<
+    string,
+    {
+      // MCP server configs
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }
+  >;
+  agents?: string[]; // Paths to agent .md files relative to plugin dir
   outputStyles?: string[]; // Paths to output style .md files relative to plugin dir
 
   // Marketplace metadata
-  marketplace?: string;    // Source marketplace identifier
-  sha256?: string;         // Content hash for verification
-  verified?: boolean;      // Passed marketplace verification
-  downloads?: number;      // Download count
-  rating?: number;         // User rating
+  marketplace?: string; // Source marketplace identifier
+  sha256?: string; // Content hash for verification
+  verified?: boolean; // Passed marketplace verification
+  downloads?: number; // Download count
+  rating?: number; // User rating
 }
 
 export interface LoadedPlugin {
@@ -43,8 +51,8 @@ export interface LoadedPlugin {
   description: string;
   dir: string;
   manifest: PluginManifest;
-  skillFiles: string[];   // Absolute paths to skill .md files
-  agentFiles: string[];   // Absolute paths to agent .md files
+  skillFiles: string[]; // Absolute paths to skill .md files
+  agentFiles: string[]; // Absolute paths to agent .md files
   outputStyleFiles: string[]; // Absolute paths to output style .md files
 }
 
@@ -73,14 +81,21 @@ export class PluginManager {
     } else if (existsSync(projectPluginsDir)) {
       try {
         const entries = readdirSync(projectPluginsDir, { withFileTypes: true });
-        if (entries.some(e => e.isDirectory())) {
-          console.error(`[plugins] Skipping project .kcode/plugins/ — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`);
+        if (entries.some((e) => e.isDirectory())) {
+          console.error(
+            `[plugins] Skipping project .kcode/plugins/ — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`,
+          );
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
     if (this.plugins.length > 0) {
-      log.info("config", `Loaded ${this.plugins.length} plugin(s): ${this.plugins.map(p => p.name).join(", ")}`);
+      log.info(
+        "config",
+        `Loaded ${this.plugins.length} plugin(s): ${this.plugins.map((p) => p.name).join(", ")}`,
+      );
     }
   }
 
@@ -104,7 +119,9 @@ export class PluginManager {
               if (pkg.kcode) {
                 this.loadPlugin(pluginDir, { ...pkg.kcode, name: pkg.name, version: pkg.version });
               }
-            } catch { /* skip */ }
+            } catch {
+              /* skip */
+            }
           }
           continue;
         }
@@ -116,12 +133,14 @@ export class PluginManager {
           log.warn("config", `Failed to load plugin from ${pluginDir}: ${err}`);
         }
       }
-    } catch { /* dir not readable */ }
+    } catch {
+      /* dir not readable */
+    }
   }
 
   private loadPlugin(dir: string, manifest: PluginManifest): void {
     // Check for duplicate names
-    if (this.plugins.some(p => p.name === manifest.name)) {
+    if (this.plugins.some((p) => p.name === manifest.name)) {
       log.warn("config", `Plugin "${manifest.name}" already loaded, skipping duplicate`);
       return;
     }
@@ -133,7 +152,12 @@ export class PluginManager {
     const agentFiles = this.resolvePluginPaths(dir, manifest.name, manifest.agents, "agent");
 
     // Resolve output style file paths
-    const outputStyleFiles = this.resolvePluginPaths(dir, manifest.name, manifest.outputStyles, "output style");
+    const outputStyleFiles = this.resolvePluginPaths(
+      dir,
+      manifest.name,
+      manifest.outputStyles,
+      "output style",
+    );
 
     this.plugins.push({
       name: manifest.name,
@@ -150,14 +174,22 @@ export class PluginManager {
   /**
    * Resolve relative paths from a plugin manifest, with path traversal guards.
    */
-  private resolvePluginPaths(dir: string, pluginName: string, paths: string[] | undefined, label: string): string[] {
+  private resolvePluginPaths(
+    dir: string,
+    pluginName: string,
+    paths: string[] | undefined,
+    label: string,
+  ): string[] {
     const resolved: string[] = [];
     if (!paths) return resolved;
 
     for (const relPath of paths) {
       // Path traversal guard
       if (relPath.includes("..") || relPath.startsWith("/") || relPath.startsWith("\\")) {
-        log.warn("config", `Plugin "${pluginName}": ${label} path rejected (traversal attempt): ${relPath}`);
+        log.warn(
+          "config",
+          `Plugin "${pluginName}": ${label} path rejected (traversal attempt): ${relPath}`,
+        );
         continue;
       }
       const fullPath = join(dir, relPath);
@@ -181,14 +213,20 @@ export class PluginManager {
    * Get all skill file paths from all plugins.
    */
   getSkillPaths(): string[] {
-    return this.plugins.flatMap(p => p.skillFiles);
+    return this.plugins.flatMap((p) => p.skillFiles);
   }
 
   /**
    * Get all MCP server configs from all plugins.
    */
-  getMcpConfigs(): Record<string, { command: string; args?: string[]; env?: Record<string, string> }> {
-    const configs: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> = {};
+  getMcpConfigs(): Record<
+    string,
+    { command: string; args?: string[]; env?: Record<string, string> }
+  > {
+    const configs: Record<
+      string,
+      { command: string; args?: string[]; env?: Record<string, string> }
+    > = {};
     for (const plugin of this.plugins) {
       if (plugin.manifest.mcpServers) {
         for (const [name, config] of Object.entries(plugin.manifest.mcpServers)) {
@@ -204,7 +242,8 @@ export class PluginManager {
    * Get all hook configs from all plugins.
    */
   getHookConfigs(): Array<{ pluginName: string; event: string; command: string; args?: string[] }> {
-    const hooks: Array<{ pluginName: string; event: string; command: string; args?: string[] }> = [];
+    const hooks: Array<{ pluginName: string; event: string; command: string; args?: string[] }> =
+      [];
     for (const plugin of this.plugins) {
       if (plugin.manifest.hooks) {
         for (const [event, config] of Object.entries(plugin.manifest.hooks)) {
@@ -223,9 +262,11 @@ export class PluginManager {
       return "No plugins installed.\n\nTo install a plugin, create a directory in ~/.kcode/plugins/ with a plugin.json manifest.";
     }
 
-    const lines = this.plugins.map(p => {
+    const lines = this.plugins.map((p) => {
       const skills = p.skillFiles.length > 0 ? `, ${p.skillFiles.length} skill(s)` : "";
-      const mcps = p.manifest.mcpServers ? `, ${Object.keys(p.manifest.mcpServers).length} MCP server(s)` : "";
+      const mcps = p.manifest.mcpServers
+        ? `, ${Object.keys(p.manifest.mcpServers).length} MCP server(s)`
+        : "";
       const hooks = p.manifest.hooks ? `, ${Object.keys(p.manifest.hooks).length} hook(s)` : "";
       return `  ${p.name} v${p.version}${skills}${mcps}${hooks}\n    ${p.description || "(no description)"}`;
     });

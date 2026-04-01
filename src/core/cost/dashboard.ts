@@ -43,9 +43,15 @@ export function renderCostDashboard(summary: CostSummary): string {
   lines.push("");
   lines.push(`  \x1b[1mCost Dashboard — ${periodLabel}\x1b[0m`);
   lines.push("");
-  lines.push(`  Total:    ${formatCost(summary.totalCostUsd)} across ${summary.sessions} session${summary.sessions !== 1 ? "s" : ""} (${formatCost(summary.avgCostPerSession)}/session avg)`);
-  lines.push(`  Tokens:   ${formatTokens(summary.totalInputTokens)} input / ${formatTokens(summary.totalOutputTokens)} output`);
-  lines.push(`  Trend:    ${trendIcon(summary.trend)} ${summary.trendPercentage}% vs previous period`);
+  lines.push(
+    `  Total:    ${formatCost(summary.totalCostUsd)} across ${summary.sessions} session${summary.sessions !== 1 ? "s" : ""} (${formatCost(summary.avgCostPerSession)}/session avg)`,
+  );
+  lines.push(
+    `  Tokens:   ${formatTokens(summary.totalInputTokens)} input / ${formatTokens(summary.totalOutputTokens)} output`,
+  );
+  lines.push(
+    `  Trend:    ${trendIcon(summary.trend)} ${summary.trendPercentage}% vs previous period`,
+  );
 
   // By Model
   if (summary.byModel.length > 0) {

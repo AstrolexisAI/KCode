@@ -1,11 +1,17 @@
 // KCode - Prompt Policy & Truncation Path Tests
 // Validates: no-tools policy, language matching, and truncation on tool_use stopReason
 
-import { describe, test, expect } from "bun:test";
-import { SystemPromptBuilder } from "./system-prompt";
-import { looksIncomplete, looksTheoretical, looksCheckpointed, dedupContinuation, detectLanguage } from "./conversation";
-import { LoopGuardState } from "./agent-loop-guards";
+import { describe, expect, test } from "bun:test";
 import { classifyToolCoherence } from "../tools/plan";
+import { LoopGuardState } from "./agent-loop-guards";
+import {
+  dedupContinuation,
+  detectLanguage,
+  looksCheckpointed,
+  looksIncomplete,
+  looksTheoretical,
+} from "./conversation";
+import { SystemPromptBuilder } from "./system-prompt";
 import type { KCodeConfig } from "./types";
 
 // ─── Minimal config for prompt generation ───────────────────────
@@ -140,7 +146,9 @@ describe("looksTheoretical", () => {
   });
 
   test("detects multiple formal keywords", () => {
-    expect(looksTheoretical("decidability of compaction with idempotent tool calls and equivalence")).toBe(true);
+    expect(
+      looksTheoretical("decidability of compaction with idempotent tool calls and equivalence"),
+    ).toBe(true);
   });
 
   test("does not trigger on normal coding request", () => {
@@ -152,7 +160,8 @@ describe("looksTheoretical", () => {
   });
 
   test("detects the exact KCode test prompt", () => {
-    const prompt = "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema de determinar si existe una subsecuencia de compaction que preserve la equivalencia observacional del estado final del filesystem es reducible al problema de alcanzabilidad";
+    const prompt =
+      "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema de determinar si existe una subsecuencia de compaction que preserve la equivalencia observacional del estado final del filesystem es reducible al problema de alcanzabilidad";
     expect(looksTheoretical(prompt)).toBe(true);
   });
 
@@ -170,7 +179,10 @@ Una empresa de retail opera con las siguientes condiciones:
   });
 
   test("detects long prompt with structured sections and reasoning keywords", () => {
-    const prompt = "Sos un sistema de razonamiento avanzado. " + "x ".repeat(250) + `
+    const prompt =
+      "Sos un sistema de razonamiento avanzado. " +
+      "x ".repeat(250) +
+      `
 ### TAREAS
 Explicá la consistencia lógica del modelo y mostrá el diagnóstico paso a paso.`;
     expect(looksTheoretical(prompt)).toBe(true);
@@ -197,11 +209,15 @@ Mostrá el razonamiento paso a paso.`;
 
 describe("detectLanguage", () => {
   test("detects Spanish", () => {
-    expect(detectLanguage("Dado un programa que recibe una secuencia de tool calls sobre un filesystem")).toBe("es");
+    expect(
+      detectLanguage("Dado un programa que recibe una secuencia de tool calls sobre un filesystem"),
+    ).toBe("es");
   });
 
   test("detects English", () => {
-    expect(detectLanguage("Prove that the problem of determining reachability is undecidable")).toBe("en");
+    expect(
+      detectLanguage("Prove that the problem of determining reachability is undecidable"),
+    ).toBe("en");
   });
 
   test("defaults to English for short/ambiguous text", () => {
@@ -209,7 +225,8 @@ describe("detectLanguage", () => {
   });
 
   test("detects Spanish in the KCode test prompt", () => {
-    const prompt = "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema";
+    const prompt =
+      "Dado un programa arbitrario P que recibe como entrada una secuencia de tool calls con efectos secundarios sobre un filesystem, demuestra que el problema";
     expect(detectLanguage(prompt)).toBe("es");
   });
 });
@@ -292,51 +309,111 @@ describe("LoopGuardState error fingerprinting", () => {
 
 describe("classifyToolCoherence", () => {
   test("setup step + scaffold command = ok", () => {
-    expect(classifyToolCoherence("Bash", { command: "bun create next-app my-project" }, "Initialize project setup")).toBe("ok");
+    expect(
+      classifyToolCoherence(
+        "Bash",
+        { command: "bun create next-app my-project" },
+        "Initialize project setup",
+      ),
+    ).toBe("ok");
   });
 
   test("setup step + npm install = ok", () => {
-    expect(classifyToolCoherence("Bash", { command: "npm install tailwindcss" }, "Set up project structure")).toBe("ok");
+    expect(
+      classifyToolCoherence(
+        "Bash",
+        { command: "npm install tailwindcss" },
+        "Set up project structure",
+      ),
+    ).toBe("ok");
   });
 
   test("setup step + writing config = ok", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/tailwind.config.ts" }, "Configure project setup")).toBe("ok");
+    expect(
+      classifyToolCoherence(
+        "Write",
+        { file_path: "/project/tailwind.config.ts" },
+        "Configure project setup",
+      ),
+    ).toBe("ok");
   });
 
   test("setup step + writing page component = warn", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/app/about/page.tsx" }, "Initialize project setup")).toBe("warn");
+    expect(
+      classifyToolCoherence(
+        "Write",
+        { file_path: "/project/app/about/page.tsx" },
+        "Initialize project setup",
+      ),
+    ).toBe("warn");
   });
 
   test("git step + git command = ok", () => {
-    expect(classifyToolCoherence("Bash", { command: "git add -A && git commit -m 'init'" }, "Git commit and push")).toBe("ok");
+    expect(
+      classifyToolCoherence(
+        "Bash",
+        { command: "git add -A && git commit -m 'init'" },
+        "Git commit and push",
+      ),
+    ).toBe("ok");
   });
 
   test("git step + writing new files = block", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/components/Hero.tsx" }, "Final git commit")).toBe("block");
+    expect(
+      classifyToolCoherence(
+        "Write",
+        { file_path: "/project/components/Hero.tsx" },
+        "Final git commit",
+      ),
+    ).toBe("block");
   });
 
   test("build page step + Write component = ok", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/components/Hero.tsx" }, "Build Home/Landing page with hero")).toBe("ok");
+    expect(
+      classifyToolCoherence(
+        "Write",
+        { file_path: "/project/components/Hero.tsx" },
+        "Build Home/Landing page with hero",
+      ),
+    ).toBe("ok");
   });
 
   test("test/verify step + Bash = ok", () => {
-    expect(classifyToolCoherence("Bash", { command: "bun test" }, "Verify and test the project")).toBe("ok");
+    expect(
+      classifyToolCoherence("Bash", { command: "bun test" }, "Verify and test the project"),
+    ).toBe("ok");
   });
 
   test("test/verify step + Write = warn", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/app/page.tsx" }, "Test and validate")).toBe("warn");
+    expect(
+      classifyToolCoherence("Write", { file_path: "/project/app/page.tsx" }, "Test and validate"),
+    ).toBe("warn");
   });
 
   test("docs step + Write .md = ok", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/README.md" }, "Create documentation and README")).toBe("ok");
+    expect(
+      classifyToolCoherence(
+        "Write",
+        { file_path: "/project/README.md" },
+        "Create documentation and README",
+      ),
+    ).toBe("ok");
   });
 
   test("docs step + Write .tsx = warn", () => {
-    expect(classifyToolCoherence("Write", { file_path: "/project/app/page.tsx" }, "Update documentation")).toBe("warn");
+    expect(
+      classifyToolCoherence(
+        "Write",
+        { file_path: "/project/app/page.tsx" },
+        "Update documentation",
+      ),
+    ).toBe("warn");
   });
 
   test("finalize step + Edit code = block", () => {
-    expect(classifyToolCoherence("Edit", { file_path: "/project/app/page.tsx" }, "Finalize and polish")).toBe("block");
+    expect(
+      classifyToolCoherence("Edit", { file_path: "/project/app/page.tsx" }, "Finalize and polish"),
+    ).toBe("block");
   });
 
   test("unclassified step = ok (default)", () => {
@@ -374,8 +451,10 @@ describe("System prompt data discipline", () => {
 
 describe("dedupContinuation", () => {
   test("strips repeated paragraph from continuation", () => {
-    const tail = "Line one of the conclusion.\nLine two of the conclusion.\nFinal sentence of the section.";
-    const continuation = "Line two of the conclusion.\nFinal sentence of the section.\nNew content that follows.";
+    const tail =
+      "Line one of the conclusion.\nLine two of the conclusion.\nFinal sentence of the section.";
+    const continuation =
+      "Line two of the conclusion.\nFinal sentence of the section.\nNew content that follows.";
     const result = dedupContinuation(tail, continuation);
     expect(result).toBe("New content that follows.");
   });

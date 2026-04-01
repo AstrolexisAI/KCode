@@ -1,7 +1,7 @@
 // KCode - LSP Integration
 // Lightweight LSP client for diagnostics and code intelligence queries
 
-import { spawn, type Subprocess } from "bun";
+import { type Subprocess, spawn } from "bun";
 import { log } from "./logger";
 
 interface LspDiagnostic {
@@ -17,7 +17,7 @@ interface LspServerConfig {
   name: string;
   command: string;
   args: string[];
-  languages: string[];  // file extensions like ".ts", ".py"
+  languages: string[]; // file extensions like ".ts", ".py"
   rootPatterns: string[]; // files that indicate project root: "tsconfig.json", "pyproject.toml"
 }
 
@@ -90,7 +90,7 @@ export class LspManager {
       }
 
       // Check if project has relevant files
-      const hasRootFile = config.rootPatterns.some(pattern => {
+      const hasRootFile = config.rootPatterns.some((pattern) => {
         try {
           return Bun.file(`${this.cwd}/${pattern}`).size > 0;
         } catch {
@@ -143,7 +143,11 @@ export class LspManager {
     this.sendNotification(config.name, "initialized", {});
   }
 
-  private async readResponses(serverName: string, proc: Subprocess, entry: ServerEntry): Promise<void> {
+  private async readResponses(
+    serverName: string,
+    proc: Subprocess,
+    entry: ServerEntry,
+  ): Promise<void> {
     if (!proc.stdout || typeof proc.stdout === "number") return;
     const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
     const decoder = new TextDecoder();
@@ -177,10 +181,14 @@ export class LspManager {
           try {
             const msg = JSON.parse(body);
             this.handleMessage(serverName, msg, entry);
-          } catch { /* skip malformed */ }
+          } catch {
+            /* skip malformed */
+          }
         }
       }
-    } catch { /* stream closed */ }
+    } catch {
+      /* stream closed */
+    }
   }
 
   private handleMessage(serverName: string, msg: any, entry: ServerEntry): void {
@@ -206,7 +214,9 @@ export class LspManager {
         file,
         line: (d.range?.start?.line ?? 0) + 1,
         column: (d.range?.start?.character ?? 0) + 1,
-        severity: (["", "error", "warning", "info", "hint"] as const)[d.severity ?? 1] as LspDiagnostic["severity"],
+        severity: (["", "error", "warning", "info", "hint"] as const)[
+          d.severity ?? 1
+        ] as LspDiagnostic["severity"],
         message: d.message,
         source: d.source ?? serverName,
       }));
@@ -252,7 +262,9 @@ export class LspManager {
 
     try {
       (entry.process.stdin as import("bun").FileSink).write(header + msg);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   /**
@@ -285,7 +297,11 @@ export class LspManager {
    * Send an LSP request for a given file. Auto-detects the right server.
    * Opens the file in the server if not already open.
    */
-  async query(filePath: string, method: string, position?: { line: number; character: number }): Promise<unknown> {
+  async query(
+    filePath: string,
+    method: string,
+    position?: { line: number; character: number },
+  ): Promise<unknown> {
     const ext = filePath.slice(filePath.lastIndexOf("."));
 
     for (const [name, entry] of this.servers) {
@@ -299,8 +315,10 @@ export class LspManager {
         const isNewFile = !this.openedFiles.has(key);
         this.ensureFileOpen(name, filePath, content);
         // Only delay on first open — server needs time to parse the file
-        if (isNewFile) await new Promise(r => setTimeout(r, 200));
-      } catch { /* file might not exist */ }
+        if (isNewFile) await new Promise((r) => setTimeout(r, 200));
+      } catch {
+        /* file might not exist */
+      }
 
       const params: Record<string, unknown> = {
         textDocument: { uri: `file://${filePath}` },
@@ -312,7 +330,9 @@ export class LspManager {
       return this.sendRequest(name, method, params);
     }
 
-    throw new Error(`No language server available for ${filePath} (running: ${this.getServerNames().join(", ") || "none"})`);
+    throw new Error(
+      `No language server available for ${filePath} (running: ${this.getServerNames().join(", ") || "none"})`,
+    );
   }
 
   /**
@@ -340,7 +360,7 @@ export class LspManager {
   getAllErrors(): LspDiagnostic[] {
     const errors: LspDiagnostic[] = [];
     for (const diags of this.diagnosticsCache.values()) {
-      errors.push(...diags.filter(d => d.severity === "error"));
+      errors.push(...diags.filter((d) => d.severity === "error"));
     }
     return errors;
   }
@@ -352,8 +372,8 @@ export class LspManager {
     const diags = this.getDiagnostics(filePath);
     if (diags.length === 0) return null;
 
-    const errors = diags.filter(d => d.severity === "error");
-    const warnings = diags.filter(d => d.severity === "warning");
+    const errors = diags.filter((d) => d.severity === "error");
+    const warnings = diags.filter((d) => d.severity === "warning");
 
     if (errors.length === 0 && warnings.length === 0) return null;
 
@@ -387,9 +407,13 @@ export class LspManager {
 
   private getLanguageId(ext: string): string {
     const map: Record<string, string> = {
-      ".ts": "typescript", ".tsx": "typescriptreact",
-      ".js": "javascript", ".jsx": "javascriptreact",
-      ".py": "python", ".go": "go", ".rs": "rust",
+      ".ts": "typescript",
+      ".tsx": "typescriptreact",
+      ".js": "javascript",
+      ".jsx": "javascriptreact",
+      ".py": "python",
+      ".go": "go",
+      ".rs": "rust",
     };
     return map[ext] ?? "plaintext";
   }
@@ -409,11 +433,17 @@ export class LspManager {
       // Send shutdown notification (not request — no response expected during teardown)
       try {
         this.sendNotification(name, "shutdown", null);
-      } catch { /* best-effort shutdown notification */ }
+      } catch {
+        /* best-effort shutdown notification */
+      }
       // Kill after brief grace period
       const proc = entry.process;
       setTimeout(() => {
-        try { proc.kill(); } catch { /* process may have already exited */ }
+        try {
+          proc.kill();
+        } catch {
+          /* process may have already exited */
+        }
       }, 1000);
     }
     this.servers.clear();

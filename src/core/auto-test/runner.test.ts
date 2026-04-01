@@ -1,7 +1,7 @@
 // KCode - Auto-Test Runner Tests
 
-import { describe, test, expect } from "bun:test";
-import { runTests, formatTestResult } from "./runner";
+import { describe, expect, test } from "bun:test";
+import { formatTestResult, runTests } from "./runner";
 
 describe("runTests", () => {
   test("runs a successful command", async () => {

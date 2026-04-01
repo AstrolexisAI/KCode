@@ -1,14 +1,14 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import type { WorkerConfig, WorkerSpawnConfig } from "./types";
 import {
-  getWorkerTools,
-  WORKER_TOOLS,
-  COORDINATOR_ONLY_TOOLS,
-  buildWorkerPrompt,
   buildWorkerArgs,
   buildWorkerEnv,
+  buildWorkerPrompt,
+  COORDINATOR_ONLY_TOOLS,
   createWorkerHandle,
+  getWorkerTools,
+  WORKER_TOOLS,
 } from "./worker";
-import type { WorkerConfig, WorkerSpawnConfig } from "./types";
 
 function makeWorkerConfig(overrides: Partial<WorkerConfig> = {}): WorkerConfig {
   return {
@@ -81,10 +81,12 @@ describe("Worker Tool Restrictions", () => {
   });
 
   test("COORDINATOR_ONLY_TOOLS are blocked even via extraTools", () => {
-    const tools = getWorkerTools(makeWorkerConfig({
-      mode: "simple",
-      extraTools: ["Agent", "SendMessage", "Skill", "Plan", "TestRunner"],
-    }));
+    const tools = getWorkerTools(
+      makeWorkerConfig({
+        mode: "simple",
+        extraTools: ["Agent", "SendMessage", "Skill", "Plan", "TestRunner"],
+      }),
+    );
     expect(tools).not.toContain("Agent");
     expect(tools).not.toContain("SendMessage");
     expect(tools).not.toContain("Skill");
@@ -96,30 +98,36 @@ describe("Worker Tool Restrictions", () => {
   // ─── Extra Tools ────────────────────────────────────────────
 
   test("extraTools are added to the tool list", () => {
-    const tools = getWorkerTools(makeWorkerConfig({
-      mode: "simple",
-      extraTools: ["DiffViewer", "Rename"],
-    }));
+    const tools = getWorkerTools(
+      makeWorkerConfig({
+        mode: "simple",
+        extraTools: ["DiffViewer", "Rename"],
+      }),
+    );
     expect(tools).toContain("DiffViewer");
     expect(tools).toContain("Rename");
   });
 
   test("extraTools are deduplicated", () => {
-    const tools = getWorkerTools(makeWorkerConfig({
-      mode: "simple",
-      extraTools: ["Bash", "Read"], // Already in simple mode
-    }));
-    const bashCount = tools.filter(t => t === "Bash").length;
+    const tools = getWorkerTools(
+      makeWorkerConfig({
+        mode: "simple",
+        extraTools: ["Bash", "Read"], // Already in simple mode
+      }),
+    );
+    const bashCount = tools.filter((t) => t === "Bash").length;
     expect(bashCount).toBe(1);
   });
 
   // ─── Blocked Tools ──────────────────────────────────────────
 
   test("blockedTools are removed from the final list", () => {
-    const tools = getWorkerTools(makeWorkerConfig({
-      mode: "simple",
-      blockedTools: ["Bash"],
-    }));
+    const tools = getWorkerTools(
+      makeWorkerConfig({
+        mode: "simple",
+        blockedTools: ["Bash"],
+      }),
+    );
     expect(tools).not.toContain("Bash");
     // Other tools remain
     expect(tools).toContain("Read");
@@ -127,11 +135,13 @@ describe("Worker Tool Restrictions", () => {
   });
 
   test("blockedTools and extraTools interact correctly", () => {
-    const tools = getWorkerTools(makeWorkerConfig({
-      mode: "simple",
-      extraTools: ["TestRunner"],
-      blockedTools: ["TestRunner", "Bash"],
-    }));
+    const tools = getWorkerTools(
+      makeWorkerConfig({
+        mode: "simple",
+        extraTools: ["TestRunner"],
+        blockedTools: ["TestRunner", "Bash"],
+      }),
+    );
     expect(tools).not.toContain("TestRunner");
     expect(tools).not.toContain("Bash");
   });
@@ -139,27 +149,21 @@ describe("Worker Tool Restrictions", () => {
   // ─── MCP Tools ──────────────────────────────────────────────
 
   test("MCP tools are added in complex mode", () => {
-    const tools = getWorkerTools(
-      makeWorkerConfig({ mode: "complex" }),
-      ["mcp__server__tool1", "mcp__server__tool2"],
-    );
+    const tools = getWorkerTools(makeWorkerConfig({ mode: "complex" }), [
+      "mcp__server__tool1",
+      "mcp__server__tool2",
+    ]);
     expect(tools).toContain("mcp__server__tool1");
     expect(tools).toContain("mcp__server__tool2");
   });
 
   test("MCP tools are NOT added in simple mode", () => {
-    const tools = getWorkerTools(
-      makeWorkerConfig({ mode: "simple" }),
-      ["mcp__server__tool1"],
-    );
+    const tools = getWorkerTools(makeWorkerConfig({ mode: "simple" }), ["mcp__server__tool1"]);
     expect(tools).not.toContain("mcp__server__tool1");
   });
 
   test("MCP tools that match coordinator-only names are excluded", () => {
-    const tools = getWorkerTools(
-      makeWorkerConfig({ mode: "complex" }),
-      ["Agent", "custom_tool"],
-    );
+    const tools = getWorkerTools(makeWorkerConfig({ mode: "complex" }), ["Agent", "custom_tool"]);
     expect(tools).not.toContain("Agent");
     expect(tools).toContain("custom_tool");
   });
@@ -189,16 +193,20 @@ describe("buildWorkerPrompt", () => {
   });
 
   test("includes allowed tools list", () => {
-    const prompt = buildWorkerPrompt(makeSpawnConfig({
-      allowedTools: ["Bash", "Read", "Edit"],
-    }));
+    const prompt = buildWorkerPrompt(
+      makeSpawnConfig({
+        allowedTools: ["Bash", "Read", "Edit"],
+      }),
+    );
     expect(prompt).toContain("Bash, Read, Edit");
   });
 
   test("includes focus files when provided", () => {
-    const prompt = buildWorkerPrompt(makeSpawnConfig({
-      files: ["src/auth.ts", "src/auth.test.ts"],
-    }));
+    const prompt = buildWorkerPrompt(
+      makeSpawnConfig({
+        files: ["src/auth.ts", "src/auth.test.ts"],
+      }),
+    );
     expect(prompt).toContain("Focus Files");
     expect(prompt).toContain("src/auth.ts");
     expect(prompt).toContain("src/auth.test.ts");

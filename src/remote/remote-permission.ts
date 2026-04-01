@@ -41,10 +41,13 @@ export const PERMISSION_TIMEOUT_MS = 30_000;
  */
 export class RemotePermissionBridge {
   private promptFn: PermissionPromptFn;
-  private pendingRequests: Map<string, {
-    resolve: (result: PermissionResult) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }> = new Map();
+  private pendingRequests: Map<
+    string,
+    {
+      resolve: (result: PermissionResult) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  > = new Map();
   private timeoutMs: number;
 
   constructor(promptFn: PermissionPromptFn, timeoutMs: number = PERMISSION_TIMEOUT_MS) {

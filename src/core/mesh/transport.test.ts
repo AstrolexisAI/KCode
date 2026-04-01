@@ -1,9 +1,9 @@
 // KCode - P2P Agent Mesh Transport Tests
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { MeshTransport, type TransportEventHandlers } from "./transport";
-import type { PeerInfo, MeshTask, MeshTaskHandle, MeshResult } from "./types";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { generateTeamToken } from "./security";
+import { MeshTransport, type TransportEventHandlers } from "./transport";
+import type { MeshResult, MeshTask, MeshTaskHandle, PeerInfo } from "./types";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -12,11 +12,8 @@ const TEST_TOKEN = generateTeamToken();
 function makeTransport(
   overrides: Partial<{ port: number; handlers: TransportEventHandlers }> = {},
 ): MeshTransport {
-  const port = overrides.port ?? (19300 + Math.floor(Math.random() * 1000));
-  return new MeshTransport(
-    { port, teamToken: TEST_TOKEN },
-    overrides.handlers ?? {},
-  );
+  const port = overrides.port ?? 19300 + Math.floor(Math.random() * 1000);
+  return new MeshTransport({ port, teamToken: TEST_TOKEN }, overrides.handlers ?? {});
 }
 
 function makePeer(port: number): PeerInfo {
@@ -90,8 +87,7 @@ describe("MeshTransport - request handling", () => {
     transport = makeTransport({
       port,
       handlers: {
-        onCapabilities: () =>
-          makePeer(port),
+        onCapabilities: () => makePeer(port),
         onTask: async (task) => ({
           taskId: task.id,
           assignedTo: "test-node",

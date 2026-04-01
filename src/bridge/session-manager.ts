@@ -3,7 +3,7 @@
 
 import { randomUUID } from "node:crypto";
 import { log } from "../core/logger";
-import type { SpawnMode, SessionStatus, Session } from "./types";
+import type { Session, SessionStatus, SpawnMode } from "./types";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -221,7 +221,10 @@ export class SessionManager {
 
       // Idle timeout
       if (idleMs > this.idleTimeoutMs) {
-        log.info("session-manager", `GC: destroying idle session ${id} (idle for ${Math.round(idleMs / 1000)}s)`);
+        log.info(
+          "session-manager",
+          `GC: destroying idle session ${id} (idle for ${Math.round(idleMs / 1000)}s)`,
+        );
         this.emit({ type: "idle-timeout", sessionId: id, reason: "idle timeout" });
         await this.destroySession(id);
         destroyed.push(id);

@@ -1,23 +1,23 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 
 import {
-  extractCommandPrefix,
+  analyzeBashCommand,
   detectCommandInjection,
   detectDangerousRedirections,
-  detectShellInvocation,
   detectPipeToShell,
   detectQuoteDesync,
-  analyzeBashCommand,
-  validateFileWritePath,
+  detectShellInvocation,
   evaluateRules,
+  extractCommandPrefix,
+  type ParsedToolRule,
+  PermissionManager,
+  type PermissionPromptFn,
+  type PermissionResult,
   parseToolRule,
   suggestRule,
-  PermissionManager,
-  type PermissionResult,
-  type PermissionPromptFn,
-  type ParsedToolRule,
+  validateFileWritePath,
 } from "./permissions.ts";
-import type { ToolUseBlock, PermissionRule } from "./types.ts";
+import type { PermissionRule, ToolUseBlock } from "./types.ts";
 
 // ─── extractCommandPrefix ──────────────────────────────────────
 
@@ -150,7 +150,7 @@ describe("detectShellInvocation", () => {
 
 describe("detectQuoteDesync", () => {
   test("returns null for balanced quotes", () => {
-    expect(detectQuoteDesync('echo "hello" \'world\'')).toBeNull();
+    expect(detectQuoteDesync("echo \"hello\" 'world'")).toBeNull();
   });
 
   test("detects unmatched single quote", () => {
@@ -272,57 +272,57 @@ describe("detectDestructiveRemoval", () => {
     const result = analyzeBashCommand("rm -rf /home/user/bitcoin-sovereign");
     expect(result.safe).toBe(false);
     expect(result.riskLevel).toBe("dangerous");
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(true);
   });
 
   test("blocks rm -rf on relative path", () => {
     const result = analyzeBashCommand("rm -rf bitcoin-sovereign");
     expect(result.safe).toBe(false);
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(true);
   });
 
   test("blocks rm -rf .", () => {
     const result = analyzeBashCommand("rm -rf .");
     expect(result.safe).toBe(false);
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(true);
   });
 
   test("allows rm -rf node_modules", () => {
     const result = analyzeBashCommand("rm -rf node_modules");
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(false);
   });
 
   test("allows rm -rf .next", () => {
     const result = analyzeBashCommand("rm -rf .next");
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(false);
   });
 
   test("allows rm -rf dist", () => {
     const result = analyzeBashCommand("rm -rf dist");
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(false);
   });
 
   test("does not trigger on rm without -rf", () => {
     const result = analyzeBashCommand("rm file.txt");
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(false);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(false);
   });
 
   test("blocks rm -rfv (verbose flag bypass)", () => {
     const result = analyzeBashCommand("rm -rfv bitcoin-sovereign");
     expect(result.safe).toBe(false);
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(true);
   });
 
   test("blocks rm -frv (reordered flags)", () => {
     const result = analyzeBashCommand("rm -frv bitcoin-sovereign");
     expect(result.safe).toBe(false);
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(true);
   });
 
   test("blocks rm -rvf (another flag order)", () => {
     const result = analyzeBashCommand("rm -rvf bitcoin-sovereign");
     expect(result.safe).toBe(false);
-    expect(result.issues.some(i => i.includes("destructive removal"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("destructive removal"))).toBe(true);
   });
 });
 
@@ -332,12 +332,12 @@ describe("detectScaffoldConflict", () => {
   test("detects scaffold on existing non-empty directory", () => {
     // Use a directory that definitely exists and is non-empty
     const result = analyzeBashCommand(`bun create next-app ${process.env.HOME}`);
-    expect(result.issues.some(i => i.includes("Scaffold conflict"))).toBe(true);
+    expect(result.issues.some((i) => i.includes("Scaffold conflict"))).toBe(true);
   });
 
   test("does not trigger on non-existent directory", () => {
     const result = analyzeBashCommand("bun create next-app /tmp/definitely-not-existing-dir-12345");
-    expect(result.issues.some(i => i.includes("Scaffold conflict"))).toBe(false);
+    expect(result.issues.some((i) => i.includes("Scaffold conflict"))).toBe(false);
   });
 });
 
@@ -432,7 +432,9 @@ describe("PermissionManager", () => {
       expect(bash.allowed).toBe(false);
       expect(bash.reason).toContain("plan");
 
-      const write = await pm.checkPermission(makeToolUse("Write", { file_path: "/tmp/test/f.txt", content: "x" }));
+      const write = await pm.checkPermission(
+        makeToolUse("Write", { file_path: "/tmp/test/f.txt", content: "x" }),
+      );
       expect(write.allowed).toBe(false);
 
       const edit = await pm.checkPermission(
@@ -827,7 +829,10 @@ describe("evaluateRules compound patterns", () => {
 
   test("Write(**.test.ts) matches test files", () => {
     const rules: PermissionRule[] = [{ pattern: "Write(**.test.ts)", action: "allow" }];
-    const tool = makeTool("Write", { file_path: "/home/user/project/src/foo.test.ts", content: "test" });
+    const tool = makeTool("Write", {
+      file_path: "/home/user/project/src/foo.test.ts",
+      content: "test",
+    });
     expect(evaluateRules(rules, tool)).toBe("allow");
   });
 

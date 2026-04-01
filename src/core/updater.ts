@@ -3,11 +3,11 @@
 // Downloads from GitHub releases or a configured update URL.
 
 import { execSync } from "node:child_process";
-import { existsSync, renameSync, unlinkSync, chmodSync, copyFileSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { platform, arch, homedir } from "node:os";
-import { kcodePath } from "./paths";
+import { chmodSync, copyFileSync, existsSync, readFileSync, renameSync, unlinkSync } from "node:fs";
+import { arch, homedir, platform } from "node:os";
+import { dirname, join } from "node:path";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -72,8 +72,16 @@ async function getLatestRelease(updateUrl?: string): Promise<ReleaseInfo | null>
 
     if (!resp.ok) return null;
 
-    interface ReleaseAsset { name: string; browser_download_url: string }
-    interface ReleaseData { tag_name?: string; version?: string; assets?: ReleaseAsset[]; published_at?: string }
+    interface ReleaseAsset {
+      name: string;
+      browser_download_url: string;
+    }
+    interface ReleaseData {
+      tag_name?: string;
+      version?: string;
+      assets?: ReleaseAsset[];
+      published_at?: string;
+    }
     const data = (await resp.json()) as ReleaseData;
     const tag = data.tag_name ?? data.version ?? "";
     const version = tag.replace(/^v/, "");
@@ -124,7 +132,9 @@ async function downloadBinary(url: string, destPath: string): Promise<void> {
 
     if (totalSize > 0) {
       const pct = Math.round((downloaded / totalSize) * 100);
-      process.stderr.write(`\r  Downloading... ${pct}% (${(downloaded / 1024 / 1024).toFixed(1)} MB)`);
+      process.stderr.write(
+        `\r  Downloading... ${pct}% (${(downloaded / 1024 / 1024).toFixed(1)} MB)`,
+      );
     }
   }
 
@@ -143,14 +153,20 @@ async function downloadBinary(url: string, destPath: string): Promise<void> {
     }
     renameSync(tmpPath, destPath);
     // Clean up backup
-    try { unlinkSync(backupPath); } catch { /* may be in use */ }
+    try {
+      unlinkSync(backupPath);
+    } catch {
+      /* may be in use */
+    }
   } catch (err) {
     // Restore backup if rename failed
     try {
       if (existsSync(backupPath)) {
         renameSync(backupPath, destPath);
       }
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
     throw err;
   }
 }
@@ -170,14 +186,18 @@ export async function checkForUpdate(currentVersion: string): Promise<string | n
         return null;
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const release = await getLatestRelease();
 
   // Save check timestamp
   try {
     await Bun.write(UPDATE_CHECK_FILE, Date.now().toString());
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   if (!release) return null;
 
@@ -210,7 +230,9 @@ export async function performUpdate(
   }
 
   console.log(`  Current: v${currentVersion}`);
-  console.log(`  Latest:  v${release.version} (${release.publishedAt?.split("T")[0] ?? "unknown"})`);
+  console.log(
+    `  Latest:  v${release.version} (${release.publishedAt?.split("T")[0] ?? "unknown"})`,
+  );
   console.log();
 
   // Find all binary locations to update
@@ -242,7 +264,9 @@ export async function performUpdate(
     // Save check timestamp
     try {
       await Bun.write(UPDATE_CHECK_FILE, Date.now().toString());
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     return { updated: true, version: release.version };
   } catch (err) {
@@ -268,7 +292,9 @@ function findBinaryPaths(): string[] {
     if (which && !candidates.includes(which)) {
       candidates.unshift(which);
     }
-  } catch { /* not in PATH */ }
+  } catch {
+    /* not in PATH */
+  }
 
   for (const p of candidates) {
     if (existsSync(p)) {

@@ -9,32 +9,24 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type {
-  RemoteConfig,
-  RemoteMode,
-  RemoteSessionInfo,
-  RemoteAgentInfo,
-  TunnelInfo,
-} from "./types";
+import { initialSync, startRemoteWatcher, startWatcher, syncChanges } from "./file-sync";
+import { type PermissionPromptFn, RemotePermissionBridge } from "./remote-permission";
 import {
   checkConnectivity,
   checkKCodeInstalled,
-  startRemoteAgent,
   createTunnel,
+  DEFAULT_RECONNECT,
   executeRemote,
   reconnect,
-  DEFAULT_RECONNECT,
+  startRemoteAgent,
 } from "./ssh-transport";
-import {
-  initialSync,
-  syncChanges,
-  startWatcher,
-  startRemoteWatcher,
-} from "./file-sync";
-import {
-  RemotePermissionBridge,
-  type PermissionPromptFn,
-} from "./remote-permission";
+import type {
+  RemoteAgentInfo,
+  RemoteConfig,
+  RemoteMode,
+  RemoteSessionInfo,
+  TunnelInfo,
+} from "./types";
 
 /** Events emitted by a remote session */
 export type RemoteSessionEvent =
@@ -116,13 +108,14 @@ export class RemoteSession {
       id: this.state.id,
       host: this.config.host,
       dir: this.config.remoteDir,
-      status: this.state.status === "connecting" || this.state.status === "reconnecting"
-        ? "active"
-        : this.state.status === "connected"
+      status:
+        this.state.status === "connecting" || this.state.status === "reconnecting"
           ? "active"
-          : this.state.status === "terminated"
-            ? "terminated"
-            : "disconnected",
+          : this.state.status === "connected"
+            ? "active"
+            : this.state.status === "terminated"
+              ? "terminated"
+              : "disconnected",
       createdAt: new Date().toISOString(),
     };
   }
@@ -166,21 +159,15 @@ export class RemoteSession {
     if (!installed) {
       throw new Error(
         `KCode is not installed on ${this.config.host}. ` +
-        `Install with: kcode remote install ${this.config.host}`,
+          `Install with: kcode remote install ${this.config.host}`,
       );
     }
 
     // Start remote agent
-    this.state.agentInfo = await startRemoteAgent(
-      this.config.host,
-      this.config.remoteDir,
-    );
+    this.state.agentInfo = await startRemoteAgent(this.config.host, this.config.remoteDir);
 
     // Create SSH tunnel
-    this.state.tunnel = await createTunnel(
-      this.config.host,
-      this.state.agentInfo.port,
-    );
+    this.state.tunnel = await createTunnel(this.config.host, this.state.agentInfo.port);
 
     // Set up permission bridge
     if (this.permissionPrompt) {
@@ -255,10 +242,7 @@ export class RemoteSession {
   private async startViewerMode(): Promise<void> {
     // For viewer mode, we connect to an existing agent session
     // We need the agent info (port/token) from the remote
-    const result = await executeRemote(
-      this.config.host,
-      ["kcode", "sessions", "--json"],
-    );
+    const result = await executeRemote(this.config.host, ["kcode", "sessions", "--json"]);
 
     if (result.exitCode !== 0) {
       throw new Error(`Failed to list remote sessions: ${result.stderr}`);
@@ -275,7 +259,7 @@ export class RemoteSession {
     if (!target) {
       throw new Error(
         `Session ${this.state.id} not found on ${this.config.host}. ` +
-        `Use 'kcode remote sessions ${this.config.host}' to list available sessions.`,
+          `Use 'kcode remote sessions ${this.config.host}' to list available sessions.`,
       );
     }
 
@@ -317,11 +301,13 @@ export class RemoteSession {
 
         // If viewer mode, send subscription message
         if (viewerMode) {
-          ws.send(JSON.stringify({
-            type: "session.subscribe",
-            sessionId: this.state.id,
-            mode: "viewer",
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "session.subscribe",
+              sessionId: this.state.id,
+              mode: "viewer",
+            }),
+          );
         }
 
         resolve();
@@ -362,10 +348,12 @@ export class RemoteSession {
         .handleRequest(data as unknown as import("./remote-permission").PermissionRequest)
         .then((result) => {
           if (this.state.ws && this.state.ws.readyState === WebSocket.OPEN) {
-            this.state.ws.send(JSON.stringify({
-              type: "permission.response",
-              ...result,
-            }));
+            this.state.ws.send(
+              JSON.stringify({
+                type: "permission.response",
+                ...result,
+              }),
+            );
           }
         });
       return;
@@ -383,23 +371,16 @@ export class RemoteSession {
     this.state.status = "reconnecting";
     this.emit({ type: "disconnected", reason: "Connection lost" });
 
-    const success = await reconnect(
-      this.config.host,
-      DEFAULT_RECONNECT,
-      (attempt, max) => {
-        this.emit({ type: "reconnecting", attempt, maxAttempts: max });
-      },
-    );
+    const success = await reconnect(this.config.host, DEFAULT_RECONNECT, (attempt, max) => {
+      this.emit({ type: "reconnecting", attempt, maxAttempts: max });
+    });
 
     if (success) {
       try {
         // Re-establish tunnel and WebSocket
         if (this.state.agentInfo) {
           this.state.tunnel?.process.kill();
-          this.state.tunnel = await createTunnel(
-            this.config.host,
-            this.state.agentInfo.port,
-          );
+          this.state.tunnel = await createTunnel(this.config.host, this.state.agentInfo.port);
           await this.connectWebSocket(
             this.state.tunnel.localPort,
             this.state.agentInfo.token,
@@ -520,7 +501,11 @@ export class RemoteSession {
     if (killRemoteAgent && this.state.agentInfo) {
       try {
         await executeRemote(this.config.host, [
-          "kcode", "serve", "--stop", "--port", String(this.state.agentInfo.port),
+          "kcode",
+          "serve",
+          "--stop",
+          "--port",
+          String(this.state.agentInfo.port),
         ]);
       } catch {
         // Best effort

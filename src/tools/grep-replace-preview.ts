@@ -27,10 +27,10 @@ export async function previewGrepReplace(
   const results: GrepReplacePreviewResult["files"] = [];
 
   // Find matching files
-  const findProc = Bun.spawn(
-    ["rg", "--files-with-matches", "--glob", glob, pattern, cwd],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const findProc = Bun.spawn(["rg", "--files-with-matches", "--glob", glob, pattern, cwd], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const findOutput = await new Response(findProc.stdout).text();
   const files = findOutput.trim().split("\n").filter(Boolean);
 
@@ -63,7 +63,10 @@ export async function previewGrepReplace(
           const newLine = line.replace(regex, replacement);
 
           // Context (1 line before)
-          if (i > 0 && (diffLines.length < 3 || !diffLines[diffLines.length - 1]?.startsWith(" "))) {
+          if (
+            i > 0 &&
+            (diffLines.length < 3 || !diffLines[diffLines.length - 1]?.startsWith(" "))
+          ) {
             diffLines.push(`@@ -${i},3 +${i},3 @@`);
             diffLines.push(` ${lines[i - 1]}`);
           }
@@ -103,10 +106,14 @@ export async function previewGrepReplace(
 export function formatPreview(preview: GrepReplacePreviewResult): string {
   const lines: string[] = [];
 
-  lines.push(`\n  GrepReplace Preview: ${preview.totalMatches} match(es) in ${preview.totalFiles} file(s)\n`);
+  lines.push(
+    `\n  GrepReplace Preview: ${preview.totalMatches} match(es) in ${preview.totalFiles} file(s)\n`,
+  );
 
   for (const file of preview.files) {
-    lines.push(`  \x1b[1m${file.path}\x1b[0m (${file.matches} match${file.matches !== 1 ? "es" : ""})`);
+    lines.push(
+      `  \x1b[1m${file.path}\x1b[0m (${file.matches} match${file.matches !== 1 ? "es" : ""})`,
+    );
     lines.push(file.diff);
     lines.push("");
   }

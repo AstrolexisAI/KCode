@@ -1,6 +1,6 @@
 // KCode - Extension API Event Emitter Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { ExtensionEventEmitter } from "./events";
 import type { ExtensionEvent } from "./types";
 

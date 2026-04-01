@@ -65,7 +65,10 @@ export class PermissionBridge {
 
     return new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => {
-        log.warn("permission-bridge", `Permission request ${requestId} timed out after ${this.timeoutMs}ms — denying`);
+        log.warn(
+          "permission-bridge",
+          `Permission request ${requestId} timed out after ${this.timeoutMs}ms — denying`,
+        );
         this.pending.delete(requestId);
         resolve(false);
       }, this.timeoutMs);
@@ -107,14 +110,20 @@ export class PermissionBridge {
 
     // Verify session matches
     if (pending.sessionId !== msg.sessionId) {
-      log.warn("permission-bridge", `Session mismatch for request ${msg.requestId}: expected ${pending.sessionId}, got ${msg.sessionId}`);
+      log.warn(
+        "permission-bridge",
+        `Session mismatch for request ${msg.requestId}: expected ${pending.sessionId}, got ${msg.sessionId}`,
+      );
       return false;
     }
 
     clearTimeout(pending.timer);
     this.pending.delete(msg.requestId);
 
-    log.info("permission-bridge", `Permission ${msg.allowed ? "granted" : "denied"} for request ${msg.requestId}`);
+    log.info(
+      "permission-bridge",
+      `Permission ${msg.allowed ? "granted" : "denied"} for request ${msg.requestId}`,
+    );
     pending.resolve(msg.allowed);
     return true;
   }

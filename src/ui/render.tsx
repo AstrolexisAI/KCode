@@ -1,15 +1,15 @@
 // KCode - Ink render entry point
 // Initializes and renders the Ink application with paste interception
 
-import React from "react";
 import { render } from "ink";
-import App from "./App.js";
-import { ThemeProvider } from "./ThemeContext.js";
-import { installPasteInterceptor } from "./paste-stream.js";
-import { invokePasteHandler } from "./paste-handler.js";
+import React from "react";
 import type { ConversationManager } from "../core/conversation.js";
-import type { KCodeConfig } from "../core/types.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
+import type { KCodeConfig } from "../core/types.js";
+import App from "./App.js";
+import { invokePasteHandler } from "./paste-handler.js";
+import { installPasteInterceptor } from "./paste-stream.js";
+import { ThemeProvider } from "./ThemeContext.js";
 
 interface StartUIOptions {
   config: KCodeConfig;

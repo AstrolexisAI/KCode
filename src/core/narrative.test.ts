@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterAll } from "bun:test";
 import { Database } from "bun:sqlite";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { NarrativeManager, type SessionData } from "./narrative";
 
 describe("NarrativeManager", () => {
@@ -49,7 +49,7 @@ describe("NarrativeManager", () => {
 
     // Verify it was stored
     const all = manager.getAllNarratives(50);
-    const found = all.find(n => n.project === testProject);
+    const found = all.find((n) => n.project === testProject);
     expect(found).toBeDefined();
     expect(found!.summary.length).toBeGreaterThan(0);
     expect(found!.actions_taken).toBe(5);
@@ -105,7 +105,7 @@ describe("NarrativeManager", () => {
     manager.updateNarrative(data);
 
     const all = manager.getAllNarratives(50);
-    const found = all.find(n => n.project === testProject && n.actions_taken === 8);
+    const found = all.find((n) => n.project === testProject && n.actions_taken === 8);
     expect(found).toBeDefined();
 
     const summary = found!.summary;
@@ -129,7 +129,7 @@ describe("NarrativeManager", () => {
     manager.updateNarrative(data);
 
     const all = manager.getAllNarratives(50);
-    const found = all.find(n => n.project === testProject && n.actions_taken === 12);
+    const found = all.find((n) => n.project === testProject && n.actions_taken === 12);
     expect(found).toBeDefined();
     expect(found!.summary).toContain("12 actions");
   });
@@ -144,7 +144,7 @@ describe("NarrativeManager", () => {
     manager.updateNarrative(data);
 
     const all = manager.getAllNarratives(50);
-    const found = all.find(n => n.project === testProject && n.actions_taken === 0);
+    const found = all.find((n) => n.project === testProject && n.actions_taken === 0);
     expect(found).toBeDefined();
     expect(found!.summary).toContain("had a conversation");
   });
@@ -156,7 +156,7 @@ describe("NarrativeManager", () => {
     manager.updateNarrative(data);
 
     const all = manager.getAllNarratives(50);
-    const found = all.find(n => n.tools_used.includes("Grep"));
+    const found = all.find((n) => n.tools_used.includes("Grep"));
     expect(found).toBeDefined();
     expect(found!.tools_used).toContain("Read");
     expect(found!.tools_used).toContain("Write");

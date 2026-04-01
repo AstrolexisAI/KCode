@@ -181,7 +181,7 @@ export interface TurnCostEntry {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
-  toolCalls: string[];  // tool names used in this turn
+  toolCalls: string[]; // tool names used in this turn
   timestamp: number;
 }
 
@@ -193,19 +193,45 @@ export type StreamEvent =
   | { type: "tool_use_start"; toolUseId: string; name: string }
   | { type: "tool_input_delta"; toolUseId: string; partialJson: string }
   | { type: "tool_executing"; name: string; toolUseId: string; input: Record<string, unknown> }
-  | { type: "tool_result"; name: string; toolUseId: string; result: string; isError?: boolean; durationMs?: number }
+  | {
+      type: "tool_result";
+      name: string;
+      toolUseId: string;
+      result: string;
+      isError?: boolean;
+      durationMs?: number;
+    }
   | { type: "usage_update"; usage: TokenUsage }
   | { type: "token_count"; tokens: number }
   | { type: "error"; error: Error; retryable: boolean; attempt?: number }
   | { type: "turn_start" }
   | { type: "suggestion"; suggestions: { type: string; message: string; priority: string }[] }
-  | { type: "turn_end"; stopReason: string; emptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" }
+  | {
+      type: "turn_end";
+      stopReason: string;
+      emptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output";
+    }
   | { type: "compaction_start"; messageCount: number; tokensBefore: number }
   | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }
   | { type: "budget_warning"; costUsd: number; limitUsd: number; pct: number }
-  | { type: "tool_progress"; toolUseId: string; name: string; status: "queued" | "running" | "done" | "error"; index: number; total: number; durationMs?: number }
+  | {
+      type: "tool_progress";
+      toolUseId: string;
+      name: string;
+      status: "queued" | "running" | "done" | "error";
+      index: number;
+      total: number;
+      durationMs?: number;
+    }
   | { type: "tool_stream"; toolUseId: string; name: string; chunk: string }
-  | { type: "partial_progress"; toolsUsed: number; elapsedMs: number; filesModified: string[]; lastError?: string; summary: string };
+  | {
+      type: "partial_progress";
+      toolsUsed: number;
+      elapsedMs: number;
+      filesModified: string[];
+      lastError?: string;
+      summary: string;
+    };
 
 // ─── Tool Input/Output Schemas ───────────────────────────────────
 

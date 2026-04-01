@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { WorldModel, type Prediction } from "./world-model";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { type Prediction, WorldModel } from "./world-model";
 
 describe("WorldModel", () => {
   let wm: WorldModel;
@@ -71,7 +71,7 @@ describe("WorldModel", () => {
     wm.compare(prediction, "Error: not found", true);
     // Should be recorded as incorrect
     const discrepancies = wm.loadRecentDiscrepancies(100);
-    const found = discrepancies.some(d => d.action.includes("nonexistent.ts"));
+    const found = discrepancies.some((d) => d.action.includes("nonexistent.ts"));
     expect(found).toBe(true);
   });
 
@@ -80,7 +80,7 @@ describe("WorldModel", () => {
     wm.compare(prediction, "No such file or directory", false);
     // Result contains "no such file" error indicator, so should be marked incorrect
     const discrepancies = wm.loadRecentDiscrepancies(100);
-    const found = discrepancies.some(d => d.action.includes("cat /missing"));
+    const found = discrepancies.some((d) => d.action.includes("cat /missing"));
     expect(found).toBe(true);
   });
 
@@ -93,7 +93,7 @@ describe("WorldModel", () => {
     expect(Array.isArray(discrepancies)).toBe(true);
     // Should have at least the one we just inserted
     expect(discrepancies.length).toBeGreaterThanOrEqual(1);
-    const entry = discrepancies.find(d => d.action.includes("failing-command-test"));
+    const entry = discrepancies.find((d) => d.action.includes("failing-command-test"));
     if (entry) {
       expect(entry).toHaveProperty("action");
       expect(entry).toHaveProperty("expected");

@@ -1,6 +1,6 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { readFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -107,7 +107,7 @@ describe("grep-replace tool", () => {
   // ─── Literal mode ───
 
   test("literal mode escapes regex special characters", async () => {
-    await createTempFile("regex.ts", 'const re = /foo.bar/;\n');
+    await createTempFile("regex.ts", "const re = /foo.bar/;\n");
 
     const result = await executeGrepReplace({
       pattern: "foo.bar",

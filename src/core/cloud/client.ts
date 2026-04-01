@@ -4,9 +4,9 @@
 import { join } from "node:path";
 import { log } from "../logger";
 import type {
-  KCodeCloudConfig,
-  CloudTeam,
   CloudAuthResult,
+  CloudTeam,
+  KCodeCloudConfig,
   TeamAnalytics,
   TeamPolicies,
 } from "./types";
@@ -46,9 +46,7 @@ async function loadCloudConfigFromSettings(): Promise<KCodeCloudConfig | null> {
  * Write cloud configuration back to ~/.kcode/settings.json,
  * merging with existing settings.
  */
-async function saveCloudConfigToSettings(
-  config: KCodeCloudConfig,
-): Promise<void> {
+async function saveCloudConfigToSettings(config: KCodeCloudConfig): Promise<void> {
   try {
     const { kcodeHome } = await import("../paths");
     const settingsPath = join(kcodeHome(), "settings.json");
@@ -83,9 +81,7 @@ export class CloudClient {
       this.configLoaded = true;
     }
     if (!this.config) {
-      throw new Error(
-        "Cloud is not configured. Run `kcode cloud login` to set up your account.",
-      );
+      throw new Error("Cloud is not configured. Run `kcode cloud login` to set up your account.");
     }
     return this.config;
   }
@@ -122,11 +118,7 @@ export class CloudClient {
       if (response.status === 401) {
         throw new CloudClientError("Invalid email or password", 401, body);
       }
-      throw new CloudClientError(
-        `Login failed (HTTP ${response.status})`,
-        response.status,
-        body,
-      );
+      throw new CloudClientError(`Login failed (HTTP ${response.status})`, response.status, body);
     }
 
     const result: CloudAuthResult = await response.json();
@@ -164,10 +156,7 @@ export class CloudClient {
   /**
    * Invite a new member to the team.
    */
-  async inviteMember(
-    email: string,
-    role: "admin" | "member" = "member",
-  ): Promise<void> {
+  async inviteMember(email: string, role: "admin" | "member" = "member"): Promise<void> {
     const config = await this.ensureConfig();
     await this.request("POST", `/api/v1/teams/${config.teamId}/members`, {
       email,
@@ -181,19 +170,14 @@ export class CloudClient {
    */
   async removeMember(memberId: string): Promise<void> {
     const config = await this.ensureConfig();
-    await this.request(
-      "DELETE",
-      `/api/v1/teams/${config.teamId}/members/${memberId}`,
-    );
+    await this.request("DELETE", `/api/v1/teams/${config.teamId}/members/${memberId}`);
     log.debug("cloud", `Removed member ${memberId}`);
   }
 
   /**
    * Get team analytics for the specified period.
    */
-  async getAnalytics(
-    period: "day" | "week" | "month",
-  ): Promise<TeamAnalytics> {
+  async getAnalytics(period: "day" | "week" | "month"): Promise<TeamAnalytics> {
     const config = await this.ensureConfig();
     return this.request<TeamAnalytics>(
       "GET",
@@ -206,10 +190,7 @@ export class CloudClient {
    */
   async getPolicies(): Promise<TeamPolicies> {
     const config = await this.ensureConfig();
-    return this.request<TeamPolicies>(
-      "GET",
-      `/api/v1/teams/${config.teamId}/policies`,
-    );
+    return this.request<TeamPolicies>("GET", `/api/v1/teams/${config.teamId}/policies`);
   }
 
   /**
@@ -217,11 +198,7 @@ export class CloudClient {
    */
   async updatePolicies(policies: Partial<TeamPolicies>): Promise<void> {
     const config = await this.ensureConfig();
-    await this.request(
-      "PATCH",
-      `/api/v1/teams/${config.teamId}/policies`,
-      policies,
-    );
+    await this.request("PATCH", `/api/v1/teams/${config.teamId}/policies`, policies);
     log.debug("cloud", "Team policies updated");
   }
 
@@ -229,11 +206,7 @@ export class CloudClient {
    * Base HTTP helper. Handles authentication headers, JSON
    * serialization, and error responses.
    */
-  async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const config = await this.ensureConfig();
     const url = `${config.url}${path}`;
 
@@ -263,11 +236,9 @@ export class CloudClient {
       let message = `Cloud API error (HTTP ${response.status})`;
 
       if (response.status === 401) {
-        message =
-          "Authentication expired or invalid. Run `kcode cloud login` to re-authenticate.";
+        message = "Authentication expired or invalid. Run `kcode cloud login` to re-authenticate.";
       } else if (response.status === 403) {
-        message =
-          "Permission denied. You may not have access to this resource.";
+        message = "Permission denied. You may not have access to this resource.";
       } else if (response.status === 404) {
         message = `Resource not found: ${path}`;
       } else if (response.status === 429) {

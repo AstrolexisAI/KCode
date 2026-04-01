@@ -1,7 +1,13 @@
 // KCode - Health Score Tests
 
-import { describe, test, expect } from "bun:test";
-import { calculateScore, scoreToGrade, renderHealthReport, type HealthCheck, type HealthReport } from "./health-score";
+import { describe, expect, test } from "bun:test";
+import {
+  calculateScore,
+  type HealthCheck,
+  type HealthReport,
+  renderHealthReport,
+  scoreToGrade,
+} from "./health-score";
 
 // ─── calculateScore ────────────────────────────────────────────
 
@@ -40,7 +46,7 @@ describe("calculateScore", () => {
   test("mixed pass/warn/fail calculates correctly", () => {
     const checks: HealthCheck[] = [
       { name: "A", category: "runtime", status: "pass", message: "", weight: 10 }, // +10
-      { name: "B", category: "config", status: "warn", message: "", weight: 10 },  // +5
+      { name: "B", category: "config", status: "warn", message: "", weight: 10 }, // +5
       { name: "C", category: "network", status: "fail", message: "", weight: 10 }, // +0
     ];
     // total = 30, earned = 15
@@ -54,7 +60,7 @@ describe("calculateScore", () => {
   test("respects weight differences", () => {
     const checks: HealthCheck[] = [
       { name: "A", category: "runtime", status: "pass", message: "", weight: 10 }, // +10
-      { name: "B", category: "plugin", status: "fail", message: "", weight: 1 },   // +0
+      { name: "B", category: "plugin", status: "fail", message: "", weight: 1 }, // +0
     ];
     // total = 11, earned = 10
     expect(calculateScore(checks)).toBe(91);
@@ -84,8 +90,21 @@ describe("renderHealthReport", () => {
     score: 85,
     grade: "B",
     checks: [
-      { name: "Bun Runtime", category: "runtime", status: "pass", message: "Bun 1.3.10", weight: 10 },
-      { name: "Storage", category: "storage", status: "warn", message: "DB is 600MB", fix: "Run `kcode db vacuum`", weight: 5 },
+      {
+        name: "Bun Runtime",
+        category: "runtime",
+        status: "pass",
+        message: "Bun 1.3.10",
+        weight: 10,
+      },
+      {
+        name: "Storage",
+        category: "storage",
+        status: "warn",
+        message: "DB is 600MB",
+        fix: "Run `kcode db vacuum`",
+        weight: 5,
+      },
       { name: "GPU", category: "gpu", status: "skip", message: "No GPU detected", weight: 7 },
     ],
     summary: "Health Score: 85/100 (B)",

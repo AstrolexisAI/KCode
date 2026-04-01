@@ -1,8 +1,8 @@
 // KCode - GrepReplace Tool
 // Regex find-and-replace across multiple files with preview
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, extname, resolve } from "node:path";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { extname, join, relative, resolve } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const grepReplaceDefinition: ToolDefinition = {
@@ -54,17 +54,53 @@ export const grepReplaceDefinition: ToolDefinition = {
 // ─── Constants ──────────────────────────────────────────────────
 
 const DEFAULT_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".rs", ".go", ".java", ".kt", ".swift",
-  ".c", ".cpp", ".h", ".hpp", ".cs", ".rb",
-  ".vue", ".svelte", ".json", ".yaml", ".yml",
-  ".toml", ".md", ".txt", ".html", ".css", ".scss",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".rs",
+  ".go",
+  ".java",
+  ".kt",
+  ".swift",
+  ".c",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".rb",
+  ".vue",
+  ".svelte",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".md",
+  ".txt",
+  ".html",
+  ".css",
+  ".scss",
 ]);
 
 const IGNORE_DIRS = new Set([
-  "node_modules", "dist", "build", ".git", "__pycache__",
-  "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", ".vscode", ".idea", "coverage", "data",
+  "node_modules",
+  "dist",
+  "build",
+  ".git",
+  "__pycache__",
+  "venv",
+  ".next",
+  ".nuxt",
+  "target",
+  "vendor",
+  ".kcode",
+  ".vscode",
+  ".idea",
+  "coverage",
+  "data",
 ]);
 
 const MAX_FILE_SIZE = 500_000; // 500KB
@@ -120,7 +156,9 @@ function collectFiles(
       if (stat.size <= MAX_FILE_SIZE) {
         results.push(fullPath);
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 }
 
@@ -142,7 +180,11 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
   const resolvedPath = resolve(searchPath);
   const resolvedCwd = resolve(cwd);
   if (!resolvedPath.startsWith(resolvedCwd)) {
-    return { tool_use_id: "", content: `Error: path must be within the project directory (${resolvedCwd}).`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: path must be within the project directory (${resolvedCwd}).`,
+      is_error: true,
+    };
   }
 
   // Build regex with ReDoS protection
@@ -153,18 +195,30 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
 
     // Basic ReDoS detection: reject nested quantifiers like (a+)+, (a*)*
     if (!literal && /([+*])\)?[+*{]/.test(source)) {
-      return { tool_use_id: "", content: "Error: Pattern contains nested quantifiers which may cause catastrophic backtracking. Simplify the regex or use literal=true.", is_error: true };
+      return {
+        tool_use_id: "",
+        content:
+          "Error: Pattern contains nested quantifiers which may cause catastrophic backtracking. Simplify the regex or use literal=true.",
+        is_error: true,
+      };
     }
 
     regex = new RegExp(source, flags);
   } catch (err) {
-    return { tool_use_id: "", content: `Error: Invalid regex pattern: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: Invalid regex pattern: ${err instanceof Error ? err.message : String(err)}`,
+      is_error: true,
+    };
   }
 
   // Parse extension filter
   let allowedExts = DEFAULT_EXTENSIONS;
   if (input.glob) {
-    const exts = String(input.glob).split(",").map((e) => e.trim()).filter(Boolean);
+    const exts = String(input.glob)
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
     if (exts.length > 0) {
       allowedExts = new Set(exts.map((e) => (e.startsWith(".") ? e : `.${e}`)));
     }
@@ -222,7 +276,9 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
         });
         totalReplacements += fileReplacements;
       }
-    } catch { /* skip unreadable */ }
+    } catch {
+      /* skip unreadable */
+    }
   }
 
   if (fileMatches.length === 0) {
@@ -231,14 +287,18 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
 
   // Build output
   const output: string[] = [
-    dryRun ? `Dry run: ${totalReplacements} replacement(s) in ${fileMatches.length} file(s)` : `Applied ${totalReplacements} replacement(s) in ${fileMatches.length} file(s)`,
+    dryRun
+      ? `Dry run: ${totalReplacements} replacement(s) in ${fileMatches.length} file(s)`
+      : `Applied ${totalReplacements} replacement(s) in ${fileMatches.length} file(s)`,
     `Pattern: ${patternStr}${literal ? " (literal)" : ""}${caseInsensitive ? " (case-insensitive)" : ""}`,
     `Replace: ${replacement}`,
     "",
   ];
 
   for (const fm of fileMatches.slice(0, 30)) {
-    output.push(`${fm.relativePath} (${fm.totalReplacements} replacement${fm.totalReplacements === 1 ? "" : "s"}):`);
+    output.push(
+      `${fm.relativePath} (${fm.totalReplacements} replacement${fm.totalReplacements === 1 ? "" : "s"}):`,
+    );
     for (const m of fm.matches.slice(0, 5)) {
       output.push(`  L${m.line}: ${m.before}`);
       output.push(`     → ${m.after}`);
@@ -272,10 +332,14 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
         for (const prev of written) {
           try {
             writeFileSync(prev.file, prev.originalContent, "utf-8");
-          } catch { /* best-effort rollback */ }
+          } catch {
+            /* best-effort rollback */
+          }
         }
         errors.push(`${fm.relativePath}: ${err instanceof Error ? err.message : String(err)}`);
-        errors.push(`Rolled back ${written.length} previously modified file(s) due to write failure.`);
+        errors.push(
+          `Rolled back ${written.length} previously modified file(s) due to write failure.`,
+        );
         // Override the summary line to reflect rollback
         output[0] = `Rollback complete — 0 files modified`;
         break; // Stop processing after rollback

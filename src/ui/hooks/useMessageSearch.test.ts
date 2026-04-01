@@ -1,9 +1,9 @@
 // KCode - useMessageSearch pure function tests
 // Tests extractText and findMatches without React
 
-import { describe, test, expect } from "bun:test";
-import { extractText, findMatches } from "./useMessageSearch";
+import { describe, expect, test } from "bun:test";
 import type { MessageEntry } from "../components/MessageList";
+import { extractText, findMatches } from "./useMessageSearch";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -171,10 +171,7 @@ describe("findMatches", () => {
   });
 
   test("no matches returns empty array", () => {
-    const messages = [
-      textEntry("user", "hello"),
-      textEntry("assistant", "world"),
-    ];
+    const messages = [textEntry("user", "hello"), textEntry("assistant", "world")];
     const matches = findMatches(messages, "xyz", new Map());
     expect(matches).toHaveLength(0);
   });

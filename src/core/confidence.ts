@@ -69,7 +69,10 @@ Rules:
  * Extract scored issues from raw agent text output.
  * Looks for JSON objects containing the required fields.
  */
-export function parseAgentIssues(agentOutput: string, agentName: string = "unknown"): ScoredIssue[] {
+export function parseAgentIssues(
+  agentOutput: string,
+  agentName: string = "unknown",
+): ScoredIssue[] {
   const issues: ScoredIssue[] = [];
 
   // Match JSON objects in the output — handles both inline and fenced blocks
@@ -82,11 +85,8 @@ export function parseAgentIssues(agentOutput: string, agentName: string = "unkno
       const parsed = JSON.parse(raw);
 
       // Validate required fields
-      if (
-        typeof parsed.confidence !== "number" ||
-        parsed.confidence < 0 ||
-        parsed.confidence > 100
-      ) continue;
+      if (typeof parsed.confidence !== "number" || parsed.confidence < 0 || parsed.confidence > 100)
+        continue;
       if (!parsed.description || typeof parsed.description !== "string") continue;
       if (!VALID_CATEGORIES.has(parsed.category)) continue;
       if (!VALID_SEVERITIES.has(parsed.severity)) continue;
@@ -141,12 +141,7 @@ export function deduplicateIssues(issues: ScoredIssue[]): ScoredIssue[] {
   for (const issue of issues) {
     // Build a dedup key: file + line (if present) + category + normalized description start
     const descNorm = issue.description.toLowerCase().slice(0, 60).trim();
-    const key = [
-      issue.file ?? "_",
-      issue.line ?? "_",
-      issue.category,
-      descNorm,
-    ].join("::");
+    const key = [issue.file ?? "_", issue.line ?? "_", issue.category, descNorm].join("::");
 
     const existing = seen.get(key);
     if (existing) {
@@ -248,9 +243,7 @@ export function formatIssueReport(issues: ScoredIssue[]): string {
     return "  No issues found above confidence threshold.";
   }
 
-  const lines: string[] = [
-    `  Found ${issues.length} issue(s):\n`,
-  ];
+  const lines: string[] = [`  Found ${issues.length} issue(s):\n`];
 
   const severityIcon: Record<string, string> = {
     critical: "[CRITICAL]",

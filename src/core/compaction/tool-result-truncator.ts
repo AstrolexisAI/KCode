@@ -49,9 +49,7 @@ function setTextContent(msg: Message, text: string): Message {
   if (Array.isArray(msg.content) && msg.content.length > 0) {
     return {
       ...msg,
-      content: msg.content.map((c, i) =>
-        i === 0 ? { ...c, text } : c,
-      ),
+      content: msg.content.map((c, i) => (i === 0 ? { ...c, text } : c)),
     };
   }
   return { ...msg, content: text };

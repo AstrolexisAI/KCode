@@ -1,11 +1,18 @@
 // KCode - Session Transcript Persistence
 // Saves conversation transcripts to ~/.kcode/transcripts/ in JSONL format
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
-import { kcodePath } from "./paths";
-import type { Message, ToolUseBlock, ToolResultBlock, ContentBlock } from "./types";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
+import type { ContentBlock, Message, ToolResultBlock, ToolUseBlock } from "./types";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -185,7 +192,11 @@ export class TranscriptManager {
         if (match) {
           const fileDate = new Date(match[1]!);
           if (fileDate < cutoffDate) {
-            try { unlinkSync(join(TRANSCRIPTS_DIR, f)); } catch (err) { log.debug("transcript", `Failed to delete expired transcript ${f}: ${err}`); }
+            try {
+              unlinkSync(join(TRANSCRIPTS_DIR, f));
+            } catch (err) {
+              log.debug("transcript", `Failed to delete expired transcript ${f}: ${err}`);
+            }
           }
         }
       }
@@ -255,7 +266,11 @@ export class TranscriptManager {
             };
             // Merge into existing assistant message or create new one
             const lastAssistant = messages[messages.length - 1];
-            if (lastAssistant && lastAssistant.role === "assistant" && Array.isArray(lastAssistant.content)) {
+            if (
+              lastAssistant &&
+              lastAssistant.role === "assistant" &&
+              Array.isArray(lastAssistant.content)
+            ) {
               lastAssistant.content.push(toolBlock);
             } else {
               messages.push({
@@ -339,7 +354,8 @@ export class TranscriptManager {
             const idx = entry.content.toLowerCase().indexOf(queryLower);
             const start = Math.max(0, idx - 40);
             const end = Math.min(entry.content.length, idx + query.length + 40);
-            const snippet = (start > 0 ? "..." : "") +
+            const snippet =
+              (start > 0 ? "..." : "") +
               entry.content.slice(start, end).replace(/\n/g, " ") +
               (end < entry.content.length ? "..." : "");
             results.push({ ...session, snippet });
@@ -357,13 +373,15 @@ export class TranscriptManager {
   /**
    * Get a summary of a session (first user message + message count + tool count).
    */
-  getSessionSummary(filename: string): { prompt: string; messageCount: number; toolUseCount: number; duration: string } | null {
+  getSessionSummary(
+    filename: string,
+  ): { prompt: string; messageCount: number; toolUseCount: number; duration: string } | null {
     const entries = this.loadSession(filename);
     if (entries.length === 0) return null;
 
-    const firstUser = entries.find(e => e.type === "user_message");
+    const firstUser = entries.find((e) => e.type === "user_message");
     const lastEntry = entries[entries.length - 1];
-    const toolUseCount = entries.filter(e => e.type === "tool_use").length;
+    const toolUseCount = entries.filter((e) => e.type === "tool_use").length;
 
     let duration = "unknown";
     try {
@@ -371,7 +389,9 @@ export class TranscriptManager {
       const endTime = new Date(lastEntry!.timestamp).getTime();
       const mins = Math.round((endTime - startTime) / 60_000);
       duration = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
-    } catch (err) { log.debug("transcript", `Failed to calculate session duration: ${err}`); }
+    } catch (err) {
+      log.debug("transcript", `Failed to calculate session duration: ${err}`);
+    }
 
     return {
       prompt: firstUser?.content.slice(0, 100) ?? "(empty)",

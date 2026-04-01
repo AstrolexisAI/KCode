@@ -1,7 +1,7 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { BillingManager } from "./billing";
 import { CloudClient } from "./client";
-import type { KCodeCloudConfig, CloudTeam } from "./types";
+import type { CloudTeam, KCodeCloudConfig } from "./types";
 
 // ─── Test fixtures ─────────────────────────────────────────────
 
@@ -77,25 +77,45 @@ describe("BillingManager", () => {
   describe("isWithinLimits", () => {
     test("returns true when all metrics are within limits", () => {
       const usage = { sessionsThisMonth: 100, tokensThisMonth: 500000, storageUsedMb: 50 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
       expect(billing.isWithinLimits(usage, limits)).toBe(true);
     });
 
     test("returns false when sessions exceed limit", () => {
       const usage = { sessionsThisMonth: 1001, tokensThisMonth: 100, storageUsedMb: 10 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
       expect(billing.isWithinLimits(usage, limits)).toBe(false);
     });
 
     test("returns false when tokens exceed limit", () => {
       const usage = { sessionsThisMonth: 10, tokensThisMonth: 6000000, storageUsedMb: 10 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
       expect(billing.isWithinLimits(usage, limits)).toBe(false);
     });
 
     test("returns false when storage exceeds limit", () => {
       const usage = { sessionsThisMonth: 10, tokensThisMonth: 100, storageUsedMb: 501 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
       expect(billing.isWithinLimits(usage, limits)).toBe(false);
     });
   });
@@ -176,7 +196,12 @@ describe("BillingManager", () => {
   describe("formatUsage", () => {
     test("produces readable output with headers", () => {
       const usage = { sessionsThisMonth: 100, tokensThisMonth: 500000, storageUsedMb: 50 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
 
       const output = billing.formatUsage(usage, limits);
       expect(output).toContain("Cloud Usage Report");
@@ -188,7 +213,12 @@ describe("BillingManager", () => {
 
     test("includes percentage calculations", () => {
       const usage = { sessionsThisMonth: 500, tokensThisMonth: 2500000, storageUsedMb: 250 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
 
       const output = billing.formatUsage(usage, limits);
       expect(output).toContain("50%");
@@ -196,7 +226,12 @@ describe("BillingManager", () => {
 
     test("includes warnings section when near limits", () => {
       const usage = { sessionsThisMonth: 900, tokensThisMonth: 100, storageUsedMb: 5 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
 
       const output = billing.formatUsage(usage, limits);
       expect(output).toContain("Warnings:");
@@ -205,7 +240,12 @@ describe("BillingManager", () => {
 
     test("omits warnings section when well under limits", () => {
       const usage = { sessionsThisMonth: 10, tokensThisMonth: 100, storageUsedMb: 5 };
-      const limits = { maxMembers: 10, maxSessions: 1000, maxStorageMb: 500, maxTokensPerMonth: 5000000 };
+      const limits = {
+        maxMembers: 10,
+        maxSessions: 1000,
+        maxStorageMb: 500,
+        maxTokensPerMonth: 5000000,
+      };
 
       const output = billing.formatUsage(usage, limits);
       expect(output).not.toContain("Warnings:");

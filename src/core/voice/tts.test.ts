@@ -1,6 +1,6 @@
 // KCode - TTS Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { LocalTTS } from "./tts";
 
 describe("LocalTTS", () => {
@@ -93,7 +93,9 @@ describe("LocalTTS", () => {
 
   test("speakStream handles single chunk", async () => {
     const spoken: string[] = [];
-    tts.speak = async (text: string) => { spoken.push(text); };
+    tts.speak = async (text: string) => {
+      spoken.push(text);
+    };
 
     async function* textStream() {
       yield "Short text.";
@@ -105,7 +107,9 @@ describe("LocalTTS", () => {
 
   test("speakStream flushes remaining buffer", async () => {
     const spoken: string[] = [];
-    tts.speak = async (text: string) => { spoken.push(text); };
+    tts.speak = async (text: string) => {
+      spoken.push(text);
+    };
 
     async function* textStream() {
       yield "No period here";

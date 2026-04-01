@@ -1,9 +1,9 @@
 // KCode - Storage Health Check
 
-import { existsSync, accessSync, constants } from "node:fs";
+import { accessSync, constants, existsSync } from "node:fs";
 import { join } from "node:path";
-import { kcodeHome } from "../../paths";
 import { log } from "../../logger";
+import { kcodeHome } from "../../paths";
 import type { HealthCheck } from "../health-score";
 
 async function dirSizeBytes(path: string): Promise<number> {
@@ -14,14 +14,22 @@ async function dirSizeBytes(path: string): Promise<number> {
     const output = await new Response(proc.stdout).text();
     const bytes = parseInt(output.split("\t")[0]!, 10);
     return isNaN(bytes) ? 0 : bytes;
-  } catch { return 0; }
+  } catch {
+    return 0;
+  }
 }
 
 export async function checkStorage(): Promise<HealthCheck> {
   const kcodeDir = kcodeHome();
 
   if (!existsSync(kcodeDir)) {
-    return { name: "Storage", category: "storage", status: "pass", message: "~/.kcode/ not created yet (0MB)", weight: 5 };
+    return {
+      name: "Storage",
+      category: "storage",
+      status: "pass",
+      message: "~/.kcode/ not created yet (0MB)",
+      weight: 5,
+    };
   }
 
   try {

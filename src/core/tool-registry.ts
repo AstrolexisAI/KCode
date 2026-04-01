@@ -1,7 +1,7 @@
 // KCode - Tool Registry
 // Manages tool definitions and dispatches execution
 
-import type { ToolDefinition, ToolResult, ToolHandler } from "./types";
+import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 
 export class ToolRegistry {
   private tools = new Map<string, RegisteredTool>();
@@ -50,7 +50,15 @@ export class ToolRegistry {
   }
 
   /** Read-only tools that are safe to execute in parallel. */
-  static readonly PARALLEL_SAFE = new Set(["Read", "Glob", "Grep", "WebFetch", "WebSearch", "TaskList", "TaskGet"]);
+  static readonly PARALLEL_SAFE = new Set([
+    "Read",
+    "Glob",
+    "Grep",
+    "WebFetch",
+    "WebSearch",
+    "TaskList",
+    "TaskGet",
+  ]);
 
   /**
    * Check if a tool is safe to run in parallel with other tools.

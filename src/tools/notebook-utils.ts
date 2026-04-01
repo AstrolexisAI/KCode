@@ -35,9 +35,7 @@ export interface CellOutput {
 export function parseNotebook(content: string): JupyterNotebook {
   const nb = JSON.parse(content);
   if (nb.nbformat !== 4) {
-    throw new Error(
-      `Only nbformat 4 is supported, found: ${nb.nbformat}`,
-    );
+    throw new Error(`Only nbformat 4 is supported, found: ${nb.nbformat}`);
   }
   return nb as JupyterNotebook;
 }
@@ -54,18 +52,14 @@ export function findCell(
 ): number {
   if (query.index !== undefined) return query.index;
   if (query.contains) {
-    return nb.cells.findIndex((c) =>
-      c.source.join("").includes(query.contains!),
-    );
+    return nb.cells.findIndex((c) => c.source.join("").includes(query.contains!));
   }
   return -1;
 }
 
 /** Split content string into Jupyter source line format */
 export function contentToSource(content: string): string[] {
-  return content.split("\n").map((line, i, arr) =>
-    i < arr.length - 1 ? line + "\n" : line,
-  );
+  return content.split("\n").map((line, i, arr) => (i < arr.length - 1 ? line + "\n" : line));
 }
 
 /** Join Jupyter source lines back to a string */

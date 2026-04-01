@@ -1,9 +1,9 @@
 // KCode - Remote Trigger API Client Tests
 
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { TriggerApiClient } from "./trigger-api";
-import { TriggerApiError } from "./types";
 import type { RemoteTrigger, TriggerRunResult } from "./types";
+import { TriggerApiError } from "./types";
 
 const BASE_URL = "https://cloud.kulvex.ai/api/v1";
 const AUTH_TOKEN = "test-token-abc123";
@@ -51,13 +51,10 @@ afterEach(() => {
 function mockResponse(body: unknown, status = 200): void {
   mockFetch.mockImplementation(() =>
     Promise.resolve(
-      new Response(
-        status === 204 ? null : JSON.stringify(body),
-        {
-          status,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
+      new Response(status === 204 ? null : JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      }),
     ),
   );
 }
@@ -199,9 +196,7 @@ describe("TriggerApiClient", () => {
 
   test("network error is wrapped in TriggerApiError", async () => {
     const client = new TriggerApiClient(BASE_URL, AUTH_TOKEN);
-    mockFetch.mockImplementation(() =>
-      Promise.reject(new Error("DNS resolution failed")),
-    );
+    mockFetch.mockImplementation(() => Promise.reject(new Error("DNS resolution failed")));
 
     try {
       await client.listTriggers();

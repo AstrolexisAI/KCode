@@ -1,11 +1,11 @@
 // KCode - E2E Integration Tests
 // Tests full conversation flows using the fake provider and fake tools
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConversationManager } from "../core/conversation";
 import type { StreamEvent } from "../core/types";
 import { FakeProvider } from "./fake-provider";
-import { createTestEnv, collectEvents, type TestEnv } from "./test-env";
+import { collectEvents, createTestEnv, type TestEnv } from "./test-env";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -48,16 +48,26 @@ describe("E2E: FakeProvider standalone", () => {
   });
 
   afterEach(async () => {
-    try { await provider?.stop(); } catch { /* setup may have failed */ }
+    try {
+      await provider?.stop();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("serves text response as valid SSE stream", async () => {
-    provider.addResponse("Hello from the fake provider, this is a longer test response for the SSE stream parser");
+    provider.addResponse(
+      "Hello from the fake provider, this is a longer test response for the SSE stream parser",
+    );
 
     const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "fake-model", messages: [{ role: "user", content: "hi" }], stream: true }),
+      body: JSON.stringify({
+        model: "fake-model",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      }),
     });
 
     expect(res.status).toBe(200);
@@ -70,9 +80,7 @@ describe("E2E: FakeProvider standalone", () => {
   });
 
   test("serves tool call response as valid SSE stream", async () => {
-    provider.addToolCallResponse([
-      { name: "Read", arguments: { file_path: "/tmp/test.txt" } },
-    ]);
+    provider.addToolCallResponse([{ name: "Read", arguments: { file_path: "/tmp/test.txt" } }]);
 
     const res = await fetchFn(`${provider.baseUrl}/v1/chat/completions`, {
       method: "POST",
@@ -112,7 +120,7 @@ describe("E2E: FakeProvider standalone", () => {
     });
 
     expect(res.status).toBe(500);
-    const body = await res.json() as Record<string, any>;
+    const body = (await res.json()) as Record<string, any>;
     expect(body.error.message).toBe("Rate limit exceeded");
   });
 
@@ -196,11 +204,17 @@ describe("E2E: ConversationManager with FakeProvider", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("basic text response flow", async () => {
-    env.provider.addResponse("Hello! I am the fake assistant and I am here to help you with your coding tasks today.");
+    env.provider.addResponse(
+      "Hello! I am the fake assistant and I am here to help you with your coding tasks today.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events, text } = await sendAndCollect(cm, "Hi there");
@@ -220,19 +234,17 @@ describe("E2E: ConversationManager with FakeProvider", () => {
 
     // Provider should have received exactly 1 request
     // (filter to /v1/chat/completions since there may be other calls)
-    const completionReqs = env.provider.requests.filter(
-      (r) => r.url === "/v1/chat/completions",
-    );
+    const completionReqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
     expect(completionReqs.length).toBe(1);
   });
 
   test("tool use flow — model calls Read, gets result", async () => {
     // Step 1: Model requests a tool call
-    env.provider.addToolCallResponse([
-      { name: "Read", arguments: { file_path: "/tmp/test.txt" } },
-    ]);
+    env.provider.addToolCallResponse([{ name: "Read", arguments: { file_path: "/tmp/test.txt" } }]);
     // Step 2: After seeing the tool result, model responds with text
-    env.provider.addResponse("I read the file and it contains the test data. The file has useful information for our analysis.");
+    env.provider.addResponse(
+      "I read the file and it contains the test data. The file has useful information for our analysis.",
+    );
 
     // Register a file for the fake Read tool
     const { registry } = env;
@@ -256,9 +268,7 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     expect(text).toContain("read the file");
 
     // Provider should have received at least 2 requests (tool call + follow-up)
-    const completionReqs = env.provider.requests.filter(
-      (r) => r.url === "/v1/chat/completions",
-    );
+    const completionReqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
     expect(completionReqs.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -266,7 +276,7 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     const envWithBash = await createTestEnv({
       inProcess: true,
       tools: {
-        bashCommands: { "ls": "file1.ts\nfile2.ts\nfile3.ts" },
+        bashCommands: { ls: "file1.ts\nfile2.ts\nfile3.ts" },
       },
       configOverrides: {
         systemPromptOverride: "You are a helpful test assistant.",
@@ -279,7 +289,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
         { name: "Bash", arguments: { command: "ls", description: "List files" } },
       ]);
       // After seeing result, model responds
-      envWithBash.provider.addResponse("The directory contains three TypeScript files: file1.ts, file2.ts, and file3.ts as expected.");
+      envWithBash.provider.addResponse(
+        "The directory contains three TypeScript files: file1.ts, file2.ts, and file3.ts as expected.",
+      );
 
       const cm = new ConversationManager(envWithBash.config, envWithBash.registry);
       const { events } = await sendAndCollect(cm, "List the files");
@@ -329,7 +341,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
       { name: "Read", arguments: { file_path: "/tmp/output.txt" } },
     ]);
     // Turn 3: Model responds with summary
-    env.provider.addResponse("I wrote 'Hello, World!' to /tmp/output.txt and verified the file was created successfully for you.");
+    env.provider.addResponse(
+      "I wrote 'Hello, World!' to /tmp/output.txt and verified the file was created successfully for you.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events } = await sendAndCollect(cm, "Write hello world to a file and verify it");
@@ -345,17 +359,19 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     expect(env.writes[0]!.content).toBe("Hello, World!");
 
     // Provider should have received 3 requests
-    const completionReqs = env.provider.requests.filter(
-      (r) => r.url === "/v1/chat/completions",
-    );
+    const completionReqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
     expect(completionReqs.length).toBe(3);
   });
 
   test("max_tokens continuation — model is auto-continued when truncated", async () => {
     // First response: truncated (max_tokens)
-    env.provider.addMaxTokensResponse("This is the beginning of a very long explanation that gets cut off because of the token limit and will need");
+    env.provider.addMaxTokensResponse(
+      "This is the beginning of a very long explanation that gets cut off because of the token limit and will need",
+    );
     // Continuation response after the system injects a continue prompt
-    env.provider.addResponse("to be continued here with the rest of the explanation that the user was waiting for successfully.");
+    env.provider.addResponse(
+      "to be continued here with the rest of the explanation that the user was waiting for successfully.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events, text } = await sendAndCollect(cm, "Give me a long explanation");
@@ -408,7 +424,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
   });
 
   test("request format — sends correct OpenAI-compatible request body", async () => {
-    env.provider.addResponse("Checking the request format to ensure it matches the expected OpenAI API structure correctly.");
+    env.provider.addResponse(
+      "Checking the request format to ensure it matches the expected OpenAI API structure correctly.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     await sendAndCollect(cm, "Hello from the test");
@@ -427,7 +445,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     expect(systemMsg).toBeDefined();
     expect(systemMsg.content).toContain("helpful test assistant");
 
-    const userMsg = body.messages.find((m: any) => m.role === "user" && m.content?.includes?.("Hello from the test"));
+    const userMsg = body.messages.find(
+      (m: any) => m.role === "user" && m.content?.includes?.("Hello from the test"),
+    );
     expect(userMsg).toBeDefined();
   });
 
@@ -438,7 +458,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
       { name: "Read", arguments: { file_path: "/tmp/b.txt" } },
     ]);
     // After seeing both results, model responds
-    env.provider.addResponse("I read both files. Neither file was found but that is expected in this test environment setup.");
+    env.provider.addResponse(
+      "I read both files. Neither file was found but that is expected in this test environment setup.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events } = await sendAndCollect(cm, "Read both files");
@@ -451,7 +473,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
   });
 
   test("provider reset clears state", async () => {
-    env.provider.addResponse("first response that is long enough to be parsed by the SSE stream parser correctly");
+    env.provider.addResponse(
+      "first response that is long enough to be parsed by the SSE stream parser correctly",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     await sendAndCollect(cm, "First message");
@@ -462,7 +486,9 @@ describe("E2E: ConversationManager with FakeProvider", () => {
     expect(env.provider.requests.length).toBe(0);
 
     // After reset, a new request should get 500 (no responses queued)
-    env.provider.addResponse("new response after reset that is also long enough to parse through the SSE buffer correctly");
+    env.provider.addResponse(
+      "new response after reset that is also long enough to parse through the SSE buffer correctly",
+    );
     const cm2 = new ConversationManager(env.config, env.registry);
     const { text } = await sendAndCollect(cm2, "After reset");
     expect(text).toContain("new response after reset");
@@ -486,7 +512,9 @@ describe("E2E: Theoretical mode — tool blocking", () => {
         { name: "Bash", arguments: { command: "echo test", description: "test" } },
       ]);
       // After tool is blocked and model retries, it responds with text
-      env.provider.addResponse("Here is my text-only analysis of the theoretical problem with detailed reasoning and step by step explanation.");
+      env.provider.addResponse(
+        "Here is my text-only analysis of the theoretical problem with detailed reasoning and step by step explanation.",
+      );
 
       const cm = new ConversationManager(env.config, env.registry);
 
@@ -537,9 +565,7 @@ Analizá los trade-off entre opciones.`;
       env.provider.addToolCallResponse([
         { name: "Bash", arguments: { command: "ls", description: "list" } },
       ]);
-      env.provider.addToolCallResponse([
-        { name: "Glob", arguments: { pattern: "*.ts" } },
-      ]);
+      env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
 
       const cm = new ConversationManager(env.config, env.registry);
 
@@ -580,7 +606,9 @@ Analizá el trade-off entre las opciones disponibles.`;
       env.provider.addToolCallResponse([
         { name: "Bash", arguments: { command: "ls", description: "List files" } },
       ]);
-      env.provider.addResponse("I listed the files and found the project structure for you as requested in this test.");
+      env.provider.addResponse(
+        "I listed the files and found the project structure for you as requested in this test.",
+      );
 
       const cm = new ConversationManager(env.config, env.registry);
       const { events } = await sendAndCollect(cm, "List all TypeScript files in this directory");
@@ -683,18 +711,21 @@ describe("E2E: Long scaffold flows", () => {
         ]);
       }
       // Final text response after checkpoint forces stop
-      env.provider.addResponse("Here is a summary of what was created in the initial structure for the project as requested.");
+      env.provider.addResponse(
+        "Here is a summary of what was created in the initial structure for the project as requested.",
+      );
 
       const cm = new ConversationManager(env.config, env.registry);
 
       // Prompt with checkpoint language
-      const { events, text } = await sendAndCollect(cm,
-        "Crea un sitio web completo sobre Bitcoin. Empieza con la estructura inicial y muéstrame el primer paso cuando termines."
+      const { events, text } = await sendAndCollect(
+        cm,
+        "Crea un sitio web completo sobre Bitcoin. Empieza con la estructura inicial y muéstrame el primer paso cuando termines.",
       );
 
       // Should have a checkpoint_reached stop reason
       const turnEnds = eventsOfType(events, "turn_end");
-      const checkpoint = turnEnds.find(e => e.stopReason === "checkpoint_reached");
+      const checkpoint = turnEnds.find((e) => e.stopReason === "checkpoint_reached");
       expect(checkpoint).toBeDefined();
 
       // Tool executions should be capped (not all 10)
@@ -726,7 +757,11 @@ describe("E2E: Long scaffold flows", () => {
     let writeCallCount = 0;
     const failHandler = async () => {
       writeCallCount++;
-      return { tool_use_id: "", content: "Error: embedding HTML inside TypeScript is not allowed", is_error: true };
+      return {
+        tool_use_id: "",
+        content: "Error: embedding HTML inside TypeScript is not allowed",
+        is_error: true,
+      };
     };
     env.registry.register("Write", failDef, failHandler);
 
@@ -744,7 +779,9 @@ describe("E2E: Long scaffold flows", () => {
         { name: "Write", arguments: { file_path: "/tmp/test3.tsx", content: "<div>test3</div>" } },
       ]);
       // Finally responds with text
-      env.provider.addResponse("I could not write the files due to repeated errors with HTML in TypeScript. Trying different approach.");
+      env.provider.addResponse(
+        "I could not write the files due to repeated errors with HTML in TypeScript. Trying different approach.",
+      );
 
       const cm = new ConversationManager(env.config, env.registry);
       const { events } = await sendAndCollect(cm, "Create the component files");
@@ -752,7 +789,7 @@ describe("E2E: Long scaffold flows", () => {
       // The tool should have been called at most 2 times (handler executes)
       // Third call should be blocked before execution
       const toolResults = eventsOfType(events, "tool_result");
-      const errorResults = toolResults.filter(r => r.isError);
+      const errorResults = toolResults.filter((r) => r.isError);
 
       // At least one error result should exist
       expect(errorResults.length).toBeGreaterThanOrEqual(1);

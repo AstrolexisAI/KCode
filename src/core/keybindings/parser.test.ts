@@ -1,14 +1,14 @@
 // KCode - Parser tests for key combos and chords
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  parseKeyCombo,
-  parseKeyChord,
-  serializeCombo,
-  serializeChord,
-  formatKeyChord,
-  comboEquals,
   chordEquals,
+  comboEquals,
+  formatKeyChord,
+  parseKeyChord,
+  parseKeyCombo,
+  serializeChord,
+  serializeCombo,
 } from "./parser.js";
 
 describe("parseKeyCombo", () => {
@@ -158,15 +158,21 @@ describe("parseKeyChord", () => {
 
 describe("serializeCombo", () => {
   test("serializes simple key", () => {
-    expect(serializeCombo({ key: "a", ctrl: false, alt: false, shift: false, meta: false })).toBe("a");
+    expect(serializeCombo({ key: "a", ctrl: false, alt: false, shift: false, meta: false })).toBe(
+      "a",
+    );
   });
 
   test("serializes with ctrl", () => {
-    expect(serializeCombo({ key: "c", ctrl: true, alt: false, shift: false, meta: false })).toBe("ctrl+c");
+    expect(serializeCombo({ key: "c", ctrl: true, alt: false, shift: false, meta: false })).toBe(
+      "ctrl+c",
+    );
   });
 
   test("serializes with multiple modifiers in canonical order", () => {
-    expect(serializeCombo({ key: "x", ctrl: true, alt: true, shift: true, meta: true })).toBe("ctrl+alt+shift+meta+x");
+    expect(serializeCombo({ key: "x", ctrl: true, alt: true, shift: true, meta: true })).toBe(
+      "ctrl+alt+shift+meta+x",
+    );
   });
 });
 

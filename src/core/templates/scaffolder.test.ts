@@ -1,9 +1,9 @@
 // KCode - Scaffolder Tests
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { Scaffolder } from "./scaffolder";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { Scaffolder } from "./scaffolder";
 import type { Template } from "./types";
 
 const TEST_OUTPUT = join(import.meta.dir, "__test_scaffold__");
@@ -112,10 +112,9 @@ console.log("hello");
   test("scaffold throws on empty model response", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () =>
-      new Response(
-        JSON.stringify({ choices: [{ message: { content: "No files here." } }] }),
-        { headers: { "Content-Type": "application/json" } },
-      );
+      new Response(JSON.stringify({ choices: [{ message: { content: "No files here." } }] }), {
+        headers: { "Content-Type": "application/json" },
+      });
 
     try {
       await expect(

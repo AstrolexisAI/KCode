@@ -12,7 +12,9 @@ export interface UseKeyBindingsParams {
   mode: string;
   messageQueueRef: React.MutableRefObject<string[]>;
   exit: () => void;
-  setMode: (mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle") => void;
+  setMode: (
+    mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle",
+  ) => void;
   setStreamingText: (text: string) => void;
   setStreamingThinking: (text: string) => void;
   setIsThinking: (v: boolean) => void;
@@ -35,7 +37,6 @@ export function useKeyBindings({
   setCompleted,
   setMessageQueue,
 }: UseKeyBindingsParams): void {
-
   useInput((input, key) => {
     // Escape cancels current response
     if (key.escape && mode === "responding") {
@@ -55,10 +56,19 @@ export function useKeyBindings({
     // Alt+T: Toggle extended thinking
     if (key.meta && input === "t" && mode === "input") {
       config.thinking = !config.thinking;
-      const budgetLabel = config.reasoningBudget === -1 ? "unlimited" : config.reasoningBudget !== undefined ? `${config.reasoningBudget} tokens` : "default";
+      const budgetLabel =
+        config.reasoningBudget === -1
+          ? "unlimited"
+          : config.reasoningBudget !== undefined
+            ? `${config.reasoningBudget} tokens`
+            : "default";
       setCompleted((prev) => [
         ...prev,
-        { kind: "text", role: "assistant", text: `  Thinking mode: ${config.thinking ? `ON (budget: ${budgetLabel})` : "OFF"}` },
+        {
+          kind: "text",
+          role: "assistant",
+          text: `  Thinking mode: ${config.thinking ? `ON (budget: ${budgetLabel})` : "OFF"}`,
+        },
       ]);
       return;
     }
@@ -78,7 +88,11 @@ export function useKeyBindings({
         setLoadingMessage("");
         setCompleted((prev) => [
           ...prev,
-          { kind: "text", role: "assistant", text: `\n  [Cancelled${queuedCount > 0 ? `, ${queuedCount} queued message${queuedCount > 1 ? "s" : ""} cleared` : ""}]` },
+          {
+            kind: "text",
+            role: "assistant",
+            text: `\n  [Cancelled${queuedCount > 0 ? `, ${queuedCount} queued message${queuedCount > 1 ? "s" : ""} cleared` : ""}]`,
+          },
         ]);
       } else {
         exit();
@@ -101,7 +115,11 @@ export function useKeyBindings({
       };
       setCompleted((prev) => [
         ...prev,
-        { kind: "text", role: "assistant", text: `  Permission mode: ${labels[nextMode] ?? nextMode}` },
+        {
+          kind: "text",
+          role: "assistant",
+          text: `  Permission mode: ${labels[nextMode] ?? nextMode}`,
+        },
       ]);
       return;
     }

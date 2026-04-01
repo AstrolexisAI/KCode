@@ -1,15 +1,18 @@
 // KCode - GrepReplace Preview Tests
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { previewGrepReplace, formatPreview } from "./grep-replace-preview";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { formatPreview, previewGrepReplace } from "./grep-replace-preview";
 
 const TEST_DIR = join(import.meta.dir, `__test_grep_preview_${process.pid}__`);
 
 beforeAll(() => {
   mkdirSync(join(TEST_DIR, "src"), { recursive: true });
-  writeFileSync(join(TEST_DIR, "src", "foo.ts"), `const name = "hello";\nconst greeting = "hello world";\nconst other = "bye";\n`);
+  writeFileSync(
+    join(TEST_DIR, "src", "foo.ts"),
+    `const name = "hello";\nconst greeting = "hello world";\nconst other = "bye";\n`,
+  );
   writeFileSync(join(TEST_DIR, "src", "bar.ts"), `console.log("hello");\nfoo();\n`);
   writeFileSync(join(TEST_DIR, "src", "data.json"), `{"key": "hello"}\n`);
 });
@@ -39,13 +42,20 @@ describe("previewGrepReplace", () => {
   });
 
   test("returns 0 matches for non-matching pattern", async () => {
-    const result = await previewGrepReplace("nonexistent_string_xyz", "replacement", "*.ts", TEST_DIR);
+    const result = await previewGrepReplace(
+      "nonexistent_string_xyz",
+      "replacement",
+      "*.ts",
+      TEST_DIR,
+    );
     expect(result.totalFiles).toBe(0);
     expect(result.totalMatches).toBe(0);
   });
 
   test("throws on invalid regex", async () => {
-    await expect(previewGrepReplace("[invalid", "replacement", "*.ts", TEST_DIR)).rejects.toThrow("Invalid regex");
+    await expect(previewGrepReplace("[invalid", "replacement", "*.ts", TEST_DIR)).rejects.toThrow(
+      "Invalid regex",
+    );
   });
 
   test("does not modify original files", async () => {

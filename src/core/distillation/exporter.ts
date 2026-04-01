@@ -2,17 +2,12 @@
 // Exports distilled_examples from SQLite into fine-tuning dataset formats
 // (JSONL Chat, ShareGPT, Alpaca, OpenAI).
 
-import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { getDb } from "../db";
 import { log } from "../logger";
 import { kcodePath } from "../paths";
-import type {
-  ExportConfig,
-  ExportFormat,
-  ExportReport,
-  DistilledExampleRow,
-} from "./types";
+import type { DistilledExampleRow, ExportConfig, ExportFormat, ExportReport } from "./types";
 
 // ─── Defaults ──────────────────────────────────────────────────
 
@@ -67,7 +62,10 @@ export class DatasetExporter {
 
     const totalTokens = this.estimateTokens(formatted);
 
-    log.info("distill", `Exported ${formatted.length} examples to ${outputFile} (${config.format})`);
+    log.info(
+      "distill",
+      `Exported ${formatted.length} examples to ${outputFile} (${config.format})`,
+    );
 
     return {
       outputFile,
@@ -114,10 +112,7 @@ export class DatasetExporter {
   /**
    * Format a single example according to the export format.
    */
-  formatExample(
-    example: DistilledExampleRow,
-    config: ExportConfig,
-  ): Record<string, unknown> {
+  formatExample(example: DistilledExampleRow, config: ExportConfig): Record<string, unknown> {
     switch (config.format) {
       case "jsonl-chat":
         return this.formatJsonlChat(example, config);
@@ -168,9 +163,7 @@ export class DatasetExporter {
                   type: "function",
                   function: {
                     name: tool.name ?? tool.tool ?? "unknown",
-                    arguments: JSON.stringify(
-                      tool.input ?? tool.inputSummary ?? "",
-                    ),
+                    arguments: JSON.stringify(tool.input ?? tool.inputSummary ?? ""),
                   },
                 },
               ],
@@ -199,9 +192,7 @@ export class DatasetExporter {
   /**
    * ShareGPT format (human/gpt pairs).
    */
-  private formatShareGPT(
-    example: DistilledExampleRow,
-  ): Record<string, unknown> {
+  private formatShareGPT(example: DistilledExampleRow): Record<string, unknown> {
     return {
       conversations: [
         { from: "human", value: example.user_query },
@@ -248,9 +239,7 @@ export class DatasetExporter {
                   type: "function",
                   function: {
                     name: tool.name ?? tool.tool ?? "unknown",
-                    arguments: JSON.stringify(
-                      tool.input ?? tool.inputSummary ?? "",
-                    ),
+                    arguments: JSON.stringify(tool.input ?? tool.inputSummary ?? ""),
                   },
                 },
               ],

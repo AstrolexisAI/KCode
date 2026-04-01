@@ -1,17 +1,20 @@
 // KCode - Three-Way Merge Tests
 // Tests for the three-way merge engine including auto-resolution and conflict handling.
 
-import { describe, test, expect } from "bun:test";
-import { ThreeWayMerge, getThreeWayMerge, rangesOverlap } from "./three-way-merge.js";
+import { describe, expect, test } from "bun:test";
+import { getThreeWayMerge, rangesOverlap, ThreeWayMerge } from "./three-way-merge.js";
 
 describe("ThreeWayMerge", () => {
   const merger = new ThreeWayMerge();
 
   describe("no conflicts", () => {
     test("merges non-overlapping changes from both sides", () => {
-      const base = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
-      const ours = "line 1\nOUR CHANGE\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
-      const theirs = "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nTHEIR CHANGE\nline 10\n";
+      const base =
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
+      const ours =
+        "line 1\nOUR CHANGE\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n";
+      const theirs =
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nTHEIR CHANGE\nline 10\n";
 
       const result = merger.merge(base, ours, theirs);
       expect(result.conflicts).toHaveLength(0);
@@ -194,20 +197,21 @@ describe("ThreeWayMerge", () => {
 
   describe("complex scenarios", () => {
     test("handles multiple conflicts and auto-resolves together", () => {
-      const base = [
-        "header",
-        "line 1",
-        "line 2",
-        "line 3",
-        "line 4",
-        "line 5",
-        "line 6",
-        "line 7",
-        "line 8",
-        "line 9",
-        "line 10",
-        "footer",
-      ].join("\n") + "\n";
+      const base =
+        [
+          "header",
+          "line 1",
+          "line 2",
+          "line 3",
+          "line 4",
+          "line 5",
+          "line 6",
+          "line 7",
+          "line 8",
+          "line 9",
+          "line 10",
+          "footer",
+        ].join("\n") + "\n";
 
       // Ours changes line 2 and line 10
       const ours = base.replace("line 2", "OUR LINE 2").replace("line 10", "OUR LINE 10");

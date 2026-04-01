@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { mergeContinuation, isTruncatedQuestion } from "./continuation-merge";
+import { describe, expect, test } from "bun:test";
+import { isTruncatedQuestion, mergeContinuation } from "./continuation-merge";
 
 describe("mergeContinuation", () => {
   test("no overlap returns continuation unchanged", () => {
@@ -81,8 +81,10 @@ describe("mergeContinuation", () => {
   });
 
   test("strips paragraph that was repeated entirely", () => {
-    const prev = "First paragraph.\n\nThis is the important paragraph that matters a lot and has enough text to be significant.\n\nEnd.";
-    const cont = "This is the important paragraph that matters a lot and has enough text to be significant.\n\nNew paragraph after.";
+    const prev =
+      "First paragraph.\n\nThis is the important paragraph that matters a lot and has enough text to be significant.\n\nEnd.";
+    const cont =
+      "This is the important paragraph that matters a lot and has enough text to be significant.\n\nNew paragraph after.";
     const r = mergeContinuation(prev, cont);
     expect(r.merged).toBe("New paragraph after.");
   });

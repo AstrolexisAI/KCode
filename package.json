@@ -17,12 +17,16 @@
     "build:web": "cd src/web && bunx vite build",
     "dev:web": "cd src/web && bunx vite",
     "typecheck": "bun run --bun tsc --noEmit",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "format": "biome format --write src/",
     "test": "bun test",
     "version:patch": "bun run --bun npm version patch",
     "version:minor": "bun run --bun npm version minor",
     "version:major": "bun run --bun npm version major"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
     "@types/bun": "latest",
     "@types/react": "^19.2.14",
     "react-devtools-core": "^7.0.1"

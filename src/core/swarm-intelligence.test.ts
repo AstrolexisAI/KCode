@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { SwarmIntelligence, DEFAULT_AGENT_SPECS } from "./swarm-intelligence";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { DEFAULT_AGENT_SPECS, SwarmIntelligence } from "./swarm-intelligence";
 
 describe("SwarmIntelligence", () => {
   let swarm: SwarmIntelligence;
@@ -19,8 +19,8 @@ describe("SwarmIntelligence", () => {
     test("createDefaultSwarm creates 5 agents", () => {
       const agents = swarm.createDefaultSwarm("test-model");
       expect(agents).toHaveLength(5);
-      expect(agents.map(a => a.role)).toContain("architect");
-      expect(agents.map(a => a.role)).toContain("security");
+      expect(agents.map((a) => a.role)).toContain("architect");
+      expect(agents.map((a) => a.role)).toContain("security");
     });
   });
 
@@ -29,10 +29,7 @@ describe("SwarmIntelligence", () => {
       swarm.addAgent("frontend", "m1");
       swarm.addAgent("backend", "m2");
 
-      const plan = swarm.planDistribution("fix bugs", [
-        "src/ui/App.tsx",
-        "src/core/config.ts",
-      ]);
+      const plan = swarm.planDistribution("fix bugs", ["src/ui/App.tsx", "src/core/config.ts"]);
 
       expect(plan.assignments.length).toBeGreaterThanOrEqual(1);
       expect(plan.status).toBe("planning");
@@ -51,21 +48,17 @@ describe("SwarmIntelligence", () => {
       swarm.addAgent("frontend", "m1");
       swarm.addAgent("general", "m2");
 
-      const plan = swarm.planDistribution("review", [
-        "random/unknown.xyz",
-      ]);
+      const plan = swarm.planDistribution("review", ["random/unknown.xyz"]);
 
-      const generalAssignment = plan.assignments.find(
-        (a) => a.agentId.includes("general"),
-      );
+      const generalAssignment = plan.assignments.find((a) => a.agentId.includes("general"));
       expect(generalAssignment).toBeDefined();
     });
   });
 
   describe("conflict resolution", () => {
     test("prefer-higher-priority selects correct agent", () => {
-      swarm.addAgent("security", "m1");  // priority 8
-      swarm.addAgent("frontend", "m2");  // priority 5
+      swarm.addAgent("security", "m1"); // priority 8
+      swarm.addAgent("frontend", "m2"); // priority 5
 
       const resolution = swarm.resolveConflict(
         "src/ui/auth.tsx",

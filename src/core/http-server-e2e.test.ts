@@ -2,7 +2,7 @@
 // Spins up a real Bun.serve using the production fetch handler (buildFetchHandler).
 // Uses port 0 for OS-assigned port. Gracefully skips if server can't bind.
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { buildFetchHandler } from "./http-server";
 
 // ─── Real Server Setup ──────────────────────────────────────────
@@ -21,12 +21,20 @@ try {
       BASE = `http://127.0.0.1:${server.port}`;
       serverAvailable = true;
       break;
-    } catch { /* try next port */ }
+    } catch {
+      /* try next port */
+    }
   }
-} catch { /* buildFetchHandler failed — skip all tests */ }
+} catch {
+  /* buildFetchHandler failed — skip all tests */
+}
 
 afterAll(() => {
-  try { server?.stop(true); } catch { /* ignore */ }
+  try {
+    server?.stop(true);
+  } catch {
+    /* ignore */
+  }
 });
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -119,7 +127,7 @@ describe("E2E: GET /api/health", () => {
     const res = await api("/api/health");
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("application/json");
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.ok).toBe(true);
     expect(body).toHaveProperty("version");
     expect(body).toHaveProperty("model");
@@ -130,7 +138,7 @@ describe("E2E: GET /api/status", () => {
   it("returns uptime and model", async () => {
     const res = await api("/api/status");
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(typeof body.uptime).toBe("number");
     expect(body).toHaveProperty("model");
   });
@@ -140,7 +148,7 @@ describe("E2E: GET /api/tools", () => {
   it("returns array of tool definitions", async () => {
     const res = await api("/api/tools");
     expect(res.status).toBe(200);
-    const body = await res.json() as { tools: unknown[] };
+    const body = (await res.json()) as { tools: unknown[] };
     expect(Array.isArray(body.tools)).toBe(true);
     expect(body.tools.length).toBeGreaterThan(0);
   });
@@ -150,7 +158,7 @@ describe("E2E: GET /api/sessions", () => {
   it("returns active and recent arrays", async () => {
     const res = await api("/api/sessions");
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(Array.isArray(body.active)).toBe(true);
     expect(Array.isArray(body.recent)).toBe(true);
   });
@@ -168,7 +176,7 @@ describe("E2E: POST /api/tool", () => {
       }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.name).toBe("Read");
     expect(body.isError).toBe(false);
     expect(typeof body.content).toBe("string");
@@ -200,7 +208,7 @@ describe("E2E: Error handling", () => {
   it("returns 404 JSON for unknown routes", async () => {
     const res = await api("/api/does-not-exist");
     expect(res.status).toBe(404);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("Not Found");
   });
 
@@ -222,7 +230,7 @@ describe("E2E: Session headers", () => {
       headers: { "X-Session-Id": "test-session-abc" },
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.messageCount).toBe(0);
   });
 });
@@ -233,21 +241,21 @@ describe("E2E: Legacy endpoints", () => {
   it("GET /health returns ok", async () => {
     const res = await api("/health");
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.status).toBe("ok");
   });
 
   it("GET /v1/tools returns tools", async () => {
     const res = await api("/v1/tools");
     expect(res.status).toBe(200);
-    const body = await res.json() as { tools: unknown[] };
+    const body = (await res.json()) as { tools: unknown[] };
     expect(Array.isArray(body.tools)).toBe(true);
   });
 
   it("GET /v1/skills returns skills", async () => {
     const res = await api("/v1/skills");
     expect(res.status).toBe(200);
-    const body = await res.json() as { skills: unknown[] };
+    const body = (await res.json()) as { skills: unknown[] };
     expect(Array.isArray(body.skills)).toBe(true);
   });
 });
@@ -261,7 +269,7 @@ describe("E2E: Workspace scoping", () => {
       body: JSON.stringify({ name: "Glob", input: { pattern: "*.ts", path: "/etc" } }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.isError).toBe(true);
     expect(body.content).toContain("outside the project workspace");
   });
@@ -272,7 +280,7 @@ describe("E2E: Workspace scoping", () => {
       body: JSON.stringify({ name: "Glob", input: { pattern: "*.ts", path: "../../../etc" } }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.isError).toBe(true);
     expect(body.content).toContain("outside the project workspace");
   });
@@ -283,7 +291,7 @@ describe("E2E: Workspace scoping", () => {
       body: JSON.stringify({ name: "Grep", input: { pattern: "root", path: "/etc/passwd" } }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.isError).toBe(true);
     expect(body.content).toContain("outside the project workspace");
   });
@@ -294,7 +302,7 @@ describe("E2E: Workspace scoping", () => {
       body: JSON.stringify({ name: "Glob", input: { pattern: "src/**/*.ts" } }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.isError ?? false).toBe(false);
   });
 });

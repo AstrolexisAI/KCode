@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { executeWebSearch, webSearchDefinition } from "./web-search.ts";
 
 describe("web search tool", () => {
@@ -25,7 +25,10 @@ describe("web search tool", () => {
   });
 
   test("freshness property has correct enum values", () => {
-    const props = webSearchDefinition.input_schema.properties as Record<string, { enum?: string[] }>;
+    const props = webSearchDefinition.input_schema.properties as Record<
+      string,
+      { enum?: string[] }
+    >;
     expect(props.freshness!.enum).toEqual(["day", "week", "month", "year"]);
   });
 

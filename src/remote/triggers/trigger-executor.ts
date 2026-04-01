@@ -30,10 +30,7 @@ const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 /**
  * Default spawn function using Bun.spawn.
  */
-async function defaultSpawn(
-  args: string[],
-  options: SpawnOptions,
-): Promise<SpawnResult> {
+async function defaultSpawn(args: string[], options: SpawnOptions): Promise<SpawnResult> {
   const proc = Bun.spawn(["bun", "run", ...args], {
     cwd: options.cwd,
     env: { ...process.env, ...options.env },
@@ -159,10 +156,7 @@ export class TriggerExecutor {
   /**
    * Execute multiple triggers sequentially.
    */
-  async executeAll(
-    triggers: RemoteTrigger[],
-    cwd: string,
-  ): Promise<TriggerRunResult[]> {
+  async executeAll(triggers: RemoteTrigger[], cwd: string): Promise<TriggerRunResult[]> {
     const results: TriggerRunResult[] = [];
 
     for (const trigger of triggers) {

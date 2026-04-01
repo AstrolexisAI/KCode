@@ -21,7 +21,7 @@ export async function isMnemoCudaServer(baseUrl: string): Promise<boolean> {
   try {
     const res = await fetch(`${baseUrl}/status`, { signal: AbortSignal.timeout(2000) });
     if (!res.ok) return false;
-    const data = await res.json() as Record<string, unknown>;
+    const data = (await res.json()) as Record<string, unknown>;
     // MnemoCUDA /status returns fields like cache_slots, expert counts
     return typeof data.cache_slots === "number" || typeof data.resident_mb === "number";
   } catch {
@@ -36,7 +36,7 @@ export async function isMnemoCudaReady(baseUrl: string): Promise<boolean> {
   try {
     const res = await fetch(`${baseUrl}/ready`, { signal: AbortSignal.timeout(2000) });
     if (!res.ok) return false;
-    const data = await res.json() as Record<string, unknown>;
+    const data = (await res.json()) as Record<string, unknown>;
     return data.status === "ready";
   } catch {
     return false;
@@ -68,26 +68,28 @@ export function chatMessagesToPrompt(
     } else if (Array.isArray(msg.content)) {
       // Extract text from content blocks
       content = (msg.content as Array<{ type: string; text?: string; content?: string }>)
-        .filter(b => b.type === "text")
-        .map(b => b.text ?? b.content ?? "")
+        .filter((b) => b.type === "text")
+        .map((b) => b.text ?? b.content ?? "")
         .join("\n");
 
       // For tool use blocks, format as text
-      const toolUses = (msg.content as Array<{ type: string; name?: string; input?: unknown }>)
-        .filter(b => b.type === "tool_use");
+      const toolUses = (
+        msg.content as Array<{ type: string; name?: string; input?: unknown }>
+      ).filter((b) => b.type === "tool_use");
       if (toolUses.length > 0) {
         const toolText = toolUses
-          .map(t => `[Tool: ${t.name}] ${JSON.stringify(t.input)}`)
+          .map((t) => `[Tool: ${t.name}] ${JSON.stringify(t.input)}`)
           .join("\n");
         content = content ? `${content}\n${toolText}` : toolText;
       }
 
       // For tool results, format as text
-      const toolResults = (msg.content as Array<{ type: string; content?: string; is_error?: boolean }>)
-        .filter(b => b.type === "tool_result");
+      const toolResults = (
+        msg.content as Array<{ type: string; content?: string; is_error?: boolean }>
+      ).filter((b) => b.type === "tool_result");
       if (toolResults.length > 0) {
         const resultText = toolResults
-          .map(r => `[Result${r.is_error ? " (error)" : ""}] ${r.content ?? ""}`)
+          .map((r) => `[Result${r.is_error ? " (error)" : ""}] ${r.content ?? ""}`)
           .join("\n");
         content = content ? `${content}\n${resultText}` : resultText;
       }
@@ -139,9 +141,13 @@ export function buildMnemoCudaRequest(
  * Parse MnemoCUDA's SSE stream into KCode's SSEChunk format.
  * Converts { token, done } → SSEChunk { type: "content_delta", content }
  */
-export async function* parseMnemoCudaStream(
-  response: Response,
-): AsyncGenerator<{ type: string; content?: string; finishReason?: string; promptTokens?: number; completionTokens?: number }> {
+export async function* parseMnemoCudaStream(response: Response): AsyncGenerator<{
+  type: string;
+  content?: string;
+  finishReason?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+}> {
   if (!response.body) return;
 
   const reader = response.body.getReader();

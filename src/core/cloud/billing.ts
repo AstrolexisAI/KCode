@@ -39,10 +39,7 @@ export class BillingManager {
    * Generate a formatted usage report string showing current
    * consumption against plan limits.
    */
-  formatUsage(
-    usage: CloudTeam["usage"],
-    limits: CloudTeam["limits"],
-  ): string {
+  formatUsage(usage: CloudTeam["usage"], limits: CloudTeam["limits"]): string {
     const lines: string[] = [];
     lines.push("Cloud Usage Report");
     lines.push("==================");
@@ -76,10 +73,7 @@ export class BillingManager {
   /**
    * Check if all usage metrics are within plan limits.
    */
-  isWithinLimits(
-    usage: CloudTeam["usage"],
-    limits: CloudTeam["limits"],
-  ): boolean {
+  isWithinLimits(usage: CloudTeam["usage"], limits: CloudTeam["limits"]): boolean {
     if (usage.sessionsThisMonth > limits.maxSessions) return false;
     if (usage.tokensThisMonth > limits.maxTokensPerMonth) return false;
     if (usage.storageUsedMb > limits.maxStorageMb) return false;
@@ -90,10 +84,7 @@ export class BillingManager {
    * Generate warning messages for any metrics that exceed the
    * WARNING_THRESHOLD (80%) of their limit.
    */
-  private generateWarnings(
-    usage: CloudTeam["usage"],
-    limits: CloudTeam["limits"],
-  ): string[] {
+  private generateWarnings(usage: CloudTeam["usage"], limits: CloudTeam["limits"]): string[] {
     const warnings: string[] = [];
 
     if (
@@ -101,9 +92,7 @@ export class BillingManager {
       usage.sessionsThisMonth >= limits.maxSessions * WARNING_THRESHOLD
     ) {
       const pct = this.pct(usage.sessionsThisMonth, limits.maxSessions);
-      warnings.push(
-        `Session usage at ${pct} (${usage.sessionsThisMonth}/${limits.maxSessions})`,
-      );
+      warnings.push(`Session usage at ${pct} (${usage.sessionsThisMonth}/${limits.maxSessions})`);
     }
 
     if (
@@ -116,14 +105,9 @@ export class BillingManager {
       );
     }
 
-    if (
-      limits.maxStorageMb > 0 &&
-      usage.storageUsedMb >= limits.maxStorageMb * WARNING_THRESHOLD
-    ) {
+    if (limits.maxStorageMb > 0 && usage.storageUsedMb >= limits.maxStorageMb * WARNING_THRESHOLD) {
       const pct = this.pct(usage.storageUsedMb, limits.maxStorageMb);
-      warnings.push(
-        `Storage usage at ${pct} (${usage.storageUsedMb}MB/${limits.maxStorageMb}MB)`,
-      );
+      warnings.push(`Storage usage at ${pct} (${usage.storageUsedMb}MB/${limits.maxStorageMb}MB)`);
     }
 
     return warnings;

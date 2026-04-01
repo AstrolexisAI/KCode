@@ -11,14 +11,14 @@ export interface ExecutionProfile {
   description: string;
   icon: string;
   settings: {
-    permissionMode: string;       // ask, auto, plan, deny, acceptEdits
-    effortLevel: string;          // low, medium, high, max
+    permissionMode: string; // ask, auto, plan, deny, acceptEdits
+    effortLevel: string; // low, medium, high, max
     thinking: boolean;
     maxTokens?: number;
     compactThreshold?: number;
-    allowedTools?: string[];      // if set, only these tools
-    disallowedTools?: string[];   // if set, block these tools
-    systemPromptAppend?: string;  // extra instructions for this profile
+    allowedTools?: string[]; // if set, only these tools
+    disallowedTools?: string[]; // if set, block these tools
+    systemPromptAppend?: string; // extra instructions for this profile
   };
 }
 
@@ -34,7 +34,8 @@ const BUILTIN_PROFILES: ExecutionProfile[] = [
       effortLevel: "medium",
       thinking: false,
       disallowedTools: ["Write", "Edit", "MultiEdit", "Bash", "GrepReplace", "Rename"],
-      systemPromptAppend: "You are in SAFE mode. Do NOT modify any files. Only read, analyze, and explain. Always show diffs before suggesting changes.",
+      systemPromptAppend:
+        "You are in SAFE mode. Do NOT modify any files. Only read, analyze, and explain. Always show diffs before suggesting changes.",
     },
   },
   {
@@ -58,7 +59,8 @@ const BUILTIN_PROFILES: ExecutionProfile[] = [
       effortLevel: "high",
       thinking: true,
       disallowedTools: ["Write", "Edit", "MultiEdit", "Bash"],
-      systemPromptAppend: "You are in REVIEW mode. Focus on finding bugs, regressions, security issues, missing tests, and code quality problems. Do not make changes — only analyze and report. Classify issues by severity.",
+      systemPromptAppend:
+        "You are in REVIEW mode. Focus on finding bugs, regressions, security issues, missing tests, and code quality problems. Do not make changes — only analyze and report. Classify issues by severity.",
     },
   },
   {
@@ -69,7 +71,8 @@ const BUILTIN_PROFILES: ExecutionProfile[] = [
       permissionMode: "auto",
       effortLevel: "high",
       thinking: true,
-      systemPromptAppend: "You are in IMPLEMENT mode. You have full autonomy to read, edit, write, and run tests. After making changes, always verify by running relevant tests. Track your progress.",
+      systemPromptAppend:
+        "You are in IMPLEMENT mode. You have full autonomy to read, edit, write, and run tests. After making changes, always verify by running relevant tests. Track your progress.",
     },
   },
   {
@@ -81,7 +84,8 @@ const BUILTIN_PROFILES: ExecutionProfile[] = [
       effortLevel: "medium",
       thinking: false,
       allowedTools: ["Read", "Bash", "Glob", "Grep", "LS"],
-      systemPromptAppend: "You are in OPS mode. Focus on diagnostics, logs, processes, ports, deployment, and environment. Prefer reading and running commands over editing files.",
+      systemPromptAppend:
+        "You are in OPS mode. Focus on diagnostics, logs, processes, ports, deployment, and environment. Prefer reading and running commands over editing files.",
     },
   },
 ];
@@ -160,7 +164,8 @@ export function getCurrentProfileName(config: KCodeConfig): string | null {
       continue;
     }
     if (s.disallowedTools) {
-      if (!config.disallowedTools || !arraysEqual(config.disallowedTools, s.disallowedTools)) continue;
+      if (!config.disallowedTools || !arraysEqual(config.disallowedTools, s.disallowedTools))
+        continue;
     } else if (config.disallowedTools) {
       continue;
     }

@@ -1,13 +1,7 @@
 // KCode - Session Sharing for Real-time Collaboration
 
 import { log } from "../logger";
-import type {
-  CollabSession,
-  CollabEvent,
-  Participant,
-  ShareInfo,
-  JoinResult,
-} from "./types";
+import type { CollabEvent, CollabSession, JoinResult, Participant, ShareInfo } from "./types";
 import { PARTICIPANT_COLORS } from "./types";
 
 type EventListener = (event: CollabEvent) => void;

@@ -49,10 +49,7 @@ export async function runTests(command: string, cwd: string): Promise<TestRunRes
  */
 export function formatTestResult(result: TestRunResult): string {
   const status = result.passed ? "\x1b[32m✓ PASSED\x1b[0m" : "\x1b[31m✗ FAILED\x1b[0m";
-  const lines: string[] = [
-    `  ${status} in ${result.durationMs}ms`,
-    `  Command: ${result.command}`,
-  ];
+  const lines: string[] = [`  ${status} in ${result.durationMs}ms`, `  Command: ${result.command}`];
 
   if (!result.passed && result.stderr) {
     lines.push("");

@@ -30,7 +30,7 @@ export function initBenchmarkSchema(): void {
 export interface BenchmarkResult {
   model: string;
   taskType: string;
-  score: number;       // 0.0 - 1.0
+  score: number; // 0.0 - 1.0
   tokensUsed: number;
   latencyMs: number;
   details: Record<string, unknown>;
@@ -62,11 +62,11 @@ export function scoreResponse(params: {
   userSatisfied?: boolean; // from explicit feedback
 }): number {
   const weights = {
-    completion: 0.35,     // Did it complete the task?
-    efficiency: 0.25,     // How many turns / tool calls?
-    errorFree: 0.20,      // Were there errors?
-    conciseness: 0.10,    // Was the response reasonably sized?
-    satisfaction: 0.10,   // Explicit user feedback
+    completion: 0.35, // Did it complete the task?
+    efficiency: 0.25, // How many turns / tool calls?
+    errorFree: 0.2, // Were there errors?
+    conciseness: 0.1, // Was the response reasonably sized?
+    satisfaction: 0.1, // Explicit user feedback
   };
 
   let score = 0;
@@ -79,7 +79,8 @@ export function scoreResponse(params: {
   score += weights.efficiency * efficiencyScore;
 
   // Error-free: penalize errors heavily
-  const errorScore = params.errorsEncountered === 0 ? 1.0 : Math.max(0, 1.0 - params.errorsEncountered * 0.3);
+  const errorScore =
+    params.errorsEncountered === 0 ? 1.0 : Math.max(0, 1.0 - params.errorsEncountered * 0.3);
   score += weights.errorFree * errorScore;
 
   // Conciseness: penalize very long responses (>5000 chars)
@@ -127,21 +128,35 @@ export function getBenchmarkSummary(model?: string, days: number = 30): Benchmar
     const db = getDb();
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    interface ModelRow { model: string }
-    interface BenchmarkRow { task_type: string; score: number; tokens_used: number; latency_ms: number; created_at: string }
+    interface ModelRow {
+      model: string;
+    }
+    interface BenchmarkRow {
+      task_type: string;
+      score: number;
+      tokens_used: number;
+      latency_ms: number;
+      created_at: string;
+    }
 
     const models: string[] = model
       ? [model]
-      : (db.query(`SELECT DISTINCT model FROM benchmarks WHERE created_at > ?`).all(cutoff) as ModelRow[]).map((r) => r.model);
+      : (
+          db
+            .query(`SELECT DISTINCT model FROM benchmarks WHERE created_at > ?`)
+            .all(cutoff) as ModelRow[]
+        ).map((r) => r.model);
 
     const summaries: BenchmarkSummary[] = [];
 
     for (const m of models) {
-      const rows = db.query(
-        `SELECT task_type, score, tokens_used, latency_ms, created_at
+      const rows = db
+        .query(
+          `SELECT task_type, score, tokens_used, latency_ms, created_at
          FROM benchmarks WHERE model = ? AND created_at > ?
          ORDER BY created_at DESC`,
-      ).all(m, cutoff) as BenchmarkRow[];
+        )
+        .all(m, cutoff) as BenchmarkRow[];
 
       if (rows.length === 0) continue;
 
@@ -165,7 +180,8 @@ export function getBenchmarkSummary(model?: string, days: number = 30): Benchmar
       // Trend: compare first half vs second half
       const midpoint = Math.floor(rows.length / 2);
       const recentAvg = rows.slice(0, midpoint).reduce((s, r) => s + r.score, 0) / (midpoint || 1);
-      const olderAvg = rows.slice(midpoint).reduce((s, r) => s + r.score, 0) / ((rows.length - midpoint) || 1);
+      const olderAvg =
+        rows.slice(midpoint).reduce((s, r) => s + r.score, 0) / (rows.length - midpoint || 1);
       const diff = recentAvg - olderAvg;
       const trend = diff > 0.05 ? "improving" : diff < -0.05 ? "declining" : "stable";
 
@@ -208,18 +224,22 @@ export function formatBenchmarks(summaries: BenchmarkSummary[]): string {
 
     if (Object.keys(s.byTaskType).length > 1) {
       lines.push("  By task:");
-      for (const [type, data] of Object.entries(s.byTaskType).sort((a, b) => b[1].runs - a[1].runs)) {
+      for (const [type, data] of Object.entries(s.byTaskType).sort(
+        (a, b) => b[1].runs - a[1].runs,
+      )) {
         lines.push(`    ${type}: ${(data.avgScore * 100).toFixed(0)}% (${data.runs} runs)`);
       }
     }
 
     if (s.recentScores.length > 0) {
-      const sparkline = s.recentScores.map((sc) => {
-        if (sc >= 0.8) return "█";
-        if (sc >= 0.6) return "▆";
-        if (sc >= 0.4) return "▃";
-        return "▁";
-      }).join("");
+      const sparkline = s.recentScores
+        .map((sc) => {
+          if (sc >= 0.8) return "█";
+          if (sc >= 0.6) return "▆";
+          if (sc >= 0.4) return "▃";
+          return "▁";
+        })
+        .join("");
       lines.push(`  Recent: ${sparkline} (last ${s.recentScores.length})`);
     }
 

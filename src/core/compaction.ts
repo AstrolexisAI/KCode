@@ -1,9 +1,9 @@
 // KCode - Conversation Compaction
 // Summarizes pruned messages via LLM instead of discarding them
 
-import type { Message, ContentBlock, TextBlock } from "./types.js";
-import { getModelBaseUrl, getModelProvider } from "./models.js";
 import { log } from "./logger.js";
+import { getModelBaseUrl, getModelProvider } from "./models.js";
+import type { ContentBlock, Message, TextBlock } from "./types.js";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -37,7 +37,10 @@ export class CompactionManager {
     if (model) {
       this.model = model;
     } else {
-      log.warn("compaction", `No model configured for compaction, falling back to hardcoded "${SUMMARY_MODEL}". Configure a model to avoid this.`);
+      log.warn(
+        "compaction",
+        `No model configured for compaction, falling back to hardcoded "${SUMMARY_MODEL}". Configure a model to avoid this.`,
+      );
       this.model = SUMMARY_MODEL;
     }
     this.apiKey = apiKey;
@@ -75,9 +78,7 @@ export class CompactionManager {
       const provider = await getModelProvider(this.model);
       const isAnthropic = provider === "anthropic";
 
-      const url = isAnthropic
-        ? `${apiBase}/v1/messages`
-        : `${apiBase}/v1/chat/completions`;
+      const url = isAnthropic ? `${apiBase}/v1/messages` : `${apiBase}/v1/chat/completions`;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
@@ -131,7 +132,10 @@ export class CompactionManager {
         return null;
       }
       // Cap summary length to prevent context pollution from malformed model output
-      const safeSummary = summaryText.length > 10_000 ? summaryText.slice(0, 10_000) + "\n[summary truncated]" : summaryText;
+      const safeSummary =
+        summaryText.length > 10_000
+          ? summaryText.slice(0, 10_000) + "\n[summary truncated]"
+          : summaryText;
 
       this.consecutiveFailures = 0;
       this.compactionCount++;
@@ -160,7 +164,7 @@ export class CompactionManager {
       this.circuitBreakerTripped = true;
       console.warn(
         `[compaction] Circuit breaker tripped after ${this.consecutiveFailures} consecutive failures. ` +
-        `Auto-compaction disabled for this session. Call resetCircuitBreaker() to re-enable.`,
+          `Auto-compaction disabled for this session. Call resetCircuitBreaker() to re-enable.`,
       );
     }
   }
@@ -190,7 +194,9 @@ export class CompactionManager {
             // Skip thinking blocks in summaries
             break;
           case "tool_use":
-            parts.push(`${role} [tool_use ${block.name}]: ${JSON.stringify(block.input).slice(0, 200)}`);
+            parts.push(
+              `${role} [tool_use ${block.name}]: ${JSON.stringify(block.input).slice(0, 200)}`,
+            );
             break;
           case "tool_result": {
             const content =

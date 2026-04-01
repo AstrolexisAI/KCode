@@ -1,9 +1,18 @@
 // KCode - Coordinator Scratchpad
 // Shared filesystem-based workspace for coordinator and workers
 
-import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync, rmSync, appendFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ScratchpadEntry, ScratchpadLogEntry } from "./types";
 
 /**
@@ -61,8 +70,8 @@ export class Scratchpad {
   list(): ScratchpadEntry[] {
     if (!existsSync(this.dir)) return [];
     return readdirSync(this.dir)
-      .filter(f => !f.startsWith("."))
-      .map(file => {
+      .filter((f) => !f.startsWith("."))
+      .map((file) => {
         const fullPath = join(this.dir, file);
         return {
           file,
@@ -98,9 +107,7 @@ export class Scratchpad {
           if (entry.file === file && entry.action === "write") {
             return entry.author;
           }
-        } catch {
-          continue;
-        }
+        } catch {}
       }
     } catch {
       // Log file unreadable

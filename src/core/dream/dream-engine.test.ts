@@ -1,8 +1,8 @@
 // KCode - Dream Engine Tests
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { DreamEngine } from "./dream-engine";
-import type { DreamTask, DreamContext, DreamResult, DreamState } from "./types";
+import type { DreamContext, DreamResult, DreamState, DreamTask } from "./types";
 
 function makeMockTask(overrides: Partial<DreamTask> = {}): DreamTask {
   return {
@@ -65,7 +65,7 @@ describe("DreamEngine", () => {
         taskName: "Runner",
         status: "completed",
         durationMs: 1,
-      })
+      }),
     );
 
     engine.register(
@@ -74,7 +74,7 @@ describe("DreamEngine", () => {
         name: "Runner",
         shouldRun: () => true,
         execute: executeMock,
-      })
+      }),
     );
 
     const results = await engine.startDreaming(makeCtx());
@@ -89,7 +89,7 @@ describe("DreamEngine", () => {
         taskName: "Skipped",
         status: "completed",
         durationMs: 1,
-      })
+      }),
     );
 
     engine.register(
@@ -98,7 +98,7 @@ describe("DreamEngine", () => {
         name: "Skipped",
         shouldRun: () => false,
         execute: executeMock,
-      })
+      }),
     );
 
     const results = await engine.startDreaming(makeCtx());
@@ -121,14 +121,12 @@ describe("DreamEngine", () => {
                 status: "completed",
                 durationMs: 1,
               });
-            ctx.signal.addEventListener(
-              "abort",
-              () => reject(new Error("aborted")),
-              { once: true }
-            );
+            ctx.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            });
           });
         },
-      })
+      }),
     );
 
     const resultPromise = engine.startDreaming(makeCtx());
@@ -173,14 +171,12 @@ describe("DreamEngine", () => {
         execute: async (ctx: DreamContext): Promise<DreamResult> => {
           // Never resolves unless aborted
           return new Promise((resolve, reject) => {
-            ctx.signal.addEventListener(
-              "abort",
-              () => reject(new Error("aborted")),
-              { once: true }
-            );
+            ctx.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            });
           });
         },
-      })
+      }),
     );
 
     const results = await engine.startDreaming(makeCtx());
@@ -199,14 +195,12 @@ describe("DreamEngine", () => {
         execute: async (ctx: DreamContext): Promise<DreamResult> => {
           taskStarted = true;
           return new Promise((resolve, reject) => {
-            ctx.signal.addEventListener(
-              "abort",
-              () => reject(new Error("aborted")),
-              { once: true }
-            );
+            ctx.signal.addEventListener("abort", () => reject(new Error("aborted")), {
+              once: true,
+            });
           });
         },
-      })
+      }),
     );
 
     const resultPromise = engine.startDreaming(makeCtx());
@@ -236,7 +230,7 @@ describe("DreamEngine", () => {
             order.push(id);
             return { taskName: id, status: "completed", durationMs: 1 };
           },
-        })
+        }),
       );
     }
 
@@ -258,7 +252,7 @@ describe("DreamEngine", () => {
                   status: "completed",
                   durationMs: 100,
                 }),
-              100
+              100,
             );
             ctx.signal.addEventListener(
               "abort",
@@ -266,11 +260,11 @@ describe("DreamEngine", () => {
                 clearTimeout(timer);
                 reject(new Error("aborted"));
               },
-              { once: true }
+              { once: true },
             );
           });
         },
-      })
+      }),
     );
 
     const ctx = makeCtx();

@@ -268,10 +268,15 @@ export function assessRisk(command: string): RiskAssessment {
   );
 
   const level: RiskAssessment["level"] =
-    score >= 80 ? "critical" :
-    score >= 50 ? "high" :
-    score >= 25 ? "moderate" :
-    score >= 10 ? "low" : "safe";
+    score >= 80
+      ? "critical"
+      : score >= 50
+        ? "high"
+        : score >= 25
+          ? "moderate"
+          : score >= 10
+            ? "low"
+            : "safe";
 
   return { score, level, matches };
 }
@@ -280,18 +285,18 @@ export function assessRisk(command: string): RiskAssessment {
 
 /** Patterns that should NEVER be allowed as permission rules in auto mode */
 const DANGEROUS_RULE_PATTERNS = [
-  /^Bash\(\*\)$/,              // Bash(*) — allows ANY command
-  /^Edit\(\*\)$/,              // Edit(*) — allows editing any file
-  /^Write\(\*\)$/,             // Write(*) — allows writing any file
-  /^Bash\(python:\*\)$/,      // Bash(python:*) — allows any Python execution
-  /^Bash\(node:\*\)$/,        // Bash(node:*) — allows any Node execution
-  /^Bash\(ruby:\*\)$/,        // Bash(ruby:*) — allows any Ruby execution
-  /^Bash\(perl:\*\)$/,        // Bash(perl:*) — allows any Perl execution
-  /^Bash\(php:\*\)$/,         // Bash(php:*) — allows any PHP execution
-  /^Bash\(curl:\*\)$/,        // Bash(curl:*) — allows any HTTP request
-  /^Bash\(wget:\*\)$/,        // Bash(wget:*) — allows any download
-  /^Bash\(sudo:\*\)$/,        // Bash(sudo:*) — allows any sudo command
-  /^\*$/,                      // * — wildcard all tools
+  /^Bash\(\*\)$/, // Bash(*) — allows ANY command
+  /^Edit\(\*\)$/, // Edit(*) — allows editing any file
+  /^Write\(\*\)$/, // Write(*) — allows writing any file
+  /^Bash\(python:\*\)$/, // Bash(python:*) — allows any Python execution
+  /^Bash\(node:\*\)$/, // Bash(node:*) — allows any Node execution
+  /^Bash\(ruby:\*\)$/, // Bash(ruby:*) — allows any Ruby execution
+  /^Bash\(perl:\*\)$/, // Bash(perl:*) — allows any Perl execution
+  /^Bash\(php:\*\)$/, // Bash(php:*) — allows any PHP execution
+  /^Bash\(curl:\*\)$/, // Bash(curl:*) — allows any HTTP request
+  /^Bash\(wget:\*\)$/, // Bash(wget:*) — allows any download
+  /^Bash\(sudo:\*\)$/, // Bash(sudo:*) — allows any sudo command
+  /^\*$/, // * — wildcard all tools
 ];
 
 /**
@@ -309,7 +314,16 @@ export function isDangerousRule(rule: string): { dangerous: boolean; reason?: st
   }
 
   // Check for wildcards in tool argument (except read-only tools)
-  const SAFE_WILDCARD_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "DiffView", "GitStatus", "GitLog", "ToolSearch"]);
+  const SAFE_WILDCARD_TOOLS = new Set([
+    "Read",
+    "Glob",
+    "Grep",
+    "LS",
+    "DiffView",
+    "GitStatus",
+    "GitLog",
+    "ToolSearch",
+  ]);
   const toolNameMatch = rule.match(/^(\w+)\(\*\)$/);
   if (toolNameMatch && !SAFE_WILDCARD_TOOLS.has(toolNameMatch[1]!)) {
     return {
@@ -342,12 +356,21 @@ export function validateRulesForAutoMode(rules: string[]): Array<{ rule: string;
 
 /** Known script interpreters */
 const INTERPRETERS = new Set([
-  "python", "python3", "python2",
-  "node", "nodejs", "deno", "bun",
-  "ruby", "irb",
-  "perl", "perl5", "perl6",
+  "python",
+  "python3",
+  "python2",
+  "node",
+  "nodejs",
+  "deno",
+  "bun",
+  "ruby",
+  "irb",
+  "perl",
+  "perl5",
+  "perl6",
   "php",
-  "lua", "luajit",
+  "lua",
+  "luajit",
   "Rscript",
 ]);
 
@@ -364,7 +387,10 @@ export function detectInterpreter(command: string): string | null {
   if (cmd.startsWith("env ")) {
     const parts = cmd.split(/\s+/).slice(1);
     for (const part of parts) {
-      if (!part.includes("=")) { cmd = parts.slice(parts.indexOf(part)).join(" "); break; }
+      if (!part.includes("=")) {
+        cmd = parts.slice(parts.indexOf(part)).join(" ");
+        break;
+      }
     }
   }
 
@@ -394,7 +420,5 @@ export function getPatternsByCategory(category: PatternCategory): DangerousPatte
 export function getPatternsBySeverity(minSeverity: PatternSeverity): DangerousPattern[] {
   const severityOrder: PatternSeverity[] = ["info", "warning", "danger", "critical"];
   const minIdx = severityOrder.indexOf(minSeverity);
-  return PATTERN_REGISTRY.filter(
-    (p) => severityOrder.indexOf(p.severity) >= minIdx,
-  );
+  return PATTERN_REGISTRY.filter((p) => severityOrder.indexOf(p.severity) >= minIdx);
 }

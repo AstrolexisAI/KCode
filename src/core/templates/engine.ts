@@ -163,7 +163,7 @@ export class TemplateEngine {
             });
             const answer = await ask(`  Choose [1-${choices.length}]: `);
             const idx = parseInt(answer.trim(), 10) - 1;
-            value = (idx >= 0 && idx < choices.length) ? choices[idx] : param.default;
+            value = idx >= 0 && idx < choices.length ? choices[idx] : param.default;
             break;
           }
 
@@ -186,7 +186,14 @@ export class TemplateEngine {
   }
 
   private isTruthy(value: unknown): boolean {
-    if (value === false || value === "false" || value === 0 || value === "" || value === null || value === undefined) {
+    if (
+      value === false ||
+      value === "false" ||
+      value === 0 ||
+      value === "" ||
+      value === null ||
+      value === undefined
+    ) {
       return false;
     }
     return true;

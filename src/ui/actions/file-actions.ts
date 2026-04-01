@@ -3,10 +3,7 @@
 
 import type { ActionContext } from "./action-helpers.js";
 
-export async function handleFileAction(
-  action: string,
-  ctx: ActionContext,
-): Promise<string | null> {
+export async function handleFileAction(action: string, ctx: ActionContext): Promise<string | null> {
   const { appConfig, args } = ctx;
 
   switch (action) {
@@ -28,7 +25,8 @@ export async function handleFileAction(
       }
 
       // Extract imports (handles multiline imports)
-      const importRegex = /(?:import\s+[\s\S]*?from\s+["'](.+?)["']|require\s*\(\s*["'](.+?)["']\s*\))/g;
+      const importRegex =
+        /(?:import\s+[\s\S]*?from\s+["'](.+?)["']|require\s*\(\s*["'](.+?)["']\s*\))/g;
       const imports: string[] = [];
       let match;
       while ((match = importRegex.exec(content)) !== null) {
@@ -36,7 +34,8 @@ export async function handleFileAction(
       }
 
       // Extract exports
-      const exportRegex = /export\s+(?:default\s+)?(?:function|class|const|let|var|type|interface|enum)\s+(\w+)/g;
+      const exportRegex =
+        /export\s+(?:default\s+)?(?:function|class|const|let|var|type|interface|enum)\s+(\w+)/g;
       const exports: string[] = [];
       while ((match = exportRegex.exec(content)) !== null) {
         exports.push(match[1]!);
@@ -44,7 +43,16 @@ export async function handleFileAction(
       // Also check for `export { ... }`
       const reExportRegex = /export\s*\{([^}]+)\}/g;
       while ((match = reExportRegex.exec(content)) !== null) {
-        const names = match[1]!.split(",").map(s => s.trim().split(/\s+as\s+/).pop()?.trim()).filter(Boolean);
+        const names = match[1]!
+          .split(",")
+          .map((s) =>
+            s
+              .trim()
+              .split(/\s+as\s+/)
+              .pop()
+              ?.trim(),
+          )
+          .filter(Boolean);
         exports.push(...(names as string[]));
       }
 
@@ -88,27 +96,41 @@ export async function handleFileAction(
 
       const rawPattern = args?.trim() || "**/*.*";
       // Sanitize pattern: only allow alphanumeric, *, ?, ., -, _, /
-      const pattern = rawPattern.replace(/[^a-zA-Z0-9*?._\-\/]/g, "");
+      const pattern = rawPattern.replace(/[^a-zA-Z0-9*?._\-/]/g, "");
       if (!pattern) return "  Invalid pattern. Use glob characters like *.ts or **/*.js";
 
       // Use find to get files matching pattern, sorted by size
-      let files: Array<{ path: string; size: number }> = [];
+      const files: Array<{ path: string; size: number }> = [];
       try {
         const namePattern = pattern.includes("*") ? pattern.split("/").pop() || "*" : pattern;
-        const output = execFileSync("find", [
-          ".", "-type", "f", "-name", namePattern,
-          "-not", "-path", "*/node_modules/*",
-          "-not", "-path", "*/.git/*",
-          "-printf", "%s\\t%p\\n",
-        ], {
-          cwd,
-          timeout: 10000,
-          encoding: "utf-8",
-          stdio: ["pipe", "pipe", "pipe"],
-        }).trim();
+        const output = execFileSync(
+          "find",
+          [
+            ".",
+            "-type",
+            "f",
+            "-name",
+            namePattern,
+            "-not",
+            "-path",
+            "*/node_modules/*",
+            "-not",
+            "-path",
+            "*/.git/*",
+            "-printf",
+            "%s\\t%p\\n",
+          ],
+          {
+            cwd,
+            timeout: 10000,
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          },
+        ).trim();
         // Sort by size descending and limit to 30
-        const sorted = output.split("\n")
-          .filter(l => l.trim())
+        const sorted = output
+          .split("\n")
+          .filter((l) => l.trim())
           .sort((a, b) => parseInt(b.split("\t")[0] ?? "0") - parseInt(a.split("\t")[0] ?? "0"))
           .slice(0, 30)
           .join("\n");
@@ -167,7 +189,12 @@ export async function handleFileAction(
         // Use diff command (returns exit code 1 if files differ, which is normal)
         // Escape single quotes in paths to prevent injection
         const esc = (s: string) => s.replace(/'/g, "'\\''");
-        const output = execSync(`diff -u '${esc(file1)}' '${esc(file2)}' 2>&1; true`, { cwd, timeout: 10000 }).toString().trim();
+        const output = execSync(`diff -u '${esc(file1)}' '${esc(file2)}' 2>&1; true`, {
+          cwd,
+          timeout: 10000,
+        })
+          .toString()
+          .trim();
 
         if (!output) return `  Files are identical: ${parts[0]} = ${parts[1]}`;
 
@@ -199,7 +226,8 @@ export async function handleFileAction(
       if (!existsSync(filePath)) return `  File not found: ${args.trim()}`;
 
       const { statSync: statSyncOutline } = await import("node:fs");
-      if (statSyncOutline(filePath).size > 5 * 1024 * 1024) return "  File too large for outline (max 5 MB).";
+      if (statSyncOutline(filePath).size > 5 * 1024 * 1024)
+        return "  File too large for outline (max 5 MB).";
 
       const content = readFileSync(filePath, "utf-8");
       const ext = extname(filePath).toLowerCase();
@@ -212,60 +240,91 @@ export async function handleFileAction(
         for (let i = 0; i < fileLines.length; i++) {
           const l = fileLines[i]!;
           let m;
-          if ((m = l.match(/^\s*export\s+(default\s+)?(async\s+)?function\s+(\w+)/))) symbols.push({ line: i + 1, kind: "fn", name: m[3]! });
-          else if ((m = l.match(/^\s*(export\s+)?(async\s+)?function\s+(\w+)/))) symbols.push({ line: i + 1, kind: "fn", name: m[3]! });
-          else if ((m = l.match(/^\s*export\s+(default\s+)?class\s+(\w+)/))) symbols.push({ line: i + 1, kind: "class", name: m[2]! });
-          else if ((m = l.match(/^\s*class\s+(\w+)/))) symbols.push({ line: i + 1, kind: "class", name: m[1]! });
-          else if ((m = l.match(/^\s*export\s+(default\s+)?interface\s+(\w+)/))) symbols.push({ line: i + 1, kind: "iface", name: m[2]! });
-          else if ((m = l.match(/^\s*interface\s+(\w+)/))) symbols.push({ line: i + 1, kind: "iface", name: m[1]! });
-          else if ((m = l.match(/^\s*export\s+(default\s+)?type\s+(\w+)/))) symbols.push({ line: i + 1, kind: "type", name: m[2]! });
-          else if ((m = l.match(/^\s*type\s+(\w+)\s*=/))) symbols.push({ line: i + 1, kind: "type", name: m[1]! });
-          else if ((m = l.match(/^\s*export\s+(const|let|var)\s+(\w+)/))) symbols.push({ line: i + 1, kind: "var", name: m[2]! });
-          else if ((m = l.match(/^\s*const\s+(\w+)\s*=\s*(async\s+)?\(/))) symbols.push({ line: i + 1, kind: "fn", name: m[1]! });
+          if ((m = l.match(/^\s*export\s+(default\s+)?(async\s+)?function\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "fn", name: m[3]! });
+          else if ((m = l.match(/^\s*(export\s+)?(async\s+)?function\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "fn", name: m[3]! });
+          else if ((m = l.match(/^\s*export\s+(default\s+)?class\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "class", name: m[2]! });
+          else if ((m = l.match(/^\s*class\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "class", name: m[1]! });
+          else if ((m = l.match(/^\s*export\s+(default\s+)?interface\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "iface", name: m[2]! });
+          else if ((m = l.match(/^\s*interface\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "iface", name: m[1]! });
+          else if ((m = l.match(/^\s*export\s+(default\s+)?type\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "type", name: m[2]! });
+          else if ((m = l.match(/^\s*type\s+(\w+)\s*=/)))
+            symbols.push({ line: i + 1, kind: "type", name: m[1]! });
+          else if ((m = l.match(/^\s*export\s+(const|let|var)\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "var", name: m[2]! });
+          else if ((m = l.match(/^\s*const\s+(\w+)\s*=\s*(async\s+)?\(/)))
+            symbols.push({ line: i + 1, kind: "fn", name: m[1]! });
         }
       } else if ([".py"].includes(ext)) {
         for (let i = 0; i < fileLines.length; i++) {
           const l = fileLines[i]!;
           let m;
-          if ((m = l.match(/^class\s+(\w+)/))) symbols.push({ line: i + 1, kind: "class", name: m[1]! });
-          else if ((m = l.match(/^(\s*)def\s+(\w+)/))) symbols.push({ line: i + 1, kind: m[1] ? "method" : "fn", name: m[2]! });
-          else if ((m = l.match(/^(\s*)async\s+def\s+(\w+)/))) symbols.push({ line: i + 1, kind: m[1] ? "method" : "fn", name: m[2]! });
+          if ((m = l.match(/^class\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "class", name: m[1]! });
+          else if ((m = l.match(/^(\s*)def\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: m[1] ? "method" : "fn", name: m[2]! });
+          else if ((m = l.match(/^(\s*)async\s+def\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: m[1] ? "method" : "fn", name: m[2]! });
         }
       } else if ([".go"].includes(ext)) {
         for (let i = 0; i < fileLines.length; i++) {
           const l = fileLines[i]!;
           let m;
-          if ((m = l.match(/^func\s+\((\w+)\s+\*?(\w+)\)\s+(\w+)/))) symbols.push({ line: i + 1, kind: "method", name: `${m[2]}.${m[3]}` });
-          else if ((m = l.match(/^func\s+(\w+)/))) symbols.push({ line: i + 1, kind: "fn", name: m[1]! });
-          else if ((m = l.match(/^type\s+(\w+)\s+struct/))) symbols.push({ line: i + 1, kind: "struct", name: m[1]! });
-          else if ((m = l.match(/^type\s+(\w+)\s+interface/))) symbols.push({ line: i + 1, kind: "iface", name: m[1]! });
+          if ((m = l.match(/^func\s+\((\w+)\s+\*?(\w+)\)\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "method", name: `${m[2]}.${m[3]}` });
+          else if ((m = l.match(/^func\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "fn", name: m[1]! });
+          else if ((m = l.match(/^type\s+(\w+)\s+struct/)))
+            symbols.push({ line: i + 1, kind: "struct", name: m[1]! });
+          else if ((m = l.match(/^type\s+(\w+)\s+interface/)))
+            symbols.push({ line: i + 1, kind: "iface", name: m[1]! });
         }
       } else if ([".rs"].includes(ext)) {
         for (let i = 0; i < fileLines.length; i++) {
           const l = fileLines[i]!;
           let m;
-          if ((m = l.match(/^\s*(pub\s+)?fn\s+(\w+)/))) symbols.push({ line: i + 1, kind: "fn", name: m[2]! });
-          else if ((m = l.match(/^\s*(pub\s+)?struct\s+(\w+)/))) symbols.push({ line: i + 1, kind: "struct", name: m[2]! });
-          else if ((m = l.match(/^\s*(pub\s+)?enum\s+(\w+)/))) symbols.push({ line: i + 1, kind: "enum", name: m[2]! });
-          else if ((m = l.match(/^\s*(pub\s+)?trait\s+(\w+)/))) symbols.push({ line: i + 1, kind: "trait", name: m[2]! });
-          else if ((m = l.match(/^\s*impl\s+(\w+)/))) symbols.push({ line: i + 1, kind: "impl", name: m[1]! });
+          if ((m = l.match(/^\s*(pub\s+)?fn\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "fn", name: m[2]! });
+          else if ((m = l.match(/^\s*(pub\s+)?struct\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "struct", name: m[2]! });
+          else if ((m = l.match(/^\s*(pub\s+)?enum\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "enum", name: m[2]! });
+          else if ((m = l.match(/^\s*(pub\s+)?trait\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "trait", name: m[2]! });
+          else if ((m = l.match(/^\s*impl\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "impl", name: m[1]! });
         }
       } else if ([".swift"].includes(ext)) {
         for (let i = 0; i < fileLines.length; i++) {
           const l = fileLines[i]!;
           let m;
-          if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?class\s+(\w+)/))) symbols.push({ line: i + 1, kind: "class", name: m[2]! });
-          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?struct\s+(\w+)/))) symbols.push({ line: i + 1, kind: "struct", name: m[2]! });
-          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?func\s+(\w+)/))) symbols.push({ line: i + 1, kind: "fn", name: m[2]! });
-          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?enum\s+(\w+)/))) symbols.push({ line: i + 1, kind: "enum", name: m[2]! });
-          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?protocol\s+(\w+)/))) symbols.push({ line: i + 1, kind: "proto", name: m[2]! });
+          if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?class\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "class", name: m[2]! });
+          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?struct\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "struct", name: m[2]! });
+          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?func\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "fn", name: m[2]! });
+          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?enum\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "enum", name: m[2]! });
+          else if ((m = l.match(/^\s*(public\s+|private\s+|internal\s+|open\s+)?protocol\s+(\w+)/)))
+            symbols.push({ line: i + 1, kind: "proto", name: m[2]! });
         }
       } else {
         // Generic: look for common patterns
         for (let i = 0; i < fileLines.length; i++) {
           const l = fileLines[i]!;
           let m;
-          if ((m = l.match(/^\s*(public|private|protected)?\s*(static\s+)?(void|int|string|boolean|async)?\s*(\w+)\s*\(/))) {
+          if (
+            (m = l.match(
+              /^\s*(public|private|protected)?\s*(static\s+)?(void|int|string|boolean|async)?\s*(\w+)\s*\(/,
+            ))
+          ) {
             if (!["if", "for", "while", "switch", "catch", "return", "else"].includes(m[4]!)) {
               symbols.push({ line: i + 1, kind: "fn", name: m[4]! });
             }
@@ -276,11 +335,22 @@ export async function handleFileAction(
       if (symbols.length === 0) return `  No symbols found in ${relPath}`;
 
       const kindIcons: Record<string, string> = {
-        fn: "f", method: "m", class: "C", struct: "S", iface: "I",
-        type: "T", var: "v", enum: "E", trait: "R", impl: "M", proto: "P",
+        fn: "f",
+        method: "m",
+        class: "C",
+        struct: "S",
+        iface: "I",
+        type: "T",
+        var: "v",
+        enum: "E",
+        trait: "R",
+        impl: "M",
+        proto: "P",
       };
 
-      const lines = [`  Outline: ${relPath} (${symbols.length} symbols, ${fileLines.length} lines)\n`];
+      const lines = [
+        `  Outline: ${relPath} (${symbols.length} symbols, ${fileLines.length} lines)\n`,
+      ];
       for (const sym of symbols) {
         const icon = kindIcons[sym.kind] ?? "?";
         lines.push(`  ${String(sym.line).padStart(5)}  [${icon}] ${sym.name}`);
@@ -306,10 +376,11 @@ export async function handleFileAction(
       const ext = extname(filePath).toLowerCase();
 
       // Detect delimiter
-      const delimiter = ext === ".tsv" || content.split("\t").length > content.split(",").length ? "\t" : ",";
+      const delimiter =
+        ext === ".tsv" || content.split("\t").length > content.split(",").length ? "\t" : ",";
       const delimName = delimiter === "\t" ? "TAB" : "COMMA";
 
-      const rows = content.split("\n").filter(l => l.trim());
+      const rows = content.split("\n").filter((l) => l.trim());
       if (rows.length === 0) return "  Empty file.";
 
       // Parse with simple CSV logic (handles quoted fields)
@@ -337,8 +408,8 @@ export async function handleFileAction(
 
       // Column widths for preview
       const colWidths = headers.map((h, i) => {
-        const values = [h, ...dataRows.slice(0, 10).map(r => r[i] ?? "")];
-        return Math.min(Math.max(...values.map(v => v.length), 3), 25);
+        const values = [h, ...dataRows.slice(0, 10).map((r) => r[i] ?? "")];
+        return Math.min(Math.max(...values.map((v) => v.length), 3), 25);
       });
 
       const lines = [
@@ -354,10 +425,16 @@ export async function handleFileAction(
 
       // Table preview (header + first 10 rows)
       const formatRow = (fields: string[]) =>
-        fields.map((f, i) => (f.length > colWidths[i]! ? f.slice(0, colWidths[i]! - 1) + "\u2026" : f.padEnd(colWidths[i]!))).join("  ");
+        fields
+          .map((f, i) =>
+            f.length > colWidths[i]!
+              ? f.slice(0, colWidths[i]! - 1) + "\u2026"
+              : f.padEnd(colWidths[i]!),
+          )
+          .join("  ");
 
       lines.push(`  ${formatRow(headers)}`);
-      lines.push(`  ${colWidths.map(w => "\u2500".repeat(w)).join("  ")}`);
+      lines.push(`  ${colWidths.map((w) => "\u2500".repeat(w)).join("  ")}`);
       for (const row of dataRows.slice(0, 10)) {
         lines.push(`  ${formatRow(row)}`);
       }
@@ -392,7 +469,10 @@ export async function handleFileAction(
       }
 
       // Analyze structure
-      const countKeys = (obj: unknown, depth = 0): { keys: number; maxDepth: number; arrays: number; objects: number } => {
+      const countKeys = (
+        obj: unknown,
+        depth = 0,
+      ): { keys: number; maxDepth: number; arrays: number; objects: number } => {
         const result = { keys: 0, maxDepth: depth, arrays: 0, objects: 0 };
         if (depth > 100) return result;
         if (Array.isArray(obj)) {
@@ -463,7 +543,7 @@ export async function handleFileAction(
       const keys: string[] = [];
       const duplicates: string[] = [];
       const empty: string[] = [];
-      const comments = rawLines.filter(l => l.trim().startsWith("#")).length;
+      const comments = rawLines.filter((l) => l.trim().startsWith("#")).length;
       const seen = new Set<string>();
 
       for (const line of rawLines) {
@@ -540,15 +620,17 @@ export async function handleFileAction(
       try {
         const output = execSync(
           `find '${targetPath.replace(/'/g, "'\\''")}' -type f -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null`,
-          { cwd, timeout: 10000 }
-        ).toString().trim();
+          { cwd, timeout: 10000 },
+        )
+          .toString()
+          .trim();
 
         if (!output) return "  No files found.";
 
         const files = output.split("\n");
         const extCounts: Record<string, { count: number; lines: number }> = {};
         let totalLines = 0;
-        let totalFiles = files.length;
+        const totalFiles = files.length;
 
         for (const file of files) {
           const ext = extname(file).toLowerCase() || "(no ext)";
@@ -560,11 +642,15 @@ export async function handleFileAction(
         try {
           const wcOutput = execSync(
             `find '${targetPath.replace(/'/g, "'\\''")}' -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -size -1M -exec wc -l {} + 2>/dev/null | tail -1`,
-            { cwd, timeout: 15000 }
-          ).toString().trim();
+            { cwd, timeout: 15000 },
+          )
+            .toString()
+            .trim();
           const totalMatch = wcOutput.match(/^\s*(\d+)\s+total$/);
           if (totalMatch) totalLines = parseInt(totalMatch[1]!);
-        } catch { /* skip line counting */ }
+        } catch {
+          /* skip line counting */
+        }
 
         const sorted = Object.entries(extCounts).sort((a, b) => b[1].count - a[1].count);
         const relDir = relative(cwd, targetPath) || ".";
@@ -598,8 +684,8 @@ export async function handleFileAction(
       const cwd = appConfig.workingDirectory;
 
       const parts = args.trim().split(/\s+/);
-      const flags = new Set(parts.filter(p => p.startsWith("--")));
-      const filePart = parts.find(p => !p.startsWith("--"));
+      const flags = new Set(parts.filter((p) => p.startsWith("--")));
+      const filePart = parts.find((p) => !p.startsWith("--"));
       if (!filePart) return "  Usage: /sort-lines <file> [--reverse] [--numeric] [--unique]";
 
       const filePath = resolvePath(cwd, filePart);
@@ -687,7 +773,7 @@ export async function handleFileAction(
 
       if (headings.length === 0) return `  No headings found in ${relPath}`;
 
-      const minLevel = Math.min(...headings.map(h => h.level));
+      const minLevel = Math.min(...headings.map((h) => h.level));
       const lines = [`  Table of Contents: ${relPath}\n`];
 
       for (const h of headings.slice(0, 100)) {
@@ -699,7 +785,9 @@ export async function handleFileAction(
       }
 
       lines.push(``);
-      lines.push(`  Headings: ${headings.length}  |  Levels: ${minLevel}-${Math.max(...headings.map(h => h.level))}`);
+      lines.push(
+        `  Headings: ${headings.length}  |  Levels: ${minLevel}-${Math.max(...headings.map((h) => h.level))}`,
+      );
 
       return lines.join("\n");
     }

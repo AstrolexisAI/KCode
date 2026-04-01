@@ -1,13 +1,7 @@
 // KCode - Dream Engine
 // Core engine for running background tasks during idle periods
 
-import type {
-  DreamTask,
-  DreamContext,
-  DreamResult,
-  DreamState,
-  DreamEngineConfig,
-} from "./types";
+import type { DreamContext, DreamEngineConfig, DreamResult, DreamState, DreamTask } from "./types";
 import { DEFAULT_DREAM_CONFIG } from "./types";
 
 export class DreamEngine {
@@ -44,9 +38,7 @@ export class DreamEngine {
    * Returns results for each task that was attempted.
    * If already running, returns an empty array.
    */
-  async startDreaming(
-    ctx: Omit<DreamContext, "signal">
-  ): Promise<DreamResult[]> {
+  async startDreaming(ctx: Omit<DreamContext, "signal">): Promise<DreamResult[]> {
     if (this.running) {
       return [];
     }
@@ -92,7 +84,7 @@ export class DreamEngine {
   private async executeTask(
     task: DreamTask,
     ctx: DreamContext,
-    startTime: number
+    startTime: number,
   ): Promise<DreamResult> {
     const { signal } = ctx;
 
@@ -139,10 +131,7 @@ export class DreamEngine {
   /**
    * Create a promise that rejects when the abort signal fires.
    */
-  private createAbortPromise(
-    signal: AbortSignal,
-    taskName: string
-  ): Promise<DreamResult> {
+  private createAbortPromise(signal: AbortSignal, taskName: string): Promise<DreamResult> {
     return new Promise((_, reject) => {
       if (signal.aborted) {
         reject(new Error(`Dream task "${taskName}" was aborted`));
@@ -153,7 +142,7 @@ export class DreamEngine {
         () => {
           reject(new Error(`Dream task "${taskName}" was aborted`));
         },
-        { once: true }
+        { once: true },
       );
     });
   }

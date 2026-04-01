@@ -2,13 +2,13 @@
 // Plugin discovery and distribution system with local registry fallback.
 // Supports CDN-based atomic downloads with SHA verification.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
-import { kcodeHome, kcodePath } from "./paths";
 import { CDNFetcher } from "./marketplace/cdn-fetcher";
+import type { MarketplaceSettings, MarketplaceSource } from "./marketplace/types";
 import { verifyPlugin } from "./marketplace/verifier";
-import type { MarketplaceSource, MarketplaceSettings } from "./marketplace/types";
+import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -52,7 +52,9 @@ function loadConfig(): MarketplaceConfig {
         installed: parsed.installed ?? {},
       };
     }
-  } catch { /* use defaults */ }
+  } catch {
+    /* use defaults */
+  }
   return { registryUrl: DEFAULT_REGISTRY_URL, installed: {} };
 }
 
@@ -69,7 +71,9 @@ function loadBundledRegistry(): MarketplacePlugin[] {
       const raw = readFileSync(BUNDLED_REGISTRY_PATH, "utf-8");
       return JSON.parse(raw) as MarketplacePlugin[];
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
   return getDefaultRegistry();
 }
@@ -145,7 +149,8 @@ function getDefaultRegistry(): MarketplacePlugin[] {
     {
       name: "lint-format",
       version: "1.0.0",
-      description: "Auto-lint and format code with ESLint, Prettier, and language-specific formatters",
+      description:
+        "Auto-lint and format code with ESLint, Prettier, and language-specific formatters",
       author: "Astrolexis",
       repository: "https://github.com/Astrolexis/kcode-plugin-lint-format",
       downloads: 11200,
@@ -197,7 +202,9 @@ async function fetchRemoteRegistry(registryUrl: string): Promise<MarketplacePlug
       log.debug("marketplace", "Offline mode active, skipping remote registry fetch");
       return null;
     }
-  } catch { /* offline module not loaded yet */ }
+  } catch {
+    /* offline module not loaded yet */
+  }
 
   try {
     const resp = await fetch(`${registryUrl}/plugins`, {
@@ -206,7 +213,9 @@ async function fetchRemoteRegistry(registryUrl: string): Promise<MarketplacePlug
     if (resp.ok) {
       return (await resp.json()) as MarketplacePlugin[];
     }
-  } catch { /* offline or unreachable */ }
+  } catch {
+    /* offline or unreachable */
+  }
   return null;
 }
 
@@ -220,11 +229,12 @@ export async function searchPlugins(query: string): Promise<MarketplacePlugin[]>
   if (!query.trim()) return registry;
 
   const q = query.toLowerCase();
-  return registry.filter(p =>
-    p.name.toLowerCase().includes(q) ||
-    p.description.toLowerCase().includes(q) ||
-    p.tags.some(t => t.toLowerCase().includes(q)) ||
-    p.author.toLowerCase().includes(q)
+  return registry.filter(
+    (p) =>
+      p.name.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q) ||
+      p.tags.some((t) => t.toLowerCase().includes(q)) ||
+      p.author.toLowerCase().includes(q),
   );
 }
 
@@ -233,10 +243,13 @@ export async function getPluginDetails(name: string): Promise<MarketplacePlugin 
   const remote = await fetchRemoteRegistry(config.registryUrl);
   const registry = remote ?? loadBundledRegistry();
 
-  return registry.find(p => p.name === name) ?? null;
+  return registry.find((p) => p.name === name) ?? null;
 }
 
-export async function installFromMarketplace(name: string, options?: { forceCdn?: boolean }): Promise<boolean> {
+export async function installFromMarketplace(
+  name: string,
+  options?: { forceCdn?: boolean },
+): Promise<boolean> {
   const plugin = await getPluginDetails(name);
   if (!plugin) {
     log.warn("marketplace", `Plugin "${name}" not found in marketplace`);
@@ -260,7 +273,10 @@ export async function installFromMarketplace(name: string, options?: { forceCdn?
       const result = await installViaCDN(name, plugin.version, config);
       if (result) return true;
     } catch (err) {
-      log.warn("marketplace", `CDN install failed for ${name}, falling back to git: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(
+        "marketplace",
+        `CDN install failed for ${name}, falling back to git: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -277,9 +293,12 @@ export async function installFromMarketplace(name: string, options?: { forceCdn?
     if (config.marketplace?.verifyIntegrity !== false) {
       const verification = verifyPlugin(pluginDir);
       if (!verification.valid) {
-        log.warn("marketplace", `Plugin "${name}" has verification issues: ${verification.issues.map(i => i.message).join("; ")}`);
+        log.warn(
+          "marketplace",
+          `Plugin "${name}" has verification issues: ${verification.issues.map((i) => i.message).join("; ")}`,
+        );
       }
-      for (const issue of verification.issues.filter(i => i.severity === "warning")) {
+      for (const issue of verification.issues.filter((i) => i.severity === "warning")) {
         log.warn("marketplace", `Plugin "${name}": ${issue.message}`);
       }
     }
@@ -305,7 +324,11 @@ export async function installFromMarketplace(name: string, options?: { forceCdn?
 /**
  * Install a plugin via CDN with atomic download.
  */
-async function installViaCDN(name: string, version: string, config: MarketplaceConfig): Promise<boolean> {
+async function installViaCDN(
+  name: string,
+  version: string,
+  config: MarketplaceConfig,
+): Promise<boolean> {
   const cdnSource = getCDNSource(config);
   if (!cdnSource) return false;
 
@@ -330,7 +353,10 @@ async function installViaCDN(name: string, version: string, config: MarketplaceC
   };
   saveConfig(config);
 
-  log.info("marketplace", `Installed plugin: ${name} v${result.version} from CDN (${result.fromCache ? "cached" : "downloaded"})`);
+  log.info(
+    "marketplace",
+    `Installed plugin: ${name} v${result.version} from CDN (${result.fromCache ? "cached" : "downloaded"})`,
+  );
   return true;
 }
 
@@ -339,7 +365,7 @@ async function installViaCDN(name: string, version: string, config: MarketplaceC
  */
 function getCDNSource(config: MarketplaceConfig): MarketplaceSource | null {
   if (!config.marketplace?.sources) return null;
-  return config.marketplace.sources.find(s => s.type === "cdn") ?? null;
+  return config.marketplace.sources.find((s) => s.type === "cdn") ?? null;
 }
 
 export async function updatePlugin(name: string): Promise<boolean> {
@@ -389,7 +415,7 @@ export async function listInstalled(): Promise<MarketplacePlugin[]> {
     const pluginDir = join(PLUGINS_DIR, name);
     if (!existsSync(pluginDir)) continue;
 
-    const details = fullRegistry.find(p => p.name === name);
+    const details = fullRegistry.find((p) => p.name === name);
     if (details) {
       result.push(details);
     } else {
@@ -417,7 +443,7 @@ export async function checkUpdates(): Promise<{ name: string; current: string; l
   const updates: { name: string; current: string; latest: string }[] = [];
 
   for (const [name, info] of Object.entries(config.installed)) {
-    const latest = registry.find(p => p.name === name);
+    const latest = registry.find((p) => p.name === name);
     if (latest && latest.version !== info.version) {
       updates.push({ name, current: info.version, latest: latest.version });
     }

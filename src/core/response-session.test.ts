@@ -1,14 +1,14 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  beginResponseSession,
-  getActiveResponseSession,
   appendSessionText,
-  recordSessionToolUse,
-  recordSessionContinuation,
-  isSessionContinuationExhausted,
+  beginResponseSession,
   closeResponseSession,
+  getActiveResponseSession,
   getLastSession,
   hasPendingIncompleteSession,
+  isSessionContinuationExhausted,
+  recordSessionContinuation,
+  recordSessionToolUse,
   resetSessionState,
 } from "./response-session";
 

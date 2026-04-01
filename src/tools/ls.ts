@@ -1,19 +1,31 @@
 // KCode - LS Tool
 // Fast directory listing without spawning a shell process
 
-import { readdirSync, statSync, lstatSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { lstatSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 // Directories to skip in recursive mode
 const EXCLUDED_DIRS = new Set([
-  "node_modules", ".git", ".svn", ".hg",
-  "dist", "build", ".next", ".nuxt",
-  "__pycache__", ".pytest_cache",
-  "vendor", "venv", ".venv",
-  "coverage", ".nyc_output",
-  ".cache", ".parcel-cache", ".turbo",
+  "node_modules",
+  ".git",
+  ".svn",
+  ".hg",
+  "dist",
+  "build",
+  ".next",
+  ".nuxt",
+  "__pycache__",
+  ".pytest_cache",
+  "vendor",
+  "venv",
+  ".venv",
+  "coverage",
+  ".nyc_output",
+  ".cache",
+  ".parcel-cache",
+  ".turbo",
   "target",
 ]);
 
@@ -101,13 +113,14 @@ function listDir(
     if (isDir && !isSymlink && EXCLUDED_DIRS.has(entry)) continue;
 
     // Show symlinks to directories with @ suffix, don't recurse into them
-    const displayName = isSymlink && isDir
-      ? `${relativePath}@`
-      : isDir
-        ? `${relativePath}/`
-        : isSymlink
-          ? `${relativePath}@`
-          : relativePath;
+    const displayName =
+      isSymlink && isDir
+        ? `${relativePath}@`
+        : isDir
+          ? `${relativePath}/`
+          : isSymlink
+            ? `${relativePath}@`
+            : relativePath;
 
     if (filter) {
       // For directories, always include if recursive (so we can recurse into them)
@@ -129,9 +142,7 @@ function listDir(
   }
 }
 
-export async function executeLs(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeLs(input: Record<string, unknown>): Promise<ToolResult> {
   const cwd = process.cwd();
   const dirPath = resolve(String(input.path ?? cwd));
   const recursive = Boolean(input.recursive ?? false);

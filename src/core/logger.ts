@@ -1,15 +1,31 @@
 // KCode - Logging System
 // Lightweight file logger with daily rotation and buffered writes
 
-import { readdirSync, unlinkSync, mkdirSync, appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { kcodePath } from "./paths";
-import { appendFile } from "node:fs/promises";
 
 // ─── Types ──────────────────────────────────────────────────────
 
 type LogLevel = "debug" | "info" | "warn" | "error";
-type LogCategory = "llm" | "tool" | "permission" | "mcp" | "config" | "session" | "general" | "db" | "narrative" | "indexer" | "intentions" | "learn" | "user-model" | "world-model" | "process" | (string & {});
+type LogCategory =
+  | "llm"
+  | "tool"
+  | "permission"
+  | "mcp"
+  | "config"
+  | "session"
+  | "general"
+  | "db"
+  | "narrative"
+  | "indexer"
+  | "intentions"
+  | "learn"
+  | "user-model"
+  | "world-model"
+  | "process"
+  | (string & {});
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 0,
@@ -94,15 +110,20 @@ class Logger {
   // ─── Secret Sanitization ─────────────────────────────────────
 
   /** Known API key prefixes — redact all but the first 8 chars */
-  private static readonly KEY_PREFIX_RE = /\b(sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_\-]{8,}/g;
+  private static readonly KEY_PREFIX_RE =
+    /\b(sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_-]{8,}/g;
 
   /** Key=value pairs where the key name suggests a secret */
-  private static readonly KEY_VALUE_RE = /(["']?(?:api[_-]?key|secret|token|password|authorization|bearer|credential|private[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?)([^\s"',}{[\]]{8,})/gi;
+  private static readonly KEY_VALUE_RE =
+    /(["']?(?:api[_-]?key|secret|token|password|authorization|bearer|credential|private[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?)([^\s"',}{[\]]{8,})/gi;
 
   /** Redact values that look like API keys or tokens in log output */
   private sanitize(text: string): string {
     text = text.replace(Logger.KEY_PREFIX_RE, (m) => m.slice(0, 8) + "****");
-    text = text.replace(Logger.KEY_VALUE_RE, (_, prefix: string, value: string) => prefix + value.slice(0, 4) + "****");
+    text = text.replace(
+      Logger.KEY_VALUE_RE,
+      (_, prefix: string, value: string) => prefix + value.slice(0, 4) + "****",
+    );
     return text;
   }
 

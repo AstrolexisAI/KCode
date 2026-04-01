@@ -4,8 +4,8 @@
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { relative } from "node:path";
+import { listPinnedFiles, pinFile, unpinFile } from "./context-pin";
 import { log } from "./logger";
-import { pinFile, unpinFile, listPinnedFiles } from "./context-pin";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ const DEFAULT_CONFIG: AutoPinConfig = {
   enabled: true,
   minAccessCount: 3,
   maxAutoPinned: 5,
-  unpinThreshold: 0.80,
+  unpinThreshold: 0.8,
   windowMs: 10 * 60 * 1000, // 10 minutes
 };
 
@@ -195,13 +195,18 @@ export class AutoPinManager {
     try {
       const stat = statSync(filePath);
       if (stat.size > 8000) return; // Too large
-    } catch { return; }
+    } catch {
+      return;
+    }
 
     // Auto-pin
     const result = pinFile(filePath, this.cwd);
     if (result.success) {
       this.autoPinnedFiles.add(filePath);
-      log.info("auto-pin", `Auto-pinned: ${relative(this.cwd, filePath)} (${record.accessCount} accesses)`);
+      log.info(
+        "auto-pin",
+        `Auto-pinned: ${relative(this.cwd, filePath)} (${record.accessCount} accesses)`,
+      );
     }
   }
 }

@@ -2,9 +2,7 @@ import type { Command } from "commander";
 import { kcodePath } from "../../core/paths";
 
 export function registerMcpCommand(program: Command): void {
-  const mcpCmd = program
-    .command("mcp")
-    .description("Manage MCP (Model Context Protocol) servers");
+  const mcpCmd = program.command("mcp").description("Manage MCP (Model Context Protocol) servers");
 
   mcpCmd
     .command("list")
@@ -38,7 +36,9 @@ export function registerMcpCommand(program: Command): void {
             const args = cfg.args ? ` ${cfg.args.join(" ")}` : "";
             console.log(`    ${name} — ${cmd}${args}`);
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
 
       if (!found) {
@@ -54,7 +54,9 @@ export function registerMcpCommand(program: Command): void {
     .action(async (name: string, command: string, args: string[], opts: { user?: boolean }) => {
       // Validate server name
       if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
-        console.error("\u2717 Invalid server name. Use only letters, digits, hyphens, and underscores (max 64 chars).");
+        console.error(
+          "\u2717 Invalid server name. Use only letters, digits, hyphens, and underscores (max 64 chars).",
+        );
         return;
       }
 
@@ -68,12 +70,16 @@ export function registerMcpCommand(program: Command): void {
       try {
         const file = Bun.file(settingsPath);
         if (await file.exists()) data = await file.json();
-      } catch { /* start fresh */ }
+      } catch {
+        /* start fresh */
+      }
 
       if (!data.mcpServers) data.mcpServers = {};
 
       if (data.mcpServers[name]) {
-        console.log(`\u2717 MCP server "${name}" already exists. Remove it first with: kcode mcp remove ${name}`);
+        console.log(
+          `\u2717 MCP server "${name}" already exists. Remove it first with: kcode mcp remove ${name}`,
+        );
         return;
       }
 
@@ -88,7 +94,9 @@ export function registerMcpCommand(program: Command): void {
       mkdirSync(dirname(settingsPath), { recursive: true });
       await Bun.write(settingsPath, JSON.stringify(data, null, 2) + "\n");
 
-      console.log(`\u2713 Added MCP server "${name}" (${command}${args.length > 0 ? " " + args.join(" ") : ""})`);
+      console.log(
+        `\u2713 Added MCP server "${name}" (${command}${args.length > 0 ? " " + args.join(" ") : ""})`,
+      );
       console.log(`  Config: ${settingsPath}`);
     });
 
@@ -137,11 +145,13 @@ export function registerMcpCommand(program: Command): void {
         const tools = await manager.discoverTools();
 
         const filtered = server
-          ? tools.filter(t => t.name.startsWith(`mcp__${server}__`))
+          ? tools.filter((t) => t.name.startsWith(`mcp__${server}__`))
           : tools;
 
         if (filtered.length === 0) {
-          console.log(server ? `  No tools from server "${server}".` : "  No MCP tools discovered.");
+          console.log(
+            server ? `  No tools from server "${server}".` : "  No MCP tools discovered.",
+          );
           return;
         }
 

@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 
 export interface SessionSummary {
   sessionId: string;
@@ -64,13 +64,7 @@ export class SessionBrowser {
     this.db.run(
       `INSERT OR REPLACE INTO session_meta (session_id, started_at, last_activity, turn_count, model, project, summary)
        VALUES (?, ?, ?, 0, ?, ?, NULL)`,
-      [
-        meta.sessionId,
-        meta.startedAt,
-        meta.startedAt,
-        meta.model ?? null,
-        meta.project ?? null,
-      ],
+      [meta.sessionId, meta.startedAt, meta.startedAt, meta.model ?? null, meta.project ?? null],
     );
   }
 
@@ -87,10 +81,7 @@ export class SessionBrowser {
       [sessionId, turnIndex, role, content, timestamp],
     );
 
-    const summary =
-      role === "user" && turnIndex === 0
-        ? content.slice(0, 80)
-        : undefined;
+    const summary = role === "user" && turnIndex === 0 ? content.slice(0, 80) : undefined;
 
     if (summary !== undefined) {
       this.db.run(
@@ -117,9 +108,7 @@ export class SessionBrowser {
     const sortBy = opts?.sortBy ?? "date";
 
     const orderClause =
-      sortBy === "turns"
-        ? "ORDER BY turn_count DESC"
-        : "ORDER BY last_activity DESC";
+      sortBy === "turns" ? "ORDER BY turn_count DESC" : "ORDER BY last_activity DESC";
 
     const stmt = this.db.prepare(`
       SELECT session_id, started_at, last_activity, turn_count, model, project, summary

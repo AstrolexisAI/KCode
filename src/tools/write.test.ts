@@ -1,5 +1,5 @@
-import { test, expect, describe, afterAll } from "bun:test";
-import { readFileSync, existsSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { executeWrite, writeDefinition } from "./write.ts";

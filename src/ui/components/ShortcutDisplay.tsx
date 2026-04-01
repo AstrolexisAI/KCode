@@ -1,8 +1,8 @@
 // KCode - ShortcutDisplay component
 // Renders a keybinding in platform-aware format (Cmd on macOS, Ctrl on Linux/Windows).
 
-import React from "react";
 import { Text } from "ink";
+import React from "react";
 import { formatKeyChord } from "../../core/keybindings/parser.js";
 import { useKeybindingContext } from "./KeybindingContext.js";
 

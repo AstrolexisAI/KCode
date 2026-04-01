@@ -17,12 +17,19 @@ export function setConversationManager(manager: ConversationManager): void {
   try {
     activeModel = manager.getConfig().model;
     workingDirectory = manager.getConfig().workingDirectory;
-  } catch { /* config not available yet */ }
+  } catch {
+    /* config not available yet */
+  }
 }
 
 /** Get the active conversation manager */
 export function getConversationManager(): ConversationManager | null {
   return activeManager;
+}
+
+/** Clear the active conversation manager (for testing) */
+export function clearConversationManager(): void {
+  activeManager = null;
 }
 
 /** Set the active model name */

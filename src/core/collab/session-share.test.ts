@@ -1,6 +1,6 @@
 // KCode - Session Share Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { SessionShare } from "./session-share";
 import type { CollabEvent } from "./types";
 

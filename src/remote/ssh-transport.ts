@@ -36,10 +36,7 @@ export const DEFAULT_RECONNECT: ReconnectConfig = {
  */
 function buildSSHArgs(host: string, opts: SSHOptions = {}): string[] {
   const timeout = opts.timeout ?? 10;
-  const args: string[] = [
-    "-o", `ConnectTimeout=${timeout}`,
-    "-o", "BatchMode=yes",
-  ];
+  const args: string[] = ["-o", `ConnectTimeout=${timeout}`, "-o", "BatchMode=yes"];
   if (opts.extraOptions) {
     for (const [key, val] of Object.entries(opts.extraOptions)) {
       args.push("-o", `${key}=${val}`);
@@ -72,7 +69,10 @@ export function checkConnectivity(host: string, opts: SSHOptions = {}): boolean 
  * Check if KCode is installed on the remote host.
  * @returns Object with `installed` boolean and optional `version` string.
  */
-export function checkKCodeInstalled(host: string, opts: SSHOptions = {}): { installed: boolean; version?: string } {
+export function checkKCodeInstalled(
+  host: string,
+  opts: SSHOptions = {},
+): { installed: boolean; version?: string } {
   try {
     const args = [...buildSSHArgs(host, opts), "which", "kcode"];
     execFileSync("ssh", args, {
@@ -116,7 +116,13 @@ export async function startRemoteAgent(
 ): Promise<RemoteAgentInfo> {
   const args = [
     ...buildSSHArgs(host, { ...opts, timeout: 30 }),
-    "kcode", "serve", "--headless", "--port", String(port), "--dir", dir,
+    "kcode",
+    "serve",
+    "--headless",
+    "--port",
+    String(port),
+    "--dir",
+    dir,
   ];
 
   const proc = Bun.spawn(["ssh", ...args], {
@@ -160,8 +166,8 @@ export async function startRemoteAgent(
   const stderr = errBytes ? decoder.decode(errBytes) : "";
   throw new Error(
     `Failed to start remote agent on ${host}:${dir}. ` +
-    `stdout: ${buffer.slice(0, 500)}` +
-    (stderr ? ` stderr: ${stderr.slice(0, 500)}` : ""),
+      `stdout: ${buffer.slice(0, 500)}` +
+      (stderr ? ` stderr: ${stderr.slice(0, 500)}` : ""),
   );
 }
 
@@ -179,13 +185,17 @@ export async function createTunnel(
   remotePort: number,
   localPort?: number,
 ): Promise<TunnelInfo> {
-  const lPort = localPort ?? (10000 + Math.floor(Math.random() * 50000));
+  const lPort = localPort ?? 10000 + Math.floor(Math.random() * 50000);
   const args = [
     "-N",
-    "-o", "ExitOnForwardFailure=yes",
-    "-o", "ServerAliveInterval=15",
-    "-o", "ServerAliveCountMax=3",
-    "-L", `${lPort}:127.0.0.1:${remotePort}`,
+    "-o",
+    "ExitOnForwardFailure=yes",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=3",
+    "-L",
+    `${lPort}:127.0.0.1:${remotePort}`,
     host,
   ];
 
@@ -226,9 +236,7 @@ export async function executeRemote(
   opts: SSHOptions = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   // Build the remote command: if cwd is given, prepend cd
-  const remoteArgs = cwd
-    ? ["cd", cwd, "&&", ...command]
-    : command;
+  const remoteArgs = cwd ? ["cd", cwd, "&&", ...command] : command;
 
   const args = [...buildSSHArgs(host, opts), "--", ...remoteArgs];
 
@@ -261,9 +269,7 @@ export function executeRemoteSync(
   cwd?: string,
   opts: SSHOptions = {},
 ): { stdout: string; stderr: string; exitCode: number } {
-  const remoteArgs = cwd
-    ? ["cd", cwd, "&&", ...command]
-    : command;
+  const remoteArgs = cwd ? ["cd", cwd, "&&", ...command] : command;
 
   const args = [...buildSSHArgs(host, opts), "--", ...remoteArgs];
 
@@ -275,7 +281,11 @@ export function executeRemoteSync(
     });
     return { stdout, stderr: "", exitCode: 0 };
   } catch (err: unknown) {
-    const spawnErr = err as SpawnSyncReturns<string> & { status?: number; stdout?: string; stderr?: string };
+    const spawnErr = err as SpawnSyncReturns<string> & {
+      status?: number;
+      stdout?: string;
+      stderr?: string;
+    };
     return {
       stdout: spawnErr.stdout ?? "",
       stderr: spawnErr.stderr ?? "",
@@ -314,9 +324,10 @@ export async function reconnect(
  * Install KCode on a remote host via the install script.
  */
 export async function installRemoteKCode(host: string): Promise<boolean> {
-  const result = await executeRemote(
-    host,
-    ["bash", "-c", "curl -fsSL https://install.kulvex.dev | bash"],
-  );
+  const result = await executeRemote(host, [
+    "bash",
+    "-c",
+    "curl -fsSL https://install.kulvex.dev | bash",
+  ]);
   return result.exitCode === 0;
 }

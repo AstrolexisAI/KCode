@@ -1,13 +1,13 @@
-import { test, expect, describe, beforeEach, mock, spyOn } from "bun:test";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 
 import {
-  isSandboxAvailable,
-  getSandboxMode,
-  getSandboxCapabilities,
   getDefaultSandboxConfig,
-  wrapWithSandbox,
+  getSandboxCapabilities,
+  getSandboxMode,
+  isSandboxAvailable,
   type SandboxMode,
   type SandboxOptions,
+  wrapWithSandbox,
 } from "./sandbox.ts";
 
 // ─── getDefaultSandboxConfig ───────────────────────────────────

@@ -2,11 +2,11 @@
 // Routes requests to the best model based on message content and task type.
 // Supports mid-session model switching for vision, code, and chat tasks.
 
-import { listModels } from "./models";
-import { log } from "./logger";
 import { existsSync, readFileSync } from "node:fs";
-import { kcodePath } from "./paths";
 import { getDebugTracer } from "./debug-tracer";
+import { log } from "./logger";
+import { listModels } from "./models";
+import { kcodePath } from "./paths";
 
 // ─── Task Types ─────────────────────────────────────────────────
 
@@ -17,10 +17,10 @@ const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
 // Patterns that indicate image content in message history
 const IMAGE_INDICATORS = [
-  "data:image/",           // base64 data URIs
-  "[Image:",               // Read tool image output header
-  "[image/png output]",    // notebook image output
-  "[image/jpeg output]",   // notebook image output
+  "data:image/", // base64 data URIs
+  "[Image:", // Read tool image output header
+  "[image/png output]", // notebook image output
+  "[image/jpeg output]", // notebook image output
 ];
 
 // Patterns that indicate simple tasks (can use a faster model)
@@ -45,7 +45,7 @@ function detectSimpleTask(text: string): boolean {
 const CODE_INDICATORS = [
   /\b(refactor|debug|fix bug|implement|write code|create function|unit test|test for)\b/i,
   /\b(compile|build|deploy|migration|schema|endpoint|API)\b/i,
-  /```[a-z]+\n/,  // code blocks with language
+  /```[a-z]+\n/, // code blocks with language
 ];
 
 // Patterns that indicate deep reasoning tasks
@@ -165,7 +165,12 @@ function loadRoutingRules(): RoutingRule[] {
       const data = JSON.parse(readFileSync(settingsPath, "utf-8"));
       if (Array.isArray(data?.routing?.rules)) {
         for (const rule of data.routing.rules) {
-          if (rule.pattern && rule.model && typeof rule.pattern === "string" && rule.pattern.length <= MAX_PATTERN_LENGTH) {
+          if (
+            rule.pattern &&
+            rule.model &&
+            typeof rule.pattern === "string" &&
+            rule.pattern.length <= MAX_PATTERN_LENGTH
+          ) {
             try {
               const compiled = new RegExp(rule.pattern, "i");
               customRules.push({ ...rule, compiled });
@@ -196,7 +201,9 @@ export async function routeToModel(
     // Free users still get vision routing (critical for image input)
     if (hasImageContent) {
       const models = await listModels();
-      const visionModel = models.find(m => m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"));
+      const visionModel = models.find(
+        (m) => m.capabilities?.includes("vision") || m.capabilities?.includes("ocr"),
+      );
       if (visionModel) return visionModel.name;
     }
     return defaultModel;
@@ -206,7 +213,10 @@ export async function routeToModel(
   const rules = loadRoutingRules();
   for (const rule of rules) {
     if (rule.compiled.test(userMessage)) {
-      log.info("router", `Custom rule matched: "${rule.description ?? rule.pattern}" → ${rule.model}`);
+      log.info(
+        "router",
+        `Custom rule matched: "${rule.description ?? rule.pattern}" → ${rule.model}`,
+      );
       return rule.model;
     }
   }
@@ -228,14 +238,14 @@ export async function routeToModel(
 
   const caps = capabilityMap[taskType];
   if (caps) {
-    const matched = models.find(m =>
-      caps.some(cap => m.capabilities?.includes(cap))
-    );
+    const matched = models.find((m) => caps.some((cap) => m.capabilities?.includes(cap)));
     if (matched && (taskType === "vision" || matched.name !== defaultModel)) {
       log.info("router", `Routing ${taskType} task to ${matched.name}`);
       const tracer = getDebugTracer();
       if (tracer.isEnabled()) {
-        const candidates = models.filter(m => caps.some(cap => m.capabilities?.includes(cap))).map(m => m.name);
+        const candidates = models
+          .filter((m) => caps.some((cap) => m.capabilities?.includes(cap)))
+          .map((m) => m.name);
         tracer.traceRouting(taskType, matched.name, candidates);
       }
       return matched.name;
@@ -303,7 +313,7 @@ export async function selectEnsembleModels(
   // First, add models that match the task capability
   if (caps) {
     for (const m of models) {
-      if (caps.some(cap => m.capabilities?.includes(cap))) {
+      if (caps.some((cap) => m.capabilities?.includes(cap))) {
         selected.push(m.name);
         if (selected.length >= maxModels) break;
       }

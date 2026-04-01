@@ -37,7 +37,7 @@ export function extractSections(response: string, modelName: string): ResponseSe
     }
   } else {
     // No headings; split by double-newline paragraphs
-    const paragraphs = response.split(/\n\n+/).filter(p => p.trim());
+    const paragraphs = response.split(/\n\n+/).filter((p) => p.trim());
     for (let i = 0; i < paragraphs.length; i++) {
       sections.push({
         heading: `section-${i + 1}`,
@@ -85,13 +85,13 @@ export function scoreSection(section: ResponseSection): number {
  */
 export function mergeSections(candidates: CandidateResponse[]): EnsembleResult {
   // Extract sections from all candidates
-  const allSections: ResponseSection[][] = candidates.map(c =>
-    extractSections(c.response, c.model)
+  const allSections: ResponseSection[][] = candidates.map((c) =>
+    extractSections(c.response, c.model),
   );
 
   // If no candidates have structured sections, fall back to best overall
-  if (allSections.every(s => s.length <= 1)) {
-    const scored = candidates.map(c => ({
+  if (allSections.every((s) => s.length <= 1)) {
+    const scored = candidates.map((c) => ({
       ...c,
       score: Math.min(5, Math.floor(c.response.length / 100)),
     }));
@@ -121,7 +121,7 @@ export function mergeSections(candidates: CandidateResponse[]): EnsembleResult {
 
   for (const [_key, group] of sectionGroups) {
     // Pick the best section in this group
-    const scored = group.map(s => ({ section: s, score: scoreSection(s) }));
+    const scored = group.map((s) => ({ section: s, score: scoreSection(s) }));
     scored.sort((a, b) => b.score - a.score);
     const best = scored[0]!;
     mergedParts.push(best.section.content);
@@ -133,7 +133,7 @@ export function mergeSections(candidates: CandidateResponse[]): EnsembleResult {
   return {
     finalResponse,
     strategy: "merge",
-    candidates: candidates.map(c => ({
+    candidates: candidates.map((c) => ({
       ...c,
       score: sourcesUsed.has(c.model) ? 1.0 : 0.0,
     })),
@@ -145,7 +145,10 @@ export function mergeSections(candidates: CandidateResponse[]): EnsembleResult {
  * Normalize a heading for grouping (lowercase, strip non-alpha).
  */
 function normalizeHeading(heading: string): string {
-  return heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return heading
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 // ─── LLM-Based Merge ───────────────────────────────────────────
@@ -161,7 +164,7 @@ export async function llmMerge(
   executor: ModelExecutor,
 ): Promise<EnsembleResult> {
   const queryText = originalQuery
-    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+    .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
     .join("\n");
 
   const mergePrompt = [
@@ -172,10 +175,10 @@ export async function llmMerge(
     `ORIGINAL QUESTION:`,
     queryText,
     ``,
-    ...candidates.map((c, i) =>
-      `RESPONSE ${i + 1} (${c.model}):\n${c.response}`
-    ),
-  ].join("\n").trim();
+    ...candidates.map((c, i) => `RESPONSE ${i + 1} (${c.model}):\n${c.response}`),
+  ]
+    .join("\n")
+    .trim();
 
   try {
     const result = await executor.execute(
@@ -187,7 +190,7 @@ export async function llmMerge(
     return {
       finalResponse: result.content,
       strategy: "merge",
-      candidates: candidates.map(c => ({ ...c, score: 0.5 })),
+      candidates: candidates.map((c) => ({ ...c, score: 0.5 })),
       reasoning: `LLM-merged response using ${mergeModel}`,
     };
   } catch {

@@ -1,7 +1,7 @@
 // KCode - Stash Tool
 // Save and restore conversation context snapshots for branching exploration
 
-import type { ToolDefinition, ToolResult, Message } from "../core/types";
+import type { Message, ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -86,12 +86,20 @@ export async function executeStash(input: Record<string, unknown>): Promise<Tool
   }
 
   if (!name) {
-    return { tool_use_id: "", content: "Error: name is required for save/restore/drop.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: name is required for save/restore/drop.",
+      is_error: true,
+    };
   }
 
   // Validate name: alphanumeric, dashes, underscores only
   if (!/^[\w-]{1,30}$/.test(name)) {
-    return { tool_use_id: "", content: "Error: name must be 1-30 alphanumeric characters, dashes, or underscores.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: name must be 1-30 alphanumeric characters, dashes, or underscores.",
+      is_error: true,
+    };
   }
 
   if (action === "save") {
@@ -100,7 +108,11 @@ export async function executeStash(input: Record<string, unknown>): Promise<Tool
     }
 
     if (stashes.size >= MAX_STASHES && !stashes.has(name)) {
-      return { tool_use_id: "", content: `Error: Maximum ${MAX_STASHES} stashes reached. Drop one first.`, is_error: true };
+      return {
+        tool_use_id: "",
+        content: `Error: Maximum ${MAX_STASHES} stashes reached. Drop one first.`,
+        is_error: true,
+      };
     }
 
     const messages = _getMessages();
@@ -110,21 +122,33 @@ export async function executeStash(input: Record<string, unknown>): Promise<Tool
     try {
       serialized = JSON.stringify(messages);
     } catch (err) {
-      return { tool_use_id: "", content: `Error: Failed to serialize conversation state: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+      return {
+        tool_use_id: "",
+        content: `Error: Failed to serialize conversation state: ${err instanceof Error ? err.message : String(err)}`,
+        is_error: true,
+      };
     }
 
     const estimatedBytes = serialized.length * 2;
     if (estimatedBytes > MAX_STASH_SIZE_BYTES) {
       const sizeMB = (estimatedBytes / (1024 * 1024)).toFixed(1);
       const limitMB = (MAX_STASH_SIZE_BYTES / (1024 * 1024)).toFixed(0);
-      return { tool_use_id: "", content: `Error: Conversation is too large to stash (~${sizeMB}MB, limit is ${limitMB}MB). Use /compact first to reduce context size.`, is_error: true };
+      return {
+        tool_use_id: "",
+        content: `Error: Conversation is too large to stash (~${sizeMB}MB, limit is ${limitMB}MB). Use /compact first to reduce context size.`,
+        is_error: true,
+      };
     }
 
     let clonedMessages: Message[];
     try {
       clonedMessages = JSON.parse(serialized);
     } catch (err) {
-      return { tool_use_id: "", content: `Error: Failed to deserialize conversation state: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+      return {
+        tool_use_id: "",
+        content: `Error: Failed to deserialize conversation state: ${err instanceof Error ? err.message : String(err)}`,
+        is_error: true,
+      };
     }
 
     const entry: StashEntry = {
@@ -146,16 +170,22 @@ export async function executeStash(input: Record<string, unknown>): Promise<Tool
 
     const entry = stashes.get(name);
     if (!entry) {
-      const available = stashes.size > 0
-        ? ` Available: ${[...stashes.keys()].join(", ")}`
-        : " No stashes saved.";
-      return { tool_use_id: "", content: `Error: Stash "${name}" not found.${available}`, is_error: true };
+      const available =
+        stashes.size > 0 ? ` Available: ${[...stashes.keys()].join(", ")}` : " No stashes saved.";
+      return {
+        tool_use_id: "",
+        content: `Error: Stash "${name}" not found.${available}`,
+        is_error: true,
+      };
     }
 
     const restoredMessages = JSON.parse(JSON.stringify(entry.messages));
     _setMessages(restoredMessages);
     const age = Math.round((Date.now() - entry.savedAt) / 1000);
-    return { tool_use_id: "", content: `Restored stash "${name}" (${entry.messageCount} messages, saved ${age}s ago).` };
+    return {
+      tool_use_id: "",
+      content: `Restored stash "${name}" (${entry.messageCount} messages, saved ${age}s ago).`,
+    };
   }
 
   if (action === "drop") {
@@ -166,5 +196,9 @@ export async function executeStash(input: Record<string, unknown>): Promise<Tool
     return { tool_use_id: "", content: `Stash "${name}" dropped.` };
   }
 
-  return { tool_use_id: "", content: `Error: Unknown action "${action}". Use save, list, restore, or drop.`, is_error: true };
+  return {
+    tool_use_id: "",
+    content: `Error: Unknown action "${action}". Use save, list, restore, or drop.`,
+    is_error: true,
+  };
 }

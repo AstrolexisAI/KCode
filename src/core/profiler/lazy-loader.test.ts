@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { lazyRequire, lazyImport, _resetLazyCache } from "./lazy-loader";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { _resetLazyCache, lazyImport, lazyRequire } from "./lazy-loader";
 
 describe("lazy-loader", () => {
   beforeEach(() => {

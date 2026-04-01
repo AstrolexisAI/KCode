@@ -1,6 +1,6 @@
 // KCode - Web Server Tests
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WebServer } from "./server";
 import type { WebServerConfig } from "./types";
 
@@ -78,7 +78,9 @@ describe("WebServer", () => {
 
   test("prevents path traversal in static files", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/..%2F..%2Fetc%2Fpasswd?token=test-token-12345`);
+    const res = await fetch(
+      `http://127.0.0.1:${TEST_PORT}/..%2F..%2Fetc%2Fpasswd?token=test-token-12345`,
+    );
     // Path traversal dots are stripped, so it won't escape static dir
     expect(res.status).not.toBe(500);
   });

@@ -1,12 +1,7 @@
 // Policy Engine — Enforces configurable limits on tokens, tools, agents, budget.
 // Checks are non-blocking: they return allowed/denied but never throw.
 
-import type {
-  PolicyLimits,
-  PolicyCheckResult,
-  PolicyViolation,
-  BudgetSnapshot,
-} from "./types";
+import type { BudgetSnapshot, PolicyCheckResult, PolicyLimits, PolicyViolation } from "./types";
 
 export const DEFAULT_LIMITS: PolicyLimits = {
   maxTokensPerSession: 0, // unlimited
@@ -69,12 +64,7 @@ export class PolicyEngine {
   /** Check if a tool call is allowed */
   checkToolCall(toolName: string): PolicyCheckResult {
     if (this.limits.blockedTools.includes(toolName)) {
-      return this.violation(
-        "blocked_tool",
-        `Tool '${toolName}' is blocked by policy`,
-        0,
-        0,
-      );
+      return this.violation("blocked_tool", `Tool '${toolName}' is blocked by policy`, 0, 0);
     }
 
     if (
@@ -94,16 +84,8 @@ export class PolicyEngine {
 
   /** Check if a model is allowed */
   checkModel(modelId: string): PolicyCheckResult {
-    if (
-      this.limits.allowedModels.length > 0 &&
-      !this.limits.allowedModels.includes(modelId)
-    ) {
-      return this.violation(
-        "blocked_model",
-        `Model '${modelId}' not in allowed list`,
-        0,
-        0,
-      );
+    if (this.limits.allowedModels.length > 0 && !this.limits.allowedModels.includes(modelId)) {
+      return this.violation("blocked_model", `Model '${modelId}' not in allowed list`, 0, 0);
     }
     return { allowed: true };
   }

@@ -3,7 +3,7 @@
 
 import { EventEmitter } from "node:events";
 import { comboEquals, serializeChord } from "./parser.js";
-import type { KeyCombo, KeyBinding } from "./types.js";
+import type { KeyBinding, KeyCombo } from "./types.js";
 
 /** Chord timeout in milliseconds — if a chord is not completed within this time, it resets */
 const CHORD_TIMEOUT_MS = 1500;
@@ -112,9 +112,7 @@ export class KeybindingResolver extends EventEmitter {
     for (const binding of this.bindings) {
       if (binding.chord.sequence.length !== sequence.length) continue;
       const contextMatch =
-        !binding.context ||
-        binding.context === "global" ||
-        binding.context === context;
+        !binding.context || binding.context === "global" || binding.context === context;
       if (!contextMatch) continue;
       if (binding.chord.sequence.every((c, i) => comboEquals(c, sequence[i]!))) {
         return binding;
@@ -127,9 +125,7 @@ export class KeybindingResolver extends EventEmitter {
     for (const binding of this.bindings) {
       if (binding.chord.sequence.length <= sequence.length) continue;
       const contextMatch =
-        !binding.context ||
-        binding.context === "global" ||
-        binding.context === context;
+        !binding.context || binding.context === "global" || binding.context === context;
       if (!contextMatch) continue;
       if (sequence.every((c, i) => comboEquals(c, binding.chord.sequence[i]!))) {
         return true;

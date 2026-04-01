@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  RemotePermissionBridge,
   createAutoPrompt,
   PERMISSION_TIMEOUT_MS,
   type PermissionRequest,
+  RemotePermissionBridge,
 } from "./remote-permission";
 
 function makeRequest(id: string = "req-1"): PermissionRequest {
@@ -103,10 +103,7 @@ describe("remote-permission", () => {
     });
 
     test("cancelAll() denies all pending requests", async () => {
-      const bridge = new RemotePermissionBridge(
-        () => new Promise(() => {}),
-        10_000,
-      );
+      const bridge = new RemotePermissionBridge(() => new Promise(() => {}), 10_000);
 
       const p1 = bridge.handleRequest(makeRequest("all-1"));
       const p2 = bridge.handleRequest(makeRequest("all-2"));

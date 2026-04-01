@@ -1,7 +1,7 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { RulesManager, getRulesManager } from "./rules.ts";
+import { getRulesManager, RulesManager } from "./rules.ts";
 
 let tempDir: string;
 let rm_: RulesManager;
@@ -48,13 +48,17 @@ describe("RulesManager", () => {
   });
 
   test("loading rules from .md files with YAML frontmatter", () => {
-    createRule(tempDir, "api-rules.md", `---
+    createRule(
+      tempDir,
+      "api-rules.md",
+      `---
 name: API Guidelines
 paths:
   - src/api/**
   - src/routes/**
 ---
-Use REST conventions.`);
+Use REST conventions.`,
+    );
 
     rm_.load(tempDir);
     const rules = rm_.getMatchingRules("src/api/users.ts");
@@ -66,12 +70,16 @@ Use REST conventions.`);
 
   test("formatForPrompt() returns null with no global rules", () => {
     // Only path-specific rules
-    createRule(tempDir, "scoped.md", `---
+    createRule(
+      tempDir,
+      "scoped.md",
+      `---
 name: Scoped
 paths:
   - src/**
 ---
-Scoped content.`);
+Scoped content.`,
+    );
 
     rm_.load(tempDir);
     expect(rm_.formatForPrompt()).toBeNull();
@@ -89,13 +97,17 @@ Scoped content.`);
   });
 
   test("formatForPath() matches glob patterns", () => {
-    createRule(tempDir, "test-rules.md", `---
+    createRule(
+      tempDir,
+      "test-rules.md",
+      `---
 name: Test Rules
 paths:
   - "*.test.ts"
   - src/tests/**
 ---
-Use describe/test blocks.`);
+Use describe/test blocks.`,
+    );
 
     rm_.load(tempDir);
 

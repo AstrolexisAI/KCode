@@ -1,15 +1,15 @@
 // KCode - Web UI WebSocket Handler
 // Handles client WebSocket messages and bridges to ConversationManager
 
-import { log } from "../core/logger";
-import type { ClientEvent, ServerEvent, WebSessionContext, PendingPermission } from "./types";
-import { getConversationManager, getActiveModel, setActiveModel } from "./session-bridge";
-import type { StreamEvent } from "../core/types";
 import type { ServerWebSocket } from "bun";
+import { log } from "../core/logger";
+import type { StreamEvent } from "../core/types";
+import { getActiveModel, getConversationManager, setActiveModel } from "./session-bridge";
+import type { ClientEvent, PendingPermission, ServerEvent, WebSessionContext } from "./types";
 
 // ─── State ──────────────────────────────────────────────────────
 
-let sessionContext: WebSessionContext = {
+const sessionContext: WebSessionContext = {
   sessionId: `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   model: "unknown",
   startTime: Date.now(),
@@ -19,7 +19,7 @@ let sessionContext: WebSessionContext = {
 const pendingPermissions = new Map<string, PendingPermission>();
 let activeGenerator: AsyncGenerator<StreamEvent> | null = null;
 let isProcessing = false;
-let messageQueue: Array<{ content: string; id: string }> = [];
+const messageQueue: Array<{ content: string; id: string }> = [];
 
 // Broadcast callback (set by server.ts)
 type BroadcastFn = (event: ServerEvent) => void;
@@ -152,12 +152,20 @@ async function handleClientEvent(event: ClientEvent, broadcast: BroadcastFn): Pr
 async function handleMessageSend(content: string, broadcast: BroadcastFn): Promise<void> {
   const manager = getConversationManager();
   if (!manager) {
-    broadcast({ type: "error", message: "No active session. Start KCode first.", retryable: false });
+    broadcast({
+      type: "error",
+      message: "No active session. Start KCode first.",
+      retryable: false,
+    });
     return;
   }
 
   if (isProcessing) {
-    broadcast({ type: "error", message: "Already processing a message. Cancel first or wait.", retryable: false });
+    broadcast({
+      type: "error",
+      message: "Already processing a message. Cancel first or wait.",
+      retryable: false,
+    });
     return;
   }
 
@@ -235,7 +243,11 @@ async function handleModelSwitch(model: string, broadcast: BroadcastFn): Promise
   if (result.success) {
     broadcast({ type: "model.changed", model });
   } else {
-    broadcast({ type: "error", message: result.error ?? "Failed to switch model", retryable: false });
+    broadcast({
+      type: "error",
+      message: result.error ?? "Failed to switch model",
+      retryable: false,
+    });
   }
 }
 
@@ -357,7 +369,10 @@ function mapStreamEvent(event: StreamEvent, messageId: string): ServerEvent | nu
 
 // ─── Utilities ──────────────────────────────────────────────────
 
-async function broadcastStats(broadcast: BroadcastFn, manager: import("../core/conversation").ConversationManager): Promise<void> {
+async function broadcastStats(
+  broadcast: BroadcastFn,
+  manager: import("../core/conversation").ConversationManager,
+): Promise<void> {
   const usage = manager.getUsage();
   const state = manager.getState();
   let costUsd = 0;
@@ -368,7 +383,9 @@ async function broadcastStats(broadcast: BroadcastFn, manager: import("../core/c
     if (pricing) {
       costUsd = calculateCost(pricing, usage.inputTokens, usage.outputTokens);
     }
-  } catch { /* pricing not available */ }
+  } catch {
+    /* pricing not available */
+  }
 
   broadcast({
     type: "session.stats",

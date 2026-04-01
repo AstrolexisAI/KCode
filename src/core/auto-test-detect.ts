@@ -3,7 +3,7 @@
 // to their related test files for targeted test execution.
 
 import { existsSync } from "node:fs";
-import { join, basename, dirname, extname } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -152,7 +152,9 @@ export function detectFramework(projectDir: string): DetectedFramework {
           if (files.some((f: string) => f.endsWith(ext))) {
             totalWeight += indicator.weight;
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       } else if (existsSync(filePath)) {
         totalWeight += indicator.weight;
       }
@@ -211,10 +213,7 @@ export function findRelatedTests(sourceFile: string, projectDir: string): string
   }
 
   if (ext === ".rs") {
-    candidates.push(
-      join(dir, "tests", `${base}.rs`),
-      join(dirname(dir), "tests", `${base}.rs`),
-    );
+    candidates.push(join(dir, "tests", `${base}.rs`), join(dirname(dir), "tests", `${base}.rs`));
   }
 
   for (const candidate of candidates) {
@@ -230,10 +229,7 @@ export function findRelatedTests(sourceFile: string, projectDir: string): string
  * Build a test command for a set of modified files.
  * Detects framework and constructs the most targeted test command.
  */
-export function buildTestCommand(
-  modifiedFiles: string[],
-  projectDir: string,
-): TestMapping[] {
+export function buildTestCommand(modifiedFiles: string[], projectDir: string): TestMapping[] {
   const detected = detectFramework(projectDir);
   if (detected.framework === "unknown") return [];
 
@@ -244,7 +240,11 @@ export function buildTestCommand(
     if (testFiles.length > 0) {
       // Build targeted command
       let runCommand = detected.command;
-      if (detected.framework === "bun-test" || detected.framework === "vitest" || detected.framework === "jest") {
+      if (
+        detected.framework === "bun-test" ||
+        detected.framework === "vitest" ||
+        detected.framework === "jest"
+      ) {
         runCommand += " " + testFiles.join(" ");
       } else if (detected.framework === "pytest") {
         runCommand += " " + testFiles.join(" ");

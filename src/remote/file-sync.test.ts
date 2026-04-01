@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveConflict, startWatcher, getLocalMtime } from "./file-sync";
+import { getLocalMtime, resolveConflict, startWatcher } from "./file-sync";
 
 let tempDir: string;
 let backupDir: string;
@@ -22,13 +22,7 @@ describe("file-sync", () => {
       const localFile = join(tempDir, "test.txt");
       await writeFile(localFile, "local content", "utf-8");
 
-      const result = await resolveConflict(
-        localFile,
-        "test.txt",
-        2000,
-        1000,
-        backupDir,
-      );
+      const result = await resolveConflict(localFile, "test.txt", 2000, 1000, backupDir);
 
       expect(result.resolution).toBe("local-wins");
       expect(result.path).toBe("test.txt");
@@ -40,13 +34,7 @@ describe("file-sync", () => {
       const localFile = join(tempDir, "test.txt");
       await writeFile(localFile, "local content", "utf-8");
 
-      const result = await resolveConflict(
-        localFile,
-        "test.txt",
-        1000,
-        2000,
-        backupDir,
-      );
+      const result = await resolveConflict(localFile, "test.txt", 1000, 2000, backupDir);
 
       expect(result.resolution).toBe("remote-wins");
       expect(result.path).toBe("test.txt");
@@ -57,13 +45,7 @@ describe("file-sync", () => {
       await mkdir(join(tempDir, "src"), { recursive: true });
       await writeFile(localFile, "local content to backup", "utf-8");
 
-      await resolveConflict(
-        localFile,
-        "src/main.ts",
-        1000,
-        2000,
-        backupDir,
-      );
+      await resolveConflict(localFile, "src/main.ts", 1000, 2000, backupDir);
 
       const backupFiles = await readdir(backupDir);
       expect(backupFiles.length).toBe(1);
@@ -78,13 +60,7 @@ describe("file-sync", () => {
       const localFile = join(tempDir, "equal.txt");
       await writeFile(localFile, "content", "utf-8");
 
-      const result = await resolveConflict(
-        localFile,
-        "equal.txt",
-        1000,
-        1000,
-        backupDir,
-      );
+      const result = await resolveConflict(localFile, "equal.txt", 1000, 1000, backupDir);
 
       expect(result.resolution).toBe("local-wins");
     });

@@ -1,9 +1,9 @@
 // KCode - Validator tests for keybinding conflict detection
 
-import { describe, test, expect } from "bun:test";
-import { validateBindings } from "./validator.js";
+import { describe, expect, test } from "bun:test";
 import { parseKeyChord } from "./parser.js";
 import type { KeyBinding } from "./types.js";
+import { validateBindings } from "./validator.js";
 
 function makeBinding(
   action: string,
@@ -22,46 +22,34 @@ function makeBinding(
 describe("validateBindings", () => {
   describe("reserved key violations", () => {
     test("default bindings on reserved keys are allowed", () => {
-      const result = validateBindings([
-        makeBinding("interrupt", "ctrl+c", "default"),
-      ]);
+      const result = validateBindings([makeBinding("interrupt", "ctrl+c", "default")]);
       expect(result.reservedViolations).toHaveLength(0);
     });
 
     test("user binding on ctrl+c is a violation", () => {
-      const result = validateBindings([
-        makeBinding("custom.action", "ctrl+c", "user"),
-      ]);
+      const result = validateBindings([makeBinding("custom.action", "ctrl+c", "user")]);
       expect(result.reservedViolations).toHaveLength(1);
       expect(result.reservedViolations[0]!.reason).toContain("ctrl+c");
       expect(result.reservedViolations[0]!.reason).toContain("reserved");
     });
 
     test("user binding on ctrl+d is a violation", () => {
-      const result = validateBindings([
-        makeBinding("custom.action", "ctrl+d", "user"),
-      ]);
+      const result = validateBindings([makeBinding("custom.action", "ctrl+d", "user")]);
       expect(result.reservedViolations).toHaveLength(1);
     });
 
     test("user binding on ctrl+z is a violation", () => {
-      const result = validateBindings([
-        makeBinding("custom.action", "ctrl+z", "user"),
-      ]);
+      const result = validateBindings([makeBinding("custom.action", "ctrl+z", "user")]);
       expect(result.reservedViolations).toHaveLength(1);
     });
 
     test("plugin binding on reserved key is a violation", () => {
-      const result = validateBindings([
-        makeBinding("plugin.action", "ctrl+c", "plugin"),
-      ]);
+      const result = validateBindings([makeBinding("plugin.action", "ctrl+c", "plugin")]);
       expect(result.reservedViolations).toHaveLength(1);
     });
 
     test("user binding on non-reserved key is fine", () => {
-      const result = validateBindings([
-        makeBinding("custom.action", "ctrl+l", "user"),
-      ]);
+      const result = validateBindings([makeBinding("custom.action", "ctrl+l", "user")]);
       expect(result.reservedViolations).toHaveLength(0);
     });
   });
@@ -93,7 +81,10 @@ describe("validateBindings", () => {
       ]);
       // No conflict because contexts differ
       const chordConflicts = result.conflicts.filter(
-        (c) => c.bindings.length === 2 && c.bindings[0]!.action === "action1" && c.bindings[1]!.action === "action2",
+        (c) =>
+          c.bindings.length === 2 &&
+          c.bindings[0]!.action === "action1" &&
+          c.bindings[1]!.action === "action2",
       );
       expect(chordConflicts).toHaveLength(0);
     });
@@ -105,9 +96,7 @@ describe("validateBindings", () => {
         makeBinding("simple", "ctrl+k"),
         makeBinding("chord", "ctrl+k ctrl+t"),
       ]);
-      const prefixConflict = result.conflicts.find((c) =>
-        c.resolution.includes("blocks chord"),
-      );
+      const prefixConflict = result.conflicts.find((c) => c.resolution.includes("blocks chord"));
       expect(prefixConflict).toBeDefined();
       expect(prefixConflict!.resolution).toContain('"simple" blocks chord "chord"');
     });
@@ -117,9 +106,7 @@ describe("validateBindings", () => {
         makeBinding("chord1", "ctrl+k ctrl+t"),
         makeBinding("chord2", "ctrl+k ctrl+v"),
       ]);
-      const prefixConflicts = result.conflicts.filter((c) =>
-        c.resolution.includes("blocks chord"),
-      );
+      const prefixConflicts = result.conflicts.filter((c) => c.resolution.includes("blocks chord"));
       expect(prefixConflicts).toHaveLength(0);
     });
 
@@ -128,9 +115,7 @@ describe("validateBindings", () => {
         makeBinding("simple", "ctrl+k", "default", "vim-normal"),
         makeBinding("chord", "ctrl+k ctrl+t", "default", "input"),
       ]);
-      const prefixConflicts = result.conflicts.filter((c) =>
-        c.resolution.includes("blocks chord"),
-      );
+      const prefixConflicts = result.conflicts.filter((c) => c.resolution.includes("blocks chord"));
       expect(prefixConflicts).toHaveLength(0);
     });
   });
@@ -145,9 +130,7 @@ describe("validateBindings", () => {
     });
 
     test("invalid when reserved key violated", () => {
-      const result = validateBindings([
-        makeBinding("custom", "ctrl+c", "user"),
-      ]);
+      const result = validateBindings([makeBinding("custom", "ctrl+c", "user")]);
       expect(result.valid).toBe(false);
     });
 

@@ -1,8 +1,11 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { EventQueue } from "./event-queue";
 import type { TelemetryEvent, TelemetrySink } from "./types";
 
-function makeEvent(name: string = "kcode.test", overrides: Partial<TelemetryEvent> = {}): TelemetryEvent {
+function makeEvent(
+  name: string = "kcode.test",
+  overrides: Partial<TelemetryEvent> = {},
+): TelemetryEvent {
   return {
     name,
     timestamp: new Date().toISOString(),

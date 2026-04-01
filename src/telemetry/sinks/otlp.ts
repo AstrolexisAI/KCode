@@ -1,7 +1,7 @@
 // KCode - OTLP/HTTP Telemetry Sink
 // Sends events to an OpenTelemetry-compatible endpoint using OTLP/HTTP JSON protocol.
 
-import type { TelemetrySink, TelemetryEvent } from "../types";
+import type { TelemetryEvent, TelemetrySink } from "../types";
 
 export interface OTLPSinkOptions {
   /** OTLP endpoint, e.g. "https://otel.example.com:4318/v1/traces" */
@@ -17,7 +17,8 @@ export interface OTLPSinkOptions {
  */
 function toOTLPSpan(event: TelemetryEvent) {
   const startNanos = BigInt(new Date(event.timestamp).getTime()) * 1_000_000n;
-  const durationNanos = event.duration != null ? BigInt(Math.round(event.duration * 1_000_000)) : 0n;
+  const durationNanos =
+    event.duration != null ? BigInt(Math.round(event.duration * 1_000_000)) : 0n;
 
   return {
     traceId: event.traceId,
@@ -38,9 +39,7 @@ function toOTLPSpan(event: TelemetryEvent) {
 function formatOTLPValue(value: unknown) {
   if (typeof value === "string") return { stringValue: value };
   if (typeof value === "number") {
-    return Number.isInteger(value)
-      ? { intValue: String(value) }
-      : { doubleValue: value };
+    return Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value };
   }
   if (typeof value === "boolean") return { boolValue: value };
   return { stringValue: String(value) };
@@ -65,9 +64,7 @@ export class OTLPSink implements TelemetrySink {
       resourceSpans: [
         {
           resource: {
-            attributes: [
-              { key: "service.name", value: { stringValue: "kcode" } },
-            ],
+            attributes: [{ key: "service.name", value: { stringValue: "kcode" } }],
           },
           scopeSpans: [
             {

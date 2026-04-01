@@ -1,8 +1,8 @@
 // KCode - Rename Refactoring Tool
 // Finds all references of a symbol and renames them atomically across files
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import { resolve, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 const SENSITIVE_PATTERNS = [
@@ -57,16 +57,45 @@ export const renameDefinition: ToolDefinition = {
 // ─── Supported Extensions ─────────────────────────────────────
 
 const SOURCE_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".rs", ".go", ".java", ".kt", ".swift",
-  ".c", ".cpp", ".h", ".hpp", ".cs", ".rb",
-  ".vue", ".svelte", ".json",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".rs",
+  ".go",
+  ".java",
+  ".kt",
+  ".swift",
+  ".c",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".rb",
+  ".vue",
+  ".svelte",
+  ".json",
 ]);
 
 const IGNORE_DIRS = new Set([
-  "node_modules", "dist", "build", ".git", "__pycache__",
-  "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", ".vscode", ".idea", "coverage", "data",
+  "node_modules",
+  "dist",
+  "build",
+  ".git",
+  "__pycache__",
+  "venv",
+  ".next",
+  ".nuxt",
+  "target",
+  "vendor",
+  ".kcode",
+  ".vscode",
+  ".idea",
+  "coverage",
+  "data",
 ]);
 
 const MAX_FILE_SIZE = 500_000; // 500KB
@@ -116,7 +145,7 @@ function walkAndCollect(
     if (!allowedExts.has(ext)) continue;
 
     // Block renaming inside sensitive files
-    if (SENSITIVE_PATTERNS.some(p => p.test(fullPath))) continue;
+    if (SENSITIVE_PATTERNS.some((p) => p.test(fullPath))) continue;
 
     try {
       const stat = statSync(fullPath);
@@ -178,28 +207,47 @@ export async function executeRename(input: Record<string, unknown>): Promise<Too
 
   // Validate identifier characters (basic — covers most languages)
   if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(newName)) {
-    return { tool_use_id: "", content: "Error: new_name must be a valid identifier (alphanumeric, _, $).", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: new_name must be a valid identifier (alphanumeric, _, $).",
+      is_error: true,
+    };
   }
   if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(symbol)) {
-    return { tool_use_id: "", content: "Error: symbol must be a valid identifier.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: symbol must be a valid identifier.",
+      is_error: true,
+    };
   }
 
   if (!existsSync(scope)) {
-    return { tool_use_id: "", content: `Error: scope directory not found: ${scope}`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: scope directory not found: ${scope}`,
+      is_error: true,
+    };
   }
 
   // Prevent renaming outside the project directory
   const resolvedScope = resolve(scope);
   const resolvedCwd = resolve(cwd);
   if (!resolvedScope.startsWith(resolvedCwd)) {
-    return { tool_use_id: "", content: `Error: scope must be within the project directory (${resolvedCwd}).`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: scope must be within the project directory (${resolvedCwd}).`,
+      is_error: true,
+    };
   }
 
   // Parse file pattern filter
   let allowedExts = SOURCE_EXTENSIONS;
   if (input.file_pattern) {
     const pattern = String(input.file_pattern).trim();
-    const exts = pattern.split(",").map((e) => e.trim()).filter(Boolean);
+    const exts = pattern
+      .split(",")
+      .map((e) => e.trim())
+      .filter(Boolean);
     if (exts.length > 0) {
       allowedExts = new Set(exts.map((e) => (e.startsWith(".") ? e : `.${e}`)));
     }
@@ -223,9 +271,10 @@ export async function executeRename(input: Record<string, unknown>): Promise<Too
     ];
 
     for (const m of matches) {
-      const lineNums = m.lines.length <= 5
-        ? m.lines.join(", ")
-        : `${m.lines.slice(0, 5).join(", ")}... (+${m.lines.length - 5} more)`;
+      const lineNums =
+        m.lines.length <= 5
+          ? m.lines.join(", ")
+          : `${m.lines.slice(0, 5).join(", ")}... (+${m.lines.length - 5} more)`;
       lines.push(`  ${m.relativePath}: ${m.count} match(es) on lines ${lineNums}`);
     }
 
@@ -250,10 +299,14 @@ export async function executeRename(input: Record<string, unknown>): Promise<Too
       for (const prev of written) {
         try {
           writeFileSync(prev.file, prev.originalContent, "utf-8");
-        } catch { /* best-effort rollback */ }
+        } catch {
+          /* best-effort rollback */
+        }
       }
       errors.push(`${m.relativePath}: ${err instanceof Error ? err.message : String(err)}`);
-      errors.push(`Rolled back ${written.length} previously modified file(s) due to write failure.`);
+      errors.push(
+        `Rolled back ${written.length} previously modified file(s) due to write failure.`,
+      );
       filesModified = 0; // Reflect rollback in output
       break; // Stop processing after rollback
     }
@@ -266,9 +319,10 @@ export async function executeRename(input: Record<string, unknown>): Promise<Too
   ];
 
   for (const m of matches) {
-    const lineNums = m.lines.length <= 5
-      ? m.lines.join(", ")
-      : `${m.lines.slice(0, 5).join(", ")}... (+${m.lines.length - 5} more)`;
+    const lineNums =
+      m.lines.length <= 5
+        ? m.lines.join(", ")
+        : `${m.lines.slice(0, 5).join(", ")}... (+${m.lines.length - 5} more)`;
     lines.push(`  ${m.relativePath}: ${m.count} match(es) on lines ${lineNums}`);
   }
 

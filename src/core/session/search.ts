@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 
 export interface SessionSearchResult {
   sessionId: string;
@@ -33,12 +33,7 @@ export class SessionSearch {
     this.initialized = true;
   }
 
-  indexTurn(
-    sessionId: string,
-    turnIndex: number,
-    role: string,
-    content: string,
-  ): void {
+  indexTurn(sessionId: string, turnIndex: number, role: string, content: string): void {
     const timestamp = Date.now();
     this.db.run(
       `INSERT INTO session_transcripts (session_id, turn_index, role, content, timestamp)
@@ -81,9 +76,7 @@ export class SessionSearch {
     }));
   }
 
-  getSessionTurns(
-    sessionId: string,
-  ): { turnIndex: number; role: string; content: string }[] {
+  getSessionTurns(sessionId: string): { turnIndex: number; role: string; content: string }[] {
     const stmt = this.db.prepare(`
       SELECT turn_index, role, content
       FROM session_transcripts
@@ -105,10 +98,7 @@ export class SessionSearch {
   }
 
   deleteSession(sessionId: string): void {
-    this.db.run(
-      `DELETE FROM session_transcripts WHERE session_id = ?`,
-      [sessionId],
-    );
+    this.db.run(`DELETE FROM session_transcripts WHERE session_id = ?`, [sessionId]);
   }
 
   getSessionCount(): number {

@@ -15,10 +15,11 @@ export function registerTeachCommand(program: Command): void {
       const { mkdirSync, existsSync, writeFileSync } = await import("node:fs");
       const { execSync } = await import("node:child_process");
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
-      const dir = opts.global
-        ? kcodePath("awareness")
-        : join(process.cwd(), ".kcode", "awareness");
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/-$/, "");
+      const dir = opts.global ? kcodePath("awareness") : join(process.cwd(), ".kcode", "awareness");
 
       mkdirSync(dir, { recursive: true });
       const filePath = join(dir, `${slug}.md`);
@@ -60,16 +61,25 @@ export function registerTeachCommand(program: Command): void {
 
       let found = false;
 
-      for (const [label, dir] of [["Global", globalDir], ["Project", projectDir]] as const) {
+      for (const [label, dir] of [
+        ["Global", globalDir],
+        ["Project", projectDir],
+      ] as const) {
         if (!existsSync(dir)) continue;
-        const files = readdirSync(dir).filter(f => f.endsWith(".md")).sort();
+        const files = readdirSync(dir)
+          .filter((f) => f.endsWith(".md"))
+          .sort();
         if (files.length === 0) continue;
 
         found = true;
         console.log(`\n\x1b[1m${label}\x1b[0m \x1b[2m(${dir})\x1b[0m`);
         for (const f of files) {
           const content = readFileSync(join(dir, f), "utf-8");
-          const firstLine = content.split("\n").find(l => l.startsWith("# "))?.replace("# ", "") || f;
+          const firstLine =
+            content
+              .split("\n")
+              .find((l) => l.startsWith("# "))
+              ?.replace("# ", "") || f;
           const size = statSync(join(dir, f)).size;
           console.log(`  \x1b[36m${f}\x1b[0m — ${firstLine} \x1b[2m(${size} bytes)\x1b[0m`);
         }
@@ -93,10 +103,11 @@ export function registerTeachCommand(program: Command): void {
       const { join } = await import("node:path");
       const { existsSync, unlinkSync } = await import("node:fs");
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
-      const dir = opts.global
-        ? kcodePath("awareness")
-        : join(process.cwd(), ".kcode", "awareness");
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/-$/, "");
+      const dir = opts.global ? kcodePath("awareness") : join(process.cwd(), ".kcode", "awareness");
 
       const filePath = join(dir, `${slug}.md`);
       if (!existsSync(filePath)) {
@@ -117,10 +128,11 @@ export function registerTeachCommand(program: Command): void {
       const { existsSync } = await import("node:fs");
       const { execSync } = await import("node:child_process");
 
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-$/, "");
-      const dir = opts.global
-        ? kcodePath("awareness")
-        : join(process.cwd(), ".kcode", "awareness");
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/-$/, "");
+      const dir = opts.global ? kcodePath("awareness") : join(process.cwd(), ".kcode", "awareness");
 
       const filePath = join(dir, `${slug}.md`);
       if (!existsSync(filePath)) {

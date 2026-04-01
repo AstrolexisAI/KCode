@@ -2,9 +2,9 @@
 // LLM-based compaction that summarizes older messages into a narrative.
 // Improved over the original compaction.ts with round-grouping and better prompts.
 
-import type { Message, ContentBlock, TextBlock, ToolUseBlock } from "../../types.js";
-import type { FullCompactConfig, FullCompactResult, LlmSummarizer } from "../types.js";
 import { log } from "../../logger.js";
+import type { ContentBlock, Message, TextBlock, ToolUseBlock } from "../../types.js";
+import type { FullCompactConfig, FullCompactResult, LlmSummarizer } from "../types.js";
 
 // ─── Summarization Prompt ───────────────────────────────────────
 
@@ -176,9 +176,7 @@ function messageToLine(msg: Message): string {
         break;
       case "tool_result": {
         const content =
-          typeof block.content === "string"
-            ? block.content.slice(0, 200)
-            : "[complex result]";
+          typeof block.content === "string" ? block.content.slice(0, 200) : "[complex result]";
         parts.push(`[tool_result${block.is_error ? " ERROR" : ""}]: ${content}`);
         break;
       }

@@ -1,12 +1,12 @@
 // ModelConfig actions
 // Auto-extracted from builtin-actions.ts
 
-import type { ActionContext } from "./action-helpers.js";
-import type { KCodeConfig } from "../../core/types.js";
-import { listModels, loadModelsConfig } from "../../core/models.js";
-import { getAvailableThemes, getCurrentThemeName } from "../../core/theme.js";
 import { log } from "../../core/logger.js";
+import { listModels, loadModelsConfig } from "../../core/models.js";
 import { kcodePath } from "../../core/paths.js";
+import { getAvailableThemes, getCurrentThemeName } from "../../core/theme.js";
+import type { KCodeConfig } from "../../core/types.js";
+import type { ActionContext } from "./action-helpers.js";
 
 export async function handleModelConfigAction(
   action: string,
@@ -18,7 +18,8 @@ export async function handleModelConfigAction(
     case "models": {
       const models = await listModels();
       const modelsConfig = await loadModelsConfig();
-      if (models.length === 0) return "  No models registered. Use 'kcode models add' to register one.";
+      if (models.length === 0)
+        return "  No models registered. Use 'kcode models add' to register one.";
       const lines = models.map((m) => {
         const def = m.name === modelsConfig.defaultModel ? " (default)" : "";
         const ctx = m.contextSize ? `, ctx: ${m.contextSize.toLocaleString()}` : "";
@@ -75,8 +76,18 @@ export async function handleModelConfigAction(
 
       // Check which files exist
       const sources = [
-        { name: "Environment vars", exists: !!(process.env.KCODE_MODEL || process.env.KCODE_API_KEY || process.env.KCODE_API_BASE) },
-        { name: ".kcode/settings.local.json", exists: existsSync(join(cwd, ".kcode", "settings.local.json")) },
+        {
+          name: "Environment vars",
+          exists: !!(
+            process.env.KCODE_MODEL ||
+            process.env.KCODE_API_KEY ||
+            process.env.KCODE_API_BASE
+          ),
+        },
+        {
+          name: ".kcode/settings.local.json",
+          exists: existsSync(join(cwd, ".kcode", "settings.local.json")),
+        },
         { name: ".kcode/settings.json", exists: existsSync(join(cwd, ".kcode", "settings.json")) },
         { name: "~/.kcode/settings.json", exists: existsSync(kcodePath("settings.json")) },
       ];
@@ -87,8 +98,16 @@ export async function handleModelConfigAction(
       }
 
       // Show env overrides if any
-      const envVars = ["KCODE_MODEL", "KCODE_API_KEY", "KCODE_API_BASE", "KCODE_EFFORT_LEVEL", "KCODE_MAX_TOKENS", "KCODE_PERMISSION_MODE", "KCODE_THEME"];
-      const setVars = envVars.filter(v => process.env[v]);
+      const envVars = [
+        "KCODE_MODEL",
+        "KCODE_API_KEY",
+        "KCODE_API_BASE",
+        "KCODE_EFFORT_LEVEL",
+        "KCODE_MAX_TOKENS",
+        "KCODE_PERMISSION_MODE",
+        "KCODE_THEME",
+      ];
+      const setVars = envVars.filter((v) => process.env[v]);
       if (setVars.length > 0) {
         lines.push(``, `  Active env vars:`);
         for (const v of setVars) {
@@ -117,7 +136,9 @@ export async function handleModelConfigAction(
       return `  Effort level set to: ${level}`;
     }
     case "profile": {
-      const { getProfile, listProfiles, applyProfile, getCurrentProfileName } = await import("../../core/profiles.js");
+      const { getProfile, listProfiles, applyProfile, getCurrentProfileName } = await import(
+        "../../core/profiles.js"
+      );
       const arg = (args ?? "").trim().toLowerCase();
 
       // /profile — list all profiles
@@ -125,10 +146,12 @@ export async function handleModelConfigAction(
         const profiles = listProfiles();
         const current = getCurrentProfileName(appConfig);
         const lines = ["  Execution Profiles\n"];
-        const maxName = Math.max(...profiles.map(p => p.name.length));
+        const maxName = Math.max(...profiles.map((p) => p.name.length));
         for (const p of profiles) {
           const active = p.name === current ? " \x1b[32m(active)\x1b[0m" : "";
-          lines.push(`  ${p.icon} \x1b[1m${p.name.padEnd(maxName)}\x1b[0m — ${p.description}${active}`);
+          lines.push(
+            `  ${p.icon} \x1b[1m${p.name.padEnd(maxName)}\x1b[0m — ${p.description}${active}`,
+          );
           const flags = [
             `perm:${p.settings.permissionMode}`,
             `effort:${p.settings.effortLevel}`,
@@ -136,7 +159,9 @@ export async function handleModelConfigAction(
             p.settings.maxTokens ? `maxTokens:${p.settings.maxTokens}` : null,
             p.settings.allowedTools ? `tools:${p.settings.allowedTools.join(",")}` : null,
             p.settings.disallowedTools ? `blocked:${p.settings.disallowedTools.join(",")}` : null,
-          ].filter(Boolean).join(", ");
+          ]
+            .filter(Boolean)
+            .join(", ");
           lines.push(`    ${flags}`);
         }
         lines.push("");
@@ -163,7 +188,9 @@ export async function handleModelConfigAction(
       // /profile <name> — switch to profile
       const profile = getProfile(arg);
       if (!profile) {
-        const available = listProfiles().map(p => p.name).join(", ");
+        const available = listProfiles()
+          .map((p) => p.name)
+          .join(", ");
         return `  Unknown profile "${arg}". Available: ${available}`;
       }
 
@@ -174,42 +201,52 @@ export async function handleModelConfigAction(
       const { listModels: getModels } = await import("../../core/models.js");
       const models = await getModels();
 
-      if (models.length === 0) return "  No models registered. Use 'kcode models add' to register models.";
+      if (models.length === 0)
+        return "  No models registered. Use 'kcode models add' to register models.";
 
-      const lines = [`  Model Health Check (${models.length} model${models.length > 1 ? "s" : ""})\n`];
+      const lines = [
+        `  Model Health Check (${models.length} model${models.length > 1 ? "s" : ""})\n`,
+      ];
 
       // Ping all models in parallel
-      const ping = async (model: { name: string; baseUrl: string }): Promise<{ name: string; status: string; latencyMs: number }> => {
+      const ping = async (model: {
+        name: string;
+        baseUrl: string;
+      }): Promise<{ name: string; status: string; latencyMs: number }> => {
         const start = Date.now();
         try {
           const resp = await fetch(`${model.baseUrl}/v1/models`, {
             method: "GET",
-            headers: appConfig.apiKey ? { "Authorization": `Bearer ${appConfig.apiKey}` } : {},
+            headers: appConfig.apiKey ? { Authorization: `Bearer ${appConfig.apiKey}` } : {},
             signal: AbortSignal.timeout(10000),
           });
           const latencyMs = Date.now() - start;
           if (resp.ok) return { name: model.name, status: "ok", latencyMs };
           return { name: model.name, status: `HTTP ${resp.status}`, latencyMs };
         } catch (err) {
-          return { name: model.name, status: err instanceof Error ? err.message : "error", latencyMs: Date.now() - start };
+          return {
+            name: model.name,
+            status: err instanceof Error ? err.message : "error",
+            latencyMs: Date.now() - start,
+          };
         }
       };
 
-      const results = await Promise.all(models.map(m => ping(m)));
+      const results = await Promise.all(models.map((m) => ping(m)));
 
-      const maxNameLen = Math.max(...results.map(r => r.name.length), 8);
+      const maxNameLen = Math.max(...results.map((r) => r.name.length), 8);
       for (const r of results) {
         const icon = r.status === "ok" ? "\u2713" : "\u2717";
         const latency = r.status === "ok" ? `${r.latencyMs}ms` : r.status;
         lines.push(`  ${icon} ${r.name.padEnd(maxNameLen)}  ${latency}`);
       }
 
-      const okCount = results.filter(r => r.status === "ok").length;
+      const okCount = results.filter((r) => r.status === "ok").length;
       lines.push(`\n  ${okCount}/${results.length} models responding`);
 
       if (okCount > 0) {
         const avgLatency = Math.round(
-          results.filter(r => r.status === "ok").reduce((a, b) => a + b.latencyMs, 0) / okCount
+          results.filter((r) => r.status === "ok").reduce((a, b) => a + b.latencyMs, 0) / okCount,
         );
         lines.push(`  Avg latency: ${avgLatency}ms`);
       }
@@ -217,7 +254,9 @@ export async function handleModelConfigAction(
       return lines.join("\n");
     }
     case "style": {
-      const { getCurrentStyle, setCurrentStyle, listStyles } = await import("../../core/output-styles.js");
+      const { getCurrentStyle, setCurrentStyle, listStyles } = await import(
+        "../../core/output-styles.js"
+      );
       const styleName = args?.trim();
 
       if (!styleName) {
@@ -261,27 +300,34 @@ export async function handleModelConfigAction(
       ].join("\n");
     }
     case "consensus": {
-      if (!args?.trim()) return "  Usage: /consensus <prompt>\n  Sends to all registered models and synthesizes responses.";
+      if (!args?.trim())
+        return "  Usage: /consensus <prompt>\n  Sends to all registered models and synthesizes responses.";
 
       const prompt = args.trim();
       const { listModels: getModels } = await import("../../core/models.js");
       const models = await getModels();
 
-      if (models.length < 2) return "  Need at least 2 registered models for consensus. Use 'kcode models add' to register models.";
+      if (models.length < 2)
+        return "  Need at least 2 registered models for consensus. Use 'kcode models add' to register models.";
 
       // Use up to 4 models
       const selectedModels = models.slice(0, 4);
-      const lines: string[] = [`  Consensus query across ${selectedModels.length} models\n  Prompt: "${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}"\n`];
+      const lines: string[] = [
+        `  Consensus query across ${selectedModels.length} models\n  Prompt: "${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}"\n`,
+      ];
 
       // Query all models in parallel
-      const fetchModel = async (model: { name: string; baseUrl: string }): Promise<{ name: string; text: string; timeMs: number }> => {
+      const fetchModel = async (model: {
+        name: string;
+        baseUrl: string;
+      }): Promise<{ name: string; text: string; timeMs: number }> => {
         const start = Date.now();
         try {
           const resp = await fetch(`${model.baseUrl}/v1/chat/completions`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(appConfig.apiKey ? { "Authorization": `Bearer ${appConfig.apiKey}` } : {}),
+              ...(appConfig.apiKey ? { Authorization: `Bearer ${appConfig.apiKey}` } : {}),
             },
             body: JSON.stringify({
               model: model.name,
@@ -291,15 +337,25 @@ export async function handleModelConfigAction(
             }),
             signal: AbortSignal.timeout(30000),
           });
-          const data = await resp.json() as Record<string, unknown>;
+          const data = (await resp.json()) as Record<string, unknown>;
           const choices = data.choices as Record<string, unknown>[] | undefined;
-          return { name: model.name, text: (choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string ?? "(no response)", timeMs: Date.now() - start };
+          return {
+            name: model.name,
+            text:
+              ((choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string) ??
+              "(no response)",
+            timeMs: Date.now() - start,
+          };
         } catch (err) {
-          return { name: model.name, text: `Error: ${err instanceof Error ? err.message : String(err)}`, timeMs: Date.now() - start };
+          return {
+            name: model.name,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+            timeMs: Date.now() - start,
+          };
         }
       };
 
-      const results = await Promise.all(selectedModels.map(m => fetchModel(m)));
+      const results = await Promise.all(selectedModels.map((m) => fetchModel(m)));
 
       // Show individual responses
       for (const r of results) {
@@ -313,14 +369,14 @@ export async function handleModelConfigAction(
       }
 
       // Simple agreement check
-      const validResults = results.filter(r => !r.text.startsWith("Error:"));
+      const validResults = results.filter((r) => !r.text.startsWith("Error:"));
       if (validResults.length >= 2) {
         // Check if responses are similar (basic: compare first 100 chars lowercase)
-        const normalized = validResults.map(r => r.text.toLowerCase().slice(0, 100));
-        const allSimilar = normalized.every(n => {
+        const normalized = validResults.map((r) => r.text.toLowerCase().slice(0, 100));
+        const allSimilar = normalized.every((n) => {
           const words1 = new Set(n.split(/\s+/));
           const words2 = new Set(normalized[0]!.split(/\s+/));
-          const overlap = [...words1].filter(w => words2.has(w)).length;
+          const overlap = [...words1].filter((w) => words2.has(w)).length;
           return overlap / Math.max(words1.size, words2.size) > 0.3;
         });
 
@@ -332,7 +388,7 @@ export async function handleModelConfigAction(
         }
 
         // Show fastest
-        const fastest = validResults.reduce((a, b) => a.timeMs < b.timeMs ? a : b);
+        const fastest = validResults.reduce((a, b) => (a.timeMs < b.timeMs ? a : b));
         lines.push(`  Fastest: ${fastest.name} (${fastest.timeMs}ms)`);
       }
 
@@ -370,9 +426,14 @@ export async function handleModelConfigAction(
         if (!name || !command) return "  Usage: /mcp add <name> <command> [args...]";
         const serverArgs = parts.slice(3);
         try {
-          await manager.addServer(name, { command, args: serverArgs.length > 0 ? serverArgs : undefined });
+          await manager.addServer(name, {
+            command,
+            args: serverArgs.length > 0 ? serverArgs : undefined,
+          });
           // Count newly registered MCP tools
-          const toolCount = manager.discoverTools().filter((t) => t.name.startsWith(`mcp__${name}__`)).length;
+          const toolCount = manager
+            .discoverTools()
+            .filter((t) => t.name.startsWith(`mcp__${name}__`)).length;
           return `  Added MCP server "${name}" (${command}${serverArgs.length > 0 ? " " + serverArgs.join(" ") : ""}), registered ${toolCount} tool(s)`;
         } catch (err) {
           return `  Error adding MCP server: ${err instanceof Error ? err.message : String(err)}`;
@@ -383,18 +444,18 @@ export async function handleModelConfigAction(
         const name = parts[1];
         if (!name) return "  Usage: /mcp remove <name>";
         const removed = manager.removeServer(name);
-        return removed
-          ? `  Removed MCP server "${name}"`
-          : `  MCP server "${name}" not found`;
+        return removed ? `  Removed MCP server "${name}"` : `  MCP server "${name}" not found`;
       }
 
       if (subCmd === "auth") {
         const serverName = parts[1];
-        if (!serverName) return "  Usage: /mcp auth <server-name>\n  Starts OAuth 2.0 flow for the specified MCP server.";
+        if (!serverName)
+          return "  Usage: /mcp auth <server-name>\n  Starts OAuth 2.0 flow for the specified MCP server.";
 
         const status = manager.getServerStatus();
-        const serverInfo = status.find(s => s.name === serverName);
-        if (!serverInfo) return `  MCP server "${serverName}" not found. Run /mcp list to see available servers.`;
+        const serverInfo = status.find((s) => s.name === serverName);
+        if (!serverInfo)
+          return `  MCP server "${serverName}" not found. Run /mcp list to see available servers.`;
 
         try {
           const { McpOAuthClient, discoverOAuthConfig } = await import("../../core/mcp-oauth");
@@ -414,7 +475,9 @@ export async function handleModelConfigAction(
                 oauthConfig = await discoverOAuthConfig(serverConfig.url);
               }
             }
-          } catch { /* OAuth discovery optional — server may not support it */ }
+          } catch {
+            /* OAuth discovery optional — server may not support it */
+          }
 
           if (!oauthConfig || !oauthConfig.clientId) {
             return `  No OAuth config for "${serverName}".\n  Add oauth settings to ~/.kcode/settings.json:\n  {\n    "mcpServers": {\n      "${serverName}": {\n        "url": "https://...",\n        "oauth": {\n          "clientId": "YOUR_CLIENT_ID",\n          "authorizationUrl": "https://provider/authorize",\n          "tokenUrl": "https://provider/token"\n        }\n      }\n    }\n  }`;
@@ -426,18 +489,28 @@ export async function handleModelConfigAction(
           // Try to open browser
           try {
             const { execFileSync: execSync } = await import("node:child_process");
-            const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+            const openCmd =
+              process.platform === "darwin"
+                ? "open"
+                : process.platform === "win32"
+                  ? "start"
+                  : "xdg-open";
             execSync(openCmd, [url], { stdio: "pipe", timeout: 5000 });
           } catch {
             // Browser open failed, user can copy the URL
           }
 
           // Non-blocking — the callback will store tokens
-          waitForCallback().then(() => {
-            log.info("mcp", `OAuth authentication successful for "${serverName}"`);
-          }).catch((err) => {
-            log.warn("mcp", `OAuth authentication failed for "${serverName}": ${err instanceof Error ? err.message : String(err)}`);
-          });
+          waitForCallback()
+            .then(() => {
+              log.info("mcp", `OAuth authentication successful for "${serverName}"`);
+            })
+            .catch((err) => {
+              log.warn(
+                "mcp",
+                `OAuth authentication failed for "${serverName}": ${err instanceof Error ? err.message : String(err)}`,
+              );
+            });
 
           return `  OAuth flow started for "${serverName}".\n  Open this URL in your browser:\n  ${url}\n\n  Callback listening on port ${port}...`;
         } catch (err) {
@@ -462,8 +535,11 @@ export async function handleModelConfigAction(
 
         if (!action || action === "list") {
           const aliases = listAliases();
-          if (aliases.length === 0) return "  No tool aliases defined.\n  Use /mcp alias add <alias> <target> to create one.";
-          const lines = aliases.map((a) => `  ${a.alias} -> ${a.target}${a.description ? ` (${a.description})` : ""}`);
+          if (aliases.length === 0)
+            return "  No tool aliases defined.\n  Use /mcp alias add <alias> <target> to create one.";
+          const lines = aliases.map(
+            (a) => `  ${a.alias} -> ${a.target}${a.description ? ` (${a.description})` : ""}`,
+          );
           return `  Tool Aliases:\n${lines.join("\n")}`;
         }
 
@@ -502,7 +578,9 @@ export async function handleModelConfigAction(
           const existing = (await file.exists()) ? await file.json() : {};
           existing.telemetry = true;
           await Bun.write(settingsPath, JSON.stringify(existing, null, 2) + "\n");
-        } catch { /* ignore write errors */ }
+        } catch {
+          /* ignore write errors */
+        }
         return "  Telemetry enabled. Anonymous tool usage analytics will be recorded locally.";
       }
 
@@ -514,11 +592,18 @@ export async function handleModelConfigAction(
           const existing = (await file.exists()) ? await file.json() : {};
           existing.telemetry = false;
           await Bun.write(settingsPath, JSON.stringify(existing, null, 2) + "\n");
-        } catch { /* ignore write errors */ }
+        } catch {
+          /* ignore write errors */
+        }
         return "  Telemetry disabled. No analytics will be recorded.";
       }
 
-      const status = current === true ? "enabled" : current === false ? "disabled" : "not set (disabled by default)";
+      const status =
+        current === true
+          ? "enabled"
+          : current === false
+            ? "disabled"
+            : "not set (disabled by default)";
       return [
         `  Telemetry Status: ${status}`,
         ``,
@@ -547,12 +632,16 @@ export async function handleModelConfigAction(
         if (agent.tools) lines.push(`  Tools: ${agent.tools.join(", ")}`);
         if (agent.disallowedTools) lines.push(`  Disallowed: ${agent.disallowedTools.join(", ")}`);
         if (agent.skills) lines.push(`  Skills: ${agent.skills.join(", ")}`);
-        if (agent.mcpServers) lines.push(`  MCP servers: ${Object.keys(agent.mcpServers).join(", ")}`);
+        if (agent.mcpServers)
+          lines.push(`  MCP servers: ${Object.keys(agent.mcpServers).join(", ")}`);
         if (agent.hooks) lines.push(`  Hooks: ${agent.hooks.length} configured`);
         if (agent.memory) lines.push(`  Memory: enabled`);
         if (agent.apiBase) lines.push(`  API base: ${agent.apiBase}`);
         if (agent.apiKey) lines.push(`  API key: ****${agent.apiKey.slice(-4)}`);
-        if (agent.systemPrompt) lines.push(`  System prompt: ${agent.systemPrompt.slice(0, 80)}${agent.systemPrompt.length > 80 ? "..." : ""}`);
+        if (agent.systemPrompt)
+          lines.push(
+            `  System prompt: ${agent.systemPrompt.slice(0, 80)}${agent.systemPrompt.length > 80 ? "..." : ""}`,
+          );
         return lines.join("\n");
       }
 

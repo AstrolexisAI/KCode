@@ -1,11 +1,11 @@
 // KCode - Template Scaffolder
 // Orchestrates project generation from templates via AI model calls.
 
-import { join, dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { log } from "../logger";
 import { TemplateEngine } from "./engine";
-import type { Template, ScaffoldResult } from "./types";
+import type { ScaffoldResult, Template } from "./types";
 
 // ─── Direct model call (avoids importing full conversation loop) ─
 

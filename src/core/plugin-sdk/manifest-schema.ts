@@ -77,9 +77,7 @@ export function validateManifestSchema(manifest: unknown): {
 
   // Name format
   if (typeof m.name === "string" && !NAME_PATTERN.test(m.name)) {
-    errors.push(
-      `Plugin name must be lowercase alphanumeric with hyphens, got: "${m.name}"`,
-    );
+    errors.push(`Plugin name must be lowercase alphanumeric with hyphens, got: "${m.name}"`);
   }
 
   // Name length
@@ -99,13 +97,8 @@ export function validateManifestSchema(manifest: unknown): {
 
   // KCode version range
   if (m.kcode !== undefined) {
-    if (
-      typeof m.kcode !== "string" ||
-      !VERSION_RANGE_PATTERN.test(m.kcode)
-    ) {
-      errors.push(
-        `kcode field must be a valid version range (e.g., ">=1.7.0")`,
-      );
+    if (typeof m.kcode !== "string" || !VERSION_RANGE_PATTERN.test(m.kcode)) {
+      errors.push(`kcode field must be a valid version range (e.g., ">=1.7.0")`);
     }
   }
 
@@ -144,9 +137,7 @@ export function validateManifestSchema(manifest: unknown): {
     if (typeof m.mcpServers !== "object" || Array.isArray(m.mcpServers)) {
       errors.push("mcpServers must be an object");
     } else {
-      for (const [name, config] of Object.entries(
-        m.mcpServers as Record<string, unknown>,
-      )) {
+      for (const [name, config] of Object.entries(m.mcpServers as Record<string, unknown>)) {
         if (!config || typeof config !== "object") {
           errors.push(`MCP server "${name}" must be an object`);
           continue;
@@ -188,9 +179,7 @@ export function validateManifestSchema(manifest: unknown): {
 }
 
 export function isValidPluginName(name: string): boolean {
-  return (
-    NAME_PATTERN.test(name) && name.length >= 2 && name.length <= 64
-  );
+  return NAME_PATTERN.test(name) && name.length >= 2 && name.length <= 64;
 }
 
 export function suggestFixedName(name: string): string {

@@ -1,15 +1,15 @@
 // KCode - Ensemble Voter Tests
 
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import type { CandidateResponse, ModelExecutor } from "./types";
 import {
-  scoreCandidate,
   hasValidToolCalls,
-  isRepetitive,
   heuristicSelect,
+  isRepetitive,
   judgeSelect,
   majorityVote,
+  scoreCandidate,
 } from "./voter";
-import type { CandidateResponse, ModelExecutor } from "./types";
 
 // ─── Helper ─────────────────────────────────────────────────────
 
@@ -124,7 +124,10 @@ describe("heuristicSelect", () => {
   test("selects the highest-scored candidate", () => {
     const candidates: CandidateResponse[] = [
       makeCandidate({ model: "weak", response: "I don't know" }),
-      makeCandidate({ model: "good", response: "Here is a detailed explanation with code examples and clear steps." }),
+      makeCandidate({
+        model: "good",
+        response: "Here is a detailed explanation with code examples and clear steps.",
+      }),
       makeCandidate({ model: "error", response: "SyntaxError: oops" }),
     ];
 
@@ -210,7 +213,9 @@ describe("judgeSelect", () => {
     ];
 
     const failingExecutor: ModelExecutor = {
-      execute: async () => { throw new Error("Judge failed"); },
+      execute: async () => {
+        throw new Error("Judge failed");
+      },
     };
 
     const result = await judgeSelect(
@@ -292,8 +297,8 @@ describe("majorityVote", () => {
     ];
 
     const result = majorityVote(candidates);
-    const yesScores = result.candidates.filter(c => c.response === "yes").map(c => c.score);
-    const noScores = result.candidates.filter(c => c.response === "no").map(c => c.score);
+    const yesScores = result.candidates.filter((c) => c.response === "yes").map((c) => c.score);
+    const noScores = result.candidates.filter((c) => c.response === "no").map((c) => c.score);
 
     expect(yesScores).toEqual([1.0, 1.0]);
     expect(noScores).toEqual([0.0]);

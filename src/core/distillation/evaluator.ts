@@ -2,12 +2,7 @@
 // Evaluates distilled (fine-tuned) models against base models using benchmark tasks.
 
 import { log } from "../logger";
-import type {
-  EvalConfig,
-  EvalTask,
-  EvalTaskResult,
-  EvalReport,
-} from "./types";
+import type { EvalConfig, EvalReport, EvalTask, EvalTaskResult } from "./types";
 
 // ─── Defaults ──────────────────────────────────────────────────
 
@@ -44,7 +39,8 @@ const CODING_TASKS: EvalTask[] = [
   },
   {
     id: "code-5",
-    prompt: "Refactor this function to use early returns:\n```\nfunction process(x) { if (x) { if (x.valid) { return x.value; } else { return null; } } else { return null; } }```",
+    prompt:
+      "Refactor this function to use early returns:\n```\nfunction process(x) { if (x) { if (x.valid) { return x.value; } else { return null; } } else { return null; } }```",
     expectedPattern: "return|if|guard",
     category: "refactor",
   },
@@ -62,13 +58,15 @@ const CODING_TASKS: EvalTask[] = [
   },
   {
     id: "code-8",
-    prompt: "Write a TypeScript generic function that takes an array and returns the last element with proper typing.",
+    prompt:
+      "Write a TypeScript generic function that takes an array and returns the last element with proper typing.",
     expectedPattern: "function|<T>|T\\[\\]|generic|last",
     category: "code-generation",
   },
   {
     id: "code-9",
-    prompt: "Convert this callback-based function to use async/await:\n```\nfunction readFile(path, cb) { fs.readFile(path, 'utf8', (err, data) => { if (err) cb(err); else cb(null, data); }); }```",
+    prompt:
+      "Convert this callback-based function to use async/await:\n```\nfunction readFile(path, cb) { fs.readFile(path, 'utf8', (err, data) => { if (err) cb(err); else cb(null, data); }); }```",
     expectedPattern: "async|await|promise|readFile",
     category: "refactor",
   },
@@ -204,20 +202,13 @@ export class ModelEvaluator {
     const failed = results.filter((r) => !r.passed).length;
     const avgLatencyMs =
       results.length > 0
-        ? Math.round(
-            results.reduce((sum, r) => sum + r.latencyMs, 0) / results.length,
-          )
+        ? Math.round(results.reduce((sum, r) => sum + r.latencyMs, 0) / results.length)
         : 0;
     const avgTokens =
       results.length > 0
-        ? Math.round(
-            results.reduce((sum, r) => sum + r.tokensUsed, 0) / results.length,
-          )
+        ? Math.round(results.reduce((sum, r) => sum + r.tokensUsed, 0) / results.length)
         : 0;
-    const passRate =
-      results.length > 0
-        ? Math.round((passed / results.length) * 100) / 100
-        : 0;
+    const passRate = results.length > 0 ? Math.round((passed / results.length) * 100) / 100 : 0;
 
     const report: EvalReport = {
       modelPath: config.modelPath,
@@ -242,10 +233,7 @@ export class ModelEvaluator {
   /**
    * Evaluate a single task by sending it to the model API.
    */
-  async evaluateTask(
-    task: EvalTask,
-    config: EvalConfig,
-  ): Promise<EvalTaskResult> {
+  async evaluateTask(task: EvalTask, config: EvalConfig): Promise<EvalTaskResult> {
     const start = Date.now();
 
     try {
@@ -312,8 +300,7 @@ export class ModelEvaluator {
     const choices = data.choices as Record<string, unknown>[] | undefined;
     const usage = data.usage as Record<string, unknown> | undefined;
     const text = String(
-      (choices?.[0]?.message as Record<string, unknown> | undefined)
-        ?.content ?? "",
+      (choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "",
     );
     const tokensUsed = Number(usage?.total_tokens ?? 0);
 

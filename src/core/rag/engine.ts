@@ -2,52 +2,95 @@
 // Orchestrates embedding, chunking, vector storage, and semantic search.
 // Runs entirely locally — no external APIs required (TF-IDF fallback).
 
-import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
-import { join, relative, extname } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { log } from "../logger";
+import { extname, join, relative } from "node:path";
 import { getDb } from "../db";
-import { Embedder } from "./embedder";
+import { log } from "../logger";
 import { CodeChunker } from "./chunker";
-import { VectorStore } from "./vector-store";
-import { rerank, DEFAULT_RERANKER_CONFIG } from "./reranker";
+import { Embedder } from "./embedder";
+import { DEFAULT_RERANKER_CONFIG, rerank } from "./reranker";
 import type {
   CodeChunk,
-  IndexReport,
-  RAGSearchOptions,
-  SearchResult,
-  RAGConfig,
   DEFAULT_RAG_CONFIG,
-  VectorStoreStats,
+  IndexReport,
+  RAGConfig,
+  RAGSearchOptions,
   RerankerConfig,
+  SearchResult,
+  VectorStoreStats,
 } from "./types";
+import { VectorStore } from "./vector-store";
 
 // ─── Constants ─────────────────────────────────────────────────
 
 const INDEXABLE_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".rs", ".go", ".java", ".kt", ".swift",
-  ".c", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php",
-  ".vue", ".svelte",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".rs",
+  ".go",
+  ".java",
+  ".kt",
+  ".swift",
+  ".c",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".rb",
+  ".php",
+  ".vue",
+  ".svelte",
 ]);
 
 const IGNORE_DIRS = new Set([
-  "node_modules", "dist", "build", ".git", "__pycache__",
-  "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", ".vscode", ".idea", "coverage", "data",
+  "node_modules",
+  "dist",
+  "build",
+  ".git",
+  "__pycache__",
+  "venv",
+  ".next",
+  ".nuxt",
+  "target",
+  "vendor",
+  ".kcode",
+  ".vscode",
+  ".idea",
+  "coverage",
+  "data",
 ]);
 
 const MAX_FILE_SIZE = 100_000; // 100KB
 const MAX_FILES = 5_000;
 
 const LANGUAGE_MAP: Record<string, string> = {
-  ".ts": "typescript", ".tsx": "tsx", ".js": "javascript", ".jsx": "jsx",
-  ".mjs": "javascript", ".cjs": "javascript",
-  ".py": "python", ".rs": "rust", ".go": "go",
-  ".java": "java", ".kt": "kotlin", ".swift": "swift",
-  ".c": "c", ".cpp": "cpp", ".h": "c", ".hpp": "cpp",
-  ".cs": "csharp", ".rb": "ruby", ".php": "php",
-  ".vue": "vue", ".svelte": "svelte",
+  ".ts": "typescript",
+  ".tsx": "tsx",
+  ".js": "javascript",
+  ".jsx": "jsx",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".py": "python",
+  ".rs": "rust",
+  ".go": "go",
+  ".java": "java",
+  ".kt": "kotlin",
+  ".swift": "swift",
+  ".c": "c",
+  ".cpp": "cpp",
+  ".h": "c",
+  ".hpp": "cpp",
+  ".cs": "csharp",
+  ".rb": "ruby",
+  ".php": "php",
+  ".vue": "vue",
+  ".svelte": "svelte",
 };
 
 // ─── File Info ─────────────────────────────────────────────────
@@ -118,7 +161,12 @@ export class RAGEngine {
 
     try {
       await this.init();
-      const report: IndexReport = { filesProcessed: 0, chunksCreated: 0, errors: [], durationMs: 0 };
+      const report: IndexReport = {
+        filesProcessed: 0,
+        chunksCreated: 0,
+        errors: [],
+        durationMs: 0,
+      };
       const start = Date.now();
 
       // 1. List eligible files
@@ -162,7 +210,10 @@ export class RAGEngine {
       }
 
       report.durationMs = Date.now() - start;
-      log.info("rag-engine", `Indexed ${report.filesProcessed} files, ${report.chunksCreated} chunks in ${report.durationMs}ms`);
+      log.info(
+        "rag-engine",
+        `Indexed ${report.filesProcessed} files, ${report.chunksCreated} chunks in ${report.durationMs}ms`,
+      );
       return report;
     } finally {
       this.indexing = false;
@@ -178,7 +229,12 @@ export class RAGEngine {
 
     try {
       await this.init();
-      const report: IndexReport = { filesProcessed: 0, chunksCreated: 0, errors: [], durationMs: 0 };
+      const report: IndexReport = {
+        filesProcessed: 0,
+        chunksCreated: 0,
+        errors: [],
+        durationMs: 0,
+      };
       const start = Date.now();
 
       const files = this.listEligibleFiles(dir);
@@ -188,9 +244,11 @@ export class RAGEngine {
       const db = getDb();
       const indexedFiles = new Map<string, string>();
       try {
-        const rows = db.prepare(
-          "SELECT DISTINCT file_path, MAX(file_modified_at) as last_mod FROM rag_chunks GROUP BY file_path",
-        ).all() as Array<{ file_path: string; last_mod: string }>;
+        const rows = db
+          .prepare(
+            "SELECT DISTINCT file_path, MAX(file_modified_at) as last_mod FROM rag_chunks GROUP BY file_path",
+          )
+          .all() as Array<{ file_path: string; last_mod: string }>;
         for (const row of rows) {
           indexedFiles.set(row.file_path, row.last_mod);
         }
@@ -242,7 +300,9 @@ export class RAGEngine {
       if (this.embedder.getBackend() === "tfidf") {
         const existingTexts: string[] = [];
         try {
-          const rows = db.prepare("SELECT content, relative_path, name FROM rag_chunks").all() as Array<{
+          const rows = db
+            .prepare("SELECT content, relative_path, name FROM rag_chunks")
+            .all() as Array<{
             content: string;
             relative_path: string;
             name: string;
@@ -250,7 +310,9 @@ export class RAGEngine {
           for (const row of rows) {
             existingTexts.push(`${row.relative_path}: ${row.name}\n\n${row.content}`);
           }
-        } catch { /* empty store */ }
+        } catch {
+          /* empty store */
+        }
 
         const newTexts = allChunks.map((c) => this.prepareForEmbedding(c));
         this.embedder.fitTFIDF([...existingTexts, ...newTexts]);
@@ -271,7 +333,10 @@ export class RAGEngine {
       }
 
       report.durationMs = Date.now() - start;
-      log.info("rag-engine", `Updated ${report.filesProcessed} files, ${report.chunksCreated} chunks in ${report.durationMs}ms`);
+      log.info(
+        "rag-engine",
+        `Updated ${report.filesProcessed} files, ${report.chunksCreated} chunks in ${report.durationMs}ms`,
+      );
       return report;
     } finally {
       this.indexing = false;
@@ -307,9 +372,7 @@ export class RAGEngine {
 
     // 4. Filter by minimum similarity and return top-K
     const minSim = options?.minSimilarity ?? 0.01;
-    return reranked
-      .filter((r) => r.similarity >= minSim)
-      .slice(0, options?.limit ?? 10);
+    return reranked.filter((r) => r.similarity >= minSim).slice(0, options?.limit ?? 10);
   }
 
   /** Format search results as context for injection into prompts */

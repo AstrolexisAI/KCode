@@ -1,9 +1,10 @@
 // KCode - Theme React Context
 // Provides theme colors to all UI components via React context
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+import type React from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 import type { Theme } from "../core/theme.js";
-import { getTheme, setTheme as setCoreTheme, getCurrentThemeName } from "../core/theme.js";
+import { getCurrentThemeName, getTheme, setTheme as setCoreTheme } from "../core/theme.js";
 
 interface ThemeContextValue {
   theme: Theme;

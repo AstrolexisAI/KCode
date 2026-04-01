@@ -1,8 +1,8 @@
 // KCode - PermissionDialog component
 // Prompts the user for tool execution permission
 
-import React from "react";
 import { Box, Text, useInput } from "ink";
+import React from "react";
 import { useTheme } from "../ThemeContext.js";
 
 export interface PermissionRequest {
@@ -18,11 +18,7 @@ interface PermissionDialogProps {
   isActive: boolean;
 }
 
-export default function PermissionDialog({
-  request,
-  onChoice,
-  isActive,
-}: PermissionDialogProps) {
+export default function PermissionDialog({ request, onChoice, isActive }: PermissionDialogProps) {
   const { theme } = useTheme();
 
   useInput(
@@ -57,7 +53,10 @@ export default function PermissionDialog({
       </Text>
       <Box marginTop={1}>
         <Text>
-          Tool: <Text bold color={theme.primary}>{request.toolName}</Text>
+          Tool:{" "}
+          <Text bold color={theme.primary}>
+            {request.toolName}
+          </Text>
         </Text>
       </Box>
       <Box>
@@ -67,15 +66,21 @@ export default function PermissionDialog({
       </Box>
       <Box marginTop={1} gap={2}>
         <Text>
-          <Text bold color={theme.success}>[y]</Text>
+          <Text bold color={theme.success}>
+            [y]
+          </Text>
           <Text> Allow</Text>
         </Text>
         <Text>
-          <Text bold color={theme.primary}>[a]</Text>
+          <Text bold color={theme.primary}>
+            [a]
+          </Text>
           <Text> Always</Text>
         </Text>
         <Text>
-          <Text bold color={theme.error}>[n]</Text>
+          <Text bold color={theme.error}>
+            [n]
+          </Text>
           <Text> Deny</Text>
         </Text>
       </Box>

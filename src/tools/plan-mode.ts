@@ -62,7 +62,8 @@ export const enterPlanModeDefinition: ToolDefinition = {
     properties: {
       reason: {
         type: "string",
-        description: "Why you are entering plan mode (e.g., 'researching architecture before refactor')",
+        description:
+          "Why you are entering plan mode (e.g., 'researching architecture before refactor')",
       },
     },
   },

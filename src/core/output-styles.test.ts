@@ -1,10 +1,10 @@
-import { test, expect, describe, afterEach } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
-  listStyles,
-  setCurrentStyle,
   getCurrentStyle,
   getStyleInstructions,
+  listStyles,
+  setCurrentStyle,
 } from "./output-styles.ts";
 
 describe("output-styles", () => {

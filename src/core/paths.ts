@@ -2,8 +2,8 @@
 // Single source of truth for all ~/.kcode paths.
 // Override via KCODE_HOME env var for testing or custom installs.
 
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 /**
  * Resolve the KCode home directory.

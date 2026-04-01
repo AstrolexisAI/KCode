@@ -2,9 +2,9 @@
 // Structured planning system for multi-step tasks, inspired by Claude Code's TodoWrite
 // Plans are displayed visually in the TUI and persisted to SQLite
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { getDb } from "../core/db";
 import { log } from "../core/logger";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -35,13 +35,18 @@ export function getActivePlan(): Plan | null {
   return _activePlan;
 }
 
+/** Clear the active plan (used in tests for isolation) */
+export function clearActivePlan(): void {
+  _activePlan = null;
+}
+
 /**
  * Check if the active plan has a step currently in_progress.
  * Returns the step if found, null otherwise.
  */
 export function getActiveStep(): PlanStep | null {
   if (!_activePlan) return null;
-  return _activePlan.steps.find(s => s.status === "in_progress") ?? null;
+  return _activePlan.steps.find((s) => s.status === "in_progress") ?? null;
 }
 
 /**
@@ -50,7 +55,7 @@ export function getActiveStep(): PlanStep | null {
  */
 export function countInProgressSteps(): number {
   if (!_activePlan) return 0;
-  return _activePlan.steps.filter(s => s.status === "in_progress").length;
+  return _activePlan.steps.filter((s) => s.status === "in_progress").length;
 }
 
 /**
@@ -59,7 +64,7 @@ export function countInProgressSteps(): number {
  */
 export function shouldStopAfterCurrentStep(): boolean {
   if (!_activePlan?.stopAfterStepId) return false;
-  const step = _activePlan.steps.find(s => s.id === _activePlan!.stopAfterStepId);
+  const step = _activePlan.steps.find((s) => s.id === _activePlan!.stopAfterStepId);
   return step?.status === "done";
 }
 
@@ -82,16 +87,28 @@ export function classifyToolCoherence(
   const command = String(toolInput.command ?? "").toLowerCase();
 
   // Setup/init phase: allow scaffold, config, install
-  if (/\b(setup|init|initialize|install|config|structure|scaffold|dependencies)\b/.test(stepLower)) {
-    if (toolName === "Bash" && /\b(create|init|install|npm|bun|npx|mkdir|git init)\b/.test(command)) return "ok";
+  if (
+    /\b(setup|init|initialize|install|config|structure|scaffold|dependencies)\b/.test(stepLower)
+  ) {
+    if (toolName === "Bash" && /\b(create|init|install|npm|bun|npx|mkdir|git init)\b/.test(command))
+      return "ok";
     if (toolName === "Write" && /\.(json|config|ts|js|css|md)$/i.test(filePath)) return "ok";
     // Writing full page components during setup is a deviation
-    if (toolName === "Write" && /\/(pages?|app)\/.+\.(tsx|jsx)$/i.test(filePath) && !/layout|root|config/i.test(filePath)) return "warn";
+    if (
+      toolName === "Write" &&
+      /\/(pages?|app)\/.+\.(tsx|jsx)$/i.test(filePath) &&
+      !/layout|root|config/i.test(filePath)
+    )
+      return "warn";
     return "ok";
   }
 
   // Build/create page phase: allow page/component writes
-  if (/\b(build|create|implement|add|design)\s+.*(page|component|landing|home|hero|chart|footer|header|nav)\b/.test(stepLower)) {
+  if (
+    /\b(build|create|implement|add|design)\s+.*(page|component|landing|home|hero|chart|footer|header|nav)\b/.test(
+      stepLower,
+    )
+  ) {
     if (toolName === "Write" || toolName === "Edit") return "ok";
     if (toolName === "Bash" && /\b(npm|bun|npx)\b/.test(command)) return "ok";
     return "ok";
@@ -99,7 +116,8 @@ export function classifyToolCoherence(
 
   // Test/verify phase: allow read/bash, warn on writes
   if (/\b(test|verify|check|validate|review)\b/.test(stepLower)) {
-    if (toolName === "Bash" || toolName === "Read" || toolName === "Glob" || toolName === "Grep") return "ok";
+    if (toolName === "Bash" || toolName === "Read" || toolName === "Glob" || toolName === "Grep")
+      return "ok";
     if (toolName === "Write" || toolName === "Edit") return "warn";
     return "ok";
   }
@@ -157,9 +175,17 @@ function savePlanToDb(plan: Plan): void {
 export function loadLatestPlan(): Plan | null {
   try {
     const db = getDb();
-    const row = db.query(
-      `SELECT id, title, steps, created_at, updated_at FROM plans ORDER BY updated_at DESC LIMIT 1`,
-    ).get() as { id: string; title: string; steps: string; created_at: string; updated_at: string } | null;
+    const row = db
+      .query(
+        `SELECT id, title, steps, created_at, updated_at FROM plans ORDER BY updated_at DESC LIMIT 1`,
+      )
+      .get() as {
+      id: string;
+      title: string;
+      steps: string;
+      created_at: string;
+      updated_at: string;
+    } | null;
 
     if (!row) return null;
 
@@ -260,10 +286,18 @@ export async function executePlan(input: Record<string, unknown>): Promise<ToolR
   switch (mode) {
     case "create": {
       if (!title) {
-        return { tool_use_id: "", content: "Error: 'title' is required for create mode", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: 'title' is required for create mode",
+          is_error: true,
+        };
       }
       if (!steps || steps.length === 0) {
-        return { tool_use_id: "", content: "Error: 'steps' array is required for create mode", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: 'steps' array is required for create mode",
+          is_error: true,
+        };
       }
 
       const plan: Plan = {
@@ -290,17 +324,29 @@ export async function executePlan(input: Record<string, unknown>): Promise<ToolR
 
     case "update": {
       if (!_activePlan) {
-        return { tool_use_id: "", content: "Error: No active plan. Create one first with mode='create'.", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: No active plan. Create one first with mode='create'.",
+          is_error: true,
+        };
       }
       if (!updates || updates.length === 0) {
-        return { tool_use_id: "", content: "Error: 'updates' array is required for update mode", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: 'updates' array is required for update mode",
+          is_error: true,
+        };
       }
 
       const updated: string[] = [];
       for (const u of updates) {
         const step = _activePlan.steps.find((s) => s.id === u.id);
         if (!step) {
-          return { tool_use_id: "", content: `Error: Step "${u.id}" not found in plan`, is_error: true };
+          return {
+            tool_use_id: "",
+            content: `Error: Step "${u.id}" not found in plan`,
+            is_error: true,
+          };
         }
         step.status = u.status;
         if (u.title) step.title = u.title;
@@ -319,15 +365,27 @@ export async function executePlan(input: Record<string, unknown>): Promise<ToolR
 
     case "add": {
       if (!_activePlan) {
-        return { tool_use_id: "", content: "Error: No active plan. Create one first with mode='create'.", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: No active plan. Create one first with mode='create'.",
+          is_error: true,
+        };
       }
       if (!steps || steps.length === 0) {
-        return { tool_use_id: "", content: "Error: 'steps' array is required for add mode", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: 'steps' array is required for add mode",
+          is_error: true,
+        };
       }
 
       for (const s of steps) {
         if (_activePlan.steps.some((existing) => existing.id === s.id)) {
-          return { tool_use_id: "", content: `Error: Step "${s.id}" already exists`, is_error: true };
+          return {
+            tool_use_id: "",
+            content: `Error: Step "${s.id}" already exists`,
+            is_error: true,
+          };
         }
         _activePlan.steps.push({
           id: s.id,
@@ -386,12 +444,7 @@ export function formatPlan(plan: Plan): string {
 export function formatPlanForPrompt(): string | null {
   if (!_activePlan) return null;
 
-  const lines: string[] = [
-    "# Active Plan",
-    "",
-    `**${_activePlan.title}**`,
-    "",
-  ];
+  const lines: string[] = ["# Active Plan", "", `**${_activePlan.title}**`, ""];
 
   for (const step of _activePlan.steps) {
     lines.push(`${STATUS_ICONS[step.status]} ${step.id}. ${step.title}`);

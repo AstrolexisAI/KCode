@@ -1,10 +1,13 @@
 // KCode - Plugin Validator
 // Validates plugin structure, manifest, and content integrity.
 
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import type { ValidationReport, ValidationIssue } from "../../../core/plugin-sdk/types";
-import { validateManifestSchema, VALID_HOOK_EVENTS } from "../../../core/plugin-sdk/manifest-schema";
+import {
+  VALID_HOOK_EVENTS,
+  validateManifestSchema,
+} from "../../../core/plugin-sdk/manifest-schema";
+import type { ValidationIssue, ValidationReport } from "../../../core/plugin-sdk/types";
 
 export async function validatePlugin(dir: string): Promise<ValidationReport> {
   const report: ValidationReport = { valid: true, errors: [], warnings: [], info: [] };
@@ -215,12 +218,8 @@ function findMatchingFiles(dir: string, pattern: string): string[] {
 
   try {
     const entries = readdirSync(targetDir);
-    const regex = new RegExp(
-      "^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
-    );
-    return entries
-      .filter((e) => regex.test(e))
-      .map((e) => (dirPart ? `${dirPart}/${e}` : e));
+    const regex = new RegExp("^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    return entries.filter((e) => regex.test(e)).map((e) => (dirPart ? `${dirPart}/${e}` : e));
   } catch {
     return [];
   }
@@ -265,7 +264,9 @@ function calculateDirSize(dir: string): number {
         total += stat.size;
       }
     }
-  } catch { /* skip inaccessible dirs */ }
+  } catch {
+    /* skip inaccessible dirs */
+  }
   return total;
 }
 

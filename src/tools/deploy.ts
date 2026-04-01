@@ -5,8 +5,8 @@
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { log } from "../core/logger";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Stack Detection ────────────────────────────────────────────
 
@@ -26,7 +26,9 @@ function detectStack(cwd: string): Stack {
     try {
       const pkg = JSON.parse(readFileSync(join(cwd, "package.json"), "utf-8"));
       if (pkg.scripts?.build) return "node";
-    } catch { /* ignore parse errors */ }
+    } catch {
+      /* ignore parse errors */
+    }
   }
   if (existsSync(join(cwd, "Cargo.toml"))) {
     return "rust";
@@ -51,10 +53,14 @@ function resolveTarget(target: string | undefined, stack: Stack): Target {
 
   // Auto-detect target from stack
   switch (stack) {
-    case "docker": return "docker";
-    case "vercel": return "vercel";
-    case "fly": return "fly";
-    default: return "docker"; // default fallback
+    case "docker":
+      return "docker";
+    case "vercel":
+      return "vercel";
+    case "fly":
+      return "fly";
+    default:
+      return "docker"; // default fallback
   }
 }
 
@@ -67,9 +73,14 @@ function runCommand(cmd: string, cwd: string): string {
       stdio: "pipe",
       timeout: 300_000, // 5 minute timeout for deploys
       maxBuffer: 10 * 1024 * 1024,
-    }).toString().trim();
+    })
+      .toString()
+      .trim();
   } catch (err) {
-    const msg = err instanceof Error ? (err as Error & { stderr?: Buffer }).stderr?.toString() || err.message : String(err);
+    const msg =
+      err instanceof Error
+        ? (err as Error & { stderr?: Buffer }).stderr?.toString() || err.message
+        : String(err);
     throw new Error(`Command failed: ${cmd}\n${msg}`);
   }
 }
@@ -183,7 +194,11 @@ function deploySSH(cwd: string, env: string, dryRun: boolean): ToolResult {
   }
 
   if (!config.host || !config.path) {
-    return { tool_use_id: "", content: ".kcode/deploy.json must contain 'host' and 'path' fields", is_error: true };
+    return {
+      tool_use_id: "",
+      content: ".kcode/deploy.json must contain 'host' and 'path' fields",
+      is_error: true,
+    };
   }
 
   const excludeFlags = (config.exclude ?? ["node_modules", ".git", ".env"])
@@ -191,9 +206,7 @@ function deploySSH(cwd: string, env: string, dryRun: boolean): ToolResult {
     .join(" ");
 
   const target = config.user ? `${config.user}@${config.host}` : config.host;
-  const commands: string[] = [
-    `rsync -avz --delete ${excludeFlags} ./ ${target}:${config.path}`,
-  ];
+  const commands: string[] = [`rsync -avz --delete ${excludeFlags} ./ ${target}:${config.path}`];
 
   if (config.restart) {
     commands.push(`ssh ${target} '${config.restart}'`);
@@ -264,7 +277,10 @@ export async function executeDeploy(input: Record<string, unknown>): Promise<Too
 
   // Detect stack
   const stack = detectStack(cwd);
-  log.info("tool", `Deploy: detected stack=${stack}, target=${targetInput ?? "auto"}, env=${env}, dryRun=${dryRun}`);
+  log.info(
+    "tool",
+    `Deploy: detected stack=${stack}, target=${targetInput ?? "auto"}, env=${env}, dryRun=${dryRun}`,
+  );
 
   // Resolve deploy target
   const target = resolveTarget(targetInput, stack);
@@ -272,7 +288,8 @@ export async function executeDeploy(input: Record<string, unknown>): Promise<Too
   if (stack === "unknown" && !targetInput) {
     return {
       tool_use_id: "",
-      content: "Could not auto-detect project stack. No Dockerfile, vercel.json, fly.toml, package.json (with build), Cargo.toml, go.mod, requirements.txt, or pyproject.toml found.\n\nSpecify a target explicitly: docker, vercel, fly, or ssh.",
+      content:
+        "Could not auto-detect project stack. No Dockerfile, vercel.json, fly.toml, package.json (with build), Cargo.toml, go.mod, requirements.txt, or pyproject.toml found.\n\nSpecify a target explicitly: docker, vercel, fly, or ssh.",
       is_error: true,
     };
   }

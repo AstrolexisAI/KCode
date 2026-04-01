@@ -24,7 +24,8 @@ export function registerTriggersCommand(program: Command): void {
 
         console.log(`\n  Remote Triggers (${triggers.length}):\n`);
         for (const t of triggers) {
-          const status = t.status === "active" ? "\u2713" : t.status === "paused" ? "\u2016" : "\u2717";
+          const status =
+            t.status === "active" ? "\u2713" : t.status === "paused" ? "\u2016" : "\u2717";
           const lastRun = t.lastRun
             ? `last: ${new Date(t.lastRun.timestamp).toLocaleDateString()} (${t.lastRun.status})`
             : "never run";
@@ -45,30 +46,38 @@ export function registerTriggersCommand(program: Command): void {
     .requiredOption("--prompt <prompt>", "Agent prompt to execute")
     .option("--model <model>", "Model to use")
     .option("--max-turns <n>", "Max agent turns", (v: string) => parseInt(v, 10))
-    .action(async (opts: { name: string; schedule: string; prompt: string; model?: string; maxTurns?: number }) => {
-      const { TriggerApiClient } = await import("../../remote/triggers/trigger-api");
-      const { TriggerManager } = await import("../../remote/triggers/trigger-manager");
-      const client = new TriggerApiClient();
-      const manager = new TriggerManager(client);
+    .action(
+      async (opts: {
+        name: string;
+        schedule: string;
+        prompt: string;
+        model?: string;
+        maxTurns?: number;
+      }) => {
+        const { TriggerApiClient } = await import("../../remote/triggers/trigger-api");
+        const { TriggerManager } = await import("../../remote/triggers/trigger-manager");
+        const client = new TriggerApiClient();
+        const manager = new TriggerManager(client);
 
-      try {
-        const trigger = await manager.create({
-          name: opts.name,
-          schedule: opts.schedule,
-          prompt: opts.prompt,
-          model: opts.model,
-          maxTurns: opts.maxTurns,
-        });
-        console.log(`\u2713 Trigger "${trigger.name}" created (id: ${trigger.id})`);
-        console.log(`  Schedule: ${trigger.schedule}`);
-        if (trigger.nextRun) {
-          console.log(`  Next run: ${new Date(trigger.nextRun).toLocaleString()}`);
+        try {
+          const trigger = await manager.create({
+            name: opts.name,
+            schedule: opts.schedule,
+            prompt: opts.prompt,
+            model: opts.model,
+            maxTurns: opts.maxTurns,
+          });
+          console.log(`\u2713 Trigger "${trigger.name}" created (id: ${trigger.id})`);
+          console.log(`  Schedule: ${trigger.schedule}`);
+          if (trigger.nextRun) {
+            console.log(`  Next run: ${new Date(trigger.nextRun).toLocaleString()}`);
+          }
+        } catch (err: any) {
+          console.error(`\u2717 ${err.message}`);
+          process.exit(1);
         }
-      } catch (err: any) {
-        console.error(`\u2717 ${err.message}`);
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   triggersCmd
     .command("delete <id>")
@@ -102,7 +111,9 @@ export function registerTriggersCommand(program: Command): void {
         console.log("Running trigger...");
         const result = await manager.runNow(id);
         console.log(`\u2713 ${result.status}: ${result.summary}`);
-        console.log(`  Messages: ${result.messagesCount}, Tokens: ${result.tokensUsed}, Cost: $${result.costUsd.toFixed(4)}`);
+        console.log(
+          `  Messages: ${result.messagesCount}, Tokens: ${result.tokensUsed}, Cost: $${result.costUsd.toFixed(4)}`,
+        );
         console.log(`  Duration: ${result.durationMs}ms`);
       } catch (err: any) {
         console.error(`\u2717 ${err.message}`);

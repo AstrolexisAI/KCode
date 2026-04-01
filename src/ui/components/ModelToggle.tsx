@@ -1,8 +1,8 @@
 // KCode - ModelToggle component
 // Interactive model switcher: pick any registered model (local or cloud)
 
-import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
+import React, { useEffect, useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 export interface ModelInfo {
@@ -33,13 +33,15 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     (async () => {
       const { listModels } = await import("../../core/models.js");
       const all = await listModels();
-      setModels(all.map((m) => ({
-        name: m.name,
-        baseUrl: m.baseUrl,
-        description: m.description,
-        gpu: m.gpu,
-        provider: m.provider ?? (m.name.startsWith("claude") ? "anthropic" : "openai"),
-      })));
+      setModels(
+        all.map((m) => ({
+          name: m.name,
+          baseUrl: m.baseUrl,
+          description: m.description,
+          gpu: m.gpu,
+          provider: m.provider ?? (m.name.startsWith("claude") ? "anthropic" : "openai"),
+        })),
+      );
       // Pre-select the current model
       const idx = all.findIndex((m) => m.name === currentModel);
       if (idx >= 0) setSelectedIndex(idx);
@@ -86,7 +88,9 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
   const cloudModels = models.filter((m) => !isLocal(m));
 
   // Build ordered list with section markers
-  type ListItem = { type: "header"; label: string } | { type: "model"; model: ModelInfo; globalIndex: number };
+  type ListItem =
+    | { type: "header"; label: string }
+    | { type: "model"; model: ModelInfo; globalIndex: number };
   const items: ListItem[] = [];
 
   if (localModels.length > 0) {
@@ -121,7 +125,11 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           if (item.type === "header") {
             return (
               <Box key={`hdr-${item.label}`} marginTop={i > 0 ? 1 : 0}>
-                <Text bold dimColor>{"─── "}{item.label}{" ───"}</Text>
+                <Text bold dimColor>
+                  {"─── "}
+                  {item.label}
+                  {" ───"}
+                </Text>
               </Box>
             );
           }
@@ -137,12 +145,8 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
                 {m.name}
               </Text>
               {isCurrent && <Text color={theme.success}>●</Text>}
-              {isSelected && m.description && (
-                <Text dimColor>{m.description}</Text>
-              )}
-              {isSelected && m.gpu && (
-                <Text dimColor>[{m.gpu}]</Text>
-              )}
+              {isSelected && m.description && <Text dimColor>{m.description}</Text>}
+              {isSelected && m.gpu && <Text dimColor>[{m.gpu}]</Text>}
             </Box>
           );
         })}

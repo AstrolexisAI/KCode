@@ -1,9 +1,12 @@
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { executeBash, bashDefinition } from "./bash.ts";
+import { bashDefinition, executeBash } from "./bash.ts";
 
 let hasBash = false;
-try { execFileSync("bash", ["--version"], { stdio: "pipe" }); hasBash = true; } catch {}
+try {
+  execFileSync("bash", ["--version"], { stdio: "pipe" });
+  hasBash = true;
+} catch {}
 
 (hasBash ? describe : describe.skip)("bash tool", () => {
   // ─── Definition ───
@@ -165,7 +168,7 @@ try { execFileSync("bash", ["--version"], { stdio: "pipe" }); hasBash = true; } 
 
   test("shellEscape handles single quotes in background commands", async () => {
     const result = await executeBash({
-      command: "echo \"it's a test\"",
+      command: 'echo "it\'s a test"',
       run_in_background: true,
     });
     expect(result.is_error).toBeFalsy();

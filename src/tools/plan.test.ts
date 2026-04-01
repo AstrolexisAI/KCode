@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { executePlan, getActivePlan, formatPlan } from "./plan";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { executePlan, formatPlan, getActivePlan } from "./plan";
 
 describe("plan tool", () => {
   beforeEach(async () => {

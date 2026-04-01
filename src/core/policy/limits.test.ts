@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { PolicyEngine, DEFAULT_LIMITS } from "./limits";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { DEFAULT_LIMITS, PolicyEngine } from "./limits";
 
 describe("PolicyEngine", () => {
   let engine: PolicyEngine;

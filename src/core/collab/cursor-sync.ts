@@ -1,7 +1,7 @@
 // KCode - Cursor Synchronization for Collaboration
 
 import { log } from "../logger";
-import type { CursorPosition, CollabEvent } from "./types";
+import type { CollabEvent, CursorPosition } from "./types";
 
 type EventListener = (event: CollabEvent) => void;
 
@@ -25,7 +25,13 @@ export class CursorSync {
   }
 
   /** Update a participant's cursor position (debounced). */
-  updateCursor(participantId: string, file: string, line: number, col: number, color: string): void {
+  updateCursor(
+    participantId: string,
+    file: string,
+    line: number,
+    col: number,
+    color: string,
+  ): void {
     // Debounce rapid updates
     const existing = this.debounceTimers.get(participantId);
     if (existing) clearTimeout(existing);
@@ -55,7 +61,13 @@ export class CursorSync {
   }
 
   /** Update cursor immediately (no debounce). */
-  updateCursorImmediate(participantId: string, file: string, line: number, col: number, color: string): void {
+  updateCursorImmediate(
+    participantId: string,
+    file: string,
+    line: number,
+    col: number,
+    color: string,
+  ): void {
     const position: CursorPosition = {
       participantId,
       file,

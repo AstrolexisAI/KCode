@@ -23,7 +23,10 @@ export const multiEditDefinition: ToolDefinition = {
             file_path: { type: "string", description: "Absolute path to the file" },
             old_string: { type: "string", description: "The exact text to find and replace" },
             new_string: { type: "string", description: "The replacement text" },
-            replace_all: { type: "boolean", description: "Replace all occurrences (default false)" },
+            replace_all: {
+              type: "boolean",
+              description: "Replace all occurrences (default false)",
+            },
           },
           required: ["file_path", "old_string", "new_string"],
         },
@@ -61,11 +64,19 @@ export async function executeMultiEdit(input: Record<string, unknown>): Promise<
   const edits = input.edits as EditOp[] | undefined;
 
   if (!edits || !Array.isArray(edits) || edits.length === 0) {
-    return { tool_use_id: "", content: "Error: 'edits' must be a non-empty array.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: 'edits' must be a non-empty array.",
+      is_error: true,
+    };
   }
 
   if (edits.length > 50) {
-    return { tool_use_id: "", content: "Error: Maximum 50 edits per MultiEdit call.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: Maximum 50 edits per MultiEdit call.",
+      is_error: true,
+    };
   }
 
   // ── Phase 1: Read all files and validate every edit ───────────────
@@ -73,10 +84,18 @@ export async function executeMultiEdit(input: Record<string, unknown>): Promise<
   // Group edits by file so we apply them sequentially on the same content
   const fileEdits = new Map<string, EditOp[]>();
   for (const edit of edits) {
-    if (typeof edit.file_path !== "string" || edit.file_path.trim() === "" ||
-        typeof edit.old_string !== "string" || edit.old_string === "" ||
-        typeof edit.new_string !== "string") {
-      return { tool_use_id: "", content: `Error: Each edit must have file_path (string), old_string (non-empty string), and new_string (string).`, is_error: true };
+    if (
+      typeof edit.file_path !== "string" ||
+      edit.file_path.trim() === "" ||
+      typeof edit.old_string !== "string" ||
+      edit.old_string === "" ||
+      typeof edit.new_string !== "string"
+    ) {
+      return {
+        tool_use_id: "",
+        content: `Error: Each edit must have file_path (string), old_string (non-empty string), and new_string (string).`,
+        is_error: true,
+      };
     }
     const existing = fileEdits.get(edit.file_path) ?? [];
     existing.push(edit);
@@ -92,24 +111,42 @@ export async function executeMultiEdit(input: Record<string, unknown>): Promise<
     try {
       content = readFileSync(filePath, "utf-8");
     } catch (err) {
-      return { tool_use_id: "", content: `Error: Cannot read ${filePath}: ${err instanceof Error ? err.message : err}`, is_error: true };
+      return {
+        tool_use_id: "",
+        content: `Error: Cannot read ${filePath}: ${err instanceof Error ? err.message : err}`,
+        is_error: true,
+      };
     }
 
     let working = content;
     for (const op of ops) {
       if (op.old_string === op.new_string) {
-        return { tool_use_id: "", content: `Error: old_string === new_string in ${filePath}. No edit needed. Do NOT retry.`, is_error: true };
+        return {
+          tool_use_id: "",
+          content: `Error: old_string === new_string in ${filePath}. No edit needed. Do NOT retry.`,
+          is_error: true,
+        };
       }
 
       const occurrences = working.split(op.old_string).length - 1;
       if (occurrences === 0) {
-        return { tool_use_id: "", content: `Error: old_string not found in ${filePath}:\n  "${op.old_string.slice(0, 80)}"`, is_error: true };
+        return {
+          tool_use_id: "",
+          content: `Error: old_string not found in ${filePath}:\n  "${op.old_string.slice(0, 80)}"`,
+          is_error: true,
+        };
       }
       if (occurrences > 1 && !op.replace_all) {
-        return { tool_use_id: "", content: `Error: old_string found ${occurrences} times in ${filePath}. Use replace_all or add more context.`, is_error: true };
+        return {
+          tool_use_id: "",
+          content: `Error: old_string found ${occurrences} times in ${filePath}. Use replace_all or add more context.`,
+          is_error: true,
+        };
       }
 
-      working = op.replace_all ? working.replaceAll(op.old_string, op.new_string) : working.replace(op.old_string, op.new_string);
+      working = op.replace_all
+        ? working.replaceAll(op.old_string, op.new_string)
+        : working.replace(op.old_string, op.new_string);
     }
 
     filePlans.set(filePath, { original: content, updated: working });
@@ -127,10 +164,20 @@ export async function executeMultiEdit(input: Record<string, unknown>): Promise<
       let rollbackFailed = false;
       for (const written of writtenFiles) {
         const orig = filePlans.get(written)!;
-        try { writeFileSync(written, orig.original, "utf-8"); } catch { rollbackFailed = true; }
+        try {
+          writeFileSync(written, orig.original, "utf-8");
+        } catch {
+          rollbackFailed = true;
+        }
       }
-      const rollbackMsg = rollbackFailed ? "Partial rollback attempted (some files may not have been restored)." : "All changes rolled back.";
-      return { tool_use_id: "", content: `Error writing ${filePath}: ${err instanceof Error ? err.message : err}. ${rollbackMsg}`, is_error: true };
+      const rollbackMsg = rollbackFailed
+        ? "Partial rollback attempted (some files may not have been restored)."
+        : "All changes rolled back.";
+      return {
+        tool_use_id: "",
+        content: `Error writing ${filePath}: ${err instanceof Error ? err.message : err}. ${rollbackMsg}`,
+        is_error: true,
+      };
     }
 
     // Build summary for this file

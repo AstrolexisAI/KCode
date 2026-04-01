@@ -1,9 +1,9 @@
 // KCode - Plugin Test Runner
 // Runs automated tests against a plugin to verify integrity.
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import type { PluginTestResult, PluginManifest } from "../../../core/plugin-sdk/types";
+import type { PluginManifest, PluginTestResult } from "../../../core/plugin-sdk/types";
 
 export async function testPlugin(dir: string): Promise<PluginTestResult[]> {
   const results: PluginTestResult[] = [];
@@ -142,8 +142,7 @@ export function formatTestResults(results: PluginTestResult[]): string {
   const skipped = results.filter((r) => r.status === "skip");
 
   for (const r of results) {
-    const icon =
-      r.status === "pass" ? "\u2713" : r.status === "fail" ? "\u2717" : "\u25cb";
+    const icon = r.status === "pass" ? "\u2713" : r.status === "fail" ? "\u2717" : "\u25cb";
     const time = r.duration > 0 ? ` (${r.duration}ms)` : "";
     lines.push(`  ${icon} ${r.name}${time}`);
     if (r.error && r.status === "fail") {
@@ -152,19 +151,14 @@ export function formatTestResults(results: PluginTestResult[]): string {
   }
 
   lines.push("");
-  lines.push(
-    `  ${passed.length} passed, ${failed.length} failed, ${skipped.length} skipped`,
-  );
+  lines.push(`  ${passed.length} passed, ${failed.length} failed, ${skipped.length} skipped`);
 
   return lines.join("\n");
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-async function runTest(
-  name: string,
-  fn: () => Promise<void>,
-): Promise<PluginTestResult> {
+async function runTest(name: string, fn: () => Promise<void>): Promise<PluginTestResult> {
   const start = Date.now();
   try {
     await fn();
@@ -198,20 +192,14 @@ function findFiles(dir: string, pattern: string): string[] {
 
   try {
     const entries = readdirSync(targetDir);
-    const regex = new RegExp(
-      "^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
-    );
-    return entries
-      .filter((e) => regex.test(e))
-      .map((e) => (dirPart ? `${dirPart}/${e}` : e));
+    const regex = new RegExp("^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    return entries.filter((e) => regex.test(e)).map((e) => (dirPart ? `${dirPart}/${e}` : e));
   } catch {
     return [];
   }
 }
 
-function parseFrontmatter(
-  content: string,
-): Record<string, string> | null {
+function parseFrontmatter(content: string): Record<string, string> | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
 

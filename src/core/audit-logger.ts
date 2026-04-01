@@ -5,8 +5,16 @@
 import { log } from "./logger";
 
 interface AuditEntry {
-  eventType: "tool_execute" | "tool_blocked" | "permission_denied" | "permission_granted"
-    | "model_switch" | "session_start" | "session_end" | "policy_violation" | "security_event";
+  eventType:
+    | "tool_execute"
+    | "tool_blocked"
+    | "permission_denied"
+    | "permission_granted"
+    | "model_switch"
+    | "session_start"
+    | "session_end"
+    | "policy_violation"
+    | "security_event";
   toolName?: string;
   action: string;
   status: "success" | "blocked" | "error" | "denied";
@@ -69,7 +77,9 @@ export function initAuditLogger(options: { enabled: boolean; orgId?: string }): 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[audit] CRITICAL: Failed to initialize audit logger: ${msg}`);
-    console.error(`[audit] Audit logging required by policy but could not start. Continuing without audit.`);
+    console.error(
+      `[audit] Audit logging required by policy but could not start. Continuing without audit.`,
+    );
     _auditEnabled = false;
   }
 }
@@ -83,9 +93,7 @@ export function auditLog(entry: AuditEntry): void {
   try {
     const orgId = entry.orgId ?? _orgId ?? null;
     // Truncate input summary to prevent sensitive data leakage
-    const inputSummary = entry.inputSummary
-      ? entry.inputSummary.slice(0, 200)
-      : null;
+    const inputSummary = entry.inputSummary ? entry.inputSummary.slice(0, 200) : null;
 
     _insertStmt.run(
       entry.eventType,

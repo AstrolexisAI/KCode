@@ -4,9 +4,9 @@
 // Windows: cmdkey (Credential Manager)
 // Fallback: encrypted file in ~/.kcode/credentials.enc
 
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
 
 const SERVICE = "kcode";
 const FALLBACK_DIR = join(homedir(), ".kcode");
@@ -38,10 +38,9 @@ async function darwinGet(account: string): Promise<string | null> {
 }
 
 async function darwinDelete(account: string): Promise<boolean> {
-  const proc = Bun.spawn(
-    ["security", "delete-generic-password", "-s", SERVICE, "-a", account],
-    { stderr: "pipe" },
-  );
+  const proc = Bun.spawn(["security", "delete-generic-password", "-s", SERVICE, "-a", account], {
+    stderr: "pipe",
+  });
   await proc.exited;
   return proc.exitCode === 0;
 }
@@ -49,7 +48,16 @@ async function darwinDelete(account: string): Promise<boolean> {
 async function linuxSet(account: string, secret: string): Promise<boolean> {
   try {
     const proc = Bun.spawn(
-      ["secret-tool", "store", "--label", `KCode: ${account}`, "service", SERVICE, "account", account],
+      [
+        "secret-tool",
+        "store",
+        "--label",
+        `KCode: ${account}`,
+        "service",
+        SERVICE,
+        "account",
+        account,
+      ],
       { stdin: new TextEncoder().encode(secret), stderr: "pipe" },
     );
     await proc.exited;
@@ -61,10 +69,10 @@ async function linuxSet(account: string, secret: string): Promise<boolean> {
 
 async function linuxGet(account: string): Promise<string | null> {
   try {
-    const proc = Bun.spawn(
-      ["secret-tool", "lookup", "service", SERVICE, "account", account],
-      { stdout: "pipe", stderr: "pipe" },
-    );
+    const proc = Bun.spawn(["secret-tool", "lookup", "service", SERVICE, "account", account], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const output = await new Response(proc.stdout).text();
     await proc.exited;
     return proc.exitCode === 0 ? output.trim() || null : null;
@@ -75,10 +83,9 @@ async function linuxGet(account: string): Promise<string | null> {
 
 async function linuxDelete(account: string): Promise<boolean> {
   try {
-    const proc = Bun.spawn(
-      ["secret-tool", "clear", "service", SERVICE, "account", account],
-      { stderr: "pipe" },
-    );
+    const proc = Bun.spawn(["secret-tool", "clear", "service", SERVICE, "account", account], {
+      stderr: "pipe",
+    });
     await proc.exited;
     return proc.exitCode === 0;
   } catch {
@@ -120,10 +127,7 @@ async function win32Get(account: string): Promise<string | null> {
 
 async function win32Delete(account: string): Promise<boolean> {
   try {
-    const proc = Bun.spawn(
-      ["cmdkey", `/delete:${SERVICE}:${account}`],
-      { stderr: "pipe" },
-    );
+    const proc = Bun.spawn(["cmdkey", `/delete:${SERVICE}:${account}`], { stderr: "pipe" });
     await proc.exited;
     return proc.exitCode === 0;
   } catch {
@@ -145,13 +149,7 @@ async function deriveKey(): Promise<CryptoKey> {
     salt = new TextEncoder().encode(homedir().padEnd(32, "0").slice(0, 32));
   }
 
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw",
-    salt,
-    "PBKDF2",
-    false,
-    ["deriveKey"],
-  );
+  const keyMaterial = await crypto.subtle.importKey("raw", salt, "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
     keyMaterial,
@@ -169,11 +167,7 @@ async function fallbackRead(): Promise<Record<string, string>> {
     const key = await deriveKey();
     const iv = new Uint8Array(encrypted.slice(0, 12));
     const data = new Uint8Array(encrypted.slice(12));
-    const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      key,
-      data,
-    );
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
     return JSON.parse(new TextDecoder().decode(decrypted));
   } catch {
     return {};
@@ -184,11 +178,7 @@ async function fallbackWrite(entries: Record<string, string>): Promise<void> {
   const key = await deriveKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(JSON.stringify(entries));
-  const encrypted = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    encoded,
-  );
+  const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
   const combined = new Uint8Array(iv.length + new Uint8Array(encrypted).length);
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);

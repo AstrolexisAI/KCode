@@ -1,5 +1,13 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { t, tp, initI18n, setLocale, getLocale, registerLocale, getAvailableLocales } from "./index";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  getAvailableLocales,
+  getLocale,
+  initI18n,
+  registerLocale,
+  setLocale,
+  t,
+  tp,
+} from "./index";
 
 describe("i18n", () => {
   beforeEach(() => {
@@ -12,9 +20,7 @@ describe("i18n", () => {
     });
 
     test("interpolates parameters", () => {
-      expect(t("tool.completed", { tool: "Bash", duration: 150 })).toBe(
-        "Bash completed in 150ms",
-      );
+      expect(t("tool.completed", { tool: "Bash", duration: 150 })).toBe("Bash completed in 150ms");
     });
 
     test("returns key for missing translation", () => {

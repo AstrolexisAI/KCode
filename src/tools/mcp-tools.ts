@@ -2,8 +2,8 @@
 // Factory functions for creating tool definitions from MCP server schemas,
 // handlers for forwarding tool calls, and MCP resource operation tools
 
-import type { ToolDefinition, ToolResult, ToolHandler } from "../core/types";
 import { getMcpManager, type McpManager } from "../core/mcp";
+import type { ToolDefinition, ToolHandler, ToolResult } from "../core/types";
 
 // ─── MCP Tool Name Parsing ─────────────────────────────────────
 
@@ -43,10 +43,7 @@ export interface McpToolSchema {
  * Create a KCode ToolDefinition from an MCP server's tool schema.
  * The tool name follows the convention: mcp__<serverName>__<toolName>
  */
-export function mcpToolDefinition(
-  serverName: string,
-  tool: McpToolSchema,
-): ToolDefinition {
+export function mcpToolDefinition(serverName: string, tool: McpToolSchema): ToolDefinition {
   return {
     name: buildMcpToolName(serverName, tool.name),
     description: `[MCP: ${serverName}] ${tool.description ?? `Tool "${tool.name}" from MCP server "${serverName}"`}`,
@@ -87,16 +84,15 @@ export const listMcpResourcesDefinition: ToolDefinition = {
     properties: {
       server_name: {
         type: "string",
-        description: "Optional: filter resources by server name. If omitted, lists resources from all servers.",
+        description:
+          "Optional: filter resources by server name. If omitted, lists resources from all servers.",
       },
     },
     required: [],
   },
 };
 
-export async function executeListMcpResources(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeListMcpResources(input: Record<string, unknown>): Promise<ToolResult> {
   try {
     const manager = getMcpManager();
     const serverFilter = input.server_name as string | undefined;
@@ -111,7 +107,8 @@ export async function executeListMcpResources(
       if (servers.length === 0) {
         return {
           tool_use_id: "",
-          content: "No MCP servers are connected. Configure servers in .kcode/settings.json under \"mcpServers\".",
+          content:
+            'No MCP servers are connected. Configure servers in .kcode/settings.json under "mcpServers".',
         };
       }
       return {
@@ -166,9 +163,7 @@ export const readMcpResourceDefinition: ToolDefinition = {
   },
 };
 
-export async function executeReadMcpResource(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeReadMcpResource(input: Record<string, unknown>): Promise<ToolResult> {
   const serverName = input.server_name as string;
   const uri = input.uri as string;
 
@@ -190,7 +185,8 @@ export async function executeReadMcpResource(
 
     const parts = contents.map((c) => {
       if (c.text) return c.text;
-      if (c.blob) return `[Binary content, ${c.blob.length} bytes base64, mime: ${c.mimeType ?? "unknown"}]`;
+      if (c.blob)
+        return `[Binary content, ${c.blob.length} bytes base64, mime: ${c.mimeType ?? "unknown"}]`;
       return JSON.stringify(c);
     });
 

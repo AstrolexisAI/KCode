@@ -1,6 +1,17 @@
 // KCode - Changelog Generator Types
 
-export type CommitType = "feat" | "fix" | "docs" | "refactor" | "test" | "chore" | "perf" | "breaking" | "style" | "ci" | "build";
+export type CommitType =
+  | "feat"
+  | "fix"
+  | "docs"
+  | "refactor"
+  | "test"
+  | "chore"
+  | "perf"
+  | "breaking"
+  | "style"
+  | "ci"
+  | "build";
 
 export interface ChangelogEntry {
   type: CommitType;

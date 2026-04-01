@@ -271,7 +271,9 @@ export async function collectStats(days: number = 7): Promise<UsageStats> {
 export function formatStats(stats: UsageStats): string {
   const lines: string[] = [];
 
-  lines.push(`KCode Usage Stats (last ${stats.periodDays} day${stats.periodDays !== 1 ? "s" : ""})`);
+  lines.push(
+    `KCode Usage Stats (last ${stats.periodDays} day${stats.periodDays !== 1 ? "s" : ""})`,
+  );
   lines.push("");
 
   // Sessions & messages
@@ -302,9 +304,7 @@ export function formatStats(stats: UsageStats): string {
     lines.push("Models:");
     for (const [model, count] of modelEntries.sort((a, b) => b[1] - a[1])) {
       const avgSuffix =
-        stats.avgResponseTimeMs > 0
-          ? ` (avg ${(stats.avgResponseTimeMs / 1000).toFixed(1)}s)`
-          : "";
+        stats.avgResponseTimeMs > 0 ? ` (avg ${(stats.avgResponseTimeMs / 1000).toFixed(1)}s)` : "";
       lines.push(`  ${model}  ${count} request${count !== 1 ? "s" : ""}${avgSuffix}`);
     }
   }

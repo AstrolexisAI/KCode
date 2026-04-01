@@ -1,8 +1,8 @@
 // KCode - Incomplete Response Banner
 // Shows when a response was truncated and couldn't be fully recovered
 
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
 import { useTheme } from "../ThemeContext.js";
 
 interface IncompleteResponseBannerProps {
@@ -10,7 +10,10 @@ interface IncompleteResponseBannerProps {
   stopReason: string;
 }
 
-export default function IncompleteResponseBanner({ continuations, stopReason }: IncompleteResponseBannerProps) {
+export default function IncompleteResponseBanner({
+  continuations,
+  stopReason,
+}: IncompleteResponseBannerProps) {
   const { theme } = useTheme();
 
   return (
@@ -19,8 +22,7 @@ export default function IncompleteResponseBanner({ continuations, stopReason }: 
         {"--- "}
         {stopReason === "max_tokens"
           ? `Response incomplete — model reached output limit (${continuations} continuation${continuations !== 1 ? "s" : ""} attempted)`
-          : `Response may be incomplete (${stopReason})`
-        }
+          : `Response may be incomplete (${stopReason})`}
         {" ---"}
       </Text>
     </Box>

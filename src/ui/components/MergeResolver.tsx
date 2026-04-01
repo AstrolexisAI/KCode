@@ -2,10 +2,11 @@
 // Interactive terminal UI for resolving three-way merge conflicts.
 // Presents each conflict with base/ours/theirs panels and resolution controls.
 
-import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
-import type { MergeConflict, MergeResult } from "../../core/diff/types.js";
+import type React from "react";
+import { useCallback, useMemo, useState } from "react";
 import { getThreeWayMerge } from "../../core/diff/three-way-merge.js";
+import type { MergeConflict, MergeResult } from "../../core/diff/types.js";
 
 export interface MergeResolverProps {
   /** The merge result containing conflicts to resolve */
@@ -74,9 +75,7 @@ export default function MergeResolver({
 
       // Navigation
       if (input === "n" || key.downArrow) {
-        setCurrentIndex((prev) =>
-          Math.min(prev + 1, result.conflicts.length - 1),
-        );
+        setCurrentIndex((prev) => Math.min(prev + 1, result.conflicts.length - 1));
         return;
       }
       if (input === "p" || key.upArrow) {
@@ -155,9 +154,7 @@ export default function MergeResolver({
         </Text>
         <Text dimColor>|</Text>
         <Text color="green">{resolvedCount} resolved</Text>
-        <Text color="red">
-          {result.conflicts.length - resolvedCount} remaining
-        </Text>
+        <Text color="red">{result.conflicts.length - resolvedCount} remaining</Text>
         <Text dimColor>|</Text>
         <Text dimColor>Auto-merged: {result.autoResolved}</Text>
       </Box>
@@ -180,12 +177,7 @@ export default function MergeResolver({
             <Text bold dimColor>
               [BASE]
             </Text>
-            <Box
-              flexDirection="column"
-              borderStyle="single"
-              borderColor="gray"
-              paddingX={1}
-            >
+            <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
               {currentConflict.base.length > 0 ? (
                 currentConflict.base.map((line, i) => (
                   <Text key={`base-${i}`} dimColor>
@@ -205,12 +197,7 @@ export default function MergeResolver({
             <Text bold color="cyan">
               [OURS] (1)
             </Text>
-            <Box
-              flexDirection="column"
-              borderStyle="single"
-              borderColor="cyan"
-              paddingX={1}
-            >
+            <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
               {currentConflict.ours.length > 0 ? (
                 currentConflict.ours.map((line, i) => (
                   <Text key={`ours-${i}`} color="cyan">
@@ -230,12 +217,7 @@ export default function MergeResolver({
             <Text bold color="yellow">
               [THEIRS] (2)
             </Text>
-            <Box
-              flexDirection="column"
-              borderStyle="single"
-              borderColor="yellow"
-              paddingX={1}
-            >
+            <Box flexDirection="column" borderStyle="single" borderColor="yellow" paddingX={1}>
               {currentConflict.theirs.length > 0 ? (
                 currentConflict.theirs.map((line, i) => (
                   <Text key={`theirs-${i}`} color="yellow">

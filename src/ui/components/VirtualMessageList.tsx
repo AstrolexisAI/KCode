@@ -3,14 +3,14 @@
 // Replaces Static-based MessageList for conversations with many messages.
 // Streaming content (thinking, text, bash) renders outside the virtual list.
 
-import React, { useCallback, useMemo, memo } from "react";
 import { Box, Text } from "ink";
+import React, { memo, useCallback, useMemo } from "react";
+import { useVirtualScroll } from "../hooks/useVirtualScroll.js";
+import { useTheme } from "../ThemeContext.js";
+import MarkdownRenderer from "./MarkdownRenderer.js";
+import type { MessageEntry } from "./MessageList.js";
 import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
-import MarkdownRenderer from "./MarkdownRenderer.js";
-import { useTheme } from "../ThemeContext.js";
-import { useVirtualScroll } from "../hooks/useVirtualScroll.js";
-import type { MessageEntry } from "./MessageList.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -102,11 +102,7 @@ export default function VirtualMessageList({
   scrollActive = true,
   terminalRows,
 }: VirtualMessageListProps) {
-  const {
-    range,
-    following,
-    setHeight,
-  } = useVirtualScroll({
+  const { range, following, setHeight } = useVirtualScroll({
     messages: completed,
     isActive: scrollActive,
     terminalRows,
@@ -141,9 +137,7 @@ export default function VirtualMessageList({
       )}
 
       {/* Top spacer for content above render window */}
-      {range.spacerTop > 0 && (
-        <Box height={range.spacerTop} />
-      )}
+      {range.spacerTop > 0 && <Box height={range.spacerTop} />}
 
       {/* Rendered messages in visible range */}
       {visibleMessages.map(({ entry, key }) => (
@@ -153,16 +147,11 @@ export default function VirtualMessageList({
       ))}
 
       {/* Bottom spacer for content below render window */}
-      {range.spacerBottom > 0 && (
-        <Box height={range.spacerBottom} />
-      )}
+      {range.spacerBottom > 0 && <Box height={range.spacerBottom} />}
 
       {/* Live thinking indicator while thinking_delta events stream in */}
       {isThinking && streamingThinking.length > 0 && (
-        <ThinkingBlockComponent
-          text={streamingThinking}
-          isStreaming={true}
-        />
+        <ThinkingBlockComponent text={streamingThinking} isStreaming={true} />
       )}
 
       {/* Currently streaming text */}
@@ -173,9 +162,7 @@ export default function VirtualMessageList({
       )}
 
       {/* Live streaming Bash output */}
-      {bashStreamOutput.length > 0 && (
-        <BashStreamDisplay output={bashStreamOutput} />
-      )}
+      {bashStreamOutput.length > 0 && <BashStreamDisplay output={bashStreamOutput} />}
 
       {/* Loading spinner with tokens and elapsed time */}
       {isLoading && (
@@ -324,9 +311,7 @@ function ToolResultMessage({
   const { theme } = useTheme();
   const safeResult = result ?? "";
   const durationStr =
-    durationMs != null && durationMs > 100
-      ? ` (${formatDuration(durationMs)})`
-      : "";
+    durationMs != null && durationMs > 100 ? ` (${formatDuration(durationMs)})` : "";
 
   if (isError) {
     return (
@@ -352,20 +337,17 @@ function ToolResultMessage({
         {durationStr}
       </Text>
       {preview.length > 0 && preview.length < 500 && (
-        <Text dimColor>{"    "}{preview}</Text>
+        <Text dimColor>
+          {"    "}
+          {preview}
+        </Text>
       )}
     </Box>
   );
 }
 
 function ThinkingMessage({ text }: { text: string }) {
-  return (
-    <ThinkingBlockComponent
-      text={text}
-      isStreaming={false}
-      defaultExpanded={false}
-    />
-  );
+  return <ThinkingBlockComponent text={text} isStreaming={false} defaultExpanded={false} />;
 }
 
 function LearnMessage({ text }: { text: string }) {
@@ -413,13 +395,7 @@ function SuggestionMessage({
   );
 }
 
-function BannerMessage({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle: string;
-}) {
+function BannerMessage({ title, subtitle }: { title: string; subtitle: string }) {
   const { theme } = useTheme();
 
   return (
@@ -442,12 +418,7 @@ function BashStreamDisplay({ output }: { output: string }) {
   const truncated = lines.length > 10;
 
   return (
-    <Box
-      flexDirection="column"
-      paddingLeft={2}
-      marginTop={0}
-      marginBottom={0}
-    >
+    <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
       <Text color={theme.warning} bold>
         {"  streaming"}
       </Text>
@@ -466,24 +437,13 @@ function BashStreamDisplay({ output }: { output: string }) {
   );
 }
 
-function DiffMessage({
-  filePath,
-  hunks,
-}: {
-  filePath: string;
-  hunks: string;
-}) {
+function DiffMessage({ filePath, hunks }: { filePath: string; hunks: string }) {
   const { theme } = useTheme();
 
   const lines = hunks.split("\n");
 
   return (
-    <Box
-      flexDirection="column"
-      paddingLeft={2}
-      marginTop={0}
-      marginBottom={0}
-    >
+    <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
       <Text bold color={theme.primary}>
         {"  "}
         {filePath}
@@ -530,12 +490,7 @@ function PartialProgressMessage({
   const elapsed = Math.round(elapsedMs / 1000);
 
   return (
-    <Box
-      flexDirection="column"
-      paddingLeft={2}
-      marginTop={1}
-      marginBottom={1}
-    >
+    <Box flexDirection="column" paddingLeft={2} marginTop={1} marginBottom={1}>
       <Text color={theme.warning} bold>
         {"--- Partial Progress ---"}
       </Text>

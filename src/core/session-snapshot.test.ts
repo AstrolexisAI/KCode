@@ -1,10 +1,10 @@
 // Tests for session-snapshot.ts
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
-import { mkdirSync, rmSync, existsSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import type { KCodeConfig, ConversationState, TokenUsage, Message } from "./types";
+import { join } from "node:path";
+import type { ConversationState, KCodeConfig, Message, TokenUsage } from "./types";
 
 // Redirect snapshot storage to a temp directory before importing the module
 const TEST_KCODE_HOME = join(tmpdir(), `kcode-test-snap-${process.pid}`);
@@ -12,26 +12,28 @@ const origKcodeHome = process.env.KCODE_HOME;
 process.env.KCODE_HOME = TEST_KCODE_HOME;
 
 import {
-  captureSnapshot,
-  exportSnapshot,
-  saveSnapshot,
-  loadSnapshot,
-  listSnapshots,
-  diffSnapshots,
   AutoCheckpointer,
-  rewindToCheckpoint,
-  saveCrashRecovery,
+  captureSnapshot,
   checkCrashRecovery,
   clearCrashRecovery,
+  diffSnapshots,
+  exportSnapshot,
+  listSnapshots,
+  loadSnapshot,
+  rewindToCheckpoint,
   type SessionSnapshot,
   type SnapshotMessage,
+  saveCrashRecovery,
+  saveSnapshot,
 } from "./session-snapshot";
 
 afterAll(() => {
   // Restore env and clean up temp dir
   if (origKcodeHome === undefined) delete process.env.KCODE_HOME;
   else process.env.KCODE_HOME = origKcodeHome;
-  try { rmSync(TEST_KCODE_HOME, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(TEST_KCODE_HOME, { recursive: true, force: true });
+  } catch {}
 });
 
 // ─── Test Helpers ────────────────────────────────────────────────
@@ -79,7 +81,11 @@ function makeState(messages?: Message[]): ConversationState {
           type: "tool_use",
           id: "call_2",
           name: "Edit",
-          input: { file_path: "/src/main.ts", old_string: "const x = 1;", new_string: "const x = 2;" },
+          input: {
+            file_path: "/src/main.ts",
+            old_string: "const x = 1;",
+            new_string: "const x = 2;",
+          },
         },
       ],
     },
@@ -274,10 +280,20 @@ describe("session-snapshot", () => {
   describe("listSnapshots", () => {
     it("lists saved snapshots newest first", () => {
       // Save two snapshots
-      const snap1 = captureSnapshot(makeConfig({ model: "model-a" }), makeState(), makeUsage(), Date.now() - 60_000);
+      const snap1 = captureSnapshot(
+        makeConfig({ model: "model-a" }),
+        makeState(),
+        makeUsage(),
+        Date.now() - 60_000,
+      );
       saveSnapshot(snap1);
 
-      const snap2 = captureSnapshot(makeConfig({ model: "model-b" }), makeState(), makeUsage(), Date.now() - 30_000);
+      const snap2 = captureSnapshot(
+        makeConfig({ model: "model-b" }),
+        makeState(),
+        makeUsage(),
+        Date.now() - 30_000,
+      );
       saveSnapshot(snap2);
 
       const list = listSnapshots(10);
@@ -328,8 +344,18 @@ describe("session-snapshot", () => {
     });
 
     it("calculates token and message deltas", () => {
-      const usageA: TokenUsage = { inputTokens: 500, outputTokens: 200, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 };
-      const usageB: TokenUsage = { inputTokens: 1500, outputTokens: 600, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 };
+      const usageA: TokenUsage = {
+        inputTokens: 500,
+        outputTokens: 200,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      };
+      const usageB: TokenUsage = {
+        inputTokens: 1500,
+        outputTokens: 600,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+      };
 
       const stateSmall = makeState([{ role: "user", content: "Hi" }]);
       const stateLarge = makeState(); // default has 5 messages

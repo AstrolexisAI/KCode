@@ -3,8 +3,8 @@
 // Uses SQLite for persistence across sessions.
 
 import { createHash } from "node:crypto";
-import { kcodePath } from "./paths";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 const CACHE_DB_PATH = kcodePath("cache.db");
 const MAX_CACHE_SIZE = 500; // Max cached entries
@@ -71,9 +71,9 @@ export function getCachedResponse(key: string): string | null {
   if (!database) return null;
 
   try {
-    const row = database.prepare(
-      "SELECT response, created_at FROM response_cache WHERE hash = ?"
-    ).get(key) as { response: string; created_at: number } | null;
+    const row = database
+      .prepare("SELECT response, created_at FROM response_cache WHERE hash = ?")
+      .get(key) as { response: string; created_at: number } | null;
 
     if (!row) return null;
 
@@ -109,19 +109,25 @@ export function setCachedResponse(
     // Don't cache very short or very long responses
     if (response.length < 10 || response.length > 100_000) return;
 
-    database.prepare(`
+    database
+      .prepare(`
       INSERT OR REPLACE INTO response_cache (hash, model, prompt_preview, response, tokens_used, created_at, hits)
       VALUES (?, ?, ?, ?, ?, ?, 0)
-    `).run(key, model, promptPreview.slice(0, 200), response, tokensUsed, Date.now());
+    `)
+      .run(key, model, promptPreview.slice(0, 200), response, tokensUsed, Date.now());
 
     // Evict old entries if over limit
-    const count = (database.prepare("SELECT COUNT(*) as n FROM response_cache").get() as { n: number }).n;
+    const count = (
+      database.prepare("SELECT COUNT(*) as n FROM response_cache").get() as { n: number }
+    ).n;
     if (count > MAX_CACHE_SIZE) {
-      database.prepare(`
+      database
+        .prepare(`
         DELETE FROM response_cache WHERE hash IN (
           SELECT hash FROM response_cache ORDER BY created_at ASC LIMIT ?
         )
-      `).run(count - MAX_CACHE_SIZE);
+      `)
+        .run(count - MAX_CACHE_SIZE);
     }
 
     log.debug("cache", `Cached response for ${key.slice(0, 8)} (${response.length} chars)`);
@@ -138,10 +144,12 @@ export function getCacheStats(): { entries: number; totalHits: number; oldestDay
   if (!database) return { entries: 0, totalHits: 0, oldestDays: 0 };
 
   try {
-    const stats = database.prepare(`
+    const stats = database
+      .prepare(`
       SELECT COUNT(*) as entries, COALESCE(SUM(hits), 0) as totalHits, MIN(created_at) as oldest
       FROM response_cache
-    `).get() as { entries: number; totalHits: number; oldest: number | null };
+    `)
+      .get() as { entries: number; totalHits: number; oldest: number | null };
 
     const oldestDays = stats.oldest
       ? Math.round((Date.now() - stats.oldest) / (24 * 60 * 60 * 1000))
@@ -161,7 +169,9 @@ export function clearCache(): number {
   if (!database) return 0;
 
   try {
-    const count = (database.prepare("SELECT COUNT(*) as n FROM response_cache").get() as { n: number }).n;
+    const count = (
+      database.prepare("SELECT COUNT(*) as n FROM response_cache").get() as { n: number }
+    ).n;
     database.prepare("DELETE FROM response_cache").run();
     return count;
   } catch {

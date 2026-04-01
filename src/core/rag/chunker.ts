@@ -2,8 +2,8 @@
 // Splits source files into semantically meaningful chunks using
 // language-aware boundary detection (regex-based, no external parser).
 
-import { basename, relative } from "node:path";
 import { createHash } from "node:crypto";
+import { basename, relative } from "node:path";
 import type { CodeChunk } from "./types";
 
 // ─── Code Chunker ──────────────────────────────────────────────
@@ -60,7 +60,18 @@ export class CodeChunker {
       }
     }
     if (importLines.length > 2) {
-      chunks.push(this.createChunk(filePath, importLines.join("\n"), language, "module", "imports", 1, importEnd + 1, ""));
+      chunks.push(
+        this.createChunk(
+          filePath,
+          importLines.join("\n"),
+          language,
+          "module",
+          "imports",
+          1,
+          importEnd + 1,
+          "",
+        ),
+      );
     }
 
     // Detect function/class/interface/type boundaries
@@ -77,7 +88,12 @@ export class CodeChunker {
       /^(?:export\s+)?type\s+(\w+)/,
     ];
 
-    const boundaries: Array<{ line: number; name: string; kind: CodeChunk["type"]; signature: string }> = [];
+    const boundaries: Array<{
+      line: number;
+      name: string;
+      kind: CodeChunk["type"];
+      signature: string;
+    }> = [];
 
     for (let i = 0; i < lines.length; i++) {
       const trimmed = lines[i]!.trimStart();
@@ -89,7 +105,8 @@ export class CodeChunker {
           if (/class\s/.test(trimmed)) kind = "class";
           else if (/interface\s/.test(trimmed)) kind = "block";
           else if (/type\s/.test(trimmed)) kind = "block";
-          else if (/const|let|var/.test(trimmed) && !/=>/.test(trimmed) && !/{/.test(trimmed)) kind = "block";
+          else if (/const|let|var/.test(trimmed) && !/=>/.test(trimmed) && !/{/.test(trimmed))
+            kind = "block";
 
           boundaries.push({ line: i, name, kind, signature: trimmed.slice(0, 120) });
           break;
@@ -104,12 +121,18 @@ export class CodeChunker {
       const end = this.findBlockEnd(lines, start, nextStart);
 
       const chunkContent = lines.slice(start, end).join("\n");
-      chunks.push(this.createChunk(
-        filePath, chunkContent, language,
-        boundaries[b]!.kind, boundaries[b]!.name,
-        start + 1, end,
-        boundaries[b]!.signature,
-      ));
+      chunks.push(
+        this.createChunk(
+          filePath,
+          chunkContent,
+          language,
+          boundaries[b]!.kind,
+          boundaries[b]!.name,
+          start + 1,
+          end,
+          boundaries[b]!.signature,
+        ),
+      );
     }
 
     // If no boundaries found, use sliding window
@@ -130,7 +153,12 @@ export class CodeChunker {
     }
 
     const chunks: CodeChunk[] = [];
-    const boundaries: Array<{ line: number; name: string; kind: CodeChunk["type"]; signature: string }> = [];
+    const boundaries: Array<{
+      line: number;
+      name: string;
+      kind: CodeChunk["type"];
+      signature: string;
+    }> = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
@@ -138,9 +166,19 @@ export class CodeChunker {
       const classMatch = line.match(/^class\s+(\w+)/);
 
       if (defMatch) {
-        boundaries.push({ line: i, name: defMatch[1]!, kind: "function", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: defMatch[1]!,
+          kind: "function",
+          signature: line.trimEnd().slice(0, 120),
+        });
       } else if (classMatch) {
-        boundaries.push({ line: i, name: classMatch[1]!, kind: "class", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: classMatch[1]!,
+          kind: "class",
+          signature: line.trimEnd().slice(0, 120),
+        });
       }
     }
 
@@ -153,17 +191,30 @@ export class CodeChunker {
       const baseIndent = this.getIndent(lines[start]!);
       for (let j = start + 1; j < nextStart; j++) {
         const line = lines[j]!;
-        if (line.trim() === "") { end = j + 1; continue; }
-        if (this.getIndent(line) > baseIndent) { end = j + 1; } else { break; }
+        if (line.trim() === "") {
+          end = j + 1;
+          continue;
+        }
+        if (this.getIndent(line) > baseIndent) {
+          end = j + 1;
+        } else {
+          break;
+        }
       }
 
       const chunkContent = lines.slice(start, end).join("\n");
-      chunks.push(this.createChunk(
-        filePath, chunkContent, language,
-        boundaries[b]!.kind, boundaries[b]!.name,
-        start + 1, end,
-        boundaries[b]!.signature,
-      ));
+      chunks.push(
+        this.createChunk(
+          filePath,
+          chunkContent,
+          language,
+          boundaries[b]!.kind,
+          boundaries[b]!.name,
+          start + 1,
+          end,
+          boundaries[b]!.signature,
+        ),
+      );
     }
 
     if (boundaries.length === 0) {
@@ -183,7 +234,12 @@ export class CodeChunker {
     }
 
     const chunks: CodeChunk[] = [];
-    const boundaries: Array<{ line: number; name: string; kind: CodeChunk["type"]; signature: string }> = [];
+    const boundaries: Array<{
+      line: number;
+      name: string;
+      kind: CodeChunk["type"];
+      signature: string;
+    }> = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
@@ -191,9 +247,19 @@ export class CodeChunker {
       const typeMatch = line.match(/^type\s+(\w+)\s+(?:struct|interface)/);
 
       if (funcMatch) {
-        boundaries.push({ line: i, name: funcMatch[1]!, kind: "function", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: funcMatch[1]!,
+          kind: "function",
+          signature: line.trimEnd().slice(0, 120),
+        });
       } else if (typeMatch) {
-        boundaries.push({ line: i, name: typeMatch[1]!, kind: "class", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: typeMatch[1]!,
+          kind: "class",
+          signature: line.trimEnd().slice(0, 120),
+        });
       }
     }
 
@@ -203,12 +269,18 @@ export class CodeChunker {
       const end = this.findBlockEnd(lines, start, nextStart);
 
       const chunkContent = lines.slice(start, end).join("\n");
-      chunks.push(this.createChunk(
-        filePath, chunkContent, language,
-        boundaries[b]!.kind, boundaries[b]!.name,
-        start + 1, end,
-        boundaries[b]!.signature,
-      ));
+      chunks.push(
+        this.createChunk(
+          filePath,
+          chunkContent,
+          language,
+          boundaries[b]!.kind,
+          boundaries[b]!.name,
+          start + 1,
+          end,
+          boundaries[b]!.signature,
+        ),
+      );
     }
 
     if (boundaries.length === 0) {
@@ -228,7 +300,12 @@ export class CodeChunker {
     }
 
     const chunks: CodeChunk[] = [];
-    const boundaries: Array<{ line: number; name: string; kind: CodeChunk["type"]; signature: string }> = [];
+    const boundaries: Array<{
+      line: number;
+      name: string;
+      kind: CodeChunk["type"];
+      signature: string;
+    }> = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
@@ -238,13 +315,33 @@ export class CodeChunker {
       const traitMatch = line.match(/^(?:pub\s+)?trait\s+(\w+)/);
 
       if (fnMatch) {
-        boundaries.push({ line: i, name: fnMatch[1]!, kind: "function", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: fnMatch[1]!,
+          kind: "function",
+          signature: line.trimEnd().slice(0, 120),
+        });
       } else if (structMatch) {
-        boundaries.push({ line: i, name: structMatch[1]!, kind: "class", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: structMatch[1]!,
+          kind: "class",
+          signature: line.trimEnd().slice(0, 120),
+        });
       } else if (implMatch) {
-        boundaries.push({ line: i, name: implMatch[1]!, kind: "class", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: implMatch[1]!,
+          kind: "class",
+          signature: line.trimEnd().slice(0, 120),
+        });
       } else if (traitMatch) {
-        boundaries.push({ line: i, name: traitMatch[1]!, kind: "class", signature: line.trimEnd().slice(0, 120) });
+        boundaries.push({
+          line: i,
+          name: traitMatch[1]!,
+          kind: "class",
+          signature: line.trimEnd().slice(0, 120),
+        });
       }
     }
 
@@ -254,12 +351,18 @@ export class CodeChunker {
       const end = this.findBlockEnd(lines, start, nextStart);
 
       const chunkContent = lines.slice(start, end).join("\n");
-      chunks.push(this.createChunk(
-        filePath, chunkContent, language,
-        boundaries[b]!.kind, boundaries[b]!.name,
-        start + 1, end,
-        boundaries[b]!.signature,
-      ));
+      chunks.push(
+        this.createChunk(
+          filePath,
+          chunkContent,
+          language,
+          boundaries[b]!.kind,
+          boundaries[b]!.name,
+          start + 1,
+          end,
+          boundaries[b]!.signature,
+        ),
+      );
     }
 
     if (boundaries.length === 0) {
@@ -362,8 +465,13 @@ export class CodeChunker {
     for (let i = start; i < maxEnd; i++) {
       const line = lines[i]!;
       for (const ch of line) {
-        if (ch === "{") { braces++; foundOpen = true; }
-        if (ch === "}") { braces--; }
+        if (ch === "{") {
+          braces++;
+          foundOpen = true;
+        }
+        if (ch === "}") {
+          braces--;
+        }
       }
       if (foundOpen && braces <= 0) {
         return i + 1;

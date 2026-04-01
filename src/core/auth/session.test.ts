@@ -1,9 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import {
-  AuthSessionManager,
-  _resetAuthSessionManager,
-  getAuthSessionManager,
-} from "./session";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { _resetAuthSessionManager, AuthSessionManager, getAuthSessionManager } from "./session";
 
 describe("AuthSessionManager", () => {
   let manager: AuthSessionManager;

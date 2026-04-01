@@ -3,15 +3,13 @@
 
 import type { ActionContext } from "./action-helpers.js";
 
-export async function handleTextAction(
-  action: string,
-  ctx: ActionContext,
-): Promise<string | null> {
+export async function handleTextAction(action: string, ctx: ActionContext): Promise<string | null> {
   const { conversationManager, appConfig, args } = ctx;
 
   switch (action) {
     case "regex": {
-      if (!args?.trim()) return "  Usage: /regex <pattern> <text or file path>\n  Example: /regex \"\\d+\\.\\d+\" package.json";
+      if (!args?.trim())
+        return '  Usage: /regex <pattern> <text or file path>\n  Example: /regex "\\d+\\.\\d+" package.json';
 
       const input = args.trim();
       // Parse: first quoted or unquoted token is the pattern, rest is text/file
@@ -37,7 +35,8 @@ export async function handleTextAction(
       const filePath = resolvePath(appConfig.workingDirectory, target);
 
       if (existsSync(filePath) && statSyncFn(filePath).isFile()) {
-        if (statSyncFn(filePath).size > 1024 * 1024) return "  File too large (max 1 MB for regex testing).";
+        if (statSyncFn(filePath).size > 1024 * 1024)
+          return "  File too large (max 1 MB for regex testing).";
         text = readFileSync(filePath, "utf-8");
         isFile = true;
       }
@@ -59,17 +58,24 @@ export async function handleTextAction(
         }
         const groups = m.slice(1).length > 0 ? m.slice(1) : undefined;
         matches.push({ index: m.index, match: m[0], groups });
-        if (m[0].length === 0) { regex.lastIndex++; } // prevent infinite loop on zero-length matches
+        if (m[0].length === 0) {
+          regex.lastIndex++;
+        } // prevent infinite loop on zero-length matches
         if (!regex.global) break;
       }
 
-      if (matches.length === 0) return `  No matches for /${pattern}/${isFile ? ` in ${target}` : ""}`;
+      if (matches.length === 0)
+        return `  No matches for /${pattern}/${isFile ? ` in ${target}` : ""}`;
 
-      const lines = [`  Regex: /${pattern}/g${isFile ? ` in ${target}` : ""}\n  ${matches.length} match(es)\n`];
+      const lines = [
+        `  Regex: /${pattern}/g${isFile ? ` in ${target}` : ""}\n  ${matches.length} match(es)\n`,
+      ];
 
       for (let i = 0; i < Math.min(matches.length, 20); i++) {
         const match = matches[i]!;
-        const context = text.slice(Math.max(0, match.index - 20), match.index + match.match.length + 20).replace(/\n/g, "\\n");
+        const context = text
+          .slice(Math.max(0, match.index - 20), match.index + match.match.length + 20)
+          .replace(/\n/g, "\\n");
         lines.push(`  [${i + 1}] "${match.match}" at index ${match.index}`);
         if (match.groups) {
           lines.push(`       Groups: ${match.groups.map((g, j) => `$${j + 1}="${g}"`).join(", ")}`);
@@ -84,7 +90,10 @@ export async function handleTextAction(
       const unit = parts[0]?.toLowerCase() ?? "paragraphs";
       const count = Math.min(Math.max(parseInt(parts[1] ?? "3") || 3, 1), 50);
 
-      const loremWords = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum".split(" ");
+      const loremWords =
+        "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est laborum".split(
+          " ",
+        );
 
       const genSentence = (): string => {
         const len = 8 + Math.floor(Math.random() * 12);
@@ -146,13 +155,17 @@ export async function handleTextAction(
         try {
           const bin = cmd.split(" ")[0]!;
           execSync(`which ${bin} 2>/dev/null`, { timeout: 2000 });
-          const output = execSync(`${cmd} '${text.replace(/'/g, "'\\''")}' 2>/dev/null`, { timeout: 5000 }).toString();
+          const output = execSync(`${cmd} '${text.replace(/'/g, "'\\''")}' 2>/dev/null`, {
+            timeout: 5000,
+          }).toString();
           const lines = [`  ASCII Art\n`];
           for (const line of output.split("\n")) {
             lines.push(`  ${line}`);
           }
           return lines.join("\n");
-        } catch { /* not available */ }
+        } catch {
+          /* not available */
+        }
       }
 
       // Built-in simple block letters
@@ -210,7 +223,8 @@ export async function handleTextAction(
       return artLines.join("\n");
     }
     case "reverse": {
-      if (!args?.trim()) return "  Usage: /reverse <text>\n  Options: --words (reverse word order), --lines (reverse line order)";
+      if (!args?.trim())
+        return "  Usage: /reverse <text>\n  Options: --words (reverse word order), --lines (reverse line order)";
 
       const input = args.trim();
       let mode = "chars";
@@ -266,7 +280,7 @@ export async function handleTextAction(
 
       // Word wrap
       const paragraphs = text.split(/\n\s*\n/);
-      const wrapped = paragraphs.map(para => {
+      const wrapped = paragraphs.map((para) => {
         const words = para.replace(/\n/g, " ").split(/\s+/).filter(Boolean);
         const resultLines: string[] = [];
         let currentLine = "";
@@ -338,7 +352,9 @@ export async function handleTextAction(
       const maxCount = sorted[0]![1];
       const barWidth = 20;
 
-      const lines = [`  Word Frequency (top ${Math.min(topN, sorted.length)} of ${freq.size} unique)\n`];
+      const lines = [
+        `  Word Frequency (top ${Math.min(topN, sorted.length)} of ${freq.size} unique)\n`,
+      ];
       lines.push(`  Total words: ${words.length}\n`);
 
       const maxWordLen = Math.max(...sorted.map(([w]) => w.length), 4);
@@ -353,14 +369,42 @@ export async function handleTextAction(
       if (!args?.trim()) return "  Usage: /nato <text>\n  Example: /nato Hello";
 
       const NATO: Record<string, string> = {
-        A: "Alfa", B: "Bravo", C: "Charlie", D: "Delta", E: "Echo",
-        F: "Foxtrot", G: "Golf", H: "Hotel", I: "India", J: "Juliet",
-        K: "Kilo", L: "Lima", M: "Mike", N: "November", O: "Oscar",
-        P: "Papa", Q: "Quebec", R: "Romeo", S: "Sierra", T: "Tango",
-        U: "Uniform", V: "Victor", W: "Whiskey", X: "X-ray", Y: "Yankee",
+        A: "Alfa",
+        B: "Bravo",
+        C: "Charlie",
+        D: "Delta",
+        E: "Echo",
+        F: "Foxtrot",
+        G: "Golf",
+        H: "Hotel",
+        I: "India",
+        J: "Juliet",
+        K: "Kilo",
+        L: "Lima",
+        M: "Mike",
+        N: "November",
+        O: "Oscar",
+        P: "Papa",
+        Q: "Quebec",
+        R: "Romeo",
+        S: "Sierra",
+        T: "Tango",
+        U: "Uniform",
+        V: "Victor",
+        W: "Whiskey",
+        X: "X-ray",
+        Y: "Yankee",
         Z: "Zulu",
-        "0": "Zero", "1": "One", "2": "Two", "3": "Three", "4": "Four",
-        "5": "Five", "6": "Six", "7": "Seven", "8": "Eight", "9": "Niner",
+        "0": "Zero",
+        "1": "One",
+        "2": "Two",
+        "3": "Three",
+        "4": "Four",
+        "5": "Five",
+        "6": "Six",
+        "7": "Seven",
+        "8": "Eight",
+        "9": "Niner",
       };
 
       const text = args.trim().slice(0, 200);
@@ -385,7 +429,8 @@ export async function handleTextAction(
     }
     case "char_info": {
       const input = args?.trim();
-      if (!input) return "  Usage: /char-info <character(s)>\n  Examples: /char-info A, /char-info U+1F600, /char-info \u00e9\u00f1";
+      if (!input)
+        return "  Usage: /char-info <character(s)>\n  Examples: /char-info A, /char-info U+1F600, /char-info \u00e9\u00f1";
 
       const lines = [`  Unicode Character Info\n`];
 
@@ -395,7 +440,7 @@ export async function handleTextAction(
 
       if (codePointMatch) {
         const cp = parseInt(codePointMatch[1]!, 16);
-        if (cp > 0x10FFFF) return "  Invalid codepoint (max U+10FFFF).";
+        if (cp > 0x10ffff) return "  Invalid codepoint (max U+10FFFF).";
         chars = [String.fromCodePoint(cp)];
       } else {
         // Spread to handle surrogate pairs correctly
@@ -409,45 +454,49 @@ export async function handleTextAction(
         // UTF-8 byte representation
         const encoder = new TextEncoder();
         const utf8Bytes = encoder.encode(char);
-        const bytesStr = [...utf8Bytes].map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+        const bytesStr = [...utf8Bytes]
+          .map((b) => b.toString(16).toUpperCase().padStart(2, "0"))
+          .join(" ");
 
         // Category heuristic
         let category = "Other";
-        if (cp >= 0x41 && cp <= 0x5A) category = "Uppercase Letter";
-        else if (cp >= 0x61 && cp <= 0x7A) category = "Lowercase Letter";
+        if (cp >= 0x41 && cp <= 0x5a) category = "Uppercase Letter";
+        else if (cp >= 0x61 && cp <= 0x7a) category = "Lowercase Letter";
         else if (cp >= 0x30 && cp <= 0x39) category = "Digit";
-        else if (cp >= 0x00 && cp <= 0x1F) category = "Control";
-        else if (cp >= 0x20 && cp <= 0x2F) category = "Punctuation/Symbol";
-        else if (cp >= 0x3A && cp <= 0x40) category = "Punctuation/Symbol";
-        else if (cp >= 0x5B && cp <= 0x60) category = "Punctuation/Symbol";
-        else if (cp >= 0x7B && cp <= 0x7E) category = "Punctuation/Symbol";
-        else if (cp >= 0x80 && cp <= 0xFF) category = "Latin Extended";
-        else if (cp >= 0x100 && cp <= 0x24F) category = "Latin Extended";
-        else if (cp >= 0x370 && cp <= 0x3FF) category = "Greek";
-        else if (cp >= 0x400 && cp <= 0x4FF) category = "Cyrillic";
-        else if (cp >= 0x4E00 && cp <= 0x9FFF) category = "CJK Ideograph";
-        else if (cp >= 0x3040 && cp <= 0x309F) category = "Hiragana";
-        else if (cp >= 0x30A0 && cp <= 0x30FF) category = "Katakana";
-        else if (cp >= 0xAC00 && cp <= 0xD7AF) category = "Hangul";
-        else if (cp >= 0x0600 && cp <= 0x06FF) category = "Arabic";
-        else if (cp >= 0x0590 && cp <= 0x05FF) category = "Hebrew";
-        else if (cp >= 0x0900 && cp <= 0x097F) category = "Devanagari";
-        else if (cp >= 0x1F600 && cp <= 0x1F64F) category = "Emoji (Faces)";
-        else if (cp >= 0x1F300 && cp <= 0x1F5FF) category = "Emoji (Symbols)";
-        else if (cp >= 0x1F680 && cp <= 0x1F6FF) category = "Emoji (Transport)";
-        else if (cp >= 0x2600 && cp <= 0x26FF) category = "Misc Symbols";
-        else if (cp >= 0x2700 && cp <= 0x27BF) category = "Dingbats";
-        else if (cp >= 0x2000 && cp <= 0x206F) category = "General Punctuation";
-        else if (cp >= 0x2190 && cp <= 0x21FF) category = "Arrows";
-        else if (cp >= 0x2200 && cp <= 0x22FF) category = "Math Operators";
-        else if (cp >= 0x2500 && cp <= 0x257F) category = "Box Drawing";
-        else if (cp >= 0x2580 && cp <= 0x259F) category = "Block Elements";
-        else if (cp >= 0xFE00 && cp <= 0xFE0F) category = "Variation Selector";
-        else if (cp >= 0xE0000 && cp <= 0xE007F) category = "Tags";
+        else if (cp >= 0x00 && cp <= 0x1f) category = "Control";
+        else if (cp >= 0x20 && cp <= 0x2f) category = "Punctuation/Symbol";
+        else if (cp >= 0x3a && cp <= 0x40) category = "Punctuation/Symbol";
+        else if (cp >= 0x5b && cp <= 0x60) category = "Punctuation/Symbol";
+        else if (cp >= 0x7b && cp <= 0x7e) category = "Punctuation/Symbol";
+        else if (cp >= 0x80 && cp <= 0xff) category = "Latin Extended";
+        else if (cp >= 0x100 && cp <= 0x24f) category = "Latin Extended";
+        else if (cp >= 0x370 && cp <= 0x3ff) category = "Greek";
+        else if (cp >= 0x400 && cp <= 0x4ff) category = "Cyrillic";
+        else if (cp >= 0x4e00 && cp <= 0x9fff) category = "CJK Ideograph";
+        else if (cp >= 0x3040 && cp <= 0x309f) category = "Hiragana";
+        else if (cp >= 0x30a0 && cp <= 0x30ff) category = "Katakana";
+        else if (cp >= 0xac00 && cp <= 0xd7af) category = "Hangul";
+        else if (cp >= 0x0600 && cp <= 0x06ff) category = "Arabic";
+        else if (cp >= 0x0590 && cp <= 0x05ff) category = "Hebrew";
+        else if (cp >= 0x0900 && cp <= 0x097f) category = "Devanagari";
+        else if (cp >= 0x1f600 && cp <= 0x1f64f) category = "Emoji (Faces)";
+        else if (cp >= 0x1f300 && cp <= 0x1f5ff) category = "Emoji (Symbols)";
+        else if (cp >= 0x1f680 && cp <= 0x1f6ff) category = "Emoji (Transport)";
+        else if (cp >= 0x2600 && cp <= 0x26ff) category = "Misc Symbols";
+        else if (cp >= 0x2700 && cp <= 0x27bf) category = "Dingbats";
+        else if (cp >= 0x2000 && cp <= 0x206f) category = "General Punctuation";
+        else if (cp >= 0x2190 && cp <= 0x21ff) category = "Arrows";
+        else if (cp >= 0x2200 && cp <= 0x22ff) category = "Math Operators";
+        else if (cp >= 0x2500 && cp <= 0x257f) category = "Box Drawing";
+        else if (cp >= 0x2580 && cp <= 0x259f) category = "Block Elements";
+        else if (cp >= 0xfe00 && cp <= 0xfe0f) category = "Variation Selector";
+        else if (cp >= 0xe0000 && cp <= 0xe007f) category = "Tags";
 
         lines.push(`  '${char}'  U+${hex}`);
         lines.push(`    Decimal:   ${cp}`);
-        lines.push(`    UTF-8:     ${bytesStr} (${utf8Bytes.length} byte${utf8Bytes.length > 1 ? "s" : ""})`);
+        lines.push(
+          `    UTF-8:     ${bytesStr} (${utf8Bytes.length} byte${utf8Bytes.length > 1 ? "s" : ""})`,
+        );
         lines.push(`    Category:  ${category}`);
         lines.push(`    HTML:      &#${cp}; / &#x${hex};`);
         lines.push(``);
@@ -456,18 +505,19 @@ export async function handleTextAction(
       return lines.join("\n");
     }
     case "slug": {
-      if (!args?.trim()) return "  Usage: /slug <text>\n  Example: /slug Hello World! This is a Test";
+      if (!args?.trim())
+        return "  Usage: /slug <text>\n  Example: /slug Hello World! This is a Test";
 
       const text = args.trim();
 
       // Normalize unicode, strip diacritics, lowercase, replace non-alnum with hyphens
       const slug = text
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")   // strip diacritics
+        .replace(/[\u0300-\u036f]/g, "") // strip diacritics
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")       // non-alnum -> hyphen
-        .replace(/^-+|-+$/g, "")           // trim leading/trailing hyphens
-        .replace(/-{2,}/g, "-");           // collapse multiple hyphens
+        .replace(/[^a-z0-9]+/g, "-") // non-alnum -> hyphen
+        .replace(/^-+|-+$/g, "") // trim leading/trailing hyphens
+        .replace(/-{2,}/g, "-"); // collapse multiple hyphens
 
       return [
         `  Slug Generator\n`,
@@ -526,7 +576,7 @@ export async function handleTextAction(
       if (!args?.trim() || !args.includes("|"))
         return "  Usage: /diff-words text1 | text2\n  Example: /diff-words the quick brown fox | the slow brown dog";
 
-      const [left, right] = args.split("|", 2).map(s => s!.trim());
+      const [left, right] = args.split("|", 2).map((s) => s!.trim());
       if (!left || !right) return "  Provide two texts separated by |";
 
       const wordsA = left.split(/\s+/);
@@ -553,11 +603,13 @@ export async function handleTextAction(
 
       // Backtrack to produce diff
       const diff: { type: string; word: string }[] = [];
-      let i = m, j = n;
+      let i = m,
+        j = n;
       while (i > 0 || j > 0) {
         if (i > 0 && j > 0 && wordsA[i - 1] === wordsB[j - 1]) {
           diff.unshift({ type: " ", word: wordsA[i - 1]! });
-          i--; j--;
+          i--;
+          j--;
         } else if (j > 0 && (i === 0 || dp[i]![j - 1]! >= dp[i - 1]![j]!)) {
           diff.unshift({ type: "+", word: wordsB[j - 1]! });
           j--;
@@ -567,9 +619,9 @@ export async function handleTextAction(
         }
       }
 
-      const removed = diff.filter(d => d.type === "-").length;
-      const added = diff.filter(d => d.type === "+").length;
-      const unchanged = diff.filter(d => d.type === " ").length;
+      const removed = diff.filter((d) => d.type === "-").length;
+      const added = diff.filter((d) => d.type === "+").length;
+      const unchanged = diff.filter((d) => d.type === " ").length;
 
       const lines = [`  Word Diff\n`];
       let line = "  ";
@@ -589,26 +641,30 @@ export async function handleTextAction(
       return lines.join("\n");
     }
     case "table_fmt": {
-      if (!args?.trim()) return "  Usage: /table-fmt header1,header2 | row1col1,row1col2 | row2col1,row2col2\n  Example: /table-fmt Name,Age,City | Alice,30,NYC | Bob,25,LA";
+      if (!args?.trim())
+        return "  Usage: /table-fmt header1,header2 | row1col1,row1col2 | row2col1,row2col2\n  Example: /table-fmt Name,Age,City | Alice,30,NYC | Bob,25,LA";
 
-      const sections = args.split("|").map(s => s.trim()).filter(Boolean);
+      const sections = args
+        .split("|")
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (sections.length < 1) return "  Provide at least headers.";
 
-      const rows = sections.map(s => s.split(",").map(c => c.trim()));
+      const rows = sections.map((s) => s.split(",").map((c) => c.trim()));
       const headers = rows[0]!;
       const dataRows = rows.slice(1);
       const numCols = headers.length;
 
       // Calculate column widths
       const colWidths = headers.map((h, i) => {
-        const values = [h, ...dataRows.map(r => r[i] ?? "")];
-        return Math.max(...values.map(v => v.length), 3);
+        const values = [h, ...dataRows.map((r) => r[i] ?? "")];
+        return Math.max(...values.map((v) => v.length), 3);
       });
 
       const formatRow = (cells: string[]) =>
         "| " + cells.map((c, i) => (c ?? "").padEnd(colWidths[i]!)).join(" | ") + " |";
 
-      const separator = "| " + colWidths.map(w => "-".repeat(w)).join(" | ") + " |";
+      const separator = "| " + colWidths.map((w) => "-".repeat(w)).join(" | ") + " |";
 
       const lines = [`  Markdown Table\n`];
       lines.push(`  ${formatRow(headers)}`);
@@ -620,21 +676,25 @@ export async function handleTextAction(
       return lines.join("\n");
     }
     case "progress": {
-      if (!args?.trim()) return "  Usage: /progress <value> [max] [label]\n  Examples: /progress 75, /progress 3 10 Tasks, /progress 50,80,30";
+      if (!args?.trim())
+        return "  Usage: /progress <value> [max] [label]\n  Examples: /progress 75, /progress 3 10 Tasks, /progress 50,80,30";
 
       const input = args.trim();
 
       // Multiple bars: comma-separated values
       if (input.includes(",") && !input.includes(" ")) {
-        const values = input.split(",").map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+        const values = input
+          .split(",")
+          .map((v) => parseFloat(v.trim()))
+          .filter((v) => !isNaN(v));
         const max = Math.max(...values, 100);
         const barWidth = 30;
 
         const lines = [`  Progress Bars\n`];
         for (let i = 0; i < values.length; i++) {
           const val = values[i]!;
-          const pct = Math.min(val / max * 100, 100);
-          const filled = Math.round(pct / 100 * barWidth);
+          const pct = Math.min((val / max) * 100, 100);
+          const filled = Math.round((pct / 100) * barWidth);
           const bar = "\u2588".repeat(filled) + "\u2591".repeat(barWidth - filled);
           lines.push(`  ${String(i + 1).padStart(3)}  ${bar}  ${val}/${max} (${pct.toFixed(0)}%)`);
         }
@@ -648,9 +708,9 @@ export async function handleTextAction(
       const max = parts[1] ? parseFloat(parts[1]) : 100;
       if (!max || max <= 0) return "  Max must be greater than 0.";
       const label = parts.slice(2).join(" ") || "";
-      const pct = Math.min(value / max * 100, 100);
+      const pct = Math.min((value / max) * 100, 100);
       const barWidth = 30;
-      const filled = Math.round(pct / 100 * barWidth);
+      const filled = Math.round((pct / 100) * barWidth);
       const bar = "\u2588".repeat(filled) + "\u2591".repeat(barWidth - filled);
 
       return [
@@ -681,10 +741,7 @@ export async function handleTextAction(
         const payload = JSON.parse(decodeBase64Url(parts[1]!));
         const sig = parts[2]!;
 
-        const lines = [
-          `  JWT Decode\n`,
-          `  Header:`,
-        ];
+        const lines = [`  JWT Decode\n`, `  Header:`];
         for (const line of JSON.stringify(header, null, 2).split("\n")) {
           lines.push(`    ${line}`);
         }
@@ -700,7 +757,10 @@ export async function handleTextAction(
         if (header.typ) lines.push(`    Type:      ${header.typ}`);
         if (payload.sub) lines.push(`    Subject:   ${payload.sub}`);
         if (payload.iss) lines.push(`    Issuer:    ${payload.iss}`);
-        if (payload.aud) lines.push(`    Audience:  ${Array.isArray(payload.aud) ? payload.aud.join(", ") : payload.aud}`);
+        if (payload.aud)
+          lines.push(
+            `    Audience:  ${Array.isArray(payload.aud) ? payload.aud.join(", ") : payload.aud}`,
+          );
 
         if (payload.iat) {
           const iat = new Date(payload.iat * 1000);
@@ -716,7 +776,9 @@ export async function handleTextAction(
           lines.push(`    Not Before: ${new Date(payload.nbf * 1000).toISOString()}`);
         }
 
-        lines.push(`\n  Signature: ${sig.slice(0, 20)}...${sig.length > 20 ? ` (${sig.length} chars)` : ""}`);
+        lines.push(
+          `\n  Signature: ${sig.slice(0, 20)}...${sig.length > 20 ? ` (${sig.length} chars)` : ""}`,
+        );
         lines.push(`  \u26a0 Signature NOT verified (decode only)`);
 
         return lines.join("\n");
@@ -725,16 +787,37 @@ export async function handleTextAction(
       }
     }
     case "crontab": {
-      if (!args?.trim()) return "  Usage: /crontab <cron expression>\n  Example: /crontab */5 * * * *";
+      if (!args?.trim())
+        return "  Usage: /crontab <cron expression>\n  Example: /crontab */5 * * * *";
 
       const parts = args.trim().split(/\s+/);
       if (parts.length < 5) return "  Invalid cron: need 5 fields (minute hour day month weekday)";
 
       const [minF, hourF, dayF, monthF, dowF] = parts.slice(0, 5);
       const fieldNames = ["Minute", "Hour", "Day", "Month", "Weekday"];
-      const fieldRanges = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 6]];
+      const fieldRanges = [
+        [0, 59],
+        [0, 23],
+        [1, 31],
+        [1, 12],
+        [0, 6],
+      ];
       const dowNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const monthNames = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthNames = [
+        "",
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       const fields = [minF!, hourF!, dayF!, monthF!, dowF!];
 
       // Parse a single cron field into matching values
@@ -754,22 +837,20 @@ export async function handleTextAction(
             values.add(parseInt(range));
           }
         }
-        return [...values].filter(v => v >= min && v <= max).sort((a, b) => a - b);
+        return [...values].filter((v) => v >= min && v <= max).sort((a, b) => a - b);
       };
 
       const parsed = fields.map((f, i) => parseField(f, fieldRanges[i]![0]!, fieldRanges[i]![1]!));
 
-      const lines = [
-        `  Cron Expression: ${fields.join(" ")}\n`,
-      ];
+      const lines = [`  Cron Expression: ${fields.join(" ")}\n`];
 
       // Describe each field
       for (let i = 0; i < 5; i++) {
         const vals = parsed[i]!;
         let desc: string;
         if (fields[i] === "*") desc = "every";
-        else if (i === 4) desc = vals.map(v => dowNames[v]!).join(", ");
-        else if (i === 3) desc = vals.map(v => monthNames[v]!).join(", ");
+        else if (i === 4) desc = vals.map((v) => dowNames[v]!).join(", ");
+        else if (i === 3) desc = vals.map((v) => monthNames[v]!).join(", ");
         else desc = vals.join(", ");
         lines.push(`  ${fieldNames[i]!.padEnd(8)} ${fields[i]!.padEnd(10)} \u2192 ${desc}`);
       }
@@ -777,19 +858,26 @@ export async function handleTextAction(
       // Calculate next 5 runs
       lines.push(`\n  Next 5 runs:`);
       const now = new Date();
-      let cursor = new Date(now);
+      const cursor = new Date(now);
       cursor.setSeconds(0, 0);
       cursor.setMinutes(cursor.getMinutes() + 1);
       let found = 0;
 
-      for (let attempt = 0; attempt < 100000 && found < 5; attempt++) { // max ~69 days of minutes
+      for (let attempt = 0; attempt < 100000 && found < 5; attempt++) {
+        // max ~69 days of minutes
         const m = cursor.getMinutes();
         const h = cursor.getHours();
         const d = cursor.getDate();
         const mo = cursor.getMonth() + 1;
         const dow = cursor.getDay();
 
-        if (parsed[0]!.includes(m) && parsed[1]!.includes(h) && parsed[2]!.includes(d) && parsed[3]!.includes(mo) && parsed[4]!.includes(dow)) {
+        if (
+          parsed[0]!.includes(m) &&
+          parsed[1]!.includes(h) &&
+          parsed[2]!.includes(d) &&
+          parsed[3]!.includes(mo) &&
+          parsed[4]!.includes(dow)
+        ) {
           lines.push(`    ${cursor.toLocaleString()}`);
           found++;
         }
@@ -806,7 +894,10 @@ export async function handleTextAction(
 
       try {
         const urlDetail = `https://wttr.in/${query}?format=%l%n%c+%C+%t+(feels+like+%f)%nHumidity:+%h%nWind:+%w%nPrecip:+%p%nUV:+%u%nMoon:+%m+%M`;
-        const respDetail = await fetch(urlDetail, { signal: AbortSignal.timeout(8000), headers: { "User-Agent": "curl/8.0" } });
+        const respDetail = await fetch(urlDetail, {
+          signal: AbortSignal.timeout(8000),
+          headers: { "User-Agent": "curl/8.0" },
+        });
         const detail = (await respDetail.text()).trim();
 
         const lines = [`  Weather\n`];

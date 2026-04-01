@@ -4,12 +4,12 @@
 //   - llama.cpp (llama-server) on Linux/Windows
 //   - MLX (mlx_lm.server) on macOS Apple Silicon
 
-import { join } from "node:path";
-import { kcodeHome, kcodePath } from "./paths";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import { join } from "node:path";
 import { log } from "./logger";
 import { getServerConfig } from "./model-manager";
+import { kcodeHome, kcodePath } from "./paths";
 
 const KCODE_HOME = kcodeHome();
 const PID_FILE = kcodePath("server.pid");
@@ -30,7 +30,9 @@ export async function isServerRunning(): Promise<boolean> {
         signal: AbortSignal.timeout(2000),
       });
       if (resp.ok) return true;
-    } catch (err) { log.debug("llama-server", `Health check ${endpoint} failed: ${err}`); }
+    } catch (err) {
+      log.debug("llama-server", `Health check ${endpoint} failed: ${err}`);
+    }
   }
 
   // Server not responding — clean up stale PID file
@@ -45,7 +47,9 @@ export function getServerPort(): number | null {
       const port = parseInt(readFileSync(PORT_FILE, "utf-8").trim(), 10);
       if (port > 0) return port;
     }
-  } catch (err) { log.debug("llama-server", `Failed to read port file: ${err}`); }
+  } catch (err) {
+    log.debug("llama-server", `Failed to read port file: ${err}`);
+  }
   return null;
 }
 
@@ -56,12 +60,16 @@ function getServerPid(): number | null {
       const pid = parseInt(readFileSync(PID_FILE, "utf-8").trim(), 10);
       if (pid > 0) return pid;
     }
-  } catch (err) { log.debug("llama-server", `Failed to read PID file: ${err}`); }
+  } catch (err) {
+    log.debug("llama-server", `Failed to read PID file: ${err}`);
+  }
   return null;
 }
 
 /** Start the inference server with the configured model */
-export async function startServer(options?: { port?: number }): Promise<{ port: number; pid: number }> {
+export async function startServer(options?: {
+  port?: number;
+}): Promise<{ port: number; pid: number }> {
   // Check if already running
   if (await isServerRunning()) {
     const port = getServerPort()!;
@@ -100,7 +108,9 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
       // We monkey-patch set_wired_limit after our call so main() can't override it.
       const wiredBytes = Math.floor(Number(config.mlxWiredLimitMB) * 1024 * 1024);
       if (!Number.isFinite(wiredBytes) || wiredBytes <= 0) {
-        throw new Error(`Invalid mlxWiredLimitMB: ${config.mlxWiredLimitMB} — must be a positive number`);
+        throw new Error(
+          `Invalid mlxWiredLimitMB: ${config.mlxWiredLimitMB} — must be a positive number`,
+        );
       }
       // Validate port as integer to prevent Python injection via interpolation
       const safePort = Math.floor(Number(port));
@@ -108,9 +118,8 @@ export async function startServer(options?: { port?: number }): Promise<{ port: 
         throw new Error(`Invalid port: ${port} — must be integer 1-65535`);
       }
       // Sanitize model name to prevent injection (only allow alphanumeric, -, /, .)
-      const safeModel = mlxModel.replace(/[^a-zA-Z0-9\-\/._]/g, "");
-      const wrapperScript =
-`import mlx.core as mx
+      const safeModel = mlxModel.replace(/[^a-zA-Z0-9\-/._]/g, "");
+      const wrapperScript = `import mlx.core as mx
 if hasattr(mx, 'set_wired_limit'):
     mx.set_wired_limit(${wiredBytes})
     _orig = mx.set_wired_limit
@@ -120,32 +129,47 @@ sys.argv = ['mlx_lm.server', '--model', '${safeModel}', '--port', '${safePort}',
 from mlx_lm.server import main
 main()`;
       args = ["-c", wrapperScript];
-      log.info("server", `Starting MLX server with disk offloading (wired: ${config.mlxWiredLimitMB}MB) on port ${port}`);
+      log.info(
+        "server",
+        `Starting MLX server with disk offloading (wired: ${config.mlxWiredLimitMB}MB) on port ${port}`,
+      );
     } else {
       args = [
-        "-m", "mlx_lm.server",
-        "--model", mlxModel,
-        "--port", port.toString(),
-        "--host", "127.0.0.1",
+        "-m",
+        "mlx_lm.server",
+        "--model",
+        mlxModel,
+        "--port",
+        port.toString(),
+        "--host",
+        "127.0.0.1",
       ];
       log.info("server", `Starting MLX server on port ${port}: ${cmd} ${args.join(" ")}`);
     }
   } else {
     // llama.cpp
     if (!existsSync(config.modelPath)) {
-      throw new Error(`Model file not found: ${config.modelPath}. Run 'kcode setup' to redownload.`);
+      throw new Error(
+        `Model file not found: ${config.modelPath}. Run 'kcode setup' to redownload.`,
+      );
     }
 
     cmd = config.enginePath;
     args = [
-      "--model", config.modelPath,
-      "--port", port.toString(),
-      "--host", "127.0.0.1",
-      "--ctx-size", config.contextSize.toString(),
-      "--n-gpu-layers", config.gpuLayers.toString(),
-      "--parallel", "1",
+      "--model",
+      config.modelPath,
+      "--port",
+      port.toString(),
+      "--host",
+      "127.0.0.1",
+      "--ctx-size",
+      config.contextSize.toString(),
+      "--n-gpu-layers",
+      config.gpuLayers.toString(),
+      "--parallel",
+      "1",
       "--metrics",
-      "--mmap",  // Enable mmap for SSD-backed weight streaming (flash-moe principle)
+      "--mmap", // Enable mmap for SSD-backed weight streaming (flash-moe principle)
     ];
 
     // Multi-GPU tensor split
@@ -157,7 +181,10 @@ main()`;
 
     const isPartialOffload = config.gpuLayers > 0 && config.gpuLayers !== -1;
     if (isPartialOffload) {
-      log.info("server", `Partial GPU offload: ${config.gpuLayers} layers on GPU, rest via mmap (SSD/RAM)`);
+      log.info(
+        "server",
+        `Partial GPU offload: ${config.gpuLayers} layers on GPU, rest via mmap (SSD/RAM)`,
+      );
     }
 
     log.info("server", `Starting llama-server on port ${port}: ${cmd} ${args.join(" ")}`);
@@ -175,11 +202,15 @@ main()`;
       const libDirs = [engineDir, ...findLibDirs(engineDir)];
 
       if (process.platform === "darwin") {
-        envOverrides.DYLD_LIBRARY_PATH = [...libDirs, process.env.DYLD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+        envOverrides.DYLD_LIBRARY_PATH = [...libDirs, process.env.DYLD_LIBRARY_PATH ?? ""]
+          .filter(Boolean)
+          .join(":");
       } else if (process.platform === "win32") {
         envOverrides.PATH = [...libDirs, process.env.PATH ?? ""].filter(Boolean).join(";");
       } else {
-        envOverrides.LD_LIBRARY_PATH = [...libDirs, process.env.LD_LIBRARY_PATH ?? ""].filter(Boolean).join(":");
+        envOverrides.LD_LIBRARY_PATH = [...libDirs, process.env.LD_LIBRARY_PATH ?? ""]
+          .filter(Boolean)
+          .join(":");
       }
     }
 
@@ -206,7 +237,12 @@ main()`;
 
     proc.on("error", (err) => {
       log.error("server", `Failed to start server: ${err.message}`);
-      try { logFile.flush(); logFile.end(); } catch (err) { log.debug("llama-server", `Failed to flush log file: ${err}`); }
+      try {
+        logFile.flush();
+        logFile.end();
+      } catch (err) {
+        log.debug("llama-server", `Failed to flush log file: ${err}`);
+      }
       cleanupPidFile();
       reject(new Error(`Failed to start server: ${err.message}`));
     });
@@ -230,7 +266,9 @@ main()`;
     const pollInterval = 500;
     let settled = false;
 
-    proc.on("error", () => { settled = true; });
+    proc.on("error", () => {
+      settled = true;
+    });
 
     const poll = async () => {
       while (Date.now() - startTime < maxWait) {
@@ -242,11 +280,16 @@ main()`;
           if (resp.ok) {
             settled = true;
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            log.info("server", `Server ready in ${elapsed}s (PID: ${proc.pid}, engine: ${isMlx ? "mlx" : "llama.cpp"})`);
+            log.info(
+              "server",
+              `Server ready in ${elapsed}s (PID: ${proc.pid}, engine: ${isMlx ? "mlx" : "llama.cpp"})`,
+            );
             resolve({ port, pid: proc.pid! });
             return;
           }
-        } catch (err) { log.debug("llama-server", `Server not ready yet: ${err}`); }
+        } catch (err) {
+          log.debug("llama-server", `Server not ready yet: ${err}`);
+        }
 
         await new Promise((r) => setTimeout(r, pollInterval));
       }
@@ -254,7 +297,9 @@ main()`;
       if (!settled) {
         settled = true;
         // Timed out
-        reject(new Error(`Server did not become ready within ${maxWait / 1000}s. Check ${LOG_FILE}`));
+        reject(
+          new Error(`Server did not become ready within ${maxWait / 1000}s. Check ${LOG_FILE}`),
+        );
       }
     };
 
@@ -296,7 +341,9 @@ export async function stopServer(): Promise<void> {
       try {
         process.kill(pid, "SIGKILL");
         log.warn("server", `Force-killed llama-server (PID: ${pid})`);
-      } catch (err) { log.debug("llama-server", `Force-kill failed (process already dead): ${err}`); }
+      } catch (err) {
+        log.debug("llama-server", `Force-kill failed (process already dead): ${err}`);
+      }
     }
   } catch (err) {
     // Process doesn't exist — clean up stale files
@@ -344,38 +391,51 @@ export async function getServerStatus(): Promise<{
         signal: AbortSignal.timeout(2000),
       });
       if (resp.ok) {
-        const props = await resp.json() as { default_generation_settings?: { model?: string } };
+        const props = (await resp.json()) as { default_generation_settings?: { model?: string } };
         return { running, port, pid, model: props.default_generation_settings?.model };
       }
-    } catch (err) { log.debug("llama-server", `Failed to fetch /props for server status: ${err}`); }
+    } catch (err) {
+      log.debug("llama-server", `Failed to fetch /props for server status: ${err}`);
+    }
 
     try {
       const resp = await fetch(`http://localhost:${port}/v1/models`, {
         signal: AbortSignal.timeout(2000),
       });
       if (resp.ok) {
-        const data = await resp.json() as { data?: Array<{ id?: string }> };
+        const data = (await resp.json()) as { data?: Array<{ id?: string }> };
         const model = data?.data?.[0]?.id;
         return { running, port, pid, model };
       }
-    } catch (err) { log.debug("llama-server", `Failed to fetch /v1/models for server status: ${err}`); }
+    } catch (err) {
+      log.debug("llama-server", `Failed to fetch /v1/models for server status: ${err}`);
+    }
   }
 
   return { running, port, pid };
 }
 
 function cleanupPidFile(): void {
-  try { unlinkSync(PID_FILE); } catch (err) { log.debug("llama-server", `Failed to remove PID file: ${err}`); }
-  try { unlinkSync(PORT_FILE); } catch (err) { log.debug("llama-server", `Failed to remove port file: ${err}`); }
+  try {
+    unlinkSync(PID_FILE);
+  } catch (err) {
+    log.debug("llama-server", `Failed to remove PID file: ${err}`);
+  }
+  try {
+    unlinkSync(PORT_FILE);
+  } catch (err) {
+    log.debug("llama-server", `Failed to remove port file: ${err}`);
+  }
 }
 
 /** Find directories containing shared library files under a given path (cross-platform) */
 function findLibDirs(baseDir: string): string[] {
-  const patterns = process.platform === "darwin"
-    ? ["**/*.dylib"]
-    : process.platform === "win32"
-    ? ["**/*.dll"]
-    : ["**/*.so", "**/*.so.*"];
+  const patterns =
+    process.platform === "darwin"
+      ? ["**/*.dylib"]
+      : process.platform === "win32"
+        ? ["**/*.dll"]
+        : ["**/*.so", "**/*.so.*"];
 
   try {
     const dirs = new Set<string>();
@@ -386,5 +446,8 @@ function findLibDirs(baseDir: string): string[] {
       }
     }
     return [...dirs];
-  } catch (err) { log.debug("llama-server", `Failed to scan for shared libraries: ${err}`); return []; }
+  } catch (err) {
+    log.debug("llama-server", `Failed to scan for shared libraries: ${err}`);
+    return [];
+  }
 }

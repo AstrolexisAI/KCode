@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 
 import { ModelTrainer } from "./trainer";
 import type { TrainingConfig } from "./types";
@@ -83,9 +83,7 @@ describe("ModelTrainer", () => {
     });
 
     test("fails for unsupported backend", () => {
-      const errors = trainer.validateConfig(
-        makeConfig({ backend: "invalid" as any }),
-      );
+      const errors = trainer.validateConfig(makeConfig({ backend: "invalid" as any }));
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain("Unsupported backend");
     });
@@ -101,9 +99,7 @@ describe("ModelTrainer", () => {
     });
 
     test("fails for non-existent dataset file", () => {
-      const errors = trainer.validateConfig(
-        makeConfig({ datasetPath: "/nonexistent/path.jsonl" }),
-      );
+      const errors = trainer.validateConfig(makeConfig({ datasetPath: "/nonexistent/path.jsonl" }));
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain("Dataset file not found");
     });
@@ -121,9 +117,7 @@ describe("ModelTrainer", () => {
     });
 
     test("fails for invalid learningRate", () => {
-      const errors = trainer.validateConfig(
-        makeConfig({ learningRate: -0.1 }),
-      );
+      const errors = trainer.validateConfig(makeConfig({ learningRate: -0.1 }));
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain("learningRate");
     });
@@ -135,9 +129,7 @@ describe("ModelTrainer", () => {
     });
 
     test("fails for invalid maxSeqLength", () => {
-      const errors = trainer.validateConfig(
-        makeConfig({ maxSeqLength: 100 }),
-      );
+      const errors = trainer.validateConfig(makeConfig({ maxSeqLength: 100 }));
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain("maxSeqLength");
     });
@@ -164,9 +156,7 @@ describe("ModelTrainer", () => {
       expect(script).toContain("from unsloth import FastLanguageModel");
       expect(script).toContain("from trl import SFTTrainer");
       expect(script).toContain("TRAINING_COMPLETE");
-      expect(script).toContain(
-        "unsloth/Qwen2.5-Coder-7B-Instruct",
-      );
+      expect(script).toContain("unsloth/Qwen2.5-Coder-7B-Instruct");
       expect(script).toContain("load_in_4bit=True");
       expect(script).toContain(`r=16`);
       expect(script).toContain(`lora_alpha=32`);
@@ -175,16 +165,12 @@ describe("ModelTrainer", () => {
     });
 
     test("generates Unsloth script with 8bit quantization", () => {
-      const script = trainer.generateTrainingScript(
-        makeConfig({ quantization: "8bit" }),
-      );
+      const script = trainer.generateTrainingScript(makeConfig({ quantization: "8bit" }));
       expect(script).toContain("load_in_4bit=False");
     });
 
     test("generates valid MLX-LM script", () => {
-      const script = trainer.generateTrainingScript(
-        makeConfig({ backend: "mlx-lm" }),
-      );
+      const script = trainer.generateTrainingScript(makeConfig({ backend: "mlx-lm" }));
 
       expect(script).toContain("import mlx");
       expect(script).toContain("mlx_lm");
@@ -193,9 +179,7 @@ describe("ModelTrainer", () => {
     });
 
     test("generates valid Axolotl script", () => {
-      const script = trainer.generateTrainingScript(
-        makeConfig({ backend: "axolotl" }),
-      );
+      const script = trainer.generateTrainingScript(makeConfig({ backend: "axolotl" }));
 
       expect(script).toContain("axolotl");
       expect(script).toContain("axolotl_config");
@@ -204,9 +188,7 @@ describe("ModelTrainer", () => {
     });
 
     test("generates valid LLaMA-Factory script", () => {
-      const script = trainer.generateTrainingScript(
-        makeConfig({ backend: "llamafactory" }),
-      );
+      const script = trainer.generateTrainingScript(makeConfig({ backend: "llamafactory" }));
 
       expect(script).toContain("llamafactory");
       expect(script).toContain("TRAINING_COMPLETE");
@@ -237,9 +219,7 @@ describe("ModelTrainer", () => {
 
     test("throws for unknown backend", () => {
       expect(() =>
-        trainer.generateTrainingScript(
-          makeConfig({ backend: "unknown" as any }),
-        ),
+        trainer.generateTrainingScript(makeConfig({ backend: "unknown" as any })),
       ).toThrow(/not implemented/);
     });
   });

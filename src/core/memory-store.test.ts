@@ -1,16 +1,16 @@
-import { describe, test, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  initMemoryStoreSchema,
   addMemory,
-  updateMemory,
   deleteMemory,
-  getMemories,
-  searchMemories,
-  promoteMemory,
   expireStaleMemories,
+  getMemories,
   getMemoryStats,
+  initMemoryStoreSchema,
   type MemoryEntry,
+  promoteMemory,
+  searchMemories,
+  updateMemory,
 } from "./memory-store";
 
 let db: Database;
@@ -24,12 +24,16 @@ describe("memory-store", () => {
   // ── Schema ──
 
   test("initMemoryStoreSchema creates tables without error", () => {
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_store'").get();
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_store'")
+      .get();
     expect(tables).toBeTruthy();
   });
 
   test("initMemoryStoreSchema creates FTS virtual table", () => {
-    const fts = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_store_fts'").get();
+    const fts = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memory_store_fts'")
+      .get();
     expect(fts).toBeTruthy();
   });
 
@@ -44,28 +48,34 @@ describe("memory-store", () => {
   // ── Add ──
 
   test("addMemory inserts and returns an ID", () => {
-    const id = addMemory({
-      category: "fact",
-      key: "test-key",
-      content: "This is a test fact.",
-      confidence: 0.9,
-      source: "user",
-      approved: false,
-    }, db);
+    const id = addMemory(
+      {
+        category: "fact",
+        key: "test-key",
+        content: "This is a test fact.",
+        confidence: 0.9,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
     expect(id).toBeGreaterThan(0);
   });
 
   test("addMemory stores all fields correctly", () => {
-    const id = addMemory({
-      category: "preference",
-      key: "editor-theme",
-      content: "User prefers dark mode",
-      project: "/home/user/proj",
-      confidence: 0.95,
-      source: "auto",
-      expiresAt: "2030-01-01T00:00:00",
-      approved: true,
-    }, db);
+    const id = addMemory(
+      {
+        category: "preference",
+        key: "editor-theme",
+        content: "User prefers dark mode",
+        project: "/home/user/proj",
+        confidence: 0.95,
+        source: "auto",
+        expiresAt: "2030-01-01T00:00:00",
+        approved: true,
+      },
+      db,
+    );
 
     const row = db.prepare("SELECT * FROM memory_store WHERE id = ?").get(id) as any;
     expect(row.category).toBe("preference");
@@ -81,11 +91,23 @@ describe("memory-store", () => {
   // ── Update ──
 
   test("updateMemory modifies content and returns true", () => {
-    const id = addMemory({ category: "fact", key: "k", content: "old", confidence: 0.5, source: "user", approved: false }, db);
+    const id = addMemory(
+      {
+        category: "fact",
+        key: "k",
+        content: "old",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
     const ok = updateMemory(id, { content: "new content", confidence: 0.8 }, db);
     expect(ok).toBe(true);
 
-    const row = db.prepare("SELECT content, confidence FROM memory_store WHERE id = ?").get(id) as any;
+    const row = db
+      .prepare("SELECT content, confidence FROM memory_store WHERE id = ?")
+      .get(id) as any;
     expect(row.content).toBe("new content");
     expect(row.confidence).toBe(0.8);
   });
@@ -96,7 +118,17 @@ describe("memory-store", () => {
   });
 
   test("updateMemory with empty updates returns false", () => {
-    const id = addMemory({ category: "fact", key: "k", content: "c", confidence: 0.5, source: "user", approved: false }, db);
+    const id = addMemory(
+      {
+        category: "fact",
+        key: "k",
+        content: "c",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
     const ok = updateMemory(id, {}, db);
     expect(ok).toBe(false);
   });
@@ -104,7 +136,17 @@ describe("memory-store", () => {
   // ── Delete ──
 
   test("deleteMemory removes entry and returns true", () => {
-    const id = addMemory({ category: "fact", key: "k", content: "c", confidence: 0.5, source: "user", approved: false }, db);
+    const id = addMemory(
+      {
+        category: "fact",
+        key: "k",
+        content: "c",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
     expect(deleteMemory(id, db)).toBe(true);
     expect(deleteMemory(id, db)).toBe(false); // already gone
   });
@@ -112,17 +154,67 @@ describe("memory-store", () => {
   // ── Query / Filter ──
 
   test("getMemories returns all entries", () => {
-    addMemory({ category: "fact", key: "a", content: "A", confidence: 0.5, source: "user", approved: false }, db);
-    addMemory({ category: "preference", key: "b", content: "B", confidence: 0.8, source: "auto", approved: true }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "a",
+        content: "A",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
+    addMemory(
+      {
+        category: "preference",
+        key: "b",
+        content: "B",
+        confidence: 0.8,
+        source: "auto",
+        approved: true,
+      },
+      db,
+    );
 
     const all = getMemories(undefined, db);
     expect(all.length).toBe(2);
   });
 
   test("getMemories filters by category", () => {
-    addMemory({ category: "fact", key: "a", content: "A", confidence: 0.5, source: "user", approved: false }, db);
-    addMemory({ category: "preference", key: "b", content: "B", confidence: 0.8, source: "auto", approved: true }, db);
-    addMemory({ category: "fact", key: "c", content: "C", confidence: 0.6, source: "user", approved: false }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "a",
+        content: "A",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
+    addMemory(
+      {
+        category: "preference",
+        key: "b",
+        content: "B",
+        confidence: 0.8,
+        source: "auto",
+        approved: true,
+      },
+      db,
+    );
+    addMemory(
+      {
+        category: "fact",
+        key: "c",
+        content: "C",
+        confidence: 0.6,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
 
     const facts = getMemories({ category: "fact" }, db);
     expect(facts.length).toBe(2);
@@ -130,8 +222,30 @@ describe("memory-store", () => {
   });
 
   test("getMemories filters by project", () => {
-    addMemory({ category: "fact", key: "a", content: "A", project: "/proj1", confidence: 0.5, source: "user", approved: false }, db);
-    addMemory({ category: "fact", key: "b", content: "B", project: "/proj2", confidence: 0.5, source: "user", approved: false }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "a",
+        content: "A",
+        project: "/proj1",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
+    addMemory(
+      {
+        category: "fact",
+        key: "b",
+        content: "B",
+        project: "/proj2",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
 
     const proj1 = getMemories({ project: "/proj1" }, db);
     expect(proj1.length).toBe(1);
@@ -139,8 +253,21 @@ describe("memory-store", () => {
   });
 
   test("getMemories filters by approved", () => {
-    addMemory({ category: "fact", key: "a", content: "A", confidence: 0.5, source: "user", approved: false }, db);
-    addMemory({ category: "fact", key: "b", content: "B", confidence: 0.5, source: "user", approved: true }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "a",
+        content: "A",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
+    addMemory(
+      { category: "fact", key: "b", content: "B", confidence: 0.5, source: "user", approved: true },
+      db,
+    );
 
     const approved = getMemories({ approved: true }, db);
     expect(approved.length).toBe(1);
@@ -149,7 +276,17 @@ describe("memory-store", () => {
 
   test("getMemories respects limit", () => {
     for (let i = 0; i < 10; i++) {
-      addMemory({ category: "fact", key: `k${i}`, content: `c${i}`, confidence: 0.5, source: "user", approved: false }, db);
+      addMemory(
+        {
+          category: "fact",
+          key: `k${i}`,
+          content: `c${i}`,
+          confidence: 0.5,
+          source: "user",
+          approved: false,
+        },
+        db,
+      );
     }
     const limited = getMemories({ limit: 3 }, db);
     expect(limited.length).toBe(3);
@@ -158,8 +295,28 @@ describe("memory-store", () => {
   // ── FTS Search ──
 
   test("searchMemories finds by content keyword", () => {
-    addMemory({ category: "fact", key: "ts-config", content: "Always use strict TypeScript mode", confidence: 0.9, source: "user", approved: true }, db);
-    addMemory({ category: "preference", key: "editor", content: "Prefer vim keybindings", confidence: 0.8, source: "user", approved: true }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "ts-config",
+        content: "Always use strict TypeScript mode",
+        confidence: 0.9,
+        source: "user",
+        approved: true,
+      },
+      db,
+    );
+    addMemory(
+      {
+        category: "preference",
+        key: "editor",
+        content: "Prefer vim keybindings",
+        confidence: 0.8,
+        source: "user",
+        approved: true,
+      },
+      db,
+    );
 
     const results = searchMemories("TypeScript", db);
     expect(results.length).toBe(1);
@@ -167,7 +324,17 @@ describe("memory-store", () => {
   });
 
   test("searchMemories finds by key", () => {
-    addMemory({ category: "convention", key: "bun-over-node", content: "Use Bun APIs instead of Node fs", confidence: 1.0, source: "user", approved: true }, db);
+    addMemory(
+      {
+        category: "convention",
+        key: "bun-over-node",
+        content: "Use Bun APIs instead of Node fs",
+        confidence: 1.0,
+        source: "user",
+        approved: true,
+      },
+      db,
+    );
 
     const results = searchMemories("bun", db);
     expect(results.length).toBe(1);
@@ -176,7 +343,17 @@ describe("memory-store", () => {
   // ── Promote ──
 
   test("promoteMemory sets approved and source to promoted", () => {
-    const id = addMemory({ category: "learned", key: "k", content: "c", confidence: 0.5, source: "auto", approved: false }, db);
+    const id = addMemory(
+      {
+        category: "learned",
+        key: "k",
+        content: "c",
+        confidence: 0.5,
+        source: "auto",
+        approved: false,
+      },
+      db,
+    );
     const ok = promoteMemory(id, db);
     expect(ok).toBe(true);
 
@@ -188,8 +365,29 @@ describe("memory-store", () => {
   // ── Expiry ──
 
   test("expireStaleMemories removes expired entries", () => {
-    addMemory({ category: "fact", key: "old", content: "expired", confidence: 0.5, source: "auto", approved: false, expiresAt: "2020-01-01T00:00:00" }, db);
-    addMemory({ category: "fact", key: "fresh", content: "still good", confidence: 0.5, source: "user", approved: true }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "old",
+        content: "expired",
+        confidence: 0.5,
+        source: "auto",
+        approved: false,
+        expiresAt: "2020-01-01T00:00:00",
+      },
+      db,
+    );
+    addMemory(
+      {
+        category: "fact",
+        key: "fresh",
+        content: "still good",
+        confidence: 0.5,
+        source: "user",
+        approved: true,
+      },
+      db,
+    );
 
     const removed = expireStaleMemories(db);
     expect(removed).toBe(1);
@@ -202,9 +400,32 @@ describe("memory-store", () => {
   // ── Stats ──
 
   test("getMemoryStats returns correct counts", () => {
-    addMemory({ category: "fact", key: "a", content: "A", confidence: 0.5, source: "user", approved: false }, db);
-    addMemory({ category: "fact", key: "b", content: "B", confidence: 0.5, source: "auto", approved: true }, db);
-    addMemory({ category: "preference", key: "c", content: "C", confidence: 0.5, source: "user", approved: false }, db);
+    addMemory(
+      {
+        category: "fact",
+        key: "a",
+        content: "A",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
+    addMemory(
+      { category: "fact", key: "b", content: "B", confidence: 0.5, source: "auto", approved: true },
+      db,
+    );
+    addMemory(
+      {
+        category: "preference",
+        key: "c",
+        content: "C",
+        confidence: 0.5,
+        source: "user",
+        approved: false,
+      },
+      db,
+    );
 
     const stats = getMemoryStats(db);
     expect(stats.total).toBe(3);

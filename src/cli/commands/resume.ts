@@ -28,6 +28,8 @@ export function registerResumeCommand(program: Command): void {
 
       console.log("\nTo resume a session:");
       console.log("  \x1b[1mkcode --continue\x1b[0m         Resume the most recent session");
-      console.log("  \x1b[1mkcode --fork\x1b[0m             Fork the most recent session (new transcript)");
+      console.log(
+        "  \x1b[1mkcode --fork\x1b[0m             Fork the most recent session (new transcript)",
+      );
     });
 }

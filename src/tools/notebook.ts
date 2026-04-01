@@ -33,7 +33,8 @@ interface Notebook {
 
 export const notebookEditDefinition: ToolDefinition = {
   name: "NotebookEdit",
-  description: "Read or edit Jupyter .ipynb notebook files. Supports replace, insert, and delete operations on cells.",
+  description:
+    "Read or edit Jupyter .ipynb notebook files. Supports replace, insert, and delete operations on cells.",
   input_schema: {
     type: "object",
     properties: {
@@ -45,7 +46,8 @@ export const notebookEditDefinition: ToolDefinition = {
       },
       cell_index: {
         type: "number",
-        description: "Zero-based index of the cell to operate on (required for replace/delete, insertion point for insert)",
+        description:
+          "Zero-based index of the cell to operate on (required for replace/delete, insertion point for insert)",
       },
       cell_contains: {
         type: "string",
@@ -104,7 +106,11 @@ function formatCellForDisplay(cell: NotebookCell, index: number): string {
 }
 
 /** Resolve cell index from explicit index or content search */
-function resolveCell(notebook: Notebook, cellIndex: number | undefined, cellContains: string | undefined): number | null {
+function resolveCell(
+  notebook: Notebook,
+  cellIndex: number | undefined,
+  cellContains: string | undefined,
+): number | null {
   if (cellIndex !== undefined) return cellIndex;
   if (cellContains) {
     const idx = notebook.cells.findIndex((c) => c.source.join("").includes(cellContains));
@@ -115,7 +121,9 @@ function resolveCell(notebook: Notebook, cellIndex: number | undefined, cellCont
 
 function makeCell(content: string, cellType: string): NotebookCell {
   // Split content into lines preserving newlines
-  const lines = content.split("\n").map((line, i, arr) => (i < arr.length - 1 ? line + "\n" : line));
+  const lines = content
+    .split("\n")
+    .map((line, i, arr) => (i < arr.length - 1 ? line + "\n" : line));
 
   const cell: NotebookCell = {
     cell_type: cellType,
@@ -133,7 +141,8 @@ function makeCell(content: string, cellType: string): NotebookCell {
 
 export async function executeNotebookEdit(input: Record<string, unknown>): Promise<ToolResult> {
   const opts = input as unknown as NotebookEditInput;
-  const { file_path, operation, cell_index, cell_type, content, cell_contains, target_index } = opts;
+  const { file_path, operation, cell_index, cell_type, content, cell_contains, target_index } =
+    opts;
 
   try {
     if (operation === "read") {
@@ -147,7 +156,11 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
 
     if (operation === "replace") {
       if (content === undefined) {
-        return { tool_use_id: "", content: "Error: content is required for replace", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: content is required for replace",
+          is_error: true,
+        };
       }
 
       const notebook = readNotebook(file_path);
@@ -168,7 +181,11 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
 
     if (operation === "insert") {
       if (content === undefined) {
-        return { tool_use_id: "", content: "Error: content is required for insert", is_error: true };
+        return {
+          tool_use_id: "",
+          content: "Error: content is required for insert",
+          is_error: true,
+        };
       }
 
       const notebook = readNotebook(file_path);
@@ -217,7 +234,11 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
       }
       const targetIdx = target_index ?? 0;
       if (targetIdx < 0 || targetIdx >= notebook.cells.length) {
-        return { tool_use_id: "", content: `Error: target_index ${targetIdx} out of range`, is_error: true };
+        return {
+          tool_use_id: "",
+          content: `Error: target_index ${targetIdx} out of range`,
+          is_error: true,
+        };
       }
 
       const [cell] = notebook.cells.splice(idx, 1);
@@ -257,7 +278,10 @@ export async function executeNotebookEdit(input: Record<string, unknown>): Promi
         }
       }
       writeNotebook(file_path, notebook);
-      return { tool_use_id: "", content: `Cleared outputs of ${cleared} code cells in ${file_path}` };
+      return {
+        tool_use_id: "",
+        content: `Cleared outputs of ${cleared} code cells in ${file_path}`,
+      };
     }
 
     return {

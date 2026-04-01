@@ -1,8 +1,8 @@
 // KCode - Spinner component
 // Animated loading indicator with phase detection, token speed, and elapsed time
 
-import React, { useState, useEffect, useRef } from "react";
 import { Text } from "ink";
+import React, { useEffect, useRef, useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 // Different spinner styles for different phases
@@ -65,9 +65,8 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
       if (dt >= 0.5 && currentTokens > prevTokensRef.current) {
         const newSpeed = (currentTokens - prevTokensRef.current) / dt;
         // Smooth: weighted average with previous speed
-        speedRef.current = speedRef.current > 0
-          ? speedRef.current * 0.3 + newSpeed * 0.7
-          : newSpeed;
+        speedRef.current =
+          speedRef.current > 0 ? speedRef.current * 0.3 + newSpeed * 0.7 : newSpeed;
         prevTokensRef.current = currentTokens;
         prevTimeRef.current = now;
       }
@@ -91,18 +90,20 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
   if (startTime && elapsed > 0) meta.push(formatElapsed(elapsed));
 
   // Spinner color based on phase
-  const spinnerColor = phase === "thinking" ? theme.accent
-    : phase === "streaming" ? theme.success
-    : phase === "tool" ? theme.warning
-    : theme.primary;
+  const spinnerColor =
+    phase === "thinking"
+      ? theme.accent
+      : phase === "streaming"
+        ? theme.success
+        : phase === "tool"
+          ? theme.warning
+          : theme.primary;
 
   return (
     <Text color={theme.dimmed}>
       <Text color={spinnerColor}>{frames[frame % frames.length]}</Text>
       {message ? ` ${message}` : ""}
-      {meta.length > 0 && (
-        <Text color={theme.dimmed}>{` ${meta.join(" · ")}`}</Text>
-      )}
+      {meta.length > 0 && <Text color={theme.dimmed}>{` ${meta.join(" · ")}`}</Text>}
     </Text>
   );
 }

@@ -17,9 +17,7 @@ export interface DiffLine {
 function computeLcsTable(oldLines: string[], newLines: string[]): number[][] {
   const m = oldLines.length;
   const n = newLines.length;
-  const table: number[][] = Array.from({ length: m + 1 }, () =>
-    new Array<number>(n + 1).fill(0),
-  );
+  const table: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
 
   for (let i = 1; i <= m; i++) {
     const row = table[i]!;
@@ -39,11 +37,7 @@ function computeLcsTable(oldLines: string[], newLines: string[]): number[][] {
 /**
  * Backtrack through the LCS table to produce diff operations.
  */
-function backtrackDiff(
-  oldLines: string[],
-  newLines: string[],
-  table: number[][],
-): DiffLine[] {
+function backtrackDiff(oldLines: string[], newLines: string[], table: number[][]): DiffLine[] {
   const result: DiffLine[] = [];
   let i = oldLines.length;
   let j = newLines.length;
@@ -75,11 +69,7 @@ function backtrackDiff(
  * @param filename - Optional filename to include in the diff header
  * @returns Array of DiffLine objects representing the diff
  */
-export function generateDiff(
-  oldText: string,
-  newText: string,
-  filename?: string,
-): DiffLine[] {
+export function generateDiff(oldText: string, newText: string, filename?: string): DiffLine[] {
   if (oldText === newText) {
     return [];
   }

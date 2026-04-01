@@ -2,9 +2,9 @@
 // Search the web using Brave Search API, SearXNG, or DuckDuckGo fallback scraping.
 // Features: domain filtering, freshness filter, result caching, rate limiting, deduplication.
 
-import type { ToolDefinition, ToolResult } from "../core/types";
-import { getOfflineMode } from "../core/offline/mode";
 import { localSearch } from "../core/offline/local-search";
+import { getOfflineMode } from "../core/offline/mode";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 export interface WebSearchInput {
   query: string;
@@ -118,7 +118,11 @@ export const webSearchDefinition: ToolDefinition = {
 
 // ─── Search Providers ───────────────────────────────────────────
 
-async function braveSearch(query: string, apiKey: string, freshness?: string): Promise<SearchResult[]> {
+async function braveSearch(
+  query: string,
+  apiKey: string,
+  freshness?: string,
+): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query, count: "20" });
   if (freshness) {
     const freshnessMap: Record<string, string> = {
@@ -156,7 +160,11 @@ async function braveSearch(query: string, apiKey: string, freshness?: string): P
   }));
 }
 
-async function searxngSearch(query: string, baseUrl: string, freshness?: string): Promise<SearchResult[]> {
+async function searxngSearch(
+  query: string,
+  baseUrl: string,
+  freshness?: string,
+): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query, format: "json" });
   if (freshness) {
     const timeRangeMap: Record<string, string> = {
@@ -209,7 +217,9 @@ async function fallbackScrapeSearch(query: string): Promise<SearchResult[]> {
   const resultBlocks = html.split(/class="result__body"/);
   for (let i = 1; i < Math.min(resultBlocks.length, 21); i++) {
     const block = resultBlocks[i]!;
-    const titleMatch = block.match(/class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/);
+    const titleMatch = block.match(
+      /class="result__a"[^>]*href="([^"]*)"[^>]*>([^<]*(?:<[^>]*>[^<]*)*)<\/a>/,
+    );
     const snippetMatch = block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/td/);
 
     if (titleMatch) {
@@ -248,7 +258,7 @@ function sanitizeHtml(html: string): string {
 function filterResults(
   results: SearchResult[],
   allowedDomains?: string[],
-  blockedDomains?: string[]
+  blockedDomains?: string[],
 ): SearchResult[] {
   let filtered = results;
 
@@ -367,19 +377,28 @@ export async function executeWebSearch(input: Record<string, unknown>): Promise<
         content: `Search: "${query}" (offline mode — local sources only)\n\n${formatted}`,
       };
     }
-  } catch { /* offline module not initialized, proceed normally */ }
+  } catch {
+    /* offline module not initialized, proceed normally */
+  }
 
   // Rate limiting
   if (!checkRateLimit()) {
     return {
       tool_use_id: "",
-      content: "Rate limit exceeded: maximum 10 searches per minute. Please wait before searching again.",
+      content:
+        "Rate limit exceeded: maximum 10 searches per minute. Please wait before searching again.",
       is_error: true,
     };
   }
 
   // Check cache
-  const cacheKey = buildCacheKey({ query, allowed_domains, blocked_domains, max_results: maxCount, freshness });
+  const cacheKey = buildCacheKey({
+    query,
+    allowed_domains,
+    blocked_domains,
+    max_results: maxCount,
+    freshness,
+  });
   const cached = getCached(cacheKey);
   if (cached) {
     const filtered = filterResults(cached.results, allowed_domains, blocked_domains);

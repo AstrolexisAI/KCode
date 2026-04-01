@@ -5,13 +5,13 @@ import { randomUUID } from "node:crypto";
 import type {
   BridgeMessage,
   ClientMessage,
-  ServerMessage,
-  SessionCreateMessage,
-  SessionMessageMessage,
-  SessionCancelMessage,
-  SessionDestroyMessage,
   PermissionResponseMessage,
   PingMessage,
+  ServerMessage,
+  SessionCancelMessage,
+  SessionCreateMessage,
+  SessionDestroyMessage,
+  SessionMessageMessage,
   SpawnMode,
 } from "./types";
 

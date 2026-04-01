@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,20 +9,20 @@ import { join } from "node:path";
 // getDefaultModel, findModel, listModels, addModel, removeModel, setDefaultModel, invalidateCache.
 
 import {
-  invalidateCache,
-  loadModelsConfig,
-  saveModelsConfig,
+  _setModelsPathForTest,
+  addModel,
+  findModel,
+  getDefaultModel,
   getModelBaseUrl,
   getModelContextSize,
-  getDefaultModel,
-  findModel,
+  invalidateCache,
   listModels,
-  addModel,
-  removeModel,
-  setDefaultModel,
-  _setModelsPathForTest,
+  loadModelsConfig,
   type ModelEntry,
   type ModelsConfig,
+  removeModel,
+  saveModelsConfig,
+  setDefaultModel,
 } from "./models.ts";
 
 // Each test gets its own temp directory so we never touch ~/.kcode/models.json.

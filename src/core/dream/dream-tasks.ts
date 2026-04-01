@@ -1,7 +1,7 @@
 // KCode - Built-in Dream Tasks
 // Background tasks that run during idle periods
 
-import type { DreamTask, DreamContext, DreamResult, DreamState } from "./types";
+import type { DreamContext, DreamResult, DreamState, DreamTask } from "./types";
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
@@ -14,7 +14,7 @@ function makeResult(
   taskName: string,
   status: DreamResult["status"],
   startTime: number,
-  details?: string
+  details?: string,
 ): DreamResult {
   return {
     taskName,
@@ -66,7 +66,7 @@ export const reindexTask: DreamTask = {
           clearTimeout(timer);
           reject(new Error("aborted"));
         },
-        { once: true }
+        { once: true },
       );
     });
 
@@ -111,7 +111,7 @@ export const preloadContextTask: DreamTask = {
           clearTimeout(timer);
           reject(new Error("aborted"));
         },
-        { once: true }
+        { once: true },
       );
     });
 
@@ -136,10 +136,7 @@ export const analyzeUsageTask: DreamTask = {
   interruptible: true,
 
   shouldRun(state: DreamState): boolean {
-    return (
-      state.sessionTurnCount > 10 &&
-      timeSince(state.lastAnalysisTime, FIFTEEN_MINUTES_MS)
-    );
+    return state.sessionTurnCount > 10 && timeSince(state.lastAnalysisTime, FIFTEEN_MINUTES_MS);
   },
 
   async execute(ctx: DreamContext): Promise<DreamResult> {
@@ -159,7 +156,7 @@ export const analyzeUsageTask: DreamTask = {
           clearTimeout(timer);
           reject(new Error("aborted"));
         },
-        { once: true }
+        { once: true },
       );
     });
 
@@ -185,10 +182,7 @@ export const maintenanceTask: DreamTask = {
   interruptible: false,
 
   shouldRun(state: DreamState): boolean {
-    return (
-      state.idleSeconds > 120 &&
-      timeSince(state.lastMaintenanceTime, THIRTY_MINUTES_MS)
-    );
+    return state.idleSeconds > 120 && timeSince(state.lastMaintenanceTime, THIRTY_MINUTES_MS);
   },
 
   async execute(ctx: DreamContext): Promise<DreamResult> {
@@ -208,7 +202,7 @@ export const maintenanceTask: DreamTask = {
           clearTimeout(timer);
           reject(new Error("aborted"));
         },
-        { once: true }
+        { once: true },
       );
     });
 

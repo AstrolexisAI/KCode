@@ -22,7 +22,9 @@ export function registerCloudCommand(program: Command): void {
         let settings: Record<string, unknown> = {};
         try {
           settings = await Bun.file(settingsPath).json();
-        } catch { /* no existing settings */ }
+        } catch {
+          /* no existing settings */
+        }
         settings.cloudConfig = { token: opts.token, url: "https://cloud.kulvex.ai" };
         await Bun.write(settingsPath, JSON.stringify(settings, null, 2));
         console.log("\u2713 Cloud token saved.");

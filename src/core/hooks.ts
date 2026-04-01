@@ -1,65 +1,62 @@
 // KCode - Hooks System
 // Loads and executes lifecycle hooks from .kcode/settings.json and ~/.kcode/settings.json
 
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { kcodePath } from "./paths";
-import type { ToolUseBlock, ToolResult } from "./types";
-import { log } from "./logger";
 import { evaluateHookifyRules } from "./hookify";
+import { log } from "./logger";
+import { kcodePath } from "./paths";
+import type { ToolResult, ToolUseBlock } from "./types";
 
 // ─── Re-exports from extracted modules ──────────────────────────
 // These maintain the public API so existing imports from "./hooks" continue to work.
 
+export {
+  _resetTrustCache,
+  isWorkspaceTrusted,
+  setTrustPromptCallback,
+  trustWorkspace,
+  untrustWorkspace,
+} from "./hook-trust";
 export type {
+  HookAction,
+  HookConfig,
+  HookEntry,
   HookEvent,
   HookMatcher,
-  HookConfig,
-  PromptHookConfig,
-  HookEntry,
-  HookAction,
   HookOutput,
   HookResult,
   KCodeSettings,
+  PromptHookConfig,
 } from "./hook-types";
-
-export {
-  setTrustPromptCallback,
-  trustWorkspace,
-  isWorkspaceTrusted,
-  untrustWorkspace,
-  _resetTrustCache,
-} from "./hook-trust";
 
 // ─── Internal imports from extracted modules ────────────────────
 
-import type {
-  HookEvent,
-  HookConfig,
-  HookEntry,
-  HookResult,
-  TaggedHook,
-  KCodeSettings,
-  HookSource,
-} from "./hook-types";
-import { HOOK_SOURCE } from "./hook-types";
-
 import {
-  isWorkspaceTrusted,
-  getTrustPromptCallback,
-  trustWorkspace,
-  normalizePath,
-} from "./hook-trust";
-
-import {
-  isHookEntry,
-  isLegacyHookConfig,
-  safeRegexTest,
-  matcherMatches,
   executeHookAction,
   executeHookEntry,
+  isHookEntry,
+  isLegacyHookConfig,
+  matcherMatches,
   parseHookOutput,
+  safeRegexTest,
 } from "./hook-executor";
+import {
+  getTrustPromptCallback,
+  isWorkspaceTrusted,
+  normalizePath,
+  trustWorkspace,
+} from "./hook-trust";
+import type {
+  HookConfig,
+  HookEntry,
+  HookEvent,
+  HookResult,
+  HookSource,
+  KCodeSettings,
+  TaggedHook,
+} from "./hook-types";
+import { HOOK_SOURCE } from "./hook-types";
 
 // ─── Hook Configuration Loading ─────────────────────────────────
 
@@ -155,10 +152,11 @@ export class HookManager {
     if (isWorkspaceTrusted(normalizePath(this.workingDirectory))) return true;
 
     // Determine the command string for the prompt
-    const command = (hook as HookEntry).command
-      ?? (hook as HookConfig).hooks?.[0]?.command
-      ?? (hook as HookConfig).hooks?.[0]?.url
-      ?? "unknown";
+    const command =
+      (hook as HookEntry).command ??
+      (hook as HookConfig).hooks?.[0]?.command ??
+      (hook as HookConfig).hooks?.[0]?.url ??
+      "unknown";
 
     const trustPromptCallback = getTrustPromptCallback();
     if (trustPromptCallback) {
@@ -249,11 +247,7 @@ export class HookManager {
       if (!(await this.checkHookTrust(config as TaggedHook))) continue;
 
       for (const action of config.hooks) {
-        const result = await executeHookAction(
-          action,
-          stdinData,
-          this.workingDirectory,
-        );
+        const result = await executeHookAction(action, stdinData, this.workingDirectory);
 
         // Exit code 2 = block the tool call
         if (result.exitCode === 2) {
@@ -295,7 +289,8 @@ export class HookManager {
         } else {
           // Non-zero, non-2 exit code = warning only
           const label = action.command ?? action.url ?? "unknown";
-          const message = result.stderr || result.stdout || `Hook "${label}" exited with code ${result.exitCode}`;
+          const message =
+            result.stderr || result.stdout || `Hook "${label}" exited with code ${result.exitCode}`;
           warnings.push(message);
         }
       }
@@ -352,14 +347,19 @@ export class HookManager {
         }
       } else {
         const label = entry.command ?? "unknown";
-        const message = result.stderr || result.stdout || `Hook "${label}" exited with code ${result.exitCode}`;
+        const message =
+          result.stderr || result.stdout || `Hook "${label}" exited with code ${result.exitCode}`;
         warnings.push(message);
       }
     }
 
     // Evaluate hookify rules (lower priority than explicit hooks)
     try {
-      const hookifyResult = await evaluateHookifyRules(tool.name, currentInput as Record<string, unknown>, "PreToolUse");
+      const hookifyResult = await evaluateHookifyRules(
+        tool.name,
+        currentInput as Record<string, unknown>,
+        "PreToolUse",
+      );
       if (hookifyResult.decision === "block") {
         return {
           allowed: false,
@@ -387,7 +387,10 @@ export class HookManager {
   // ─── PostToolUse ────────────────────────────────────────────
 
   /** Run PostToolUse hooks for logging/notification. These cannot block. */
-  async runPostToolUse(tool: ToolUseBlock, result: ToolResult): Promise<{ warnings: string[]; contextOutput?: string[] }> {
+  async runPostToolUse(
+    tool: ToolUseBlock,
+    result: ToolResult,
+  ): Promise<{ warnings: string[]; contextOutput?: string[] }> {
     const legacyHooks = this.getMatchingLegacyHooks("PostToolUse", tool.name);
     const entryHooks = this.getMatchingHookEntries("PostToolUse", tool.name, {
       tool_name: tool.name,
@@ -416,15 +419,14 @@ export class HookManager {
       if (!(await this.checkHookTrust(config as TaggedHook))) continue;
 
       for (const action of config.hooks) {
-        const hookResult = await executeHookAction(
-          action,
-          stdinData,
-          this.workingDirectory,
-        );
+        const hookResult = await executeHookAction(action, stdinData, this.workingDirectory);
 
         if (hookResult.exitCode !== 0) {
           const label = action.command ?? action.url ?? "unknown";
-          const message = hookResult.stderr || hookResult.stdout || `PostToolUse hook "${label}" exited with code ${hookResult.exitCode}`;
+          const message =
+            hookResult.stderr ||
+            hookResult.stdout ||
+            `PostToolUse hook "${label}" exited with code ${hookResult.exitCode}`;
           warnings.push(message);
         } else if (hookResult.stdout && !parseHookOutput(hookResult.stdout)) {
           contextOutput.push(hookResult.stdout);
@@ -441,7 +443,11 @@ export class HookManager {
         contextOutput.push(hookResult.stdout);
       } else if (hookResult.exitCode !== 0) {
         const label = entry.command ?? "unknown";
-        warnings.push(hookResult.stderr || hookResult.stdout || `PostToolUse hook "${label}" exited with code ${hookResult.exitCode}`);
+        warnings.push(
+          hookResult.stderr ||
+            hookResult.stdout ||
+            `PostToolUse hook "${label}" exited with code ${hookResult.exitCode}`,
+        );
       } else if (hookResult.stdout && !parseHookOutput(hookResult.stdout)) {
         contextOutput.push(hookResult.stdout);
       }
@@ -480,7 +486,11 @@ export class HookManager {
         const hookResult = await executeHookAction(action, stdinData, this.workingDirectory);
         if (hookResult.exitCode !== 0) {
           const label = action.command ?? action.url ?? "unknown";
-          warnings.push(hookResult.stderr || hookResult.stdout || `PostToolUseFailure hook "${label}" exited with code ${hookResult.exitCode}`);
+          warnings.push(
+            hookResult.stderr ||
+              hookResult.stdout ||
+              `PostToolUseFailure hook "${label}" exited with code ${hookResult.exitCode}`,
+          );
         }
       }
     }
@@ -491,7 +501,11 @@ export class HookManager {
       const hookResult = await executeHookEntry(entry, stdinData, this.workingDirectory);
       if (hookResult.exitCode !== 0) {
         const label = entry.command ?? "unknown";
-        warnings.push(hookResult.stderr || hookResult.stdout || `PostToolUseFailure hook "${label}" exited with code ${hookResult.exitCode}`);
+        warnings.push(
+          hookResult.stderr ||
+            hookResult.stdout ||
+            `PostToolUseFailure hook "${label}" exited with code ${hookResult.exitCode}`,
+        );
       }
     }
 
@@ -528,15 +542,14 @@ export class HookManager {
       if (!(await this.checkHookTrust(config as TaggedHook))) continue;
 
       for (const action of config.hooks) {
-        const result = await executeHookAction(
-          action,
-          stdinData,
-          this.workingDirectory,
-        );
+        const result = await executeHookAction(action, stdinData, this.workingDirectory);
 
         if (result.exitCode !== 0) {
           const label = action.command ?? action.url ?? "unknown";
-          const message = result.stderr || result.stdout || `${event} hook "${label}" exited with code ${result.exitCode}`;
+          const message =
+            result.stderr ||
+            result.stdout ||
+            `${event} hook "${label}" exited with code ${result.exitCode}`;
           warnings.push(message);
         } else if (result.stdout && !parseHookOutput(result.stdout)) {
           contextOutput.push(result.stdout);
@@ -553,7 +566,11 @@ export class HookManager {
         contextOutput.push(result.stdout);
       } else if (result.exitCode !== 0) {
         const label = entry.command ?? "unknown";
-        warnings.push(result.stderr || result.stdout || `${event} hook "${label}" exited with code ${result.exitCode}`);
+        warnings.push(
+          result.stderr ||
+            result.stdout ||
+            `${event} hook "${label}" exited with code ${result.exitCode}`,
+        );
       } else if (result.stdout && !parseHookOutput(result.stdout)) {
         contextOutput.push(result.stdout);
       }
@@ -574,7 +591,10 @@ export class HookManager {
   ): void {
     if (!this.hasHooks(event)) return;
     this.runEventHook(event, context).catch((err) => {
-      log.warn("hooks", `Fire-and-forget hook "${event}" error: ${err instanceof Error ? err.message : err}`);
+      log.warn(
+        "hooks",
+        `Fire-and-forget hook "${event}" error: ${err instanceof Error ? err.message : err}`,
+      );
     });
   }
 
@@ -602,7 +622,8 @@ export class HookManager {
           const output = parseHookOutput(result.stdout);
           return {
             blocked: true,
-            reason: output?.reason ?? `Stop hook blocked: ${action.command ?? action.url ?? "unknown"}`,
+            reason:
+              output?.reason ?? `Stop hook blocked: ${action.command ?? action.url ?? "unknown"}`,
             warnings,
           };
         }
@@ -618,7 +639,9 @@ export class HookManager {
           }
         } else {
           const label = action.command ?? action.url ?? "unknown";
-          warnings.push(result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`);
+          warnings.push(
+            result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`,
+          );
         }
       }
     }
@@ -650,7 +673,9 @@ export class HookManager {
         }
       } else {
         const label = entry.command ?? "unknown";
-        warnings.push(result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`);
+        warnings.push(
+          result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`,
+        );
       }
     }
 
@@ -667,7 +692,10 @@ export class HookManager {
     input: Record<string, unknown>,
   ): Promise<HookResult> {
     const legacyHooks = this.getMatchingLegacyHooks(event, toolName);
-    const entryHooks = this.getMatchingHookEntries(event, toolName, { tool_name: toolName, ...input });
+    const entryHooks = this.getMatchingHookEntries(event, toolName, {
+      tool_name: toolName,
+      ...input,
+    });
 
     if (legacyHooks.length === 0 && entryHooks.length === 0) return { allowed: true, warnings: [] };
 
@@ -691,7 +719,9 @@ export class HookManager {
           const output = parseHookOutput(result.stdout);
           return {
             allowed: false,
-            reason: output?.reason ?? `${event} hook blocked: ${action.command ?? action.url ?? "unknown"}`,
+            reason:
+              output?.reason ??
+              `${event} hook blocked: ${action.command ?? action.url ?? "unknown"}`,
             warnings,
             contextOutput: contextOutput.length > 0 ? contextOutput : undefined,
           };
@@ -707,7 +737,9 @@ export class HookManager {
           }
         } else {
           const label = action.command ?? action.url ?? "unknown";
-          warnings.push(result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`);
+          warnings.push(
+            result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`,
+          );
         }
       }
     }
@@ -743,7 +775,9 @@ export class HookManager {
         }
       } else {
         const label = entry.command ?? "unknown";
-        warnings.push(result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`);
+        warnings.push(
+          result.stderr || `${event} hook "${label}" exited with code ${result.exitCode}`,
+        );
       }
     }
 

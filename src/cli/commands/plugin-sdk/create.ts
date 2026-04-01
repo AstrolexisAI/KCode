@@ -1,9 +1,9 @@
 // KCode - Plugin Scaffolding
 // Creates a new plugin project with boilerplate files.
 
-import { join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
-import type { PluginScaffoldConfig, PluginComponent } from "../../../core/plugin-sdk/types";
+import { join } from "node:path";
+import type { PluginComponent, PluginScaffoldConfig } from "../../../core/plugin-sdk/types";
 
 export async function createPlugin(config: PluginScaffoldConfig): Promise<string> {
   const dir = join(process.cwd(), `kcode-plugin-${config.name}`);

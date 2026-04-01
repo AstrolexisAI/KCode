@@ -1,5 +1,6 @@
 // KCode - Remote Trigger Manager
 
+import type { TriggerApiClient } from "./trigger-api";
 import type {
   RemoteTrigger,
   TriggerCreateInput,
@@ -7,7 +8,6 @@ import type {
   TriggerUpdateInput,
 } from "./types";
 import { TriggerValidationError } from "./types";
-import { TriggerApiClient } from "./trigger-api";
 
 /**
  * Validates a 5-field cron expression: "min hour dom month dow".
@@ -41,20 +41,13 @@ export function validateCron(expression: string): void {
   }
 }
 
-function validateCronField(
-  field: string,
-  name: string,
-  min: number,
-  max: number,
-): void {
+function validateCronField(field: string, name: string, min: number, max: number): void {
   // Split by comma for lists: "1,3,5"
   const parts = field.split(",");
 
   for (const part of parts) {
     if (part === "") {
-      throw new TriggerValidationError(
-        `Invalid ${name} field: empty value in list`,
-      );
+      throw new TriggerValidationError(`Invalid ${name} field: empty value in list`);
     }
 
     // Check for step: "*/5" or "1-10/2"
@@ -94,9 +87,7 @@ function validateCronField(
     for (const val of rangeParts) {
       const num = Number(val);
       if (!Number.isInteger(num)) {
-        throw new TriggerValidationError(
-          `Invalid ${name} field: "${val}" is not a valid integer`,
-        );
+        throw new TriggerValidationError(`Invalid ${name} field: "${val}" is not a valid integer`);
       }
       if (num < min || num > max) {
         throw new TriggerValidationError(
@@ -166,10 +157,7 @@ export class TriggerManager {
   /**
    * Update a trigger. Validates cron if schedule is being changed.
    */
-  async update(
-    id: string,
-    updates: TriggerUpdateInput,
-  ): Promise<RemoteTrigger> {
+  async update(id: string, updates: TriggerUpdateInput): Promise<RemoteTrigger> {
     if (updates.schedule !== undefined) {
       validateCron(updates.schedule);
     }
@@ -216,10 +204,7 @@ export class TriggerManager {
   /**
    * Get execution history for a trigger.
    */
-  async getHistory(
-    id: string,
-    limit?: number,
-  ): Promise<TriggerRunResult[]> {
+  async getHistory(id: string, limit?: number): Promise<TriggerRunResult[]> {
     return this.api.getTriggerHistory(id, limit);
   }
 }

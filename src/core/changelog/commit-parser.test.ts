@@ -1,7 +1,7 @@
 // KCode - Commit Parser Tests
 
-import { describe, test, expect } from "bun:test";
-import { parseConventionalCommit, classifyCommit } from "./commit-parser";
+import { describe, expect, test } from "bun:test";
+import { classifyCommit, parseConventionalCommit } from "./commit-parser";
 
 describe("parseConventionalCommit", () => {
   test("parses feat with scope", () => {
@@ -42,7 +42,18 @@ describe("parseConventionalCommit", () => {
   });
 
   test("handles all standard types", () => {
-    for (const type of ["feat", "fix", "docs", "refactor", "test", "chore", "perf", "style", "ci", "build"]) {
+    for (const type of [
+      "feat",
+      "fix",
+      "docs",
+      "refactor",
+      "test",
+      "chore",
+      "perf",
+      "style",
+      "ci",
+      "build",
+    ]) {
       const result = parseConventionalCommit(`${type}: something`);
       expect(result).not.toBeNull();
       expect(result!.type).toBe(type);

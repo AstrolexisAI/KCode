@@ -1,6 +1,6 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { TeamMemory, type TeamMemoryEntry } from "./team";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CloudClient } from "./client";
+import { TeamMemory, type TeamMemoryEntry } from "./team";
 import type { KCodeCloudConfig, TeamAnalytics, TeamPolicies } from "./types";
 
 // ─── Test fixtures ─────────────────────────────────────────────
@@ -76,9 +76,7 @@ describe("TeamMemory", () => {
 
     test("keeps remote-only entries", () => {
       const local: TeamMemoryEntry[] = [];
-      const remote = [
-        makeMemory("key-b", "remote-val", "2026-03-15T00:00:00Z"),
-      ];
+      const remote = [makeMemory("key-b", "remote-val", "2026-03-15T00:00:00Z")];
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
@@ -87,12 +85,8 @@ describe("TeamMemory", () => {
     });
 
     test("gives precedence to newer remote entry", () => {
-      const local = [
-        makeMemory("shared", "old-local", "2026-03-01T00:00:00Z"),
-      ];
-      const remote = [
-        makeMemory("shared", "new-remote", "2026-03-15T00:00:00Z"),
-      ];
+      const local = [makeMemory("shared", "old-local", "2026-03-01T00:00:00Z")];
+      const remote = [makeMemory("shared", "new-remote", "2026-03-15T00:00:00Z")];
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
@@ -100,12 +94,8 @@ describe("TeamMemory", () => {
     });
 
     test("keeps newer local entry over older remote", () => {
-      const local = [
-        makeMemory("shared", "new-local", "2026-03-20T00:00:00Z"),
-      ];
-      const remote = [
-        makeMemory("shared", "old-remote", "2026-03-01T00:00:00Z"),
-      ];
+      const local = [makeMemory("shared", "new-local", "2026-03-20T00:00:00Z")];
+      const remote = [makeMemory("shared", "old-remote", "2026-03-01T00:00:00Z")];
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
@@ -151,16 +141,12 @@ describe("TeamMemory", () => {
 
   describe("syncMemories", () => {
     test("uploads local memories and returns merged result", async () => {
-      const remoteMemories = [
-        makeMemory("remote-key", "remote-val", "2026-03-20T00:00:00Z"),
-      ];
+      const remoteMemories = [makeMemory("remote-key", "remote-val", "2026-03-20T00:00:00Z")];
       globalThis.fetch = mockFetchResponse(remoteMemories) as any;
       client = new CloudClient(TEST_CONFIG);
       teamMemory = new TeamMemory(client);
 
-      const localMemories = [
-        makeMemory("local-key", "local-val", "2026-03-10T00:00:00Z"),
-      ];
+      const localMemories = [makeMemory("local-key", "local-val", "2026-03-10T00:00:00Z")];
 
       const result = await teamMemory.syncMemories(localMemories);
       expect(result).toHaveLength(2);
@@ -172,9 +158,7 @@ describe("TeamMemory", () => {
       client = new CloudClient(TEST_CONFIG);
       teamMemory = new TeamMemory(client);
 
-      const localMemories = [
-        makeMemory("k1", "v1", "2026-03-01T00:00:00Z"),
-      ];
+      const localMemories = [makeMemory("k1", "v1", "2026-03-01T00:00:00Z")];
 
       await teamMemory.syncMemories(localMemories);
 

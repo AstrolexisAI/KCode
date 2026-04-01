@@ -36,12 +36,7 @@ export interface PluginScaffoldConfig {
   language: "markdown" | "typescript";
 }
 
-export type PluginComponent =
-  | "skills"
-  | "hooks"
-  | "mcp"
-  | "output-styles"
-  | "agents";
+export type PluginComponent = "skills" | "hooks" | "mcp" | "output-styles" | "agents";
 
 export interface ValidationReport {
   valid: boolean;

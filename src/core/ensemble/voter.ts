@@ -17,12 +17,7 @@ const UNCERTAINTY_PATTERNS = [
 ];
 
 /** Patterns indicating JSON/syntax errors in responses */
-const ERROR_PATTERNS = [
-  /SyntaxError/,
-  /Unexpected token/,
-  /Parse error/,
-  /Invalid JSON/i,
-];
+const ERROR_PATTERNS = [/SyntaxError/, /Unexpected token/, /Parse error/, /Invalid JSON/i];
 
 /**
  * Score a candidate response using heuristics (no judge model needed).
@@ -109,7 +104,10 @@ export function isRepetitive(text: string): boolean {
   if (text.length < 100) return false;
 
   // Split into sentences and check for duplicates
-  const sentences = text.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 10);
+  const sentences = text
+    .split(/[.!?\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10);
   if (sentences.length < 3) return false;
 
   const unique = new Set(sentences);
@@ -161,7 +159,7 @@ function findMatchingBrace(text: string, start: number): number {
  * Select the best candidate using heuristic scoring (no judge model).
  */
 export function heuristicSelect(candidates: CandidateResponse[]): EnsembleResult {
-  const scored = candidates.map(c => ({
+  const scored = candidates.map((c) => ({
     ...c,
     score: scoreCandidate(c),
   }));
@@ -191,7 +189,7 @@ export async function judgeSelect(
 ): Promise<EnsembleResult> {
   // Build the judge prompt
   const queryText = originalQuery
-    .map(m => typeof m.content === "string" ? m.content : JSON.stringify(m.content))
+    .map((m) => (typeof m.content === "string" ? m.content : JSON.stringify(m.content)))
     .join("\n");
 
   const judgePrompt = [
@@ -202,10 +200,13 @@ export async function judgeSelect(
     `ORIGINAL QUESTION:`,
     queryText,
     ``,
-    ...candidates.map((c, i) =>
-      `RESPONSE ${i + 1} (${c.model}):\n${c.response}`
-    ).join("\n---\n").split("\n"),
-  ].join("\n").trim();
+    ...candidates
+      .map((c, i) => `RESPONSE ${i + 1} (${c.model}):\n${c.response}`)
+      .join("\n---\n")
+      .split("\n"),
+  ]
+    .join("\n")
+    .trim();
 
   try {
     const judgeResult = await executor.execute(
@@ -265,9 +266,10 @@ export function majorityVote(candidates: CandidateResponse[]): EnsembleResult {
   return {
     finalResponse: best.original.response,
     strategy: "majority-vote",
-    candidates: candidates.map(c => ({
+    candidates: candidates.map((c) => ({
       ...c,
-      score: c.response.trim().toLowerCase() === best.original.response.trim().toLowerCase() ? 1.0 : 0.0,
+      score:
+        c.response.trim().toLowerCase() === best.original.response.trim().toLowerCase() ? 1.0 : 0.0,
     })),
     reasoning: `Majority vote: "${best.original.model}" response appeared ${best.count}/${candidates.length} times`,
   };

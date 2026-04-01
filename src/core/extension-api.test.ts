@@ -1,13 +1,13 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  registerExtension,
-  unregisterExtension,
-  getExtensions,
-  getExtension,
-  getExtensionTools,
-  getExtensionCommands,
   _resetExtensions,
   type ExtensionManifest,
+  getExtension,
+  getExtensionCommands,
+  getExtensions,
+  getExtensionTools,
+  registerExtension,
+  unregisterExtension,
 } from "./extension-api";
 
 const makeManifest = (name = "test-ext"): ExtensionManifest => ({
@@ -44,12 +44,14 @@ describe("extension-api", () => {
 
   test("registerExtension with tools", () => {
     registerExtension(makeManifest(), {
-      tools: [{
-        name: "MyTool",
-        description: "A test tool",
-        parameters: {},
-        execute: async () => "result",
-      }],
+      tools: [
+        {
+          name: "MyTool",
+          description: "A test tool",
+          parameters: {},
+          execute: async () => "result",
+        },
+      ],
     });
     expect(getExtensionTools()).toHaveLength(1);
     expect(getExtensionTools()[0].name).toBe("MyTool");
@@ -57,11 +59,13 @@ describe("extension-api", () => {
 
   test("registerExtension with commands", () => {
     registerExtension(makeManifest(), {
-      commands: [{
-        name: "/mycommand",
-        description: "A test command",
-        execute: async () => "done",
-      }],
+      commands: [
+        {
+          name: "/mycommand",
+          description: "A test command",
+          execute: async () => "done",
+        },
+      ],
     });
     expect(getExtensionCommands()).toHaveLength(1);
   });

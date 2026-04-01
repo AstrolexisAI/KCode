@@ -1,9 +1,9 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { CacheWarmer } from "./cache-warmer";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CacheWarmer } from "./cache-warmer";
 
 describe("CacheWarmer", () => {
   let tempHome: string;

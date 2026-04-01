@@ -8,7 +8,15 @@ export interface TestDetection {
   confidence: number;
 }
 
-export type TestFramework = "bun" | "vitest" | "jest" | "pytest" | "go" | "cargo" | "mocha" | "unknown";
+export type TestFramework =
+  | "bun"
+  | "vitest"
+  | "jest"
+  | "pytest"
+  | "go"
+  | "cargo"
+  | "mocha"
+  | "unknown";
 
 export interface TestRunResult {
   command: string;

@@ -2,9 +2,9 @@
 // Reads file contents with line numbers, offset, and limit support
 // Supports images (PNG, JPG, GIF, WEBP), PDFs, and Jupyter notebooks
 
+import { execFileSync, execSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
-import { execSync, execFileSync } from "node:child_process";
-import { extname, resolve, relative } from "node:path";
+import { extname, relative, resolve } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 import { getToolWorkspace } from "./workspace";
 
@@ -24,8 +24,15 @@ export const readDefinition: ToolDefinition = {
     type: "object",
     properties: {
       file_path: { type: "string", description: "Absolute path to the file" },
-      offset: { type: "number", description: "Starting line number (1-indexed). Omit to start from the beginning." },
-      limit: { type: "number", description: "Number of lines to read (default: up to 2000). Only set this if you need a specific smaller range. Do NOT read files in small chunks of 100 lines — read large sections at once." },
+      offset: {
+        type: "number",
+        description: "Starting line number (1-indexed). Omit to start from the beginning.",
+      },
+      limit: {
+        type: "number",
+        description:
+          "Number of lines to read (default: up to 2000). Only set this if you need a specific smaller range. Do NOT read files in small chunks of 100 lines — read large sections at once.",
+      },
       pages: {
         type: "string",
         description:
@@ -58,10 +65,7 @@ function readImage(filePath: string): ToolResult {
   };
 }
 
-function getImageDimensions(
-  buffer: Buffer,
-  ext: string
-): { width: number; height: number } | null {
+function getImageDimensions(buffer: Buffer, ext: string): { width: number; height: number } | null {
   try {
     if (ext === "png" && buffer.length >= 24) {
       // PNG: width at offset 16, height at offset 20 (big-endian uint32)
@@ -150,7 +154,11 @@ function getPdfPageCount(filePath: string): number | null {
       encoding: "utf-8",
       timeout: 10000,
     });
-    const pagesLine = output.split("\n").find(l => /^Pages:/i.test(l))?.trim() ?? "";
+    const pagesLine =
+      output
+        .split("\n")
+        .find((l) => /^Pages:/i.test(l))
+        ?.trim() ?? "";
     const match = pagesLine.match(/Pages:\s*(\d+)/i);
     return match ? parseInt(match[1]!, 10) : null;
   } catch {
@@ -251,7 +259,9 @@ function formatNotebookOutput(output: Record<string, unknown>): string {
 
   if (outputType === "stream") {
     const name = (output.name as string) || "stdout";
-    const text = Array.isArray(output.text) ? (output.text as string[]).join("") : String(output.text);
+    const text = Array.isArray(output.text)
+      ? (output.text as string[]).join("")
+      : String(output.text);
     return `[${name}]\n${text}`;
   }
 
@@ -318,7 +328,12 @@ function readNotebook(filePath: string): ToolResult {
   for (let i = 0; i < notebook.cells.length; i++) {
     const cell = notebook.cells[i]!;
     const source = Array.isArray(cell.source) ? cell.source.join("") : String(cell.source);
-    const typeLabel = cell.cell_type === "code" ? "Code" : cell.cell_type === "markdown" ? "Markdown" : cell.cell_type;
+    const typeLabel =
+      cell.cell_type === "code"
+        ? "Code"
+        : cell.cell_type === "markdown"
+          ? "Markdown"
+          : cell.cell_type;
     const execCount =
       cell.cell_type === "code" && cell.execution_count != null ? ` [${cell.execution_count}]` : "";
 
@@ -365,7 +380,8 @@ function readTextFile(filePath: string, offset?: number, limit?: number): TextFi
   const formatted = lines
     .map((line, i) => {
       const num = startLine + i + 1;
-      const truncated = line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + "..." : line;
+      const truncated =
+        line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + "..." : line;
       return `${String(num).padStart(6)}\t${truncated}`;
     })
     .join("\n");
@@ -391,8 +407,8 @@ const BLOCKED_READ_PATHS = [
   "/etc/shadow",
   "/etc/passwd",
   "/etc/sudoers",
-  "/etc/master.passwd",      // BSD equivalent
-  "/proc/self/environ",      // leaks env vars with secrets
+  "/etc/master.passwd", // BSD equivalent
+  "/proc/self/environ", // leaks env vars with secrets
 ];
 
 const home = process.env.HOME ?? "";
@@ -428,7 +444,7 @@ function isSensitiveReadPath(filePath: string): boolean {
     if (prefix && resolved.startsWith(prefix)) return true;
   }
 
-  if (SENSITIVE_READ_PATTERNS.some(p => p.test(resolved))) return true;
+  if (SENSITIVE_READ_PATTERNS.some((p) => p.test(resolved))) return true;
 
   return false;
 }
@@ -468,7 +484,9 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
     }
     // If file doesn't exist and workspace is HOME, give a specific warning
     // instead of a generic ENOENT — the model likely invented this path
-    try { statSync(file_path); } catch {
+    try {
+      statSync(file_path);
+    } catch {
       return {
         tool_use_id: "",
         content: `Error: File "${file_path}" does not exist. Your workspace is your home directory (~) — this is too broad for code exploration. Run KCode from a project directory, or specify an existing file path.`,
@@ -513,7 +531,9 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
       if (cached) {
         return { tool_use_id: "", content: cached };
       }
-    } catch { /* cache not critical */ }
+    } catch {
+      /* cache not critical */
+    }
 
     const result = readTextFile(file_path, offset, limit);
 
@@ -528,7 +548,9 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
       const cache = getToolCache();
       const cacheKey = cache.makeKey("Read", file_path, `${offset ?? 0}:${limit ?? 0}`);
       cache.set(cacheKey, file_path, result.content);
-    } catch { /* cache not critical */ }
+    } catch {
+      /* cache not critical */
+    }
 
     return result;
   } catch (error) {

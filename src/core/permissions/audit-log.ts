@@ -1,10 +1,10 @@
 // KCode - Permission Audit Log
 // Records all permission decisions for review and debugging.
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { createHmac } from "node:crypto";
-import { writeFileSync, statSync, renameSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -75,18 +75,10 @@ export class AuditLog {
     this.db = db;
     this.db.run(CREATE_TABLE_SQL);
     // Run index creation statements individually
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_audit_tool_name ON permission_audit(tool_name)",
-    );
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_audit_session_id ON permission_audit(session_id)",
-    );
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON permission_audit(timestamp)",
-    );
-    this.db.run(
-      "CREATE INDEX IF NOT EXISTS idx_audit_action ON permission_audit(action)",
-    );
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_tool_name ON permission_audit(tool_name)");
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_session_id ON permission_audit(session_id)");
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON permission_audit(timestamp)");
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_action ON permission_audit(action)");
 
     this.insertStmt = this.db.prepare(`
       INSERT INTO permission_audit (timestamp, tool_name, action, input_summary, reason, session_id)
@@ -113,11 +105,7 @@ export class AuditLog {
   /**
    * Retrieves audit history with optional filters.
    */
-  getHistory(opts?: {
-    toolName?: string;
-    sessionId?: string;
-    limit?: number;
-  }): AuditEntry[] {
+  getHistory(opts?: { toolName?: string; sessionId?: string; limit?: number }): AuditEntry[] {
     const conditions: string[] = [];
     const params: Record<string, unknown> = {};
 
@@ -130,8 +118,7 @@ export class AuditLog {
       params.$session_id = opts.sessionId;
     }
 
-    const where =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const limit = opts?.limit ? `LIMIT ${opts.limit}` : "";
 
     const sql = `
@@ -223,18 +210,16 @@ export class AuditLog {
     let count: number;
     if (beforeTimestamp !== undefined) {
       const countRow = this.db
-        .prepare(
-          "SELECT COUNT(*) as c FROM permission_audit WHERE timestamp < $before",
-        )
+        .prepare("SELECT COUNT(*) as c FROM permission_audit WHERE timestamp < $before")
         .get({ $before: beforeTimestamp }) as { c: number };
       count = countRow.c;
       this.db
         .prepare("DELETE FROM permission_audit WHERE timestamp < $before")
         .run({ $before: beforeTimestamp });
     } else {
-      const countRow = this.db
-        .prepare("SELECT COUNT(*) as c FROM permission_audit")
-        .get() as { c: number };
+      const countRow = this.db.prepare("SELECT COUNT(*) as c FROM permission_audit").get() as {
+        c: number;
+      };
       count = countRow.c;
       this.db.run("DELETE FROM permission_audit");
     }
@@ -327,7 +312,9 @@ export class AuditLog {
       // Re-create tables in the (now empty) database
       this.db.run(CREATE_TABLE_SQL);
       this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_tool_name ON permission_audit(tool_name)");
-      this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_session_id ON permission_audit(session_id)");
+      this.db.run(
+        "CREATE INDEX IF NOT EXISTS idx_audit_session_id ON permission_audit(session_id)",
+      );
       this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON permission_audit(timestamp)");
       this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_action ON permission_audit(action)");
 

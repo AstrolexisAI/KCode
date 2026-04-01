@@ -3,7 +3,7 @@
 // Styles are .md files in a plugin's output-styles/ directory with optional YAML frontmatter.
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { basename, join } from "node:path";
 import type { PluginOutputStyle } from "./types";
 
 /**
@@ -39,7 +39,7 @@ export function loadPluginOutputStyles(plugins: PluginInfo[]): PluginOutputStyle
 
     let files: string[];
     try {
-      files = readdirSync(stylesDir).filter(f => f.endsWith(".md"));
+      files = readdirSync(stylesDir).filter((f) => f.endsWith(".md"));
     } catch {
       continue;
     }
@@ -102,7 +102,10 @@ export function parseFrontmatter(text: string): {
 
     // Strip surrounding quotes
     if (typeof value === "string" && value.length >= 2) {
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
         value = value.slice(1, -1);
       }
     }

@@ -1,9 +1,15 @@
 // KCode - WebSocket Handler Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
-import { handleClientMessage, resolvePermission, switchModel, enqueueMessage, setSessionContext } from "./ws-handler";
+import { beforeEach, describe, expect, test } from "bun:test";
 import * as bridge from "./session-bridge";
 import type { ServerEvent } from "./types";
+import {
+  enqueueMessage,
+  handleClientMessage,
+  resolvePermission,
+  setSessionContext,
+  switchModel,
+} from "./ws-handler";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -52,6 +58,7 @@ function createMockManager(): any {
 
 describe("WebSocket Handler", () => {
   beforeEach(() => {
+    bridge.clearConversationManager();
     bridge.setActiveModel("test-model");
     bridge.setWorkingDirectory("/tmp/test");
   });
@@ -99,7 +106,7 @@ describe("WebSocket Handler", () => {
       handleClientMessage(
         createMockWs(),
         '{"type":"permission.respond","id":"p1","action":"maybe"}',
-        broadcast
+        broadcast,
       );
     });
     expect(events.length).toBe(0);
@@ -118,11 +125,7 @@ describe("WebSocket Handler", () => {
     const events: ServerEvent[] = [];
     const broadcast = (e: ServerEvent) => events.push(e);
 
-    handleClientMessage(
-      createMockWs(),
-      '{"type":"message.send","content":"hello"}',
-      broadcast
-    );
+    handleClientMessage(createMockWs(), '{"type":"message.send","content":"hello"}', broadcast);
 
     // Wait for async handling
     await new Promise((r) => setTimeout(r, 100));
@@ -139,18 +142,16 @@ describe("WebSocket Handler", () => {
     const events: ServerEvent[] = [];
     const broadcast = (e: ServerEvent) => events.push(e);
 
-    handleClientMessage(
-      createMockWs(),
-      '{"type":"message.send","content":"hello"}',
-      broadcast
-    );
+    handleClientMessage(createMockWs(), '{"type":"message.send","content":"hello"}', broadcast);
 
     // Wait for async handling
     await new Promise((r) => setTimeout(r, 200));
 
     // Should have user message, assistant message, and a delta
     const userMsg = events.find((e) => e.type === "message.new" && (e as any).role === "user");
-    const assistantMsg = events.find((e) => e.type === "message.new" && (e as any).role === "assistant");
+    const assistantMsg = events.find(
+      (e) => e.type === "message.new" && (e as any).role === "assistant",
+    );
     const delta = events.find((e) => e.type === "message.delta");
 
     expect(userMsg).toBeDefined();
@@ -162,19 +163,15 @@ describe("WebSocket Handler", () => {
 
   test("message.cancel calls abort on manager", async () => {
     let aborted = false;
-    bridge.setConversationManager(
-      createMockManager() as any
-    );
+    bridge.setConversationManager(createMockManager() as any);
     // Replace abort
     const mgr = bridge.getConversationManager() as any;
-    mgr.abort = () => { aborted = true; };
+    mgr.abort = () => {
+      aborted = true;
+    };
 
     const events: ServerEvent[] = [];
-    handleClientMessage(
-      createMockWs(),
-      '{"type":"message.cancel"}',
-      (e) => events.push(e)
-    );
+    handleClientMessage(createMockWs(), '{"type":"message.cancel"}', (e) => events.push(e));
 
     await new Promise((r) => setTimeout(r, 50));
     expect(aborted).toBe(true);
@@ -185,10 +182,8 @@ describe("WebSocket Handler", () => {
   test("model.switch without manager returns error", async () => {
     // Ensure no manager
     const events: ServerEvent[] = [];
-    handleClientMessage(
-      createMockWs(),
-      '{"type":"model.switch","model":"new-model"}',
-      (e) => events.push(e)
+    handleClientMessage(createMockWs(), '{"type":"model.switch","model":"new-model"}', (e) =>
+      events.push(e),
     );
 
     await new Promise((r) => setTimeout(r, 50));
@@ -200,10 +195,8 @@ describe("WebSocket Handler", () => {
     bridge.setConversationManager(createMockManager() as any);
 
     const events: ServerEvent[] = [];
-    handleClientMessage(
-      createMockWs(),
-      '{"type":"model.switch","model":"new-model"}',
-      (e) => events.push(e)
+    handleClientMessage(createMockWs(), '{"type":"model.switch","model":"new-model"}', (e) =>
+      events.push(e),
     );
 
     await new Promise((r) => setTimeout(r, 50));
@@ -216,10 +209,8 @@ describe("WebSocket Handler", () => {
 
   test("command.run rejects non-slash commands", async () => {
     const events: ServerEvent[] = [];
-    handleClientMessage(
-      createMockWs(),
-      '{"type":"command.run","command":"hello"}',
-      (e) => events.push(e)
+    handleClientMessage(createMockWs(), '{"type":"command.run","command":"hello"}', (e) =>
+      events.push(e),
     );
 
     await new Promise((r) => setTimeout(r, 50));

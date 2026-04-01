@@ -2,8 +2,8 @@
 // Reusable component for rendering a single diff hunk with syntax coloring,
 // line numbers, and status indicators. Supports inline and side-by-side modes.
 
-import React from "react";
 import { Box, Text } from "ink";
+import type React from "react";
 import type { DiffHunk } from "../../core/diff/types.js";
 
 export interface HunkSelectorProps {
@@ -57,7 +57,8 @@ export default function HunkSelector({
           {symbol}
         </Text>
         <Text color="magenta" dimColor={dimmed}>
-          @@ -{hunk.startLineOld},{hunk.linesRemoved.length} +{hunk.startLineNew},{hunk.linesAdded.length} @@
+          @@ -{hunk.startLineOld},{hunk.linesRemoved.length} +{hunk.startLineNew},
+          {hunk.linesAdded.length} @@
         </Text>
         <Text color={statusColor} dimColor={dimmed}>
           [{hunk.status}]
@@ -76,13 +77,7 @@ export default function HunkSelector({
 /**
  * Inline (unified) diff view with +/- prefixes.
  */
-function InlineView({
-  hunk,
-  dimmed,
-}: {
-  hunk: DiffHunk;
-  dimmed: boolean;
-}): React.ReactElement {
+function InlineView({ hunk, dimmed }: { hunk: DiffHunk; dimmed: boolean }): React.ReactElement {
   const lines: React.ReactElement[] = [];
   let key = 0;
 
@@ -92,7 +87,7 @@ function InlineView({
     lines.push(
       <Box key={key++}>
         <Text dimColor>{padLineNum(lineNum)} </Text>
-        <Text dimColor>  {hunk.context.before[i]}</Text>
+        <Text dimColor> {hunk.context.before[i]}</Text>
       </Box>,
     );
   }
@@ -129,7 +124,7 @@ function InlineView({
     lines.push(
       <Box key={key++}>
         <Text dimColor>{padLineNum(lineNum)} </Text>
-        <Text dimColor>  {hunk.context.after[i]}</Text>
+        <Text dimColor> {hunk.context.after[i]}</Text>
       </Box>,
     );
   }
@@ -140,20 +135,10 @@ function InlineView({
 /**
  * Side-by-side diff view with two columns.
  */
-function SideBySideView({
-  hunk,
-  dimmed,
-}: {
-  hunk: DiffHunk;
-  dimmed: boolean;
-}): React.ReactElement {
+function SideBySideView({ hunk, dimmed }: { hunk: DiffHunk; dimmed: boolean }): React.ReactElement {
   const maxRows = Math.max(
-    hunk.context.before.length +
-      hunk.linesRemoved.length +
-      hunk.context.after.length,
-    hunk.context.before.length +
-      hunk.linesAdded.length +
-      hunk.context.after.length,
+    hunk.context.before.length + hunk.linesRemoved.length + hunk.context.after.length,
+    hunk.context.before.length + hunk.linesAdded.length + hunk.context.after.length,
   );
 
   const leftLines: Array<{ num: number | null; text: string; type: "ctx" | "del" }> = [];
@@ -222,9 +207,7 @@ function SideBySideView({
 
         {/* Right column (new) */}
         <Box width={40}>
-          <Text dimColor>
-            {right.num !== null ? padLineNum(right.num) : "    "}{" "}
-          </Text>
+          <Text dimColor>{right.num !== null ? padLineNum(right.num) : "    "} </Text>
           <Text
             color={right.type === "add" ? "green" : undefined}
             dimColor={right.type === "ctx" || dimmed}

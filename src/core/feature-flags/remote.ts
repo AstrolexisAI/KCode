@@ -5,9 +5,9 @@
 // Flow: Remote API → Local cache → Runtime evaluation
 // Fallback: If remote is unreachable, uses local cache or defaults.
 
+import { join } from "node:path";
 import { log } from "../logger";
 import { kcodeHome } from "../paths";
-import { join } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -118,7 +118,7 @@ export class RemoteFlagClient {
 
     try {
       const headers: Record<string, string> = {
-        "Accept": "application/json",
+        Accept: "application/json",
         "X-Client-ID": this.config.clientId,
       };
       if (this.config.apiKey) {
@@ -143,7 +143,7 @@ export class RemoteFlagClient {
         return false;
       }
 
-      const data = await resp.json() as { flags: RemoteFlag[] };
+      const data = (await resp.json()) as { flags: RemoteFlag[] };
       this.cache = {
         flags: data.flags,
         fetchedAt: Date.now(),

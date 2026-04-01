@@ -86,9 +86,9 @@ export class CheckpointManager {
 
   /** Get checkpoint by ID */
   getById(id: string): SessionCheckpoint | null {
-    const row = this.db
-      .query(`SELECT data FROM session_checkpoints WHERE id = ?`)
-      .get(id) as { data: string } | null;
+    const row = this.db.query(`SELECT data FROM session_checkpoints WHERE id = ?`).get(id) as {
+      data: string;
+    } | null;
     if (!row) return null;
     try {
       return JSON.parse(row.data) as SessionCheckpoint;
@@ -185,20 +185,16 @@ export class CheckpointManager {
 
   /** Remove all checkpoints for a conversation */
   clearConversation(conversationId: string): number {
-    const result = this.db.run(
-      `DELETE FROM session_checkpoints WHERE conversation_id = ?`,
-      [conversationId],
-    );
+    const result = this.db.run(`DELETE FROM session_checkpoints WHERE conversation_id = ?`, [
+      conversationId,
+    ]);
     return result.changes;
   }
 
   /** Remove all checkpoints older than N days */
   pruneOlderThan(days: number): number {
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-    const result = this.db.run(
-      `DELETE FROM session_checkpoints WHERE timestamp < ?`,
-      [cutoff],
-    );
+    const result = this.db.run(`DELETE FROM session_checkpoints WHERE timestamp < ?`, [cutoff]);
     return result.changes;
   }
 }

@@ -1,10 +1,10 @@
 // KCode - Web UI REST API
 // Endpoint handlers for /api/v1/* routes
 
-import { join, resolve, normalize } from "node:path";
+import { join, normalize, resolve } from "node:path";
 import { log } from "../core/logger";
+import { getActiveModel, getConversationManager, getWorkingDirectory } from "./session-bridge";
 import type { ServerEvent } from "./types";
-import { getConversationManager, getActiveModel, getWorkingDirectory } from "./session-bridge";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -58,9 +58,11 @@ export async function handleApiRequest(req: Request, pathname: string): Promise<
     // GET /api/v1/plan
     if (route === "/plan" && method === "GET") return handleGetPlan();
     // POST /api/v1/permission/:id
-    if (route.startsWith("/permission/") && method === "POST") return handlePermissionResponse(req, route.slice(12));
+    if (route.startsWith("/permission/") && method === "POST")
+      return handlePermissionResponse(req, route.slice(12));
     // GET /api/v1/health
-    if (route === "/health" && method === "GET") return json({ status: "ok", timestamp: Date.now() });
+    if (route === "/health" && method === "GET")
+      return json({ status: "ok", timestamp: Date.now() });
 
     return error("Not found", 404);
   } catch (err) {
@@ -94,7 +96,9 @@ async function handleGetSession(): Promise<Response> {
     if (pricing) {
       costUsd = calculateCost(pricing, usage.inputTokens, usage.outputTokens);
     }
-  } catch { /* pricing not available */ }
+  } catch {
+    /* pricing not available */
+  }
 
   return json({
     model: manager.getConfig().model,
@@ -248,7 +252,9 @@ async function handleGetStats(): Promise<Response> {
     if (pricing) {
       costUsd = calculateCost(pricing, usage.inputTokens, usage.outputTokens);
     }
-  } catch { /* pricing not available */ }
+  } catch {
+    /* pricing not available */
+  }
 
   return json({
     inputTokens: usage.inputTokens,
@@ -374,7 +380,8 @@ function serializeContent(content: string | import("../core/types").ContentBlock
         parts.push(`[tool: ${block.name}]`);
         break;
       case "tool_result": {
-        const text = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+        const text =
+          typeof block.content === "string" ? block.content : JSON.stringify(block.content);
         parts.push(`[result${block.is_error ? " (error)" : ""}] ${text}`);
         break;
       }

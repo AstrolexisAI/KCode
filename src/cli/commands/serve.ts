@@ -16,8 +16,10 @@ export function registerServeCommand(program: Command, VERSION: string): void {
         if (!isLocal && !opts.apiKey) {
           console.error(
             "\x1b[31mError:\x1b[0m --api-key is required when binding to a non-localhost address.\n" +
-            "Exposing KCode without authentication is a security risk.\n" +
-            "Use: kcode serve --host " + host + " --api-key <secret>"
+              "Exposing KCode without authentication is a security risk.\n" +
+              "Use: kcode serve --host " +
+              host +
+              " --api-key <secret>",
           );
           process.exit(1);
         }
@@ -26,7 +28,7 @@ export function registerServeCommand(program: Command, VERSION: string): void {
         if (host === "0.0.0.0" && opts.apiKey) {
           console.warn(
             "\x1b[33m⚠ Warning:\x1b[0m Binding to 0.0.0.0 exposes KCode to all network interfaces.\n" +
-            "  Ensure this server is behind a firewall or reverse proxy.\n"
+              "  Ensure this server is behind a firewall or reverse proxy.\n",
           );
         }
 

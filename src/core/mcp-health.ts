@@ -34,9 +34,9 @@ interface ServerState {
   lastCheck: number;
   lastSuccess: number;
   consecutiveFailures: number;
-  latencies: number[];          // rolling window of last N latencies
-  circuitOpenedAt: number;      // timestamp when circuit was opened (0 = closed)
-  halfOpenSuccesses: number;    // successful probes in half-open state
+  latencies: number[]; // rolling window of last N latencies
+  circuitOpenedAt: number; // timestamp when circuit was opened (0 = closed)
+  halfOpenSuccesses: number; // successful probes in half-open state
   totalRequests: number;
   totalFailures: number;
 }
@@ -106,7 +106,10 @@ export class McpHealthMonitor {
     if (state.circuitOpenedAt > 0) {
       state.circuitOpenedAt = now;
       state.halfOpenSuccesses = 0;
-      log.warn("mcp-health", `Circuit re-opened for "${serverName}" — half-open probe failed${error ? ": " + error : ""}`);
+      log.warn(
+        "mcp-health",
+        `Circuit re-opened for "${serverName}" — half-open probe failed${error ? ": " + error : ""}`,
+      );
       return;
     }
 
@@ -114,7 +117,10 @@ export class McpHealthMonitor {
     if (state.consecutiveFailures >= this.config.failureThreshold) {
       state.circuitOpenedAt = now;
       state.halfOpenSuccesses = 0;
-      log.warn("mcp-health", `Circuit opened for "${serverName}" after ${state.consecutiveFailures} consecutive failures`);
+      log.warn(
+        "mcp-health",
+        `Circuit opened for "${serverName}" after ${state.consecutiveFailures} consecutive failures`,
+      );
     }
   }
 
@@ -161,7 +167,9 @@ export class McpHealthMonitor {
       lastSuccess: state.lastSuccess,
       consecutiveFailures: state.consecutiveFailures,
       averageLatencyMs: this.computeAverageLatency(state),
-      circuitOpen: state.circuitOpenedAt > 0 && (Date.now() - state.circuitOpenedAt) < this.config.resetTimeoutMs,
+      circuitOpen:
+        state.circuitOpenedAt > 0 &&
+        Date.now() - state.circuitOpenedAt < this.config.resetTimeoutMs,
       totalRequests: state.totalRequests,
       totalFailures: state.totalFailures,
     };
@@ -198,24 +206,39 @@ export class McpHealthMonitor {
 
     const lines: string[] = ["  MCP Server Health:"];
     lines.push("  " + "-".repeat(72));
-    lines.push("  " + padRight("Server", 20) + padRight("Status", 12) + padRight("Circuit", 10) + padRight("Failures", 10) + padRight("Avg Latency", 12) + "Requests");
+    lines.push(
+      "  " +
+        padRight("Server", 20) +
+        padRight("Status", 12) +
+        padRight("Circuit", 10) +
+        padRight("Failures", 10) +
+        padRight("Avg Latency", 12) +
+        "Requests",
+    );
     lines.push("  " + "-".repeat(72));
 
     for (const h of allHealth) {
-      const statusIcon = h.status === "healthy" ? "\x1b[32m●\x1b[0m" :
-                         h.status === "degraded" ? "\x1b[33m●\x1b[0m" :
-                         h.status === "down" ? "\x1b[31m●\x1b[0m" : "\x1b[90m●\x1b[0m";
+      const statusIcon =
+        h.status === "healthy"
+          ? "\x1b[32m●\x1b[0m"
+          : h.status === "degraded"
+            ? "\x1b[33m●\x1b[0m"
+            : h.status === "down"
+              ? "\x1b[31m●\x1b[0m"
+              : "\x1b[90m●\x1b[0m";
       const circuitLabel = h.circuitOpen ? "\x1b[31mOPEN\x1b[0m" : "\x1b[32mclosed\x1b[0m";
       const latency = h.averageLatencyMs > 0 ? `${Math.round(h.averageLatencyMs)}ms` : "-";
 
       lines.push(
         "  " +
-        padRight(h.serverName, 20) +
-        statusIcon + " " + padRight(h.status, 10) +
-        padRight(circuitLabel.length > 10 ? circuitLabel : circuitLabel, 10) +
-        padRight(String(h.totalFailures), 10) +
-        padRight(latency, 12) +
-        String(h.totalRequests)
+          padRight(h.serverName, 20) +
+          statusIcon +
+          " " +
+          padRight(h.status, 10) +
+          padRight(circuitLabel.length > 10 ? circuitLabel : circuitLabel, 10) +
+          padRight(String(h.totalFailures), 10) +
+          padRight(latency, 12) +
+          String(h.totalRequests),
       );
     }
 
@@ -246,7 +269,10 @@ export class McpHealthMonitor {
 
   private computeStatus(state: ServerState): ServerHealth["status"] {
     // Circuit is open and not yet timed out — server is down
-    if (state.circuitOpenedAt > 0 && (Date.now() - state.circuitOpenedAt) < this.config.resetTimeoutMs) {
+    if (
+      state.circuitOpenedAt > 0 &&
+      Date.now() - state.circuitOpenedAt < this.config.resetTimeoutMs
+    ) {
       return "down";
     }
     // Circuit is in half-open recovery (timed out, but not yet closed)

@@ -7,7 +7,7 @@
 //     inbox-worker-1.jsonl
 //     inbox-worker-2.jsonl
 
-import { mkdirSync, appendFileSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CoordinatorMessage } from "./types";
 

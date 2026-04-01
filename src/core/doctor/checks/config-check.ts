@@ -2,8 +2,8 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { kcodeHome } from "../../paths";
 import { log } from "../../logger";
+import { kcodeHome } from "../../paths";
 import type { HealthCheck } from "../health-score";
 
 export async function checkConfig(): Promise<HealthCheck> {
@@ -37,7 +37,13 @@ export async function checkConfig(): Promise<HealthCheck> {
       };
     }
 
-    return { name: "Config", category: "config", status: "pass", message: "Configuration valid", weight: 5 };
+    return {
+      name: "Config",
+      category: "config",
+      status: "pass",
+      message: "Configuration valid",
+      weight: 5,
+    };
   } catch (err) {
     log.debug("doctor/config-check", `Error: ${err}`);
     return {

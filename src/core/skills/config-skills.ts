@@ -1,0 +1,118 @@
+// KCode - Configuration skills
+
+import type { SkillDefinition } from "../builtin-skills";
+
+export const configSkills: SkillDefinition[] = [
+  {
+    name: "template",
+    description: "Manage and use prompt templates",
+    aliases: ["tpl", "tmpl"],
+    args: ["list | use <name> [args...] | save <name>"],
+    template: `__builtin_template__`,
+  },
+  {
+    name: "plugins",
+    description: "List installed plugins",
+    aliases: ["plugin"],
+    args: [],
+    template: `__builtin_plugins__`,
+  },
+  {
+    name: "theme",
+    description: "List or switch color themes",
+    aliases: ["skin"],
+    args: ["theme name (optional)"],
+    template: `__builtin_theme__`,
+  },
+  {
+    name: "usage",
+    description: "Show token usage and cost for this session",
+    aliases: ["cost"],
+    args: [],
+    template: `__builtin_usage__`,
+  },
+  {
+    name: "plan",
+    description: "Show or manage the active plan",
+    aliases: [],
+    args: ["clear (optional)"],
+    template: `__builtin_plan__`,
+  },
+  {
+    name: "hooks",
+    description: "Show configured hooks",
+    aliases: ["hook"],
+    args: [],
+    template: `__builtin_hooks__`,
+  },
+  {
+    name: "pin",
+    description: "Pin a file to always be in context",
+    aliases: [],
+    args: ["file path"],
+    template: `__builtin_pin__`,
+  },
+  {
+    name: "unpin",
+    description: "Unpin a file from context",
+    aliases: [],
+    args: ["file path (or 'all')"],
+    template: `__builtin_unpin__`,
+  },
+  {
+    name: "index",
+    description: "Build or query the codebase index",
+    aliases: ["idx"],
+    args: ["query (optional, builds index if empty)"],
+    template: `__builtin_index__`,
+  },
+  {
+    name: "config",
+    description: "Show resolved configuration with source priority",
+    aliases: ["settings", "cfg"],
+    args: [],
+    template: `__builtin_config__`,
+  },
+  {
+    name: "effort",
+    description: "Set reasoning effort level (low/medium/high/max)",
+    aliases: ["reasoning", "depth"],
+    args: ["low | medium | high | max"],
+    template: `__builtin_effort__`,
+  },
+  {
+    name: "profile",
+    description: "Switch execution profile (safe, fast, review, implement, ops)",
+    aliases: ["mode", "preset"],
+    args: ["profile name | off | list"],
+    template: `__builtin_profile__`,
+  },
+  {
+    name: "mcp",
+    description: "Manage MCP (Model Context Protocol) servers",
+    aliases: ["mcp-servers"],
+    args: ["list | tools | add <name> <command> | remove <name>"],
+    template: `__builtin_mcp__`,
+  },
+  {
+    name: "auto-compact",
+    description: "Configure auto-compaction threshold",
+    aliases: ["compact-threshold"],
+    args: ["percentage (e.g. 70) or 'off'"],
+    template: `__builtin_auto_compact__`,
+  },
+  {
+    name: "style",
+    description: "Show or switch output style",
+    aliases: ["output-style"],
+    args: ["style name (optional)"],
+    template: `__builtin_style__`,
+  },
+  {
+    name: "cache",
+    description: "Show or manage the response cache",
+    aliases: ["response-cache", "llm-cache"],
+    args: ["stats | clear"],
+    template: `__builtin_cache__`,
+  },
+];

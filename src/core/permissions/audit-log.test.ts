@@ -1,8 +1,8 @@
 // Tests for permission audit log
 
-import { describe, test, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { AuditLog, type AuditEntry, computeEntryHmac, verifyEntryHmac } from "./audit-log";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { type AuditEntry, AuditLog, computeEntryHmac, verifyEntryHmac } from "./audit-log";
 
 function createTestDb(): Database {
   return new Database(":memory:");

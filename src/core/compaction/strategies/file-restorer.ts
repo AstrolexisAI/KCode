@@ -2,20 +2,17 @@
 // After full compaction, re-inject the most recently read files so the model
 // retains working context about the codebase.
 
+import { log } from "../../logger.js";
+import { CHARS_PER_TOKEN } from "../../token-budget.js";
 import type { Message, TextBlock } from "../../types.js";
 import type { FullCompactConfig } from "../types.js";
 import { extractFilePaths } from "./full-compact.js";
-import { log } from "../../logger.js";
-import { CHARS_PER_TOKEN } from "../../token-budget.js";
 
 /**
  * Read a file's content for restoration. Returns null if the file can't be read
  * or exceeds the size limit.
  */
-async function readFileForRestore(
-  filePath: string,
-  maxBytes: number,
-): Promise<string | null> {
+async function readFileForRestore(filePath: string, maxBytes: number): Promise<string | null> {
   try {
     const file = Bun.file(filePath);
     if (!(await file.exists())) return null;

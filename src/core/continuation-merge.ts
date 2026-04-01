@@ -21,7 +21,12 @@ export interface MergeResult {
  */
 export function mergeContinuation(previousText: string, continuation: string): MergeResult {
   if (previousText.length === 0) {
-    return { merged: continuation, strippedChars: 0, strippedLines: 0, repeatedPrefixDetected: false };
+    return {
+      merged: continuation,
+      strippedChars: 0,
+      strippedLines: 0,
+      repeatedPrefixDetected: false,
+    };
   }
   if (continuation.length === 0) {
     return { merged: "", strippedChars: 0, strippedLines: 0, repeatedPrefixDetected: false };
@@ -41,12 +46,12 @@ export function mergeContinuation(previousText: string, continuation: string): M
       repeatedPrefixDetected = true;
       // Find where the previous text's version of this section ends
       const prevLines = previousText.split("\n");
-      const headingIdx = prevLines.findIndex(l => l.trim() === heading);
+      const headingIdx = prevLines.findIndex((l) => l.trim() === heading);
       if (headingIdx >= 0) {
         // Strip from continuation: everything from the repeated heading
         // until we find content not in the previous text
         const contLines = result.split("\n");
-        const headingContIdx = contLines.findIndex(l => l.trim() === heading);
+        const headingContIdx = contLines.findIndex((l) => l.trim() === heading);
         if (headingContIdx >= 0) {
           // Find first line in continuation that's genuinely new
           let newContentStart = headingContIdx;
@@ -73,7 +78,7 @@ export function mergeContinuation(previousText: string, continuation: string): M
     for (let i = 0; i < Math.min(newLines.length, 10); i++) {
       const line = newLines[i]!.trim();
       if (line.length < 10) continue;
-      const tailIdx = tailLines.findIndex(tl => tl.trim() === line);
+      const tailIdx = tailLines.findIndex((tl) => tl.trim() === line);
       if (tailIdx >= 0) {
         // Count how many consecutive lines actually match
         let matchCount = 0;
@@ -87,7 +92,10 @@ export function mergeContinuation(previousText: string, continuation: string): M
           }
         }
         if (matchCount >= 1) {
-          result = newLines.slice(i + matchCount).join("\n").trim();
+          result = newLines
+            .slice(i + matchCount)
+            .join("\n")
+            .trim();
           break;
         }
       }
@@ -111,7 +119,11 @@ export function mergeContinuation(previousText: string, continuation: string): M
   // Strategy 4: Char-level suffix/prefix overlap
   if (result.length > 0) {
     const tailToMatch = previousText.slice(-200);
-    for (let overlapLen = Math.min(tailToMatch.length, result.length); overlapLen >= 20; overlapLen--) {
+    for (
+      let overlapLen = Math.min(tailToMatch.length, result.length);
+      overlapLen >= 20;
+      overlapLen--
+    ) {
       if (result.startsWith(tailToMatch.slice(-overlapLen))) {
         result = result.slice(overlapLen);
         break;
@@ -155,6 +167,12 @@ export function isTruncatedQuestion(text: string): boolean {
   // Open Spanish question mark without closing
   if (/¿[^?]+$/.test(lastLine)) return true;
   // Confirmation/question words followed by truncated text (no terminal punctuation)
-  if (/\b(proceder|proceed|deseas|desea|want to|would you|shall I|shall we)\b.{0,30}$/i.test(lastLine) && !/[.!?]$/.test(lastLine)) return true;
+  if (
+    /\b(proceder|proceed|deseas|desea|want to|would you|shall I|shall we)\b.{0,30}$/i.test(
+      lastLine,
+    ) &&
+    !/[.!?]$/.test(lastLine)
+  )
+    return true;
   return false;
 }

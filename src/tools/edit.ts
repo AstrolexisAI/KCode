@@ -1,8 +1,8 @@
 // KCode - Edit Tool
 // Performs exact string replacements in files with visual diff output
 
-import { readFileSync, writeFileSync, realpathSync, lstatSync } from "node:fs";
-import type { ToolDefinition, ToolResult, FileEditInput } from "../core/types";
+import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import type { FileEditInput, ToolDefinition, ToolResult } from "../core/types";
 
 const SENSITIVE_PATTERNS = [
   /\.(env|env\.\w+)$/,
@@ -21,7 +21,8 @@ const SENSITIVE_PATTERNS = [
 
 export const editDefinition: ToolDefinition = {
   name: "Edit",
-  description: "Perform exact string replacement in a file. The old_string must be unique unless replace_all is true.",
+  description:
+    "Perform exact string replacement in a file. The old_string must be unique unless replace_all is true.",
   input_schema: {
     type: "object",
     properties: {
@@ -67,7 +68,8 @@ function generateDiff(oldStr: string, newStr: string, filePath: string): string 
       } else {
         for (let i = 0; i < 3; i++) diffLines.push(`  ${prefix} ${lines[i]}`);
         diffLines.push(`  ${prefix} ... (${lines.length - 6} more lines)`);
-        for (let i = lines.length - 3; i < lines.length; i++) diffLines.push(`  ${prefix} ${lines[i]}`);
+        for (let i = lines.length - 3; i < lines.length; i++)
+          diffLines.push(`  ${prefix} ${lines[i]}`);
       }
     };
 
@@ -144,7 +146,7 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
   const { file_path, old_string, new_string, replace_all } = input as unknown as FileEditInput;
 
   // Block edits to sensitive files (parity with Write tool)
-  const isSensitive = SENSITIVE_PATTERNS.some(p => p.test(file_path));
+  const isSensitive = SENSITIVE_PATTERNS.some((p) => p.test(file_path));
   if (isSensitive) {
     return {
       tool_use_id: "",
@@ -157,7 +159,7 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
   try {
     const realPath = realpathSync(file_path);
     if (realPath !== file_path) {
-      const realIsSensitive = SENSITIVE_PATTERNS.some(p => p.test(realPath));
+      const realIsSensitive = SENSITIVE_PATTERNS.some((p) => p.test(realPath));
       if (realIsSensitive) {
         return {
           tool_use_id: "",
@@ -176,7 +178,8 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
     if (old_string === new_string) {
       return {
         tool_use_id: "",
-        content: "Error: old_string and new_string are identical. STOP: Do NOT retry this Edit. If the file already contains the desired content, no edit is needed. Move on to the next task.",
+        content:
+          "Error: old_string and new_string are identical. STOP: Do NOT retry this Edit. If the file already contains the desired content, no edit is needed. Move on to the next task.",
         is_error: true,
       };
     }
@@ -204,7 +207,9 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
       };
     }
 
-    const updated = replace_all ? content.replaceAll(old_string, new_string) : content.replace(old_string, new_string);
+    const updated = replace_all
+      ? content.replaceAll(old_string, new_string)
+      : content.replace(old_string, new_string);
 
     // TOCTOU mitigation: verify file hasn't been replaced with a symlink between read and write
     try {
@@ -215,7 +220,9 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
           is_error: true,
         };
       }
-    } catch { /* file gone — writeFileSync will fail naturally */ }
+    } catch {
+      /* file gone — writeFileSync will fail naturally */
+    }
 
     writeFileSync(file_path, updated, "utf-8");
 
@@ -226,7 +233,8 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
     const replacements = replace_all ? occurrences : 1;
     const diff = generateDiff(old_string, new_string, file_path);
     const linesChanged = new_string.split("\n").length - old_string.split("\n").length;
-    const linesDelta = linesChanged > 0 ? `+${linesChanged}` : linesChanged === 0 ? "±0" : `${linesChanged}`;
+    const linesDelta =
+      linesChanged > 0 ? `+${linesChanged}` : linesChanged === 0 ? "±0" : `${linesChanged}`;
 
     return {
       tool_use_id: "",

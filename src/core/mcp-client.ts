@@ -1,7 +1,7 @@
 // KCode - MCP Client Connections
 // Low-level JSON-RPC client for stdio and HTTP/SSE MCP server transports
 
-import { spawn, type Subprocess } from "bun";
+import { type Subprocess, spawn } from "bun";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -92,7 +92,9 @@ export interface ElicitationResponse {
   content?: Record<string, unknown>;
 }
 
-export type ElicitationCallback = (request: ElicitationRequest["params"]) => Promise<ElicitationResponse>;
+export type ElicitationCallback = (
+  request: ElicitationRequest["params"],
+) => Promise<ElicitationResponse>;
 
 // ─── Input Sanitization ─────────────────────────────────────────
 
@@ -115,10 +117,7 @@ const MAX_ARRAY_ELEMENTS = 1000;
  * Sanitize MCP tool input: strip prototype pollution keys,
  * reject excessively deep nesting, enforce field size limits.
  */
-export function sanitizeMcpInput(
-  obj: Record<string, unknown>,
-  depth = 0,
-): Record<string, unknown> {
+export function sanitizeMcpInput(obj: Record<string, unknown>, depth = 0): Record<string, unknown> {
   if (depth > MAX_INPUT_DEPTH) {
     return { _error: "Input exceeds maximum nesting depth" };
   }
@@ -130,7 +129,8 @@ export function sanitizeMcpInput(
   for (const [key, value] of entries) {
     if (DANGEROUS_KEYS.has(key)) continue;
     if (typeof value === "string" && value.length > MAX_STRING_FIELD_SIZE) {
-      result[key] = value.slice(0, MAX_STRING_FIELD_SIZE) + `\n[Truncated at ${MAX_STRING_FIELD_SIZE} bytes]`;
+      result[key] =
+        value.slice(0, MAX_STRING_FIELD_SIZE) + `\n[Truncated at ${MAX_STRING_FIELD_SIZE} bytes]`;
     } else if (value !== null && typeof value === "object" && !Array.isArray(value)) {
       result[key] = sanitizeMcpInput(value as Record<string, unknown>, depth + 1);
     } else if (Array.isArray(value)) {
@@ -151,10 +151,20 @@ export function sanitizeMcpInput(
 
 /** Commands that are allowed for stdio MCP transport by default */
 const ALLOWED_STDIO_COMMANDS = new Set([
-  "npx", "node", "bun", "bunx", "deno",
-  "python", "python3", "pip", "pipx", "uvx",
-  "docker", "podman",
-  "mcp-server", "mcp-server-*",
+  "npx",
+  "node",
+  "bun",
+  "bunx",
+  "deno",
+  "python",
+  "python3",
+  "pip",
+  "pipx",
+  "uvx",
+  "docker",
+  "podman",
+  "mcp-server",
+  "mcp-server-*",
 ]);
 
 /**
@@ -169,7 +179,19 @@ export function validateStdioCommand(command: string): { ok: boolean; reason?: s
 
   // Block direct shell invocations
   const shell = command.split("/").pop() ?? command;
-  const dangerousShells = new Set(["sh", "bash", "zsh", "fish", "csh", "tcsh", "dash", "ksh", "cmd", "powershell", "pwsh"]);
+  const dangerousShells = new Set([
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "csh",
+    "tcsh",
+    "dash",
+    "ksh",
+    "cmd",
+    "powershell",
+    "pwsh",
+  ]);
   if (dangerousShells.has(shell)) {
     return { ok: false, reason: `Direct shell invocation blocked: "${command}"` };
   }
@@ -182,8 +204,11 @@ export function validateStdioCommand(command: string): { ok: boolean; reason?: s
   // In safe mode, also check the allowlist
   if (process.env.KCODE_SAFE_PLUGINS === "1") {
     const basename = command.split("/").pop() ?? command;
-    const matched = ALLOWED_STDIO_COMMANDS.has(basename)
-      || [...ALLOWED_STDIO_COMMANDS].some(p => p.endsWith("*") && basename.startsWith(p.slice(0, -1)));
+    const matched =
+      ALLOWED_STDIO_COMMANDS.has(basename) ||
+      [...ALLOWED_STDIO_COMMANDS].some(
+        (p) => p.endsWith("*") && basename.startsWith(p.slice(0, -1)),
+      );
     if (!matched) {
       return { ok: false, reason: `Command "${basename}" not in safe-plugins allowlist` };
     }
@@ -199,11 +224,14 @@ export class McpServerConnection {
   private config: McpServerConfig;
   private process: Subprocess | null = null;
   private requestId = 0;
-  private pendingRequests = new Map<number, {
-    resolve: (value: JsonRpcResponse) => void;
-    reject: (reason: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }>();
+  private pendingRequests = new Map<
+    number,
+    {
+      resolve: (value: JsonRpcResponse) => void;
+      reject: (reason: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private buffer = "";
   private initialized = false;
   private tools: McpToolSchema[] = [];
@@ -231,7 +259,9 @@ export class McpServerConnection {
 
     log.info("mcp", `Starting server "${this.name}": ${cmd} ${(this.config.args ?? []).join(" ")}`);
     const rawEnv = { ...process.env, ...(this.config.env ?? {}) };
-    const env = Object.fromEntries(Object.entries(rawEnv).filter((e): e is [string, string] => e[1] !== undefined));
+    const env = Object.fromEntries(
+      Object.entries(rawEnv).filter((e): e is [string, string] => e[1] !== undefined),
+    );
 
     this.process = spawn({
       cmd: [this.config.command!, ...(this.config.args ?? [])],
@@ -265,7 +295,7 @@ export class McpServerConnection {
         this.processBuffer();
       }
     } catch (err) {
-      log.debug("mcp", "Stdout stream ended for server \"" + this.name + "\": " + err);
+      log.debug("mcp", 'Stdout stream ended for server "' + this.name + '": ' + err);
     }
   }
 
@@ -286,7 +316,7 @@ export class McpServerConnection {
         }
       }
     } catch (err) {
-      log.debug("mcp", "Stderr stream ended for server \"" + this.name + "\": " + err);
+      log.debug("mcp", 'Stderr stream ended for server "' + this.name + '": ' + err);
     }
   }
 
@@ -319,7 +349,7 @@ export class McpServerConnection {
         }
         // Notifications (no id) are ignored for now
       } catch (err) {
-        log.debug("mcp", "Failed to parse JSON-RPC message from \"" + this.name + "\": " + err);
+        log.debug("mcp", 'Failed to parse JSON-RPC message from "' + this.name + '": ' + err);
       }
     }
   }
@@ -348,7 +378,11 @@ export class McpServerConnection {
       this.pendingRequests.set(id, {
         resolve: (resp: JsonRpcResponse) => {
           if (resp.error) {
-            reject(new Error(`MCP error from "${this.name}": ${resp.error.message} (code: ${resp.error.code})`));
+            reject(
+              new Error(
+                `MCP error from "${this.name}": ${resp.error.message} (code: ${resp.error.code})`,
+              ),
+            );
           } else {
             resolve(resp.result);
           }
@@ -383,16 +417,17 @@ export class McpServerConnection {
 
     // Send initialized notification (no id, but we still use sendRequest-like approach)
     if (this.process?.stdin && typeof this.process.stdin !== "number") {
-      const notification = JSON.stringify({
-        jsonrpc: "2.0",
-        method: "notifications/initialized",
-      }) + "\n";
+      const notification =
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+        }) + "\n";
       (this.process.stdin as import("bun").FileSink).write(notification);
     }
   }
 
   async discoverTools(): Promise<McpToolSchema[]> {
-    const result = await this.sendRequest("tools/list", {}) as { tools?: McpToolSchema[] };
+    const result = (await this.sendRequest("tools/list", {})) as { tools?: McpToolSchema[] };
     this.tools = result?.tools ?? [];
     log.info("mcp", `Server "${this.name}" discovered ${this.tools.length} tools`);
     return this.tools;
@@ -400,10 +435,12 @@ export class McpServerConnection {
 
   async discoverResources(): Promise<McpResource[]> {
     try {
-      const result = await this.sendRequest("resources/list", {}) as { resources?: McpResource[] };
+      const result = (await this.sendRequest("resources/list", {})) as {
+        resources?: McpResource[];
+      };
       this.resources = result?.resources ?? [];
     } catch (err) {
-      log.debug("mcp", "Server \"" + this.name + "\" does not support resources/list: " + err);
+      log.debug("mcp", 'Server "' + this.name + '" does not support resources/list: ' + err);
       this.resources = [];
     }
     return this.resources;
@@ -413,10 +450,10 @@ export class McpServerConnection {
     // Sanitize input: strip prototype pollution keys and limit depth
     const sanitizedArgs = sanitizeMcpInput(args);
 
-    const result = await this.sendRequest("tools/call", {
+    const result = (await this.sendRequest("tools/call", {
       name: toolName,
       arguments: sanitizedArgs,
-    }) as { content?: unknown };
+    })) as { content?: unknown };
 
     // Validate response structure (prevent malicious MCP server injection)
     if (!result || typeof result !== "object") return "";
@@ -441,9 +478,9 @@ export class McpServerConnection {
   }
 
   async readResource(uri: string): Promise<McpResourceContent[]> {
-    const result = await this.sendRequest("resources/read", {
+    const result = (await this.sendRequest("resources/read", {
       uri,
-    }) as { contents?: McpResourceContent[] };
+    })) as { contents?: McpResourceContent[] };
 
     return result?.contents ?? [];
   }
@@ -468,7 +505,10 @@ export class McpServerConnection {
       return false;
     }
     this.restartCount++;
-    log.info("mcp", `Restarting server "${this.name}" (attempt ${this.restartCount}/${this.maxRestarts})`);
+    log.info(
+      "mcp",
+      `Restarting server "${this.name}" (attempt ${this.restartCount}/${this.maxRestarts})`,
+    );
     this.shutdown();
     this.buffer = ""; // Clear buffer to prevent old process data contaminating new connection
     await this.start();
@@ -480,15 +520,21 @@ export class McpServerConnection {
   /**
    * Handle a server-initiated JSON-RPC request (e.g., elicitation/create).
    */
-  private handleServerRequest(request: { id: string | number; method: string; params?: Record<string, unknown> }): void {
+  private handleServerRequest(request: {
+    id: string | number;
+    method: string;
+    params?: Record<string, unknown>;
+  }): void {
     if (request.method === "elicitation/create") {
       const params = request.params as ElicitationRequest["params"];
       const respond = (result: ElicitationResponse) => this.sendJsonRpcResponse(request.id, result);
 
       if (this.elicitationCallback) {
-        this.elicitationCallback(params).then(respond).catch(() => {
-          respond({ action: "deny" });
-        });
+        this.elicitationCallback(params)
+          .then(respond)
+          .catch(() => {
+            respond({ action: "deny" });
+          });
       } else {
         respond({ action: "deny" });
       }
@@ -504,7 +550,7 @@ export class McpServerConnection {
     try {
       (this.process.stdin as import("bun").FileSink).write(response);
     } catch (err) {
-      log.warn("mcp", "Failed to write to stdin of server \"" + this.name + "\": " + err);
+      log.warn("mcp", 'Failed to write to stdin of server "' + this.name + '": ' + err);
     }
   }
 
@@ -522,7 +568,7 @@ export class McpServerConnection {
         // Send SIGTERM first for graceful shutdown
         this.process.kill("SIGTERM");
       } catch (err) {
-        log.debug("mcp", "Server \"" + this.name + "\" already dead on SIGTERM: " + err);
+        log.debug("mcp", 'Server "' + this.name + '" already dead on SIGTERM: ' + err);
       }
       // Schedule SIGKILL if still alive after 3 seconds
       const proc = this.process;
@@ -533,7 +579,7 @@ export class McpServerConnection {
             proc.kill("SIGKILL");
           }
         } catch (err) {
-          log.debug("mcp", "Server \"" + this.name + "\" already dead on SIGKILL: " + err);
+          log.debug("mcp", 'Server "' + this.name + '" already dead on SIGKILL: ' + err);
         }
       }, 3000);
       this.process = null;
@@ -554,11 +600,14 @@ export class McpHttpConnection {
   private requestId = 0;
   private accessToken: string | null = null;
   private sseAbortController: AbortController | null = null;
-  private ssePendingRequests = new Map<number, {
-    resolve: (value: unknown) => void;
-    reject: (reason: Error) => void;
-    timer: ReturnType<typeof setTimeout>;
-  }>();
+  private ssePendingRequests = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (reason: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
   private sseConnected = false;
   private elicitationCallback?: ElicitationCallback;
 
@@ -573,7 +622,10 @@ export class McpHttpConnection {
 
   async start(): Promise<void> {
     const transport = this.config.transport ?? "http";
-    log.info("mcp", `Connecting to ${transport.toUpperCase()} server "${this.name}": ${this.config.url}`);
+    log.info(
+      "mcp",
+      `Connecting to ${transport.toUpperCase()} server "${this.name}": ${this.config.url}`,
+    );
 
     // Resolve authentication
     await this.resolveAuth();
@@ -599,17 +651,23 @@ export class McpHttpConnection {
         this.accessToken = tokens.accessToken;
         log.info("mcp", `Using stored OAuth token for "${this.name}"`);
       } else {
-        log.warn("mcp", `No OAuth token for "${this.name}" — run /mcp auth ${this.name} to authenticate`);
+        log.warn(
+          "mcp",
+          `No OAuth token for "${this.name}" — run /mcp auth ${this.name} to authenticate`,
+        );
       }
     } else if (this.config.oauthAutoDiscover && this.config.url) {
       try {
         const { discoverOAuthConfig } = await import("./mcp-oauth");
         const discovered = await discoverOAuthConfig(this.config.url);
         if (discovered) {
-          log.info("mcp", `Discovered OAuth config for "${this.name}" — requires /mcp auth to complete`);
+          log.info(
+            "mcp",
+            `Discovered OAuth config for "${this.name}" — requires /mcp auth to complete`,
+          );
         }
       } catch (err) {
-        log.debug("mcp", "OAuth auto-discovery failed for \"" + this.name + "\": " + err);
+        log.debug("mcp", 'OAuth auto-discovery failed for "' + this.name + '": ' + err);
       }
     }
 
@@ -655,12 +713,15 @@ export class McpHttpConnection {
     // Start SSE connection in background
     this.sseConnected = true;
     this.connectSse(url, headers).catch((err) => {
-      log.warn("mcp", `SSE connection error for "${this.name}": ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(
+        "mcp",
+        `SSE connection error for "${this.name}": ${err instanceof Error ? err.message : String(err)}`,
+      );
       this.sseConnected = false; // Mark as disconnected on error
     });
 
     // Wait briefly for SSE to establish
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
   private async connectSse(url: string, headers: Record<string, string>): Promise<void> {
@@ -707,7 +768,10 @@ export class McpHttpConnection {
     }
   }
 
-  private parseSseEvents(buffer: string): { parsed: Array<{ event?: string; data: string }>; remaining: string } {
+  private parseSseEvents(buffer: string): {
+    parsed: Array<{ event?: string; data: string }>;
+    remaining: string;
+  } {
     const parsed: Array<{ event?: string; data: string }> = [];
     const blocks = buffer.split("\n\n");
     let remaining = blocks.pop() ?? "";
@@ -759,14 +823,16 @@ export class McpHttpConnection {
             clearTimeout(pending.timer);
             this.ssePendingRequests.delete(response.id);
             if (response.error) {
-              pending.reject(new Error(`MCP error: ${response.error.message} (code: ${response.error.code})`));
+              pending.reject(
+                new Error(`MCP error: ${response.error.message} (code: ${response.error.code})`),
+              );
             } else {
               pending.resolve(response.result);
             }
           }
         }
       } catch (err) {
-        log.debug("mcp", "Failed to parse SSE JSON-RPC message from \"" + this.name + "\": " + err);
+        log.debug("mcp", 'Failed to parse SSE JSON-RPC message from "' + this.name + '": ' + err);
       }
     }
     // Ignore "ping", "endpoint", and other event types
@@ -842,7 +908,7 @@ export class McpHttpConnection {
       this.sessionId = sessionHeader;
     }
 
-    const json = await response.json() as JsonRpcResponse;
+    const json = (await response.json()) as JsonRpcResponse;
     if (json.error) {
       throw new Error(`MCP error: ${json.error.message} (code: ${json.error.code})`);
     }
@@ -887,7 +953,7 @@ export class McpHttpConnection {
         if (contentType.includes("application/json")) {
           clearTimeout(timer);
           this.ssePendingRequests.delete(id);
-          const json = await response.json() as JsonRpcResponse;
+          const json = (await response.json()) as JsonRpcResponse;
           if (json.error) {
             reject(new Error(`MCP error: ${json.error.message}`));
           } else {
@@ -970,7 +1036,7 @@ export class McpHttpConnection {
         return true;
       }
     } catch (err) {
-      log.warn("mcp", "OAuth token refresh failed for \"" + this.name + "\": " + err);
+      log.warn("mcp", 'OAuth token refresh failed for "' + this.name + '": ' + err);
     }
     return false;
   }
@@ -985,7 +1051,11 @@ export class McpHttpConnection {
       },
       clientInfo: { name: "KCode", version: "1.0.0" },
     });
-    if (result && typeof result === "object" && "sessionId" in (result as Record<string, unknown>)) {
+    if (
+      result &&
+      typeof result === "object" &&
+      "sessionId" in (result as Record<string, unknown>)
+    ) {
       this.sessionId = (result as Record<string, unknown>).sessionId as string;
     }
     // Send initialized notification
@@ -993,7 +1063,7 @@ export class McpHttpConnection {
   }
 
   async discoverTools(): Promise<McpToolSchema[]> {
-    const result = await this.sendHttp("tools/list", {}) as { tools?: McpToolSchema[] };
+    const result = (await this.sendHttp("tools/list", {})) as { tools?: McpToolSchema[] };
     this.tools = result?.tools ?? [];
     log.info("mcp", `HTTP server "${this.name}" discovered ${this.tools.length} tools`);
     return this.tools;
@@ -1001,10 +1071,10 @@ export class McpHttpConnection {
 
   async discoverResources(): Promise<McpResource[]> {
     try {
-      const result = await this.sendHttp("resources/list", {}) as { resources?: McpResource[] };
+      const result = (await this.sendHttp("resources/list", {})) as { resources?: McpResource[] };
       this.resources = result?.resources ?? [];
     } catch (err) {
-      log.debug("mcp", "HTTP server \"" + this.name + "\" does not support resources/list: " + err);
+      log.debug("mcp", 'HTTP server "' + this.name + '" does not support resources/list: ' + err);
       this.resources = [];
     }
     return this.resources;
@@ -1014,12 +1084,13 @@ export class McpHttpConnection {
     // Sanitize input: strip prototype pollution keys and limit depth
     const sanitizedArgs = sanitizeMcpInput(args);
 
-    const result = await this.sendHttp("tools/call", {
+    const result = (await this.sendHttp("tools/call", {
       name: toolName,
       arguments: sanitizedArgs,
-    }) as { content?: Array<{ type: string; text?: string }> };
+    })) as { content?: Array<{ type: string; text?: string }> };
 
-    if (!result?.content || !Array.isArray(result.content) || result.content.length === 0) return "";
+    if (!result?.content || !Array.isArray(result.content) || result.content.length === 0)
+      return "";
 
     // Apply same 1MB response limit as stdio transport
     const MAX_RESPONSE_SIZE = 1024 * 1024;
@@ -1039,12 +1110,18 @@ export class McpHttpConnection {
   }
 
   async readResource(uri: string): Promise<McpResourceContent[]> {
-    const result = await this.sendHttp("resources/read", { uri }) as { contents?: McpResourceContent[] };
+    const result = (await this.sendHttp("resources/read", { uri })) as {
+      contents?: McpResourceContent[];
+    };
     return result?.contents ?? [];
   }
 
-  getTools(): McpToolSchema[] { return this.tools; }
-  getResources(): McpResource[] { return this.resources; }
+  getTools(): McpToolSchema[] {
+    return this.tools;
+  }
+  getResources(): McpResource[] {
+    return this.resources;
+  }
 
   isAlive(): boolean {
     if (this.config.transport === "sse") {
@@ -1064,7 +1141,10 @@ export class McpHttpConnection {
       await this.discoverTools();
       await this.discoverResources();
       return true;
-    } catch (err) { log.warn("mcp", "Failed to restart HTTP server \"" + this.name + "\": " + err); return false; }
+    } catch (err) {
+      log.warn("mcp", 'Failed to restart HTTP server "' + this.name + '": ' + err);
+      return false;
+    }
   }
 
   private shutdownSse(): void {
@@ -1083,15 +1163,22 @@ export class McpHttpConnection {
   /**
    * Handle a server-initiated JSON-RPC request (e.g., elicitation/create).
    */
-  private handleServerRequest(request: { id: string | number; method: string; params?: Record<string, unknown> }): void {
+  private handleServerRequest(request: {
+    id: string | number;
+    method: string;
+    params?: Record<string, unknown>;
+  }): void {
     if (request.method === "elicitation/create") {
       const params = request.params as ElicitationRequest["params"];
-      const respond = (result: ElicitationResponse) => this.sendJsonRpcResponseHttp(request.id, result);
+      const respond = (result: ElicitationResponse) =>
+        this.sendJsonRpcResponseHttp(request.id, result);
 
       if (this.elicitationCallback) {
-        this.elicitationCallback(params).then(respond).catch(() => {
-          respond({ action: "deny" });
-        });
+        this.elicitationCallback(params)
+          .then(respond)
+          .catch(() => {
+            respond({ action: "deny" });
+          });
       } else {
         respond({ action: "deny" });
       }

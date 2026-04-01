@@ -1,9 +1,14 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { Coordinator, detectCoordinatorSession, loadCoordinatorProgress, parseCoordinatorConfig } from "./coordinator";
+import {
+  Coordinator,
+  detectCoordinatorSession,
+  loadCoordinatorProgress,
+  parseCoordinatorConfig,
+} from "./coordinator";
 import { Scratchpad } from "./scratchpad";
 import type { CoordinatorConfig, WorkerConfig } from "./types";
 import { DEFAULT_COORDINATOR_CONFIG } from "./types";
@@ -116,9 +121,9 @@ describe("Coordinator", () => {
     await coord.assignTask({ id: "w1", mode: "simple", task: "Task 1" });
     await coord.assignTask({ id: "w2", mode: "simple", task: "Task 2" });
 
-    await expect(
-      coord.assignTask({ id: "w3", mode: "simple", task: "Task 3" }),
-    ).rejects.toThrow("Max workers (2) reached");
+    await expect(coord.assignTask({ id: "w3", mode: "simple", task: "Task 3" })).rejects.toThrow(
+      "Max workers (2) reached",
+    );
 
     await coord.cleanup();
     coord.getScratchpad().cleanup();
@@ -130,9 +135,9 @@ describe("Coordinator", () => {
 
     await coord.assignTask({ id: "w1", mode: "simple", task: "Task 1" });
 
-    await expect(
-      coord.assignTask({ id: "w1", mode: "simple", task: "Task 2" }),
-    ).rejects.toThrow('Worker "w1" already exists');
+    await expect(coord.assignTask({ id: "w1", mode: "simple", task: "Task 2" })).rejects.toThrow(
+      'Worker "w1" already exists',
+    );
 
     await coord.cleanup();
     coord.getScratchpad().cleanup();
@@ -164,7 +169,7 @@ describe("Coordinator", () => {
     expect(cancelled).toBe(true);
 
     const statuses = coord.getWorkerStatuses();
-    const w1 = statuses.find(s => s.id === "w1");
+    const w1 = statuses.find((s) => s.id === "w1");
     expect(w1?.status).toBe("failed");
 
     await coord.cleanup();
@@ -192,7 +197,7 @@ describe("Coordinator", () => {
     await coord.cancelAll();
 
     const statuses = coord.getWorkerStatuses();
-    expect(statuses.every(s => s.status === "failed")).toBe(true);
+    expect(statuses.every((s) => s.status === "failed")).toBe(true);
 
     await coord.cleanup();
     coord.getScratchpad().cleanup();
@@ -263,7 +268,7 @@ describe("Coordinator", () => {
 
     const statuses = coord.getWorkerStatuses();
     expect(statuses).toHaveLength(2);
-    expect(statuses.map(s => s.id).sort()).toEqual(["w1", "w2"]);
+    expect(statuses.map((s) => s.id).sort()).toEqual(["w1", "w2"]);
 
     await coord.cleanup();
     coord.getScratchpad().cleanup();
@@ -365,10 +370,10 @@ describe("parseCoordinatorConfig", () => {
 
   test("ignores invalid values", () => {
     const config = parseCoordinatorConfig({
-      enabled: "yes",         // should be boolean
-      maxWorkers: -1,         // should be > 0
-      defaultWorkerMode: "turbo",  // invalid
-      workerTimeoutMs: 0,     // should be > 0
+      enabled: "yes", // should be boolean
+      maxWorkers: -1, // should be > 0
+      defaultWorkerMode: "turbo", // invalid
+      workerTimeoutMs: 0, // should be > 0
     });
 
     expect(config.enabled).toBeUndefined();

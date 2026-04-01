@@ -1,8 +1,8 @@
 // KCode - Remote Trigger Executor Tests
 
-import { describe, test, expect, mock } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
+import type { SpawnOptions, SpawnResult } from "./trigger-executor";
 import { TriggerExecutor } from "./trigger-executor";
-import type { SpawnResult, SpawnOptions } from "./trigger-executor";
 import type { RemoteTrigger, TriggerRunResult } from "./types";
 
 function makeTrigger(overrides?: Partial<RemoteTrigger>): RemoteTrigger {
@@ -19,9 +19,7 @@ function makeTrigger(overrides?: Partial<RemoteTrigger>): RemoteTrigger {
 }
 
 function createMockSpawn(result: SpawnResult) {
-  return mock((_args: string[], _options: SpawnOptions) =>
-    Promise.resolve(result),
-  );
+  return mock((_args: string[], _options: SpawnOptions) => Promise.resolve(result));
 }
 
 describe("TriggerExecutor", () => {

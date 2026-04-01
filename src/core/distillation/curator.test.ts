@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 
 import { DatasetCurator, type DatasetEntry } from "./curator";
 
@@ -11,20 +11,14 @@ import { DatasetCurator, type DatasetEntry } from "./curator";
 let tempDir: string;
 let curator: DatasetCurator;
 
-async function writeJsonl(
-  filename: string,
-  entries: Record<string, unknown>[],
-): Promise<string> {
+async function writeJsonl(filename: string, entries: Record<string, unknown>[]): Promise<string> {
   const filePath = join(tempDir, filename);
   const content = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
   await Bun.write(filePath, content);
   return filePath;
 }
 
-async function writeJson(
-  filename: string,
-  data: unknown,
-): Promise<string> {
+async function writeJson(filename: string, data: unknown): Promise<string> {
   const filePath = join(tempDir, filename);
   await Bun.write(filePath, JSON.stringify(data, null, 2));
   return filePath;
@@ -35,9 +29,7 @@ function makeEntry(overrides?: Partial<DatasetEntry>): DatasetEntry {
     user_query: "Write a function that adds two numbers",
     assistant_response:
       "Here is a TypeScript function:\n```ts\nfunction add(a: number, b: number): number {\n  return a + b;\n}\n```",
-    tool_chain: JSON.stringify([
-      { name: "Write", inputSummary: "add.ts", success: true },
-    ]),
+    tool_chain: JSON.stringify([{ name: "Write", inputSummary: "add.ts", success: true }]),
     success: true,
     tags: "typescript,code",
     quality: 1.0,
@@ -182,9 +174,7 @@ describe("DatasetCurator", () => {
     });
 
     test("returns 1.0 for case-different identical strings", () => {
-      expect(DatasetCurator.querySimilarity("Hello World", "hello world")).toBe(
-        1.0,
-      );
+      expect(DatasetCurator.querySimilarity("Hello World", "hello world")).toBe(1.0);
     });
 
     test("returns 0.0 for completely different strings", () => {
@@ -247,8 +237,7 @@ describe("DatasetCurator", () => {
         }),
         makeEntry({
           success: false,
-          assistant_response:
-            "I found the bug and applied a fix to the auth module.",
+          assistant_response: "I found the bug and applied a fix to the auth module.",
         }),
       ];
 
@@ -268,9 +257,7 @@ describe("DatasetCurator", () => {
     });
 
     test("keeps entries without tool_chain", () => {
-      const entries = [
-        makeEntry({ tool_chain: undefined }),
-      ];
+      const entries = [makeEntry({ tool_chain: undefined })];
 
       const result = curator.filterProblematic(entries);
       expect(result.length).toBe(1);
@@ -293,17 +280,12 @@ describe("DatasetCurator", () => {
         minPerTag: 1,
       });
       // 2 from typescript + 1 from python = 3
-      const tsCount = result.filter((e) =>
-        e.tags?.startsWith("typescript"),
-      ).length;
+      const tsCount = result.filter((e) => e.tags?.startsWith("typescript")).length;
       expect(tsCount).toBeLessThanOrEqual(2);
     });
 
     test("includes untagged entries", () => {
-      const entries = [
-        makeEntry({ tags: "" }),
-        makeEntry({ tags: "typescript" }),
-      ];
+      const entries = [makeEntry({ tags: "" }), makeEntry({ tags: "typescript" })];
 
       const result = curator.balanceByTags(entries, {
         maxPerTag: 10,
@@ -313,9 +295,7 @@ describe("DatasetCurator", () => {
     });
 
     test("returns empty for empty input", () => {
-      expect(
-        curator.balanceByTags([], { maxPerTag: 10, minPerTag: 5 }),
-      ).toEqual([]);
+      expect(curator.balanceByTags([], { maxPerTag: 10, minPerTag: 5 })).toEqual([]);
     });
   });
 
@@ -331,9 +311,7 @@ describe("DatasetCurator", () => {
     });
 
     test("strips control characters", () => {
-      expect(DatasetCurator.cleanText("hello\x00world\x1F!")).toBe(
-        "helloworld!",
-      );
+      expect(DatasetCurator.cleanText("hello\x00world\x1F!")).toBe("helloworld!");
     });
 
     test("preserves tabs and normal newlines", () => {
@@ -351,8 +329,7 @@ describe("DatasetCurator", () => {
         makeEntry({ assistant_response: "OK" }), // too short
         makeEntry({
           user_query: "Deploy to production",
-          assistant_response:
-            "Here are the deployment steps for the production environment.",
+          assistant_response: "Here are the deployment steps for the production environment.",
           tags: "deploy",
         }),
         makeEntry({
@@ -384,8 +361,14 @@ describe("DatasetCurator", () => {
 
     test("curates a JSON array dataset", async () => {
       const entries = [
-        makeEntry({ user_query: "Implement binary search in Python with detailed error handling", tags: "python,algorithms" }),
-        makeEntry({ user_query: "Configure nginx reverse proxy for microservices architecture", tags: "devops,nginx" }),
+        makeEntry({
+          user_query: "Implement binary search in Python with detailed error handling",
+          tags: "python,algorithms",
+        }),
+        makeEntry({
+          user_query: "Configure nginx reverse proxy for microservices architecture",
+          tags: "devops,nginx",
+        }),
       ];
 
       const inputFile = await writeJson(

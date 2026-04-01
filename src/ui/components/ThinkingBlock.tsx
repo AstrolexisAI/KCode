@@ -1,10 +1,10 @@
 // KCode - ThinkingBlock component
 // Visually striking display for model thinking/reasoning content
 
-import React, { useState, useEffect, useRef } from "react";
 import { Box, Text } from "ink";
-import { useTheme } from "../ThemeContext.js";
+import React, { useEffect, useRef, useState } from "react";
 import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
+import { useTheme } from "../ThemeContext.js";
 
 interface ThinkingBlockProps {
   /** The thinking text content */
@@ -68,7 +68,8 @@ export default function ThinkingBlock({
           </Text>
           {statsText && (
             <Text color={violet} dimColor>
-              {"  "}{statsText}
+              {"  "}
+              {statsText}
             </Text>
           )}
         </Box>
@@ -90,7 +91,10 @@ export default function ThinkingBlock({
               </Text>
             ))}
             {lines.length > MAX_PREVIEW_LINES && (
-              <Text dimColor color={violet}>{"  ⋮ "}{lines.length - MAX_PREVIEW_LINES} more lines above</Text>
+              <Text dimColor color={violet}>
+                {"  ⋮ "}
+                {lines.length - MAX_PREVIEW_LINES} more lines above
+              </Text>
             )}
           </Box>
         )}
@@ -103,11 +107,10 @@ export default function ThinkingBlock({
     const tokEstimate = Math.round(charCount / CHARS_PER_TOKEN);
     return (
       <Box paddingLeft={1}>
-        <Text color={violet}>
-          {BRAIN}{" "}
-        </Text>
+        <Text color={violet}>{BRAIN} </Text>
         <Text color={violet} dimColor>
-          Reasoned ({tokEstimate > 1000 ? `${(tokEstimate / 1000).toFixed(1)}K` : tokEstimate} tok, {lineCount} {lineCount === 1 ? "line" : "lines"}) ▸
+          Reasoned ({tokEstimate > 1000 ? `${(tokEstimate / 1000).toFixed(1)}K` : tokEstimate} tok,{" "}
+          {lineCount} {lineCount === 1 ? "line" : "lines"}) ▸
         </Text>
       </Box>
     );

@@ -1,8 +1,8 @@
 // KCode - Performance Monitor
 // Tracks inference performance metrics and detects degradation in real-time.
 
-import type { PerformanceMetrics, DegradationAlert } from "./types";
 import { log } from "../logger";
+import type { DegradationAlert, PerformanceMetrics } from "./types";
 
 export class PerformanceMonitor {
   private history: PerformanceMetrics[] = [];
@@ -73,7 +73,7 @@ export class PerformanceMonitor {
         gpuMemoryUsed: this.history[0].gpuMemoryUsed !== undefined ? 0 : undefined,
         ramUsed: 0,
         cpuUtilization: 0,
-      } as PerformanceMetrics
+      } as PerformanceMetrics,
     );
 
     const n = this.history.length;
@@ -103,7 +103,8 @@ export class PerformanceMonitor {
 
     // Check TPS drop > 30%
     if (avgBaseline.tokensPerSecond > 0) {
-      const tpsDrop = (avgBaseline.tokensPerSecond - avgRecent.tokensPerSecond) / avgBaseline.tokensPerSecond;
+      const tpsDrop =
+        (avgBaseline.tokensPerSecond - avgRecent.tokensPerSecond) / avgBaseline.tokensPerSecond;
       if (tpsDrop > 0.3) {
         return {
           type: "tps_drop",
@@ -117,7 +118,8 @@ export class PerformanceMonitor {
 
     // Check TTFT increase > 50%
     if (avgBaseline.timeToFirstToken > 0) {
-      const ttftIncrease = (avgRecent.timeToFirstToken - avgBaseline.timeToFirstToken) / avgBaseline.timeToFirstToken;
+      const ttftIncrease =
+        (avgRecent.timeToFirstToken - avgBaseline.timeToFirstToken) / avgBaseline.timeToFirstToken;
       if (ttftIncrease > 0.5) {
         return {
           type: "ttft_increase",
@@ -157,23 +159,33 @@ export class PerformanceMonitor {
     const suggestions: string[] = [];
 
     if (avg.gpuUtilization !== undefined && avg.gpuUtilization < 50) {
-      suggestions.push("GPU underutilized. Consider increasing batch_size or using a larger model.");
+      suggestions.push(
+        "GPU underutilized. Consider increasing batch_size or using a larger model.",
+      );
     }
 
     if (avg.tokensPerSecond < 5) {
-      suggestions.push("Very low speed. Consider using more aggressive quantization (Q4_0) or a smaller model.");
+      suggestions.push(
+        "Very low speed. Consider using more aggressive quantization (Q4_0) or a smaller model.",
+      );
     }
 
     if (avg.timeToFirstToken > 5000) {
-      suggestions.push("High TTFT. The context may be too large. Consider reducing context_window.");
+      suggestions.push(
+        "High TTFT. The context may be too large. Consider reducing context_window.",
+      );
     }
 
     if (avg.cpuUtilization > 90 && avg.gpuUtilization !== undefined && avg.gpuUtilization < 30) {
-      suggestions.push("CPU bottleneck detected. Ensure GPU offloading is enabled (gpu_layers: -1).");
+      suggestions.push(
+        "CPU bottleneck detected. Ensure GPU offloading is enabled (gpu_layers: -1).",
+      );
     }
 
     if (avg.ramUsed > 0 && avg.tokensPerSecond < 10) {
-      suggestions.push("Low throughput with high RAM usage. Model may be partially running on CPU. Check gpu_layers setting.");
+      suggestions.push(
+        "Low throughput with high RAM usage. Model may be partially running on CPU. Check gpu_layers setting.",
+      );
     }
 
     return suggestions;
@@ -192,16 +204,28 @@ export class PerformanceMonitor {
     }
 
     const n = slice.length;
-    let tps = 0, ttft = 0, gpuUtil = 0, gpuMem = 0, ram = 0, cpu = 0;
-    let gpuUtilCount = 0, gpuMemCount = 0;
+    let tps = 0,
+      ttft = 0,
+      gpuUtil = 0,
+      gpuMem = 0,
+      ram = 0,
+      cpu = 0;
+    let gpuUtilCount = 0,
+      gpuMemCount = 0;
 
     for (const m of slice) {
       tps += m.tokensPerSecond;
       ttft += m.timeToFirstToken;
       ram += m.ramUsed;
       cpu += m.cpuUtilization;
-      if (m.gpuUtilization !== undefined) { gpuUtil += m.gpuUtilization; gpuUtilCount++; }
-      if (m.gpuMemoryUsed !== undefined) { gpuMem += m.gpuMemoryUsed; gpuMemCount++; }
+      if (m.gpuUtilization !== undefined) {
+        gpuUtil += m.gpuUtilization;
+        gpuUtilCount++;
+      }
+      if (m.gpuMemoryUsed !== undefined) {
+        gpuMem += m.gpuMemoryUsed;
+        gpuMemCount++;
+      }
     }
 
     return {

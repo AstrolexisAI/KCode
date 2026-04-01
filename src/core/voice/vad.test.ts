@@ -1,6 +1,6 @@
 // KCode - VAD Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { VoiceActivityDetector } from "./vad";
 
 describe("VoiceActivityDetector", () => {
@@ -90,7 +90,8 @@ describe("VoiceActivityDetector", () => {
     // Feed loud audio frames
     const loud = new Float32Array(320).fill(0.5);
     let event = null;
-    for (let i = 0; i < 50; i++) { // Enough frames to exceed speechDuration
+    for (let i = 0; i < 50; i++) {
+      // Enough frames to exceed speechDuration
       const e = vad.process(loud);
       if (e) event = e;
     }
@@ -109,7 +110,8 @@ describe("VoiceActivityDetector", () => {
     // Feed silence
     const silence = new Float32Array(320).fill(0.0001);
     let event = null;
-    for (let i = 0; i < 200; i++) { // Enough for silenceDuration
+    for (let i = 0; i < 200; i++) {
+      // Enough for silenceDuration
       const e = vad.process(silence);
       if (e && e.type === "speech-end") event = e;
     }

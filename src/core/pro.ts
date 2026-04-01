@@ -3,13 +3,13 @@
 // Pro ($19/mo individual, $49/mo team): HTTP API, swarm, transcript search,
 //      hooks (webhook+agent-spawn), browser, image-gen, distilled learning
 
-import { join } from "node:path";
+import { createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { kcodeHome, kcodePath } from "./paths";
-import { createHmac, randomBytes, pbkdf2Sync } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { loadUserSettingsRaw } from "./config.js";
 import { log } from "./logger";
+import { kcodeHome, kcodePath } from "./paths";
 
 const KCODE_HOME = kcodeHome();
 const PRO_CACHE_FILE = kcodePath("pro-cache.json");
@@ -23,12 +23,16 @@ function getOrCreateCacheSalt(): string {
     if (existsSync(PRO_CACHE_SALT_FILE)) {
       return readFileSync(PRO_CACHE_SALT_FILE, "utf-8").trim();
     }
-  } catch (err) { log.debug("pro", `Failed to read cache salt file, regenerating: ${err}`); }
+  } catch (err) {
+    log.debug("pro", `Failed to read cache salt file, regenerating: ${err}`);
+  }
   const salt = randomBytes(32).toString("hex");
   try {
     mkdirSync(KCODE_HOME, { recursive: true });
     writeFileSync(PRO_CACHE_SALT_FILE, salt + "\n", { mode: 0o600 });
-  } catch (err) { log.debug("pro", `Failed to write cache salt file: ${err}`); }
+  } catch (err) {
+    log.debug("pro", `Failed to write cache salt file: ${err}`);
+  }
   return salt;
 }
 
@@ -43,19 +47,19 @@ function getCacheHmacKey(): Buffer {
 
 export const PRO_FEATURES = {
   // Hard gates — fully blocked without Pro
-  "http-server":       "HTTP API server for IDE integrations",
-  "browser":           "Browser automation (Playwright)",
-  "hooks-webhook":     "HTTP webhook hooks",
-  "hooks-agent":       "Agent-spawn hooks",
-  "distillation":      "Distilled learning from past sessions",
-  "smart-routing":     "Auto-select best model per task type",
-  "cloud-failover":    "Multi-provider failover chain",
-  "deploy":            "Deploy automation (Docker, Vercel, Fly, SSH)",
+  "http-server": "HTTP API server for IDE integrations",
+  browser: "Browser automation (Playwright)",
+  "hooks-webhook": "HTTP webhook hooks",
+  "hooks-agent": "Agent-spawn hooks",
+  distillation: "Distilled learning from past sessions",
+  "smart-routing": "Auto-select best model per task type",
+  "cloud-failover": "Multi-provider failover chain",
+  deploy: "Deploy automation (Docker, Vercel, Fly, SSH)",
   // Soft gates — limited in free, unlimited in Pro
-  "swarm":             "Multi-agent swarm (free: 1 sequential, Pro: up to 8 parallel)",
+  swarm: "Multi-agent swarm (free: 1 sequential, Pro: up to 8 parallel)",
   "transcript-search": "Transcript search (free: 72h, Pro: full history)",
-  "image-gen":         "Image generation via cloud API (Flux, DALL-E)",
-  "analytics-export":  "Detailed analytics with cost tracking and export",
+  "image-gen": "Image generation via cloud API (Flux, DALL-E)",
+  "analytics-export": "Detailed analytics with cost tracking and export",
 } as const;
 
 // ── Soft gate limits ────────────────────────────────────────────
@@ -123,7 +127,7 @@ interface ProCache {
   validatedAt: string;
   valid: boolean;
   serverValidated: boolean; // true only if server confirmed at least once
-  hmac: string;             // HMAC of key+validatedAt+valid to detect tampering
+  hmac: string; // HMAC of key+validatedAt+valid to detect tampering
 }
 
 function computeHmac(key: string, validatedAt: string, valid: boolean): string {
@@ -143,7 +147,11 @@ export function loadProCache(): ProCache | null {
     if ((mode & 0o077) !== 0) {
       // File is readable by group/others — could be tampered. Reset permissions.
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
-      try { chmodSync(PRO_CACHE_FILE, 0o600); } catch (err) { log.debug("pro", `Failed to chmod pro-cache file: ${err}`); }
+      try {
+        chmodSync(PRO_CACHE_FILE, 0o600);
+      } catch (err) {
+        log.debug("pro", `Failed to chmod pro-cache file: ${err}`);
+      }
     }
 
     const raw = JSON.parse(readFileSync(PRO_CACHE_FILE, "utf-8"));
@@ -160,13 +168,20 @@ export function loadProCache(): ProCache | null {
   }
 }
 
-function saveProCache(key: string, validatedAt: string, valid: boolean, serverValidated: boolean): void {
+function saveProCache(
+  key: string,
+  validatedAt: string,
+  valid: boolean,
+  serverValidated: boolean,
+): void {
   try {
     mkdirSync(KCODE_HOME, { recursive: true });
     const hmac = computeHmac(key, validatedAt, valid);
     const cache: ProCache = { key, validatedAt, valid, serverValidated, hmac };
     writeFileSync(PRO_CACHE_FILE, JSON.stringify(cache, null, 2) + "\n", { mode: 0o600 });
-  } catch (err) { log.debug("pro", `Failed to save pro cache: ${err}`); }
+  } catch (err) {
+    log.debug("pro", `Failed to save pro cache: ${err}`);
+  }
 }
 
 // ── Validation logic (#1, #4) ───────────────────────────────────
@@ -200,7 +215,7 @@ async function validateProKey(key: string): Promise<boolean> {
       return false;
     }
 
-    const result = await resp.json() as { valid?: boolean };
+    const result = (await resp.json()) as { valid?: boolean };
     const valid = result.valid === true;
 
     saveProCache(key, new Date().toISOString(), valid, true);
@@ -233,15 +248,23 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   if (!process.stdin.isTTY) {
     throw new Error(
       `⚡ KCode Pro required — ${description}\n` +
-      `\n` +
-      `  This feature requires KCode Pro ($19/mo).\n` +
-      `  Activate: kcode pro activate <your-pro-key>\n` +
-      `  Get a key: https://kulvex.ai/pro\n`
+        `\n` +
+        `  This feature requires KCode Pro ($19/mo).\n` +
+        `  Activate: kcode pro activate <your-pro-key>\n` +
+        `  Get a key: https://kulvex.ai/pro\n`,
     );
   }
 
   // Interactive — show feature and prompt for key
-  const C = { reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m", cyan: "\x1b[36m", yellow: "\x1b[33m", green: "\x1b[32m", red: "\x1b[31m" };
+  const C = {
+    reset: "\x1b[0m",
+    bold: "\x1b[1m",
+    dim: "\x1b[2m",
+    cyan: "\x1b[36m",
+    yellow: "\x1b[33m",
+    green: "\x1b[32m",
+    red: "\x1b[31m",
+  };
 
   console.log();
   console.log(`  ${C.yellow}⚡ KCode Pro feature${C.reset}`);
@@ -256,9 +279,12 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   const answer = await new Promise<string>((resolve) => {
-    rl.question(`  ${C.bold}Enter Pro key${C.reset} ${C.dim}(or press Enter to cancel):${C.reset} `, (ans) => {
-      resolve(ans.trim());
-    });
+    rl.question(
+      `  ${C.bold}Enter Pro key${C.reset} ${C.dim}(or press Enter to cancel):${C.reset} `,
+      (ans) => {
+        resolve(ans.trim());
+      },
+    );
   });
   rl.close();
 
@@ -270,7 +296,7 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
     throw new Error(
       `${C.red}✗${C.reset} Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n` +
-      `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`
+        `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`,
     );
   }
 
@@ -297,7 +323,7 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   clearProCache();
   throw new Error(
     `${C.red}✗${C.reset} Pro key could not be validated. Check that it's correct or try again later.\n` +
-    `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`
+      `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`,
   );
 }
 
@@ -339,10 +365,15 @@ export async function getSessionCountThisMonth(): Promise<number> {
       try {
         const mtime = statSync(join(transcriptDir, f)).mtimeMs;
         if (mtime >= thirtyDaysAgo) count++;
-      } catch (err) { log.debug("pro", `Failed to stat transcript file ${f}: ${err}`); }
+      } catch (err) {
+        log.debug("pro", `Failed to stat transcript file ${f}: ${err}`);
+      }
     }
     return count;
-  } catch (err) { log.debug("pro", `Failed to count sessions this month: ${err}`); return 0; }
+  } catch (err) {
+    log.debug("pro", `Failed to count sessions this month: ${err}`);
+    return 0;
+  }
 }
 
 /** Check if session limit reached (free: 50/month). Interactive prompt in TTY. */
@@ -351,21 +382,31 @@ export async function checkSessionLimit(): Promise<void> {
   const count = await getSessionCountThisMonth();
   if (count < FREE_LIMITS.sessionsPerMonth) return;
 
-  const C = { reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m", cyan: "\x1b[36m", yellow: "\x1b[33m", green: "\x1b[32m", red: "\x1b[31m" };
+  const C = {
+    reset: "\x1b[0m",
+    bold: "\x1b[1m",
+    dim: "\x1b[2m",
+    cyan: "\x1b[36m",
+    yellow: "\x1b[33m",
+    green: "\x1b[32m",
+    red: "\x1b[31m",
+  };
 
   if (!process.stdin.isTTY) {
     throw new Error(
       `⚡ Session limit reached — ${count}/${FREE_LIMITS.sessionsPerMonth} sessions this month.\n` +
-      `\n` +
-      `  Upgrade to KCode Pro for unlimited sessions.\n` +
-      `  Activate: kcode pro activate <your-pro-key>\n` +
-      `  Get a key: https://kulvex.ai/pro\n`
+        `\n` +
+        `  Upgrade to KCode Pro for unlimited sessions.\n` +
+        `  Activate: kcode pro activate <your-pro-key>\n` +
+        `  Get a key: https://kulvex.ai/pro\n`,
     );
   }
 
   console.log();
   console.log(`  ${C.yellow}⚡ Session limit reached${C.reset}`);
-  console.log(`  ${C.bold}${count}/${FREE_LIMITS.sessionsPerMonth} sessions used this month${C.reset}`);
+  console.log(
+    `  ${C.bold}${count}/${FREE_LIMITS.sessionsPerMonth} sessions used this month${C.reset}`,
+  );
   console.log();
   console.log(`  ${C.dim}Upgrade to KCode Pro ($19/mo) for unlimited sessions.${C.reset}`);
   console.log(`  ${C.dim}Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}`);
@@ -374,7 +415,10 @@ export async function checkSessionLimit(): Promise<void> {
   const { createInterface } = await import("node:readline");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await new Promise<string>((resolve) => {
-    rl.question(`  ${C.bold}Enter Pro key${C.reset} ${C.dim}(or press Enter to exit):${C.reset} `, (ans) => resolve(ans.trim()));
+    rl.question(
+      `  ${C.bold}Enter Pro key${C.reset} ${C.dim}(or press Enter to exit):${C.reset} `,
+      (ans) => resolve(ans.trim()),
+    );
   });
   rl.close();
 
@@ -384,7 +428,7 @@ export async function checkSessionLimit(): Promise<void> {
 
   // Validate key format before saving
   if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
-    throw new Error("Invalid key format. Keys start with \"kcode_pro_\" or \"klx_lic_\".");
+    throw new Error('Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".');
   }
 
   const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
@@ -400,7 +444,12 @@ export async function checkSessionLimit(): Promise<void> {
 
   // Only remove key if server explicitly rejected it (not network failure)
   const sessionCache = loadProCache();
-  if (sessionCache && sessionCache.key === answer && sessionCache.serverValidated && !sessionCache.valid) {
+  if (
+    sessionCache &&
+    sessionCache.key === answer &&
+    sessionCache.serverValidated &&
+    !sessionCache.valid
+  ) {
     settings.proKey = undefined;
     await saveUserSettingsRaw(settings);
   }
@@ -416,13 +465,15 @@ export async function softRequireSwarm(requestedAgents: number): Promise<number>
   if (!process.stdin.isTTY) {
     process.stderr.write(
       `\x1b[33m⚠ Free tier: swarm limited to ${max} agent. Upgrade to Pro for up to 8 parallel agents.\x1b[0m\n` +
-      `  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`
+        `  Get a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m\n`,
     );
     return max;
   }
 
   console.log();
-  console.log(`  \x1b[33m⚠ Free tier: swarm limited to ${max} agent (you requested ${requestedAgents}).\x1b[0m`);
+  console.log(
+    `  \x1b[33m⚠ Free tier: swarm limited to ${max} agent (you requested ${requestedAgents}).\x1b[0m`,
+  );
   console.log(`  \x1b[2mUpgrade to Pro for up to 8 parallel agents.\x1b[0m`);
   console.log(`  \x1b[2mGet a key: \x1b[36mhttps://kulvex.ai/pro\x1b[0m`);
   console.log();
@@ -430,7 +481,10 @@ export async function softRequireSwarm(requestedAgents: number): Promise<number>
   const { createInterface } = await import("node:readline");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const answer = await new Promise<string>((resolve) => {
-    rl.question(`  \x1b[1mEnter Pro key\x1b[0m \x1b[2m(or press Enter to continue with ${max} agent):\x1b[0m `, (ans) => resolve(ans.trim()));
+    rl.question(
+      `  \x1b[1mEnter Pro key\x1b[0m \x1b[2m(or press Enter to continue with ${max} agent):\x1b[0m `,
+      (ans) => resolve(ans.trim()),
+    );
   });
   rl.close();
 
@@ -438,7 +492,9 @@ export async function softRequireSwarm(requestedAgents: number): Promise<number>
 
   // Validate key format before saving
   if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
-    console.log(`\n  \x1b[31m✗\x1b[0m Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n`);
+    console.log(
+      `\n  \x1b[31m✗\x1b[0m Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n`,
+    );
     return max;
   }
 

@@ -1,7 +1,7 @@
 // KCode - Custom HTTP Telemetry Sink
 // Generic HTTP webhook sink for forwarding telemetry events to any endpoint.
 
-import type { TelemetrySink, TelemetryEvent } from "../types";
+import type { TelemetryEvent, TelemetrySink } from "../types";
 
 export interface CustomHTTPSinkOptions {
   /** Webhook URL */

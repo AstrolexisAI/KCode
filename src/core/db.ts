@@ -278,20 +278,28 @@ function initSchema(db: Database): void {
  */
 function runPendingMigrations(db: Database): void {
   try {
-    const { MigrationRunner } = require("../migrations/runner") as typeof import("../migrations/runner");
-    const { ALL_MIGRATIONS } = require("../migrations/registry") as typeof import("../migrations/registry");
+    const { MigrationRunner } =
+      require("../migrations/runner") as typeof import("../migrations/runner");
+    const { ALL_MIGRATIONS } =
+      require("../migrations/registry") as typeof import("../migrations/registry");
     const runner = new MigrationRunner(db, ALL_MIGRATIONS);
     // Fire and forget — migrations are fast and synchronous in practice
-    runner.run().then((report) => {
-      if (report.applied.length > 0) {
-        log.info("db", `Applied ${report.applied.length} migration(s): ${report.applied.map((m) => m.version).join(", ")}`);
-      }
-      if (report.failed) {
-        log.error("db", `Migration ${report.failed.version} failed: ${report.failed.error}`);
-      }
-    }).catch((err) => {
-      log.error("db", `Migration runner failed: ${err}`);
-    });
+    runner
+      .run()
+      .then((report) => {
+        if (report.applied.length > 0) {
+          log.info(
+            "db",
+            `Applied ${report.applied.length} migration(s): ${report.applied.map((m) => m.version).join(", ")}`,
+          );
+        }
+        if (report.failed) {
+          log.error("db", `Migration ${report.failed.version} failed: ${report.failed.error}`);
+        }
+      })
+      .catch((err) => {
+        log.error("db", `Migration runner failed: ${err}`);
+      });
   } catch (err) {
     log.error("db", `Failed to load migration system: ${err}`);
   }

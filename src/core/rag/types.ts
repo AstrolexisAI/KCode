@@ -132,7 +132,7 @@ export const DEFAULT_RAG_CONFIG: RAGConfig = {
     semantic: 0.5,
     recency: 0.15,
     frequency: 0.15,
-    proximity: 0.10,
-    typeBoost: 0.10,
+    proximity: 0.1,
+    typeBoost: 0.1,
   },
 };

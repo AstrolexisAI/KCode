@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach, mock } from "bun:test";
-import { mkdirSync, writeFileSync, existsSync, readFileSync, renameSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -74,7 +74,10 @@ describe("CDNFetcher", () => {
     // Set up cache: create current dir and SHA sentinel
     const currentDir = join(cacheDir, "test-plugin", "current");
     mkdirSync(currentDir, { recursive: true });
-    writeFileSync(join(currentDir, "plugin.json"), JSON.stringify({ name: "test-plugin", version: "1.0.0" }));
+    writeFileSync(
+      join(currentDir, "plugin.json"),
+      JSON.stringify({ name: "test-plugin", version: "1.0.0" }),
+    );
 
     const shaTracker = fetcher.getSHATracker();
     shaTracker.setSHA("test-plugin", "abc123", "1.0.0");
@@ -96,7 +99,10 @@ describe("CDNFetcher", () => {
     // Set up cache with version 1.0.0
     const currentDir = join(cacheDir, "test-plugin", "current");
     mkdirSync(currentDir, { recursive: true });
-    writeFileSync(join(currentDir, "plugin.json"), JSON.stringify({ name: "test-plugin", version: "1.0.0" }));
+    writeFileSync(
+      join(currentDir, "plugin.json"),
+      JSON.stringify({ name: "test-plugin", version: "1.0.0" }),
+    );
 
     const shaTracker = fetcher.getSHATracker();
     shaTracker.setSHA("test-plugin", "abc123", "1.0.0");
@@ -173,9 +179,7 @@ describe("CDNFetcher", () => {
         timeoutMs: 5000,
       });
 
-      await expect(fetcher.fetchPlugin("sha-mismatch", "1.0.0")).rejects.toThrow(
-        /SHA256 mismatch/
-      );
+      await expect(fetcher.fetchPlugin("sha-mismatch", "1.0.0")).rejects.toThrow(/SHA256 mismatch/);
     } finally {
       server.stop(true);
     }
@@ -228,9 +232,7 @@ describe("CDNFetcher", () => {
       });
 
       // Request with a different name than what the manifest says
-      await expect(fetcher.fetchPlugin("expected-name", "1.0.0")).rejects.toThrow(
-        /name mismatch/
-      );
+      await expect(fetcher.fetchPlugin("expected-name", "1.0.0")).rejects.toThrow(/name mismatch/);
     } finally {
       server.stop(true);
     }
@@ -251,9 +253,7 @@ describe("CDNFetcher", () => {
         timeoutMs: 5000,
       });
 
-      await expect(fetcher.fetchPlugin("missing-plugin", "1.0.0")).rejects.toThrow(
-        /HTTP 404/
-      );
+      await expect(fetcher.fetchPlugin("missing-plugin", "1.0.0")).rejects.toThrow(/HTTP 404/);
     } finally {
       server.stop(true);
     }

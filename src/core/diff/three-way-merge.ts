@@ -2,8 +2,8 @@
 // Merges concurrent edits (ours + theirs) against a common base using the diff engine.
 // Auto-resolves non-overlapping changes; generates MergeConflict for overlaps.
 
-import type { MergeConflict, MergeResult } from "./types.js";
 import { DiffEngine } from "./engine.js";
+import type { MergeConflict, MergeResult } from "./types.js";
 
 /**
  * Represents a change region from one side of the merge.
@@ -86,10 +86,9 @@ export class ThreeWayMerge {
 
         if (regionA.side === regionB.side) continue;
 
-        if (rangesOverlap(
-          [regionA.startBase, regionA.endBase],
-          [regionB.startBase, regionB.endBase],
-        )) {
+        if (
+          rangesOverlap([regionA.startBase, regionA.endBase], [regionB.startBase, regionB.endBase])
+        ) {
           // Check if the changes are identical - if so, auto-resolve
           if (arraysEqual(regionA.lines, regionB.lines)) {
             // Same change on both sides, treat as auto-resolvable
@@ -124,11 +123,7 @@ export class ThreeWayMerge {
     }
 
     // Build merged content
-    const content = this.buildMergedContent(
-      baseLines,
-      autoResolvable,
-      conflicts,
-    );
+    const content = this.buildMergedContent(baseLines, autoResolvable, conflicts);
 
     return {
       content,
@@ -270,9 +265,7 @@ export class ThreeWayMerge {
           outputLines.push(...seg.lines);
           break;
         case "conflict":
-          outputLines.push(
-            ...buildConflictMarker(seg.conflict).split("\n"),
-          );
+          outputLines.push(...buildConflictMarker(seg.conflict).split("\n"));
           break;
       }
     }
@@ -286,10 +279,7 @@ export class ThreeWayMerge {
  * Ranges are half-open intervals: [start, end)
  * Adjacent ranges (a.end === b.start) also count as overlapping for merge purposes.
  */
-export function rangesOverlap(
-  a: [number, number],
-  b: [number, number],
-): boolean {
+export function rangesOverlap(a: [number, number], b: [number, number]): boolean {
   // Handle zero-length ranges (pure insertions at same point)
   if (a[0] === a[1] && b[0] === b[1]) {
     return a[0] === b[0];

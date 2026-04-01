@@ -100,9 +100,7 @@ export class AutoModeBreaker {
     this.consecutiveDenials++;
 
     if (this.consecutiveDenials >= this.config.maxConsecutiveDenials) {
-      this.trip(
-        `${this.consecutiveDenials} consecutive permission denials (last: ${toolName})`,
-      );
+      this.trip(`${this.consecutiveDenials} consecutive permission denials (last: ${toolName})`);
     }
   }
 

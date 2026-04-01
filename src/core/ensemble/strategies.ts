@@ -1,7 +1,9 @@
 // KCode - Ensemble Strategies
 // Implements all ensemble strategies: best-of-n, majority-vote, merge, verify, specialize.
 
+import { classifyTask } from "../router";
 import type { Message } from "../types";
+import { llmMerge, mergeSections } from "./merger";
 import type {
   CandidateResponse,
   EnsembleConfig,
@@ -10,8 +12,6 @@ import type {
   SpecializeConfig,
 } from "./types";
 import { heuristicSelect, judgeSelect, majorityVote } from "./voter";
-import { mergeSections, llmMerge } from "./merger";
-import { classifyTask } from "../router";
 
 // ─── Parallel Execution with Timeout ────────────────────────────
 
@@ -69,9 +69,7 @@ async function executeParallel(
 
   for (const chunk of chunks) {
     const settled = await Promise.allSettled(
-      chunk.map(model =>
-        executeWithTimeout(model, messages, config.timeout, executor)
-      ),
+      chunk.map((model) => executeWithTimeout(model, messages, config.timeout, executor)),
     );
 
     for (const result of settled) {
@@ -192,9 +190,11 @@ export async function verifyStrategy(
   const genDuration = Date.now() - startGen;
 
   // 2. Verify
-  const lastUserMessage = query.filter(m => m.role === "user").pop();
+  const lastUserMessage = query.filter((m) => m.role === "user").pop();
   const queryText = lastUserMessage
-    ? (typeof lastUserMessage.content === "string" ? lastUserMessage.content : JSON.stringify(lastUserMessage.content))
+    ? typeof lastUserMessage.content === "string"
+      ? lastUserMessage.content
+      : JSON.stringify(lastUserMessage.content)
     : "";
 
   const verifyPrompt = [
@@ -206,7 +206,9 @@ export async function verifyStrategy(
     ``,
     `RESPONSE TO REVIEW:`,
     generated.content,
-  ].join("\n").trim();
+  ]
+    .join("\n")
+    .trim();
 
   const startVer = Date.now();
   const verified = await executor.execute(
@@ -219,9 +221,7 @@ export async function verifyStrategy(
   const wasCorrected = verified.content.startsWith("CORRECTED");
 
   return {
-    finalResponse: wasCorrected
-      ? verified.content.replace(/^CORRECTED\s*/, "")
-      : generated.content,
+    finalResponse: wasCorrected ? verified.content.replace(/^CORRECTED\s*/, "") : generated.content,
     strategy: "verify",
     candidates: [
       {
@@ -260,9 +260,11 @@ export async function specializeStrategy(
   executor: ModelExecutor,
 ): Promise<EnsembleResult> {
   // Classify the task using the router
-  const lastUserMessage = query.filter(m => m.role === "user").pop();
+  const lastUserMessage = query.filter((m) => m.role === "user").pop();
   const queryText = lastUserMessage
-    ? (typeof lastUserMessage.content === "string" ? lastUserMessage.content : "")
+    ? typeof lastUserMessage.content === "string"
+      ? lastUserMessage.content
+      : ""
     : "";
 
   const taskType = classifyTask(queryText);
@@ -292,13 +294,15 @@ export async function specializeStrategy(
   return {
     finalResponse: result.content,
     strategy: "specialize",
-    candidates: [{
-      model: selectedModel,
-      response: result.content,
-      tokensUsed: result.tokensUsed,
-      durationMs: duration,
-      score: 1.0,
-    }],
+    candidates: [
+      {
+        model: selectedModel,
+        response: result.content,
+        tokensUsed: result.tokensUsed,
+        durationMs: duration,
+        score: 1.0,
+      },
+    ],
     reasoning: `Specialized model "${matchedSpec}" (${selectedModel}) selected for task type "${taskType}"`,
   };
 }

@@ -8,7 +8,7 @@ import { log } from "./logger";
 
 export interface ToolAlias {
   alias: string;
-  target: string;       // full MCP tool name (e.g. mcp__server__toolname)
+  target: string; // full MCP tool name (e.g. mcp__server__toolname)
   description?: string;
 }
 
@@ -37,10 +37,11 @@ function ensureSchema(): void {
 export function addAlias(alias: string, target: string, description?: string): void {
   ensureSchema();
   const db = getDb();
-  db.run(
-    `INSERT OR REPLACE INTO mcp_tool_aliases (alias, target, description) VALUES (?, ?, ?)`,
-    [alias, target, description ?? null],
-  );
+  db.run(`INSERT OR REPLACE INTO mcp_tool_aliases (alias, target, description) VALUES (?, ?, ?)`, [
+    alias,
+    target,
+    description ?? null,
+  ]);
   log.info("mcp-aliases", `Added alias "${alias}" -> "${target}"`);
 }
 
@@ -65,7 +66,9 @@ export function removeAlias(alias: string): boolean {
 export function resolveAlias(name: string): string {
   ensureSchema();
   const db = getDb();
-  const row = db.query(`SELECT target FROM mcp_tool_aliases WHERE alias = ?`).get(name) as { target: string } | null;
+  const row = db.query(`SELECT target FROM mcp_tool_aliases WHERE alias = ?`).get(name) as {
+    target: string;
+  } | null;
   return row ? row.target : name;
 }
 
@@ -75,5 +78,7 @@ export function resolveAlias(name: string): string {
 export function listAliases(): ToolAlias[] {
   ensureSchema();
   const db = getDb();
-  return db.query(`SELECT alias, target, description FROM mcp_tool_aliases ORDER BY alias`).all() as ToolAlias[];
+  return db
+    .query(`SELECT alias, target, description FROM mcp_tool_aliases ORDER BY alias`)
+    .all() as ToolAlias[];
 }

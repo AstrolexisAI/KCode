@@ -1,7 +1,14 @@
 // KCode - Session Branching
 // Fork conversations at any point and continue from branches
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { kcodePath } from "./paths";
 import type { Message } from "./types";
@@ -70,7 +77,9 @@ export async function listBranches(sessionId: string): Promise<BranchMeta[]> {
 
   const results: BranchMeta[] = [];
   try {
-    const entries = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
+    const entries = readdirSync(dir)
+      .filter((f) => f.endsWith(".json"))
+      .sort();
     for (const entry of entries) {
       try {
         const content = readFileSync(join(dir, entry), "utf-8");

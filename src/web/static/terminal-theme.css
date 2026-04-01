@@ -128,28 +128,39 @@
 .language-typescript .keyword,
 .language-python .keyword,
 .language-rust .keyword,
-.language-go .keyword { color: var(--syn-keyword); }
+.language-go .keyword {
+  color: var(--syn-keyword);
+}
 
 .language-javascript .string,
 .language-typescript .string,
 .language-python .string,
 .language-rust .string,
-.language-go .string { color: var(--syn-string); }
+.language-go .string {
+  color: var(--syn-string);
+}
 
 .language-javascript .number,
 .language-typescript .number,
 .language-python .number,
 .language-rust .number,
-.language-go .number { color: var(--syn-number); }
+.language-go .number {
+  color: var(--syn-number);
+}
 
 .language-javascript .comment,
 .language-typescript .comment,
 .language-python .comment,
 .language-rust .comment,
-.language-go .comment { color: var(--syn-comment); font-style: italic; }
+.language-go .comment {
+  color: var(--syn-comment);
+  font-style: italic;
+}
 
 .language-javascript .function,
 .language-typescript .function,
 .language-python .function,
 .language-rust .function,
-.language-go .function { color: var(--syn-function); }
+.language-go .function {
+  color: var(--syn-function);
+}

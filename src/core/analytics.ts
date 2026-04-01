@@ -1,9 +1,9 @@
 // KCode - Persistent Tool Analytics
 // Records tool usage events to SQLite and provides cross-session analytics.
 
+import { getTelemetry, trackEvent } from "../telemetry/index";
 import { getDb } from "./db";
 import { log } from "./logger";
-import { getTelemetry, trackEvent } from "../telemetry/index";
 
 // ─── Telemetry Gate ─────────────────────────────────────────────
 // undefined = not yet decided (first run) — recording is disabled until explicit opt-in.
@@ -61,16 +61,20 @@ export function recordToolEvent(event: ToolEvent): void {
     );
     // Forward to professional telemetry pipeline (if enabled)
     if (getTelemetry()) {
-      trackEvent("kcode.tool.execute", {
-        tool_name: event.toolName,
-        model: event.model,
-        duration_ms: event.durationMs,
-        is_error: event.isError,
-        input_tokens: event.inputTokens ?? 0,
-        output_tokens: event.outputTokens ?? 0,
-        cost_usd: event.costUsd ?? 0,
-        session_id: event.sessionId,
-      }, event.durationMs);
+      trackEvent(
+        "kcode.tool.execute",
+        {
+          tool_name: event.toolName,
+          model: event.model,
+          duration_ms: event.durationMs,
+          is_error: event.isError,
+          input_tokens: event.inputTokens ?? 0,
+          output_tokens: event.outputTokens ?? 0,
+          cost_usd: event.costUsd ?? 0,
+          session_id: event.sessionId,
+        },
+        event.durationMs,
+      );
     }
   } catch (err) {
     log.debug("analytics", `Failed to record tool event: ${err}`);
@@ -101,34 +105,45 @@ export function getAnalyticsSummary(days: number = 7): AnalyticsSummary {
 
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
 
-  const totals = db.query<{ sessions: number; calls: number; errors: number; cost: number; inp: number; out: number }, [string]>(
-    `SELECT
+  const totals = db
+    .query<
+      { sessions: number; calls: number; errors: number; cost: number; inp: number; out: number },
+      [string]
+    >(
+      `SELECT
        COUNT(DISTINCT session_id) as sessions,
        COUNT(*) as calls,
        SUM(is_error) as errors,
        SUM(cost_usd) as cost,
        SUM(input_tokens) as inp,
        SUM(output_tokens) as out
-     FROM tool_analytics WHERE created_at >= ?`
-  ).get(cutoff);
+     FROM tool_analytics WHERE created_at >= ?`,
+    )
+    .get(cutoff);
 
-  const toolRows = db.query<{ tool: string; count: number; errors: number; avg_ms: number }, [string]>(
-    `SELECT tool_name as tool, COUNT(*) as count, SUM(is_error) as errors, AVG(duration_ms) as avg_ms
+  const toolRows = db
+    .query<{ tool: string; count: number; errors: number; avg_ms: number }, [string]>(
+      `SELECT tool_name as tool, COUNT(*) as count, SUM(is_error) as errors, AVG(duration_ms) as avg_ms
      FROM tool_analytics WHERE created_at >= ?
-     GROUP BY tool_name ORDER BY count DESC`
-  ).all(cutoff);
+     GROUP BY tool_name ORDER BY count DESC`,
+    )
+    .all(cutoff);
 
-  const dailyRows = db.query<{ date: string; calls: number }, [string]>(
-    `SELECT DATE(created_at) as date, COUNT(*) as calls
+  const dailyRows = db
+    .query<{ date: string; calls: number }, [string]>(
+      `SELECT DATE(created_at) as date, COUNT(*) as calls
      FROM tool_analytics WHERE created_at >= ?
-     GROUP BY DATE(created_at) ORDER BY date DESC LIMIT 30`
-  ).all(cutoff);
+     GROUP BY DATE(created_at) ORDER BY date DESC LIMIT 30`,
+    )
+    .all(cutoff);
 
-  const modelRows = db.query<{ model: string; calls: number; cost: number }, [string]>(
-    `SELECT model, COUNT(*) as calls, SUM(cost_usd) as cost
+  const modelRows = db
+    .query<{ model: string; calls: number; cost: number }, [string]>(
+      `SELECT model, COUNT(*) as calls, SUM(cost_usd) as cost
      FROM tool_analytics WHERE created_at >= ? AND model != ''
-     GROUP BY model ORDER BY calls DESC`
-  ).all(cutoff);
+     GROUP BY model ORDER BY calls DESC`,
+    )
+    .all(cutoff);
 
   return {
     totalSessions: totals?.sessions ?? 0,
@@ -137,9 +152,14 @@ export function getAnalyticsSummary(days: number = 7): AnalyticsSummary {
     totalCostUsd: totals?.cost ?? 0,
     totalInputTokens: totals?.inp ?? 0,
     totalOutputTokens: totals?.out ?? 0,
-    toolBreakdown: toolRows.map(r => ({ tool: r.tool, count: r.count, errors: r.errors, avgMs: Math.round(r.avg_ms) })),
-    dailyActivity: dailyRows.map(r => ({ date: r.date, calls: r.calls })),
-    modelBreakdown: modelRows.map(r => ({ model: r.model, calls: r.calls, costUsd: r.cost })),
+    toolBreakdown: toolRows.map((r) => ({
+      tool: r.tool,
+      count: r.count,
+      errors: r.errors,
+      avgMs: Math.round(r.avg_ms),
+    })),
+    dailyActivity: dailyRows.map((r) => ({ date: r.date, calls: r.calls })),
+    modelBreakdown: modelRows.map((r) => ({ model: r.model, calls: r.calls, costUsd: r.cost })),
   };
 }
 
@@ -158,7 +178,7 @@ export function formatAnalyticsSummary(summary: AnalyticsSummary, days: number):
 
   if (summary.toolBreakdown.length > 0) {
     lines.push("", "  Tool Usage:");
-    const maxName = Math.max(...summary.toolBreakdown.map(t => t.tool.length), 8);
+    const maxName = Math.max(...summary.toolBreakdown.map((t) => t.tool.length), 8);
     const maxCount = summary.toolBreakdown[0]?.count ?? 1;
     const barW = 15;
 
@@ -201,18 +221,22 @@ export async function exportAnalytics(
 
   const db = getDb();
   const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
-  const rows = db.query(
-    `SELECT session_id, tool_name, model, duration_ms, is_error,
+  const rows = db
+    .query(
+      `SELECT session_id, tool_name, model, duration_ms, is_error,
             input_tokens, output_tokens, cost_usd, created_at
      FROM tool_analytics
      WHERE created_at >= ?
-     ORDER BY created_at DESC`
-  ).all(cutoff) as Array<Record<string, unknown>>;
+     ORDER BY created_at DESC`,
+    )
+    .all(cutoff) as Array<Record<string, unknown>>;
 
   if (format === "csv") {
-    const header = "session_id,tool_name,model,duration_ms,is_error,input_tokens,output_tokens,cost_usd,created_at";
-    const lines = rows.map(r =>
-      `${r.session_id},${r.tool_name},${r.model ?? ""},${r.duration_ms},${r.is_error ? 1 : 0},${r.input_tokens ?? 0},${r.output_tokens ?? 0},${r.cost_usd ?? 0},${r.created_at}`
+    const header =
+      "session_id,tool_name,model,duration_ms,is_error,input_tokens,output_tokens,cost_usd,created_at";
+    const lines = rows.map(
+      (r) =>
+        `${r.session_id},${r.tool_name},${r.model ?? ""},${r.duration_ms},${r.is_error ? 1 : 0},${r.input_tokens ?? 0},${r.output_tokens ?? 0},${r.cost_usd ?? 0},${r.created_at}`,
     );
     return [header, ...lines].join("\n");
   }

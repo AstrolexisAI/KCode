@@ -6,17 +6,17 @@ import { join } from "node:path";
 import { log } from "../../core/logger";
 import type { MdmSettings } from "../types";
 import {
+  LINUX_MANAGED_SETTINGS_DIR,
+  LINUX_MANAGED_SETTINGS_PATH,
   macosPlistPaths,
+  SUBPROCESS_TIMEOUT_MS,
   WINDOWS_REGISTRY_PATHS,
   WINDOWS_REGISTRY_VALUE,
-  LINUX_MANAGED_SETTINGS_PATH,
-  LINUX_MANAGED_SETTINGS_DIR,
-  SUBPROCESS_TIMEOUT_MS,
 } from "./constants";
 
 // ─── Session Cache ──────────────────────────────────────────────
 
-let _mdmCache: MdmSettings | null | undefined = undefined; // undefined = not loaded yet
+let _mdmCache: MdmSettings | null | undefined; // undefined = not loaded yet
 
 /**
  * Clear the MDM session cache (for testing or hot-reload).
@@ -27,7 +27,11 @@ export function clearMdmCache(): void {
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-async function runSubprocess(cmd: string, args: string[], timeoutMs: number = SUBPROCESS_TIMEOUT_MS): Promise<string | null> {
+async function runSubprocess(
+  cmd: string,
+  args: string[],
+  timeoutMs: number = SUBPROCESS_TIMEOUT_MS,
+): Promise<string | null> {
   try {
     const proc = Bun.spawn([cmd, ...args], {
       stdout: "pipe",
@@ -37,7 +41,11 @@ async function runSubprocess(cmd: string, args: string[], timeoutMs: number = SU
     // Timeout handling
     const timeoutPromise = new Promise<null>((resolve) => {
       setTimeout(() => {
-        try { proc.kill(); } catch { /* ignore */ }
+        try {
+          proc.kill();
+        } catch {
+          /* ignore */
+        }
         resolve(null);
       }, timeoutMs);
     });
@@ -65,16 +73,46 @@ function parseMdmSettings(raw: unknown): MdmSettings | null {
   const settings: MdmSettings = {};
   let hasAnyField = false;
 
-  if (typeof obj.permissionMode === "string") { settings.permissionMode = obj.permissionMode; hasAnyField = true; }
-  if (Array.isArray(obj.allowedTools)) { settings.allowedTools = obj.allowedTools.filter((t): t is string => typeof t === "string"); hasAnyField = true; }
-  if (Array.isArray(obj.blockedTools)) { settings.blockedTools = obj.blockedTools.filter((t): t is string => typeof t === "string"); hasAnyField = true; }
-  if (typeof obj.maxBudgetUsd === "number") { settings.maxBudgetUsd = obj.maxBudgetUsd; hasAnyField = true; }
-  if (typeof obj.auditLogging === "boolean") { settings.auditLogging = obj.auditLogging; hasAnyField = true; }
-  if (typeof obj.disableWebAccess === "boolean") { settings.disableWebAccess = obj.disableWebAccess; hasAnyField = true; }
-  if (Array.isArray(obj.allowedModels)) { settings.allowedModels = obj.allowedModels.filter((m): m is string => typeof m === "string"); hasAnyField = true; }
-  if (Array.isArray(obj.blockedModels)) { settings.blockedModels = obj.blockedModels.filter((m): m is string => typeof m === "string"); hasAnyField = true; }
-  if (typeof obj.customSystemPrompt === "string") { settings.customSystemPrompt = obj.customSystemPrompt; hasAnyField = true; }
-  if (typeof obj.forceModel === "string") { settings.forceModel = obj.forceModel; hasAnyField = true; }
+  if (typeof obj.permissionMode === "string") {
+    settings.permissionMode = obj.permissionMode;
+    hasAnyField = true;
+  }
+  if (Array.isArray(obj.allowedTools)) {
+    settings.allowedTools = obj.allowedTools.filter((t): t is string => typeof t === "string");
+    hasAnyField = true;
+  }
+  if (Array.isArray(obj.blockedTools)) {
+    settings.blockedTools = obj.blockedTools.filter((t): t is string => typeof t === "string");
+    hasAnyField = true;
+  }
+  if (typeof obj.maxBudgetUsd === "number") {
+    settings.maxBudgetUsd = obj.maxBudgetUsd;
+    hasAnyField = true;
+  }
+  if (typeof obj.auditLogging === "boolean") {
+    settings.auditLogging = obj.auditLogging;
+    hasAnyField = true;
+  }
+  if (typeof obj.disableWebAccess === "boolean") {
+    settings.disableWebAccess = obj.disableWebAccess;
+    hasAnyField = true;
+  }
+  if (Array.isArray(obj.allowedModels)) {
+    settings.allowedModels = obj.allowedModels.filter((m): m is string => typeof m === "string");
+    hasAnyField = true;
+  }
+  if (Array.isArray(obj.blockedModels)) {
+    settings.blockedModels = obj.blockedModels.filter((m): m is string => typeof m === "string");
+    hasAnyField = true;
+  }
+  if (typeof obj.customSystemPrompt === "string") {
+    settings.customSystemPrompt = obj.customSystemPrompt;
+    hasAnyField = true;
+  }
+  if (typeof obj.forceModel === "string") {
+    settings.forceModel = obj.forceModel;
+    hasAnyField = true;
+  }
 
   return hasAnyField ? settings : null;
 }
@@ -142,7 +180,7 @@ async function readLinuxMdm(): Promise<MdmSettings | null> {
   if (existsSync(LINUX_MANAGED_SETTINGS_PATH)) {
     try {
       const file = Bun.file(LINUX_MANAGED_SETTINGS_PATH);
-      base = await file.json() as Record<string, unknown>;
+      base = (await file.json()) as Record<string, unknown>;
     } catch (err) {
       log.debug("config", `Failed to read Linux MDM base settings: ${err}`);
     }
@@ -153,13 +191,13 @@ async function readLinuxMdm(): Promise<MdmSettings | null> {
   if (existsSync(LINUX_MANAGED_SETTINGS_DIR)) {
     try {
       const entries = readdirSync(LINUX_MANAGED_SETTINGS_DIR)
-        .filter(f => f.endsWith(".json"))
+        .filter((f) => f.endsWith(".json"))
         .sort(); // Alphabetical order, last wins
 
       for (const entry of entries) {
         try {
           const file = Bun.file(join(LINUX_MANAGED_SETTINGS_DIR, entry));
-          const data = await file.json() as Record<string, unknown>;
+          const data = (await file.json()) as Record<string, unknown>;
           if (data && typeof data === "object") {
             dropIns.push(data);
           }

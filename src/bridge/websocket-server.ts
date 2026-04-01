@@ -1,25 +1,25 @@
 // KCode Bridge/Daemon Mode - WebSocket Server
 // Bun-native WebSocket server for bidirectional daemon communication.
 
+import type { Server, ServerWebSocket } from "bun";
 import { log } from "../core/logger";
-import { parseMessage, serializeMessage, createMessage, isClientMessageType } from "./protocol";
-import { SessionManager } from "./session-manager";
-import { PermissionBridge } from "./permission-bridge";
+import type { PermissionBridge } from "./permission-bridge";
+import { createMessage, isClientMessageType, parseMessage, serializeMessage } from "./protocol";
+import type { SessionManager } from "./session-manager";
 import type {
   BridgeMessage,
-  PongMessage,
-  SessionCreatedMessage,
-  SessionErrorMessage,
-  SessionDoneMessage,
-  PermissionResponseMessage,
   PermissionRequestMessage,
-  SessionCreateMessage,
-  SessionMessageMessage,
+  PermissionResponseMessage,
+  PongMessage,
   SessionCancelMessage,
+  SessionCreatedMessage,
+  SessionCreateMessage,
   SessionDestroyMessage,
+  SessionDoneMessage,
+  SessionErrorMessage,
+  SessionMessageMessage,
   ShutdownMessage,
 } from "./types";
-import type { Server, ServerWebSocket } from "bun";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -44,7 +44,9 @@ export class BridgeWebSocketServer {
   private token: string;
   private sessionManager: SessionManager;
   private permissionBridge: PermissionBridge;
-  private messageHandler: ((ws: ServerWebSocket<ClientState>, msg: BridgeMessage) => Promise<void>) | null = null;
+  private messageHandler:
+    | ((ws: ServerWebSocket<ClientState>, msg: BridgeMessage) => Promise<void>)
+    | null = null;
 
   constructor(opts: {
     token: string;
@@ -98,7 +100,7 @@ export class BridgeWebSocketServer {
           const authHeader = req.headers.get("authorization") ?? "";
           const token = authHeader.startsWith("Bearer ")
             ? authHeader.slice(7)
-            : url.searchParams.get("token") ?? "";
+            : (url.searchParams.get("token") ?? "");
 
           if (token !== self.token) {
             return new Response("Unauthorized", { status: 401 });
@@ -199,7 +201,9 @@ export class BridgeWebSocketServer {
   /**
    * Set an external message handler for extensibility.
    */
-  onMessage(handler: (ws: ServerWebSocket<ClientState>, msg: BridgeMessage) => Promise<void>): void {
+  onMessage(
+    handler: (ws: ServerWebSocket<ClientState>, msg: BridgeMessage) => Promise<void>,
+  ): void {
     this.messageHandler = handler;
   }
 

@@ -1,11 +1,10 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import { _setModelsPathForTest, loadModelsConfig } from "../models";
 import { ModelDeployer } from "./deployer";
 import type { DeployConfig } from "./types";
-import { _setModelsPathForTest, loadModelsConfig } from "../models";
 
 // ─── Test Helpers ──────────────────────────────────────────────
 
@@ -54,32 +53,24 @@ describe("ModelDeployer", () => {
     });
 
     test("fails for empty modelPath", () => {
-      const errors = deployer.validateConfig(
-        makeConfig({ modelPath: "" }),
-      );
+      const errors = deployer.validateConfig(makeConfig({ modelPath: "" }));
       expect(errors).toContain("modelPath is required");
     });
 
     test("fails for non-existent model file", () => {
-      const errors = deployer.validateConfig(
-        makeConfig({ modelPath: "/nonexistent/model.gguf" }),
-      );
+      const errors = deployer.validateConfig(makeConfig({ modelPath: "/nonexistent/model.gguf" }));
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain("Model file not found");
     });
 
     test("fails for invalid model name characters", () => {
-      const errors = deployer.validateConfig(
-        makeConfig({ name: "my model with spaces!" }),
-      );
+      const errors = deployer.validateConfig(makeConfig({ name: "my model with spaces!" }));
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain("Invalid model name");
     });
 
     test("passes for valid model name with dots and hyphens", () => {
-      const errors = deployer.validateConfig(
-        makeConfig({ name: "my-model.v2_q4" }),
-      );
+      const errors = deployer.validateConfig(makeConfig({ name: "my-model.v2_q4" }));
       expect(errors).toEqual([]);
     });
   });
@@ -88,9 +79,7 @@ describe("ModelDeployer", () => {
 
   describe("inferModelName", () => {
     test("strips .gguf extension", () => {
-      expect(deployer.inferModelName("/path/to/model-q4_k_m.gguf")).toBe(
-        "model-q4_k_m",
-      );
+      expect(deployer.inferModelName("/path/to/model-q4_k_m.gguf")).toBe("model-q4_k_m");
     });
 
     test("strips .ggml extension", () => {
@@ -102,9 +91,7 @@ describe("ModelDeployer", () => {
     });
 
     test("strips .safetensors extension", () => {
-      expect(deployer.inferModelName("/path/to/model.safetensors")).toBe(
-        "model",
-      );
+      expect(deployer.inferModelName("/path/to/model.safetensors")).toBe("model");
     });
 
     test("strips .pt extension", () => {
@@ -133,17 +120,13 @@ describe("ModelDeployer", () => {
 
       // Verify models.json was written
       const modelsConfig = await loadModelsConfig();
-      const registered = modelsConfig.models.find(
-        (m) => m.name === "kcode-distilled-7b",
-      );
+      const registered = modelsConfig.models.find((m) => m.name === "kcode-distilled-7b");
       expect(registered).toBeTruthy();
       expect(registered!.description).toBe("Fine-tuned on KCode sessions");
     });
 
     test("sets model as default when requested", async () => {
-      const report = await deployer.deploy(
-        makeConfig({ setAsDefault: true }),
-      );
+      const report = await deployer.deploy(makeConfig({ setAsDefault: true }));
 
       expect(report.setAsDefault).toBe(true);
 
@@ -152,9 +135,7 @@ describe("ModelDeployer", () => {
     });
 
     test("infers model name from path when name is empty", async () => {
-      const report = await deployer.deploy(
-        makeConfig({ name: "" }),
-      );
+      const report = await deployer.deploy(makeConfig({ name: "" }));
 
       expect(report.modelName).toBe("model-q4_k_m");
     });
@@ -173,14 +154,10 @@ describe("ModelDeployer", () => {
       await deployer.deploy(makeConfig());
 
       // Deploy again with different description
-      await deployer.deploy(
-        makeConfig({ description: "Updated description" }),
-      );
+      await deployer.deploy(makeConfig({ description: "Updated description" }));
 
       const modelsConfig = await loadModelsConfig();
-      const models = modelsConfig.models.filter(
-        (m) => m.name === "kcode-distilled-7b",
-      );
+      const models = modelsConfig.models.filter((m) => m.name === "kcode-distilled-7b");
       // Should have exactly one entry (updated, not duplicated)
       expect(models.length).toBe(1);
       expect(models[0]!.description).toBe("Updated description");

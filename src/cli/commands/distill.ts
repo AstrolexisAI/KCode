@@ -23,12 +23,7 @@ export function registerDistillCommand(program: Command): void {
       "jsonl-chat",
     )
     .option("-o, --output <path>", "Output directory")
-    .option(
-      "-q, --min-quality <n>",
-      "Minimum quality score (0.0-2.0)",
-      parseFloat,
-      0.5,
-    )
+    .option("-q, --min-quality <n>", "Minimum quality score (0.0-2.0)", parseFloat, 0.5)
     .option("-n, --max <n>", "Maximum examples to export", parseInt, 5000)
     .option("--no-tools", "Exclude tool call sequences")
     .option("--project <project>", "Filter by project path")
@@ -43,9 +38,7 @@ export function registerDistillCommand(program: Command): void {
         project?: string;
         tag?: string;
       }) => {
-        const { DatasetExporter } = await import(
-          "../../core/distillation/exporter"
-        );
+        const { DatasetExporter } = await import("../../core/distillation/exporter");
         const { kcodePath } = await import("../../core/paths");
 
         const exporter = new DatasetExporter();
@@ -77,24 +70,18 @@ export function registerDistillCommand(program: Command): void {
     .description("Curate a dataset: deduplicate, filter, balance, clean")
     .option("-o, --output <path>", "Output file path")
     .action(async (input: string, opts: { output?: string }) => {
-      const { DatasetCurator } = await import(
-        "../../core/distillation/curator"
-      );
+      const { DatasetCurator } = await import("../../core/distillation/curator");
       const { resolve, basename, dirname, join } = await import("node:path");
 
       const inputPath = resolve(input);
-      const outputPath =
-        opts.output ??
-        join(dirname(inputPath), `curated_${basename(inputPath)}`);
+      const outputPath = opts.output ?? join(dirname(inputPath), `curated_${basename(inputPath)}`);
 
       console.log(`Curating dataset: ${inputPath}`);
       const curator = new DatasetCurator();
       const report = await curator.curate(inputPath, outputPath);
 
       console.log(`\x1b[32m+\x1b[0m Curation complete`);
-      console.log(
-        `  ${report.inputCount} -> ${report.outputCount} examples`,
-      );
+      console.log(`  ${report.inputCount} -> ${report.outputCount} examples`);
       console.log(`  Duplicates removed: ${report.removedDuplicates}`);
       console.log(`  Short/broken removed: ${report.removedShort}`);
       console.log(`  Rebalanced: ${report.rebalanced}`);
@@ -111,11 +98,7 @@ export function registerDistillCommand(program: Command): void {
       "Training backend: unsloth, axolotl, llamafactory, mlx-lm",
       "unsloth",
     )
-    .option(
-      "--base <model>",
-      "Base model name/path",
-      "unsloth/Qwen2.5-Coder-7B-Instruct",
-    )
+    .option("--base <model>", "Base model name/path", "unsloth/Qwen2.5-Coder-7B-Instruct")
     .option("-o, --output <dir>", "Output directory for model")
     .option("--epochs <n>", "Training epochs", parseInt, 3)
     .option("--batch-size <n>", "Batch size", parseInt, 4)
@@ -136,9 +119,7 @@ export function registerDistillCommand(program: Command): void {
         quant: string;
         cuda: string;
       }) => {
-        const { ModelTrainer } = await import(
-          "../../core/distillation/trainer"
-        );
+        const { ModelTrainer } = await import("../../core/distillation/trainer");
         const { kcodePath } = await import("../../core/paths");
         const { resolve } = await import("node:path");
 
@@ -156,17 +137,13 @@ export function registerDistillCommand(program: Command): void {
           cudaDevices: opts.cuda,
         });
 
-        console.log(
-          `Launching ${config.backend} training with ${config.baseModel}...`,
-        );
+        console.log(`Launching ${config.backend} training with ${config.baseModel}...`);
         const handle = await trainer.train(config);
 
         console.log(`\x1b[32m+\x1b[0m Training started (PID: ${handle.pid})`);
         console.log(`  Log: ${handle.logFile}`);
         console.log(`  Output: ${handle.outputDir}`);
-        console.log(
-          `  Monitor: tail -f ${handle.logFile}`,
-        );
+        console.log(`  Monitor: tail -f ${handle.logFile}`);
       },
     );
 
@@ -175,11 +152,7 @@ export function registerDistillCommand(program: Command): void {
     .command("eval")
     .description("Evaluate a distilled model against benchmarks")
     .requiredOption("-m, --model <path>", "Model path or name")
-    .option(
-      "--benchmark <type>",
-      "Benchmark: coding-tasks, general, tool-use",
-      "coding-tasks",
-    )
+    .option("--benchmark <type>", "Benchmark: coding-tasks, general, tool-use", "coding-tasks")
     .option("-n, --num <n>", "Number of eval prompts", parseInt, 50)
     .option("--api-base <url>", "API base URL", "http://localhost:10091")
     .option("--base-model <path>", "Base model to compare against")
@@ -191,9 +164,7 @@ export function registerDistillCommand(program: Command): void {
         apiBase: string;
         baseModel?: string;
       }) => {
-        const { ModelEvaluator } = await import(
-          "../../core/distillation/evaluator"
-        );
+        const { ModelEvaluator } = await import("../../core/distillation/evaluator");
 
         const evaluator = new ModelEvaluator();
         const config = ModelEvaluator.defaults({
@@ -241,15 +212,8 @@ export function registerDistillCommand(program: Command): void {
     .option("--description <desc>", "Model description")
     .option("--default", "Set as the default model", false)
     .action(
-      async (opts: {
-        model: string;
-        name?: string;
-        description?: string;
-        default: boolean;
-      }) => {
-        const { ModelDeployer } = await import(
-          "../../core/distillation/deployer"
-        );
+      async (opts: { model: string; name?: string; description?: string; default: boolean }) => {
+        const { ModelDeployer } = await import("../../core/distillation/deployer");
         const { resolve } = await import("node:path");
 
         const deployer = new ModelDeployer();
@@ -263,9 +227,7 @@ export function registerDistillCommand(program: Command): void {
         console.log(`\x1b[32m+\x1b[0m Model deployed`);
         console.log(`  Name: ${report.modelName}`);
         console.log(`  Path: ${report.modelPath}`);
-        console.log(
-          `  Default: ${report.setAsDefault ? "yes" : "no"}`,
-        );
+        console.log(`  Default: ${report.setAsDefault ? "yes" : "no"}`);
         console.log(`  Registered at: ${report.registeredAt}`);
       },
     );

@@ -1,8 +1,8 @@
 // KCode - Custom Agents Tests
 // Tests for the rich agent system: frontmatter parsing, validation, agent loading
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseFrontmatter } from "./custom-agents";
 
@@ -158,11 +158,15 @@ describe("loadCustomAgents", () => {
   });
 
   afterEach(() => {
-    try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
   });
 
   test("loads agent from .md file", async () => {
-    writeFileSync(join(agentsDir, "reviewer.md"), `---
+    writeFileSync(
+      join(agentsDir, "reviewer.md"),
+      `---
 name: reviewer
 description: Code reviewer agent
 model: gpt-4
@@ -173,13 +177,14 @@ effort: medium
 memory: true
 ---
 
-You are an expert code reviewer. Focus on correctness, security, and performance.`);
+You are an expert code reviewer. Focus on correctness, security, and performance.`,
+    );
 
     // Dynamic import to get fresh module state
     const { loadCustomAgents } = await import("./custom-agents");
     // Use tmpDir as cwd (agents are loaded from <cwd>/.kcode/agents/)
     const agents = loadCustomAgents(tmpDir);
-    const reviewer = agents.find(a => a.name === "reviewer");
+    const reviewer = agents.find((a) => a.name === "reviewer");
     expect(reviewer).toBeDefined();
     expect(reviewer!.description).toBe("Code reviewer agent");
     expect(reviewer!.model).toBe("gpt-4");
@@ -192,98 +197,119 @@ You are an expert code reviewer. Focus on correctness, security, and performance
   });
 
   test("rejects invalid permissionMode", async () => {
-    writeFileSync(join(agentsDir, "bad.md"), `---
+    writeFileSync(
+      join(agentsDir, "bad.md"),
+      `---
 name: bad-perms
 permissionMode: yolo
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    const agent = agents.find(a => a.name === "bad-perms");
+    const agent = agents.find((a) => a.name === "bad-perms");
     expect(agent).toBeDefined();
     expect(agent!.permissionMode).toBeUndefined(); // "yolo" is invalid
   });
 
   test("rejects invalid effort level", async () => {
-    writeFileSync(join(agentsDir, "bad-effort.md"), `---
+    writeFileSync(
+      join(agentsDir, "bad-effort.md"),
+      `---
 name: bad-effort
 effort: turbo
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    const agent = agents.find(a => a.name === "bad-effort");
+    const agent = agents.find((a) => a.name === "bad-effort");
     expect(agent).toBeDefined();
     expect(agent!.effort).toBeUndefined(); // "turbo" is invalid
   });
 
   test("clamps maxTurns to [1, 100]", async () => {
-    writeFileSync(join(agentsDir, "clamp-low.md"), `---
+    writeFileSync(
+      join(agentsDir, "clamp-low.md"),
+      `---
 name: clamp-low
 maxTurns: -5
 ---
 
-test`);
-    writeFileSync(join(agentsDir, "clamp-high.md"), `---
+test`,
+    );
+    writeFileSync(
+      join(agentsDir, "clamp-high.md"),
+      `---
 name: clamp-high
 maxTurns: 999
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    expect(agents.find(a => a.name === "clamp-low")!.maxTurns).toBe(1);
-    expect(agents.find(a => a.name === "clamp-high")!.maxTurns).toBe(100);
+    expect(agents.find((a) => a.name === "clamp-low")!.maxTurns).toBe(1);
+    expect(agents.find((a) => a.name === "clamp-high")!.maxTurns).toBe(100);
   });
 
   test("parses mcpServers from JSON", async () => {
-    writeFileSync(join(agentsDir, "mcp-agent.md"), `---
+    writeFileSync(
+      join(agentsDir, "mcp-agent.md"),
+      `---
 name: mcp-agent
 mcpServers: {"github": {"command": "npx", "args": ["@mcp/github"]}}
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    const agent = agents.find(a => a.name === "mcp-agent");
+    const agent = agents.find((a) => a.name === "mcp-agent");
     expect(agent!.mcpServers).toBeDefined();
     expect(agent!.mcpServers!.github!.command).toBe("npx");
     expect(agent!.mcpServers!.github!.args).toEqual(["@mcp/github"]);
   });
 
   test("parses hooks from JSON", async () => {
-    writeFileSync(join(agentsDir, "hooked.md"), `---
+    writeFileSync(
+      join(agentsDir, "hooked.md"),
+      `---
 name: hooked
 hooks: [{"event": "PreToolUse", "matcher": "Bash", "actions": [{"type": "command", "command": "echo checking"}]}]
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    const agent = agents.find(a => a.name === "hooked");
+    const agent = agents.find((a) => a.name === "hooked");
     // Project-level agents cannot define hooks (security restriction)
     expect(agent!.hooks).toBeUndefined();
   });
 
   test("parses disallowedTools and skills", async () => {
-    writeFileSync(join(agentsDir, "restricted.md"), `---
+    writeFileSync(
+      join(agentsDir, "restricted.md"),
+      `---
 name: restricted
 disallowedTools: [Bash, Agent, Cron]
 skills: [commit, review-pr]
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    const agent = agents.find(a => a.name === "restricted");
+    const agent = agents.find((a) => a.name === "restricted");
     expect(agent!.disallowedTools).toEqual(["Bash", "Agent", "Cron"]);
     expect(agent!.skills).toEqual(["commit", "review-pr"]);
   });
@@ -294,7 +320,7 @@ test`);
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir);
-    expect(agents.find(a => a.name === "big")).toBeUndefined();
+    expect(agents.find((a) => a.name === "big")).toBeUndefined();
   });
 });
 
@@ -331,59 +357,73 @@ describe("validation", () => {
   });
 
   afterEach(() => {
-    try { rmSync(tmpDir3, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(tmpDir3, { recursive: true, force: true });
+    } catch {}
   });
 
   test("rejects invalid model names", async () => {
-    writeFileSync(join(agentsDir3, "badmodel.md"), `---
+    writeFileSync(
+      join(agentsDir3, "badmodel.md"),
+      `---
 name: badmodel
 model: $(whoami)
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
-    const agent = agents.find(a => a.name === "badmodel");
+    const agent = agents.find((a) => a.name === "badmodel");
     expect(agent!.model).toBeUndefined(); // shell injection attempt rejected
   });
 
   test("rejects invalid apiBase URLs", async () => {
-    writeFileSync(join(agentsDir3, "badapi.md"), `---
+    writeFileSync(
+      join(agentsDir3, "badapi.md"),
+      `---
 name: badapi
 apiBase: javascript:alert(1)
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
-    const agent = agents.find(a => a.name === "badapi");
+    const agent = agents.find((a) => a.name === "badapi");
     expect(agent!.apiBase).toBeUndefined();
   });
 
   test("accepts valid apiBase URLs", async () => {
-    writeFileSync(join(agentsDir3, "goodapi.md"), `---
+    writeFileSync(
+      join(agentsDir3, "goodapi.md"),
+      `---
 name: goodapi
 apiBase: https://api.openai.com/v1
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
-    const agent = agents.find(a => a.name === "goodapi");
+    const agent = agents.find((a) => a.name === "goodapi");
     // Project-level agents cannot override apiBase (security restriction)
     expect(agent!.apiBase).toBeUndefined();
   });
 
   test("rejects apiKey with newlines", async () => {
-    writeFileSync(join(agentsDir3, "badkey.md"), `---
+    writeFileSync(
+      join(agentsDir3, "badkey.md"),
+      `---
 name: badkey
 apiKey: sk-test
 ---
 
-test`);
+test`,
+    );
     // Write with embedded newline in key
     const content = '---\nname: badkey2\napiKey: "sk-test\\nINJECTION"\n---\n\ntest';
     writeFileSync(join(agentsDir3, "badkey2.md"), content);
@@ -391,21 +431,24 @@ test`);
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
     // Project-level agents cannot override apiKey (security restriction)
-    const agent = agents.find(a => a.name === "badkey");
+    const agent = agents.find((a) => a.name === "badkey");
     expect(agent!.apiKey).toBeUndefined();
   });
 
   test("accepts valid model names with slashes and colons", async () => {
-    writeFileSync(join(agentsDir3, "goodmodel.md"), `---
+    writeFileSync(
+      join(agentsDir3, "goodmodel.md"),
+      `---
 name: goodmodel
 model: meta-llama/Llama-3.1-70B:latest
 ---
 
-test`);
+test`,
+    );
 
     const { loadCustomAgents } = await import("./custom-agents");
     const agents = loadCustomAgents(tmpDir3);
-    const agent = agents.find(a => a.name === "goodmodel");
+    const agent = agents.find((a) => a.name === "goodmodel");
     expect(agent!.model).toBe("meta-llama/Llama-3.1-70B:latest");
   });
 });
@@ -418,16 +461,21 @@ describe("findCustomAgent", () => {
 
   beforeEach(() => {
     mkdirSync(agentsDir2, { recursive: true });
-    writeFileSync(join(agentsDir2, "MyAgent.md"), `---
+    writeFileSync(
+      join(agentsDir2, "MyAgent.md"),
+      `---
 name: MyAgent
 description: Case test
 ---
 
-test`);
+test`,
+    );
   });
 
   afterEach(() => {
-    try { rmSync(tmpDir2, { recursive: true, force: true }); } catch {}
+    try {
+      rmSync(tmpDir2, { recursive: true, force: true });
+    } catch {}
   });
 
   test("finds agent case-insensitively", async () => {

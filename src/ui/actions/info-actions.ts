@@ -1,14 +1,11 @@
 // Info actions
 // Auto-extracted from builtin-actions.ts
 
-import type { ActionContext } from "./action-helpers.js";
-import { collectStats, formatStats } from "../../core/stats.js";
 import { runDiagnostics } from "../../core/doctor.js";
+import { collectStats, formatStats } from "../../core/stats.js";
+import type { ActionContext } from "./action-helpers.js";
 
-export async function handleInfoAction(
-  action: string,
-  ctx: ActionContext,
-): Promise<string | null> {
+export async function handleInfoAction(action: string, ctx: ActionContext): Promise<string | null> {
   const { conversationManager, setCompleted, appConfig, args, switchTheme } = ctx;
 
   switch (action) {
@@ -77,13 +74,15 @@ export async function handleInfoAction(
             toolCounts[block.name] = (toolCounts[block.name] ?? 0) + 1;
           }
           if (block.type === "tool_result" && block.is_error) {
-            const prevMsg = state.messages.find(m =>
-              Array.isArray(m.content) && m.content.some(b =>
-                b.type === "tool_use" && b.id === block.tool_use_id
-              )
+            const prevMsg = state.messages.find(
+              (m) =>
+                Array.isArray(m.content) &&
+                m.content.some((b) => b.type === "tool_use" && b.id === block.tool_use_id),
             );
             if (prevMsg && Array.isArray(prevMsg.content)) {
-              const toolBlock = prevMsg.content.find(b => b.type === "tool_use" && b.id === block.tool_use_id);
+              const toolBlock = prevMsg.content.find(
+                (b) => b.type === "tool_use" && b.id === block.tool_use_id,
+              );
               if (toolBlock && toolBlock.type === "tool_use") {
                 toolErrors[toolBlock.name] = (toolErrors[toolBlock.name] ?? 0) + 1;
               }
@@ -118,19 +117,26 @@ export async function handleInfoAction(
 
         const totalErrors = Object.values(toolErrors).reduce((a, b) => a + b, 0);
         if (totalErrors > 0) {
-          lines.push(``, `  Error rate: ${totalErrors}/${totalToolCalls} (${Math.round((totalErrors / totalToolCalls) * 100)}%)`);
+          lines.push(
+            ``,
+            `  Error rate: ${totalErrors}/${totalToolCalls} (${Math.round((totalErrors / totalToolCalls) * 100)}%)`,
+          );
         }
       }
 
       // Persistent analytics (cross-session, last 7 days)
       try {
-        const { getAnalyticsSummary, formatAnalyticsSummary } = await import("../../core/analytics.js");
+        const { getAnalyticsSummary, formatAnalyticsSummary } = await import(
+          "../../core/analytics.js"
+        );
         const summary = getAnalyticsSummary(7);
         if (summary.totalToolCalls > 0) {
           lines.push(``, `  ─── Historical (7 days) ───`, ``);
           lines.push(formatAnalyticsSummary(summary, 7));
         }
-      } catch { /* analytics table may not exist yet */ }
+      } catch {
+        /* analytics table may not exist yet */
+      }
 
       return lines.join("\n");
     }
@@ -151,8 +157,8 @@ export async function handleInfoAction(
 
       // Visual bar showing used, threshold, and total
       const barLen = 40;
-      const usedBar = Math.round(barLen * pctUsed / 100);
-      const threshBar = Math.round(barLen * pctThreshold / 100);
+      const usedBar = Math.round((barLen * pctUsed) / 100);
+      const threshBar = Math.round((barLen * pctThreshold) / 100);
 
       let bar = "";
       for (let i = 0; i < barLen; i++) {
@@ -204,7 +210,9 @@ export async function handleInfoAction(
             encoding: "utf-8",
             stdio: ["pipe", "pipe", "pipe"],
           }).trim();
-        } catch { /* not in git or no changes */ }
+        } catch {
+          /* not in git or no changes */
+        }
 
         if (diffStat) {
           lines.push(`  ${f}`);
@@ -221,12 +229,16 @@ export async function handleInfoAction(
         const summary = execSync("git diff --stat 2>/dev/null", {
           cwd: appConfig.workingDirectory,
           timeout: 3000,
-        }).toString().trim();
+        })
+          .toString()
+          .trim();
         if (summary) {
           lines.push("");
           lines.push(`  ${summary.split("\n").pop() ?? ""}`);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       return lines.join("\n");
     }
@@ -245,7 +257,12 @@ export async function handleInfoAction(
         try {
           // Get diff stat for each file
           const { execFileSync: execFileSync2 } = await import("node:child_process");
-          const stat = execFileSync2("git", ["diff", "--numstat", "--", f], { cwd, timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+          const stat = execFileSync2("git", ["diff", "--numstat", "--", f], {
+            cwd,
+            timeout: 3000,
+            encoding: "utf-8",
+            stdio: ["pipe", "pipe", "pipe"],
+          }).trim();
           if (stat) {
             const parts = stat.split("\t");
             const added = parseInt(parts[0] ?? "0") || 0;
@@ -256,7 +273,11 @@ export async function handleInfoAction(
             lines.push(`    +${added} -${removed}`);
           } else {
             // Check if it's a new untracked file
-            const isUntracked = execFileSync2("git", ["ls-files", "--others", "--exclude-standard", "--", f], { cwd, timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+            const isUntracked = execFileSync2(
+              "git",
+              ["ls-files", "--others", "--exclude-standard", "--", f],
+              { cwd, timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+            ).trim();
             if (isUntracked) {
               lines.push(`  ${f} (new file)`);
             } else {
@@ -274,13 +295,20 @@ export async function handleInfoAction(
 
       // Show combined diff preview (truncated)
       try {
-        const diff = execFileSync2("git", ["diff", "--stat", "--", ...files], { cwd, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+        const diff = execFileSync2("git", ["diff", "--stat", "--", ...files], {
+          cwd,
+          timeout: 5000,
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "pipe"],
+        }).trim();
         if (diff) {
           lines.push(``);
           const lastLine = diff.split("\n").pop() ?? "";
           lines.push(`  ${lastLine}`);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       return lines.join("\n");
     }
@@ -303,7 +331,7 @@ export async function handleInfoAction(
       const maxRpm = appConfig.rateLimit?.maxPerMinute ?? 60;
       const pct = Math.min(100, Math.round((stats.requestsThisMinute / maxRpm) * 100));
       const barLen = 30;
-      const filled = Math.round(barLen * pct / 100);
+      const filled = Math.round((barLen * pct) / 100);
       const bar = "\u2588".repeat(filled) + "\u2591".repeat(barLen - filled);
       lines.push(``, `  Rate:  [${bar}] ${pct}% (${stats.requestsThisMinute}/${maxRpm})`);
 
@@ -315,7 +343,12 @@ export async function handleInfoAction(
 
       const detect = (cmd: string): string => {
         try {
-          return execSync(`${cmd} 2>/dev/null`, { cwd, timeout: 5000 }).toString().trim().split("\n")[0] ?? "";
+          return (
+            execSync(`${cmd} 2>/dev/null`, { cwd, timeout: 5000 })
+              .toString()
+              .trim()
+              .split("\n")[0] ?? ""
+          );
         } catch {
           return "";
         }
@@ -336,7 +369,7 @@ export async function handleInfoAction(
       ];
 
       const lines = [`  Development Environment\n`];
-      const maxNameLen = Math.max(...checks.map(c => c.name.length));
+      const maxNameLen = Math.max(...checks.map((c) => c.name.length));
 
       for (const { name, cmd } of checks) {
         const ver = detect(cmd);
@@ -383,7 +416,9 @@ export async function handleInfoAction(
           }
           text = readFileSync(filePath, "utf-8");
           isFile = true;
-        } catch { /* use input as text */ }
+        } catch {
+          /* use input as text */
+        }
       }
 
       const charCount = text.length;
@@ -391,7 +426,7 @@ export async function handleInfoAction(
       const lineCount = text.split("\n").length;
 
       // Adaptive heuristic: code tokenizes more densely than prose
-      const codeRatio = (text.match(/[{}()\[\];=<>|&]/g)?.length ?? 0) / Math.max(charCount, 1);
+      const codeRatio = (text.match(/[{}()[\];=<>|&]/g)?.length ?? 0) / Math.max(charCount, 1);
       const charsPerToken = codeRatio > 0.02 ? 3.2 : 3.5;
       const estimatedTokens = Math.round(charCount / charsPerToken);
 
@@ -420,9 +455,10 @@ export async function handleInfoAction(
       const { getAnalyticsSummary } = await import("../../core/analytics.js");
       const summary = getAnalyticsSummary(365);
 
-      const errorRate = summary.totalToolCalls > 0
-        ? ((summary.totalErrors / summary.totalToolCalls) * 100).toFixed(1)
-        : "0.0";
+      const errorRate =
+        summary.totalToolCalls > 0
+          ? ((summary.totalErrors / summary.totalToolCalls) * 100).toFixed(1)
+          : "0.0";
 
       const topTools = summary.toolBreakdown.slice(0, 5);
       const topModel = summary.modelBreakdown[0];
@@ -446,10 +482,12 @@ export async function handleInfoAction(
 
       if (topTools.length > 0) {
         lines.push(`  Top 5 Tools:`);
-        const maxNameLen = Math.max(...topTools.map(t => t.tool.length));
+        const maxNameLen = Math.max(...topTools.map((t) => t.tool.length));
         for (const t of topTools) {
           const bar = "\u2588".repeat(Math.max(1, Math.round((t.count / topTools[0]!.count) * 20)));
-          lines.push(`    ${t.tool.padEnd(maxNameLen + 2)}${bar} ${t.count} calls (${t.avgMs}ms avg)`);
+          lines.push(
+            `    ${t.tool.padEnd(maxNameLen + 2)}${bar} ${t.count} calls (${t.avgMs}ms avg)`,
+          );
         }
       }
 
@@ -470,7 +508,9 @@ export async function handleInfoAction(
       try {
         const kernel = execSync(`uname -r 2>/dev/null`, { timeout: 2000 }).toString().trim();
         lines.push(`  Kernel:    ${kernel}`);
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       // CPU
       const cpus = os.cpus();
@@ -484,12 +524,19 @@ export async function handleInfoAction(
       const totalMem = os.totalmem();
       const freeMem = os.freemem();
       const usedMem = totalMem - freeMem;
-      const memPct = (usedMem / totalMem * 100).toFixed(1);
-      lines.push(`  RAM:       ${(usedMem / 1024 / 1024 / 1024).toFixed(1)} / ${(totalMem / 1024 / 1024 / 1024).toFixed(1)} GB (${memPct}%)`);
+      const memPct = ((usedMem / totalMem) * 100).toFixed(1);
+      lines.push(
+        `  RAM:       ${(usedMem / 1024 / 1024 / 1024).toFixed(1)} / ${(totalMem / 1024 / 1024 / 1024).toFixed(1)} GB (${memPct}%)`,
+      );
 
       // GPU
       try {
-        const gpu = execSync(`nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>/dev/null`, { timeout: 5000 }).toString().trim();
+        const gpu = execSync(
+          `nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader,nounits 2>/dev/null`,
+          { timeout: 5000 },
+        )
+          .toString()
+          .trim();
         if (gpu) {
           for (const line of gpu.split("\n")) {
             const [name, mem, driver] = line.split(", ");
@@ -498,14 +545,20 @@ export async function handleInfoAction(
         }
       } catch {
         try {
-          const lspci = execSync(`lspci 2>/dev/null | grep -i 'vga\\|3d' | head -2`, { timeout: 3000 }).toString().trim();
+          const lspci = execSync(`lspci 2>/dev/null | grep -i 'vga\\|3d' | head -2`, {
+            timeout: 3000,
+          })
+            .toString()
+            .trim();
           if (lspci) {
             for (const line of lspci.split("\n")) {
               const name = line.replace(/.*:\s*/, "");
               lines.push(`  GPU:       ${name}`);
             }
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
 
       // Uptime
@@ -517,7 +570,9 @@ export async function handleInfoAction(
 
       // Load average
       const load = os.loadavg();
-      lines.push(`  Load:      ${load[0]!.toFixed(2)} ${load[1]!.toFixed(2)} ${load[2]!.toFixed(2)}`);
+      lines.push(
+        `  Load:      ${load[0]!.toFixed(2)} ${load[1]!.toFixed(2)} ${load[2]!.toFixed(2)}`,
+      );
 
       // Disk
       try {
@@ -526,7 +581,9 @@ export async function handleInfoAction(
         if (dfParts.length >= 5) {
           lines.push(`  Disk (/):  ${dfParts[2]} / ${dfParts[1]} (${dfParts[4]})`);
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       return lines.join("\n");
     }
@@ -557,12 +614,30 @@ export async function handleInfoAction(
 
       if (arg === "trace" || arg.startsWith("trace ")) {
         const category = arg.replace("trace", "").trim() || undefined;
-        const validCategories = ["decision", "routing", "tool", "context", "permission", "guard", "hook", "model"];
+        const validCategories = [
+          "decision",
+          "routing",
+          "tool",
+          "context",
+          "permission",
+          "guard",
+          "hook",
+          "model",
+        ];
         if (category && !validCategories.includes(category)) {
           return `  Unknown category: "${category}"\n  Valid categories: ${validCategories.join(", ")}`;
         }
         const events = tracer.getEvents({
-          category: category as "decision" | "routing" | "tool" | "context" | "permission" | "guard" | "hook" | "model" | undefined,
+          category: category as
+            | "decision"
+            | "routing"
+            | "tool"
+            | "context"
+            | "permission"
+            | "guard"
+            | "hook"
+            | "model"
+            | undefined,
           limit: 50,
         });
         if (!tracer.isEnabled()) {

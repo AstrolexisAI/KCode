@@ -1,13 +1,13 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  scanCommand,
   assessRisk,
-  isDangerousRule,
-  validateRulesForAutoMode,
   detectInterpreter,
-  getRegisteredPatterns,
   getPatternsByCategory,
   getPatternsBySeverity,
+  getRegisteredPatterns,
+  isDangerousRule,
+  scanCommand,
+  validateRulesForAutoMode,
 } from "./dangerous-patterns";
 
 describe("dangerous-patterns", () => {
@@ -130,15 +130,15 @@ describe("dangerous-patterns", () => {
 
   describe("validateRulesForAutoMode", () => {
     test("returns violations for dangerous rules", () => {
-      const violations = validateRulesForAutoMode([
-        "Bash(*)", "Read(*)", "Bash(git:*)", "Edit(*)",
-      ]);
+      const violations = validateRulesForAutoMode(["Bash(*)", "Read(*)", "Bash(git:*)", "Edit(*)"]);
       expect(violations).toHaveLength(2); // Bash(*) and Edit(*)
     });
 
     test("returns empty for safe rules", () => {
       const violations = validateRulesForAutoMode([
-        "Bash(git add:*)", "Read(src/**)", "Edit(src/core/*.ts)",
+        "Bash(git add:*)",
+        "Read(src/**)",
+        "Edit(src/core/*.ts)",
       ]);
       expect(violations).toHaveLength(0);
     });

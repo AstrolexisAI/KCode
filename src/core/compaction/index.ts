@@ -1,7 +1,13 @@
 // KCode - Multi-Strategy Compaction Orchestrator
 // Coordinates 4 compaction strategies in progressive order based on context usage.
 
+import { log } from "../logger.js";
 import type { Message } from "../types.js";
+import { CompactionCircuitBreaker } from "./circuit-breaker.js";
+import { restoreRecentFiles } from "./strategies/file-restorer.js";
+import { fullCompact } from "./strategies/full-compact.js";
+import { hasImages, stripImages } from "./strategies/image-stripper.js";
+import { microCompact } from "./strategies/micro-compact.js";
 import type {
   CompactionConfig,
   CompactionResult,
@@ -9,40 +15,34 @@ import type {
   LlmSummarizer,
 } from "./types.js";
 import { getDefaultCompactionConfig } from "./types.js";
-import { CompactionCircuitBreaker } from "./circuit-breaker.js";
-import { hasImages, stripImages } from "./strategies/image-stripper.js";
-import { microCompact } from "./strategies/micro-compact.js";
-import { fullCompact } from "./strategies/full-compact.js";
-import { restoreRecentFiles } from "./strategies/file-restorer.js";
-import { log } from "../logger.js";
 
 // Re-export everything for convenience
 export { CompactionCircuitBreaker } from "./circuit-breaker.js";
+export { restoreRecentFiles } from "./strategies/file-restorer.js";
+export { extractFilePaths, fullCompact } from "./strategies/full-compact.js";
 export { hasImages, stripImages } from "./strategies/image-stripper.js";
 export { microCompact } from "./strategies/micro-compact.js";
-export { fullCompact, extractFilePaths } from "./strategies/full-compact.js";
-export { restoreRecentFiles } from "./strategies/file-restorer.js";
 export {
-  sessionMemoryCompact,
   buildSessionResumptionMessage,
+  sessionMemoryCompact,
 } from "./strategies/session-memory-compact.js";
-export { getDefaultCompactionConfig } from "./types.js";
 export type {
+  CircuitBreakerConfig,
+  CircuitBreakerState,
   CompactionConfig,
   CompactionResult,
   CompactionStrategy,
-  LlmSummarizer,
-  ImageStripConfig,
-  ImageStripResult,
-  MicroCompactConfig,
-  MicroCompactResult,
   FullCompactConfig,
   FullCompactResult,
+  ImageStripConfig,
+  ImageStripResult,
+  LlmSummarizer,
+  MicroCompactConfig,
+  MicroCompactResult,
   SessionMemoryCompactConfig,
   SessionMemoryCompactResult,
-  CircuitBreakerConfig,
-  CircuitBreakerState,
 } from "./types.js";
+export { getDefaultCompactionConfig } from "./types.js";
 
 // ─── Orchestrator ───────────────────────────────────────────────
 
@@ -84,18 +84,24 @@ export async function compact(
       current = result.messages;
       totalTokensRecovered += result.tokensRecovered;
       strategiesApplied.push("image-strip");
-      log.info("compaction", `Image strip: removed ${result.strippedCount} images, ~${result.tokensRecovered} tokens recovered`);
+      log.info(
+        "compaction",
+        `Image strip: removed ${result.strippedCount} images, ~${result.tokensRecovered} tokens recovered`,
+      );
     }
   }
 
   // Phase 1: Micro-compact (>= 60%)
-  if (contextUsage >= 0.60 && cfg.micro.enabled) {
+  if (contextUsage >= 0.6 && cfg.micro.enabled) {
     const result = microCompact(current, cfg.micro);
     if (result.compressedCount > 0) {
       current = result.messages;
       totalTokensRecovered += result.tokensRecovered;
       strategiesApplied.push("micro-compact");
-      log.info("compaction", `Micro-compact: compressed ${result.compressedCount} items, ~${result.tokensRecovered} tokens recovered`);
+      log.info(
+        "compaction",
+        `Micro-compact: compressed ${result.compressedCount} items, ~${result.tokensRecovered} tokens recovered`,
+      );
     }
   }
 
@@ -115,15 +121,14 @@ export async function compact(
       strategiesApplied.push("full-compact");
       cb.recordSuccess();
 
-      log.info("compaction", `Full compact: summarized ${result.compactedMessages.length} messages`);
+      log.info(
+        "compaction",
+        `Full compact: summarized ${result.compactedMessages.length} messages`,
+      );
 
       // Post-compact: restore recent files
       if (cfg.full.fileRestoreBudget > 0 && result.compactedMessages.length > 0) {
-        current = await restoreRecentFiles(
-          current,
-          result.compactedMessages,
-          cfg.full,
-        );
+        current = await restoreRecentFiles(current, result.compactedMessages, cfg.full);
       }
     } catch (error) {
       cb.recordFailure(error instanceof Error ? error : new Error(String(error)));
@@ -132,10 +137,10 @@ export async function compact(
   }
 
   // Phase 3: Emergency pruning (>= 90%)
-  if (contextUsage >= 0.90) {
+  if (contextUsage >= 0.9) {
     const result = emergencyPruneMessages(current, {
       preserveRecent: 10,
-      dropRatio: 0.30,
+      dropRatio: 0.3,
       keepFirstUserMessage: true,
     });
     if (result.dropped > 0) {

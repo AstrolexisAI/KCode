@@ -1,7 +1,7 @@
 // KCode - Custom Alias Manager
 // Persistent user-defined aliases for slash commands stored in ~/.kcode/aliases.json
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { kcodeHome, kcodePath } from "./paths";
 
 const ALIASES_PATH = kcodePath("aliases.json");
@@ -36,7 +36,7 @@ function saveAliases(aliases: AliasEntry[]): void {
 export function addAlias(shortcut: string, expansion: string): AliasEntry {
   const aliases = loadAliases();
   // Upsert — update if exists, insert otherwise
-  const idx = aliases.findIndex(a => a.shortcut === shortcut);
+  const idx = aliases.findIndex((a) => a.shortcut === shortcut);
   const entry: AliasEntry = { shortcut, expansion };
   if (idx >= 0) {
     aliases[idx] = entry;
@@ -49,7 +49,7 @@ export function addAlias(shortcut: string, expansion: string): AliasEntry {
 
 export function removeAlias(shortcut: string): boolean {
   const aliases = loadAliases();
-  const idx = aliases.findIndex(a => a.shortcut === shortcut);
+  const idx = aliases.findIndex((a) => a.shortcut === shortcut);
   if (idx < 0) return false;
   aliases.splice(idx, 1);
   saveAliases(aliases);

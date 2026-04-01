@@ -61,9 +61,7 @@ export const toolSearchDefinition: ToolDefinition = {
 
 // ─── Execution ─────────────────────────────────────────────────
 
-export async function executeToolSearch(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeToolSearch(input: Record<string, unknown>): Promise<ToolResult> {
   const query = String(input.query ?? "").trim();
   const maxResults = Math.min(Math.max(Number(input.max_results) || 5, 1), 20);
 
@@ -72,7 +70,10 @@ export async function executeToolSearch(
   }
 
   if (deferredTools.size === 0) {
-    return { tool_use_id: "", content: "No deferred tools available. All tools are already loaded." };
+    return {
+      tool_use_id: "",
+      content: "No deferred tools available. All tools are already loaded.",
+    };
   }
 
   // Exact select mode: "select:ToolA,ToolB"

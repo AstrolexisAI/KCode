@@ -23,15 +23,15 @@ export type HookEvent =
   | "WorktreeCreate"
   | "WorktreeRemove"
   // Phase 12: Expanded hook events
-  | "PreEdit"       // Before file edit (can block)
-  | "PostEdit"      // After file edit
-  | "PreBash"       // Before bash execution (can block)
-  | "PostBash"      // After bash execution
-  | "PreWrite"      // Before file write (can block)
-  | "PostWrite"     // After file write
-  | "ModelSwitch"   // When model routing switches models
+  | "PreEdit" // Before file edit (can block)
+  | "PostEdit" // After file edit
+  | "PreBash" // Before bash execution (can block)
+  | "PostBash" // After bash execution
+  | "PreWrite" // Before file write (can block)
+  | "PostWrite" // After file write
+  | "ModelSwitch" // When model routing switches models
   | "ContextOverflow" // When context window is near capacity
-  | "TaskComplete"  // When a multi-step task finishes
+  | "TaskComplete" // When a multi-step task finishes
   | "ErrorRecovery"; // When auto-recovery from an error occurs
 
 /**

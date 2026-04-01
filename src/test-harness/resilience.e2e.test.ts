@@ -2,11 +2,10 @@
 // Tests for graceful handling of real-world failure modes: malformed SSE,
 // timeouts, connection errors, corrupted tool calls, and edge cases.
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConversationManager } from "../core/conversation";
-import type { StreamEvent } from "../core/types";
+import type { StreamEvent, ToolDefinition, ToolHandler } from "../core/types";
 import { createTestEnv, type TestEnv } from "./test-env";
-import type { ToolDefinition, ToolHandler } from "../core/types";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -49,7 +48,10 @@ async function withRawServer(
   handler: (req: Request) => Response | Promise<Response>,
   fn: (overrides: RawServerOverrides) => Promise<void>,
 ): Promise<void> {
-  const customFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+  const customFetch = async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> => {
     if (init?.signal?.aborted) throw new DOMException("The operation was aborted", "AbortError");
     const req = new Request(input as string, init);
     const responsePromise = Promise.resolve(handler(req));
@@ -83,7 +85,11 @@ describe("Resilience: Malformed SSE chunks", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("malformed SSE — provider sends invalid JSON in SSE data lines", async () => {
@@ -93,16 +99,23 @@ describe("Resilience: Malformed SSE chunks", () => {
           "data: {invalid json\n\n",
           "data: not even close to json\n\n",
           `data: ${JSON.stringify({
-            id: "chatcmpl-1", object: "chat.completion.chunk", model: "fake",
+            id: "chatcmpl-1",
+            object: "chat.completion.chunk",
+            model: "fake",
             choices: [{ index: 0, delta: { content: "recovered" }, finish_reason: null }],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-2", object: "chat.completion.chunk", model: "fake",
+            id: "chatcmpl-2",
+            object: "chat.completion.chunk",
+            model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-3", object: "chat.completion.chunk", model: "fake",
-            choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            id: "chatcmpl-3",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
           })}\n\n`,
           "data: [DONE]\n\n",
         ].join("");
@@ -138,7 +151,11 @@ describe("Resilience: Empty response", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("provider sends finish with no content — no crash", async () => {
@@ -146,12 +163,17 @@ describe("Resilience: Empty response", () => {
       async () => {
         const body = [
           `data: ${JSON.stringify({
-            id: "chatcmpl-empty", object: "chat.completion.chunk", model: "fake",
+            id: "chatcmpl-empty",
+            object: "chat.completion.chunk",
+            model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-usage", object: "chat.completion.chunk", model: "fake",
-            choices: [], usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
+            id: "chatcmpl-usage",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
           })}\n\n`,
           "data: [DONE]\n\n",
         ].join("");
@@ -188,7 +210,11 @@ describe("Resilience: Huge response", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("provider sends 100KB of text — streams without OOM", async () => {
@@ -298,7 +324,11 @@ describe("Resilience: Partial tool call JSON", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("provider sends tool_call with truncated arguments JSON — graceful handling", async () => {
@@ -306,27 +336,38 @@ describe("Resilience: Partial tool call JSON", () => {
       async () => {
         const body = [
           `data: ${JSON.stringify({
-            id: "chatcmpl-bad-tool", object: "chat.completion.chunk", model: "fake",
-            choices: [{
-              index: 0,
-              delta: {
-                tool_calls: [{
-                  index: 0,
-                  id: "call_broken",
-                  type: "function",
-                  function: { name: "Read", arguments: '{"file_path": "/tmp/te' }, // truncated
-                }],
+            id: "chatcmpl-bad-tool",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_broken",
+                      type: "function",
+                      function: { name: "Read", arguments: '{"file_path": "/tmp/te' }, // truncated
+                    },
+                  ],
+                },
+                finish_reason: null,
               },
-              finish_reason: null,
-            }],
+            ],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-bad-tool-fin", object: "chat.completion.chunk", model: "fake",
+            id: "chatcmpl-bad-tool-fin",
+            object: "chat.completion.chunk",
+            model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-u", object: "chat.completion.chunk", model: "fake",
-            choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            id: "chatcmpl-u",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
           })}\n\n`,
           "data: [DONE]\n\n",
         ].join("");
@@ -374,10 +415,10 @@ describe("Resilience: Tool execution error", () => {
     env.registry.register("Exploder", throwingDef, throwingHandler);
 
     // Queue: tool call to Exploder, then text response after seeing the error
-    env.provider.addToolCallResponse([
-      { name: "Exploder", arguments: { input: "test" } },
-    ]);
-    env.provider.addResponse("The tool threw an error but I handled it gracefully and continued working as expected.");
+    env.provider.addToolCallResponse([{ name: "Exploder", arguments: { input: "test" } }]);
+    env.provider.addResponse(
+      "The tool threw an error but I handled it gracefully and continued working as expected.",
+    );
 
     try {
       const cm = new ConversationManager(env.config, env.registry);
@@ -461,7 +502,11 @@ describe("Resilience: Double finish", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("provider sends two finish events — no duplicate processing", async () => {
@@ -469,20 +514,35 @@ describe("Resilience: Double finish", () => {
       async () => {
         const body = [
           `data: ${JSON.stringify({
-            id: "chatcmpl-1", object: "chat.completion.chunk", model: "fake",
-            choices: [{ index: 0, delta: { content: "hello from double finish test response" }, finish_reason: null }],
+            id: "chatcmpl-1",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [
+              {
+                index: 0,
+                delta: { content: "hello from double finish test response" },
+                finish_reason: null,
+              },
+            ],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-2", object: "chat.completion.chunk", model: "fake",
+            id: "chatcmpl-2",
+            object: "chat.completion.chunk",
+            model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-3", object: "chat.completion.chunk", model: "fake",
+            id: "chatcmpl-3",
+            object: "chat.completion.chunk",
+            model: "fake",
             choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
           })}\n\n`,
           `data: ${JSON.stringify({
-            id: "chatcmpl-u", object: "chat.completion.chunk", model: "fake",
-            choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            id: "chatcmpl-u",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
           })}\n\n`,
           "data: [DONE]\n\n",
         ].join("");
@@ -519,11 +579,17 @@ describe("Resilience: Unicode in response", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("ASCII and common unicode — no corruption or crash", async () => {
-    env.provider.addResponse("Hello world these are ASCII words and the response completes successfully without any issues at all");
+    env.provider.addResponse(
+      "Hello world these are ASCII words and the response completes successfully without any issues at all",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events, text } = await sendAndCollect(cm, "send text");
@@ -540,25 +606,38 @@ describe("Resilience: Unicode in response", () => {
         const sseLines: string[] = [];
         const chunks = [
           "prefix ",
-          "\u{1F600} ",        // emoji (4 bytes UTF-8)
-          "\u4F60\u597D ",     // Chinese (3 bytes each)
+          "\u{1F600} ", // emoji (4 bytes UTF-8)
+          "\u4F60\u597D ", // Chinese (3 bytes each)
           "suffix",
         ];
 
         for (const chunk of chunks) {
-          sseLines.push(`data: ${JSON.stringify({
-            id: `chatcmpl-${sseLines.length}`, object: "chat.completion.chunk", model: "fake",
-            choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }],
-          })}\n\n`);
+          sseLines.push(
+            `data: ${JSON.stringify({
+              id: `chatcmpl-${sseLines.length}`,
+              object: "chat.completion.chunk",
+              model: "fake",
+              choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }],
+            })}\n\n`,
+          );
         }
-        sseLines.push(`data: ${JSON.stringify({
-          id: "chatcmpl-fin", object: "chat.completion.chunk", model: "fake",
-          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-        })}\n\n`);
-        sseLines.push(`data: ${JSON.stringify({
-          id: "chatcmpl-u", object: "chat.completion.chunk", model: "fake",
-          choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-        })}\n\n`);
+        sseLines.push(
+          `data: ${JSON.stringify({
+            id: "chatcmpl-fin",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+          })}\n\n`,
+        );
+        sseLines.push(
+          `data: ${JSON.stringify({
+            id: "chatcmpl-u",
+            object: "chat.completion.chunk",
+            model: "fake",
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          })}\n\n`,
+        );
         sseLines.push("data: [DONE]\n\n");
 
         return new Response(sseLines.join(""), {
@@ -593,7 +672,11 @@ describe("Resilience: SSE with no newline terminator", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("partial buffer at stream end — flush and complete", async () => {
@@ -602,24 +685,43 @@ describe("Resilience: SSE with no newline terminator", () => {
         const encoder = new TextEncoder();
         const stream = new ReadableStream({
           start(controller) {
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({
-                id: "chatcmpl-1", object: "chat.completion.chunk", model: "fake",
-                choices: [{ index: 0, delta: { content: "buffered content here for testing" }, finish_reason: null }],
-              })}\n\n`,
-            ));
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({
-                id: "chatcmpl-2", object: "chat.completion.chunk", model: "fake",
-                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
-              })}\n\n`,
-            ));
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({
-                id: "chatcmpl-u", object: "chat.completion.chunk", model: "fake",
-                choices: [], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-              })}\n\n`,
-            ));
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  id: "chatcmpl-1",
+                  object: "chat.completion.chunk",
+                  model: "fake",
+                  choices: [
+                    {
+                      index: 0,
+                      delta: { content: "buffered content here for testing" },
+                      finish_reason: null,
+                    },
+                  ],
+                })}\n\n`,
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  id: "chatcmpl-2",
+                  object: "chat.completion.chunk",
+                  model: "fake",
+                  choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                })}\n\n`,
+              ),
+            );
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  id: "chatcmpl-u",
+                  object: "chat.completion.chunk",
+                  model: "fake",
+                  choices: [],
+                  usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+                })}\n\n`,
+              ),
+            );
             // [DONE] without trailing newline
             controller.enqueue(encoder.encode("data: [DONE]"));
             controller.close();
@@ -658,7 +760,11 @@ describe("Resilience: Interleaved content and tool calls", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("text then tool call then text — correct ordering preserved", async () => {
@@ -667,7 +773,9 @@ describe("Resilience: Interleaved content and tool calls", () => {
       { name: "Read", arguments: { file_path: "/tmp/interleave-test.txt" } },
     ]);
     // Second response: after tool result, model sends text with reference to tool
-    env.provider.addResponse("I read the file and here is my analysis of the interleaved content test result successfully.");
+    env.provider.addResponse(
+      "I read the file and here is my analysis of the interleaved content test result successfully.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events, text } = await sendAndCollect(cm, "read and analyze");
@@ -686,7 +794,8 @@ describe("Resilience: Interleaved content and tool calls", () => {
     // Verify ordering: tool_executing comes before the final text_delta
     const toolExecIdx = events.findIndex((e) => e.type === "tool_executing");
     const lastTextDeltaIdx = events.reduce(
-      (last, e, i) => (e.type === "text_delta" ? i : last), -1,
+      (last, e, i) => (e.type === "text_delta" ? i : last),
+      -1,
     );
     expect(toolExecIdx).toBeLessThan(lastTextDeltaIdx);
   });
@@ -766,7 +875,9 @@ describe("Resilience: Multiple tool calls with mixed success/failure", () => {
       { name: "FailTool", arguments: { input: "test" } },
     ]);
     // After seeing results, model responds
-    env.provider.addResponse("One tool succeeded and one failed but I handled both results correctly in my analysis.");
+    env.provider.addResponse(
+      "One tool succeeded and one failed but I handled both results correctly in my analysis.",
+    );
 
     try {
       const cm = new ConversationManager(env.config, env.registry);

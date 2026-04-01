@@ -1,34 +1,40 @@
 // KCode - Permission System
 // Gates tool execution based on permission mode and safety analysis
 
-import type { PermissionMode, PermissionRule, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
 import { existsSync, readFileSync } from "node:fs";
+import { formatDiffPreview, generateDiff } from "./diff";
 import { log } from "./logger";
-import { generateDiff, formatDiffPreview } from "./diff";
+import type {
+  BashInput,
+  FileEditInput,
+  FileWriteInput,
+  PermissionMode,
+  PermissionRule,
+  ToolUseBlock,
+} from "./types";
 
+export {
+  evaluateRules,
+  type ParsedToolRule,
+  parseToolRule,
+  suggestRule,
+} from "./permission-rules";
 // Re-export from extracted modules for backward compatibility
 export {
-  extractCommandPrefix,
+  analyzeBashCommand,
   detectCommandInjection,
   detectCommandSubstitution,
   detectDangerousRedirections,
   detectPipeToShell,
-  detectShellInvocation,
   detectQuoteDesync,
-  analyzeBashCommand,
+  detectShellInvocation,
+  extractCommandPrefix,
   validateFileWritePath,
 } from "./safety-analysis";
 
-export {
-  parseToolRule,
-  suggestRule,
-  evaluateRules,
-  type ParsedToolRule,
-} from "./permission-rules";
-
-// Import for internal use
-import { analyzeBashCommand, validateFileWritePath, extractCommandPrefix } from "./safety-analysis";
 import { evaluateRules } from "./permission-rules";
+// Import for internal use
+import { analyzeBashCommand, extractCommandPrefix, validateFileWritePath } from "./safety-analysis";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -62,17 +68,38 @@ const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep"]);
  * In auto mode, these skip the safety classifier entirely (0ms overhead).
  */
 export const SAFE_TOOLS = new Set([
-  "Read", "Glob", "Grep", "LS", "DiffView",
-  "GitStatus", "GitLog",
-  "AskUser", "ToolSearch",
-  "TaskCreate", "TaskList", "TaskGet", "TaskUpdate",
-  "EnterPlanMode", "ExitPlanMode",
+  "Read",
+  "Glob",
+  "Grep",
+  "LS",
+  "DiffView",
+  "GitStatus",
+  "GitLog",
+  "AskUser",
+  "ToolSearch",
+  "TaskCreate",
+  "TaskList",
+  "TaskGet",
+  "TaskUpdate",
+  "EnterPlanMode",
+  "ExitPlanMode",
 ]);
 
 /** Tools auto-allowed in acceptEdits mode (everything except Bash) */
 const ACCEPT_EDITS_TOOLS = new Set([
-  "Read", "Write", "Edit", "MultiEdit", "GrepReplace", "Rename",
-  "Glob", "Grep", "WebFetch", "WebSearch", "Learn", "Agent", "Tasks",
+  "Read",
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "GrepReplace",
+  "Rename",
+  "Glob",
+  "Grep",
+  "WebFetch",
+  "WebSearch",
+  "Learn",
+  "Agent",
+  "Tasks",
 ]);
 
 // ─── Permission Manager ────────────────────────────────────────
@@ -87,7 +114,12 @@ export class PermissionManager {
   /** Allowlist of previously approved tool+pattern combos: "ToolName:pattern" */
   private allowlist = new Set<string>();
 
-  constructor(mode: PermissionMode, workingDirectory: string, additionalDirs?: string[], rules?: PermissionRule[]) {
+  constructor(
+    mode: PermissionMode,
+    workingDirectory: string,
+    additionalDirs?: string[],
+    rules?: PermissionRule[],
+  ) {
     this.mode = mode;
     this.workingDirectory = workingDirectory;
     this.additionalDirs = additionalDirs;
@@ -289,7 +321,11 @@ export class PermissionManager {
         const edits = (tool.input.edits ?? []) as Array<{ file_path?: string }>;
         for (const edit of edits) {
           if (!edit.file_path) continue;
-          const result = validateFileWritePath(edit.file_path, this.workingDirectory, this.additionalDirs);
+          const result = validateFileWritePath(
+            edit.file_path,
+            this.workingDirectory,
+            this.additionalDirs,
+          );
           if (!result.allowed) return result;
         }
         return { allowed: true };
@@ -435,7 +471,9 @@ export class PermissionManager {
         return extractCommandPrefix(input.command);
       }
       case "MultiEdit": {
-        const edits = ((tool.input as Record<string, unknown>).edits ?? []) as Array<{ file_path?: string }>;
+        const edits = ((tool.input as Record<string, unknown>).edits ?? []) as Array<{
+          file_path?: string;
+        }>;
         const firstPath = edits[0]?.file_path ?? "";
         const parts = firstPath.split("/");
         parts.pop();
@@ -460,9 +498,8 @@ export class PermissionManager {
     switch (tool.name) {
       case "Bash": {
         const input = tool.input as unknown as BashInput;
-        const cmd = input.command.length > 120
-          ? input.command.slice(0, 120) + "..."
-          : input.command;
+        const cmd =
+          input.command.length > 120 ? input.command.slice(0, 120) + "..." : input.command;
         return `Run command: ${cmd}`;
       }
       case "Write": {
@@ -520,10 +557,29 @@ export class PermissionManager {
       const cmdWords = input.command.trimStart().split(/\s+/);
       const baseCmd = (cmdWords[0] === "sudo" ? cmdWords[1] : cmdWords[0]) ?? "";
       const ELEVATED_RISK_TOOLS = new Set([
-        "msfconsole", "nmap", "nikto", "sqlmap", "hydra", "john", "hashcat",
-        "aircrack", "aircrack-ng", "gobuster", "masscan", "wireshark", "tshark",
-        "responder", "crackmapexec", "enum4linux", "wfuzz", "dirb", "setoolkit",
-        "tcpdump", "searchsploit", "metasploit", "beef",
+        "msfconsole",
+        "nmap",
+        "nikto",
+        "sqlmap",
+        "hydra",
+        "john",
+        "hashcat",
+        "aircrack",
+        "aircrack-ng",
+        "gobuster",
+        "masscan",
+        "wireshark",
+        "tshark",
+        "responder",
+        "crackmapexec",
+        "enum4linux",
+        "wfuzz",
+        "dirb",
+        "setoolkit",
+        "tcpdump",
+        "searchsploit",
+        "metasploit",
+        "beef",
       ]);
       if (ELEVATED_RISK_TOOLS.has(baseCmd)) {
         return "dangerous";

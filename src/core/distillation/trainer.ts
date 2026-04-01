@@ -2,21 +2,16 @@
 // Generates and launches training scripts for various backends
 // (Unsloth, Axolotl, LLaMA-Factory, MLX-LM).
 
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { mkdirSync, existsSync, readFileSync } from "node:fs";
 import { log } from "../logger";
 import { kcodePath } from "../paths";
-import type { TrainingConfig, TrainingHandle, TrainingBackend } from "./types";
+import type { TrainingBackend, TrainingConfig, TrainingHandle } from "./types";
 
 // ─── Defaults ──────────────────────────────────────────────────
 
 const DEFAULT_OUTPUT_DIR = kcodePath("models", "finetuned");
-const SUPPORTED_BACKENDS: TrainingBackend[] = [
-  "unsloth",
-  "axolotl",
-  "llamafactory",
-  "mlx-lm",
-];
+const SUPPORTED_BACKENDS: TrainingBackend[] = ["unsloth", "axolotl", "llamafactory", "mlx-lm"];
 
 // ─── ModelTrainer ──────────────────────────────────────────────
 
@@ -27,8 +22,7 @@ export class ModelTrainer {
   static defaults(partial?: Partial<TrainingConfig>): TrainingConfig {
     return {
       backend: partial?.backend ?? "unsloth",
-      baseModel:
-        partial?.baseModel ?? "unsloth/Qwen2.5-Coder-7B-Instruct",
+      baseModel: partial?.baseModel ?? "unsloth/Qwen2.5-Coder-7B-Instruct",
       datasetPath: partial?.datasetPath ?? "",
       outputDir: partial?.outputDir ?? DEFAULT_OUTPUT_DIR,
       epochs: partial?.epochs ?? 3,
@@ -69,27 +63,19 @@ export class ModelTrainer {
     }
 
     if (config.batchSize < 1 || config.batchSize > 256) {
-      errors.push(
-        `batchSize must be between 1 and 256 (got ${config.batchSize})`,
-      );
+      errors.push(`batchSize must be between 1 and 256 (got ${config.batchSize})`);
     }
 
     if (config.learningRate <= 0 || config.learningRate > 1) {
-      errors.push(
-        `learningRate must be between 0 and 1 (got ${config.learningRate})`,
-      );
+      errors.push(`learningRate must be between 0 and 1 (got ${config.learningRate})`);
     }
 
     if (config.loraRank < 4 || config.loraRank > 256) {
-      errors.push(
-        `loraRank must be between 4 and 256 (got ${config.loraRank})`,
-      );
+      errors.push(`loraRank must be between 4 and 256 (got ${config.loraRank})`);
     }
 
     if (config.maxSeqLength < 256 || config.maxSeqLength > 131072) {
-      errors.push(
-        `maxSeqLength must be between 256 and 131072 (got ${config.maxSeqLength})`,
-      );
+      errors.push(`maxSeqLength must be between 256 and 131072 (got ${config.maxSeqLength})`);
     }
 
     return errors;
@@ -157,10 +143,7 @@ export class ModelTrainer {
       if (content.includes("TRAINING_FAILED") || content.includes("Error")) {
         // Only if the last line indicates failure
         const lastLines = content.trim().split("\n").slice(-5).join("\n");
-        if (
-          lastLines.includes("TRAINING_FAILED") ||
-          lastLines.includes("Traceback")
-        ) {
+        if (lastLines.includes("TRAINING_FAILED") || lastLines.includes("Traceback")) {
           return { ...handle, status: "failed" };
         }
       }

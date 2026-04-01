@@ -16,10 +16,12 @@ export function registerHistoryCommand(program: Command): void {
 
       if (opts.clear) {
         try {
-          const files = readdirSync(transcriptsDir).filter(f => f.endsWith(".jsonl"));
+          const files = readdirSync(transcriptsDir).filter((f) => f.endsWith(".jsonl"));
           for (const f of files) unlinkSync(join(transcriptsDir, f));
           console.log(`Deleted ${files.length} sessions.`);
-        } catch { console.log("No sessions to delete."); }
+        } catch {
+          console.log("No sessions to delete.");
+        }
         return;
       }
 
@@ -27,7 +29,10 @@ export function registerHistoryCommand(program: Command): void {
         try {
           unlinkSync(join(transcriptsDir, opts.delete));
           console.log(`Deleted: ${opts.delete}`);
-        } catch { console.error(`Session not found: ${opts.delete}`); process.exit(1); }
+        } catch {
+          console.error(`Session not found: ${opts.delete}`);
+          process.exit(1);
+        }
         return;
       }
 
@@ -36,15 +41,26 @@ export function registerHistoryCommand(program: Command): void {
         try {
           const { readFileSync } = await import("node:fs");
           const content = readFileSync(join(transcriptsDir, opts.load), "utf-8");
-          const entries = content.trim().split("\n").filter(Boolean).map(line => {
-            try { return JSON.parse(line); } catch { return null; }
-          }).filter(Boolean);
+          const entries = content
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => {
+              try {
+                return JSON.parse(line);
+              } catch {
+                return null;
+              }
+            })
+            .filter(Boolean);
 
           console.log(`\n\x1b[1mSession: ${opts.load}\x1b[0m`);
           console.log(`Entries: ${entries.length}\n`);
 
           for (const entry of entries) {
-            const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString("en-US", { hour12: false }) : "??:??";
+            const time = entry.timestamp
+              ? new Date(entry.timestamp).toLocaleTimeString("en-US", { hour12: false })
+              : "??:??";
             const role = entry.role ?? "?";
             const type = entry.type ?? "?";
             const content = (entry.content ?? "").slice(0, 120);
@@ -73,7 +89,7 @@ export function registerHistoryCommand(program: Command): void {
       // List recent sessions
       try {
         const files = readdirSync(transcriptsDir)
-          .filter(f => f.endsWith(".jsonl"))
+          .filter((f) => f.endsWith(".jsonl"))
           .sort()
           .reverse()
           .slice(0, opts.limit ?? 20);
@@ -94,7 +110,9 @@ export function registerHistoryCommand(program: Command): void {
               const date = match[1]!;
               const time = match[2]!.replace(/-/g, ":");
               const slug = match[3]!.replace(/-/g, " ");
-              console.log(`  \x1b[36m${date} ${time}\x1b[0m  ${slug.slice(0, 50).padEnd(52)} \x1b[2m${sizeKB}KB\x1b[0m`);
+              console.log(
+                `  \x1b[36m${date} ${time}\x1b[0m  ${slug.slice(0, 50).padEnd(52)} \x1b[2m${sizeKB}KB\x1b[0m`,
+              );
             } else {
               console.log(`  ${f}  \x1b[2m${sizeKB}KB\x1b[0m`);
             }

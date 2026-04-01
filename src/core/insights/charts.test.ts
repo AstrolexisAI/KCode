@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { ASCIICharts, charts } from "./charts";
 
 describe("ASCIICharts", () => {
@@ -26,22 +26,13 @@ describe("ASCIICharts", () => {
     });
 
     test("hides values when showValue=false", () => {
-      const output = charts.barChart(
-        [{ label: "A", value: 42 }],
-        { showValue: false },
-      );
+      const output = charts.barChart([{ label: "A", value: 42 }], { showValue: false });
       expect(output).not.toContain("42");
     });
 
     test("respects custom width", () => {
-      const narrow = charts.barChart(
-        [{ label: "A", value: 100 }],
-        { width: 10 },
-      );
-      const wide = charts.barChart(
-        [{ label: "A", value: 100 }],
-        { width: 50 },
-      );
+      const narrow = charts.barChart([{ label: "A", value: 100 }], { width: 10 });
+      const wide = charts.barChart([{ label: "A", value: 100 }], { width: 50 });
       expect(wide.length).toBeGreaterThan(narrow.length);
     });
   });
@@ -89,10 +80,7 @@ describe("ASCIICharts", () => {
     });
 
     test("aligns columns", () => {
-      const output = charts.table(
-        ["A", "Longer Header"],
-        [["x", "y"]],
-      );
+      const output = charts.table(["A", "Longer Header"], [["x", "y"]]);
       const lines = output.split("\n");
       // All lines should be same length
       expect(new Set(lines.map((l) => l.length)).size).toBe(1);

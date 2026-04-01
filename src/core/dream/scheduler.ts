@@ -1,9 +1,9 @@
 // KCode - Dream Scheduler
 // Priority scheduler that triggers dream tasks during idle periods
 
+import type { DreamEngine } from "./dream-engine";
 import type { DreamContext, DreamEngineConfig, DreamResult } from "./types";
 import { DEFAULT_DREAM_CONFIG } from "./types";
-import { DreamEngine } from "./dream-engine";
 
 export class DreamScheduler {
   private engine: DreamEngine;
@@ -65,9 +65,7 @@ export class DreamScheduler {
   /**
    * Manually trigger dream tasks.
    */
-  async runPendingTasks(
-    ctx: Omit<DreamContext, "signal">
-  ): Promise<DreamResult[]> {
+  async runPendingTasks(ctx: Omit<DreamContext, "signal">): Promise<DreamResult[]> {
     return this.engine.startDreaming(ctx);
   }
 
@@ -85,10 +83,7 @@ export class DreamScheduler {
     for (const task of tasks) {
       if (task.shouldRun(state)) {
         // Task is ready now, estimate is based on idle threshold
-        const remaining = Math.max(
-          0,
-          this.config.idleThresholdSeconds - state.idleSeconds
-        );
+        const remaining = Math.max(0, this.config.idleThresholdSeconds - state.idleSeconds);
         return {
           taskName: task.name,
           estimatedSeconds: remaining,

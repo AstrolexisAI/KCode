@@ -1,6 +1,6 @@
 // KCode - Cost Dashboard Renderer Tests
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { renderCostDashboard, renderCostDashboardJson } from "./dashboard";
 import type { CostSummary } from "./types";
 
@@ -12,9 +12,9 @@ const mockSummary: CostSummary = {
   sessions: 43,
   avgCostPerSession: 0.29,
   byModel: [
-    { model: "claude-sonnet", costUsd: 8.20, percentage: 65.8 },
-    { model: "local-llama", costUsd: 2.10, percentage: 16.8 },
-    { model: "gpt-4o", costUsd: 1.50, percentage: 12.0 },
+    { model: "claude-sonnet", costUsd: 8.2, percentage: 65.8 },
+    { model: "local-llama", costUsd: 2.1, percentage: 16.8 },
+    { model: "gpt-4o", costUsd: 1.5, percentage: 12.0 },
     { model: "deepseek-v3", costUsd: 0.67, percentage: 5.4 },
   ],
   byDay: [

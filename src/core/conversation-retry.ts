@@ -1,0 +1,244 @@
+// KCode - Conversation Retry Module
+// Extracted from conversation.ts — retry logic with exponential backoff and fallback chain
+
+import type { DebugTracer } from "./debug-tracer";
+import { log } from "./logger";
+import { executeModelRequest } from "./request-builder";
+import { routeToModel } from "./router";
+import type { SSEChunk } from "./sse-parser";
+import type { ToolRegistry } from "./tool-registry";
+import type { KCodeConfig, Message } from "./types";
+
+// ─── Constants ───────────────────────────────────────────────────
+
+const BASE_RETRY_DELAY_MS = 500;
+const MAX_RETRY_DELAY_MS = 8000;
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+export function isRetryableError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    // Retry on network errors and common HTTP errors
+    if (
+      msg.includes("network") ||
+      msg.includes("econnreset") ||
+      msg.includes("econnrefused") ||
+      msg.includes("unable to connect") ||
+      msg.includes("timeout") ||
+      msg.includes("socket") ||
+      msg.includes("429") ||
+      msg.includes("500") ||
+      msg.includes("502") ||
+      msg.includes("503")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function computeRetryDelay(attempt: number): number {
+  // Exponential backoff: 0.5s, 1s, 2s, 4s, 8s capped at MAX_RETRY_DELAY_MS
+  const baseDelay = Math.min(BASE_RETRY_DELAY_MS * 2 ** attempt, MAX_RETRY_DELAY_MS);
+  // 75-100% jitter
+  const jitter = 0.75 + Math.random() * 0.25;
+  return Math.round(baseDelay * jitter);
+}
+
+export async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ─── Stream With Retry ───────────────────────────────────────────
+
+export interface CreateStreamContext {
+  config: KCodeConfig;
+  systemPrompt: string;
+  messages: Message[];
+  tools: ToolRegistry;
+  maxRetries: number;
+  abortController: AbortController | null;
+  debugTracer: DebugTracer | null;
+  getRecentMessageText: () => string;
+}
+
+/**
+ * Create a streaming API call with exponential backoff retry.
+ * Delegates to executeModelRequest() for the actual request.
+ * Tries auto-routing, primary model, fallback, tertiary, and fallback chain.
+ */
+export async function createStreamWithRetry(
+  ctx: CreateStreamContext,
+): Promise<AsyncGenerator<SSEChunk>> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= ctx.maxRetries; attempt++) {
+    let effectiveModel = ctx.config.model;
+    try {
+      if (ctx.config.autoRoute !== false && !ctx.config.modelExplicitlySet) {
+        const recentText = ctx.getRecentMessageText();
+        effectiveModel = await routeToModel(ctx.config.model, recentText);
+        if (ctx.debugTracer?.isEnabled() && effectiveModel !== ctx.config.model) {
+          ctx.debugTracer.traceModelSwitch(
+            ctx.config.model,
+            effectiveModel,
+            "Auto-router selected different model based on message content",
+          );
+        }
+      }
+
+      const requestStart = Date.now();
+      const stream = await executeModelRequest(
+        effectiveModel,
+        ctx.config,
+        ctx.systemPrompt,
+        ctx.messages,
+        ctx.tools,
+        ctx.abortController,
+      );
+      log.debug("llm", `Stream opened in ${Date.now() - requestStart}ms`);
+      return stream;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // If the router sent us to a different model and it failed, fall back to primary
+      if (effectiveModel !== ctx.config.model) {
+        log.warn(
+          "llm",
+          `Routed model ${effectiveModel} failed, falling back to primary ${ctx.config.model}`,
+        );
+        try {
+          const stream = await executeModelRequest(
+            ctx.config.model,
+            ctx.config,
+            ctx.systemPrompt,
+            ctx.messages,
+            ctx.tools,
+            ctx.abortController,
+          );
+          log.info(
+            "llm",
+            `Primary model ${ctx.config.model} connected after routed model failure`,
+          );
+          return stream;
+        } catch (primaryErr) {
+          log.error(
+            "llm",
+            `Primary model also failed: ${primaryErr instanceof Error ? primaryErr.message : primaryErr}`,
+          );
+        }
+      }
+
+      if (attempt < ctx.maxRetries && isRetryableError(error)) {
+        const delay = computeRetryDelay(attempt);
+        log.warn(
+          "llm",
+          `Retryable error (attempt ${attempt + 1}/${ctx.maxRetries}), retrying in ${delay}ms`,
+          lastError,
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      // Fallback model
+      if (ctx.config.fallbackModel && ctx.config.fallbackModel !== ctx.config.model) {
+        log.warn(
+          "llm",
+          `Primary model failed, switching to fallback: ${ctx.config.fallbackModel}`,
+        );
+        if (ctx.debugTracer?.isEnabled()) {
+          ctx.debugTracer.traceModelSwitch(
+            ctx.config.model,
+            ctx.config.fallbackModel,
+            `Primary model failed after ${attempt + 1} attempts: ${lastError?.message}`,
+          );
+        }
+        try {
+          const stream = await executeModelRequest(
+            ctx.config.fallbackModel,
+            ctx.config,
+            ctx.systemPrompt,
+            ctx.messages,
+            ctx.tools,
+            ctx.abortController,
+          );
+          log.info("llm", `Fallback model ${ctx.config.fallbackModel} connected`);
+          return stream;
+        } catch (fallbackErr) {
+          log.error(
+            "llm",
+            `Fallback model also failed: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`,
+          );
+        }
+      }
+
+      // Tertiary model
+      if (
+        ctx.config.tertiaryModel &&
+        ctx.config.tertiaryModel !== ctx.config.model &&
+        ctx.config.tertiaryModel !== ctx.config.fallbackModel
+      ) {
+        log.warn(
+          "llm",
+          `Primary + fallback failed, trying tertiary model: ${ctx.config.tertiaryModel}`,
+        );
+        try {
+          const stream = await executeModelRequest(
+            ctx.config.tertiaryModel,
+            ctx.config,
+            ctx.systemPrompt,
+            ctx.messages,
+            ctx.tools,
+            ctx.abortController,
+            {
+              maxTokens: Math.min(ctx.config.maxTokens, 4096),
+              includeTools: false,
+            },
+          );
+          log.info("llm", `Tertiary model ${ctx.config.tertiaryModel} connected (no tools)`);
+          return stream;
+        } catch (tertiaryErr) {
+          log.error(
+            "llm",
+            `Tertiary model also failed: ${tertiaryErr instanceof Error ? tertiaryErr.message : tertiaryErr}`,
+          );
+        }
+      }
+
+      // Fallback chain
+      if (ctx.config.fallbackModels && ctx.config.fallbackModels.length > 0) {
+        const triedModels = new Set(
+          [ctx.config.model, ctx.config.fallbackModel, ctx.config.tertiaryModel].filter(Boolean),
+        );
+        for (const chainModel of ctx.config.fallbackModels) {
+          if (triedModels.has(chainModel)) continue;
+          triedModels.add(chainModel);
+          log.warn("llm", `Falling back to model: ${chainModel}`);
+          try {
+            const stream = await executeModelRequest(
+              chainModel,
+              ctx.config,
+              ctx.systemPrompt,
+              ctx.messages,
+              ctx.tools,
+              ctx.abortController,
+            );
+            log.info("llm", `Fallback chain model ${chainModel} connected`);
+            return stream;
+          } catch (chainErr) {
+            log.error(
+              "llm",
+              `Fallback chain model ${chainModel} failed: ${chainErr instanceof Error ? chainErr.message : chainErr}`,
+            );
+          }
+        }
+      }
+
+      log.error("llm", `Request failed: ${lastError.message}`, lastError);
+      throw lastError;
+    }
+  }
+
+  throw lastError ?? new Error("Unexpected retry exhaustion");
+}

@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { OfflineMode, resetOfflineMode, initOfflineMode, getOfflineMode } from "./mode";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { getOfflineMode, initOfflineMode, OfflineMode, resetOfflineMode } from "./mode";
 import type { OfflineSettings } from "./types";
 
 describe("OfflineMode", () => {
@@ -28,7 +28,9 @@ describe("OfflineMode", () => {
 
     test("disable() keeps active=true if detected is true", async () => {
       const mode = new OfflineMode({
-        dnsResolver: async () => { throw new Error("no network"); },
+        dnsResolver: async () => {
+          throw new Error("no network");
+        },
       });
       // Force a connectivity check so detected becomes true
       await mode.checkConnectivity();
@@ -55,7 +57,9 @@ describe("OfflineMode", () => {
 
     test("returns false when DNS fails", async () => {
       const mode = new OfflineMode({
-        dnsResolver: async () => { throw new Error("ENOTFOUND"); },
+        dnsResolver: async () => {
+          throw new Error("ENOTFOUND");
+        },
       });
       const online = await mode.checkConnectivity();
       expect(online).toBe(false);
@@ -66,7 +70,10 @@ describe("OfflineMode", () => {
     test("caches result for 60 seconds", async () => {
       let callCount = 0;
       const mode = new OfflineMode({
-        dnsResolver: async () => { callCount++; return []; },
+        dnsResolver: async () => {
+          callCount++;
+          return [];
+        },
       });
       await mode.checkConnectivity();
       await mode.checkConnectivity();
@@ -77,7 +84,10 @@ describe("OfflineMode", () => {
     test("skips check when forced offline", async () => {
       let called = false;
       const mode = new OfflineMode({
-        dnsResolver: async () => { called = true; return []; },
+        dnsResolver: async () => {
+          called = true;
+          return [];
+        },
       });
       mode.enable();
       const online = await mode.checkConnectivity();
@@ -124,7 +134,9 @@ describe("OfflineMode", () => {
   describe("auditLocalResources", () => {
     test("returns resource inventory", async () => {
       const mode = new OfflineMode({
-        fetchFn: async () => { throw new Error("no server"); },
+        fetchFn: async () => {
+          throw new Error("no server");
+        },
       });
       const resources = await mode.auditLocalResources();
       expect(resources).toHaveProperty("hasLocalModel");

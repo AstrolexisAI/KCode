@@ -2,7 +2,7 @@
 // Parses string representations like "ctrl+k ctrl+c" into structured KeyChord objects
 // and formats them back to platform-aware display strings.
 
-import type { KeyCombo, KeyChord } from "./types.js";
+import type { KeyChord, KeyCombo } from "./types.js";
 
 /** Known modifier names that are stripped from the key portion */
 const MODIFIERS = new Set(["ctrl", "alt", "shift", "meta", "cmd"]);

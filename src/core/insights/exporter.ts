@@ -1,7 +1,7 @@
 // KCode - Analytics Data Exporter
 
-import type { ExportOptions } from "./types";
 import { getAnalyticsSummary } from "../analytics";
+import type { ExportOptions } from "./types";
 
 export async function exportInsightsData(options: ExportOptions): Promise<string> {
   const summary = getAnalyticsSummary(options.days);

@@ -4,16 +4,16 @@
 import type { Command } from "commander";
 
 export function registerDaemonCommand(program: Command): void {
-  const daemon = program
-    .command("daemon")
-    .description("Manage the KCode background daemon");
+  const daemon = program.command("daemon").description("Manage the KCode background daemon");
 
   // ─── daemon start ───────────────────────────────────────────
 
   daemon
     .command("start")
     .description("Start the KCode daemon in the foreground")
-    .option("-p, --port <port>", "Port to listen on (default: auto 19100-19199)", (v: string) => parseInt(v, 10))
+    .option("-p, --port <port>", "Port to listen on (default: auto 19100-19199)", (v: string) =>
+      parseInt(v, 10),
+    )
     .action(async (opts: { port?: number }) => {
       try {
         const { startDaemon, isDaemonRunning } = await import("../../bridge/daemon");

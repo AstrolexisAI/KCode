@@ -2,17 +2,17 @@
 
 export default {
   // General
-  "welcome": "Welcome to KCode",
-  "goodbye": "Goodbye",
-  "error": "Error",
-  "warning": "Warning",
-  "success": "Success",
-  "loading": "Loading...",
-  "cancel": "Cancel",
-  "confirm": "Confirm",
-  "yes": "Yes",
-  "no": "No",
-  "unknown": "Unknown",
+  welcome: "Welcome to KCode",
+  goodbye: "Goodbye",
+  error: "Error",
+  warning: "Warning",
+  success: "Success",
+  loading: "Loading...",
+  cancel: "Cancel",
+  confirm: "Confirm",
+  yes: "Yes",
+  no: "No",
+  unknown: "Unknown",
 
   // Session
   "session.started": "Session started",

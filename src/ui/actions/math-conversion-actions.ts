@@ -11,17 +11,38 @@ export async function handleMathConversionAction(
 
   switch (action) {
     case "calc": {
-      if (!args?.trim()) return "  Usage: /calc <expression>\n  Examples: /calc 2+3*4, /calc sqrt(144), /calc 2**10";
+      if (!args?.trim())
+        return "  Usage: /calc <expression>\n  Examples: /calc 2+3*4, /calc sqrt(144), /calc 2**10";
 
       const expr = args.trim();
 
       // Strict whitelist: only digits, operators, parens, dots, commas, spaces,
       // and known math function/constant names
       const allowedNames = new Set([
-        "abs", "ceil", "floor", "round", "sqrt", "cbrt", "pow",
-        "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-        "log", "log2", "log10", "exp", "min", "max", "random",
-        "PI", "E", "TAU",
+        "abs",
+        "ceil",
+        "floor",
+        "round",
+        "sqrt",
+        "cbrt",
+        "pow",
+        "sin",
+        "cos",
+        "tan",
+        "asin",
+        "acos",
+        "atan",
+        "atan2",
+        "log",
+        "log2",
+        "log10",
+        "exp",
+        "min",
+        "max",
+        "random",
+        "PI",
+        "E",
+        "TAU",
       ]);
 
       // Tokenize: split into numbers, identifiers, and operators
@@ -38,11 +59,15 @@ export async function handleMathConversionAction(
       }
 
       // No brackets, backticks, quotes, assignment, or dangerous constructs allowed
-      if (/[\[\]`'"\\{}=;]/.test(expr)) {
+      if (/[[\]`'"\\{}=;]/.test(expr)) {
         return "  Invalid characters in expression.";
       }
       // Block property access, template literals, and function constructor escape
-      if (/\.\s*\w|=>|import|require|eval|Function|this|global|process|constructor|prototype|__proto__/.test(expr)) {
+      if (
+        /\.\s*\w|=>|import|require|eval|Function|this|global|process|constructor|prototype|__proto__/.test(
+          expr,
+        )
+      ) {
         return "  Invalid expression. Only numbers, operators, and math functions allowed.";
       }
       // Limit expression length to prevent abuse
@@ -52,13 +77,30 @@ export async function handleMathConversionAction(
 
       try {
         const mathFns: Record<string, unknown> = {
-          abs: Math.abs, ceil: Math.ceil, floor: Math.floor, round: Math.round,
-          sqrt: Math.sqrt, cbrt: Math.cbrt, pow: Math.pow,
-          sin: Math.sin, cos: Math.cos, tan: Math.tan,
-          asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
-          log: Math.log, log2: Math.log2, log10: Math.log10,
-          exp: Math.exp, min: Math.min, max: Math.max,
-          PI: Math.PI, E: Math.E, TAU: Math.PI * 2, random: Math.random,
+          abs: Math.abs,
+          ceil: Math.ceil,
+          floor: Math.floor,
+          round: Math.round,
+          sqrt: Math.sqrt,
+          cbrt: Math.cbrt,
+          pow: Math.pow,
+          sin: Math.sin,
+          cos: Math.cos,
+          tan: Math.tan,
+          asin: Math.asin,
+          acos: Math.acos,
+          atan: Math.atan,
+          atan2: Math.atan2,
+          log: Math.log,
+          log2: Math.log2,
+          log10: Math.log10,
+          exp: Math.exp,
+          min: Math.min,
+          max: Math.max,
+          PI: Math.PI,
+          E: Math.E,
+          TAU: Math.PI * 2,
+          random: Math.random,
         };
         const keys = Object.keys(mathFns);
         const values = Object.values(mathFns);
@@ -74,7 +116,12 @@ export async function handleMathConversionAction(
         lines.push(`  Result:     ${result}`);
 
         // Show extra representations for integers
-        if (typeof result === "number" && Number.isInteger(result) && result >= 0 && result <= 0xFFFFFFFF) {
+        if (
+          typeof result === "number" &&
+          Number.isInteger(result) &&
+          result >= 0 &&
+          result <= 0xffffffff
+        ) {
           lines.push(`  Hex:        0x${result.toString(16).toUpperCase()}`);
           lines.push(`  Binary:     0b${result.toString(2)}`);
           lines.push(`  Octal:      0o${result.toString(8)}`);
@@ -104,19 +151,20 @@ export async function handleMathConversionAction(
           `  Rolls: ${rolls.join(", ")}`,
           `  Total: ${total}`,
           n > 1 ? `  Avg:   ${(total / n).toFixed(1)}` : "",
-        ].filter(Boolean).join("\n");
+        ]
+          .filter(Boolean)
+          .join("\n");
       }
 
       // Pick from comma-separated list
       if (input.includes(",")) {
-        const items = input.split(",").map(s => s.trim()).filter(Boolean);
+        const items = input
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
         if (items.length < 2) return "  Provide at least 2 comma-separated items.";
         const pick = items[Math.floor(Math.random() * items.length)]!;
-        return [
-          `  Random Pick\n`,
-          `  From: ${items.join(", ")}`,
-          `  Pick: ${pick}`,
-        ].join("\n");
+        return [`  Random Pick\n`, `  From: ${items.join(", ")}`, `  Pick: ${pick}`].join("\n");
       }
 
       // Range: min-max
@@ -152,7 +200,9 @@ export async function handleMathConversionAction(
       if (!args?.trim()) return "  Usage: /color <#hex | rgb(r,g,b) | hsl(h,s,l)>";
 
       const input = args.trim();
-      let r = 0, g = 0, b = 0;
+      let r = 0,
+        g = 0,
+        b = 0;
       let parsed = false;
 
       // Parse hex
@@ -215,11 +265,14 @@ export async function handleMathConversionAction(
       const max = Math.max(r, g, b) / 255;
       const min = Math.min(r, g, b) / 255;
       const l = (max + min) / 2;
-      let h = 0, s = 0;
+      let h = 0,
+        s = 0;
       if (max !== min) {
         const d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        const rn = r / 255, gn = g / 255, bn = b / 255;
+        const rn = r / 255,
+          gn = g / 255,
+          bn = b / 255;
         if (rn === max) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6;
         else if (gn === max) h = ((bn - rn) / d + 2) / 6;
         else h = ((rn - gn) / d + 4) / 6;
@@ -234,7 +287,7 @@ export async function handleMathConversionAction(
         `  HEX:     ${hex}`,
         `  RGB:     rgb(${r}, ${g}, ${b})`,
         `  HSL:     hsl(${Math.round(h * 360)}, ${Math.round(s * 100)}%, ${Math.round(l * 100)}%)`,
-        `  Decimal: ${(r << 16 | g << 8 | b) >>> 0}`,
+        `  Decimal: ${((r << 16) | (g << 8) | b) >>> 0}`,
       ].join("\n");
     }
     case "timestamp": {
@@ -381,12 +434,13 @@ export async function handleMathConversionAction(
       return [
         `  Checksum (${algo.toUpperCase()})`,
         ``,
-        `  ${isFile ? "File" : "Text"}:  ${isFile ? target : (target.length > 60 ? target.slice(0, 60) + "..." : target)}`,
+        `  ${isFile ? "File" : "Text"}:  ${isFile ? target : target.length > 60 ? target.slice(0, 60) + "..." : target}`,
         `  Hash:  ${hash}`,
       ].join("\n");
     }
     case "semver": {
-      if (!args?.trim()) return "  Usage: /semver <version> [bump major|minor|patch|prerelease]\n  Examples: /semver 1.2.3, /semver 1.2.3 bump minor";
+      if (!args?.trim())
+        return "  Usage: /semver <version> [bump major|minor|patch|prerelease]\n  Examples: /semver 1.2.3, /semver 1.2.3 bump minor";
 
       const input = args.trim();
       const parts = input.split(/\s+/);
@@ -396,11 +450,12 @@ export async function handleMathConversionAction(
 
       // Parse semver
       const match = raw.match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([a-zA-Z0-9.]+))?(?:\+([a-zA-Z0-9.]+))?$/);
-      if (!match) return `  Invalid semver: ${raw}\n  Expected format: MAJOR.MINOR.PATCH[-prerelease][+build]`;
+      if (!match)
+        return `  Invalid semver: ${raw}\n  Expected format: MAJOR.MINOR.PATCH[-prerelease][+build]`;
 
-      let major = parseInt(match[1]!);
-      let minor = parseInt(match[2]!);
-      let patch = parseInt(match[3]!);
+      const major = parseInt(match[1]!);
+      const minor = parseInt(match[2]!);
+      const patch = parseInt(match[3]!);
       const pre = match[4] || "";
       const build = match[5] || "";
 
@@ -466,7 +521,7 @@ export async function handleMathConversionAction(
           `  Iterations: ${iterations.toLocaleString()}`,
           `  Estimate:   ${estimate.toFixed(8)}`,
           `  Actual Pi:  ${Math.PI.toFixed(8)}`,
-          `  Error:      ${error.toFixed(8)} (${(error / Math.PI * 100).toFixed(4)}%)`,
+          `  Error:      ${error.toFixed(8)} (${((error / Math.PI) * 100).toFixed(4)}%)`,
           `  Time:       ${elapsed}ms`,
         ].join("\n");
       }
@@ -485,8 +540,8 @@ export async function handleMathConversionAction(
         return [
           `  Monte Carlo: Coin Flips\n`,
           `  Flips:  ${flips.toLocaleString()}`,
-          `  Heads:  ${heads.toLocaleString()} (${(heads / flips * 100).toFixed(2)}%)`,
-          `  Tails:  ${tails.toLocaleString()} (${(tails / flips * 100).toFixed(2)}%)`,
+          `  Heads:  ${heads.toLocaleString()} (${((heads / flips) * 100).toFixed(2)}%)`,
+          `  Tails:  ${tails.toLocaleString()} (${((tails / flips) * 100).toFixed(2)}%)`,
           `  Ratio:  ${(heads / tails).toFixed(4)}`,
           `  Time:   ${elapsed}ms`,
         ].join("\n");
@@ -494,7 +549,8 @@ export async function handleMathConversionAction(
 
       if (mode === "dice") {
         const diceMatch = parts[1]?.match(/^(\d+)d(\d+)$/i);
-        if (!diceMatch) return "  Usage: /montecarlo dice NdM [iterations]\n  Example: /montecarlo dice 2d6 100000";
+        if (!diceMatch)
+          return "  Usage: /montecarlo dice NdM [iterations]\n  Example: /montecarlo dice 2d6 100000";
 
         const n = Math.min(parseInt(diceMatch[1]!), 20);
         const sides = Math.min(parseInt(diceMatch[2]!), 100);
@@ -517,7 +573,9 @@ export async function handleMathConversionAction(
         const elapsed = Math.round(performance.now() - startTime);
 
         // Build distribution
-        const sorted = Object.entries(freq).map(([k, v]) => [parseInt(k), v] as [number, number]).sort((a, b) => a[0] - b[0]);
+        const sorted = Object.entries(freq)
+          .map(([k, v]) => [parseInt(k), v] as [number, number])
+          .sort((a, b) => a[0] - b[0]);
         const maxFreq = Math.max(...sorted.map(([, v]) => v));
         const barWidth = 25;
 
@@ -532,7 +590,7 @@ export async function handleMathConversionAction(
         // Show top values or full distribution if small enough
         const display = sorted.length <= 25 ? sorted : sorted.slice(0, 20);
         for (const [val, count] of display) {
-          const pct = (count / iterations * 100).toFixed(1);
+          const pct = ((count / iterations) * 100).toFixed(1);
           const filled = Math.max(1, Math.round((count / maxFreq) * barWidth));
           const bar = "\u2588".repeat(filled);
           lines.push(`  ${String(val).padStart(4)}  ${bar} ${pct}%`);
@@ -545,23 +603,39 @@ export async function handleMathConversionAction(
       return "  Usage: /montecarlo pi [N] | coin [N] | dice NdM [N]\n  Examples: /montecarlo pi 1000000, /montecarlo coin 50000, /montecarlo dice 2d6 100000";
     }
     case "chmod_calc": {
-      if (!args?.trim()) return "  Usage: /chmod-calc <octal or symbolic>\n  Examples: /chmod-calc 755, /chmod-calc rwxr-xr-x";
+      if (!args?.trim())
+        return "  Usage: /chmod-calc <octal or symbolic>\n  Examples: /chmod-calc 755, /chmod-calc rwxr-xr-x";
 
       const input = args.trim();
 
       const octalToSymbolic = (octal: string): string => {
         const map: Record<string, string> = {
-          "0": "---", "1": "--x", "2": "-w-", "3": "-wx",
-          "4": "r--", "5": "r-x", "6": "rw-", "7": "rwx",
+          "0": "---",
+          "1": "--x",
+          "2": "-w-",
+          "3": "-wx",
+          "4": "r--",
+          "5": "r-x",
+          "6": "rw-",
+          "7": "rwx",
         };
         const digits = octal.padStart(3, "0").slice(-3);
-        return digits.split("").map(d => map[d] ?? "---").join("");
+        return digits
+          .split("")
+          .map((d) => map[d] ?? "---")
+          .join("");
       };
 
       const symbolicToOctal = (sym: string): string => {
         const map: Record<string, string> = {
-          "---": "0", "--x": "1", "-w-": "2", "-wx": "3",
-          "r--": "4", "r-x": "5", "rw-": "6", "rwx": "7",
+          "---": "0",
+          "--x": "1",
+          "-w-": "2",
+          "-wx": "3",
+          "r--": "4",
+          "r-x": "5",
+          "rw-": "6",
+          rwx: "7",
         };
         const clean = sym.replace(/^[-d]/, "").slice(0, 9);
         if (clean.length !== 9) return "";

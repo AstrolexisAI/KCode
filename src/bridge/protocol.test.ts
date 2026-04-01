@@ -1,17 +1,23 @@
 // Tests for Bridge Protocol - message parsing, serialization, and creation
 
-import { describe, test, expect } from "bun:test";
-import { parseMessage, serializeMessage, createMessage, isClientMessageType, isServerMessageType } from "./protocol";
+import { describe, expect, test } from "bun:test";
+import {
+  createMessage,
+  isClientMessageType,
+  isServerMessageType,
+  parseMessage,
+  serializeMessage,
+} from "./protocol";
 import type {
+  PermissionResponseMessage,
   PingMessage,
   PongMessage,
-  SessionCreateMessage,
-  SessionMessageMessage,
   SessionCancelMessage,
-  SessionDestroyMessage,
-  PermissionResponseMessage,
   SessionCreatedMessage,
+  SessionCreateMessage,
+  SessionDestroyMessage,
   SessionDoneMessage,
+  SessionMessageMessage,
   ShutdownMessage,
 } from "./types";
 
@@ -19,7 +25,11 @@ import type {
 
 describe("parseMessage", () => {
   test("parses a valid ping message", () => {
-    const raw = JSON.stringify({ type: "ping", id: "abc-123", timestamp: "2026-01-01T00:00:00.000Z" });
+    const raw = JSON.stringify({
+      type: "ping",
+      id: "abc-123",
+      timestamp: "2026-01-01T00:00:00.000Z",
+    });
     const msg = parseMessage(raw);
     expect(msg.type).toBe("ping");
     expect(msg.id).toBe("abc-123");
@@ -237,7 +247,10 @@ describe("createMessage", () => {
   });
 
   test("allows overriding id and timestamp", () => {
-    const msg = createMessage<PingMessage>("ping", { id: "custom-id", timestamp: "2026-06-01T00:00:00.000Z" });
+    const msg = createMessage<PingMessage>("ping", {
+      id: "custom-id",
+      timestamp: "2026-06-01T00:00:00.000Z",
+    });
     expect(msg.id).toBe("custom-id");
     expect(msg.timestamp).toBe("2026-06-01T00:00:00.000Z");
   });

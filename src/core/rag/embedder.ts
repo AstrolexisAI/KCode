@@ -3,19 +3,14 @@
 // Supports multiple backends: Ollama, llama.cpp, and TF-IDF fallback.
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { log } from "../logger";
 import type { EmbeddingBackend, EmbeddingConfig } from "./types";
 
 // ─── Backend Priority ──────────────────────────────────────────
 
-const BACKEND_PRIORITY: EmbeddingBackend[] = [
-  "ollama",
-  "llama-cpp",
-  "bge-micro",
-  "tfidf",
-];
+const BACKEND_PRIORITY: EmbeddingBackend[] = ["ollama", "llama-cpp", "bge-micro", "tfidf"];
 
 // ─── TF-IDF Embedder ──────────────────────────────────────────
 
@@ -58,9 +53,7 @@ export class TFIDFEmbedder {
     }
 
     // Select top 10,000 tokens by frequency
-    const sorted = [...termFreq.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10_000);
+    const sorted = [...termFreq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10_000);
 
     this.vocabulary.clear();
     this.idf.clear();
@@ -193,10 +186,7 @@ export async function detectBestBackend(): Promise<EmbeddingBackend> {
     });
     const data = (await r.json()) as { models?: Array<{ name: string }> };
     const hasEmbedModel = data.models?.some(
-      (m) =>
-        m.name.includes("embed") ||
-        m.name.includes("nomic") ||
-        m.name.includes("minilm"),
+      (m) => m.name.includes("embed") || m.name.includes("nomic") || m.name.includes("minilm"),
     );
     if (hasEmbedModel) return "ollama";
   } catch {

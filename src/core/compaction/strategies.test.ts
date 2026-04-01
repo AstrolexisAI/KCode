@@ -1,16 +1,16 @@
 // KCode - Individual Compaction Strategy Tests
 
-import { describe, test, expect } from "bun:test";
-import type { Message, ContentBlock, TextBlock, ToolUseBlock, ToolResultBlock } from "../types.js";
-import type { LlmSummarizer } from "./types.js";
+import { describe, expect, test } from "bun:test";
+import type { ContentBlock, Message, TextBlock, ToolResultBlock, ToolUseBlock } from "../types.js";
+import { restoreRecentFiles } from "./strategies/file-restorer.js";
+import { extractFilePaths, fullCompact } from "./strategies/full-compact.js";
 import { hasImages, stripImages } from "./strategies/image-stripper.js";
 import { microCompact } from "./strategies/micro-compact.js";
-import { fullCompact, extractFilePaths } from "./strategies/full-compact.js";
-import { restoreRecentFiles } from "./strategies/file-restorer.js";
 import {
-  sessionMemoryCompact,
   buildSessionResumptionMessage,
+  sessionMemoryCompact,
 } from "./strategies/session-memory-compact.js";
+import type { LlmSummarizer } from "./types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -120,7 +120,9 @@ describe("Image Stripper", () => {
     const first = result.messages[0]!;
     expect(Array.isArray(first.content)).toBe(true);
     const blocks = first.content as ContentBlock[];
-    expect(blocks.some((b) => b.type === "text" && (b as TextBlock).text.includes("imagen removida"))).toBe(true);
+    expect(
+      blocks.some((b) => b.type === "text" && (b as TextBlock).text.includes("imagen removida")),
+    ).toBe(true);
     // Original text preserved
     expect(blocks.some((b) => b.type === "text" && (b as TextBlock).text === "old 1")).toBe(true);
   });
@@ -213,7 +215,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50), // recent, preserved
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 300, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 300,
+      assistantThreshold: 500,
+    });
     expect(result.compressedCount).toBeGreaterThan(0);
     expect(result.tokensRecovered).toBeGreaterThan(0);
   });
@@ -235,7 +242,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(9, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 300, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 300,
+      assistantThreshold: 500,
+    });
     // The recentToolMsg is in the last 10, should be untouched
     const idx = msgs.indexOf(recentToolMsg);
     const resultBlock = (result.messages[idx]!.content as ContentBlock[])[0] as ToolResultBlock;
@@ -264,7 +276,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 100,
+      assistantThreshold: 500,
+    });
     const compactedMsg = result.messages[1]!;
     const blocks = compactedMsg.content as ContentBlock[];
     const toolResult = blocks.find((b) => b.type === "tool_result") as ToolResultBlock;
@@ -281,7 +298,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 300, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 300,
+      assistantThreshold: 500,
+    });
     expect(result.compressedCount).toBeGreaterThan(0);
     const compacted = result.messages[1]!;
     const blocks = compacted.content as ContentBlock[];
@@ -297,7 +319,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 300, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 300,
+      assistantThreshold: 500,
+    });
     expect(result.compressedCount).toBeGreaterThan(0);
   });
 
@@ -308,7 +335,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 300, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 300,
+      assistantThreshold: 500,
+    });
     expect(result.compressedCount).toBe(2);
   });
 
@@ -335,7 +367,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 100,
+      assistantThreshold: 500,
+    });
     const blocks = result.messages[1]!.content as ContentBlock[];
     const toolResult = blocks.find((b) => b.type === "tool_result") as ToolResultBlock;
     const parsed = JSON.parse(toolResult.content as string);
@@ -343,11 +380,7 @@ describe("Micro-Compact", () => {
   });
 
   test("leaves short messages untouched", () => {
-    const msgs = [
-      makeMsg("user", "hi"),
-      makeMsg("assistant", "hello"),
-      ...fillerMessages(10, 50),
-    ];
+    const msgs = [makeMsg("user", "hi"), makeMsg("assistant", "hello"), ...fillerMessages(10, 50)];
 
     const result = microCompact(msgs);
     expect(result.compressedCount).toBe(0);
@@ -376,7 +409,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 100,
+      assistantThreshold: 500,
+    });
     // Edit results should NOT be compacted
     const blocks = result.messages[1]!.content as ContentBlock[];
     const toolResult = blocks.find((b) => b.type === "tool_result") as ToolResultBlock;
@@ -405,7 +443,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 100,
+      assistantThreshold: 500,
+    });
     const blocks = result.messages[1]!.content as ContentBlock[];
     const toolResult = blocks.find((b) => b.type === "tool_result") as ToolResultBlock;
     expect(typeof toolResult.content === "string" && toolResult.content.length).toBe(500);
@@ -433,7 +476,12 @@ describe("Micro-Compact", () => {
       ...fillerMessages(10, 50),
     ];
 
-    const result = microCompact(msgs, { enabled: true, preserveRecent: 10, toolResultThreshold: 100, assistantThreshold: 500 });
+    const result = microCompact(msgs, {
+      enabled: true,
+      preserveRecent: 10,
+      toolResultThreshold: 100,
+      assistantThreshold: 500,
+    });
     expect(result.compressedCount).toBeGreaterThan(0);
   });
 
@@ -580,8 +628,18 @@ describe("extractFilePaths", () => {
       {
         role: "assistant",
         content: [
-          { type: "tool_use" as const, id: "t1", name: "Read", input: { file_path: "/src/foo.ts" } } as ToolUseBlock,
-          { type: "tool_use" as const, id: "t2", name: "Read", input: { file_path: "/src/foo.ts" } } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Read",
+            input: { file_path: "/src/foo.ts" },
+          } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t2",
+            name: "Read",
+            input: { file_path: "/src/foo.ts" },
+          } as ToolUseBlock,
         ],
       },
     ];
@@ -593,7 +651,12 @@ describe("extractFilePaths", () => {
       {
         role: "assistant",
         content: [
-          { type: "tool_use" as const, id: "t1", name: "Glob", input: { path: "/src" } } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Glob",
+            input: { path: "/src" },
+          } as ToolUseBlock,
         ],
       },
     ];
@@ -621,7 +684,12 @@ describe("File Restorer", () => {
       {
         role: "assistant",
         content: [
-          { type: "tool_use" as const, id: "t1", name: "Read", input: { file_path: "/test.ts" } } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Read",
+            input: { file_path: "/test.ts" },
+          } as ToolUseBlock,
         ],
       },
     ];
@@ -692,7 +760,12 @@ describe("File Restorer", () => {
       {
         role: "assistant",
         content: [
-          { type: "tool_use" as const, id: "t1", name: "Read", input: { file_path: "/gone.ts" } } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Read",
+            input: { file_path: "/gone.ts" },
+          } as ToolUseBlock,
         ],
       },
     ];
@@ -711,21 +784,34 @@ describe("File Restorer", () => {
   test("respects budget", async () => {
     const summaryMsg: Message = {
       role: "user",
-      content: [{ type: "text" as const, text: "[Conversation Summary - Full Compaction] summary" }],
+      content: [
+        { type: "text" as const, text: "[Conversation Summary - Full Compaction] summary" },
+      ],
     };
     const messages = [makeMsg("user", "first"), summaryMsg];
     const compacted: Message[] = [
       {
         role: "assistant",
         content: [
-          { type: "tool_use" as const, id: "t1", name: "Read", input: { file_path: "/big.ts" } } as ToolUseBlock,
-          { type: "tool_use" as const, id: "t2", name: "Read", input: { file_path: "/small.ts" } } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t1",
+            name: "Read",
+            input: { file_path: "/big.ts" },
+          } as ToolUseBlock,
+          {
+            type: "tool_use" as const,
+            id: "t2",
+            name: "Read",
+            input: { file_path: "/small.ts" },
+          } as ToolUseBlock,
         ],
       },
     ];
 
     // 1 token budget = 3.5 chars, so 10 token budget = 35 chars
-    const mockReader = async (path: string) => (path === "/big.ts" ? "x".repeat(100) : "y".repeat(5));
+    const mockReader = async (path: string) =>
+      path === "/big.ts" ? "x".repeat(100) : "y".repeat(5);
     const result = await restoreRecentFiles(
       messages,
       compacted,

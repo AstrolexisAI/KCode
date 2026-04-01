@@ -1,4 +1,4 @@
-import { SessionSearch } from "./search";
+import type { SessionSearch } from "./search";
 
 export type ExportFormat = "markdown" | "json" | "html" | "txt";
 
@@ -33,9 +33,7 @@ export class SessionExporter {
     } = options;
 
     const turns = this.search.getSessionTurns(sessionId);
-    const filtered = includeToolCalls
-      ? turns
-      : turns.filter((t) => t.role !== "tool");
+    const filtered = includeToolCalls ? turns : turns.filter((t) => t.role !== "tool");
 
     let output: string;
     switch (format) {
@@ -62,10 +60,7 @@ export class SessionExporter {
     return output;
   }
 
-  private formatMarkdown(
-    turns: Turn[],
-    opts: { includeTimestamps: boolean },
-  ): string {
+  private formatMarkdown(turns: Turn[], opts: { includeTimestamps: boolean }): string {
     if (turns.length === 0) {
       return "# Session Transcript\n\nNo turns recorded.\n";
     }
@@ -165,10 +160,7 @@ export class SessionExporter {
 </html>`;
   }
 
-  private formatTxt(
-    turns: Turn[],
-    opts: { includeTimestamps: boolean },
-  ): string {
+  private formatTxt(turns: Turn[], opts: { includeTimestamps: boolean }): string {
     if (turns.length === 0) {
       return "Session Transcript\n\nNo turns recorded.\n";
     }

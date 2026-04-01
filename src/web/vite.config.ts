@@ -2,8 +2,8 @@
 // Build: bun run build:web (outputs to src/web/dist/)
 // Dev:   bun run dev:web (hot-reload on localhost:10101)
 
-import { defineConfig } from "vite";
 import { resolve } from "node:path";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   root: resolve(__dirname, "client"),

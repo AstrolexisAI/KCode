@@ -1,7 +1,7 @@
 // KCode - System Prompt Builder Tests
 // Tests for the static section builders and the overall build() flow
 
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { SystemPromptBuilder } from "./system-prompt";
 import type { KCodeConfig } from "./types";
 

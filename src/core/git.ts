@@ -99,10 +99,7 @@ export async function getGitStatus(cwd: string): Promise<string | null> {
 
 export async function getRecentCommits(cwd: string, count: number = 5): Promise<string | null> {
   try {
-    return await runGit(
-      ["log", `--oneline`, `-n`, String(count), "--no-decorate"],
-      cwd,
-    );
+    return await runGit(["log", `--oneline`, `-n`, String(count), "--no-decorate"], cwd);
   } catch {
     return null;
   }

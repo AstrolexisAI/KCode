@@ -3,8 +3,8 @@
 // A "forked agent" receives a snapshot of recent context and executes a specific
 // prompt without tools or streaming, running in the background without blocking UI.
 
-import type { Message } from "./types";
 import { log } from "./logger";
+import type { Message } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -186,7 +186,9 @@ export async function runForkedAgent(config: ForkedAgentConfig): Promise<void> {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
-      throw new Error(`Forked agent API error: ${response.status} ${response.statusText} ${errorText}`);
+      throw new Error(
+        `Forked agent API error: ${response.status} ${response.statusText} ${errorText}`,
+      );
     }
 
     const data = (await response.json()) as {
@@ -205,7 +207,10 @@ export async function runForkedAgent(config: ForkedAgentConfig): Promise<void> {
       durationMs,
     };
 
-    log.debug("forked-agent", `${config.name} completed in ${durationMs}ms (${result.inputTokens}+${result.outputTokens} tokens)`);
+    log.debug(
+      "forked-agent",
+      `${config.name} completed in ${durationMs}ms (${result.inputTokens}+${result.outputTokens} tokens)`,
+    );
 
     await config.onComplete(result);
   } catch (error) {

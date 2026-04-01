@@ -68,44 +68,55 @@ export interface SwarmIntelligenceResult {
 
 // ─── Default Agent Specializations ─────────────────────────────
 
-export const DEFAULT_AGENT_SPECS: Record<AgentRole, { specialization: string; filePatterns: string[]; priority: number }> = {
+export const DEFAULT_AGENT_SPECS: Record<
+  AgentRole,
+  { specialization: string; filePatterns: string[]; priority: number }
+> = {
   architect: {
-    specialization: "You are the architect agent. Focus on system design, module boundaries, API contracts, and architectural decisions. Review proposals from other agents for consistency.",
+    specialization:
+      "You are the architect agent. Focus on system design, module boundaries, API contracts, and architectural decisions. Review proposals from other agents for consistency.",
     filePatterns: ["**/*.md", "**/types.ts", "**/index.ts"],
     priority: 10,
   },
   frontend: {
-    specialization: "You are the frontend agent. Focus on UI components, styling, accessibility, and user experience. Work with React, CSS, and browser APIs.",
+    specialization:
+      "You are the frontend agent. Focus on UI components, styling, accessibility, and user experience. Work with React, CSS, and browser APIs.",
     filePatterns: ["src/ui/**", "src/web/**", "**/*.tsx", "**/*.css"],
     priority: 5,
   },
   backend: {
-    specialization: "You are the backend agent. Focus on core logic, APIs, data processing, and server-side code. Ensure performance and correctness.",
+    specialization:
+      "You are the backend agent. Focus on core logic, APIs, data processing, and server-side code. Ensure performance and correctness.",
     filePatterns: ["src/core/**", "src/tools/**", "src/enterprise/**"],
     priority: 5,
   },
   testing: {
-    specialization: "You are the testing agent. Write and maintain tests. Ensure coverage for new code. Identify edge cases and regression risks.",
+    specialization:
+      "You are the testing agent. Write and maintain tests. Ensure coverage for new code. Identify edge cases and regression risks.",
     filePatterns: ["**/*.test.ts", "**/*.spec.ts", "**/__tests__/**"],
     priority: 4,
   },
   security: {
-    specialization: "You are the security agent. Review code for vulnerabilities: injection, XSS, SSRF, path traversal, secrets exposure. Flag unsafe patterns.",
+    specialization:
+      "You are the security agent. Review code for vulnerabilities: injection, XSS, SSRF, path traversal, secrets exposure. Flag unsafe patterns.",
     filePatterns: ["src/core/permissions*", "src/core/safety*", "src/enterprise/**"],
     priority: 8,
   },
   devops: {
-    specialization: "You are the devops agent. Focus on build systems, CI/CD, deployment, monitoring, and infrastructure configuration.",
+    specialization:
+      "You are the devops agent. Focus on build systems, CI/CD, deployment, monitoring, and infrastructure configuration.",
     filePatterns: ["build.ts", "scripts/**", "Dockerfile", "*.yml", "*.yaml"],
     priority: 3,
   },
   documentation: {
-    specialization: "You are the documentation agent. Write clear, accurate documentation. Update READMEs, API docs, and inline comments.",
+    specialization:
+      "You are the documentation agent. Write clear, accurate documentation. Update READMEs, API docs, and inline comments.",
     filePatterns: ["**/*.md", "docs/**"],
     priority: 2,
   },
   general: {
-    specialization: "You are a general-purpose agent. Handle tasks that don't fit other specializations.",
+    specialization:
+      "You are a general-purpose agent. Handle tasks that don't fit other specializations.",
     filePatterns: ["**/*"],
     priority: 1,
   },
@@ -145,10 +156,7 @@ export class SwarmIntelligence {
   }
 
   /** Plan task distribution across agents based on file patterns */
-  planDistribution(
-    task: string,
-    files: string[],
-  ): SwarmPlan {
+  planDistribution(task: string, files: string[]): SwarmPlan {
     const assignments: SwarmPlan["assignments"] = [];
 
     // Assign files to agents based on patterns

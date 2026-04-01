@@ -39,7 +39,12 @@ export class MetricsCollector {
   /**
    * Record a successful LLM request.
    */
-  recordRequest(model: string, durationMs: number, inputTokens: number, outputTokens: number): void {
+  recordRequest(
+    model: string,
+    durationMs: number,
+    inputTokens: number,
+    outputTokens: number,
+  ): void {
     if (!this.requests.has(model)) {
       this.requests.set(model, []);
     }

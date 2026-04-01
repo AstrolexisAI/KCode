@@ -1,11 +1,11 @@
 // KCode - Multi-Strategy Compaction Orchestrator Tests
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { Message } from "../types.js";
-import type { LlmSummarizer, CompactionConfig } from "./types.js";
-import { getDefaultCompactionConfig } from "./types.js";
-import { compact } from "./index.js";
 import { CompactionCircuitBreaker } from "./circuit-breaker.js";
+import { compact } from "./index.js";
+import type { CompactionConfig, LlmSummarizer } from "./types.js";
+import { getDefaultCompactionConfig } from "./types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ describe("compact orchestrator", () => {
 
   test("applies full-compact at >= 75% usage", async () => {
     const msgs = fillerMessages(30, 200);
-    const result = await compact(msgs, 0.80, mockSummarizer);
+    const result = await compact(msgs, 0.8, mockSummarizer);
     expect(result.strategiesApplied).toContain("full-compact");
   });
 
@@ -111,7 +111,7 @@ describe("compact orchestrator", () => {
   test("handles null summarizer gracefully at high usage", async () => {
     // Use long messages so micro-compact has something to compress
     const msgs = fillerMessages(30, 600);
-    const result = await compact(msgs, 0.80, null);
+    const result = await compact(msgs, 0.8, null);
     // Should apply micro-compact but skip full-compact (no summarizer)
     expect(result.strategiesApplied).toContain("micro-compact");
     expect(result.strategiesApplied).not.toContain("full-compact");
@@ -119,7 +119,7 @@ describe("compact orchestrator", () => {
 
   test("handles failing summarizer gracefully", async () => {
     const msgs = fillerMessages(30, 600);
-    const result = await compact(msgs, 0.80, failingSummarizer);
+    const result = await compact(msgs, 0.8, failingSummarizer);
     // Should apply micro-compact but full-compact fails silently
     expect(result.strategiesApplied).toContain("micro-compact");
     expect(result.strategiesApplied).not.toContain("full-compact");
@@ -134,21 +134,21 @@ describe("compact orchestrator", () => {
     cb.recordFailure(new Error("fail 2"));
     expect(cb.canAttempt()).toBe(false);
 
-    const result = await compact(msgs, 0.80, mockSummarizer, undefined, cb);
+    const result = await compact(msgs, 0.8, mockSummarizer, undefined, cb);
     expect(result.strategiesApplied).not.toContain("full-compact");
   });
 
   test("escalates strategies progressively", async () => {
     const msgs = fillerMessages(30, 200);
 
-    const low = await compact(msgs, 0.50, mockSummarizer);
+    const low = await compact(msgs, 0.5, mockSummarizer);
     expect(low.strategiesApplied).toEqual(["none"]);
 
     const midMsgs = fillerMessages(30, 600); // Long messages so micro-compact triggers
     const mid = await compact(midMsgs, 0.65, mockSummarizer);
     expect(mid.strategiesApplied).toContain("micro-compact");
 
-    const high = await compact(msgs, 0.80, mockSummarizer);
+    const high = await compact(msgs, 0.8, mockSummarizer);
     expect(high.strategiesApplied).toContain("full-compact");
   });
 
@@ -164,13 +164,15 @@ describe("compact orchestrator", () => {
   });
 
   test("respects disabled strategies in config", async () => {
-    const msgs = [
-      makeImageMsg(0),
-      ...fillerMessages(20, 200),
-    ];
+    const msgs = [makeImageMsg(0), ...fillerMessages(20, 200)];
     const config: Partial<CompactionConfig> = {
       imageStripping: { enabled: false, preserveRecent: 4 },
-      micro: { enabled: false, preserveRecent: 10, toolResultThreshold: 300, assistantThreshold: 500 },
+      micro: {
+        enabled: false,
+        preserveRecent: 10,
+        toolResultThreshold: 300,
+        assistantThreshold: 500,
+      },
     };
     const result = await compact(msgs, 0.65, mockSummarizer, config);
     expect(result.strategiesApplied).not.toContain("image-strip");

@@ -4,14 +4,47 @@
 // ─── Server → Client Events ────────────────────────────────────
 
 export type ServerEvent =
-  | { type: "message.new"; id: string; role: "user" | "assistant"; content: string; timestamp: number }
+  | {
+      type: "message.new";
+      id: string;
+      role: "user" | "assistant";
+      content: string;
+      timestamp: number;
+    }
   | { type: "message.delta"; id: string; delta: string }
   | { type: "message.thinking"; id: string; thinking: string }
-  | { type: "tool.start"; id: string; messageId: string; name: string; input: Record<string, unknown> }
-  | { type: "tool.result"; id: string; messageId: string; name: string; result: string; isError: boolean; durationMs?: number }
-  | { type: "permission.request"; id: string; tool: string; input: Record<string, unknown>; description: string }
+  | {
+      type: "tool.start";
+      id: string;
+      messageId: string;
+      name: string;
+      input: Record<string, unknown>;
+    }
+  | {
+      type: "tool.result";
+      id: string;
+      messageId: string;
+      name: string;
+      result: string;
+      isError: boolean;
+      durationMs?: number;
+    }
+  | {
+      type: "permission.request";
+      id: string;
+      tool: string;
+      input: Record<string, unknown>;
+      description: string;
+    }
   | { type: "permission.resolved"; id: string; allowed: boolean }
-  | { type: "session.stats"; model: string; inputTokens: number; outputTokens: number; costUsd: number; messageCount: number }
+  | {
+      type: "session.stats";
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd: number;
+      messageCount: number;
+    }
   | { type: "model.changed"; model: string }
   | { type: "compact.start"; messageCount: number; tokensBefore: number }
   | { type: "compact.done"; tokensAfter: number; method: string }

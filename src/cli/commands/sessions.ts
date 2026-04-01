@@ -36,7 +36,9 @@ export function registerSessionsCommand(program: Command): void {
       for (const s of sessions) {
         const date = new Date(s.startedAt).toLocaleDateString();
         const time = new Date(s.startedAt).toLocaleTimeString();
-        console.log(`  ${s.sessionId.slice(0, 8)}  ${date} ${time}  [${s.turnCount} turns]  ${s.model || ""}`);
+        console.log(
+          `  ${s.sessionId.slice(0, 8)}  ${date} ${time}  [${s.turnCount} turns]  ${s.model || ""}`,
+        );
         if (s.summary) {
           console.log(`    ${s.summary}`);
         }
@@ -84,39 +86,44 @@ export function registerSessionsCommand(program: Command): void {
     .option("--output <path>", "Output file path")
     .option("--no-timestamps", "Exclude timestamps")
     .option("--no-tool-calls", "Exclude tool call details")
-    .action(async (sessionId: string, opts: { format?: string; output?: string; timestamps?: boolean; toolCalls?: boolean }) => {
-      const { Database } = await import("bun:sqlite");
-      const { join } = await import("node:path");
-      const { homedir } = await import("node:os");
-      const { SessionSearch } = await import("../../core/session/search");
-      const { SessionExporter } = await import("../../core/session/exporter");
+    .action(
+      async (
+        sessionId: string,
+        opts: { format?: string; output?: string; timestamps?: boolean; toolCalls?: boolean },
+      ) => {
+        const { Database } = await import("bun:sqlite");
+        const { join } = await import("node:path");
+        const { homedir } = await import("node:os");
+        const { SessionSearch } = await import("../../core/session/search");
+        const { SessionExporter } = await import("../../core/session/exporter");
 
-      const dbPath = join(homedir(), ".kcode", "awareness.db");
-      const db = new Database(dbPath);
-      const search = new SessionSearch(db);
-      const exporter = new SessionExporter(search);
+        const dbPath = join(homedir(), ".kcode", "awareness.db");
+        const db = new Database(dbPath);
+        const search = new SessionSearch(db);
+        const exporter = new SessionExporter(search);
 
-      try {
-        const result = await exporter.exportSession({
-          sessionId,
-          format: (opts.format as "markdown" | "json" | "html" | "txt") || "markdown",
-          includeTimestamps: opts.timestamps !== false,
-          includeToolCalls: opts.toolCalls !== false,
-          outputPath: opts.output,
-        });
+        try {
+          const result = await exporter.exportSession({
+            sessionId,
+            format: (opts.format as "markdown" | "json" | "html" | "txt") || "markdown",
+            includeTimestamps: opts.timestamps !== false,
+            includeToolCalls: opts.toolCalls !== false,
+            outputPath: opts.output,
+          });
 
-        if (opts.output) {
-          console.log(`\u2713 Session exported to ${result}`);
-        } else {
-          console.log(result);
+          if (opts.output) {
+            console.log(`\u2713 Session exported to ${result}`);
+          } else {
+            console.log(result);
+          }
+        } catch (err: any) {
+          console.error(`\u2717 ${err.message}`);
+          process.exit(1);
         }
-      } catch (err: any) {
-        console.error(`\u2717 ${err.message}`);
-        process.exit(1);
-      }
 
-      db.close();
-    });
+        db.close();
+      },
+    );
 
   sessionsCmd
     .command("stats")

@@ -82,7 +82,9 @@ export class PluginAPI {
         if (await file.exists()) {
           existing = await file.json();
         }
-      } catch { /* empty */ }
+      } catch {
+        /* empty */
+      }
       existing[scopedKey] = value;
       await Bun.write(configPath, JSON.stringify(existing, null, 2));
     } catch (err) {
@@ -97,12 +99,7 @@ export class PluginAPI {
       const { kcodeHome } = await import("../paths");
       const { join } = await import("node:path");
       const { readdirSync, readFileSync } = await import("node:fs");
-      const memDir = join(
-        kcodeHome(),
-        "plugins",
-        this.ctx.pluginName,
-        "memories",
-      );
+      const memDir = join(kcodeHome(), "plugins", this.ctx.pluginName, "memories");
       try {
         const files = readdirSync(memDir).filter((f) => f.endsWith(".md"));
         const entries: MemoryEntry[] = [];
@@ -122,23 +119,14 @@ export class PluginAPI {
     }
   }
 
-  async addMemory(entry: {
-    type: string;
-    title: string;
-    content: string;
-  }): Promise<void> {
+  async addMemory(entry: { type: string; title: string; content: string }): Promise<void> {
     const full: MemoryEntry = { ...entry, createdAt: new Date().toISOString() };
     this.memories.push(full);
     try {
       const { kcodeHome } = await import("../paths");
       const { join } = await import("node:path");
       const { mkdirSync } = await import("node:fs");
-      const memDir = join(
-        kcodeHome(),
-        "plugins",
-        this.ctx.pluginName,
-        "memories",
-      );
+      const memDir = join(kcodeHome(), "plugins", this.ctx.pluginName, "memories");
       mkdirSync(memDir, { recursive: true });
       const filename = `${entry.type}_${entry.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.md`;
       const fileContent = `---\nname: ${entry.title}\ntype: ${entry.type}\ncreatedAt: ${full.createdAt}\n---\n\n${entry.content}\n`;
@@ -150,15 +138,14 @@ export class PluginAPI {
 
   // ─── Tool Execution ───────────────────────────────────────────
 
-  async executeTool(
-    name: string,
-    input: Record<string, unknown>,
-  ): Promise<ToolResult> {
+  async executeTool(name: string, input: Record<string, unknown>): Promise<ToolResult> {
     const start = Date.now();
     try {
-      const { getToolRegistry } = await import("../tool-registry");
-      const registry = getToolRegistry();
-      const tool = registry.get(name);
+      const tools = await import("../../tools/index");
+      const allTools = tools.getRegisteredTools?.() ?? tools.default ?? [];
+      const tool = Array.isArray(allTools)
+        ? allTools.find((t: any) => t.name === name)
+        : null;
       if (!tool) {
         return {
           success: false,
@@ -167,7 +154,7 @@ export class PluginAPI {
         };
       }
       this.log.debug(`Executing tool: ${name}`);
-      const result = await tool.execute(input);
+      const result = await tool.handler(input);
       const duration = Date.now() - start;
       return {
         success: true,
@@ -178,7 +165,7 @@ export class PluginAPI {
       return {
         success: false,
         output: "",
-        error: String(err),
+        error: `Tool not found: ${name}`,
         duration: Date.now() - start,
       };
     }
@@ -221,8 +208,7 @@ export class PluginAPI {
     message: string,
     type: "info" | "warning" | "error" = "info",
   ): Promise<void> {
-    const prefix =
-      type === "error" ? "\u2717" : type === "warning" ? "\u26a0" : "\u2713";
+    const prefix = type === "error" ? "\u2717" : type === "warning" ? "\u26a0" : "\u2713";
     console.log(`[${this.ctx.pluginName}] ${prefix} ${message}`);
   }
 
@@ -239,9 +225,7 @@ export class PluginAPI {
   }
 }
 
-function parseMemoryFile(
-  content: string,
-): MemoryEntry | null {
+function parseMemoryFile(content: string): MemoryEntry | null {
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/);
   if (!fmMatch) return null;
   const frontmatter = fmMatch[1];

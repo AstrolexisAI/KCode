@@ -81,7 +81,12 @@ function parseModelsConfig(raw: any): ModelsConfig {
           capabilities: Array.isArray(entry.capabilities) ? entry.capabilities : undefined,
           gpu: typeof entry.gpu === "string" ? entry.gpu : undefined,
           description: typeof entry.description === "string" ? entry.description : undefined,
-          provider: entry.provider === "anthropic" ? "anthropic" : entry.provider === "openai" ? "openai" : undefined,
+          provider:
+            entry.provider === "anthropic"
+              ? "anthropic"
+              : entry.provider === "openai"
+                ? "openai"
+                : undefined,
         });
       }
     }
@@ -147,7 +152,10 @@ export async function addModel(entry: ModelEntry): Promise<void> {
   } else {
     config.models.push(entry);
   }
-  log.debug("config", `Model "${entry.name}" ${existing >= 0 ? "updated" : "added"} at ${entry.baseUrl}`);
+  log.debug(
+    "config",
+    `Model "${entry.name}" ${existing >= 0 ? "updated" : "added"} at ${entry.baseUrl}`,
+  );
   await saveModelsConfig(config);
 }
 
@@ -195,7 +203,9 @@ export function invalidateCache(): void {
  * Adds a `recommended` flag and optional `hardwareNotes` to models that match
  * the detected hardware profile's optimal configuration.
  */
-export async function getRecommendedModels(): Promise<Array<ModelEntry & { recommended?: boolean; hardwareNotes?: string }>> {
+export async function getRecommendedModels(): Promise<
+  Array<ModelEntry & { recommended?: boolean; hardwareNotes?: string }>
+> {
   const { HardwareDetector } = await import("./hardware/detector.js");
   const { HardwareOptimizer } = await import("./hardware/optimizer.js");
 
@@ -205,8 +215,8 @@ export async function getRecommendedModels(): Promise<Array<ModelEntry & { recom
   const recommendations = optimizer.recommend(profile);
 
   const config = await loadModelsConfig();
-  const enriched = config.models.map(model => {
-    const rec = recommendations.find(r => r.model === model.name);
+  const enriched = config.models.map((model) => {
+    const rec = recommendations.find((r) => r.model === model.name);
     return {
       ...model,
       recommended: !!rec,
@@ -216,7 +226,7 @@ export async function getRecommendedModels(): Promise<Array<ModelEntry & { recom
 
   // Add recommended models that are not yet in the registry
   for (const rec of recommendations) {
-    if (!enriched.find(m => m.name === rec.model)) {
+    if (!enriched.find((m) => m.name === rec.model)) {
       enriched.push({
         name: rec.model,
         baseUrl: "http://localhost:10091",

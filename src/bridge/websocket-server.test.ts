@@ -1,11 +1,16 @@
 // Tests for Bridge WebSocket Server
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { BridgeWebSocketServer } from "./websocket-server";
-import { SessionManager } from "./session-manager";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { PermissionBridge } from "./permission-bridge";
-import { serializeMessage, createMessage } from "./protocol";
-import type { PingMessage, SessionCreateMessage, SessionDestroyMessage, SessionErrorMessage } from "./types";
+import { createMessage, serializeMessage } from "./protocol";
+import { SessionManager } from "./session-manager";
+import type {
+  PingMessage,
+  SessionCreateMessage,
+  SessionDestroyMessage,
+  SessionErrorMessage,
+} from "./types";
+import { BridgeWebSocketServer } from "./websocket-server";
 
 const TEST_TOKEN = "test-token-12345";
 let server: BridgeWebSocketServer;
@@ -21,7 +26,11 @@ function getPort(): number {
 
 beforeEach(() => {
   port = getPort();
-  sessionManager = new SessionManager({ maxSessions: 10, idleTimeoutMs: 300_000, gcIntervalMs: 60_000_000 });
+  sessionManager = new SessionManager({
+    maxSessions: 10,
+    idleTimeoutMs: 300_000,
+    gcIntervalMs: 60_000_000,
+  });
   permissionBridge = new PermissionBridge({ timeoutMs: 5_000 });
   server = new BridgeWebSocketServer({
     token: TEST_TOKEN,
@@ -51,7 +60,9 @@ function waitForMessage(ws: WebSocket, timeoutMs: number = 2000): Promise<string
     const timer = setTimeout(() => reject(new Error("Timeout waiting for message")), timeoutMs);
     ws.onmessage = (e) => {
       clearTimeout(timer);
-      resolve(typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data as ArrayBuffer));
+      resolve(
+        typeof e.data === "string" ? e.data : new TextDecoder().decode(e.data as ArrayBuffer),
+      );
     };
   });
 }
@@ -82,7 +93,10 @@ describe("connection", () => {
     try {
       const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=wrong`);
       await new Promise<void>((resolve, reject) => {
-        ws.onopen = () => { ws.close(); reject(new Error("Should not have opened")); };
+        ws.onopen = () => {
+          ws.close();
+          reject(new Error("Should not have opened"));
+        };
         ws.onerror = () => resolve();
         ws.onclose = (e) => resolve();
       });

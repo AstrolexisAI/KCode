@@ -1,6 +1,6 @@
 // KCode - Grep Workspace Guard Tests
 
-import { test, expect, describe, afterAll } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { executeGrep } from "./grep";
 import { setToolWorkspace } from "./workspace";
 

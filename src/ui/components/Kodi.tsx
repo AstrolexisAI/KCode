@@ -3,14 +3,14 @@
 // Uses a layered animation engine for fluid, contextual expressiveness.
 // Falls back to hardcoded speech chips; optionally uses LLM for unique reactions.
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Box, Text } from "ink";
-import { useTheme } from "../ThemeContext.js";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { KodiAnimState, KodiEvent, KodiMood } from "../kodi-animation.js";
 import { KodiAnimEngine, SPEECH_CHIPS } from "../kodi-animation.js";
-import type { KodiMood, KodiEvent, KodiAnimState } from "../kodi-animation.js";
+import { useTheme } from "../ThemeContext.js";
 
 // Re-export types for external consumers
-export type { KodiMood, KodiEvent };
+export type { KodiEvent, KodiMood };
 
 interface KodiProps {
   mode: string;
@@ -90,7 +90,7 @@ async function generateReaction(context: string): Promise<string | null> {
       }),
     });
     if (!res.ok) return null;
-    const data = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text || text.length > 80) return null;
     return text.replace(/^["']|["']$/g, "");
@@ -101,29 +101,52 @@ async function generateReaction(context: string): Promise<string | null> {
   }
 }
 
-function buildContext(event: KodiEvent, stats: { tools: number; tokens: number; elapsed: number; agents: number }): string {
+function buildContext(
+  event: KodiEvent,
+  stats: { tools: number; tokens: number; elapsed: number; agents: number },
+): string {
   const parts: string[] = [];
   switch (event.type) {
-    case "tool_start": parts.push(`User just triggered the ${event.detail ?? "a"} tool.`); break;
+    case "tool_start":
+      parts.push(`User just triggered the ${event.detail ?? "a"} tool.`);
+      break;
     case "tool_done":
       parts.push(`The ${event.detail ?? "a"} tool just finished successfully.`);
       if (event.detail === "TestRunner") parts.push("All tests passed!");
       if (event.detail === "GitCommit") parts.push("Code was committed!");
       break;
-    case "tool_error": parts.push(`The ${event.detail ?? "a"} tool just FAILED.`); break;
-    case "thinking": parts.push("The AI is now doing deep reasoning — neurons firing."); break;
-    case "streaming": parts.push("The AI is writing its response to the user."); break;
-    case "turn_end": parts.push("The AI just finished responding. Waiting for user input."); break;
-    case "compaction": parts.push("Context window is getting full — conversation is being compacted."); break;
-    case "agent_spawn": parts.push("A sub-agent was just spawned for a parallel task!"); break;
-    case "error": parts.push(`An error occurred: ${event.detail ?? "unknown error"}`); break;
+    case "tool_error":
+      parts.push(`The ${event.detail ?? "a"} tool just FAILED.`);
+      break;
+    case "thinking":
+      parts.push("The AI is now doing deep reasoning — neurons firing.");
+      break;
+    case "streaming":
+      parts.push("The AI is writing its response to the user.");
+      break;
+    case "turn_end":
+      parts.push("The AI just finished responding. Waiting for user input.");
+      break;
+    case "compaction":
+      parts.push("Context window is getting full — conversation is being compacted.");
+      break;
+    case "agent_spawn":
+      parts.push("A sub-agent was just spawned for a parallel task!");
+      break;
+    case "error":
+      parts.push(`An error occurred: ${event.detail ?? "unknown error"}`);
+      break;
     case "idle":
-      if (stats.elapsed > 120_000) parts.push("User has been idle for over 2 minutes. You're getting sleepy.");
+      if (stats.elapsed > 120_000)
+        parts.push("User has been idle for over 2 minutes. You're getting sleepy.");
       else parts.push("Waiting for the user.");
       break;
-    default: parts.push(`Event: ${event.type}`);
+    default:
+      parts.push(`Event: ${event.type}`);
   }
-  parts.push(`Session: ${stats.tools} tools, ${Math.round(stats.tokens / 1000)}k tok, ${stats.agents} agents.`);
+  parts.push(
+    `Session: ${stats.tools} tools, ${Math.round(stats.tokens / 1000)}k tok, ${stats.agents} agents.`,
+  );
   return parts.join(" ");
 }
 
@@ -143,9 +166,21 @@ function formatTime(ms: number): string {
 const TICK_MS = 200; // 5fps — enough for terminal, light on CPU
 
 export default function KodiCompanion({
-  mode, toolUseCount, tokenCount, activeToolName, isThinking,
-  runningAgents, sessionElapsedMs, lastEvent, model, version,
-  workingDirectory, permissionMode, activeProfile, contextWindowSize, sessionName,
+  mode,
+  toolUseCount,
+  tokenCount,
+  activeToolName,
+  isThinking,
+  runningAgents,
+  sessionElapsedMs,
+  lastEvent,
+  model,
+  version,
+  workingDirectory,
+  permissionMode,
+  activeProfile,
+  contextWindowSize,
+  sessionName,
   sessionStartTime,
 }: KodiProps) {
   const { theme } = useTheme();
@@ -181,32 +216,36 @@ export default function KodiCompanion({
   }, [sessionStartTime]);
 
   // Sync context into engine
-  useEffect(() => { engine.runningAgents = runningAgents; }, [runningAgents]);
   useEffect(() => {
-    engine.contextPressure = contextWindowSize && contextWindowSize > 0
-      ? Math.min(1, tokenCount / contextWindowSize)
-      : 0;
+    engine.runningAgents = runningAgents;
+  }, [runningAgents]);
+  useEffect(() => {
+    engine.contextPressure =
+      contextWindowSize && contextWindowSize > 0 ? Math.min(1, tokenCount / contextWindowSize) : 0;
   }, [tokenCount, contextWindowSize]);
 
   // React to events
-  const handleEvent = useCallback((event: KodiEvent) => {
-    eventCountRef.current++;
-    engine.react(event);
+  const handleEvent = useCallback(
+    (event: KodiEvent) => {
+      eventCountRef.current++;
+      engine.react(event);
 
-    // Try LLM reaction (non-blocking)
-    const ctx = buildContext(event, {
-      tools: toolUseCount,
-      tokens: tokenCount,
-      elapsed: sessionElapsedMs,
-      agents: runningAgents,
-    });
-    generateReaction(ctx).then((r) => {
-      if (r) {
-        setLlmReaction(r);
-        engine.say(r, 5000);
-      }
-    });
-  }, [engine, toolUseCount, tokenCount, sessionElapsedMs, runningAgents]);
+      // Try LLM reaction (non-blocking)
+      const ctx = buildContext(event, {
+        tools: toolUseCount,
+        tokens: tokenCount,
+        elapsed: sessionElapsedMs,
+        agents: runningAgents,
+      });
+      generateReaction(ctx).then((r) => {
+        if (r) {
+          setLlmReaction(r);
+          engine.say(r, 5000);
+        }
+      });
+    },
+    [engine, toolUseCount, tokenCount, sessionElapsedMs, runningAgents],
+  );
 
   useEffect(() => {
     if (!lastEvent) return;
@@ -226,7 +265,9 @@ export default function KodiCompanion({
       }, 90_000);
     }, 30_000);
 
-    return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
   }, [lastEvent, handleEvent]);
 
   // Milestones
@@ -254,35 +295,50 @@ export default function KodiCompanion({
   // ─── Computed values ────────────────────────────────────────
 
   const home = process.env.HOME ?? "";
-  const shortCwd = home && workingDirectory.startsWith(home)
-    ? "~" + workingDirectory.slice(home.length)
-    : workingDirectory;
+  const shortCwd =
+    home && workingDirectory.startsWith(home)
+      ? "~" + workingDirectory.slice(home.length)
+      : workingDirectory;
 
   const displayMood = frame?.mood ?? "idle";
-  const moodColor = displayMood === "happy" || displayMood === "celebrating" || displayMood === "excited"
-    ? theme.success
-    : displayMood === "worried" ? theme.error
-    : displayMood === "angry" ? theme.error
-    : displayMood === "reasoning" ? theme.accent
-    : displayMood === "thinking" || displayMood === "working" ? theme.warning
-    : displayMood === "mischievous" ? "#ff69b4"
-    : displayMood === "crazy" ? "#ff00ff"
-    : displayMood === "smug" ? "#ffd700"
-    : displayMood === "sleeping" ? theme.dimmed
-    : theme.primary;
+  const moodColor =
+    displayMood === "happy" || displayMood === "celebrating" || displayMood === "excited"
+      ? theme.success
+      : displayMood === "worried"
+        ? theme.error
+        : displayMood === "angry"
+          ? theme.error
+          : displayMood === "reasoning"
+            ? theme.accent
+            : displayMood === "thinking" || displayMood === "working"
+              ? theme.warning
+              : displayMood === "mischievous"
+                ? "#ff69b4"
+                : displayMood === "crazy"
+                  ? "#ff00ff"
+                  : displayMood === "smug"
+                    ? "#ffd700"
+                    : displayMood === "sleeping"
+                      ? theme.dimmed
+                      : theme.primary;
 
-  const ctxPct = contextWindowSize && contextWindowSize > 0 && tokenCount > 0
-    ? Math.min(100, Math.round((tokenCount / contextWindowSize) * 100))
-    : 0;
+  const ctxPct =
+    contextWindowSize && contextWindowSize > 0 && tokenCount > 0
+      ? Math.min(100, Math.round((tokenCount / contextWindowSize) * 100))
+      : 0;
   const ctxBarLen = 10;
-  const ctxFilled = Math.round(ctxBarLen * ctxPct / 100);
+  const ctxFilled = Math.round((ctxBarLen * ctxPct) / 100);
   const ctxBar = "\u2588".repeat(ctxFilled) + "\u2591".repeat(ctxBarLen - ctxFilled);
   const ctxColor = ctxPct > 85 ? theme.error : ctxPct > 60 ? theme.warning : theme.success;
 
-  const pmColor = permissionMode === "auto" ? theme.warning
-    : permissionMode === "deny" ? theme.error
-    : permissionMode === "plan" ? (theme.info ?? theme.primary)
-    : theme.dimmed;
+  const pmColor =
+    permissionMode === "auto"
+      ? theme.warning
+      : permissionMode === "deny"
+        ? theme.error
+        : permissionMode === "plan"
+          ? (theme.info ?? theme.primary)
+          : theme.dimmed;
 
   // ─── Render ─────────────────────────────────────────────────
 
@@ -301,14 +357,18 @@ export default function KodiCompanion({
       {/* Kodi sprite — pre-composed, fixed-width lines */}
       <Box flexDirection="column" width={15}>
         {lines.map((line, i) => (
-          <Text key={i} color={moodColor}>{line}</Text>
+          <Text key={i} color={moodColor}>
+            {line}
+          </Text>
         ))}
       </Box>
       {/* Info panel */}
       <Box flexDirection="column" flexGrow={1} marginLeft={1}>
         {/* Line 1: Brand */}
         <Box gap={1}>
-          <Text bold color={theme.primary}>KCode</Text>
+          <Text bold color={theme.primary}>
+            KCode
+          </Text>
           <Text color={theme.dimmed}>v{version}</Text>
           <Text color={theme.dimmed}>—</Text>
           <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
@@ -349,7 +409,9 @@ export default function KodiCompanion({
           {contextWindowSize && contextWindowSize > 0 && tokenCount > 0 && (
             <>
               <Text color={theme.dimmed}>•</Text>
-              <Text color={ctxColor}>[{ctxBar}] {ctxPct}%</Text>
+              <Text color={ctxColor}>
+                [{ctxBar}] {ctxPct}%
+              </Text>
             </>
           )}
           {sessionName && (
@@ -370,7 +432,9 @@ export default function KodiCompanion({
           {bubble ? (
             <>
               <Text color={moodColor}>{"💬 "}</Text>
-              <Text color={moodColor} italic>{bubble}</Text>
+              <Text color={moodColor} italic>
+                {bubble}
+              </Text>
             </>
           ) : (
             <Text color={theme.dimmed}> </Text>

@@ -4,14 +4,14 @@
 
 import { useCallback, useRef } from "react";
 import type { ConversationManager } from "../../core/conversation.js";
-import type { KCodeConfig, StreamEvent } from "../../core/types.js";
-import type { ToolRegistry } from "../../core/tool-registry.js";
 import type { SkillManager } from "../../core/skills.js";
-import { processStreamEvents } from "../stream-handler.js";
+import type { ToolRegistry } from "../../core/tool-registry.js";
+import type { KCodeConfig, StreamEvent } from "../../core/types.js";
 import { handleBuiltinAction } from "../builtin-actions.js";
-import type { MessageEntry } from "../components/MessageList.js";
 import type { KodiEvent } from "../components/Kodi.js";
+import type { MessageEntry } from "../components/MessageList.js";
 import type { TabInfo } from "../stream-handler.js";
+import { processStreamEvents } from "../stream-handler.js";
 
 export interface UseMessageProcessorParams {
   config: KCodeConfig;
@@ -26,7 +26,9 @@ export interface UseMessageProcessorParams {
   tabRemovalTimers: React.MutableRefObject<Set<ReturnType<typeof setTimeout>>>;
   switchTheme: (theme: string) => void;
   exit: () => void;
-  setMode: (mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle") => void;
+  setMode: (
+    mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle",
+  ) => void;
   setCompleted: (updater: (prev: MessageEntry[]) => MessageEntry[]) => void;
   setStreamingText: (text: string) => void;
   setStreamingThinking: (text: string) => void;
@@ -40,7 +42,9 @@ export interface UseMessageProcessorParams {
   setRunningAgentCount: (count: number) => void;
   setActiveTabs: (updater: (prev: TabInfo[]) => TabInfo[]) => void;
   setBashStreamOutput: (output: string | ((prev: string) => string)) => void;
-  setSessionNotes: (updater: (prev: Array<{ time: string; text: string }>) => Array<{ time: string; text: string }>) => void;
+  setSessionNotes: (
+    updater: (prev: Array<{ time: string; text: string }>) => Array<{ time: string; text: string }>,
+  ) => void;
   setSessionName: (name: string) => void;
   setSessionTags: (updater: (prev: string[]) => string[]) => void;
   setWatcherSuggestions: (updater: (prev: string[]) => string[]) => void;
@@ -60,14 +64,38 @@ export interface UseMessageProcessorResult {
 
 export function useMessageProcessor(params: UseMessageProcessorParams): UseMessageProcessorResult {
   const {
-    config, conversationManager, tools, skillManager,
-    mode, sessionStart, sessionNotes, sessionName, sessionTags,
-    tabRemovalTimers, switchTheme, exit,
-    setMode, setCompleted, setStreamingText, setStreamingThinking,
-    setIsThinking, setLoadingMessage, setTokenCount, setTurnTokens,
-    setTurnStartTime, setSpinnerPhase, setToolUseCount, setRunningAgentCount,
-    setActiveTabs, setBashStreamOutput, setSessionNotes, setSessionName,
-    setSessionTags, setWatcherSuggestions, setShowContextGrid, setMessageQueue,
+    config,
+    conversationManager,
+    tools,
+    skillManager,
+    mode,
+    sessionStart,
+    sessionNotes,
+    sessionName,
+    sessionTags,
+    tabRemovalTimers,
+    switchTheme,
+    exit,
+    setMode,
+    setCompleted,
+    setStreamingText,
+    setStreamingThinking,
+    setIsThinking,
+    setLoadingMessage,
+    setTokenCount,
+    setTurnTokens,
+    setTurnStartTime,
+    setSpinnerPhase,
+    setToolUseCount,
+    setRunningAgentCount,
+    setActiveTabs,
+    setBashStreamOutput,
+    setSessionNotes,
+    setSessionName,
+    setSessionTags,
+    setWatcherSuggestions,
+    setShowContextGrid,
+    setMessageQueue,
     setLastKodiEvent,
   } = params;
 
@@ -77,19 +105,27 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
   const multilineBufferRef = useRef<string[]>([]);
   const messageQueueRef = useRef<string[]>([]);
 
-  const processEvents = useCallback(
-    async (events: AsyncGenerator<StreamEvent>) => {
-      await processStreamEvents(events, {
-        config, conversationManager, tabRemovalTimers,
-        setLoadingMessage, setLastKodiEvent, setIsThinking,
-        setStreamingThinking, setCompleted, setStreamingText,
-        setToolUseCount, setBashStreamOutput, setActiveTabs,
-        setTokenCount, setTurnTokens, setSpinnerPhase,
-        setRunningAgentCount, setWatcherSuggestions,
-      });
-    },
-    [],
-  );
+  const processEvents = useCallback(async (events: AsyncGenerator<StreamEvent>) => {
+    await processStreamEvents(events, {
+      config,
+      conversationManager,
+      tabRemovalTimers,
+      setLoadingMessage,
+      setLastKodiEvent,
+      setIsThinking,
+      setStreamingThinking,
+      setCompleted,
+      setStreamingText,
+      setToolUseCount,
+      setBashStreamOutput,
+      setActiveTabs,
+      setTokenCount,
+      setTurnTokens,
+      setSpinnerPhase,
+      setRunningAgentCount,
+      setWatcherSuggestions,
+    });
+  }, []);
 
   // Process a single message (sends to LLM, handles events, resets state)
   const processMessage = useCallback(
@@ -97,8 +133,12 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       // Built-in exit commands
       const lower = userInput.toLowerCase().trim();
       if (
-        lower === "/exit" || lower === "/quit" || lower === "/bye" ||
-        lower === "exit" || lower === "quit" || lower === "bye"
+        lower === "/exit" ||
+        lower === "/quit" ||
+        lower === "/bye" ||
+        lower === "exit" ||
+        lower === "quit" ||
+        lower === "bye"
       ) {
         exit();
         return;
@@ -108,7 +148,11 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       if (userInput.startsWith("!") && userInput.length > 1) {
         const cmd = userInput.slice(1).trim();
         if (!cmd) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: "  Usage: !<command>" }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: "  Usage: !<command>" },
+          ]);
           return;
         }
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
@@ -121,14 +165,21 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             stdio: ["pipe", "pipe", "pipe"],
           });
           // Strip potentially dangerous OSC terminal escape sequences (window title, clipboard, etc.)
-          output = output.replace(/\x1b\][^\x07]*\x07/g, "")   // OSC sequences with BEL terminator
-                         .replace(/\x1b\][^\x1b]*\x1b\\/g, ""); // OSC sequences with ST terminator
-          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: output.trimEnd() || "  (no output)" }]);
+          output = output
+            .replace(/\x1b\][^\x07]*\x07/g, "") // OSC sequences with BEL terminator
+            .replace(/\x1b\][^\x1b]*\x1b\\/g, ""); // OSC sequences with ST terminator
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: output.trimEnd() || "  (no output)" },
+          ]);
         } catch (err: any) {
           const stderr = err.stderr ? String(err.stderr).trimEnd() : "";
           const stdout = err.stdout ? String(err.stdout).trimEnd() : "";
           const output = stderr || stdout || (err.message ?? "Command failed");
-          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  ${output}` }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: `  ${output}` },
+          ]);
         }
         // Don't add to conversation history — just display result
         return;
@@ -152,7 +203,14 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       // Guard against infinite recursion (circular aliases, self-references, chain loops)
       if (commandDepthRef.current > 10) {
         commandDepthRef.current = 0;
-        setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Error: Max command recursion depth (10) exceeded. Check for circular aliases." }]);
+        setCompleted((prev) => [
+          ...prev,
+          {
+            kind: "text",
+            role: "assistant",
+            text: "  Error: Max command recursion depth (10) exceeded. Check for circular aliases.",
+          },
+        ]);
         return;
       }
       if (userInput.startsWith("/")) {
@@ -167,15 +225,31 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       }
 
       // /retry — re-send last user prompt
-      if (lower === "/retry" || lower.startsWith("/retry ") || lower === "/again" || lower === "/redo") {
+      if (
+        lower === "/retry" ||
+        lower.startsWith("/retry ") ||
+        lower === "/again" ||
+        lower === "/redo"
+      ) {
         const last = lastUserPromptRef.current;
         if (!last) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: "  No previous prompt to retry." }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: "  No previous prompt to retry." },
+          ]);
           return;
         }
         const replacement = userInput.replace(/^\/(retry|again|redo)\s*/i, "").trim();
         const toSend = replacement || last;
-        setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Retrying: "${toSend.slice(0, 80)}${toSend.length > 80 ? "..." : ""}"` }]);
+        setCompleted((prev) => [
+          ...prev,
+          {
+            kind: "text",
+            role: "assistant",
+            text: `  Retrying: "${toSend.slice(0, 80)}${toSend.length > 80 ? "..." : ""}"`,
+          },
+        ]);
         commandDepthRef.current++;
         await processMessage(toSend);
         commandDepthRef.current = 0;
@@ -186,21 +260,40 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       if (lower.startsWith("/note ") || lower.startsWith("/annotate ")) {
         const noteText = userInput.replace(/^\/(note|annotate)\s+/i, "").trim();
         if (!noteText) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: "  Usage: /note <text>" }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: "  Usage: /note <text>" },
+          ]);
           return;
         }
         const time = new Date().toLocaleTimeString();
         setSessionNotes((prev) => [...prev, { time, text: noteText }]);
-        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  \u{1F4DD} [${time}] ${noteText}` }]);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: userInput },
+          { kind: "text", role: "assistant", text: `  \u{1F4DD} [${time}] ${noteText}` },
+        ]);
         return;
       }
       if (lower === "/note" || lower === "/annotate") {
         // Show all notes
         if (sessionNotes.length === 0) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: "  No notes yet. Usage: /note <text>" }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: "  No notes yet. Usage: /note <text>" },
+          ]);
         } else {
-          const lines = [`  Session Notes (${sessionNotes.length}):\n`, ...sessionNotes.map(n => `  [${n.time}] ${n.text}`)];
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+          const lines = [
+            `  Session Notes (${sessionNotes.length}):\n`,
+            ...sessionNotes.map((n) => `  [${n.time}] ${n.text}`),
+          ];
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: lines.join("\n") },
+          ]);
         }
         return;
       }
@@ -210,10 +303,18 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         const chainBody = userInput.replace(/^\/(chain|seq|multi)\s+/i, "").trim();
         const commands = chainBody.split(/\s*;\s*/).filter(Boolean);
         if (commands.length === 0) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: "  Usage: /chain /cmd1 ; /cmd2 ; /cmd3" }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: "  Usage: /chain /cmd1 ; /cmd2 ; /cmd3" },
+          ]);
           return;
         }
-        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Running ${commands.length} commands...` }]);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: userInput },
+          { kind: "text", role: "assistant", text: `  Running ${commands.length} commands...` },
+        ]);
         try {
           commandDepthRef.current = 1; // mark as inside chain (not incrementing per iteration)
           for (const cmd of commands) {
@@ -226,17 +327,33 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       }
 
       // /workspace — switch working directory
-      if (lower.startsWith("/workspace ") || lower.startsWith("/cwd ") || lower.startsWith("/cd ")) {
+      if (
+        lower.startsWith("/workspace ") ||
+        lower.startsWith("/cwd ") ||
+        lower.startsWith("/cd ")
+      ) {
         const dirArg = userInput.replace(/^\/(workspace|cwd|cd)\s+/i, "").trim();
         if (!dirArg) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Current: ${config.workingDirectory}\n  Usage: /workspace <path>` }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            {
+              kind: "text",
+              role: "assistant",
+              text: `  Current: ${config.workingDirectory}\n  Usage: /workspace <path>`,
+            },
+          ]);
           return;
         }
         const { resolve: resolvePath } = await import("node:path");
         const { existsSync, statSync: statSyncFn } = await import("node:fs");
         const newDir = resolvePath(config.workingDirectory, dirArg);
         if (!existsSync(newDir) || !statSyncFn(newDir).isDirectory()) {
-          setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Not a directory: ${newDir}` }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            { kind: "text", role: "assistant", text: `  Not a directory: ${newDir}` },
+          ]);
           return;
         }
         config.workingDirectory = newDir;
@@ -245,16 +362,33 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         // Update tool workspace so Read/Glob/Grep resolve relative to the new dir
         const { setToolWorkspace } = await import("../../tools/workspace.js");
         setToolWorkspace(newDir);
-        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Working directory changed to: ${newDir}` }]);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: userInput },
+          { kind: "text", role: "assistant", text: `  Working directory changed to: ${newDir}` },
+        ]);
         return;
       }
       if (lower === "/workspace" || lower === "/cwd" || lower === "/cd") {
-        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Current: ${config.workingDirectory}\n  Usage: /workspace <path>` }]);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: userInput },
+          {
+            kind: "text",
+            role: "assistant",
+            text: `  Current: ${config.workingDirectory}\n  Usage: /workspace <path>`,
+          },
+        ]);
         return;
       }
 
       // /cloud — interactive cloud provider setup
-      if (lower === "/cloud" || lower === "/api-key" || lower === "/apikey" || lower === "/provider") {
+      if (
+        lower === "/cloud" ||
+        lower === "/api-key" ||
+        lower === "/apikey" ||
+        lower === "/provider"
+      ) {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         setMode("cloud");
         return;
@@ -272,21 +406,45 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         (async () => {
           try {
-            const { loadHookifyRules, saveHookifyRule, deleteHookifyRule, testHookifyRules, formatRuleList, formatRuleDetail } = await import("../../core/hookify.js");
+            const {
+              loadHookifyRules,
+              saveHookifyRule,
+              deleteHookifyRule,
+              testHookifyRules,
+              formatRuleList,
+              formatRuleDetail,
+            } = await import("../../core/hookify.js");
             const args = userInput.slice("/hookify".length).trim();
             const parts = args.split(/\s+/);
             const subcmd = parts[0]?.toLowerCase() || "list";
 
             if (subcmd === "list" || subcmd === "ls" || !args) {
               const rules = await loadHookifyRules();
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatRuleList(rules) }]);
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: formatRuleList(rules) },
+              ]);
             } else if (subcmd === "create" || subcmd === "add" || subcmd === "new") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify create <name> [event=bash|file|all] [action=block|warn] [tool=Bash|Edit] [field:operator:pattern]\n\n  Example: /hookify create no-force-push event=bash action=block tool=Bash command:regex_match:git\\\\s+push\\\\s+.*--force" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: "  Usage: /hookify create <name> [event=bash|file|all] [action=block|warn] [tool=Bash|Edit] [field:operator:pattern]\n\n  Example: /hookify create no-force-push event=bash action=block tool=Bash command:regex_match:git\\\\s+push\\\\s+.*--force",
+                  },
+                ]);
                 return;
               }
-              const rule: any = { name, enabled: true, event: "all" as const, conditions: [], action: "warn" as const, message: `Rule "${name}" triggered.` };
+              const rule: any = {
+                name,
+                enabled: true,
+                event: "all" as const,
+                conditions: [],
+                action: "warn" as const,
+                message: `Rule "${name}" triggered.`,
+              };
               for (let i = 2; i < parts.length; i++) {
                 const part = parts[i]!;
                 if (part.startsWith("event=")) rule.event = part.slice(6);
@@ -301,34 +459,67 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 }
               }
               await saveHookifyRule(rule);
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Created hookify rule: ${name}\n${formatRuleDetail(rule)}` }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  Created hookify rule: ${name}\n${formatRuleDetail(rule)}`,
+                },
+              ]);
             } else if (subcmd === "toggle") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify toggle <name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: "  Usage: /hookify toggle <name>" },
+                ]);
                 return;
               }
               const rules = await loadHookifyRules();
-              const rule = rules.find(r => r.name === name);
+              const rule = rules.find((r) => r.name === name);
               if (!rule) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Rule not found: ${name}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: `  Rule not found: ${name}` },
+                ]);
                 return;
               }
               rule.enabled = !rule.enabled;
               await saveHookifyRule(rule);
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Rule "${name}" is now ${rule.enabled ? "enabled" : "disabled"}` }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  Rule "${name}" is now ${rule.enabled ? "enabled" : "disabled"}`,
+                },
+              ]);
             } else if (subcmd === "delete" || subcmd === "rm" || subcmd === "remove") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify delete <name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: "  Usage: /hookify delete <name>" },
+                ]);
                 return;
               }
               const deleted = await deleteHookifyRule(name);
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: deleted ? `  Deleted rule: ${name}` : `  Rule not found: ${name}` }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: deleted ? `  Deleted rule: ${name}` : `  Rule not found: ${name}`,
+                },
+              ]);
             } else if (subcmd === "test") {
               const command = parts.slice(1).join(" ");
               if (!command) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify test <command>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: "  Usage: /hookify test <command>" },
+                ]);
                 return;
               }
               const result = await testHookifyRules(command);
@@ -340,25 +531,51 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 lines.push(`  Messages:`);
                 for (const msg of result.messages) lines.push(`    ${msg}`);
               }
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: lines.join("\n") },
+              ]);
             } else if (subcmd === "show" || subcmd === "info") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify show <name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: "  Usage: /hookify show <name>" },
+                ]);
                 return;
               }
               const rules = await loadHookifyRules();
-              const rule = rules.find(r => r.name === name);
+              const rule = rules.find((r) => r.name === name);
               if (!rule) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Rule not found: ${name}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: `  Rule not found: ${name}` },
+                ]);
                 return;
               }
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatRuleDetail(rule) }]);
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: formatRuleDetail(rule) },
+              ]);
             } else {
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /hookify [list|create <name>|toggle <name>|delete <name>|test <command>|show <name>]" }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: "  Usage: /hookify [list|create <name>|toggle <name>|delete <name>|test <command>|show <name>]",
+                },
+              ]);
             }
           } catch (err) {
-            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Hookify error: ${err instanceof Error ? err.message : err}` }]);
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  Hookify error: ${err instanceof Error ? err.message : err}`,
+              },
+            ]);
           }
         })();
         return;
@@ -369,7 +586,16 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         (async () => {
           try {
-            const { searchPlugins, getPluginDetails, installFromMarketplace, updatePlugin, listInstalled, checkUpdates, formatPluginInfo, formatPluginList } = await import("../../core/marketplace.js");
+            const {
+              searchPlugins,
+              getPluginDetails,
+              installFromMarketplace,
+              updatePlugin,
+              listInstalled,
+              checkUpdates,
+              formatPluginInfo,
+              formatPluginList,
+            } = await import("../../core/marketplace.js");
             const args = userInput.slice("/marketplace".length).trim();
             const parts = args.split(/\s+/);
             const subcmd = parts[0]?.toLowerCase() || "list";
@@ -377,58 +603,138 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             if (subcmd === "search" || subcmd === "find") {
               const query = parts.slice(1).join(" ");
               const results = await searchPlugins(query);
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatPluginList(results, query ? `Search results for "${query}"` : "All available plugins") }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: formatPluginList(
+                    results,
+                    query ? `Search results for "${query}"` : "All available plugins",
+                  ),
+                },
+              ]);
             } else if (subcmd === "install" || subcmd === "add") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /marketplace install <plugin-name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: "  Usage: /marketplace install <plugin-name>",
+                  },
+                ]);
                 return;
               }
               const success = await installFromMarketplace(name);
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: success ? `  Installed "${name}" from marketplace` : `  Failed to install "${name}". Check logs for details.` }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: success
+                    ? `  Installed "${name}" from marketplace`
+                    : `  Failed to install "${name}". Check logs for details.`,
+                },
+              ]);
             } else if (subcmd === "update") {
               const name = parts[1];
               if (name) {
                 const success = await updatePlugin(name);
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: success ? `  Updated "${name}"` : `  Failed to update "${name}"` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: success ? `  Updated "${name}"` : `  Failed to update "${name}"`,
+                  },
+                ]);
               } else {
                 const updates = await checkUpdates();
                 if (updates.length === 0) {
-                  setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  All plugins are up to date." }]);
+                  setCompleted((prev) => [
+                    ...prev,
+                    { kind: "text", role: "assistant", text: "  All plugins are up to date." },
+                  ]);
                 } else {
                   const lines = [`  Updates available (${updates.length}):\n`];
                   for (const u of updates) {
                     lines.push(`  ${u.name}: ${u.current} -> ${u.latest}`);
                   }
                   lines.push(`\n  Run /marketplace update <name> to update`);
-                  setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+                  setCompleted((prev) => [
+                    ...prev,
+                    { kind: "text", role: "assistant", text: lines.join("\n") },
+                  ]);
                 }
               }
             } else if (subcmd === "info" || subcmd === "details") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /marketplace info <plugin-name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: "  Usage: /marketplace info <plugin-name>",
+                  },
+                ]);
                 return;
               }
               const plugin = await getPluginDetails(name);
               if (!plugin) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Plugin not found: ${name}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: `  Plugin not found: ${name}` },
+                ]);
                 return;
               }
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatPluginInfo(plugin) }]);
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: formatPluginInfo(plugin) },
+              ]);
             } else if (subcmd === "list" || subcmd === "ls" || subcmd === "installed" || !args) {
               const installed = await listInstalled();
               if (installed.length === 0) {
                 const available = await searchPlugins("");
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  No plugins installed from marketplace.\n\n${formatPluginList(available, "Available plugins")}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: `  No plugins installed from marketplace.\n\n${formatPluginList(available, "Available plugins")}`,
+                  },
+                ]);
               } else {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: formatPluginList(installed, "Installed from marketplace") }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: formatPluginList(installed, "Installed from marketplace"),
+                  },
+                ]);
               }
             } else {
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /marketplace [search <query>|install <name>|update [name]|info <name>|list]" }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: "  Usage: /marketplace [search <query>|install <name>|update [name]|info <name>|list]",
+                },
+              ]);
             }
           } catch (err) {
-            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Marketplace error: ${err instanceof Error ? err.message : err}` }]);
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  Marketplace error: ${err instanceof Error ? err.message : err}`,
+              },
+            ]);
           }
         })();
         return;
@@ -448,32 +754,86 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             if (subcmd === "list" || subcmd === "ls" || !args) {
               const plugins = await pm.list();
               if (plugins.length === 0) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  No plugins installed.\n  Usage: /plugin install <path-or-git-url>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: "  No plugins installed.\n  Usage: /plugin install <path-or-git-url>",
+                  },
+                ]);
               } else {
-                const lines = plugins.map((p) => `  ${p.name} v${p.version} — ${p.description ?? "no description"}`);
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Installed plugins (${plugins.length}):\n${lines.join("\n")}` }]);
+                const lines = plugins.map(
+                  (p) => `  ${p.name} v${p.version} — ${p.description ?? "no description"}`,
+                );
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: `  Installed plugins (${plugins.length}):\n${lines.join("\n")}`,
+                  },
+                ]);
               }
             } else if (subcmd === "install" || subcmd === "add") {
               const source = parts.slice(1).join(" ");
               if (!source) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /plugin install <path-or-git-url>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: "  Usage: /plugin install <path-or-git-url>",
+                  },
+                ]);
               } else {
                 const manifest = await pm.install(source);
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Installed: ${manifest.name} v${manifest.version}\n  ${manifest.description ?? ""}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: `  Installed: ${manifest.name} v${manifest.version}\n  ${manifest.description ?? ""}`,
+                  },
+                ]);
               }
             } else if (subcmd === "remove" || subcmd === "rm" || subcmd === "uninstall") {
               const name = parts[1];
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /plugin remove <name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: "  Usage: /plugin remove <name>" },
+                ]);
               } else {
                 const ok = await pm.remove(name);
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: ok ? `  Removed: ${name}` : `  Plugin not found: ${name}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: ok ? `  Removed: ${name}` : `  Plugin not found: ${name}`,
+                  },
+                ]);
               }
             } else {
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Usage: /plugin [list|install <source>|remove <name>]" }]);
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: "  Usage: /plugin [list|install <source>|remove <name>]",
+                },
+              ]);
             }
           } catch (err) {
-            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  Plugin error: ${err instanceof Error ? err.message : err}` }]);
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  Plugin error: ${err instanceof Error ? err.message : err}`,
+              },
+            ]);
           }
         })();
         return;
@@ -539,7 +899,14 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
 
           // Built-in action commands (stats, doctor, models, clear, compact, rewind)
           if (expanded.builtinAction) {
-            const result = await handleBuiltinAction(expanded.builtinAction, conversationManager, setCompleted, config, expanded.prompt, switchTheme);
+            const result = await handleBuiltinAction(
+              expanded.builtinAction,
+              conversationManager,
+              setCompleted,
+              config,
+              expanded.prompt,
+              switchTheme,
+            );
 
             // /context — toggle the context grid display
             if (expanded.builtinAction === "context") {
@@ -550,10 +917,24 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             if (result.startsWith("__rename__")) {
               const name = result.slice("__rename__".length).trim();
               if (!name) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: sessionName ? `  Current session: "${sessionName}"\n  Usage: /rename <name>` : "  Usage: /rename <name>" }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "user", text: userInput },
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: sessionName
+                      ? `  Current session: "${sessionName}"\n  Usage: /rename <name>`
+                      : "  Usage: /rename <name>",
+                  },
+                ]);
               } else {
                 setSessionName(name);
-                setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Session renamed to: "${name}"` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "user", text: userInput },
+                  { kind: "text", role: "assistant", text: `  Session renamed to: "${name}"` },
+                ]);
               }
               return;
             }
@@ -570,22 +951,38 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                   if (prev.includes(tagValue)) return prev;
                   return [...prev, tagValue];
                 });
-                setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Tag added: "${tagValue}"` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "user", text: userInput },
+                  { kind: "text", role: "assistant", text: `  Tag added: "${tagValue}"` },
+                ]);
               } else if (subCmd === "remove" && tagValue) {
-                setSessionTags((prev) => prev.filter(t => t !== tagValue));
-                setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: `  Tag removed: "${tagValue}"` }]);
+                setSessionTags((prev) => prev.filter((t) => t !== tagValue));
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "user", text: userInput },
+                  { kind: "text", role: "assistant", text: `  Tag removed: "${tagValue}"` },
+                ]);
               } else {
                 // List tags
-                const tagsDisplay = sessionTags.length > 0
-                  ? `  Session Tags: ${sessionTags.map(t => `[${t}]`).join(" ")}`
-                  : "  No tags set. Use /session-tags add <tag> to add one.";
-                setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }, { kind: "text", role: "assistant", text: tagsDisplay }]);
+                const tagsDisplay =
+                  sessionTags.length > 0
+                    ? `  Session Tags: ${sessionTags.map((t) => `[${t}]`).join(" ")}`
+                    : "  No tags set. Use /session-tags add <tag> to add one.";
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "user", text: userInput },
+                  { kind: "text", role: "assistant", text: tagsDisplay },
+                ]);
               }
               return;
             }
 
             // Some builtin actions return a prompt to send to the LLM (dry-run, auto-fix)
-            if (result.startsWith("__dry_run_prompt__") || result.startsWith("__auto_fix_prompt__")) {
+            if (
+              result.startsWith("__dry_run_prompt__") ||
+              result.startsWith("__auto_fix_prompt__")
+            ) {
               const llmPrompt = result.replace(/^__(?:dry_run|auto_fix)_prompt__/, "");
               setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
               setMode("responding");
@@ -598,7 +995,14 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 const events = conversationManager.sendMessage(llmPrompt);
                 await processEvents(events);
               } catch (err) {
-                setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `Error: ${err instanceof Error ? err.message : err}` }]);
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: `Error: ${err instanceof Error ? err.message : err}`,
+                  },
+                ]);
               } finally {
                 setMode("input");
                 setStreamingText("");
@@ -692,7 +1096,8 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           if (existsSync(absPath)) {
             try {
               const content = readFileSync(absPath, "utf-8");
-              const truncated = content.length > 50000 ? content.slice(0, 50000) + "\n... (truncated)" : content;
+              const truncated =
+                content.length > 50000 ? content.slice(0, 50000) + "\n... (truncated)" : content;
               prefixes.push(`[File: ${filePath}]\n${truncated}`);
             } catch {
               prefixes.push(`[File: ${filePath}] (could not read)`);
@@ -706,7 +1111,8 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       }
 
       // Image file path detection — detect paths to image files and annotate the message
-      const pathPattern = /(?:^|\s)((?:\/|\.\/|~\/|\.\.\/)?[\w./_~-]*\.(png|jpg|jpeg|gif|webp|bmp))(?:\s|$)/gi;
+      const pathPattern =
+        /(?:^|\s)((?:\/|\.\/|~\/|\.\.\/)?[\w./_~-]*\.(png|jpg|jpeg|gif|webp|bmp))(?:\s|$)/gi;
       const imageMatches = [...processedInput.matchAll(pathPattern)];
       if (imageMatches.length > 0) {
         const annotations: string[] = [];
@@ -720,12 +1126,14 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           const { loadModelsConfig } = await import("../../core/models.js");
           const modelsConfig = await loadModelsConfig();
           const hasScanner = modelsConfig.models?.some(
-            (m: { name: string }) => m.name === "mnemo:scanner" || m.name.includes("scanner")
+            (m: { name: string }) => m.name === "mnemo:scanner" || m.name.includes("scanner"),
           );
           if (hasScanner) {
             scannerNote = "\n(Note: The mnemo:scanner model is available for image analysis)";
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         processedInput = processedInput + "\n\n" + annotations.join("\n") + scannerNote;
       }
 

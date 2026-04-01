@@ -21,9 +21,9 @@ export interface SandboxOptions {
 interface SandboxConfig {
   mode: SandboxMode;
   allowNetwork: boolean;
-  allowWritePaths: string[];   // Paths the sandbox can write to
-  readOnlyPaths: string[];     // Paths mounted read-only
-  tmpDir: string;              // Writable temp directory inside sandbox
+  allowWritePaths: string[]; // Paths the sandbox can write to
+  readOnlyPaths: string[]; // Paths mounted read-only
+  tmpDir: string; // Writable temp directory inside sandbox
 }
 
 // ─── Sensitive paths that must never be writable ────────────────
@@ -114,7 +114,10 @@ export function wrapWithSandbox(
   }
 
   if (config.mode === "strict" && !hasBwrap()) {
-    log.warn("sandbox", "bwrap not available, falling back to light sandbox. Install bubblewrap for strict mode.");
+    log.warn(
+      "sandbox",
+      "bwrap not available, falling back to light sandbox. Install bubblewrap for strict mode.",
+    );
   }
 
   // Light sandbox: use restricted bash with safety guards
@@ -172,13 +175,18 @@ function wrapWithBwrap(
     // Die if parent dies
     "--die-with-parent",
     // Read-only bind mount of entire filesystem as the base layer
-    "--ro-bind", "/", "/",
+    "--ro-bind",
+    "/",
+    "/",
     // Writable /tmp (tmpfs overlay, not the host /tmp)
-    "--tmpfs", "/tmp",
+    "--tmpfs",
+    "/tmp",
     // Proc filesystem (fresh mount over the ro-bind)
-    "--proc", "/proc",
+    "--proc",
+    "/proc",
     // Dev filesystem (minimal, fresh mount over the ro-bind)
-    "--dev", "/dev",
+    "--dev",
+    "/dev",
   ];
 
   // Writable: ~/.kcode (always — needed for logs, db, settings)
@@ -219,7 +227,10 @@ function wrapWithBwrap(
   // The actual command
   bwrapArgs.push("--", "bash", "-c", command);
 
-  log.info("sandbox", `bwrap sandbox: writable=[${config.allowWritePaths.join(", ")}], network=${config.allowNetwork}`);
+  log.info(
+    "sandbox",
+    `bwrap sandbox: writable=[${config.allowWritePaths.join(", ")}], network=${config.allowNetwork}`,
+  );
 
   return {
     command: bwrapArgs.map(shellQuote).join(" "),
@@ -229,7 +240,11 @@ function wrapWithBwrap(
 
 // ─── Default Config ─────────────────────────────────────────────
 
-export function getDefaultSandboxConfig(mode: SandboxMode, cwd: string, opts?: SandboxOptions): SandboxConfig {
+export function getDefaultSandboxConfig(
+  mode: SandboxMode,
+  cwd: string,
+  opts?: SandboxOptions,
+): SandboxConfig {
   const extraWritable = opts?.writablePaths ?? [];
   const extraReadOnly = opts?.readOnlyPaths ?? [];
 
@@ -237,13 +252,13 @@ export function getDefaultSandboxConfig(mode: SandboxMode, cwd: string, opts?: S
     mode,
     allowNetwork: opts?.allowNetwork ?? true, // Allow network by default (needed for git, curl, etc.)
     allowWritePaths: [
-      cwd,                    // Project directory
-      "/tmp",                 // System temp
+      cwd, // Project directory
+      "/tmp", // System temp
       ...extraWritable,
     ],
     readOnlyPaths: [
-      "/etc/resolv.conf",     // DNS resolution
-      "/etc/ssl",             // SSL certificates
+      "/etc/resolv.conf", // DNS resolution
+      "/etc/ssl", // SSL certificates
       "/etc/ca-certificates", // CA certificates
       ...extraReadOnly,
     ],

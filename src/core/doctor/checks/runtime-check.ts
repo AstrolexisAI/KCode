@@ -7,7 +7,13 @@ export async function checkRuntime(): Promise<HealthCheck> {
   const [major, minor] = bunVersion.split(".").map(Number);
 
   if ((major ?? 0) >= 1 && (minor ?? 0) >= 2) {
-    return { name: "Bun Runtime", category: "runtime", status: "pass", message: `Bun ${bunVersion}`, weight: 10 };
+    return {
+      name: "Bun Runtime",
+      category: "runtime",
+      status: "pass",
+      message: `Bun ${bunVersion}`,
+      weight: 10,
+    };
   }
 
   return {

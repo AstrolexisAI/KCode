@@ -1,10 +1,8 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { emergencyPrune, type Message } from "./emergency-pruner";
 
 function makeMessages(count: number): Message[] {
-  const msgs: Message[] = [
-    { role: "system", content: "You are helpful." },
-  ];
+  const msgs: Message[] = [{ role: "system", content: "You are helpful." }];
   for (let i = 0; i < count; i++) {
     msgs.push({ role: "user", content: `Question ${i}: ${"x".repeat(200)}` });
     msgs.push({ role: "assistant", content: `Answer ${i}: ${"y".repeat(200)}` });

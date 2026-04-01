@@ -1,17 +1,17 @@
 // KCode - 한국어
 
 export default {
-  "welcome": "KCode에 오신 것을 환영합니다",
-  "goodbye": "안녕히 가세요",
-  "error": "오류",
-  "warning": "경고",
-  "success": "성공",
-  "loading": "로딩 중...",
-  "cancel": "취소",
-  "confirm": "확인",
-  "yes": "예",
-  "no": "아니오",
-  "unknown": "알 수 없음",
+  welcome: "KCode에 오신 것을 환영합니다",
+  goodbye: "안녕히 가세요",
+  error: "오류",
+  warning: "경고",
+  success: "성공",
+  loading: "로딩 중...",
+  cancel: "취소",
+  confirm: "확인",
+  yes: "예",
+  no: "아니오",
+  unknown: "알 수 없음",
 
   "session.started": "세션이 시작되었습니다",
   "session.resumed": "세션이 재개되었습니다",

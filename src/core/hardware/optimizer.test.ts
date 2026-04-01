@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { HardwareOptimizer, getHardwareOptimizer } from "./optimizer";
+import { describe, expect, test } from "bun:test";
+import { getHardwareOptimizer, HardwareOptimizer } from "./optimizer";
 import { HARDWARE_PROFILES } from "./profiles";
 import type { HardwareProfile, ModelRecommendation } from "./types";
 

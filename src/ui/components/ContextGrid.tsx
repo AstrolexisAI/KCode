@@ -1,8 +1,8 @@
 // KCode - ContextGrid component
 // Visual grid showing context window usage as colored cells
 
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
 import { useTheme } from "../ThemeContext.js";
 
 interface ContextBreakdown {
@@ -35,9 +35,9 @@ export default function ContextGrid({ breakdown }: ContextGridProps) {
   const totalCategorized = systemTokens + messageTokens + toolTokens;
   const scale = totalCategorized > 0 ? totalTokens / totalCategorized : 0;
 
-  const systemCells = Math.round((systemTokens * scale / contextWindowSize) * 100);
-  const messageCells = Math.round((messageTokens * scale / contextWindowSize) * 100);
-  const toolCells = Math.round((toolTokens * scale / contextWindowSize) * 100);
+  const systemCells = Math.round(((systemTokens * scale) / contextWindowSize) * 100);
+  const messageCells = Math.round(((messageTokens * scale) / contextWindowSize) * 100);
+  const toolCells = Math.round(((toolTokens * scale) / contextWindowSize) * 100);
   const freeCells = Math.max(0, 100 - systemCells - messageCells - toolCells);
 
   // Build the grid — each cell is ~1% of context
@@ -61,13 +61,19 @@ export default function ContextGrid({ breakdown }: ContextGridProps) {
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box gap={1}>
-        <Text bold color={theme.primary}>Context</Text>
+        <Text bold color={theme.primary}>
+          Context
+        </Text>
         <Text color={theme.dimmed}>[</Text>
         {gridParts.map((p, i) => (
-          <Text key={i} color={p.color}>{p.char}</Text>
+          <Text key={i} color={p.color}>
+            {p.char}
+          </Text>
         ))}
         <Text color={theme.dimmed}>]</Text>
-        <Text bold color={statusColor}>{pct}%</Text>
+        <Text bold color={statusColor}>
+          {pct}%
+        </Text>
       </Box>
       <Box gap={2} paddingLeft={2}>
         <Text color={theme.dimmed}>

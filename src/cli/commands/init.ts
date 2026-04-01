@@ -19,7 +19,9 @@ export function registerInitCommand(program: Command): void {
       const kcodeMdPath = join(cwd, "KCODE.md");
       if (!existsSync(kcodeMdPath) || opts.force) {
         const dirName = cwd.split("/").pop() ?? "project";
-        writeFileSync(kcodeMdPath, `# KCODE.md
+        writeFileSync(
+          kcodeMdPath,
+          `# KCODE.md
 
 ## Project: ${dirName}
 
@@ -39,7 +41,9 @@ export function registerInitCommand(program: Command): void {
 ## Architecture
 
 - <!-- Describe the high-level architecture, key files, modules -->
-`, "utf-8");
+`,
+          "utf-8",
+        );
         created.push("KCODE.md");
       } else {
         skipped.push("KCODE.md (exists)");
@@ -52,12 +56,20 @@ export function registerInitCommand(program: Command): void {
       // 3. Create settings.json
       const settingsPath = join(kcodeDir, "settings.json");
       if (!existsSync(settingsPath) || opts.force) {
-        writeFileSync(settingsPath, JSON.stringify({
-          hooks: {
-            PostToolUse: [],
-            PreToolUse: [],
-          },
-        }, null, 2) + "\n", "utf-8");
+        writeFileSync(
+          settingsPath,
+          JSON.stringify(
+            {
+              hooks: {
+                PostToolUse: [],
+                PreToolUse: [],
+              },
+            },
+            null,
+            2,
+          ) + "\n",
+          "utf-8",
+        );
         created.push(".kcode/settings.json");
       } else {
         skipped.push(".kcode/settings.json (exists)");
@@ -69,11 +81,15 @@ export function registerInitCommand(program: Command): void {
 
       const exampleAwareness = join(awarenessDir, "project.md");
       if (!existsSync(exampleAwareness) || opts.force) {
-        writeFileSync(exampleAwareness, `# Project Context
+        writeFileSync(
+          exampleAwareness,
+          `# Project Context
 
 <!-- Add anything KCode should always know about this project. -->
 <!-- Examples: API endpoints, environment setup, team conventions. -->
-`, "utf-8");
+`,
+          "utf-8",
+        );
         created.push(".kcode/awareness/project.md");
       } else {
         skipped.push(".kcode/awareness/project.md (exists)");
@@ -88,7 +104,11 @@ export function registerInitCommand(program: Command): void {
       if (existsSync(gitignorePath)) {
         const gitignore = (await import("node:fs")).readFileSync(gitignorePath, "utf-8");
         if (!gitignore.includes(".kcode/")) {
-          (await import("node:fs")).appendFileSync(gitignorePath, "\n# KCode local config\n.kcode/\n", "utf-8");
+          (await import("node:fs")).appendFileSync(
+            gitignorePath,
+            "\n# KCode local config\n.kcode/\n",
+            "utf-8",
+          );
           created.push(".gitignore (appended .kcode/)");
         }
       }
@@ -102,7 +122,9 @@ export function registerInitCommand(program: Command): void {
 
           const preCommitPath = join(hooksDir, "pre-commit");
           if (!existsSync(preCommitPath) || opts.force) {
-            writeFileSync(preCommitPath, `#!/bin/sh
+            writeFileSync(
+              preCommitPath,
+              `#!/bin/sh
 # KCode pre-commit hook — runs lint/typecheck on staged files
 # To skip: git commit --no-verify
 
@@ -117,7 +139,9 @@ if [ -n "$STAGED_TS" ]; then
     fi
   fi
 fi
-`, "utf-8");
+`,
+              "utf-8",
+            );
             const { chmodSync } = await import("node:fs");
             chmodSync(preCommitPath, 0o755);
             created.push(".git/hooks/pre-commit");
@@ -127,7 +151,9 @@ fi
 
           const prePushPath = join(hooksDir, "pre-push");
           if (!existsSync(prePushPath) || opts.force) {
-            writeFileSync(prePushPath, `#!/bin/sh
+            writeFileSync(
+              prePushPath,
+              `#!/bin/sh
 # KCode pre-push hook — runs tests before pushing
 # To skip: git push --no-verify
 
@@ -153,7 +179,9 @@ elif [ -f "Makefile" ] && grep -q "^test:" Makefile; then
     exit 1
   fi
 fi
-`, "utf-8");
+`,
+              "utf-8",
+            );
             const { chmodSync } = await import("node:fs");
             chmodSync(prePushPath, 0o755);
             created.push(".git/hooks/pre-push");

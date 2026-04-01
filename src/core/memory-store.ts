@@ -10,9 +10,17 @@ export type MemoryCategory = "preference" | "convention" | "fact" | "decision" |
 export type MemorySource = "auto" | "user" | "promoted" | "auto-extract";
 
 // Internal row types for typed SQLite queries
-interface DbCountRow { cnt: number }
-interface DbCategoryRow { category: string; cnt: number }
-interface DbSourceRow { source: string; cnt: number }
+interface DbCountRow {
+  cnt: number;
+}
+interface DbCategoryRow {
+  category: string;
+  cnt: number;
+}
+interface DbSourceRow {
+  source: string;
+  cnt: number;
+}
 
 export interface MemoryEntry {
   id: number;
@@ -101,7 +109,8 @@ export function addMemory(
   db?: Database,
 ): number {
   const d = resolveDb(db);
-  const stmt = d.prepare(`INSERT INTO memory_store (category, key, content, project, confidence, source, expires_at, approved)
+  const stmt =
+    d.prepare(`INSERT INTO memory_store (category, key, content, project, confidence, source, expires_at, approved)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   const result = stmt.run(
     entry.category,
@@ -118,21 +127,57 @@ export function addMemory(
 
 export function updateMemory(
   id: number,
-  updates: Partial<Pick<MemoryEntry, "category" | "key" | "content" | "confidence" | "source" | "expiresAt" | "approved" | "project">>,
+  updates: Partial<
+    Pick<
+      MemoryEntry,
+      | "category"
+      | "key"
+      | "content"
+      | "confidence"
+      | "source"
+      | "expiresAt"
+      | "approved"
+      | "project"
+    >
+  >,
   db?: Database,
 ): boolean {
   const d = resolveDb(db);
   const sets: string[] = [];
   const values: any[] = [];
 
-  if (updates.category !== undefined) { sets.push("category = ?"); values.push(updates.category); }
-  if (updates.key !== undefined) { sets.push("key = ?"); values.push(updates.key); }
-  if (updates.content !== undefined) { sets.push("content = ?"); values.push(updates.content); }
-  if (updates.confidence !== undefined) { sets.push("confidence = ?"); values.push(updates.confidence); }
-  if (updates.source !== undefined) { sets.push("source = ?"); values.push(updates.source); }
-  if (updates.expiresAt !== undefined) { sets.push("expires_at = ?"); values.push(updates.expiresAt); }
-  if (updates.approved !== undefined) { sets.push("approved = ?"); values.push(updates.approved ? 1 : 0); }
-  if (updates.project !== undefined) { sets.push("project = ?"); values.push(updates.project); }
+  if (updates.category !== undefined) {
+    sets.push("category = ?");
+    values.push(updates.category);
+  }
+  if (updates.key !== undefined) {
+    sets.push("key = ?");
+    values.push(updates.key);
+  }
+  if (updates.content !== undefined) {
+    sets.push("content = ?");
+    values.push(updates.content);
+  }
+  if (updates.confidence !== undefined) {
+    sets.push("confidence = ?");
+    values.push(updates.confidence);
+  }
+  if (updates.source !== undefined) {
+    sets.push("source = ?");
+    values.push(updates.source);
+  }
+  if (updates.expiresAt !== undefined) {
+    sets.push("expires_at = ?");
+    values.push(updates.expiresAt);
+  }
+  if (updates.approved !== undefined) {
+    sets.push("approved = ?");
+    values.push(updates.approved ? 1 : 0);
+  }
+  if (updates.project !== undefined) {
+    sets.push("project = ?");
+    values.push(updates.project);
+  }
 
   if (sets.length === 0) return false;
 
@@ -191,13 +236,15 @@ export function getMemories(
 export function searchMemories(query: string, db?: Database): MemoryEntry[] {
   const d = resolveDb(db);
   // Use FTS5 match with a join back to get full row data
-  const rows = d.prepare(`
+  const rows = d
+    .prepare(`
     SELECT m.* FROM memory_store m
     JOIN memory_store_fts f ON m.id = f.rowid
     WHERE memory_store_fts MATCH ?
     ORDER BY rank
     LIMIT 50
-  `).all(query);
+  `)
+    .all(query);
   return rows.map(rowToEntry);
 }
 
@@ -210,12 +257,17 @@ export function promoteMemory(id: number, db?: Database): boolean {
 export function expireStaleMemories(db?: Database): number {
   const d = resolveDb(db);
   // Count first since DELETE triggers (FTS sync) inflate result.changes
-  const count = (d.prepare(
-    "SELECT COUNT(*) as cnt FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now')"
-  ).get() as DbCountRow | undefined)?.cnt ?? 0;
+  const count =
+    (
+      d
+        .prepare(
+          "SELECT COUNT(*) as cnt FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
+        )
+        .get() as DbCountRow | undefined
+    )?.cnt ?? 0;
   if (count > 0) {
     d.prepare(
-      "DELETE FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now')"
+      "DELETE FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
     ).run();
   }
   return count;
@@ -226,19 +278,30 @@ export function expireStaleMemories(db?: Database): number {
 export function getMemoryStats(db?: Database): MemoryStats {
   const d = resolveDb(db);
 
-  const total = (d.prepare("SELECT COUNT(*) as cnt FROM memory_store").get() as DbCountRow | undefined)?.cnt ?? 0;
+  const total =
+    (d.prepare("SELECT COUNT(*) as cnt FROM memory_store").get() as DbCountRow | undefined)?.cnt ??
+    0;
 
-  const catRows = d.prepare("SELECT category, COUNT(*) as cnt FROM memory_store GROUP BY category").all() as DbCategoryRow[];
+  const catRows = d
+    .prepare("SELECT category, COUNT(*) as cnt FROM memory_store GROUP BY category")
+    .all() as DbCategoryRow[];
   const byCategory: Record<string, number> = {};
   for (const r of catRows) byCategory[r.category] = r.cnt;
 
-  const srcRows = d.prepare("SELECT source, COUNT(*) as cnt FROM memory_store GROUP BY source").all() as DbSourceRow[];
+  const srcRows = d
+    .prepare("SELECT source, COUNT(*) as cnt FROM memory_store GROUP BY source")
+    .all() as DbSourceRow[];
   const bySource: Record<string, number> = {};
   for (const r of srcRows) bySource[r.source] = r.cnt;
 
-  const expiring = (d.prepare(
-    "SELECT COUNT(*) as cnt FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now', '+7 days')"
-  ).get() as DbCountRow | undefined)?.cnt ?? 0;
+  const expiring =
+    (
+      d
+        .prepare(
+          "SELECT COUNT(*) as cnt FROM memory_store WHERE expires_at IS NOT NULL AND expires_at < datetime('now', '+7 days')",
+        )
+        .get() as DbCountRow | undefined
+    )?.cnt ?? 0;
 
   return { total, byCategory, bySource, expiringSoon: expiring };
 }

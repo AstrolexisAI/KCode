@@ -1,15 +1,15 @@
-import { test, expect, describe, beforeEach, afterEach, mock } from "bun:test";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  clearRemoteSettingsCache,
+  computeChecksum,
   fetchSettings,
   getRemoteSettings,
   loadFromCache,
   startPolling,
   stopPolling,
-  clearRemoteSettingsCache,
-  computeChecksum,
 } from "./remote-settings";
 
 let tempDir: string;
@@ -295,11 +295,13 @@ describe("remote-settings", () => {
         hostname: "127.0.0.1",
         fetch(req) {
           receivedAuth = req.headers.get("Authorization");
-          return new Response(JSON.stringify({
-            version: "v1",
-            checksum: "test",
-            settings: {},
-          }));
+          return new Response(
+            JSON.stringify({
+              version: "v1",
+              checksum: "test",
+              settings: {},
+            }),
+          );
         },
       });
 
@@ -320,11 +322,13 @@ describe("remote-settings", () => {
         hostname: "127.0.0.1",
         fetch(req) {
           receivedOS = req.headers.get("X-KCode-OS");
-          return new Response(JSON.stringify({
-            version: "v1",
-            checksum: "test",
-            settings: {},
-          }));
+          return new Response(
+            JSON.stringify({
+              version: "v1",
+              checksum: "test",
+              settings: {},
+            }),
+          );
         },
       });
 

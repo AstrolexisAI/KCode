@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -30,7 +30,9 @@ describe("RAGEngine", () => {
     try {
       const { closeDb } = await import("../db");
       closeDb();
-    } catch { /* ok */ }
+    } catch {
+      /* ok */
+    }
   });
 
   afterEach(async () => {
@@ -38,7 +40,9 @@ describe("RAGEngine", () => {
     try {
       const { closeDb } = await import("../db");
       closeDb();
-    } catch { /* ok */ }
+    } catch {
+      /* ok */
+    }
     delete process.env.KCODE_DB_PATH;
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -57,7 +61,9 @@ describe("RAGEngine", () => {
   // ─── Full Index ──────────────────────────────────────────────
 
   test("indexProject indexes TypeScript files", async () => {
-    await createFile("src/auth.ts", `
+    await createFile(
+      "src/auth.ts",
+      `
 export function authenticate(user: string, pass: string): boolean {
   return user === "admin" && pass === "secret";
 }
@@ -65,14 +71,18 @@ export function authenticate(user: string, pass: string): boolean {
 export function hashPassword(password: string): string {
   return password.split("").reverse().join("");
 }
-    `.trim());
+    `.trim(),
+    );
 
-    await createFile("src/db.ts", `
+    await createFile(
+      "src/db.ts",
+      `
 export class Database {
   connect(): void { console.log("connected"); }
   query(sql: string): any[] { return []; }
 }
-    `.trim());
+    `.trim(),
+    );
 
     const engine = new RAGEngine(projectDir);
     const report = await engine.indexProject();
@@ -122,17 +132,23 @@ export class Database {
   // ─── Search ──────────────────────────────────────────────────
 
   test("search finds relevant chunks after indexing", async () => {
-    await createFile("src/auth.ts", `
+    await createFile(
+      "src/auth.ts",
+      `
 export function authenticate(user: string, password: string): boolean {
   return user === "admin" && password === "secret";
 }
-    `.trim());
+    `.trim(),
+    );
 
-    await createFile("src/math.ts", `
+    await createFile(
+      "src/math.ts",
+      `
 export function add(a: number, b: number): number {
   return a + b;
 }
-    `.trim());
+    `.trim(),
+    );
 
     const engine = new RAGEngine(projectDir);
     await engine.indexProject();
@@ -155,7 +171,9 @@ export function add(a: number, b: number): number {
     await engine.indexProject();
 
     const allResults = await engine.search("function handler helper");
-    const tsResults = await engine.search("function handler helper", { filters: { language: "typescript" } });
+    const tsResults = await engine.search("function handler helper", {
+      filters: { language: "typescript" },
+    });
 
     expect(tsResults.length).toBeLessThanOrEqual(allResults.length);
   });

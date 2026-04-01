@@ -3,9 +3,9 @@
 // Supports fail-open (default) and fail-closed modes.
 
 import { join } from "node:path";
-import { kcodeHome } from "../core/paths";
 import { log } from "../core/logger";
-import type { PolicyLimitsResponse, PolicyLimitsCache, PolicyRestriction } from "./types";
+import { kcodeHome } from "../core/paths";
+import type { PolicyLimitsCache, PolicyLimitsResponse, PolicyRestriction } from "./types";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ function getFailMode(): "open" | "closed" {
 }
 
 function retryDelay(attempt: number): number {
-  const exponential = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+  const exponential = Math.min(BASE_DELAY_MS * 2 ** attempt, MAX_DELAY_MS);
   const jitter = 0.75 + Math.random() * 0.5;
   return Math.round(exponential * jitter);
 }
@@ -68,7 +68,9 @@ async function saveToCache(cache: PolicyLimitsCache): Promise<void> {
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
       chmodSync(path, 0o600);
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   } catch (err) {
     log.debug("config", `Failed to save policy limits cache: ${err}`);
   }
@@ -132,14 +134,14 @@ export async function fetchPolicyLimits(): Promise<PolicyLimitsResponse | null> 
         if (!resp.ok) {
           lastError = new Error(`HTTP ${resp.status}`);
           if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-            await new Promise(r => setTimeout(r, retryDelay(attempt)));
+            await new Promise((r) => setTimeout(r, retryDelay(attempt)));
             continue;
           }
           break;
         }
 
         // 200 OK
-        const body = await resp.json() as PolicyLimitsResponse;
+        const body = (await resp.json()) as PolicyLimitsResponse;
         if (!body || typeof body !== "object" || !body.restrictions) {
           log.warn("config", "Policy limits response is invalid, ignoring");
           return cached?.response ?? null;
@@ -159,13 +161,16 @@ export async function fetchPolicyLimits(): Promise<PolicyLimitsResponse | null> 
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-          await new Promise(r => setTimeout(r, retryDelay(attempt)));
+          await new Promise((r) => setTimeout(r, retryDelay(attempt)));
         }
       }
     }
 
     if (lastError) {
-      log.warn("config", `Policy limits fetch failed after ${MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`);
+      log.warn(
+        "config",
+        `Policy limits fetch failed after ${MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`,
+      );
     }
     return cached?.response ?? null;
   } finally {

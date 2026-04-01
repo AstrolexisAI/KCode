@@ -1,6 +1,6 @@
 import type { Command } from "commander";
+import { formatBenchmarks, getBenchmarkSummary, initBenchmarkSchema } from "../../core/benchmarks";
 import { buildConfig } from "../../core/config";
-import { getBenchmarkSummary, formatBenchmarks, initBenchmarkSchema } from "../../core/benchmarks";
 
 export function registerBenchmarkCommands(program: Command): void {
   // ─── Warmup subcommand ─────────────────────────────────────────
@@ -22,7 +22,7 @@ export function registerBenchmarkCommands(program: Command): void {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {}),
+            ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
           },
           body: JSON.stringify({
             model,
@@ -33,11 +33,13 @@ export function registerBenchmarkCommands(program: Command): void {
           signal: AbortSignal.timeout(30000),
         });
 
-        const data = await resp.json() as Record<string, unknown>;
+        const data = (await resp.json()) as Record<string, unknown>;
         const elapsed = Date.now() - start;
         const choices = data.choices as Record<string, unknown>[] | undefined;
         const usage = data.usage as Record<string, unknown> | undefined;
-        const text = ((choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string) ?? "(no response)";
+        const text =
+          ((choices?.[0]?.message as Record<string, unknown> | undefined)?.content as string) ??
+          "(no response)";
         const tokens = (usage?.total_tokens as number) ?? 0;
 
         console.log(`\x1b[32m✓\x1b[0m Model ready (${elapsed}ms, ${tokens} tok)`);
@@ -62,7 +64,11 @@ export function registerBenchmarkCommands(program: Command): void {
     .option("-m, --model <model>", "Filter by model name")
     .option("-d, --days <days>", "Number of days to look back", parseInt, 30)
     .action(async (opts: { model?: string; days?: number }) => {
-      try { initBenchmarkSchema(); } catch { /* ignore */ }
+      try {
+        initBenchmarkSchema();
+      } catch {
+        /* ignore */
+      }
       const summaries = getBenchmarkSummary(opts.model, opts.days ?? 30);
       console.log(formatBenchmarks(summaries));
     });

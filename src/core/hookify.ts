@@ -2,7 +2,7 @@
 // Converts conversation patterns into hooks without editing JSON manually.
 // Rules are stored as markdown files with YAML frontmatter in ~/.kcode/
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
 import { kcodeHome } from "./paths";
@@ -55,7 +55,7 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
   for (const line of yamlBlock.split("\n")) {
     const trimmed = line.trimEnd();
 
-    if (/^  - field:/.test(trimmed) || /^    - field:/.test(trimmed)) {
+    if (/^ {2}- field:/.test(trimmed) || /^ {4}- field:/.test(trimmed)) {
       if (currentItem && currentArray) currentArray.push(currentItem);
       currentItem = { field: trimmed.replace(/^\s*- field:\s*/, "").trim() };
       continue;
@@ -89,7 +89,6 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
       }
 
       meta[key] = parseYamlValue(value);
-      continue;
     }
   }
 
@@ -110,8 +109,10 @@ function parseYamlValue(value: string): string | boolean | number {
 }
 
 function unquoteYaml(value: string): string {
-  if ((value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))) {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
     return value.slice(1, -1);
   }
   return value;
@@ -154,7 +155,13 @@ function parseRule(content: string, filename: string): HookifyRule | null {
   const conditions: HookifyCondition[] = [];
   if (Array.isArray(rawConditions)) {
     for (const raw of rawConditions) {
-      if (raw && typeof raw === "object" && "field" in raw && "operator" in raw && "pattern" in raw) {
+      if (
+        raw &&
+        typeof raw === "object" &&
+        "field" in raw &&
+        "operator" in raw &&
+        "pattern" in raw
+      ) {
         conditions.push({
           field: String(raw.field),
           operator: String(raw.operator) as HookifyCondition["operator"],
@@ -164,7 +171,15 @@ function parseRule(content: string, filename: string): HookifyRule | null {
     }
   }
 
-  return { name, enabled, event, toolMatcher, conditions, action, message: body || `Rule "${name}" triggered.` };
+  return {
+    name,
+    enabled,
+    event,
+    toolMatcher,
+    conditions,
+    action,
+    message: body || `Rule "${name}" triggered.`,
+  };
 }
 
 // ─── Public API ─────────────────────────────────────────────────
@@ -217,7 +232,8 @@ export async function deleteHookifyRule(name: string): Promise<boolean> {
 function eventMatchesHookEvent(hookEvent: HookifyRule["event"], toolName: string): boolean {
   if (hookEvent === "all") return true;
   if (hookEvent === "bash" && toolName === "Bash") return true;
-  if (hookEvent === "file" && ["Edit", "Write", "MultiEdit", "Read"].includes(toolName)) return true;
+  if (hookEvent === "file" && ["Edit", "Write", "MultiEdit", "Read"].includes(toolName))
+    return true;
   if (hookEvent === "prompt") return true;
   if (hookEvent === "stop") return true;
   return false;
@@ -226,7 +242,7 @@ function eventMatchesHookEvent(hookEvent: HookifyRule["event"], toolName: string
 function toolMatcherMatches(matcher: string | undefined, toolName: string): boolean {
   if (!matcher || matcher === "*") return true;
   const matchers = matcher.split("|");
-  return matchers.some(m => m.trim() === toolName);
+  return matchers.some((m) => m.trim() === toolName);
 }
 
 function evaluateCondition(cond: HookifyCondition, toolInput: Record<string, unknown>): boolean {
@@ -280,8 +296,9 @@ export async function evaluateHookifyRules(
     if (!eventMatchesHookEvent(rule.event, toolName)) continue;
     if (!toolMatcherMatches(rule.toolMatcher, toolName)) continue;
 
-    const allConditionsMet = rule.conditions.length === 0 ||
-      rule.conditions.every(cond => evaluateCondition(cond, toolInput));
+    const allConditionsMet =
+      rule.conditions.length === 0 ||
+      rule.conditions.every((cond) => evaluateCondition(cond, toolInput));
 
     if (!allConditionsMet) continue;
 
@@ -311,8 +328,9 @@ export async function testHookifyRules(
     if (!rule.enabled) continue;
     if (!eventMatchesHookEvent(rule.event, "Bash")) continue;
     if (!toolMatcherMatches(rule.toolMatcher, "Bash")) continue;
-    const allMet = rule.conditions.length === 0 ||
-      rule.conditions.every(cond => evaluateCondition(cond, toolInput));
+    const allMet =
+      rule.conditions.length === 0 ||
+      rule.conditions.every((cond) => evaluateCondition(cond, toolInput));
     if (allMet) matchedRules.push(rule.name);
   }
 
@@ -330,7 +348,9 @@ export function formatRuleList(rules: HookifyRule[]): string {
   for (const rule of rules) {
     const status = rule.enabled ? "ON " : "OFF";
     const condCount = rule.conditions.length;
-    lines.push(`  [${status}] ${rule.name} — ${rule.action} on ${rule.event} (${condCount} condition${condCount !== 1 ? "s" : ""})`);
+    lines.push(
+      `  [${status}] ${rule.name} — ${rule.action} on ${rule.event} (${condCount} condition${condCount !== 1 ? "s" : ""})`,
+    );
     if (rule.toolMatcher) lines.push(`        matcher: ${rule.toolMatcher}`);
     for (const cond of rule.conditions) {
       lines.push(`        ${cond.field} ${cond.operator} "${cond.pattern}"`);

@@ -4,10 +4,10 @@
 
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ToolDefinition, ToolResult } from "../core/types";
+import { join } from "node:path";
 import { log } from "../core/logger";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Detection ──────────────────────────────────────────────────
 
@@ -58,7 +58,10 @@ Requires Playwright installed (npx playwright install chromium). Falls back to c
       value: { type: "string", description: "Value for fill action" },
       script: { type: "string", description: "JavaScript to evaluate" },
       output: { type: "string", description: "Output file path for screenshot" },
-      attribute: { type: "string", description: "Element attribute to extract (default: innerText)" },
+      attribute: {
+        type: "string",
+        description: "Element attribute to extract (default: innerText)",
+      },
       wait: { type: "number", description: "Wait time in ms after navigation (default: 2000)" },
     },
     required: ["action", "url"],
@@ -69,8 +72,14 @@ Requires Playwright installed (npx playwright install chromium). Falls back to c
 
 function generatePlaywrightScript(input: Record<string, unknown>): string {
   const { action, url, selector, value, script, output, attribute, wait } = input as {
-    action: string; url: string; selector?: string; value?: string;
-    script?: string; output?: string; attribute?: string; wait?: number;
+    action: string;
+    url: string;
+    selector?: string;
+    value?: string;
+    script?: string;
+    output?: string;
+    attribute?: string;
+    wait?: number;
   };
 
   const waitMs = wait ?? 2000;
@@ -94,7 +103,9 @@ function generatePlaywrightScript(input: Record<string, unknown>): string {
       break;
 
     case "screenshot":
-      lines.push(`    await page.screenshot({ path: ${JSON.stringify(screenshotPath)}, fullPage: true });`);
+      lines.push(
+        `    await page.screenshot({ path: ${JSON.stringify(screenshotPath)}, fullPage: true });`,
+      );
       lines.push(`    console.log("Screenshot saved: ${screenshotPath}");`);
       break;
 
@@ -130,8 +141,12 @@ function generatePlaywrightScript(input: Record<string, unknown>): string {
       if (!script) throw new Error("script is required for evaluate action");
       // Pass script as a string to page.evaluate to prevent Node.js context escape
       lines.push(`    const __script = ${JSON.stringify(script)};`);
-      lines.push(`    const result = await page.evaluate((__s) => { return new Function(__s)(); }, __script);`);
-      lines.push(`    console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result));`);
+      lines.push(
+        `    const result = await page.evaluate((__s) => { return new Function(__s)(); }, __script);`,
+      );
+      lines.push(
+        `    console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result));`,
+      );
       break;
   }
 
@@ -180,7 +195,11 @@ export async function executeBrowser(input: Record<string, unknown>): Promise<To
 
   // Block non-HTTP URLs
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    return { tool_use_id: "", content: "Only http:// and https:// URLs are supported", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Only http:// and https:// URLs are supported",
+      is_error: true,
+    };
   }
 
   // If Playwright is not available, fall back for simple actions
@@ -191,7 +210,11 @@ export async function executeBrowser(input: Record<string, unknown>): Promise<To
         const text = await fallbackNavigate(url);
         return { tool_use_id: "", content: text };
       } catch (err) {
-        return { tool_use_id: "", content: `Browser error: ${err instanceof Error ? err.message : err}`, is_error: true };
+        return {
+          tool_use_id: "",
+          content: `Browser error: ${err instanceof Error ? err.message : err}`,
+          is_error: true,
+        };
       }
     }
 
@@ -208,15 +231,24 @@ export async function executeBrowser(input: Record<string, unknown>): Promise<To
     const tmpScript = join(tmpdir(), `kcode-browser-${Date.now()}.js`);
     await Bun.write(tmpScript, script);
 
-    const output = execSync(`npx playwright test --reporter=list ${tmpScript} 2>/dev/null || node ${tmpScript}`, {
-      stdio: "pipe",
-      timeout: 60_000,
-      maxBuffer: 10 * 1024 * 1024,
-      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: "0" },
-    }).toString().trim();
+    const output = execSync(
+      `npx playwright test --reporter=list ${tmpScript} 2>/dev/null || node ${tmpScript}`,
+      {
+        stdio: "pipe",
+        timeout: 60_000,
+        maxBuffer: 10 * 1024 * 1024,
+        env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: "0" },
+      },
+    )
+      .toString()
+      .trim();
 
     // Cleanup
-    try { unlinkSync(tmpScript); } catch { /* ignore */ }
+    try {
+      unlinkSync(tmpScript);
+    } catch {
+      /* ignore */
+    }
 
     return { tool_use_id: "", content: output || "(no output)" };
   } catch (err) {

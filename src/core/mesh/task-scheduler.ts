@@ -1,17 +1,17 @@
 // KCode - P2P Agent Mesh Task Scheduler
 // Distributes tasks across mesh peers based on scoring (models, VRAM, CPU, latency).
 
+import { log } from "../logger";
+import type { PeerDiscovery } from "./discovery";
+import type { MeshTransport } from "./transport";
 import type {
-  PeerInfo,
+  MeshResult,
   MeshTask,
   MeshTaskHandle,
-  MeshResult,
+  PeerInfo,
   ScoredPeer,
   TaskStatus,
 } from "./types";
-import type { PeerDiscovery } from "./discovery";
-import type { MeshTransport } from "./transport";
-import { log } from "../logger";
 
 // ─── Constants ─────────────────────────────────────────────────
 
@@ -30,11 +30,7 @@ export class TaskScheduler {
   private pendingResults: Map<string, MeshResult> = new Map();
   private localExecutor: LocalExecutor | null = null;
 
-  constructor(
-    discovery: PeerDiscovery,
-    transport: MeshTransport,
-    localExecutor?: LocalExecutor,
-  ) {
+  constructor(discovery: PeerDiscovery, transport: MeshTransport, localExecutor?: LocalExecutor) {
     this.discovery = discovery;
     this.transport = transport;
     this.localExecutor = localExecutor ?? null;
@@ -271,10 +267,10 @@ export type LocalExecutor = (task: MeshTask) => Promise<string>;
 // ─── Exports ───────────────────────────────────────────────────
 
 export {
-  SCORE_HAS_MODEL,
-  SCORE_PER_GB_VRAM,
-  SCORE_PER_CPU_CORE,
+  HIGH_LATENCY_THRESHOLD_MS,
   PENALTY_BUSY,
   PENALTY_HIGH_LATENCY,
-  HIGH_LATENCY_THRESHOLD_MS,
+  SCORE_HAS_MODEL,
+  SCORE_PER_CPU_CORE,
+  SCORE_PER_GB_VRAM,
 };

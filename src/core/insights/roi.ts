@@ -1,9 +1,9 @@
 // KCode - ROI Tracking
 // Estimates return on investment from AI-assisted development.
 
-import type { ROIMetrics } from "./types";
 import { getAnalyticsSummary } from "../analytics";
 import { charts } from "./charts";
+import type { ROIMetrics } from "./types";
 
 // Estimated minutes saved per tool call by category
 const TIME_SAVINGS_MAP: Record<string, number> = {
@@ -47,12 +47,10 @@ export async function calculateROI(config: {
   const analytics = getAnalyticsSummary(config.period);
 
   // Calculate time saved per tool category
-  const toolTimeSavings: Array<{ category: string; timeSavedMinutes: number }> =
-    [];
+  const toolTimeSavings: Array<{ category: string; timeSavedMinutes: number }> = [];
 
   for (const tool of analytics.toolBreakdown) {
-    const minutesPerCall =
-      TIME_SAVINGS_MAP[tool.tool] ?? DEFAULT_MINUTES_SAVED;
+    const minutesPerCall = TIME_SAVINGS_MAP[tool.tool] ?? DEFAULT_MINUTES_SAVED;
     const totalMinutes = tool.count * minutesPerCall;
     toolTimeSavings.push({
       category: tool.tool,
@@ -63,10 +61,7 @@ export async function calculateROI(config: {
   // Sort descending by time saved
   toolTimeSavings.sort((a, b) => b.timeSavedMinutes - a.timeSavedMinutes);
 
-  const totalMinutesSaved = toolTimeSavings.reduce(
-    (sum, t) => sum + t.timeSavedMinutes,
-    0,
-  );
+  const totalMinutesSaved = toolTimeSavings.reduce((sum, t) => sum + t.timeSavedMinutes, 0);
   const hoursSaved = totalMinutesSaved / 60;
   const valueUsd = hoursSaved * config.hourlyRate;
   const totalCostUsd = analytics.totalCostUsd;
@@ -101,14 +96,8 @@ export function formatROI(metrics: ROIMetrics): string {
       ["Metric", "Value"],
       [
         ["Total Cost", `$${metrics.totalCostUsd.toFixed(2)}`],
-        [
-          "Estimated Hours Saved",
-          `${metrics.estimatedTimeSavedHours.toFixed(1)}h`,
-        ],
-        [
-          "Estimated Value",
-          `$${metrics.estimatedValueUsd.toFixed(2)}`,
-        ],
+        ["Estimated Hours Saved", `${metrics.estimatedTimeSavedHours.toFixed(1)}h`],
+        ["Estimated Value", `$${metrics.estimatedValueUsd.toFixed(2)}`],
         ["ROI", `${metrics.roi.toFixed(1)}%`],
       ],
     ),
@@ -118,15 +107,11 @@ export function formatROI(metrics: ROIMetrics): string {
 
   // ROI status
   if (metrics.roi > 0) {
-    lines.push(
-      `  Net gain: $${(metrics.estimatedValueUsd - metrics.totalCostUsd).toFixed(2)}`,
-    );
+    lines.push(`  Net gain: $${(metrics.estimatedValueUsd - metrics.totalCostUsd).toFixed(2)}`);
   } else if (metrics.totalCostUsd === 0) {
     lines.push("  No cost data available (local models or free tier).");
   } else {
-    lines.push(
-      `  Net loss: $${(metrics.totalCostUsd - metrics.estimatedValueUsd).toFixed(2)}`,
-    );
+    lines.push(`  Net loss: $${(metrics.totalCostUsd - metrics.estimatedValueUsd).toFixed(2)}`);
   }
 
   lines.push("");

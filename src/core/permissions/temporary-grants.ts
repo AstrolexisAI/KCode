@@ -45,12 +45,9 @@ export class TemporaryGrants {
     },
   ): void {
     const duration = opts?.duration ?? Infinity;
-    const expiresAt =
-      duration === Infinity ? Infinity : Date.now() + duration;
+    const expiresAt = duration === Infinity ? Infinity : Date.now() + duration;
 
-    const key = opts?.fieldMatch
-      ? `${toolName}:${opts.fieldMatch}`
-      : toolName;
+    const key = opts?.fieldMatch ? `${toolName}:${opts.fieldMatch}` : toolName;
 
     this.grants.set(key, {
       action,
@@ -68,10 +65,7 @@ export class TemporaryGrants {
    *
    * Returns null if no matching grant is found.
    */
-  check(
-    toolName: string,
-    input?: Record<string, unknown>,
-  ): GrantCheckResult | null {
+  check(toolName: string, input?: Record<string, unknown>): GrantCheckResult | null {
     const now = Date.now();
 
     // Check field-level grants first (more specific)
@@ -185,10 +179,7 @@ function splitKey(key: string): [string, string] {
  * Checks if any value in the input matches the given glob pattern.
  * Uses simple glob matching (case-insensitive).
  */
-function inputMatchesPattern(
-  input: Record<string, unknown>,
-  pattern: string,
-): boolean {
+function inputMatchesPattern(input: Record<string, unknown>, pattern: string): boolean {
   for (const value of Object.values(input)) {
     if (value === null || value === undefined) continue;
     const strValue = String(value);

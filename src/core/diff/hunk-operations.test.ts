@@ -1,16 +1,16 @@
 // KCode - Hunk Operations Tests
 // Tests for accept, reject, modify, split, merge, and stats operations on diff hunks.
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  acceptHunk,
-  rejectHunk,
-  modifyHunk,
   acceptAll,
-  rejectAll,
+  acceptHunk,
   getStats,
-  splitHunk,
   mergeHunks,
+  modifyHunk,
+  rejectAll,
+  rejectHunk,
+  splitHunk,
 } from "./hunk-operations.js";
 import type { DiffHunk } from "./types.js";
 

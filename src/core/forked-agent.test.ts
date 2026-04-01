@@ -1,5 +1,10 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { runForkedAgent, simplifyMessage, type ForkedAgentConfig, type ForkedAgentResult } from "./forked-agent";
+import { beforeEach, describe, expect, test } from "bun:test";
+import {
+  type ForkedAgentConfig,
+  type ForkedAgentResult,
+  runForkedAgent,
+  simplifyMessage,
+} from "./forked-agent";
 
 // ─── simplifyMessage ────────────────────────────────────────────
 
@@ -17,9 +22,7 @@ describe("simplifyMessage", () => {
   test("extracts text from content blocks", () => {
     const result = simplifyMessage({
       role: "assistant",
-      content: [
-        { type: "text", text: "Here is the answer" },
-      ] as any,
+      content: [{ type: "text", text: "Here is the answer" }] as any,
     });
     expect(result.content).toBe("Here is the answer");
   });
@@ -28,9 +31,7 @@ describe("simplifyMessage", () => {
     const longContent = "x".repeat(1000);
     const result = simplifyMessage({
       role: "user",
-      content: [
-        { type: "tool_result", content: longContent },
-      ] as any,
+      content: [{ type: "tool_result", content: longContent }] as any,
     });
     expect(result.content).toContain("... (truncated)");
     expect(result.content.length).toBeLessThan(600);
@@ -39,9 +40,7 @@ describe("simplifyMessage", () => {
   test("does not truncate short tool results", () => {
     const result = simplifyMessage({
       role: "user",
-      content: [
-        { type: "tool_result", content: "short result" },
-      ] as any,
+      content: [{ type: "tool_result", content: "short result" }] as any,
     });
     expect(result.content).toBe("[Tool result: short result]");
   });
@@ -49,9 +48,7 @@ describe("simplifyMessage", () => {
   test("converts tool_use blocks to labels", () => {
     const result = simplifyMessage({
       role: "assistant",
-      content: [
-        { type: "tool_use", name: "Read", id: "123", input: {} },
-      ] as any,
+      content: [{ type: "tool_use", name: "Read", id: "123", input: {} }] as any,
     });
     expect(result.content).toBe("[Tool call: Read]");
   });
@@ -146,7 +143,10 @@ describe("runForkedAgent", () => {
     let errorCaught: Error | null = null;
 
     const errorFetch = async () => {
-      return new Response("Internal Server Error", { status: 500, statusText: "Internal Server Error" });
+      return new Response("Internal Server Error", {
+        status: 500,
+        statusText: "Internal Server Error",
+      });
     };
 
     await runForkedAgent({
@@ -250,10 +250,9 @@ describe("runForkedAgent", () => {
     let completedResult: ForkedAgentResult | null = null;
 
     const mockFetch = async () => {
-      return new Response(
-        JSON.stringify({ choices: [{ message: {} }], usage: {} }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ choices: [{ message: {} }], usage: {} }), {
+        status: 200,
+      });
     };
 
     await runForkedAgent({

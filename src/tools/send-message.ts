@@ -26,9 +26,7 @@ export const sendMessageDefinition: ToolDefinition = {
   },
 };
 
-export async function executeSendMessage(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeSendMessage(input: Record<string, unknown>): Promise<ToolResult> {
   const message = String(input.message ?? "");
   const level = (input.level as string) ?? "info";
 

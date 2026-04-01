@@ -3,10 +3,10 @@
 // Trust is persisted to ~/.kcode/trusted-workspaces.json so users only need
 // to approve a workspace once.
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { kcodePath, kcodeHome } from "./paths";
 import { log } from "./logger";
+import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Trust Store Path ──────────────────────────────────────────
 
@@ -31,7 +31,9 @@ let _persistentTrustCache: Set<string> | null = null;
  * Set by the UI layer via setTrustPromptCallback().
  * Called with (workspacePath, hookCommand) and should return true to trust.
  */
-let _trustPromptCallback: ((workspacePath: string, hookCommand: string) => Promise<boolean>) | null = null;
+let _trustPromptCallback:
+  | ((workspacePath: string, hookCommand: string) => Promise<boolean>)
+  | null = null;
 
 /** Register a callback that asks the user whether to trust a workspace. */
 export function setTrustPromptCallback(
@@ -41,7 +43,9 @@ export function setTrustPromptCallback(
 }
 
 /** Get the current trust prompt callback (used internally by HookManager). */
-export function getTrustPromptCallback(): ((workspacePath: string, hookCommand: string) => Promise<boolean>) | null {
+export function getTrustPromptCallback():
+  | ((workspacePath: string, hookCommand: string) => Promise<boolean>)
+  | null {
   return _trustPromptCallback;
 }
 
@@ -81,7 +85,10 @@ function savePersistentTrustStore(store: Set<string>): void {
     const dir = kcodeHome();
     mkdirSync(dir, { recursive: true });
     const sorted = [...store].sort();
-    writeFileSync(TRUST_STORE_PATH, JSON.stringify(sorted, null, 2) + "\n", { encoding: "utf-8", mode: 0o600 });
+    writeFileSync(TRUST_STORE_PATH, JSON.stringify(sorted, null, 2) + "\n", {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
   } catch (err) {
     log.debug("trust", `Failed to save trusted-workspaces.json: ${err}`);
   }

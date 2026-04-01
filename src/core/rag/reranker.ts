@@ -4,7 +4,7 @@
 
 import { statSync } from "node:fs";
 import { dirname, relative } from "node:path";
-import type { SearchResult, RerankerConfig, RerankerContext } from "./types";
+import type { RerankerConfig, RerankerContext, SearchResult } from "./types";
 
 // ─── Default Config ────────────────────────────────────────────
 
@@ -13,8 +13,8 @@ export const DEFAULT_RERANKER_CONFIG: RerankerConfig = {
     semantic: 0.5,
     recency: 0.15,
     frequency: 0.15,
-    proximity: 0.10,
-    typeBoost: 0.10,
+    proximity: 0.1,
+    typeBoost: 0.1,
   },
 };
 

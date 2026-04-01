@@ -126,7 +126,9 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "Server is healthy",
-              content: { "application/json": { schema: { $ref: "#/components/schemas/HealthResponse" } } },
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/HealthResponse" } },
+              },
             },
           },
         },
@@ -140,7 +142,9 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "Server information",
-              content: { "application/json": { schema: { $ref: "#/components/schemas/InfoResponse" } } },
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/InfoResponse" } },
+              },
             },
           },
         },
@@ -153,7 +157,11 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "List of messages",
-              content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/Message" } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "array", items: { $ref: "#/components/schemas/Message" } },
+                },
+              },
             },
           },
         },
@@ -193,7 +201,11 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "Cancellation acknowledged",
-              content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "object", properties: { ok: { type: "boolean" } } },
+                },
+              },
             },
           },
         },
@@ -219,7 +231,11 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "List of tools",
-              content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/Tool" } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "array", items: { $ref: "#/components/schemas/Tool" } },
+                },
+              },
             },
           },
         },
@@ -229,9 +245,7 @@ export function generateOpenAPISchema(): object {
           summary: "Execute a tool by name",
           operationId: "executeTool",
           tags: ["Tools"],
-          parameters: [
-            { name: "name", in: "path", required: true, schema: { type: "string" } },
-          ],
+          parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
           requestBody: {
             required: true,
             content: {
@@ -260,7 +274,11 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "List of memories",
-              content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/Memory" } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "array", items: { $ref: "#/components/schemas/Memory" } },
+                },
+              },
             },
           },
         },
@@ -297,9 +315,7 @@ export function generateOpenAPISchema(): object {
           summary: "Update a memory",
           operationId: "updateMemory",
           tags: ["Memory"],
-          parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string" } },
-          ],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           requestBody: {
             required: true,
             content: {
@@ -330,13 +346,15 @@ export function generateOpenAPISchema(): object {
           summary: "Delete a memory",
           operationId: "deleteMemory",
           tags: ["Memory"],
-          parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string" } },
-          ],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: {
             "200": {
               description: "Memory deleted",
-              content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "object", properties: { ok: { type: "boolean" } } },
+                },
+              },
             },
             "404": {
               description: "Memory not found",
@@ -385,7 +403,11 @@ export function generateOpenAPISchema(): object {
           responses: {
             "200": {
               description: "List of sessions",
-              content: { "application/json": { schema: { type: "array", items: { $ref: "#/components/schemas/Session" } } } },
+              content: {
+                "application/json": {
+                  schema: { type: "array", items: { $ref: "#/components/schemas/Session" } },
+                },
+              },
             },
           },
         },
@@ -418,9 +440,7 @@ export function generateOpenAPISchema(): object {
           summary: "Get session details",
           operationId: "getSession",
           tags: ["Sessions"],
-          parameters: [
-            { name: "id", in: "path", required: true, schema: { type: "string" } },
-          ],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
           responses: {
             "200": {
               description: "Session details",

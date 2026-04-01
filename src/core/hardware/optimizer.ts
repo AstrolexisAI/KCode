@@ -1,13 +1,9 @@
 // KCode - Hardware Optimizer
 // Generates model recommendations and inference configuration based on detected hardware.
 
-import type {
-  HardwareProfile,
-  ModelRecommendation,
-  LlamaCppConfig,
-} from "./types";
-import { getTotalVram, getEffectiveMemoryForModels } from "./profiles";
 import { log } from "../logger";
+import { getEffectiveMemoryForModels, getTotalVram } from "./profiles";
+import type { HardwareProfile, LlamaCppConfig, ModelRecommendation } from "./types";
 
 export class HardwareOptimizer {
   /**
@@ -16,7 +12,7 @@ export class HardwareOptimizer {
    */
   recommend(profile: HardwareProfile): ModelRecommendation[] {
     const totalVram = getTotalVram(profile);
-    const hasApple = profile.gpus.some(g => g.vendor === "apple");
+    const hasApple = profile.gpus.some((g) => g.vendor === "apple");
     const recommendations: ModelRecommendation[] = [];
 
     // === Apple Silicon (unified memory) ===
@@ -172,7 +168,10 @@ export class HardwareOptimizer {
   /**
    * Generate an optimized llama.cpp server configuration from a recommendation.
    */
-  generateLlamaCppConfig(recommendation: ModelRecommendation, profile: HardwareProfile): LlamaCppConfig {
+  generateLlamaCppConfig(
+    recommendation: ModelRecommendation,
+    profile: HardwareProfile,
+  ): LlamaCppConfig {
     return {
       model: recommendation.model,
       contextSize: recommendation.contextWindow,
@@ -180,7 +179,7 @@ export class HardwareOptimizer {
       threads: recommendation.threads,
       gpuLayers: recommendation.gpuLayers,
       flashAttention: profile.gpus.some(
-        g => g.vendor === "nvidia" && parseFloat(g.computeCapability || "0") >= 8.0
+        (g) => g.vendor === "nvidia" && parseFloat(g.computeCapability || "0") >= 8.0,
       ),
       mmap: true,
       mlock: recommendation.ramRequired < profile.memory.availableGb * 0.5,
@@ -208,7 +207,11 @@ export class HardwareOptimizer {
     const totalVram = getTotalVram(profile);
     const effectiveMem = getEffectiveMemoryForModels(profile);
 
-    if (rec.gpuLayers !== 0 && rec.vramRequired > totalVram && !profile.gpus.some(g => g.vendor === "apple")) {
+    if (
+      rec.gpuLayers !== 0 &&
+      rec.vramRequired > totalVram &&
+      !profile.gpus.some((g) => g.vendor === "apple")
+    ) {
       return `Model requires ${rec.vramRequired}GB VRAM but only ${totalVram}GB available`;
     }
 

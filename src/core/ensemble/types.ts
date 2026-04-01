@@ -87,7 +87,7 @@ export const MODEL_COST_RATES: Record<string, ModelCostRate> = {
   // DeepSeek
   "deepseek-chat": { inputPer1k: 0.00014, outputPer1k: 0.00028 },
   // Local models — free
-  "default": { inputPer1k: 0, outputPer1k: 0 },
+  default: { inputPer1k: 0, outputPer1k: 0 },
 };
 
 /** Estimate cost for a single model call */
@@ -97,9 +97,10 @@ export function estimateModelCost(
   estimatedOutputTokens: number,
 ): number {
   // Find cost rate: exact match, then prefix match, then default
-  const rate = MODEL_COST_RATES[model]
-    ?? Object.entries(MODEL_COST_RATES).find(([k]) => model.startsWith(k))?.[1]
-    ?? MODEL_COST_RATES["default"]!;
+  const rate =
+    MODEL_COST_RATES[model] ??
+    Object.entries(MODEL_COST_RATES).find(([k]) => model.startsWith(k))?.[1] ??
+    MODEL_COST_RATES["default"]!;
   return (inputTokens / 1000) * rate.inputPer1k + (estimatedOutputTokens / 1000) * rate.outputPer1k;
 }
 
@@ -130,7 +131,11 @@ export interface SpecializeConfig extends EnsembleConfig {
 // Abstraction for executing model requests (injectable for testing)
 
 export interface ModelExecutor {
-  execute(model: string, messages: Message[], maxTokens: number): Promise<{
+  execute(
+    model: string,
+    messages: Message[],
+    maxTokens: number,
+  ): Promise<{
     content: string;
     tokensUsed: number;
     durationMs: number;

@@ -50,10 +50,7 @@ export class TriggerApiClient {
   /**
    * Update an existing trigger.
    */
-  async updateTrigger(
-    id: string,
-    updates: TriggerUpdateInput,
-  ): Promise<RemoteTrigger> {
+  async updateTrigger(id: string, updates: TriggerUpdateInput): Promise<RemoteTrigger> {
     return this.request<RemoteTrigger>("PATCH", `/triggers/${id}`, updates);
   }
 
@@ -74,25 +71,15 @@ export class TriggerApiClient {
   /**
    * Get execution history for a trigger.
    */
-  async getTriggerHistory(
-    id: string,
-    limit?: number,
-  ): Promise<TriggerRunResult[]> {
+  async getTriggerHistory(id: string, limit?: number): Promise<TriggerRunResult[]> {
     const query = limit != null ? `?limit=${limit}` : "";
-    return this.request<TriggerRunResult[]>(
-      "GET",
-      `/triggers/${id}/history${query}`,
-    );
+    return this.request<TriggerRunResult[]>("GET", `/triggers/${id}/history${query}`);
   }
 
   /**
    * Internal HTTP helper. Attaches auth header and handles errors.
    */
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
 
     const headers: Record<string, string> = {

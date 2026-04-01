@@ -27,12 +27,18 @@ export class BranchManager {
   /**
    * Save a branch point when forking.
    */
-  saveBranch(id: string, parentId: string | null, label: string, sessionFile: string, messageCount = 0): void {
+  saveBranch(
+    id: string,
+    parentId: string | null,
+    label: string,
+    sessionFile: string,
+    messageCount = 0,
+  ): void {
     const db = getDb();
     db.run(
       `INSERT OR REPLACE INTO conversation_branches (id, parent_id, label, session_file, created_at, message_count, status)
        VALUES (?, ?, ?, ?, datetime('now'), ?, 'active')`,
-      [id, parentId, label, sessionFile, messageCount]
+      [id, parentId, label, sessionFile, messageCount],
     );
   }
 
@@ -41,12 +47,14 @@ export class BranchManager {
    */
   listBranches(): BranchInfo[] {
     const db = getDb();
-    const rows = db.query(
-      `SELECT id, parent_id, label, session_file, created_at, message_count, status
+    const rows = db
+      .query(
+        `SELECT id, parent_id, label, session_file, created_at, message_count, status
        FROM conversation_branches
        WHERE status != 'deleted'
-       ORDER BY created_at DESC`
-    ).all() as Array<{
+       ORDER BY created_at DESC`,
+      )
+      .all() as Array<{
       id: string;
       parent_id: string | null;
       label: string;
@@ -56,7 +64,7 @@ export class BranchManager {
       status: string;
     }>;
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id: r.id,
       parentId: r.parent_id,
       label: r.label,
@@ -106,10 +114,12 @@ export class BranchManager {
    */
   getBranch(id: string): BranchInfo | null {
     const db = getDb();
-    const row = db.query(
-      `SELECT id, parent_id, label, session_file, created_at, message_count, status
-       FROM conversation_branches WHERE id = ?`
-    ).get(id) as {
+    const row = db
+      .query(
+        `SELECT id, parent_id, label, session_file, created_at, message_count, status
+       FROM conversation_branches WHERE id = ?`,
+      )
+      .get(id) as {
       id: string;
       parent_id: string | null;
       label: string;
@@ -142,7 +152,10 @@ export class BranchManager {
     const branch = this.getBranch(id);
     const newParent = branch?.parentId ?? null;
     // Reparent children to the deleted branch's parent
-    db.run(`UPDATE conversation_branches SET parent_id = ? WHERE parent_id = ? AND status != 'deleted'`, [newParent, id]);
+    db.run(
+      `UPDATE conversation_branches SET parent_id = ? WHERE parent_id = ? AND status != 'deleted'`,
+      [newParent, id],
+    );
     // Mark as deleted
     db.run(`UPDATE conversation_branches SET status = 'deleted' WHERE id = ?`, [id]);
   }
@@ -160,10 +173,12 @@ export class BranchManager {
    */
   findBySessionFile(sessionFile: string): BranchInfo | null {
     const db = getDb();
-    const row = db.query(
-      `SELECT id, parent_id, label, session_file, created_at, message_count, status
-       FROM conversation_branches WHERE session_file = ? AND status != 'deleted'`
-    ).get(sessionFile) as {
+    const row = db
+      .query(
+        `SELECT id, parent_id, label, session_file, created_at, message_count, status
+       FROM conversation_branches WHERE session_file = ? AND status != 'deleted'`,
+      )
+      .get(sessionFile) as {
       id: string;
       parent_id: string | null;
       label: string;

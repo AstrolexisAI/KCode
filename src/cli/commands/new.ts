@@ -22,18 +22,44 @@ export function registerNewCommand(program: Command): void {
         api: () => {
           mkdirSync(join(projectDir, "src"), { recursive: true });
           mkdirSync(join(projectDir, "src", "routes"), { recursive: true });
-          writeFileSync(join(projectDir, "package.json"), JSON.stringify({
-            name: projectName,
-            version: "0.1.0",
-            type: "module",
-            scripts: { start: "bun run src/index.ts", dev: "bun --watch run src/index.ts", test: "bun test" },
-            devDependencies: { "@types/bun": "latest" },
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({
-            compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "bundler", strict: true, outDir: "dist" },
-            include: ["src"],
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "src", "index.ts"), `const server = Bun.serve({
+          writeFileSync(
+            join(projectDir, "package.json"),
+            JSON.stringify(
+              {
+                name: projectName,
+                version: "0.1.0",
+                type: "module",
+                scripts: {
+                  start: "bun run src/index.ts",
+                  dev: "bun --watch run src/index.ts",
+                  test: "bun test",
+                },
+                devDependencies: { "@types/bun": "latest" },
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "tsconfig.json"),
+            JSON.stringify(
+              {
+                compilerOptions: {
+                  target: "ESNext",
+                  module: "ESNext",
+                  moduleResolution: "bundler",
+                  strict: true,
+                  outDir: "dist",
+                },
+                include: ["src"],
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "src", "index.ts"),
+            `const server = Bun.serve({
   port: 10080,
   fetch(req) {
     const url = new URL(req.url);
@@ -43,25 +69,54 @@ export function registerNewCommand(program: Command): void {
 });
 
 console.log(\`Server running at http://localhost:\${server.port}\`);
-`);
-          writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun API project. Run with \`bun run dev\`.\n`);
+`,
+          );
+          writeFileSync(
+            join(projectDir, "KCODE.md"),
+            `# ${projectName}\n\nBun API project. Run with \`bun run dev\`.\n`,
+          );
         },
         cli: () => {
           mkdirSync(join(projectDir, "src"), { recursive: true });
-          writeFileSync(join(projectDir, "package.json"), JSON.stringify({
-            name: projectName,
-            version: "0.1.0",
-            type: "module",
-            bin: { [projectName]: "src/index.ts" },
-            scripts: { start: "bun run src/index.ts", build: "bun build src/index.ts --compile --outfile dist/" + projectName, test: "bun test" },
-            devDependencies: { "@types/bun": "latest" },
-            dependencies: { commander: "^14.0.0" },
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({
-            compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "bundler", strict: true },
-            include: ["src"],
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "src", "index.ts"), `#!/usr/bin/env bun
+          writeFileSync(
+            join(projectDir, "package.json"),
+            JSON.stringify(
+              {
+                name: projectName,
+                version: "0.1.0",
+                type: "module",
+                bin: { [projectName]: "src/index.ts" },
+                scripts: {
+                  start: "bun run src/index.ts",
+                  build: "bun build src/index.ts --compile --outfile dist/" + projectName,
+                  test: "bun test",
+                },
+                devDependencies: { "@types/bun": "latest" },
+                dependencies: { commander: "^14.0.0" },
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "tsconfig.json"),
+            JSON.stringify(
+              {
+                compilerOptions: {
+                  target: "ESNext",
+                  module: "ESNext",
+                  moduleResolution: "bundler",
+                  strict: true,
+                },
+                include: ["src"],
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "src", "index.ts"),
+            `#!/usr/bin/env bun
 import { Command } from "commander";
 
 const program = new Command()
@@ -74,20 +129,37 @@ const program = new Command()
   });
 
 program.parse();
-`);
-          writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun CLI project. Run with \`bun run start\`, build with \`bun run build\`.\n`);
+`,
+          );
+          writeFileSync(
+            join(projectDir, "KCODE.md"),
+            `# ${projectName}\n\nBun CLI project. Run with \`bun run start\`, build with \`bun run build\`.\n`,
+          );
         },
         web: () => {
           mkdirSync(join(projectDir, "src"), { recursive: true });
           mkdirSync(join(projectDir, "public"), { recursive: true });
-          writeFileSync(join(projectDir, "package.json"), JSON.stringify({
-            name: projectName,
-            version: "0.1.0",
-            type: "module",
-            scripts: { start: "bun run src/server.ts", dev: "bun --watch run src/server.ts", test: "bun test" },
-            devDependencies: { "@types/bun": "latest" },
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "src", "server.ts"), `const server = Bun.serve({
+          writeFileSync(
+            join(projectDir, "package.json"),
+            JSON.stringify(
+              {
+                name: projectName,
+                version: "0.1.0",
+                type: "module",
+                scripts: {
+                  start: "bun run src/server.ts",
+                  dev: "bun --watch run src/server.ts",
+                  test: "bun test",
+                },
+                devDependencies: { "@types/bun": "latest" },
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "src", "server.ts"),
+            `const server = Bun.serve({
   port: 10080,
   fetch(req) {
     const url = new URL(req.url);
@@ -97,49 +169,91 @@ program.parse();
   },
 });
 console.log(\`Server running at http://localhost:\${server.port}\`);
-`);
-          writeFileSync(join(projectDir, "public", "index.html"), `<!DOCTYPE html>
+`,
+          );
+          writeFileSync(
+            join(projectDir, "public", "index.html"),
+            `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>${projectName}</title><link rel="stylesheet" href="/styles.css"></head>
 <body><h1>${projectName}</h1><script src="/app.js"></script></body>
 </html>
-`);
-          writeFileSync(join(projectDir, "public", "styles.css"), "body { font-family: system-ui; max-width: 800px; margin: 2rem auto; }\n");
+`,
+          );
+          writeFileSync(
+            join(projectDir, "public", "styles.css"),
+            "body { font-family: system-ui; max-width: 800px; margin: 2rem auto; }\n",
+          );
           writeFileSync(join(projectDir, "public", "app.js"), "console.log('Ready');\n");
-          writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun web project. Run with \`bun run dev\`.\n`);
+          writeFileSync(
+            join(projectDir, "KCODE.md"),
+            `# ${projectName}\n\nBun web project. Run with \`bun run dev\`.\n`,
+          );
         },
         library: () => {
           mkdirSync(join(projectDir, "src"), { recursive: true });
           mkdirSync(join(projectDir, "tests"), { recursive: true });
-          writeFileSync(join(projectDir, "package.json"), JSON.stringify({
-            name: projectName,
-            version: "0.1.0",
-            type: "module",
-            main: "src/index.ts",
-            scripts: { test: "bun test", build: "bun build src/index.ts --outdir dist" },
-            devDependencies: { "@types/bun": "latest" },
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({
-            compilerOptions: { target: "ESNext", module: "ESNext", moduleResolution: "bundler", strict: true, declaration: true, outDir: "dist" },
-            include: ["src"],
-          }, null, 2) + "\n");
-          writeFileSync(join(projectDir, "src", "index.ts"), `export function hello(name: string): string {
+          writeFileSync(
+            join(projectDir, "package.json"),
+            JSON.stringify(
+              {
+                name: projectName,
+                version: "0.1.0",
+                type: "module",
+                main: "src/index.ts",
+                scripts: { test: "bun test", build: "bun build src/index.ts --outdir dist" },
+                devDependencies: { "@types/bun": "latest" },
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "tsconfig.json"),
+            JSON.stringify(
+              {
+                compilerOptions: {
+                  target: "ESNext",
+                  module: "ESNext",
+                  moduleResolution: "bundler",
+                  strict: true,
+                  declaration: true,
+                  outDir: "dist",
+                },
+                include: ["src"],
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          writeFileSync(
+            join(projectDir, "src", "index.ts"),
+            `export function hello(name: string): string {
   return \`Hello, \${name}!\`;
 }
-`);
-          writeFileSync(join(projectDir, "tests", "index.test.ts"), `import { test, expect } from "bun:test";
+`,
+          );
+          writeFileSync(
+            join(projectDir, "tests", "index.test.ts"),
+            `import { test, expect } from "bun:test";
 import { hello } from "../src/index";
 
 test("hello returns greeting", () => {
   expect(hello("World")).toBe("Hello, World!");
 });
-`);
-          writeFileSync(join(projectDir, "KCODE.md"), `# ${projectName}\n\nBun library project. Test with \`bun test\`.\n`);
+`,
+          );
+          writeFileSync(
+            join(projectDir, "KCODE.md"),
+            `# ${projectName}\n\nBun library project. Test with \`bun test\`.\n`,
+          );
         },
       };
 
       if (!templates[template]) {
-        console.error(`\x1b[31mUnknown template "${template}". Available: ${Object.keys(templates).join(", ")}\x1b[0m`);
+        console.error(
+          `\x1b[31mUnknown template "${template}". Available: ${Object.keys(templates).join(", ")}\x1b[0m`,
+        );
         process.exit(1);
       }
 

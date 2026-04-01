@@ -1,13 +1,13 @@
 // KCode - Skills Manager
 // Discovers, loads, and executes slash-command skills from multiple sources
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { kcodePath } from "./paths";
 import { builtinSkills, type SkillDefinition } from "./builtin-skills.js";
-import { TemplateManager } from "./templates.js";
+import { kcodePath } from "./paths";
 import { getPluginManager } from "./plugins.js";
 import { matchSkills, type SkillTrigger } from "./skill-matcher.js";
+import { TemplateManager } from "./templates.js";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -93,7 +93,9 @@ function extractYamlTriggers(yaml: string): SkillTrigger[] {
   const triggerBlock = yaml.match(/^triggers:\s*\n((?:\s+-\s+.*\n?)*)/m);
   if (!triggerBlock) return triggers;
 
-  const entries = triggerBlock[1]!.matchAll(/pattern:\s*["']?([^"'\n]+)["']?\s*\n\s*type:\s*["']?(regex|contains|startsWith)["']?/g);
+  const entries = triggerBlock[1]!.matchAll(
+    /pattern:\s*["']?([^"'\n]+)["']?\s*\n\s*type:\s*["']?(regex|contains|startsWith)["']?/g,
+  );
   for (const entry of entries) {
     triggers.push({ pattern: entry[1]!.trim(), type: entry[2]!.trim() as SkillTrigger["type"] });
   }
@@ -192,7 +194,9 @@ export class SkillManager {
         const content = readFileSync(filePath, "utf-8");
         const skill = parseSkillFile(content);
         if (skill) byName.set(skill.name, skill);
-      } catch { /* skip unreadable plugin skill files */ }
+      } catch {
+        /* skip unreadable plugin skill files */
+      }
     }
 
     // Project-level skills (.kcode/skills/) - highest priority
@@ -257,7 +261,13 @@ export class SkillManager {
     // Built-in action commands (handled by App.tsx, not the LLM)
     const builtinMatch = skill.template.match(/^__builtin_(\w+)__$/);
     if (builtinMatch) {
-      return { skill, prompt: args, isHelp: false, isTemplate: false, builtinAction: builtinMatch[1] };
+      return {
+        skill,
+        prompt: args,
+        isHelp: false,
+        isTemplate: false,
+        builtinAction: builtinMatch[1],
+      };
     }
 
     const prompt = expandTemplate(skill.template, args);
@@ -278,12 +288,18 @@ export class SkillManager {
     if (subcommand === "use") {
       const templateName = parts[1];
       if (!templateName) {
-        return { text: "Usage: /template use <name> [arg1=value1 arg2=value2 ...]", sendToLLM: false };
+        return {
+          text: "Usage: /template use <name> [arg1=value1 arg2=value2 ...]",
+          sendToLLM: false,
+        };
       }
 
       const template = this.templateManager.findTemplate(templateName);
       if (!template) {
-        return { text: `Template "${templateName}" not found. Use /template list to see available templates.`, sendToLLM: false };
+        return {
+          text: `Template "${templateName}" not found. Use /template list to see available templates.`,
+          sendToLLM: false,
+        };
       }
 
       // Parse key=value args from remaining parts
@@ -312,7 +328,11 @@ export class SkillManager {
       }
 
       // If there are free args but no named template args, join them as a single value for the first arg
-      if (freeArgs.length > 0 && template.args.length > 0 && Object.keys(templateArgs).length === 0) {
+      if (
+        freeArgs.length > 0 &&
+        template.args.length > 0 &&
+        Object.keys(templateArgs).length === 0
+      ) {
         templateArgs[template.args[0]!] = freeArgs.join(" ");
       }
 
@@ -326,10 +346,16 @@ export class SkillManager {
         return { text: "Usage: /template save <name>", sendToLLM: false };
       }
       // Placeholder — saving the last assistant message requires conversation context
-      return { text: `Template save is not yet implemented. To create a template manually, add a .md file to ~/.kcode/templates/ with YAML frontmatter (name, description, args) and a template body using {{arg_name}} placeholders.`, sendToLLM: false };
+      return {
+        text: `Template save is not yet implemented. To create a template manually, add a .md file to ~/.kcode/templates/ with YAML frontmatter (name, description, args) and a template body using {{arg_name}} placeholders.`,
+        sendToLLM: false,
+      };
     }
 
-    return { text: `Unknown subcommand "${subcommand}". Available: list, use, save`, sendToLLM: false };
+    return {
+      text: `Unknown subcommand "${subcommand}". Available: list, use, save`,
+      sendToLLM: false,
+    };
   }
 
   /**
@@ -338,7 +364,7 @@ export class SkillManager {
   private formatTemplateList(): string {
     const templates = this.templateManager.listTemplates();
     if (templates.length === 0) {
-      return "No templates found.\n\nTo create templates, add .md files to ~/.kcode/templates/ with YAML frontmatter:\n\n  ---\n  name: my-template\n  description: What it does\n  args: [arg1, arg2]\n  ---\n  Template body with {{arg1}} placeholders.\n\nExample templates to try:\n  - explain.md — \"Explain this code: {{code}}\"\n  - test-for.md — \"Write tests for: {{target}}\"\n  - refactor.md — \"Refactor this to be more readable: {{code}}\"";
+      return 'No templates found.\n\nTo create templates, add .md files to ~/.kcode/templates/ with YAML frontmatter:\n\n  ---\n  name: my-template\n  description: What it does\n  args: [arg1, arg2]\n  ---\n  Template body with {{arg1}} placeholders.\n\nExample templates to try:\n  - explain.md — "Explain this code: {{code}}"\n  - test-for.md — "Write tests for: {{target}}"\n  - refactor.md — "Refactor this to be more readable: {{code}}"';
     }
 
     const lines: string[] = ["\n  Templates (~/.kcode/templates/)"];
@@ -375,7 +401,8 @@ export class SkillManager {
     // Skill commands
     lines.push("  Skills");
     for (const skill of this.skills) {
-      const aliases = skill.aliases.length > 0 ? ` (${skill.aliases.map((a) => "/" + a).join(", ")})` : "";
+      const aliases =
+        skill.aliases.length > 0 ? ` (${skill.aliases.map((a) => "/" + a).join(", ")})` : "";
       const nameCol = `  /${skill.name}${aliases}`;
       lines.push(`${nameCol.padEnd(28)} ${skill.description}`);
     }
@@ -426,9 +453,7 @@ export class SkillManager {
 // ─── Level 3 Resource Loading ─────────────────────────────────
 
 function loadSkillResources(skillName: string, skills: SkillDefinition[]): string | null {
-  const skill = skills.find(
-    (s) => s.name.toLowerCase() === skillName.toLowerCase(),
-  );
+  const skill = skills.find((s) => s.name.toLowerCase() === skillName.toLowerCase());
   if (!skill?.sourceDir) return null;
 
   const resourceDir = join(skill.sourceDir, skillName);

@@ -63,10 +63,7 @@ export function getCurrentPhase(workflow: Workflow): WorkflowPhase | null {
  * Advance to the next phase, storing context from the current phase.
  * Returns the next phase, or null if the workflow is complete.
  */
-export function advancePhase(
-  workflow: Workflow,
-  phaseOutput?: string,
-): WorkflowPhase | null {
+export function advancePhase(workflow: Workflow, phaseOutput?: string): WorkflowPhase | null {
   const current = getCurrentPhase(workflow);
   if (!current) return null;
 
@@ -90,10 +87,7 @@ export function advancePhase(
  * Replaces {{context.PhaseName}} with that phase's stored output,
  * and {{args}} with provided user arguments.
  */
-export function getPhasePrompt(
-  phase: WorkflowPhase,
-  context: Record<string, string>,
-): string {
+export function getPhasePrompt(phase: WorkflowPhase, context: Record<string, string>): string {
   let prompt = phase.prompt;
 
   // Replace {{context.PhaseName}} references
@@ -135,9 +129,7 @@ export function formatWorkflowProgress(workflow: Workflow): string {
     } else {
       marker = "[  ]";
     }
-    const agentInfo = phase.agents?.length
-      ? ` (agents: ${phase.agents.join(", ")})`
-      : "";
+    const agentInfo = phase.agents?.length ? ` (agents: ${phase.agents.join(", ")})` : "";
     lines.push(`  ${marker} Phase ${phase.id}: ${phase.name}${agentInfo}`);
     lines.push(`       ${phase.description}`);
   }
@@ -306,7 +298,7 @@ Run git diff to see all changes, then review for:
 6. Type safety issues
 
 For each issue found, output a JSON block on its own line:
-{\"confidence\": 0-100, \"category\": \"bug|security|style|performance|logic\", \"severity\": \"critical|high|medium|low\", \"file\": \"path\", \"line\": N, \"description\": \"...\", \"suggestion\": \"...\"}
+{"confidence": 0-100, "category": "bug|security|style|performance|logic", "severity": "critical|high|medium|low", "file": "path", "line": N, "description": "...", "suggestion": "..."}
 
 Be thorough and calibrate confidence carefully. Only flag issues you are genuinely confident about."
 

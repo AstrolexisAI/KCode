@@ -10,13 +10,19 @@ export async function checkPlugins(): Promise<HealthCheck> {
     const plugins = await pm.list();
 
     if (plugins.length === 0) {
-      return { name: "Plugins", category: "plugin", status: "pass", message: "No plugins installed", weight: 3 };
+      return {
+        name: "Plugins",
+        category: "plugin",
+        status: "pass",
+        message: "No plugins installed",
+        weight: 3,
+      };
     }
 
     let errors = 0;
     const errorNames: string[] = [];
     for (const p of plugins) {
-      const manifest = (p as unknown as Record<string, unknown>).manifest as typeof p ?? p;
+      const manifest = ((p as unknown as Record<string, unknown>).manifest as typeof p) ?? p;
       if (!manifest.name || !manifest.version) {
         errors++;
         errorNames.push(String(manifest.name ?? "unknown"));
@@ -43,6 +49,12 @@ export async function checkPlugins(): Promise<HealthCheck> {
     };
   } catch (err) {
     log.debug("doctor/plugin-check", `Error: ${err}`);
-    return { name: "Plugins", category: "plugin", status: "pass", message: "Plugin system not initialized", weight: 3 };
+    return {
+      name: "Plugins",
+      category: "plugin",
+      status: "pass",
+      message: "Plugin system not initialized",
+      weight: 3,
+    };
   }
 }

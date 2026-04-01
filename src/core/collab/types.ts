@@ -60,6 +60,12 @@ export interface CursorPosition {
 }
 
 export const PARTICIPANT_COLORS = [
-  "#e06c75", "#98c379", "#e5c07b", "#61afef",
-  "#c678dd", "#56b6c2", "#be5046", "#d19a66",
+  "#e06c75",
+  "#98c379",
+  "#e5c07b",
+  "#61afef",
+  "#c678dd",
+  "#56b6c2",
+  "#be5046",
+  "#d19a66",
 ] as const;

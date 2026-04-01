@@ -1,8 +1,8 @@
 // KCode - Insights Analyzer
 // Generates actionable insights from analytics data.
 
-import type { Insight } from "./types";
 import { getAnalyticsSummary } from "../analytics";
+import type { Insight } from "./types";
 
 export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
   const insights: Insight[] = [];
@@ -22,9 +22,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
   if (analytics.modelBreakdown.length > 1) {
     const modelsWithCost = analytics.modelBreakdown.filter((m) => m.costUsd > 0);
     if (modelsWithCost.length > 1) {
-      const sorted = [...modelsWithCost].sort(
-        (a, b) => a.costUsd / a.calls - b.costUsd / b.calls,
-      );
+      const sorted = [...modelsWithCost].sort((a, b) => a.costUsd / a.calls - b.costUsd / b.calls);
       const cheapest = sorted[0];
       insights.push({
         type: "recommendation",
@@ -67,10 +65,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
   // 4. Achievements
   const milestones = [10, 50, 100, 500, 1000, 5000];
   for (const milestone of milestones) {
-    if (
-      analytics.totalSessions >= milestone &&
-      analytics.totalSessions < milestone * 2
-    ) {
+    if (analytics.totalSessions >= milestone && analytics.totalSessions < milestone * 2) {
       insights.push({
         type: "achievement",
         title: `${milestone}+ sessions completed`,
@@ -83,9 +78,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
 
   // 5. Usage trend
   if (analytics.dailyActivity.length >= 14) {
-    const sorted = [...analytics.dailyActivity].sort(
-      (a, b) => a.date.localeCompare(b.date),
-    );
+    const sorted = [...analytics.dailyActivity].sort((a, b) => a.date.localeCompare(b.date));
     const firstHalf = sorted.slice(0, 7).reduce((s, d) => s + d.calls, 0);
     const secondHalf = sorted.slice(-7).reduce((s, d) => s + d.calls, 0);
     if (firstHalf > 0 && secondHalf > firstHalf * 1.5) {
@@ -109,9 +102,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
   if (analytics.dailyActivity.length >= 7) {
     const totalCalls = analytics.dailyActivity.reduce((s, d) => s + d.calls, 0);
     const avgCalls = totalCalls / analytics.dailyActivity.length;
-    const spikeDays = analytics.dailyActivity.filter(
-      (d) => d.calls > avgCalls * 2.5,
-    );
+    const spikeDays = analytics.dailyActivity.filter((d) => d.calls > avgCalls * 2.5);
     if (spikeDays.length > 0) {
       insights.push({
         type: "alert",
@@ -141,9 +132,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
   // 8. Token usage summary
   const totalTokens = analytics.totalInputTokens + analytics.totalOutputTokens;
   if (totalTokens > 0) {
-    const inputPct = Math.round(
-      (analytics.totalInputTokens / totalTokens) * 100,
-    );
+    const inputPct = Math.round((analytics.totalInputTokens / totalTokens) * 100);
     insights.push({
       type: "pattern",
       title: `${totalTokens.toLocaleString()} tokens used`,
@@ -154,9 +143,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
 
   // Sort by priority
   const priorityOrder = { high: 3, medium: 2, low: 1 };
-  return insights.sort(
-    (a, b) => priorityOrder[b.priority] - priorityOrder[a.priority],
-  );
+  return insights.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
 }
 
 export function formatInsights(insights: Insight[]): string {

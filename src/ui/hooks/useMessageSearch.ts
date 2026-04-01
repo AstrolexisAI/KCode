@@ -2,8 +2,8 @@
 // Provides incremental search across conversation messages with pre-lowercased cache.
 // Activated via Ctrl+F, navigate with n/N, close with Escape.
 
-import { useState, useCallback, useMemo, useRef } from "react";
 import { useInput } from "ink";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { MessageEntry } from "../components/MessageList.js";
 
 // ─── Types ──────────────────────────────────────────────────────

@@ -1,14 +1,14 @@
 // KCode - Path-Specific Rules
 // Load contextual rules from .kcode/rules/ and ~/.kcode/rules/
 
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
 
 interface Rule {
   name: string;
-  paths: string[];  // glob patterns like "src/api/**", "*.test.ts"
+  paths: string[]; // glob patterns like "src/api/**", "*.test.ts"
   content: string;
 }
 
@@ -28,15 +28,19 @@ export class RulesManager {
     if (!existsSync(dir)) return;
 
     try {
-      const files = readdirSync(dir).filter(f => f.endsWith(".md"));
+      const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
       for (const file of files) {
         try {
           const content = readFileSync(join(dir, file), "utf-8");
           const rule = this.parseRule(file, content);
           if (rule) this.rules.push(rule);
-        } catch { /* skip unreadable */ }
+        } catch {
+          /* skip unreadable */
+        }
       }
-    } catch { /* dir not readable */ }
+    } catch {
+      /* dir not readable */
+    }
 
     if (this.rules.length > 0) {
       log.info("config", `Loaded ${this.rules.length} path rules`);
@@ -75,9 +79,9 @@ export class RulesManager {
    * Get rules matching a file path. Called when model reads/edits a file.
    */
   getMatchingRules(filePath: string): Rule[] {
-    return this.rules.filter(rule => {
+    return this.rules.filter((rule) => {
       if (rule.paths.length === 0) return true; // no paths = always active
-      return rule.paths.some(pattern => this.matchPath(filePath, pattern));
+      return rule.paths.some((pattern) => this.matchPath(filePath, pattern));
     });
   }
 
@@ -110,10 +114,10 @@ export class RulesManager {
    * Format all always-active rules (no path restriction) for system prompt.
    */
   formatForPrompt(): string | null {
-    const globalRules = this.rules.filter(r => r.paths.length === 0);
+    const globalRules = this.rules.filter((r) => r.paths.length === 0);
     if (globalRules.length === 0) return null;
 
-    const sections = globalRules.map(r => `### ${r.name}\n${this.sanitizeContent(r.content)}`);
+    const sections = globalRules.map((r) => `### ${r.name}\n${this.sanitizeContent(r.content)}`);
     return `# Project Rules\n\n${sections.join("\n\n")}`;
   }
 
@@ -121,10 +125,10 @@ export class RulesManager {
    * Format path-specific rules for injection when a file is accessed.
    */
   formatForPath(filePath: string): string | null {
-    const matching = this.getMatchingRules(filePath).filter(r => r.paths.length > 0);
+    const matching = this.getMatchingRules(filePath).filter((r) => r.paths.length > 0);
     if (matching.length === 0) return null;
 
-    const sections = matching.map(r => `### ${r.name}\n${this.sanitizeContent(r.content)}`);
+    const sections = matching.map((r) => `### ${r.name}\n${this.sanitizeContent(r.content)}`);
     return `[Rules for ${filePath}]\n${sections.join("\n\n")}`;
   }
 

@@ -1,8 +1,8 @@
 // KCode - Compaction Circuit Breaker
 // Prevents infinite retry loops when LLM-based compaction keeps failing
 
-import type { CircuitBreakerConfig, CircuitBreakerState } from "./types.js";
 import { log } from "../logger.js";
+import type { CircuitBreakerConfig, CircuitBreakerState } from "./types.js";
 
 export class CompactionCircuitBreaker {
   private consecutiveFailures = 0;
