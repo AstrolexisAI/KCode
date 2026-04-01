@@ -6,6 +6,25 @@
   "module": "src/index.ts",
   "type": "module",
   "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AstrolexisAI/KCode.git"
+  },
+  "keywords": [
+    "ai",
+    "coding-assistant",
+    "terminal",
+    "llm",
+    "ollama",
+    "llama-cpp",
+    "anthropic",
+    "openai",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.0"
+  },
   "bin": {
     "kcode": "./dist/kcode"
   },
@@ -15,7 +34,8 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "scripts": {
     "start": "bun run src/index.ts",

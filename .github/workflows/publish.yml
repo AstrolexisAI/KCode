@@ -1,0 +1,202 @@
+name: Publish Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  npm-publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  github-release-assets:
+    name: Upload binaries (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-latest
+            bun_target: bun-linux-x64
+          - target: linux-arm64
+            os: ubuntu-latest
+            bun_target: bun-linux-arm64
+          - target: darwin-x64
+            os: macos-13
+            bun_target: ""
+          - target: darwin-arm64
+            os: macos-14
+            bun_target: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install
+
+      - name: Build binary
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p staging
+          if [ -n "${{ matrix.bun_target }}" ]; then
+            bun build src/index.ts --compile --target=${{ matrix.bun_target }} --minify --outfile staging/kcode
+          else
+            bun build src/index.ts --compile --minify --outfile staging/kcode
+          fi
+          chmod +x staging/kcode
+
+      - name: Create tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd staging
+          tar czf "../kcode-${VERSION}-${{ matrix.target }}.tar.gz" kcode
+          cd ..
+          sha256sum "kcode-${VERSION}-${{ matrix.target }}.tar.gz" > "kcode-${VERSION}-${{ matrix.target }}.tar.gz.sha256"
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          gh release upload "${GITHUB_REF_NAME}" \
+            "kcode-${VERSION}-${{ matrix.target }}.tar.gz" \
+            "kcode-${VERSION}-${{ matrix.target }}.tar.gz.sha256" \
+            --clobber
+
+  homebrew-update:
+    name: Update Homebrew formula
+    needs: github-release-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for assets to be available
+        run: sleep 10
+
+      - name: Download SHA256 checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p checksums
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64; do
+            gh release download "${GITHUB_REF_NAME}" \
+              --pattern "kcode-${VERSION}-${target}.tar.gz.sha256" \
+              --dir checksums
+          done
+
+      - name: Update formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          SHA_DARWIN_ARM64=$(awk '{print $1}' checksums/kcode-${VERSION}-darwin-arm64.tar.gz.sha256)
+          SHA_DARWIN_X64=$(awk '{print $1}' checksums/kcode-${VERSION}-darwin-x64.tar.gz.sha256)
+          SHA_LINUX_ARM64=$(awk '{print $1}' checksums/kcode-${VERSION}-linux-arm64.tar.gz.sha256)
+          SHA_LINUX_X64=$(awk '{print $1}' checksums/kcode-${VERSION}-linux-x64.tar.gz.sha256)
+
+          cat > Formula/kcode.rb << FORMULA
+          # Homebrew formula for KCode (Kulvex Code)
+          # AI-powered coding assistant for the terminal by Astrolexis
+          #
+          # Install: brew install astrolexis/tap/kcode
+          # Update:  brew upgrade kcode
+          #
+          # This formula downloads pre-compiled binaries (no build from source).
+          # The binary includes an embedded Bun runtime (~99 MB).
+
+          class Kcode < Formula
+            desc "Terminal-based AI coding assistant for local LLMs and cloud APIs"
+            homepage "https://kulvex.ai"
+            license "AGPL-3.0-only"
+            version "${VERSION}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-darwin-arm64.tar.gz"
+                sha256 "${SHA_DARWIN_ARM64}"
+              else
+                url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-darwin-x64.tar.gz"
+                sha256 "${SHA_DARWIN_X64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM64}"
+              else
+                url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-x64.tar.gz"
+                sha256 "${SHA_LINUX_X64}"
+              end
+            end
+
+            def install
+              bin.install "kcode"
+
+              bash_completion.install Utils.safe_popen_read(bin/"kcode", "completions", "bash").strip => "kcode"
+              zsh_completion.install Utils.safe_popen_read(bin/"kcode", "completions", "zsh").strip => "_kcode"
+              fish_completion.install Utils.safe_popen_read(bin/"kcode", "completions", "fish").strip => "kcode.fish"
+            end
+
+            def post_install
+              (Dir.home/".kcode").mkpath
+            end
+
+            def caveats
+              <<~EOS
+                KCode has been installed. Get started:
+
+                  kcode                    # Interactive mode
+                  kcode setup              # First-time setup wizard
+                  kcode "your prompt"      # Single prompt mode
+
+                Configuration: ~/.kcode/settings.json
+                Documentation: https://kulvex.ai/docs
+              EOS
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/kcode --version")
+            end
+          end
+          FORMULA
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' Formula/kcode.rb
+
+      - name: Commit and push formula update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/kcode.rb
+          git diff --cached --quiet && exit 0
+          VERSION="${GITHUB_REF_NAME#v}"
+          git commit -m "formula: update kcode to ${VERSION}"
+          git push origin HEAD:master

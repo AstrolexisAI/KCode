@@ -8,29 +8,30 @@
 # The binary includes an embedded Bun runtime (~99 MB).
 
 class Kcode < Formula
-  desc "AI-powered coding assistant for the terminal by Astrolexis"
+  desc "Terminal-based AI coding assistant for local LLMs and cloud APIs"
   homepage "https://kulvex.ai"
+  version "2.5.0"
   license "AGPL-3.0-only"
-  version "1.8.0"
 
-  # Pre-compiled binaries per platform
   on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-macos-arm64.tar.gz"
-      sha256 "8f7924a8d7d407921e3901ba84182ad192e311a03d03b3d9f9036ca2504d32df"
-    else
-      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-macos-x64.tar.gz"
-      sha256 "dbeb4071fddec057fd0815bbc3aabaa966573be72cc65d63662a0ab8dc3afaf1"
+    on_arm do
+      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-darwin-arm64.tar.gz"
+      sha256 "PLACEHOLDER_SHA256"
+    end
+    on_intel do
+      url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-darwin-x64.tar.gz"
+      sha256 "PLACEHOLDER_SHA256"
     end
   end
 
   on_linux do
-    if Hardware::CPU.arm?
+    on_arm do
       url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-arm64.tar.gz"
-      sha256 "a2a7f1ba3ecddb568cd71af089e1a6fe199e061bf43739db80ca9643e2da4802"
-    else
+      sha256 "PLACEHOLDER_SHA256"
+    end
+    on_intel do
       url "https://github.com/AstrolexisAI/KCode/releases/download/v#{version}/kcode-#{version}-linux-x64.tar.gz"
-      sha256 "914657f4b51022b7d6341cf8901594adbdd7fe5969d40f719b2d1b4027e23ae8"
+      sha256 "PLACEHOLDER_SHA256"
     end
   end
 
@@ -44,7 +45,6 @@ class Kcode < Formula
   end
 
   def post_install
-    # Create config directory
     (Dir.home/".kcode").mkpath
   end
 
