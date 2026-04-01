@@ -1,0 +1,184 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Configuration — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Configuration</span>
+    </nav>
+
+    <h1>Configuration</h1>
+    <p class="subtitle">Settings hierarchy, environment variables, and the <code>.kcode/</code> directory structure.</p>
+
+    <h2>Settings Hierarchy</h2>
+    <p>KCode resolves settings from multiple sources. Higher priority wins:</p>
+    <ol>
+      <li><strong>CLI flags</strong> &mdash; <code>--model</code>, <code>--api-key</code>, <code>--effort</code>, etc.</li>
+      <li><strong>Environment variables</strong> &mdash; <code>KCODE_MODEL</code>, <code>KCODE_API_KEY</code>, etc.</li>
+      <li><strong>Project local</strong> &mdash; <code>.kcode/settings.local.json</code> (git-ignored, per-developer overrides)</li>
+      <li><strong>Project shared</strong> &mdash; <code>.kcode/settings.json</code> (committed to the repo)</li>
+      <li><strong>Global</strong> &mdash; <code>~/.kcode/settings.json</code> (user-wide defaults)</li>
+    </ol>
+
+    <h2>Settings Schema</h2>
+    <p>Both project and global settings files share the same JSON schema:</p>
+    <pre><code>{
+  "model": "qwen3-30b-a3b",
+  "maxTokens": 8192,
+  "permissionMode": "auto",
+  "effortLevel": "medium",
+  "apiKey": "sk-...",
+  "apiBase": "http://localhost:10091",
+  "systemPromptExtra": "Always respond in Spanish.",
+  "autoRoute": true,
+  "theme": "monokai",
+  "fallbackModel": "llama-3.1-8b",
+  "fallbackModels": ["qwen3-30b-a3b", "llama-3.1-8b"],
+  "maxBudgetUsd": 5.00,
+  "compactThreshold": 0.8,
+  "telemetry": true,
+  "thinking": false,
+  "reasoningBudget": -1,
+  "noCache": false,
+  "autoUpdate": true,
+  "updateCheckIntervalDays": 7,
+  "proKey": "kcode_pro_xxxxx",
+  "autoMemory": {
+    "enabled": true,
+    "minConfidence": 0.7,
+    "maxPerTurn": 3,
+    "cooldownTurns": 5
+  },
+  "hardware": {
+    "autoOptimize": true,
+    "gpuLayers": 99,
+    "threads": 12,
+    "batchSize": 512
+  },
+  "voice": {
+    "enabled": false,
+    "engine": "auto",
+    "model": "base",
+    "language": "auto",
+    "silenceThresholdMs": 2000,
+    "maxDurationMs": 30000
+  },
+  "language": "en",
+  "featureFlags": {
+    "enableAutoRoute": true,
+    "enableDistillation": false,
+    "enableWorldModel": true,
+    "enableCodebaseIndex": true,
+    "enableExperimentalTools": false
+  },
+  "permissionRules": [
+    { "pattern": "src/**/*.ts", "action": "allow" },
+    { "pattern": "node_modules/**", "action": "deny" }
+  ]
+}</code></pre>
+
+    <h2>Key Settings Reference</h2>
+    <table>
+      <thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>model</code></td><td>string</td><td>Auto</td><td>Default model name or path</td></tr>
+        <tr><td><code>maxTokens</code></td><td>number</td><td>8192</td><td>Maximum output tokens per response</td></tr>
+        <tr><td><code>permissionMode</code></td><td>string</td><td>"ask"</td><td>One of: ask, auto, plan, deny, acceptEdits</td></tr>
+        <tr><td><code>effortLevel</code></td><td>string</td><td>"medium"</td><td>Reasoning depth: low, medium, high, max</td></tr>
+        <tr><td><code>compactThreshold</code></td><td>number</td><td>0.8</td><td>Auto-compact at this % of context window (0.5-0.95)</td></tr>
+        <tr><td><code>maxBudgetUsd</code></td><td>number</td><td>none</td><td>Session spending cap for cloud APIs</td></tr>
+        <tr><td><code>thinking</code></td><td>boolean</td><td>false</td><td>Enable extended thinking mode</td></tr>
+        <tr><td><code>autoRoute</code></td><td>boolean</td><td>false</td><td>Auto-select model based on task complexity</td></tr>
+        <tr><td><code>theme</code></td><td>string</td><td>"default"</td><td>UI color theme (11 built-in themes)</td></tr>
+        <tr><td><code>language</code></td><td>string</td><td>"en"</td><td>UI language: en, es, fr, de, ja, ko, pt, zh</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Environment Variables</h2>
+    <table>
+      <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>KCODE_MODEL</code></td><td>Default model name</td></tr>
+        <tr><td><code>KCODE_API_KEY</code></td><td>API key for the current provider</td></tr>
+        <tr><td><code>KCODE_API_BASE</code></td><td>API base URL (default: <code>http://localhost:10091</code>)</td></tr>
+        <tr><td><code>KCODE_PROFILE</code></td><td>Enable startup profiling (set to 1)</td></tr>
+        <tr><td><code>DO_NOT_TRACK</code></td><td>Disable telemetry (set to 1)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>The <code>~/.kcode/</code> Directory</h2>
+    <p>Global configuration and data are stored in <code>~/.kcode/</code>:</p>
+    <pre><code>~/.kcode/
+  settings.json          # Global user settings
+  managed-settings.json  # Admin-deployed org policy (read-only)
+  models.json            # Dynamic model registry
+  awareness.db           # SQLite database (narrative, user model, learnings)
+  identity.md            # Custom AI identity / personality
+  awareness/             # Extensible system prompt sections (*.md)
+  plugins/               # Installed plugins
+  server.pid             # Local inference server PID
+  server.port            # Local inference server port
+  server.log             # Inference server logs</code></pre>
+
+    <h2>Project <code>.kcode/</code> Directory</h2>
+    <p>Per-project configuration lives in <code>.kcode/</code> at the project root:</p>
+    <pre><code>.kcode/
+  settings.json          # Shared project settings (commit this)
+  settings.local.json    # Local overrides (git-ignored)
+  awareness/             # Project-specific context files (*.md)
+  rules/                 # Custom rules for the AI (*.md)
+  plugins/               # Project-scoped plugins
+  enterprise.json        # Enterprise SSO / policy config</code></pre>
+
+    <h2>KCODE.md</h2>
+    <p>
+      Place a <code>KCODE.md</code> file at your project root to give the AI persistent context
+      about your codebase. This is loaded into the system prompt on every session. Generate one with:
+    </p>
+    <pre><code>kcode init</code></pre>
+
+    <h2>Managed Policies (Enterprise)</h2>
+    <p>
+      Organization admins can enforce settings that users cannot override. Policies are loaded from
+      <code>/etc/kcode/policy.json</code> or <code>~/.kcode/managed-settings.json</code>:
+    </p>
+    <pre><code>{
+  "locked": {
+    "telemetry": true,
+    "permissionMode": "ask"
+  },
+  "allowedModels": ["gpt-4*", "claude-*"],
+  "blockedModels": ["*uncensored*"],
+  "disallowedTools": ["Deploy"],
+  "maxBudgetUsd": 10.00,
+  "disableWebAccess": false,
+  "auditLog": true,
+  "orgId": "acme-corp"
+}</code></pre>
+
+    <nav class="doc-nav">
+      <a href="/docs/installation">&larr; Installation</a>
+      <a href="/docs/tools">Tools Reference &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    ol, ul { padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>

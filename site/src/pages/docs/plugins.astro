@@ -1,0 +1,234 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Plugins — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Plugins</span>
+    </nav>
+
+    <h1>Plugin System</h1>
+    <p class="subtitle">Extend KCode with custom skills, hooks, MCP servers, output styles, and agents.</p>
+
+    <h2>Installing Plugins</h2>
+    <p>Use the built-in marketplace to discover and install plugins:</p>
+    <pre><code># Search for plugins
+kcode plugin search "docker"
+
+# Install a plugin
+kcode plugin install kcode-docker
+
+# List installed plugins
+kcode plugin list
+
+# Update all plugins
+kcode plugin update
+
+# Remove a plugin
+kcode plugin remove kcode-docker</code></pre>
+
+    <h2>Plugin Locations</h2>
+    <p>Plugins can be installed globally or per-project:</p>
+    <table>
+      <thead><tr><th>Location</th><th>Scope</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>~/.kcode/plugins/</code></td><td>Global</td><td>Available in all projects</td></tr>
+        <tr><td><code>.kcode/plugins/</code></td><td>Project</td><td>Only available in the current project (commit to share with team)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Plugin Structure</h2>
+    <p>A plugin is a directory with a <code>plugin.json</code> manifest and optional component files:</p>
+    <pre><code>my-plugin/
+  plugin.json           # Required: manifest file
+  skills/
+    deploy.md           # Skill definitions (markdown or TypeScript)
+    lint-check.md
+  hooks/                # Hook scripts
+    pre-commit.sh
+  mcp-servers/
+    my-server/          # Bundled MCP server
+      index.js
+  output-styles/
+    compact.md          # Custom output style
+  agents/
+    reviewer.md         # Custom agent definition</code></pre>
+
+    <h2>plugin.json Manifest</h2>
+    <p>The manifest declares what the plugin provides:</p>
+    <pre><code>{
+  "name": "kcode-docker",
+  "version": "1.2.0",
+  "description": "Docker and Docker Compose management skills",
+  "author": "astrolexis",
+  "license": "MIT",
+  "kcode": ">=1.7.0",
+  "skills": [
+    "skills/docker-build.md",
+    "skills/docker-compose.md",
+    "skills/dockerfile-lint.md"
+  ],
+  "hooks": {
+    "post:Write": [
+      {
+        "match": { "file_path": "**/Dockerfile*" },
+        "action": "run",
+        "command": "hadolint",
+        "args": ["$FILE_PATH"]
+      }
+    ],
+    "session:start": [
+      {
+        "action": "run",
+        "command": "docker",
+        "args": ["info", "--format", "{{.ServerVersion}}"]
+      }
+    ]
+  },
+  "mcpServers": {
+    "docker-mcp": {
+      "command": "node",
+      "args": ["mcp-servers/docker/index.js"],
+      "env": {
+        "DOCKER_HOST": "unix:///var/run/docker.sock"
+      }
+    }
+  },
+  "outputStyles": [
+    "output-styles/compact.md"
+  ],
+  "agents": [
+    "agents/container-debugger.md"
+  ]
+}</code></pre>
+
+    <h2>Manifest Fields</h2>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>string</td><td>Yes</td><td>Unique plugin identifier</td></tr>
+        <tr><td><code>version</code></td><td>string</td><td>Yes</td><td>Semver version</td></tr>
+        <tr><td><code>description</code></td><td>string</td><td>Yes</td><td>Short description</td></tr>
+        <tr><td><code>author</code></td><td>string</td><td>Yes</td><td>Author name or organization</td></tr>
+        <tr><td><code>license</code></td><td>string</td><td>Yes</td><td>SPDX license identifier</td></tr>
+        <tr><td><code>kcode</code></td><td>string</td><td>Yes</td><td>Minimum KCode version (semver range)</td></tr>
+        <tr><td><code>skills</code></td><td>string[]</td><td>No</td><td>Paths to skill definition files</td></tr>
+        <tr><td><code>hooks</code></td><td>object</td><td>No</td><td>Hook event handlers (see below)</td></tr>
+        <tr><td><code>mcpServers</code></td><td>object</td><td>No</td><td>MCP server configurations</td></tr>
+        <tr><td><code>outputStyles</code></td><td>string[]</td><td>No</td><td>Custom output style definitions</td></tr>
+        <tr><td><code>agents</code></td><td>string[]</td><td>No</td><td>Custom agent definitions</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Creating a Plugin</h2>
+    <p>Use the Plugin SDK to scaffold a new plugin:</p>
+    <pre><code># Interactive scaffold
+kcode plugin create
+
+# Or specify options directly
+kcode plugin create my-plugin \
+  --description "My custom plugin" \
+  --components skills,hooks,mcp</code></pre>
+    <p>Available components: <code>skills</code>, <code>hooks</code>, <code>mcp</code>, <code>output-styles</code>, <code>agents</code>.</p>
+
+    <h3>Validating</h3>
+    <pre><code># Validate manifest and structure
+kcode plugin validate ./my-plugin
+
+# Run plugin tests
+kcode plugin test ./my-plugin</code></pre>
+
+    <h3>Publishing</h3>
+    <pre><code># Publish to the KCode marketplace
+kcode plugin publish ./my-plugin</code></pre>
+    <p>
+      Published plugins are signed with a SHA-256 checksum and verified on install.
+      The marketplace CDN configuration can be customized in settings.
+    </p>
+
+    <h2>Hook Events</h2>
+    <p>Plugins can respond to 25 lifecycle events. Key hook events:</p>
+    <table>
+      <thead><tr><th>Event</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>session:start</code></td><td>When a new session begins</td></tr>
+        <tr><td><code>session:end</code></td><td>When a session ends</td></tr>
+        <tr><td><code>pre:Bash</code></td><td>Before a Bash command executes</td></tr>
+        <tr><td><code>post:Bash</code></td><td>After a Bash command completes</td></tr>
+        <tr><td><code>pre:Write</code></td><td>Before a file is written</td></tr>
+        <tr><td><code>post:Write</code></td><td>After a file is written</td></tr>
+        <tr><td><code>pre:Edit</code></td><td>Before a file edit</td></tr>
+        <tr><td><code>post:Edit</code></td><td>After a file edit</td></tr>
+        <tr><td><code>compaction</code></td><td>When context compaction occurs</td></tr>
+        <tr><td><code>error</code></td><td>When an error occurs during tool execution</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Hook Match Filters</h3>
+    <p>Hooks can use <code>match</code> to filter when they fire:</p>
+    <pre><code>{
+  "post:Write": [
+    {
+      "match": { "file_path": "**/*.py" },
+      "action": "run",
+      "command": "ruff",
+      "args": ["check", "--fix", "$FILE_PATH"]
+    }
+  ]
+}</code></pre>
+
+    <h2>MCP Servers in Plugins</h2>
+    <p>
+      Plugins can bundle <a href="https://modelcontextprotocol.io">Model Context Protocol</a> servers.
+      These are spawned automatically when the plugin loads and their tools become available with the
+      <code>mcp__</code> prefix.
+    </p>
+    <pre><code>"mcpServers": {
+  "my-server": {
+    "command": "node",
+    "args": ["mcp-servers/my-server/index.js"],
+    "env": {
+      "MY_API_KEY": "${MY_API_KEY}"
+    }
+  }
+}</code></pre>
+    <p>Environment variable interpolation (<code>${VAR}</code>) is supported in the <code>env</code> block.</p>
+
+    <h2>Workspace Trust</h2>
+    <p>
+      Hooks from project-scoped plugins (<code>.kcode/plugins/</code>) require workspace trust.
+      KCode will prompt for confirmation before executing hooks from untrusted workspaces.
+      Global plugins (<code>~/.kcode/plugins/</code>) are always trusted.
+    </p>
+
+    <h2>Auto-Generated Documentation</h2>
+    <p>Generate documentation for your plugin automatically:</p>
+    <pre><code>kcode plugin docs ./my-plugin</code></pre>
+
+    <nav class="doc-nav">
+      <a href="/docs/local-models">&larr; Local Models</a>
+      <a href="/docs/enterprise-sso">Enterprise SSO &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2.5rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; color: #c9d1d9; font-size: 1.1rem; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    ul { margin: 0.75rem 0; padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>

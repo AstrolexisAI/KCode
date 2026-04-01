@@ -1,0 +1,112 @@
+{
+  "model": "qwen-2.5-coder-32b",
+  "timestamp": "2026-04-01T18:30:00Z",
+  "metadata": {
+    "runner": "kcode-benchmark-suite",
+    "version": "1.0.0",
+    "apiBase": "http://localhost:10091",
+    "note": "EXAMPLE DATA -- representative scores for documentation purposes, not from a live run",
+    "example": true,
+    "hardware": {
+      "gpu": "NVIDIA RTX 4090 24GB",
+      "quantization": "Q4_K_M",
+      "backend": "llama.cpp",
+      "contextLength": 32768
+    }
+  },
+  "tasks": [
+    {
+      "taskId": "fix-type-error",
+      "passed": true,
+      "timeMs": 1890,
+      "tokensUsed": 285,
+      "firstTokenMs": 320
+    },
+    {
+      "taskId": "add-error-handling",
+      "passed": true,
+      "timeMs": 3210,
+      "tokensUsed": 512,
+      "firstTokenMs": 345
+    },
+    {
+      "taskId": "write-unit-test",
+      "passed": true,
+      "timeMs": 4580,
+      "tokensUsed": 724,
+      "firstTokenMs": 380
+    },
+    {
+      "taskId": "refactor-async-await",
+      "passed": true,
+      "timeMs": 3890,
+      "tokensUsed": 601,
+      "firstTokenMs": 355
+    },
+    {
+      "taskId": "find-bug",
+      "passed": true,
+      "timeMs": 2340,
+      "tokensUsed": 398,
+      "firstTokenMs": 310
+    },
+    {
+      "taskId": "explain-function",
+      "passed": true,
+      "timeMs": 3120,
+      "tokensUsed": 445,
+      "firstTokenMs": 340
+    },
+    {
+      "taskId": "generate-sql",
+      "passed": true,
+      "timeMs": 2780,
+      "tokensUsed": 367,
+      "firstTokenMs": 330
+    },
+    {
+      "taskId": "create-rest-endpoint",
+      "passed": true,
+      "timeMs": 6450,
+      "tokensUsed": 1120,
+      "firstTokenMs": 410
+    },
+    {
+      "taskId": "callback-to-promise",
+      "passed": true,
+      "timeMs": 3560,
+      "tokensUsed": 534,
+      "firstTokenMs": 350
+    },
+    {
+      "taskId": "optimize-loop",
+      "passed": true,
+      "timeMs": 4210,
+      "tokensUsed": 678,
+      "firstTokenMs": 365
+    },
+    {
+      "taskId": "context-large-file",
+      "passed": true,
+      "timeMs": 2980,
+      "tokensUsed": 412,
+      "firstTokenMs": 335
+    },
+    {
+      "taskId": "speed-simple-response",
+      "passed": true,
+      "timeMs": 1420,
+      "tokensUsed": 198,
+      "firstTokenMs": 290
+    }
+  ],
+  "summary": {
+    "totalTasks": 12,
+    "passed": 12,
+    "failed": 0,
+    "avgTimeMs": 3369,
+    "avgTokens": 523,
+    "avgFirstTokenMs": 344,
+    "totalTokens": 6274
+  }
+}

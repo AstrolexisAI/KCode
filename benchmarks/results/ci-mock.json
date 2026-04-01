@@ -1,0 +1,93 @@
+{
+  "model": "ci-mock",
+  "timestamp": "2026-04-01T16:00:00Z",
+  "metadata": {
+    "runner": "kcode-benchmark-suite",
+    "version": "1.0.0",
+    "apiBase": "http://localhost:19555",
+    "note": "Generated against mock server for CI validation"
+  },
+  "tasks": [
+    {
+      "taskId": "fix-type-error",
+      "passed": true,
+      "timeMs": 845,
+      "tokensUsed": 312,
+      "firstTokenMs": 42
+    },
+    {
+      "taskId": "add-error-handling",
+      "passed": true,
+      "timeMs": 1102,
+      "tokensUsed": 487,
+      "firstTokenMs": 38
+    },
+    {
+      "taskId": "write-unit-test",
+      "passed": true,
+      "timeMs": 1340,
+      "tokensUsed": 521,
+      "firstTokenMs": 45
+    },
+    {
+      "taskId": "refactor-async-await",
+      "passed": true,
+      "timeMs": 1278,
+      "tokensUsed": 498,
+      "firstTokenMs": 41
+    },
+    {
+      "taskId": "find-bug",
+      "passed": true,
+      "timeMs": 920,
+      "tokensUsed": 345,
+      "firstTokenMs": 36
+    },
+    {
+      "taskId": "explain-function",
+      "passed": true,
+      "timeMs": 1456,
+      "tokensUsed": 567,
+      "firstTokenMs": 44
+    },
+    {
+      "taskId": "generate-sql",
+      "passed": true,
+      "timeMs": 1180,
+      "tokensUsed": 423,
+      "firstTokenMs": 39
+    },
+    {
+      "taskId": "create-rest-endpoint",
+      "passed": false,
+      "timeMs": 2105,
+      "tokensUsed": 689,
+      "firstTokenMs": 52,
+      "error": "Missing DELETE handler validation keywords"
+    },
+    {
+      "taskId": "callback-to-promise",
+      "passed": true,
+      "timeMs": 1290,
+      "tokensUsed": 478,
+      "firstTokenMs": 40
+    },
+    {
+      "taskId": "optimize-loop",
+      "passed": false,
+      "timeMs": 1984,
+      "tokensUsed": 612,
+      "firstTokenMs": 48,
+      "error": "Missing O(n) optimization keywords"
+    }
+  ],
+  "summary": {
+    "totalTasks": 10,
+    "passed": 8,
+    "failed": 2,
+    "avgTimeMs": 1250,
+    "avgTokens": 493,
+    "avgFirstTokenMs": 43,
+    "totalTokens": 4932
+  }
+}
