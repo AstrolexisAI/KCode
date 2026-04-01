@@ -1,0 +1,26 @@
+name: Feature Request
+description: Suggest a new feature for KCode
+labels: [enhancement]
+body:
+  - type: input
+    attributes:
+      label: Title
+      description: A concise title for the feature
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Description
+      description: Describe the feature you'd like to see
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Use Case
+      description: What problem does this solve? How would you use it?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?

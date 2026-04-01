@@ -62,6 +62,8 @@ export interface Settings {
   thinking?: boolean; // Enable extended thinking mode (Qwen3 reasoning_content)
   reasoningBudget?: number; // -1 = unlimited, positive = max thinking tokens
   noCache?: boolean; // Disable response cache (always call the model)
+  autoUpdate?: boolean; // Enable/disable automatic update checks (default true)
+  updateCheckIntervalDays?: number; // Days between update checks (default 7)
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
   marketplace?: MarketplaceSettings; // Plugin marketplace CDN config
   offline?: OfflineSettings; // Offline mode configuration

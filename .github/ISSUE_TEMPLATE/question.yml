@@ -1,0 +1,18 @@
+name: Question
+description: Ask a question about KCode
+labels: [question]
+body:
+  - type: textarea
+    attributes:
+      label: Question
+      description: What would you like to know?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Context
+      description: Any relevant context (your setup, what you're trying to accomplish)
+  - type: textarea
+    attributes:
+      label: What You've Tried
+      description: What have you already tried or looked at?

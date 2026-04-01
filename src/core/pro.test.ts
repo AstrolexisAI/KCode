@@ -128,14 +128,14 @@ describe("FREE_LIMITS", () => {
   test("maxSwarmAgents is 1", () => {
     expect(FREE_LIMITS.maxSwarmAgents).toBe(1);
   });
-  test("transcriptSearchHours is 72", () => {
-    expect(FREE_LIMITS.transcriptSearchHours).toBe(72);
+  test("transcriptSearchHours is 168 (7 days)", () => {
+    expect(FREE_LIMITS.transcriptSearchHours).toBe(168);
   });
-  test("contextWindowCap is 32000", () => {
-    expect(FREE_LIMITS.contextWindowCap).toBe(32_000);
+  test("contextWindowCap is 64000", () => {
+    expect(FREE_LIMITS.contextWindowCap).toBe(64_000);
   });
-  test("sessionsPerMonth is 50", () => {
-    expect(FREE_LIMITS.sessionsPerMonth).toBe(50);
+  test("sessionsPerMonth is 200", () => {
+    expect(FREE_LIMITS.sessionsPerMonth).toBe(200);
   });
   test("has exactly 4 fields", () => {
     expect(Object.keys(FREE_LIMITS)).toHaveLength(4);

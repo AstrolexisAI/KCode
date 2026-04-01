@@ -30,7 +30,13 @@ function getHardwareFingerprint(): string {
 // the first 2 hex chars of SHA-256(payload_without_checksum).
 // This catches typos and naive brute-force attempts.
 export function validateKeyChecksum(key: string): boolean {
-  const prefix = key.startsWith("kcode_pro_") ? "kcode_pro_" : key.startsWith("klx_lic_") ? "klx_lic_" : "";
+  const prefix = key.startsWith("kcode_pro_")
+    ? "kcode_pro_"
+    : key.startsWith("klx_lic_")
+      ? "klx_lic_"
+      : key.startsWith("kcode_trial_")
+        ? "kcode_trial_"
+        : "";
   if (!prefix) return false;
   const payload = key.slice(prefix.length);
   if (payload.length < 20) return false;
@@ -42,6 +48,47 @@ export function validateKeyChecksum(key: string): boolean {
   const { createHash } = require("node:crypto") as typeof import("node:crypto");
   const expected = createHash("sha256").update(body).digest("hex").slice(0, 2);
   return check === expected;
+}
+
+// ── Trial key support ─────────────────────────────────────────
+// Trial keys have format: kcode_trial_{random}_{expiryTimestamp}_{checksum}
+// The expiry timestamp is a Unix epoch in seconds, embedded in the key payload.
+
+/** Check if a key is a trial key (starts with kcode_trial_). */
+export function isTrialKey(key: string): boolean {
+  return typeof key === "string" && key.startsWith("kcode_trial_");
+}
+
+/** Parse the expiry timestamp from a trial key. Returns null if not a valid trial key. */
+function parseTrialExpiry(key: string): number | null {
+  if (!isTrialKey(key)) return null;
+  const payload = key.slice("kcode_trial_".length);
+  // Format: {random}_{expiryTimestamp}_{checksum}
+  // The checksum is the last 2 chars, expiryTimestamp is the second-to-last segment
+  const bodyWithoutChecksum = payload.slice(0, -2);
+  const parts = bodyWithoutChecksum.split("_");
+  if (parts.length < 2) return null;
+  // Expiry is the last segment before checksum
+  const expiryStr = parts[parts.length - 1];
+  const expiry = Number(expiryStr);
+  if (!Number.isFinite(expiry) || expiry <= 0) return null;
+  return expiry;
+}
+
+/** Check if a trial key has expired. Returns true if the key is expired or invalid. */
+export function isTrialExpired(key: string): boolean {
+  const expiry = parseTrialExpiry(key);
+  if (expiry === null) return true;
+  return Date.now() / 1000 > expiry;
+}
+
+/** Get the number of days remaining on a trial key. Returns 0 if expired or invalid. */
+export function getTrialDaysRemaining(key: string): number {
+  const expiry = parseTrialExpiry(key);
+  if (expiry === null) return 0;
+  const remaining = expiry - Date.now() / 1000;
+  if (remaining <= 0) return 0;
+  return Math.ceil(remaining / (60 * 60 * 24));
 }
 
 // HMAC key derived via PBKDF2 with a persistent random salt — NOT guessable from public info
@@ -92,9 +139,9 @@ export const PRO_FEATURES = {
 // ── Soft gate limits ────────────────────────────────────────────
 export const FREE_LIMITS = {
   maxSwarmAgents: 1,
-  transcriptSearchHours: 72,
-  contextWindowCap: 32_000,
-  sessionsPerMonth: 50,
+  transcriptSearchHours: 168, // 7 days
+  contextWindowCap: 64_000,
+  sessionsPerMonth: 200,
 } as const;
 
 export type ProFeature = keyof typeof PRO_FEATURES;
@@ -128,14 +175,15 @@ async function _doValidation(): Promise<boolean> {
   try {
     const settings = await loadUserSettingsRaw();
     const key = (settings as Record<string, unknown>).proKey;
-    // Accept kcode_pro_ keys AND klx_lic_ keys (KULVEX licenses include Pro)
+    // Accept kcode_pro_ keys, klx_lic_ keys (KULVEX licenses), and kcode_trial_ keys
     if (typeof key !== "string") return false;
     const isProKey = key.startsWith("kcode_pro_");
     const isKulvexKey = key.startsWith("klx_lic_");
-    if (!isProKey && !isKulvexKey) return false;
+    const isTrialKeyVal = isTrialKey(key);
+    if (!isProKey && !isKulvexKey && !isTrialKeyVal) return false;
 
     // Validate key format: prefix + sufficient entropy
-    const prefix = isProKey ? "kcode_pro_" : "klx_lic_";
+    const prefix = isProKey ? "kcode_pro_" : isKulvexKey ? "klx_lic_" : "kcode_trial_";
     const payload = key.slice(prefix.length);
     if (payload.length < 20) return false;
 
@@ -143,6 +191,15 @@ async function _doValidation(): Promise<boolean> {
     if (!validateKeyChecksum(key)) {
       log.debug("pro", "Key checksum validation failed");
       return false;
+    }
+
+    // Trial keys: validate locally (check expiry), no server call needed
+    if (isTrialKeyVal) {
+      if (isTrialExpired(key)) {
+        log.debug("pro", "Trial key has expired");
+        return false;
+      }
+      return true;
     }
 
     // Online validation with secure offline fallback
@@ -352,9 +409,9 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   }
 
   // Validate key format before saving — reject non-key inputs like "quit", "exit", etc.
-  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
+  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_") && !answer.startsWith("kcode_trial_")) {
     throw new Error(
-      `${C.red}✗${C.reset} Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n` +
+      `${C.red}✗${C.reset} Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".\n` +
         `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`,
     );
   }
@@ -435,14 +492,36 @@ export async function getSessionCountThisMonth(): Promise<number> {
   }
 }
 
-/** Check if session limit reached (free: 50/month). Interactive prompt in TTY. */
+/** Check if session limit reached (free: 200/month). Soft warnings at 80% and 95%. */
 export async function checkSessionLimit(): Promise<void> {
   // Skip session limits during test runs
   if (typeof globalThis.Bun !== "undefined" && (globalThis as any).Bun?.jest) return;
   if (process.env.KCODE_SKIP_SESSION_LIMIT === "1") return;
   if (await isPro()) return;
   const count = await getSessionCountThisMonth();
-  if (count < FREE_LIMITS.sessionsPerMonth) return;
+  const limit = FREE_LIMITS.sessionsPerMonth;
+
+  // Soft warning at 80%
+  if (count >= Math.floor(limit * 0.8) && count < Math.floor(limit * 0.95)) {
+    const remaining = limit - count;
+    process.stderr.write(
+      `\x1b[33m  ${remaining} sessions remaining this month (free tier: ${limit}/mo).\x1b[0m\n` +
+        `\x1b[2m  Upgrade to Pro for unlimited: kcode pro checkout\x1b[0m\n\n`,
+    );
+    return;
+  }
+
+  // Stronger warning at 95%
+  if (count >= Math.floor(limit * 0.95) && count < limit) {
+    const remaining = limit - count;
+    process.stderr.write(
+      `\x1b[33;1m  Only ${remaining} sessions left this month!\x1b[0m\n` +
+        `\x1b[2m  Upgrade to Pro ($19/mo) for unlimited sessions: kcode pro checkout\x1b[0m\n\n`,
+    );
+    return;
+  }
+
+  if (count < limit) return;
 
   const C = {
     reset: "\x1b[0m",
@@ -489,8 +568,8 @@ export async function checkSessionLimit(): Promise<void> {
   }
 
   // Validate key format before saving
-  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
-    throw new Error('Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".');
+  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_") && !answer.startsWith("kcode_trial_")) {
+    throw new Error('Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".');
   }
 
   const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
@@ -553,9 +632,9 @@ export async function softRequireSwarm(requestedAgents: number): Promise<number>
   if (!answer) return max; // Continue with free limit
 
   // Validate key format before saving
-  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_")) {
+  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_") && !answer.startsWith("kcode_trial_")) {
     console.log(
-      `\n  \x1b[31m✗\x1b[0m Invalid key format. Keys start with "kcode_pro_" or "klx_lic_".\n`,
+      `\n  \x1b[31m✗\x1b[0m Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".\n`,
     );
     return max;
   }
