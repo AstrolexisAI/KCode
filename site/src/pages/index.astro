@@ -1,0 +1,169 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="KCode — AI Coding Assistant for Your Terminal">
+  <!-- Hero -->
+  <section class="hero container">
+    <h1>Code with AI,<br />right in your terminal.</h1>
+    <p class="subtitle">
+      KCode is a terminal-based AI coding assistant that works with local LLMs and cloud APIs.
+      Private by default. Fast by design. No editor lock-in.
+    </p>
+    <div class="ctas">
+      <a href="/download" class="btn btn-primary">Install KCode</a>
+      <a href="https://github.com/astrolexis/kcode" class="btn btn-secondary">View on GitHub</a>
+    </div>
+  </section>
+
+  <!-- Terminal Demo -->
+  <section class="container">
+    <div class="terminal-demo">
+      <!-- Replace with asciinema embed: <script id="asciicast-XXXXX" src="https://asciinema.org/a/XXXXX.js" async></script> -->
+      <p>Terminal demo &mdash; asciinema recording goes here</p>
+    </div>
+  </section>
+
+  <!-- Feature Comparison -->
+  <section class="container">
+    <h2>Compare Plans</h2>
+    <p class="section-desc">Everything you need to code with AI, from solo hacking to team workflows.</p>
+
+    <table class="feature-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Free</th>
+          <th>Pro</th>
+          <th>Cloud-Only Tools</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Local LLM support (llama.cpp, Ollama, MLX)</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td>Cloud API support (Anthropic, OpenAI, Gemini, etc.)</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td>46 built-in tools</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Varies</td>
+        </tr>
+        <tr>
+          <td>Terminal UI with 11 themes</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td>MCP server integration</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>Varies</td>
+        </tr>
+        <tr>
+          <td>Session persistence and resume</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td>Multi-agent swarm mode</td>
+          <td>&mdash;</td>
+          <td>Yes</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td>Codebase RAG indexing</td>
+          <td>&mdash;</td>
+          <td>Yes</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td>Advanced analytics and cost tracking</td>
+          <td>Basic</td>
+          <td>Full</td>
+          <td>&mdash;</td>
+        </tr>
+        <tr>
+          <td>Priority support</td>
+          <td>&mdash;</td>
+          <td>Yes</td>
+          <td>&mdash;</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Pricing -->
+  <section class="container">
+    <h2>Pricing</h2>
+    <p class="section-desc">Start free, upgrade when you need more.</p>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <h3>Free</h3>
+        <div class="price">$0</div>
+        <ul>
+          <li>Full local LLM support</li>
+          <li>Cloud API (bring your own key)</li>
+          <li>All 46 built-in tools</li>
+          <li>Terminal UI with themes</li>
+          <li>Session persistence</li>
+          <li>Community support</li>
+        </ul>
+        <a href="/download" class="btn btn-secondary">Download</a>
+      </div>
+
+      <div class="pricing-card featured">
+        <h3>Pro</h3>
+        <div class="price">$19<span>/mo</span></div>
+        <ul>
+          <li>Everything in Free</li>
+          <li>Multi-agent swarm mode</li>
+          <li>Codebase RAG auto-index</li>
+          <li>Advanced analytics</li>
+          <li>Priority support</li>
+          <li>Early access to new features</li>
+        </ul>
+        <a href="/pro" class="btn btn-primary">Get Pro</a>
+      </div>
+
+      <div class="pricing-card">
+        <h3>Team</h3>
+        <div class="price">$49<span>/mo per seat</span></div>
+        <ul>
+          <li>Everything in Pro</li>
+          <li>Shared configurations</li>
+          <li>Team analytics dashboard</li>
+          <li>Centralized API key management</li>
+          <li>SSO integration</li>
+          <li>Dedicated support</li>
+        </ul>
+        <a href="mailto:contact@astrolexis.space" class="btn btn-secondary">Contact Sales</a>
+      </div>
+
+      <div class="pricing-card">
+        <h3>Enterprise</h3>
+        <div class="price">Custom</div>
+        <ul>
+          <li>Everything in Team</li>
+          <li>On-premise deployment</li>
+          <li>Custom model hosting</li>
+          <li>SLA guarantees</li>
+          <li>Audit logging</li>
+          <li>Dedicated account manager</li>
+        </ul>
+        <a href="mailto:contact@astrolexis.space" class="btn btn-secondary">Contact Sales</a>
+      </div>
+    </div>
+  </section>
+</Base>

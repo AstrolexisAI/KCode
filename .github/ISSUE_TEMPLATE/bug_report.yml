@@ -1,0 +1,40 @@
+name: Bug Report
+description: Report a bug in KCode
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected Behavior
+  - type: input
+    attributes:
+      label: KCode Version
+      placeholder: "1.8.0"
+  - type: dropdown
+    attributes:
+      label: OS
+      options:
+        - Linux
+        - macOS
+        - Windows (WSL)
+  - type: dropdown
+    attributes:
+      label: Model Type
+      options:
+        - Local (llama.cpp)
+        - Local (Ollama)
+        - Local (MLX)
+        - Cloud (Anthropic)
+        - Cloud (OpenAI)
+        - Cloud (Other)

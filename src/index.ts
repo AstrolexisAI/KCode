@@ -263,6 +263,9 @@ profileCheckpoint("process_start");
 // Start prefetching credentials and config in parallel (non-blocking)
 startPrefetch();
 
+// Non-blocking background update check (prints one-line notice if new version available)
+import("./core/update-notifier").then((m) => m.maybeNotifyUpdate(VERSION)).catch(() => {});
+
 const program = new Command()
   .name("kcode")
   .description("Kulvex Code - AI-powered coding assistant by Astrolexis")

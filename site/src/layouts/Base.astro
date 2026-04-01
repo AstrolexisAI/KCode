@@ -1,0 +1,67 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "KCode by Kulvex — Terminal-based AI coding assistant for local LLMs and cloud APIs" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kulvex.ai" />
+    <meta property="og:image" content="https://kulvex.ai/og-image.png" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+
+    <style>
+      @import "../styles/global.css";
+    </style>
+  </head>
+  <body>
+    <header class="container">
+      <nav>
+        <a href="/" class="logo">KCode</a>
+        <ul class="links">
+          <li><a href="/download">Download</a></li>
+          <li><a href="/pro">Pro</a></li>
+          <li><a href="https://github.com/astrolexis/kcode">GitHub</a></li>
+          <li><a href="https://github.com/astrolexis/kcode/wiki">Docs</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer>
+      <div class="container">
+        <div class="footer-links">
+          <a href="/download">Download</a>
+          <a href="/pro">Pro</a>
+          <a href="https://github.com/astrolexis/kcode">GitHub</a>
+          <a href="https://github.com/astrolexis/kcode/wiki">Docs</a>
+          <a href="https://github.com/astrolexis/kcode/blob/master/SECURITY.md">Security</a>
+          <a href="https://github.com/astrolexis/kcode/blob/master/LICENSE">License</a>
+        </div>
+        <p>&copy; {new Date().getFullYear()} Astrolexis. All rights reserved.</p>
+      </div>
+    </footer>
+  </body>
+</html>

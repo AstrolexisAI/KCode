@@ -119,9 +119,9 @@ describe("Pro E2E: free user feature gating", () => {
   test("free user has limited capabilities", () => {
     // Free limits should enforce restrictions
     expect(FREE_LIMITS.maxSwarmAgents).toBe(1);
-    expect(FREE_LIMITS.transcriptSearchHours).toBe(72);
-    expect(FREE_LIMITS.contextWindowCap).toBe(32_000);
-    expect(FREE_LIMITS.sessionsPerMonth).toBe(50);
+    expect(FREE_LIMITS.transcriptSearchHours).toBe(168);
+    expect(FREE_LIMITS.contextWindowCap).toBe(64_000);
+    expect(FREE_LIMITS.sessionsPerMonth).toBe(200);
   });
 
   test("no cache file means no Pro access", () => {

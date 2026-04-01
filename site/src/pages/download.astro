@@ -1,0 +1,108 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Download KCode" description="Install KCode on Linux, macOS, or Windows (WSL). Multiple install methods available.">
+  <section class="hero container">
+    <h1>Install KCode</h1>
+    <p class="subtitle">
+      Get started in seconds. KCode runs on Linux, macOS, and Windows (via WSL).
+    </p>
+  </section>
+
+  <section class="container">
+    <div class="install-options">
+      <div>
+        <h3>Quick Install (recommended)</h3>
+        <pre><code>curl -fsSL https://kulvex.ai/install.sh | bash</code></pre>
+      </div>
+
+      <div>
+        <h3>Homebrew (macOS / Linux)</h3>
+        <pre><code>brew install astrolexis/tap/kcode</code></pre>
+      </div>
+
+      <div>
+        <h3>npm / bun</h3>
+        <pre><code>npm install -g kcode
+# or
+bun install -g kcode</code></pre>
+      </div>
+
+      <div>
+        <h3>Binary Download</h3>
+        <p style="color: var(--text-muted); margin-bottom: 0.5rem;">
+          Download prebuilt binaries from the
+          <a href="https://github.com/astrolexis/kcode/releases">GitHub Releases</a> page.
+        </p>
+      </div>
+
+      <div>
+        <h3>From Source</h3>
+        <pre><code>git clone https://github.com/astrolexis/kcode.git
+cd kcode
+bun install
+bun run build</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="container">
+    <h2>System Requirements</h2>
+    <p class="section-desc">KCode is lightweight but benefits from decent hardware for local model inference.</p>
+
+    <table class="feature-table">
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th>Minimum</th>
+          <th>Recommended</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>OS</td>
+          <td>Linux, macOS 13+, Windows 10+ (WSL2)</td>
+          <td>Same</td>
+        </tr>
+        <tr>
+          <td>Runtime</td>
+          <td>Bun 1.0+ or Node.js 20+</td>
+          <td>Bun 1.1+</td>
+        </tr>
+        <tr>
+          <td>RAM</td>
+          <td>4 GB (cloud-only)</td>
+          <td>16 GB+ (local models)</td>
+        </tr>
+        <tr>
+          <td>GPU</td>
+          <td>Not required (cloud mode)</td>
+          <td>NVIDIA/AMD GPU with 8+ GB VRAM for local inference</td>
+        </tr>
+        <tr>
+          <td>Disk</td>
+          <td>200 MB (CLI only)</td>
+          <td>10+ GB (with local models)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="container">
+    <h2>First Run</h2>
+    <div class="install-options">
+      <div>
+        <h3>1. Setup wizard</h3>
+        <pre><code>kcode setup</code></pre>
+        <p style="color: var(--text-muted);">Detects your hardware, downloads a recommended model, and configures your API keys.</p>
+      </div>
+      <div>
+        <h3>2. Start coding</h3>
+        <pre><code>cd your-project
+kcode</code></pre>
+        <p style="color: var(--text-muted);">Launch the interactive terminal UI and start working with AI in your codebase.</p>
+      </div>
+    </div>
+  </section>
+</Base>
