@@ -1,0 +1,839 @@
+openapi: "3.0.3"
+info:
+  title: KCode HTTP API
+  description: |
+    REST API for KCode, the terminal-based AI coding assistant by Kulvex.
+    Used by IDE integrations (VS Code, JetBrains) and external tools to interact
+    with KCode sessions, execute prompts, run read-only tools, and inspect server state.
+
+    Start the server with `kcode serve --port 10100`.
+  version: "1.0.0"
+  contact:
+    name: Kulvex
+    url: https://kulvex.ai
+  license:
+    name: AGPL-3.0-only
+
+servers:
+  - url: http://localhost:{port}
+    description: Local KCode HTTP API server
+    variables:
+      port:
+        default: "10100"
+        description: Server port (configurable via --port flag)
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Optional Bearer token set via `--api-key` when starting the server.
+        Passed in the `Authorization: Bearer <token>` header.
+        Required when the server is started with `--api-key`.
+
+  headers:
+    X-Session-Id:
+      description: Session identifier for maintaining conversation state across requests.
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        code:
+          type: integer
+          description: HTTP status code
+
+    HealthResponse:
+      type: object
+      required: [ok, version, model]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        version:
+          type: string
+          example: "1.7.0"
+        model:
+          type: string
+          example: "mnemo:mark5-nano"
+
+    StatusResponse:
+      type: object
+      properties:
+        model:
+          type: string
+          example: "mnemo:mark5-nano"
+        sessionId:
+          type: string
+          nullable: true
+          format: uuid
+        tokenCount:
+          type: integer
+          description: Total tokens consumed across all active sessions
+        toolUseCount:
+          type: integer
+          description: Total tool invocations across all active sessions
+        runningAgents:
+          type: integer
+          description: Number of currently running agent loops
+        contextUsage:
+          type: object
+          properties:
+            messageCount:
+              type: integer
+            tokenEstimate:
+              type: integer
+            contextWindow:
+              type: integer
+              example: 32000
+            usagePercent:
+              type: integer
+              description: Percentage of context window used (0-100)
+        uptime:
+          type: integer
+          description: Server uptime in seconds
+
+    PromptRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          description: The prompt text to send to the model
+        stream:
+          type: boolean
+          default: false
+          description: Enable SSE streaming mode
+        model:
+          type: string
+          description: Override model for this request
+        cwd:
+          type: string
+          description: Working directory (must be absolute, under server root)
+        noTools:
+          type: boolean
+          default: false
+          description: Disable tool execution for this request
+
+    PromptResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        response:
+          type: string
+          description: The model's text response
+        toolCalls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+        usage:
+          $ref: "#/components/schemas/Usage"
+        model:
+          type: string
+
+    ToolCall:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Tool name
+        input:
+          type: object
+          description: Tool input parameters
+        result:
+          type: string
+          description: Tool execution result
+        isError:
+          type: boolean
+          description: Whether the tool execution errored
+
+    Usage:
+      type: object
+      properties:
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+
+    ToolExecRequest:
+      type: object
+      required: [name, input]
+      properties:
+        name:
+          type: string
+          description: |
+            Tool name. Only read-only tools are allowed via HTTP:
+            Read, Glob, Grep, LS, DiffView, GitStatus, GitLog, ToolSearch.
+        input:
+          type: object
+          description: Tool-specific input parameters (see GET /api/tools for schemas)
+        cwd:
+          type: string
+          description: Optional workspace directory override (must be absolute)
+
+    ToolExecResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        content:
+          description: Tool result content (string or structured)
+        isError:
+          type: boolean
+
+    ToolDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+          description: JSON Schema for the tool's input parameters
+
+    SessionsResponse:
+      type: object
+      properties:
+        active:
+          type: array
+          description: Currently active in-memory sessions
+          items:
+            type: object
+            properties:
+              sessionId:
+                type: string
+                format: uuid
+              model:
+                type: string
+              active:
+                type: boolean
+              createdAt:
+                type: string
+                format: date-time
+              lastActivity:
+                type: string
+                format: date-time
+              messageCount:
+                type: integer
+              toolUseCount:
+                type: integer
+              tokenCount:
+                type: integer
+        recent:
+          type: array
+          description: Recent sessions from transcript history
+          items:
+            type: object
+            properties:
+              filename:
+                type: string
+              startedAt:
+                type: string
+              prompt:
+                type: string
+              messageCount:
+                type: integer
+              toolUseCount:
+                type: integer
+              duration:
+                type: string
+
+    ContextResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          nullable: true
+          format: uuid
+        messageCount:
+          type: integer
+        tokenEstimate:
+          type: integer
+        contextWindow:
+          type: integer
+        usagePercent:
+          type: integer
+        cumulativeUsage:
+          $ref: "#/components/schemas/Usage"
+        recentMessages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                description: Message content (truncated to 500 chars for text)
+
+    CompactResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        compacted:
+          type: boolean
+        reason:
+          type: string
+          description: Present when compacted is false
+        messagesBefore:
+          type: integer
+        messagesAfter:
+          type: integer
+        tokensBefore:
+          type: integer
+        tokensAfter:
+          type: integer
+
+    PlanResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          nullable: true
+          format: uuid
+        plan:
+          description: Active plan object, or null if no plan exists
+          nullable: true
+
+    McpResponse:
+      type: object
+      properties:
+        servers:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              alive:
+                type: boolean
+              toolCount:
+                type: integer
+        tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+
+    SessionDetailResponse:
+      type: object
+      properties:
+        filename:
+          type: string
+        messageCount:
+          type: integer
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+                description: Message content (truncated to 2000 chars)
+
+    AgentsResponse:
+      type: object
+      properties:
+        available:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              model:
+                type: string
+              effort:
+                type: string
+              memory:
+                type: string
+        running:
+          type: array
+          description: Currently running agent summaries
+
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: The message to send
+        model:
+          type: string
+        cwd:
+          type: string
+        permission:
+          type: string
+        noTools:
+          type: boolean
+
+    ChatResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        response:
+          type: string
+        toolCalls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+        usage:
+          $ref: "#/components/schemas/Usage"
+        model:
+          type: string
+
+    LegacyHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        version:
+          type: string
+        uptime:
+          type: number
+          description: Process uptime in seconds
+
+    SkillsResponse:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              aliases:
+                type: array
+                items:
+                  type: string
+
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      description: Returns server health status, version, and active model.
+      tags: [Core]
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/status:
+    get:
+      summary: Server status
+      description: |
+        Returns detailed server status including active model, session info,
+        token counts, running agents, context usage, and uptime.
+      tags: [Core]
+      responses:
+        "200":
+          description: Server status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+
+  /api/prompt:
+    post:
+      summary: Send a prompt
+      description: |
+        Send a prompt to the AI model. Supports both synchronous (JSON response)
+        and streaming (SSE) modes via the `stream` body parameter.
+
+        Use the `X-Session-Id` header to maintain conversation state across
+        multiple requests. If omitted, a new session is created automatically.
+
+        **SSE Events** (when `stream: true`):
+        - `session` — Session ID assigned
+        - `text` — Incremental text token
+        - `tool_result` — Tool execution result
+        - `tool_progress` — Tool progress update
+        - `turn_start` — New agent turn started
+        - `compaction` — Context was compacted
+        - `done` — Stream complete with usage stats
+        - `error` — Error occurred
+      tags: [Core]
+      parameters:
+        - in: header
+          name: X-Session-Id
+          schema:
+            type: string
+            format: uuid
+          description: Session ID to reuse an existing session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptRequest"
+      responses:
+        "200":
+          description: Prompt response (non-streaming) or SSE stream (streaming)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptResponse"
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE event stream
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/tools:
+    get:
+      summary: List available tools
+      description: Returns all registered tools with their full JSON Schema definitions.
+      tags: [Tools]
+      responses:
+        "200":
+          description: Tool list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ToolDefinition"
+
+  /api/tool:
+    post:
+      summary: Execute a tool
+      description: |
+        Execute a single tool directly. Only read-only tools are permitted via HTTP API:
+        `Read`, `Glob`, `Grep`, `LS`, `DiffView`, `GitStatus`, `GitLog`, `ToolSearch`.
+
+        Dangerous tools (Bash, Write, Edit, etc.) are blocked for security.
+      tags: [Tools]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolExecRequest"
+      responses:
+        "200":
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolExecResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Tool not allowed via HTTP API
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Unknown tool
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/sessions:
+    get:
+      summary: List sessions
+      description: |
+        Returns both active in-memory sessions and recent historical sessions
+        from transcript storage.
+      tags: [Sessions]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 200
+          description: Maximum number of recent sessions to return
+      responses:
+        "200":
+          description: Session list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionsResponse"
+
+  /api/session/{filename}:
+    get:
+      summary: Get session transcript
+      description: |
+        Load a specific session transcript by filename. Returns up to 100
+        messages with content truncated to 2000 characters each.
+      tags: [Sessions]
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+          description: Session transcript filename (no path separators allowed)
+      responses:
+        "200":
+          description: Session transcript
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionDetailResponse"
+        "400":
+          description: Invalid filename
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/context:
+    get:
+      summary: Get conversation context
+      description: |
+        Returns a summary of the current conversation context for a session,
+        including token estimates, context window usage, and recent messages.
+      tags: [Sessions]
+      parameters:
+        - in: query
+          name: sessionId
+          schema:
+            type: string
+            format: uuid
+          description: Target session ID. Defaults to the most recent active session.
+        - in: query
+          name: lastN
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 200
+          description: Number of recent messages to include
+      responses:
+        "200":
+          description: Context summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextResponse"
+
+  /api/compact:
+    post:
+      summary: Trigger compaction
+      description: |
+        Manually trigger context compaction on a session. Compacts the middle
+        portion of the conversation (keeps first 2 and last 6 messages),
+        summarizing the rest via LLM to reduce token usage.
+      tags: [Sessions]
+      parameters:
+        - in: header
+          name: X-Session-Id
+          schema:
+            type: string
+            format: uuid
+          description: Session to compact. Defaults to the most recently active session.
+      responses:
+        "200":
+          description: Compaction result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompactResponse"
+        "404":
+          description: No active session to compact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/plan:
+    get:
+      summary: Get active plan
+      description: Returns the active structured plan for a session, if one exists.
+      tags: [Sessions]
+      parameters:
+        - in: query
+          name: sessionId
+          schema:
+            type: string
+            format: uuid
+          description: Target session ID. Defaults to the most recently active session.
+      responses:
+        "200":
+          description: Plan data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanResponse"
+
+  /api/mcp:
+    get:
+      summary: List MCP servers and tools
+      description: Returns status of connected MCP servers and their discovered tools.
+      tags: [Integrations]
+      responses:
+        "200":
+          description: MCP status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpResponse"
+
+  /api/agents:
+    get:
+      summary: List agents
+      description: Returns available custom agents and currently running agent summaries.
+      tags: [Integrations]
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentsResponse"
+
+  # Legacy v1 endpoints
+  /health:
+    get:
+      summary: Legacy health check
+      description: Basic health check (legacy). Prefer `/api/health`.
+      tags: [Legacy]
+      security: []
+      deprecated: true
+      responses:
+        "200":
+          description: Server health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegacyHealthResponse"
+
+  /v1/chat:
+    post:
+      summary: Send a chat message (legacy)
+      description: |
+        Legacy chat endpoint. Prefer `POST /api/prompt` which supports
+        streaming and session management.
+      tags: [Legacy]
+      deprecated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+
+  /v1/tools:
+    get:
+      summary: List tools (legacy)
+      description: Returns tool names and descriptions. Prefer `GET /api/tools` for full schemas.
+      tags: [Legacy]
+      deprecated: true
+      responses:
+        "200":
+          description: Tool list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+
+  /v1/skills:
+    get:
+      summary: List skills (legacy)
+      description: Returns available built-in skills with names, descriptions, and aliases.
+      tags: [Legacy]
+      deprecated: true
+      responses:
+        "200":
+          description: Skills list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillsResponse"
+
+tags:
+  - name: Core
+    description: Primary endpoints for health checks and prompting
+  - name: Tools
+    description: Tool listing and direct execution
+  - name: Sessions
+    description: Session management, context inspection, and compaction
+  - name: Integrations
+    description: MCP servers and custom agents
+  - name: Legacy
+    description: Deprecated v1 endpoints (maintained for backward compatibility)

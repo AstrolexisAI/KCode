@@ -274,7 +274,7 @@ export async function isKeychainAvailable(): Promise<boolean> {
       await p.exited;
       return p.exitCode === 0;
     }
-  } catch {}
+  } catch { /* cleanup — ignore failures */ }
   return false;
 }
 

@@ -14,8 +14,9 @@ bun run src/index.ts       # Run directly (no build needed, 0 MB overhead)
 bun run dev                # Watch mode
 bun run build              # Production build → dist/kcode (~101 MB, minified)
 bun run build:dev          # Dev build (no minification)
-bun test                   # Run all tests (31 test files, 559 tests)
+bun test                   # Run all tests (247 test files, 4690+ tests)
 bun test src/core/config.test.ts   # Run a single test file
+bash scripts/test-batched.sh 15    # Run tests in batches (avoids OOM on large suites)
 ```
 
 ## Key Conventions
@@ -35,7 +36,7 @@ bun test src/core/config.test.ts   # Run a single test file
 
 ### Core Engine (`src/core/`)
 
-- **`conversation.ts`** (~57 KB) — Main conversation loop. Handles SSE streaming from both OpenAI-compatible APIs and native Anthropic Messages API (`/v1/messages`), tool call extraction (native format + text-based patterns for local models), context window pruning at 80% capacity with auto-compaction, retry with exponential backoff, max 25 tool turns per agent loop. Supports parallel tool execution, JSON schema validation of tool inputs, smart context injection, desktop notifications on completion, prompt caching for supported providers, checkpoint/rewind system for reverting to previous states, loop detector to break repetitive tool cycles, model fallback chain (tries alternative models on failure), and effort levels (low/medium/high) that control reasoning depth and tool filtering via `allowedTools`/`disallowedTools`. Unified `buildRequestForModel()`/`executeModelRequest()` helpers handle provider-specific request formatting.
+- **`conversation.ts`** (~1800 lines) — Main conversation loop orchestrator. Delegates to extracted modules: `conversation-state.ts` (state access, usage tracking), `conversation-message-prep.ts` (budget checks, theoretical/checkpoint mode, RAG/skills injection), `conversation-retry.ts` (retry logic), `conversation-checkpoint.ts`, `conversation-session.ts`. Core `runAgentLoop()` handles SSE streaming, tool call extraction, context pruning, and effort levels.
 - **`system-prompt.ts`** (~37 KB) — Assembles a 10-layer system prompt: Identity → Tools → Code Guidelines → Git → Environment → Situational Awareness → Metacognition → User Model → World Model → Session Narrative. Loads extensible sections from `~/.kcode/identity.md`, `~/.kcode/awareness/*.md`, `.kcode/awareness/*.md`, `KCODE.md`, `.kcode/rules/*.md`. Injects active plan context and pinned files into the prompt.
 - **`config.ts`** — Settings hierarchy (highest priority first): CLI flags → env vars (`KCODE_MODEL`, `KCODE_API_KEY`, etc.) → `.kcode/settings.local.json` → `.kcode/settings.json` → `~/.kcode/settings.json`.
 - **`models.ts`** (~166 KB) — Dynamic model registry stored in `~/.kcode/models.json`. Each entry has `provider` field (`"openai"` | `"anthropic"`, auto-detected from name if not set). Registry entries take priority over `configBase` for URL resolution. Fallback: `KCODE_API_BASE` env var or `http://localhost:10091`.
@@ -59,6 +60,30 @@ bun test src/core/config.test.ts   # Run a single test file
 - **`analytics.ts`** — Session analytics tracking: tool usage frequency, token consumption, timing, and cost breakdowns.
 - **`transcript-search.ts`** — Full-text search across past conversation transcripts for finding previous solutions and context.
 - **`tool-cache.ts`** — Caches tool results (e.g., file reads, grep) within a session to avoid redundant I/O operations.
+- **`gpu-orchestrator.ts`** — Multi-GPU detection (NVIDIA/Apple), VRAM monitoring, temperature alerts, tensor-split calculation.
+- **`plugin-marketplace.ts`** — Plugin marketplace client: search, install, update, create plugins. 8 bundled seed plugins.
+- **`payments.ts`** — Stripe integration: checkout sessions, webhook verification, subscription management, pro activation.
+- **`auto-update.ts`** — Self-update via GitHub releases: version check, download, semver comparison, 24h cache.
+
+### RAG System (`src/core/rag/`)
+
+Local semantic code search pipeline:
+- **`code-chunker.ts`** — Splits source files into semantic chunks (function/class/import) for 7 languages.
+- **`embedder.ts`** — Pluggable embedding: LocalEmbedder (Ollama/llama.cpp), CloudEmbedder (OpenAI), TFIDFEmbedder (pure TS fallback).
+- **`vector-store.ts`** — SQLite-backed cosine similarity search with checksum-based incremental indexing.
+- **`rag-engine.ts`** — Pipeline orchestrator: indexFile → indexDirectory → search → formatAsContext.
+- **`engine.ts`** — Singleton RAG engine with FTS5 fallback.
+
+### Enterprise (`src/core/enterprise/`)
+
+- **`sso.ts`** — SSO: SAML 2.0 + OIDC, session management, domain restrictions, token refresh.
+- **`audit-export.ts`** — Audit log export (JSON/CSV) with PII redaction.
+- **`policy.ts`** — Team policy enforcement: blocked tools, required permissions, cloud model restrictions.
+
+### Training (`src/core/training/`)
+
+- **`data-collector.ts`** — Collects accepted/rejected/edited pairs in JSONL. Privacy: sanitizes paths, 100MB rotation.
+- **`fine-tuner.ts`** — LoRA fine-tuning via Unsloth or llama.cpp native. Min 100 pairs enforced.
 
 ### Tools (`src/tools/`)
 

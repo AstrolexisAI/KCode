@@ -5,15 +5,18 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
   program
     .command("update")
     .description("Check for updates and self-update KCode")
-    .option("--check", "Only check, don't download")
-    .option("--yes", "Skip confirmation prompt")
-    .action(async (opts: { check?: boolean; yes?: boolean }) => {
+    .option("--check", "Only check for updates, don't install")
+    .option("--force", "Install without confirmation prompt")
+    .option("--yes", "Alias for --force (skip confirmation)")
+    .action(async (opts: { check?: boolean; force?: boolean; yes?: boolean }) => {
+      const skipConfirm = opts.force || opts.yes;
+
       console.log(`\n  Current version: v${VERSION}\n`);
       console.log("  Checking for updates...\n");
 
       const info = await checkForUpdate(VERSION);
 
-      if (!info) {
+      if (!info.updateAvailable) {
         console.log(`  \x1b[32m✓\x1b[0m KCode v${VERSION} is up to date.\n`);
         return;
       }
@@ -35,6 +38,10 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
         }
       }
 
+      if (info.releaseUrl) {
+        console.log(`\n  Release: ${info.releaseUrl}`);
+      }
+
       console.log();
 
       if (opts.check) {
@@ -42,15 +49,14 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
         return;
       }
 
-      // Confirmation prompt (unless --yes)
-      if (!opts.yes) {
+      // Confirmation prompt (unless --force or --yes)
+      if (!skipConfirm) {
         process.stdout.write("  Install update? [Y/n] ");
         const answer = await new Promise<string>((resolve) => {
           if (!process.stdin.isTTY) {
             resolve("y");
             return;
           }
-          const chunks: Buffer[] = [];
           process.stdin.resume();
           process.stdin.setRawMode?.(false);
           process.stdin.once("data", (data) => {
@@ -74,20 +80,20 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
       console.log(`\n  Downloading v${info.latestVersion}...`);
       let lastPct = -1;
 
-      try {
-        await downloadAndInstall(info, (pct) => {
-          if (pct !== lastPct) {
-            lastPct = pct;
-            process.stderr.write(`\r  Downloading... ${pct}%`);
-          }
-        });
+      const result = await downloadAndInstall(info, (pct) => {
+        if (pct !== lastPct) {
+          lastPct = pct;
+          process.stderr.write(`\r  Downloading... ${pct}%`);
+        }
+      });
 
-        process.stderr.write("\r" + " ".repeat(40) + "\r");
+      process.stderr.write("\r" + " ".repeat(40) + "\r");
+
+      if (result.success) {
         console.log(`  \x1b[32m✓\x1b[0m Updated to v${info.latestVersion}`);
         console.log(`\n  Restart KCode to use the new version.\n`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`\n  \x1b[31m✗ Update failed: ${msg}\x1b[0m\n`);
+      } else {
+        console.error(`\n  \x1b[31m✗ Update failed: ${result.error}\x1b[0m\n`);
         process.exit(1);
       }
     });

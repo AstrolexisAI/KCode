@@ -126,7 +126,14 @@ export const configSkills: SkillDefinition[] = [
     name: "rag",
     description: "Manage the RAG (Retrieval-Augmented Generation) index",
     aliases: ["rag-index"],
-    args: ["status | rebuild | toggle"],
+    args: ["status | rebuild | toggle | search <query>"],
     template: `__builtin_rag__`,
+  },
+  {
+    name: "lang",
+    description: "Show or switch UI language",
+    aliases: ["language", "locale", "i18n"],
+    args: ["language code (en, es, fr, de, ja, ko, pt, zh)"],
+    template: `__builtin_lang__`,
   },
 ];

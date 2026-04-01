@@ -1,0 +1,326 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="HTTP API Reference — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>HTTP API Reference</span>
+    </nav>
+
+    <h1>HTTP API Reference</h1>
+    <p class="subtitle">
+      REST API for IDE integrations and external tools.
+      <a href="/openapi.yaml" class="spec-link">OpenAPI Spec (YAML)</a>
+    </p>
+
+    <h2>Getting Started</h2>
+    <p>Start the HTTP API server with:</p>
+    <pre><code>kcode serve --port 10100</code></pre>
+    <p>
+      The server binds to <code>127.0.0.1</code> by default.
+      All endpoints return JSON and support CORS for localhost origins and VS Code webviews.
+    </p>
+
+    <h2>Authentication</h2>
+    <p>
+      Authentication is optional but strongly recommended. Pass <code>--api-key</code> when starting the server,
+      then include the token in every request:
+    </p>
+    <pre><code>kcode serve --port 10100 --api-key MY_SECRET
+
+# All requests must include:
+Authorization: Bearer MY_SECRET</code></pre>
+    <p>
+      If the server is started without <code>--api-key</code>, no authentication is required.
+      The <code>/api/health</code> and legacy <code>/health</code> endpoints never require authentication.
+    </p>
+
+    <h2>Session Management</h2>
+    <p>
+      Use the <code>X-Session-Id</code> header to maintain conversation state across multiple requests.
+      If omitted, a new session is created automatically. The server supports up to 20 concurrent sessions
+      with a 30-minute idle timeout.
+    </p>
+
+    <h2 id="core">Core Endpoints</h2>
+
+    <h3>GET /api/health</h3>
+    <p>Health check. Returns server version and active model. No authentication required.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>ok</code></td><td>boolean</td><td>Always <code>true</code></td></tr>
+        <tr><td><code>version</code></td><td>string</td><td>KCode version</td></tr>
+        <tr><td><code>model</code></td><td>string</td><td>Active model name</td></tr>
+      </tbody>
+    </table>
+    <pre><code>curl http://localhost:10100/api/health</code></pre>
+
+    <h3>GET /api/status</h3>
+    <p>Detailed server status including session info, token counts, running agents, context usage, and uptime.</p>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>model</code></td><td>string</td><td>Active model name</td></tr>
+        <tr><td><code>sessionId</code></td><td>string?</td><td>Current session UUID</td></tr>
+        <tr><td><code>tokenCount</code></td><td>integer</td><td>Total tokens across all sessions</td></tr>
+        <tr><td><code>toolUseCount</code></td><td>integer</td><td>Total tool invocations</td></tr>
+        <tr><td><code>runningAgents</code></td><td>integer</td><td>Active agent loops</td></tr>
+        <tr><td><code>contextUsage</code></td><td>object</td><td>messageCount, tokenEstimate, contextWindow, usagePercent</td></tr>
+        <tr><td><code>uptime</code></td><td>integer</td><td>Server uptime in seconds</td></tr>
+      </tbody>
+    </table>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  http://localhost:10100/api/status</code></pre>
+
+    <h3>POST /api/prompt</h3>
+    <p>
+      Send a prompt to the AI model. Supports synchronous JSON responses and streaming via SSE.
+    </p>
+
+    <h4>Request Body</h4>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>prompt</code></td><td>string</td><td>Yes</td><td>The prompt text</td></tr>
+        <tr><td><code>stream</code></td><td>boolean</td><td>No</td><td>Enable SSE streaming (default: false)</td></tr>
+        <tr><td><code>model</code></td><td>string</td><td>No</td><td>Override model for this request</td></tr>
+        <tr><td><code>cwd</code></td><td>string</td><td>No</td><td>Working directory (absolute path)</td></tr>
+        <tr><td><code>noTools</code></td><td>boolean</td><td>No</td><td>Disable tool execution</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Headers</h4>
+    <table>
+      <thead><tr><th>Header</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-Session-Id</code></td><td>Session UUID to reuse an existing session</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Non-streaming example</h4>
+    <pre><code>curl -X POST http://localhost:10100/api/prompt \
+  -H "Authorization: Bearer MY_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "List all TypeScript files in src/"}'</code></pre>
+
+    <h4>Streaming example (SSE)</h4>
+    <pre><code>curl -N -X POST http://localhost:10100/api/prompt \
+  -H "Authorization: Bearer MY_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Explain this codebase", "stream": true}'</code></pre>
+
+    <h4>SSE Events</h4>
+    <table>
+      <thead><tr><th>Event</th><th>Data</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>session</code></td><td><code>{ sessionId }</code></td><td>Session ID assigned</td></tr>
+        <tr><td><code>text</code></td><td><code>{ text }</code></td><td>Incremental text token</td></tr>
+        <tr><td><code>tool_result</code></td><td><code>{ name, result, isError }</code></td><td>Tool execution result</td></tr>
+        <tr><td><code>tool_progress</code></td><td><code>{ name, status, index, total }</code></td><td>Tool progress update</td></tr>
+        <tr><td><code>turn_start</code></td><td><code>{}</code></td><td>New agent turn started</td></tr>
+        <tr><td><code>compaction</code></td><td><code>{ tokensAfter }</code></td><td>Context was compacted</td></tr>
+        <tr><td><code>done</code></td><td><code>{ sessionId, usage, model }</code></td><td>Stream complete</td></tr>
+        <tr><td><code>error</code></td><td><code>{ error }</code></td><td>Error occurred</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tools">Tool Endpoints</h2>
+
+    <h3>GET /api/tools</h3>
+    <p>List all registered tools with their full JSON Schema definitions.</p>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  http://localhost:10100/api/tools</code></pre>
+
+    <h3>POST /api/tool</h3>
+    <p>
+      Execute a single tool directly. Only <strong>read-only tools</strong> are permitted via HTTP
+      for security. Dangerous tools (Bash, Write, Edit, etc.) are blocked.
+    </p>
+
+    <h4>Allowed Tools</h4>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Read</code></td><td>Read file contents</td></tr>
+        <tr><td><code>Glob</code></td><td>Find files by pattern</td></tr>
+        <tr><td><code>Grep</code></td><td>Search file contents</td></tr>
+        <tr><td><code>LS</code></td><td>List directory contents</td></tr>
+        <tr><td><code>DiffView</code></td><td>View file diffs</td></tr>
+        <tr><td><code>GitStatus</code></td><td>Show git status</td></tr>
+        <tr><td><code>GitLog</code></td><td>Show git log</td></tr>
+        <tr><td><code>ToolSearch</code></td><td>Discover available tools</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Request Body</h4>
+    <table>
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>name</code></td><td>string</td><td>Yes</td><td>Tool name (must be in the allowlist)</td></tr>
+        <tr><td><code>input</code></td><td>object</td><td>Yes</td><td>Tool input parameters</td></tr>
+        <tr><td><code>cwd</code></td><td>string</td><td>No</td><td>Workspace directory override</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code># Read a file
+curl -X POST http://localhost:10100/api/tool \
+  -H "Authorization: Bearer MY_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Read", "input": {"file_path": "/home/user/project/src/index.ts"}}'
+
+# Search for a pattern
+curl -X POST http://localhost:10100/api/tool \
+  -H "Authorization: Bearer MY_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Grep", "input": {"pattern": "TODO", "path": "/home/user/project"}}'</code></pre>
+
+    <h2 id="sessions">Session Endpoints</h2>
+
+    <h3>GET /api/sessions</h3>
+    <p>List active in-memory sessions and recent historical sessions from transcript storage.</p>
+    <table>
+      <thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>limit</code></td><td>query</td><td>integer</td><td>Max recent sessions (1-200, default: 20)</td></tr>
+      </tbody>
+    </table>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  "http://localhost:10100/api/sessions?limit=10"</code></pre>
+
+    <h3>GET /api/session/:filename</h3>
+    <p>
+      Load a specific session transcript by filename. Returns up to 100 messages
+      with content truncated to 2000 characters each.
+    </p>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  http://localhost:10100/api/session/2026-04-01T12-00-00.json</code></pre>
+
+    <h3>GET /api/context</h3>
+    <p>
+      Get a summary of the current conversation context for a session, including
+      token estimates, context window usage percentage, and recent messages.
+    </p>
+    <table>
+      <thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>sessionId</code></td><td>query</td><td>string</td><td>Target session UUID (default: most recent)</td></tr>
+        <tr><td><code>lastN</code></td><td>query</td><td>integer</td><td>Recent messages to include (1-200, default: 10)</td></tr>
+      </tbody>
+    </table>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  "http://localhost:10100/api/context?lastN=5"</code></pre>
+
+    <h3>POST /api/compact</h3>
+    <p>
+      Trigger manual context compaction on a session. Keeps the first 2 and last 6 messages,
+      summarizing the middle portion via LLM to reduce token usage.
+      Requires at least 9 messages in the session.
+    </p>
+    <pre><code>curl -X POST http://localhost:10100/api/compact \
+  -H "Authorization: Bearer MY_SECRET" \
+  -H "X-Session-Id: your-session-uuid"</code></pre>
+
+    <h3>GET /api/plan</h3>
+    <p>Returns the active structured plan for a session, or <code>null</code> if no plan exists.</p>
+    <table>
+      <thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>sessionId</code></td><td>query</td><td>string</td><td>Target session UUID (default: most recent)</td></tr>
+      </tbody>
+    </table>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  http://localhost:10100/api/plan</code></pre>
+
+    <h2 id="integrations">Integration Endpoints</h2>
+
+    <h3>GET /api/mcp</h3>
+    <p>Returns status of connected MCP (Model Context Protocol) servers and their discovered tools.</p>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  http://localhost:10100/api/mcp</code></pre>
+
+    <h3>GET /api/agents</h3>
+    <p>Returns available custom agents and currently running agent summaries.</p>
+    <pre><code>curl -H "Authorization: Bearer MY_SECRET" \
+  http://localhost:10100/api/agents</code></pre>
+
+    <h2 id="legacy">Legacy Endpoints</h2>
+    <p class="deprecation-notice">
+      These endpoints are maintained for backward compatibility. Prefer the <code>/api/*</code> endpoints above.
+    </p>
+
+    <table>
+      <thead><tr><th>Method</th><th>Endpoint</th><th>Replacement</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>GET</td><td><code>/health</code></td><td><code>/api/health</code></td><td>Basic health check</td></tr>
+        <tr><td>POST</td><td><code>/v1/chat</code></td><td><code>/api/prompt</code></td><td>Send a chat message</td></tr>
+        <tr><td>GET</td><td><code>/v1/tools</code></td><td><code>/api/tools</code></td><td>List tools (names only)</td></tr>
+        <tr><td>GET</td><td><code>/v1/skills</code></td><td>-</td><td>List built-in skills</td></tr>
+      </tbody>
+    </table>
+
+    <h3>POST /v1/chat</h3>
+    <pre><code>curl -X POST http://localhost:10100/v1/chat \
+  -H "Authorization: Bearer MY_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello, what files are in this project?"}'</code></pre>
+
+    <h2 id="errors">Error Handling</h2>
+    <p>All errors return a consistent JSON format:</p>
+    <pre><code>{
+  "error": "Human-readable error message",
+  "code": 400
+}</code></pre>
+    <table>
+      <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>400</code></td><td>Invalid request (missing fields, bad JSON)</td></tr>
+        <tr><td><code>401</code></td><td>Unauthorized (missing or invalid Bearer token)</td></tr>
+        <tr><td><code>403</code></td><td>Forbidden (tool not in HTTP allowlist)</td></tr>
+        <tr><td><code>404</code></td><td>Not found (unknown endpoint, session, or tool)</td></tr>
+        <tr><td><code>500</code></td><td>Internal server error</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="cors">CORS</h2>
+    <p>
+      The server allows CORS requests from <code>localhost</code>, <code>127.0.0.1</code>,
+      and <code>vscode-webview://</code> origins. Preflight <code>OPTIONS</code> requests
+      are handled automatically.
+    </p>
+
+    <nav class="doc-nav">
+      <a href="/docs/cli-reference">&larr; CLI Reference</a>
+      <a href="/docs">Back to Docs &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .spec-link { margin-left: 1rem; font-size: 0.9rem; }
+    h2 { margin-top: 2.5rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; color: #c9d1d9; font-size: 1.1rem; }
+    h4 { margin-top: 1rem; margin-bottom: 0.5rem; color: #888; font-size: 0.95rem; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+    .deprecation-notice {
+      background: rgba(255, 200, 50, 0.1);
+      border-left: 3px solid #e8a735;
+      padding: 0.5rem 1rem;
+      margin: 1rem 0;
+      color: #ccc;
+      font-size: 0.9rem;
+    }
+  </style>
+</Base>

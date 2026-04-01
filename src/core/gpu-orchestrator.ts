@@ -304,3 +304,98 @@ export function checkGpuAlerts(statuses: GpuStatus[]): GpuAlert[] {
 
   return alerts;
 }
+
+// ─── Tensor Split & llama.cpp Args ─────────────────────────────
+
+/**
+ * Calculate optimal tensor split ratios based on free VRAM per GPU.
+ * Returns a string like "0.43,0.57" suitable for llama.cpp --tensor-split flag.
+ * For a single GPU, returns "1.00". Returns null if no GPUs have free VRAM.
+ */
+export function calculateTensorSplit(gpus: GpuStatus[]): string | null {
+  if (gpus.length === 0) return null;
+
+  const totalFreeVram = gpus.reduce((sum, g) => sum + g.vramFree, 0);
+  if (totalFreeVram <= 0) return null;
+
+  if (gpus.length === 1) return "1.00";
+
+  const ratios = gpus.map((g) => g.vramFree / totalFreeVram);
+  return ratios.map((r) => r.toFixed(2)).join(",");
+}
+
+/**
+ * Estimate number of GPU layers based on total free VRAM across all GPUs.
+ * Heuristic: ~0.5 GB per layer for typical 7B-70B models.
+ * Returns -1 (all layers) if total free VRAM >= 20 GB, otherwise scales proportionally.
+ */
+function estimateGpuLayers(gpus: GpuStatus[]): number {
+  const totalFreeMB = gpus.reduce((sum, g) => sum + g.vramFree, 0);
+  const totalFreeGB = totalFreeMB / 1024;
+
+  // Enough VRAM to offload everything
+  if (totalFreeGB >= 20) return -1;
+
+  // ~0.5 GB per layer, cap at reasonable max
+  const layers = Math.floor(totalFreeGB / 0.5);
+  return Math.max(layers, 0);
+}
+
+/**
+ * Build recommended llama.cpp CLI args based on detected GPU statuses.
+ * Includes --n-gpu-layers, --tensor-split (for multi-GPU), and --mmap.
+ */
+export function getRecommendedLlamaArgs(gpus: GpuStatus[]): string[] {
+  if (gpus.length === 0) {
+    // CPU-only: no GPU layers, rely on mmap
+    return ["--n-gpu-layers", "0", "--mmap"];
+  }
+
+  const args: string[] = [];
+
+  // GPU layers
+  const layers = estimateGpuLayers(gpus);
+  args.push("--n-gpu-layers", layers.toString());
+
+  // Tensor split for multi-GPU
+  if (gpus.length > 1) {
+    const split = calculateTensorSplit(gpus);
+    if (split) {
+      args.push("--tensor-split", split);
+    }
+  }
+
+  // Always enable mmap for SSD-backed weight streaming
+  args.push("--mmap");
+
+  return args;
+}
+
+// ─── TUI Status Bar ────────────────────────────────────────────
+
+/**
+ * Format GPU statuses into a compact string for the TUI status bar.
+ * Example: "GPU: 4090 45C 12/24GB | 5090 38C 8/32GB"
+ * Returns "GPU: none" if no GPUs are detected.
+ */
+export function formatStatusBarGpu(statuses: GpuStatus[]): string {
+  if (statuses.length === 0) return "GPU: none";
+
+  const parts = statuses.map((s) => {
+    // Extract short name: strip "NVIDIA GeForce RTX " prefix, keep model number
+    const shortName = s.name
+      .replace(/^NVIDIA\s+/i, "")
+      .replace(/^GeForce\s+/i, "")
+      .replace(/^RTX\s+/i, "")
+      .replace(/^GTX\s+/i, "")
+      .trim();
+
+    const usedGB = Math.round(s.vramUsed / 1024);
+    const totalGB = Math.round(s.vramTotal / 1024);
+    const temp = s.temperature > 0 ? ` ${s.temperature}C` : "";
+
+    return `${shortName}${temp} ${usedGB}/${totalGB}GB`;
+  });
+
+  return `GPU: ${parts.join(" | ")}`;
+}

@@ -317,6 +317,7 @@ program
   .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
   .option("--debug", "Enable agent debug tracing (shows decision reasoning)")
   .option("--offline", "Force offline mode (block all remote network requests)")
+  .option("--lang <locale>", "Set UI language (en, es, fr, de, ja, ko, pt, zh)")
   .option("--startup-profile", "Show startup profiling breakdown (timing, memory, modules)")
   .allowExcessArguments(true)
   .action(async (prompt: string | undefined, options: any) => {
@@ -414,6 +415,7 @@ async function runMain(
     file?: string;
     debug?: boolean;
     offline?: boolean;
+    lang?: string;
     startupProfile?: boolean;
   },
 ) {
@@ -425,6 +427,15 @@ async function runMain(
     const { _resetProfiler } = await import("./core/startup-profiler");
     _resetProfiler(); // Re-create profiler with enabled=true
     profileCheckpoint("process_start"); // Re-record since profiler was just enabled
+  }
+
+  // ─── i18n initialization ──────────────────────────────────
+  // Initialize early so all subsequent messages can use t()
+  {
+    const { initI18n } = await import("./i18n");
+    const config = await buildConfig(cwd);
+    // CLI flag > config setting > env var > auto-detect
+    initI18n(opts.lang ?? config.language);
   }
 
   // ─── Managed mode (launched by Kulvex WebUI) ──────────────
