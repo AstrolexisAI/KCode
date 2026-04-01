@@ -15,60 +15,134 @@ export function ensureDir(dir: string): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
-/** Download a file with progress tracking */
+/** Download a file with progress tracking and resume support.
+ *  If a partial file exists at destPath, attempts to resume using HTTP Range header.
+ *  Falls back to full download if the server does not support Range requests. */
 export async function downloadFile(
   url: string,
   destPath: string,
   onProgress: (pct: string) => void,
+  expectedSizeBytes?: number,
 ): Promise<void> {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "KCode" },
-    redirect: "follow",
-  });
+  // Check for existing partial download
+  const partialPath = `${destPath}.partial`;
+  let resumeOffset = 0;
 
-  if (!response.ok) {
-    throw new Error(`Download failed: ${response.status} ${response.statusText} — ${url}`);
-  }
-
-  const contentLength = parseInt(response.headers.get("content-length") ?? "0", 10);
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body");
-
-  const file = Bun.file(destPath);
-  const writer = file.writer();
-  let downloaded = 0;
-  let lastReport = 0;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    writer.write(value);
-    downloaded += value.length;
-
-    // Report progress every 1%
-    if (contentLength > 0) {
-      const pct = Math.round((downloaded / contentLength) * 100);
-      if (pct > lastReport) {
-        lastReport = pct;
-        const useMB = contentLength < 1024 * 1024 * 1024; // < 1 GB
-        if (useMB) {
-          const dlMB = (downloaded / (1024 * 1024)).toFixed(0);
-          const totalMB = (contentLength / (1024 * 1024)).toFixed(0);
-          onProgress(`${pct}% (${dlMB}/${totalMB} MB)`);
-        } else {
-          const dlGB = (downloaded / (1024 * 1024 * 1024)).toFixed(1);
-          const totalGB = (contentLength / (1024 * 1024 * 1024)).toFixed(1);
-          onProgress(`${pct}% (${dlGB}/${totalGB} GB)`);
-        }
-      }
-    } else {
-      const downloadedMB = (downloaded / (1024 * 1024)).toFixed(0);
-      onProgress(`${downloadedMB} MB`);
+  if (existsSync(partialPath)) {
+    const { statSync } = require("node:fs");
+    resumeOffset = statSync(partialPath).size;
+    if (resumeOffset > 0) {
+      const resumeMB = (resumeOffset / (1024 * 1024)).toFixed(1);
+      onProgress(`Resuming download from ${resumeMB} MB...`);
     }
   }
 
-  await writer.end();
+  const headers: Record<string, string> = { "User-Agent": "KCode" };
+  if (resumeOffset > 0) {
+    headers["Range"] = `bytes=${resumeOffset}-`;
+  }
+
+  const response = await fetch(url, {
+    headers,
+    redirect: "follow",
+  });
+
+  // If server returns 416 (Range Not Satisfiable), the file may be complete already
+  if (response.status === 416) {
+    // File is already fully downloaded — move partial to final
+    if (existsSync(partialPath)) {
+      renameSync(partialPath, destPath);
+    }
+    return;
+  }
+
+  // If server doesn't support Range (returns 200 instead of 206), restart from scratch
+  if (resumeOffset > 0 && response.status === 200) {
+    log.debug("model-file-utils", "Server does not support Range requests, restarting download");
+    resumeOffset = 0;
+    // Remove partial file — we'll overwrite
+    if (existsSync(partialPath)) {
+      unlinkSync(partialPath);
+    }
+  }
+
+  if (!response.ok && response.status !== 206) {
+    throw new Error(`Download failed: ${response.status} ${response.statusText} — ${url}`);
+  }
+
+  // Determine total file size
+  let totalSize = 0;
+  if (response.status === 206) {
+    // Content-Range: bytes 12345-99999/100000
+    const contentRange = response.headers.get("content-range");
+    if (contentRange) {
+      const match = contentRange.match(/\/(\d+)$/);
+      if (match) totalSize = parseInt(match[1]!, 10);
+    }
+    if (totalSize === 0) {
+      const contentLength = parseInt(response.headers.get("content-length") ?? "0", 10);
+      totalSize = resumeOffset + contentLength;
+    }
+  } else {
+    totalSize = parseInt(response.headers.get("content-length") ?? "0", 10);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  // Open file for writing — append if resuming, create if fresh
+  const { openSync, writeSync, closeSync } = require("node:fs");
+  const fd = openSync(partialPath, resumeOffset > 0 && response.status === 206 ? "a" : "w");
+
+  let downloaded = resumeOffset;
+  let lastReport = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      writeSync(fd, value);
+      downloaded += value.length;
+
+      // Report progress every 1%
+      if (totalSize > 0) {
+        const pct = Math.round((downloaded / totalSize) * 100);
+        if (pct > lastReport) {
+          lastReport = pct;
+          const useMB = totalSize < 1024 * 1024 * 1024; // < 1 GB
+          if (useMB) {
+            const dlMB = (downloaded / (1024 * 1024)).toFixed(0);
+            const totalMB = (totalSize / (1024 * 1024)).toFixed(0);
+            onProgress(`${pct}% (${dlMB}/${totalMB} MB)`);
+          } else {
+            const dlGB = (downloaded / (1024 * 1024 * 1024)).toFixed(1);
+            const totalGB = (totalSize / (1024 * 1024 * 1024)).toFixed(1);
+            onProgress(`${pct}% (${dlGB}/${totalGB} GB)`);
+          }
+        }
+      } else {
+        const downloadedMB = (downloaded / (1024 * 1024)).toFixed(0);
+        onProgress(`${downloadedMB} MB`);
+      }
+    }
+  } finally {
+    closeSync(fd);
+  }
+
+  // Verify final file size if expected size is known
+  if (expectedSizeBytes && expectedSizeBytes > 0) {
+    const { statSync } = require("node:fs");
+    const finalSize = statSync(partialPath).size;
+    if (finalSize !== expectedSizeBytes) {
+      throw new Error(
+        `Download size mismatch: expected ${expectedSizeBytes} bytes, got ${finalSize} bytes`,
+      );
+    }
+  }
+
+  // Move partial file to final destination
+  renameSync(partialPath, destPath);
 }
 
 /** Extract a .tar.gz or .zip archive (cross-platform) */
