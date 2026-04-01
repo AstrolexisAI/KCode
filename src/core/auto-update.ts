@@ -13,22 +13,37 @@ import { kcodePath } from "./paths";
 
 const GITHUB_REPO = "astrolexis/kcode";
 const DEFAULT_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const UPDATE_CHECK_FILE = kcodePath("update-check.json");
+
+function getUpdateCheckFile(): string {
+  return kcodePath("update-check.json");
+}
 
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface UpdateInfo {
   currentVersion: string;
   latestVersion: string;
-  downloadUrl: string;
-  releaseNotes: string;
-  publishedAt: string;
-  checksumUrl: string | null;
+  updateAvailable: boolean;
+  downloadUrl?: string;
+  releaseUrl?: string;
+  releaseNotes?: string;
+  publishedAt?: string;
+  checksumUrl?: string | null;
+}
+
+export interface UpdateResult {
+  success: boolean;
+  previousVersion: string;
+  newVersion: string;
+  error?: string;
 }
 
 interface UpdateCheckState {
   lastCheck: number;
   lastVersion: string | null;
+  releaseUrl?: string;
+  releaseNotes?: string;
+  publishedAt?: string;
 }
 
 interface ReleaseAsset {
@@ -120,11 +135,14 @@ export function getUpdateCheckInterval(): number {
 
 function readCheckState(): UpdateCheckState {
   try {
-    if (existsSync(UPDATE_CHECK_FILE)) {
-      const data = JSON.parse(require("node:fs").readFileSync(UPDATE_CHECK_FILE, "utf-8"));
+    if (existsSync(getUpdateCheckFile())) {
+      const data = JSON.parse(require("node:fs").readFileSync(getUpdateCheckFile(), "utf-8"));
       return {
         lastCheck: typeof data.lastCheck === "number" ? data.lastCheck : 0,
         lastVersion: typeof data.lastVersion === "string" ? data.lastVersion : null,
+        releaseUrl: typeof data.releaseUrl === "string" ? data.releaseUrl : undefined,
+        releaseNotes: typeof data.releaseNotes === "string" ? data.releaseNotes : undefined,
+        publishedAt: typeof data.publishedAt === "string" ? data.publishedAt : undefined,
       };
     }
   } catch {
@@ -139,7 +157,7 @@ async function writeCheckState(state: UpdateCheckState): Promise<void> {
     if (!existsSync(dir)) {
       require("node:fs").mkdirSync(dir, { recursive: true });
     }
-    await Bun.write(UPDATE_CHECK_FILE, JSON.stringify(state, null, 2));
+    await Bun.write(getUpdateCheckFile(), JSON.stringify(state, null, 2));
   } catch {
     /* ignore */
   }
@@ -165,7 +183,13 @@ export function shouldCheckForUpdate(): boolean {
  * Check GitHub Releases API for a newer version.
  * Returns UpdateInfo if a newer version is available, null otherwise.
  */
-export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo | null> {
+export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo> {
+  const base: UpdateInfo = {
+    currentVersion,
+    latestVersion: currentVersion,
+    updateAvailable: false,
+  };
+
   try {
     const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
     const resp = await fetch(url, {
@@ -175,25 +199,33 @@ export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo
 
     if (!resp.ok) {
       log.debug("auto-update", `GitHub API returned ${resp.status}`);
-      return null;
+      return base;
     }
 
     const data = (await resp.json()) as ReleaseData;
     const tag = data.tag_name ?? data.version ?? "";
     const latestVersion = tag.replace(/^v/, "");
+    const releaseUrl = `https://github.com/${GITHUB_REPO}/releases/tag/${tag}`;
 
     // Save check state regardless of whether update is available
-    await writeCheckState({ lastCheck: Date.now(), lastVersion: latestVersion });
+    await writeCheckState({
+      lastCheck: Date.now(),
+      lastVersion: latestVersion,
+      releaseUrl,
+      releaseNotes: data.body ?? undefined,
+      publishedAt: data.published_at ?? undefined,
+    });
 
-    if (compareSemver(latestVersion, currentVersion) <= 0) {
-      return null; // Already on latest or newer
+    const isNewer = compareSemver(latestVersion, currentVersion) > 0;
+
+    if (!isNewer) {
+      return { ...base, latestVersion };
     }
 
     const suffix = getPlatformSuffix();
     const asset = data.assets?.find((a) => a.name.includes(suffix));
     if (!asset) {
       log.warn("auto-update", `No binary found for ${suffix} in release ${tag}`);
-      return null;
     }
 
     // Look for checksums file
@@ -204,14 +236,16 @@ export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo
     return {
       currentVersion,
       latestVersion,
-      downloadUrl: asset.browser_download_url,
+      updateAvailable: true,
+      downloadUrl: asset?.browser_download_url,
+      releaseUrl,
       releaseNotes: data.body ?? "",
       publishedAt: data.published_at ?? "",
       checksumUrl: checksumAsset?.browser_download_url ?? null,
     };
   } catch (err) {
     log.debug("auto-update", `Failed to check for updates: ${err}`);
-    return null;
+    return base;
   }
 }
 
@@ -259,100 +293,168 @@ async function computeSha256(filePath: string): Promise<string> {
 export async function downloadAndInstall(
   info: UpdateInfo,
   onProgress?: (pct: number) => void,
-): Promise<void> {
-  const resp = await fetch(info.downloadUrl, {
-    signal: AbortSignal.timeout(300_000), // 5 minutes
-    headers: { "User-Agent": "KCode-AutoUpdate" },
-    redirect: "follow",
-  });
+): Promise<UpdateResult> {
+  const result: UpdateResult = {
+    success: false,
+    previousVersion: info.currentVersion,
+    newVersion: info.latestVersion,
+  };
 
-  if (!resp.ok) {
-    throw new Error(`Download failed: HTTP ${resp.status}`);
+  if (!info.updateAvailable || !info.downloadUrl) {
+    result.error = "No update available or no download URL";
+    return result;
   }
-
-  const totalSize = parseInt(resp.headers.get("content-length") ?? "0", 10);
-  const tmpDir = require("node:os").tmpdir();
-  const tmpPath = join(tmpDir, `kcode-update-${process.pid}`);
-
-  // Stream to temp file
-  const writer = Bun.file(tmpPath).writer();
-  let downloaded = 0;
 
   try {
-    for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
-      writer.write(chunk);
-      downloaded += chunk.length;
+    const resp = await fetch(info.downloadUrl, {
+      signal: AbortSignal.timeout(300_000), // 5 minutes
+      headers: { "User-Agent": "KCode-AutoUpdate" },
+      redirect: "follow",
+    });
 
-      if (onProgress && totalSize > 0) {
-        onProgress(Math.round((downloaded / totalSize) * 100));
-      }
+    if (!resp.ok) {
+      result.error = `Download failed: HTTP ${resp.status}`;
+      return result;
     }
-    await writer.end();
-  } catch (err) {
-    // Clean up on error
-    try { unlinkSync(tmpPath); } catch { /* ignore */ }
-    throw err;
-  }
 
-  // Verify SHA256 checksum if available
-  if (info.checksumUrl) {
-    const suffix = getPlatformSuffix();
-    const assetName = `kcode-${suffix}`;
-    const expected = await fetchExpectedChecksum(info.checksumUrl, assetName);
+    const totalSize = parseInt(resp.headers.get("content-length") ?? "0", 10);
+    const tmpDir = require("node:os").tmpdir();
+    const tmpPath = join(tmpDir, `kcode-update-${process.pid}`);
 
-    if (expected) {
-      const actual = await computeSha256(tmpPath);
-      if (actual !== expected) {
-        try { unlinkSync(tmpPath); } catch { /* ignore */ }
-        throw new Error(
-          `Checksum verification failed.\n  Expected: ${expected}\n  Got:      ${actual}`,
-        );
-      }
-      log.info("auto-update", "SHA256 checksum verified.");
-    }
-  }
+    // Stream to temp file
+    const writer = Bun.file(tmpPath).writer();
+    let downloaded = 0;
 
-  // Make executable
-  chmodSync(tmpPath, 0o755);
-
-  // Find and replace binary
-  const binaryPaths = findBinaryPaths();
-  if (binaryPaths.length === 0) {
-    try { unlinkSync(tmpPath); } catch { /* ignore */ }
-    throw new Error("Could not find KCode binary path to replace.");
-  }
-
-  // Atomic replace: rename tmp → dest with backup
-  const destPath = binaryPaths[0]!;
-  const backupPath = destPath + ".old";
-
-  try {
-    if (existsSync(destPath)) {
-      renameSync(destPath, backupPath);
-    }
-    renameSync(tmpPath, destPath);
-    // Clean up backup
-    try { unlinkSync(backupPath); } catch { /* may be in use */ }
-  } catch (err) {
-    // Restore backup if rename failed
     try {
-      if (existsSync(backupPath)) {
-        renameSync(backupPath, destPath);
-      }
-    } catch { /* best effort */ }
-    try { unlinkSync(tmpPath); } catch { /* ignore */ }
-    throw err;
-  }
+      for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
+        writer.write(chunk);
+        downloaded += chunk.length;
 
-  // Copy to additional locations
-  for (let i = 1; i < binaryPaths.length; i++) {
-    try {
-      require("node:fs").copyFileSync(destPath, binaryPaths[i]!);
-      chmodSync(binaryPaths[i]!, 0o755);
+        if (onProgress && totalSize > 0) {
+          onProgress(Math.round((downloaded / totalSize) * 100));
+        }
+      }
+      await writer.end();
     } catch (err) {
-      log.warn("auto-update", `Failed to copy to ${binaryPaths[i]}: ${err}`);
+      // Clean up on error
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      result.error = err instanceof Error ? err.message : "Download stream failed";
+      return result;
     }
+
+    // Verify SHA256 checksum if available
+    if (info.checksumUrl) {
+      const suffix = getPlatformSuffix();
+      const assetName = `kcode-${suffix}`;
+      const expected = await fetchExpectedChecksum(info.checksumUrl, assetName);
+
+      if (expected) {
+        const actual = await computeSha256(tmpPath);
+        if (actual !== expected) {
+          try { unlinkSync(tmpPath); } catch { /* ignore */ }
+          result.error = `Checksum verification failed. Expected: ${expected}, Got: ${actual}`;
+          return result;
+        }
+        log.info("auto-update", "SHA256 checksum verified.");
+      }
+    }
+
+    // Make executable
+    chmodSync(tmpPath, 0o755);
+
+    // Find and replace binary
+    const binaryPaths = findBinaryPaths();
+    if (binaryPaths.length === 0) {
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      result.error = "Could not find KCode binary path to replace.";
+      return result;
+    }
+
+    // Atomic replace: rename tmp -> dest with backup
+    const destPath = binaryPaths[0]!;
+    const backupPath = destPath + ".old";
+
+    try {
+      if (existsSync(destPath)) {
+        renameSync(destPath, backupPath);
+      }
+      renameSync(tmpPath, destPath);
+      // Clean up backup
+      try { unlinkSync(backupPath); } catch { /* may be in use */ }
+    } catch (err) {
+      // Restore backup if rename failed
+      try {
+        if (existsSync(backupPath)) {
+          renameSync(backupPath, destPath);
+        }
+      } catch { /* best effort */ }
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      result.error = err instanceof Error ? err.message : "Binary replacement failed";
+      return result;
+    }
+
+    // Copy to additional locations
+    for (let i = 1; i < binaryPaths.length; i++) {
+      try {
+        require("node:fs").copyFileSync(destPath, binaryPaths[i]!);
+        chmodSync(binaryPaths[i]!, 0o755);
+      } catch (err) {
+        log.warn("auto-update", `Failed to copy to ${binaryPaths[i]}: ${err}`);
+      }
+    }
+
+    log.info("auto-update", `Updated from ${info.currentVersion} to ${info.latestVersion}`);
+    result.success = true;
+    return result;
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : "Unknown error during update";
+    log.error("auto-update", "Update failed", err);
+    return result;
   }
+}
+
+// ─── Update Notification ──────────────────────────────────────
+
+const NOTIFICATION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Returns a user-friendly notification string if an update is available.
+ * Checks at most once every 24 hours, using a cached result otherwise.
+ * Returns null if no update is available or check was done recently with no update.
+ */
+export async function getUpdateNotification(
+  currentVersion: string,
+): Promise<string | null> {
+  const state = readCheckState();
+
+  // If we have a recent check, use cached result
+  if (state.lastCheck > 0 && Date.now() - state.lastCheck < NOTIFICATION_CHECK_INTERVAL_MS) {
+    if (state.lastVersion && compareSemver(state.lastVersion, currentVersion) > 0) {
+      return formatNotification(currentVersion, state.lastVersion, state.releaseUrl);
+    }
+    return null;
+  }
+
+  // Otherwise, perform a fresh check
+  const info = await checkForUpdate(currentVersion);
+  if (info.updateAvailable) {
+    return formatNotification(info.currentVersion, info.latestVersion, info.releaseUrl);
+  }
+
+  return null;
+}
+
+function formatNotification(
+  currentVersion: string,
+  latestVersion: string,
+  releaseUrl?: string,
+): string {
+  let msg = `Update available: ${currentVersion} -> ${latestVersion}`;
+  msg += "\nRun 'kcode update' to install the latest version.";
+  if (releaseUrl) {
+    msg += `\nRelease notes: ${releaseUrl}`;
+  }
+  return msg;
 }
 
 // ─── Binary Path Discovery ─────────────────────────────────────

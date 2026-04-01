@@ -1,0 +1,101 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Changelog — KCode">
+  <section class="container changelog">
+    <h1>Changelog</h1>
+    <p class="subtitle">All notable changes to KCode.</p>
+
+    <article class="release">
+      <h2>v2.5.0 <span class="tag">Latest</span></h2>
+      <time>April 1, 2026</time>
+      <h3>Phase 4: Technical Moat</h3>
+      <ul>
+        <li><strong>RAG local</strong>: Semantic code search with vector embeddings (local or cloud)</li>
+        <li><strong>Multi-GPU orchestration</strong>: Auto-detect and distribute across GPUs</li>
+        <li><strong>Fine-tuning workflow</strong>: Collect data, train LoRA adapters, benchmark</li>
+        <li><strong>Plugin marketplace</strong>: Search, install, publish plugins (5 seed plugins)</li>
+        <li><strong>Enterprise</strong>: Audit export (JSON/CSV), policy enforcement, SSO</li>
+        <li><strong>Benchmarks</strong>: 10+ coding tasks, multi-model comparison</li>
+      </ul>
+    </article>
+
+    <article class="release">
+      <h2>v2.1.0</h2>
+      <time>March 25, 2026</time>
+      <h3>Phase 3: Monetization</h3>
+      <ul>
+        <li><strong>Free tier</strong>: 200 sessions/month, 64KB context, 7-day search</li>
+        <li><strong>Trial keys</strong>: 14-day Pro trial with local validation</li>
+        <li><strong>Pro CLI</strong>: activate, deactivate, status, checkout, manage</li>
+        <li><strong>Landing page</strong>: Pricing cards, feature comparison, download page</li>
+        <li><strong>Distribution</strong>: install.sh with SHA256 verification</li>
+      </ul>
+    </article>
+
+    <article class="release">
+      <h2>v2.0.0</h2>
+      <time>March 15, 2026</time>
+      <h3>Phase 2: Differentiation</h3>
+      <ul>
+        <li><strong>Voice input</strong>: Local speech-to-text (faster-whisper, whisper.cpp)</li>
+        <li><strong>Model catalog</strong>: 13 curated models with hardware-aware recommendations</li>
+        <li><strong>IDE plugins</strong>: VS Code extension, JetBrains plugin</li>
+        <li><strong>Web dashboard</strong>: React SPA with analytics, sessions, config</li>
+        <li><strong>Telemetry</strong>: Opt-in with PII filtering, DO_NOT_TRACK support</li>
+      </ul>
+    </article>
+
+    <article class="release">
+      <h2>v1.9.0</h2>
+      <time>March 5, 2026</time>
+      <h3>Phase 1: Stabilization</h3>
+      <ul>
+        <li><strong>Biome linter</strong>: Strict rules, CI integration</li>
+        <li><strong>Pro license hardening</strong>: HMAC cache, hardware binding, rate limiting</li>
+        <li><strong>E2E tests</strong>: 46 tests covering conversation loop, tools, sessions</li>
+        <li><strong>File splits</strong>: system-prompt.ts, model-manager.ts refactored</li>
+        <li><strong>Security</strong>: SSRF fix, OAuth HTTPS enforcement, secret sanitization</li>
+      </ul>
+    </article>
+
+    <article class="release">
+      <h2>v1.8.0</h2>
+      <time>February 20, 2026</time>
+      <h3>Initial Release</h3>
+      <ul>
+        <li>46+ built-in tools, 152+ slash commands</li>
+        <li>Multi-provider support (6+ APIs + local LLMs)</li>
+        <li>React/Ink terminal UI with 11 color themes</li>
+        <li>Multi-agent swarm mode</li>
+        <li>MCP server integration</li>
+        <li>Plugin system with hooks</li>
+      </ul>
+    </article>
+  </section>
+
+  <style>
+    .changelog { padding: 2rem 0 4rem; max-width: 800px; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .release {
+      border-left: 3px solid #333;
+      padding-left: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .release h2 { margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.75rem; }
+    .release time { color: #888; font-size: 0.85rem; }
+    .release h3 { color: #7c8cf8; font-size: 1rem; margin: 0.75rem 0 0.5rem; }
+    .release ul { padding-left: 1.25rem; }
+    .release li { margin-bottom: 0.4rem; color: #ccc; }
+    .release li strong { color: #e0e0e0; }
+    .tag {
+      background: #7c8cf8;
+      color: #0d1117;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+  </style>
+</Base>

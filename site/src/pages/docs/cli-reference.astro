@@ -1,0 +1,115 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="CLI Reference — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>CLI Reference</span>
+    </nav>
+
+    <h1>CLI Reference</h1>
+    <p class="subtitle">Complete reference for all KCode commands and flags.</p>
+
+    <h2>Usage</h2>
+    <pre><code>kcode [options] [prompt]</code></pre>
+
+    <h2>Global Flags</h2>
+    <table>
+      <thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead>
+      <tbody>
+        <tr><td><code>--model, -m</code></td><td>Model name or path</td><td>Auto-detected</td></tr>
+        <tr><td><code>--api-key</code></td><td>API key for cloud providers</td><td>From env/config</td></tr>
+        <tr><td><code>--api-base</code></td><td>API base URL</td><td>localhost:10091</td></tr>
+        <tr><td><code>--max-turns</code></td><td>Max agent loop turns</td><td>25</td></tr>
+        <tr><td><code>--no-tools</code></td><td>Disable all tools (text-only)</td><td>false</td></tr>
+        <tr><td><code>--print, -p</code></td><td>Non-interactive print mode</td><td>false</td></tr>
+        <tr><td><code>--verbose, -v</code></td><td>Verbose logging</td><td>false</td></tr>
+        <tr><td><code>--effort</code></td><td>Effort level (low/medium/high)</td><td>medium</td></tr>
+        <tr><td><code>--system-prompt</code></td><td>Custom system prompt</td><td>Built-in</td></tr>
+        <tr><td><code>--append-system-prompt</code></td><td>Append to system prompt</td><td>-</td></tr>
+        <tr><td><code>--name</code></td><td>Session name</td><td>Auto</td></tr>
+        <tr><td><code>--allowed-tools</code></td><td>Comma-separated tool whitelist</td><td>All</td></tr>
+        <tr><td><code>--disallowed-tools</code></td><td>Comma-separated tool blacklist</td><td>None</td></tr>
+        <tr><td><code>--session-id</code></td><td>Resume specific session</td><td>-</td></tr>
+        <tr><td><code>--agent</code></td><td>Run as sub-agent</td><td>false</td></tr>
+        <tr><td><code>--agents</code></td><td>Multi-agent swarm mode</td><td>-</td></tr>
+        <tr><td><code>--mcp-config</code></td><td>MCP server config path</td><td>-</td></tr>
+        <tr><td><code>--tmux</code></td><td>Run in tmux session</td><td>false</td></tr>
+        <tr><td><code>--file, -f</code></td><td>Read prompt from file</td><td>-</td></tr>
+        <tr><td><code>--from-pr</code></td><td>Load context from PR number</td><td>-</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Subcommands</h2>
+    <table>
+      <thead><tr><th>Command</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>kcode setup</code></td><td>Run the model setup wizard</td></tr>
+        <tr><td><code>kcode models</code></td><td>List, add, or manage models</td></tr>
+        <tr><td><code>kcode server</code></td><td>Start/stop local inference server</td></tr>
+        <tr><td><code>kcode pro</code></td><td>Manage Pro subscription</td></tr>
+        <tr><td><code>kcode stats</code></td><td>Show usage statistics</td></tr>
+        <tr><td><code>kcode doctor</code></td><td>Diagnose environment issues</td></tr>
+        <tr><td><code>kcode teach</code></td><td>Fine-tuning data collection</td></tr>
+        <tr><td><code>kcode init</code></td><td>Initialize project config (KCODE.md)</td></tr>
+        <tr><td><code>kcode resume</code></td><td>Resume a previous session</td></tr>
+        <tr><td><code>kcode search</code></td><td>Search transcripts or codebase</td></tr>
+        <tr><td><code>kcode watch</code></td><td>Watch filesystem for changes</td></tr>
+        <tr><td><code>kcode new</code></td><td>Start fresh session</td></tr>
+        <tr><td><code>kcode update</code></td><td>Check for and install updates</td></tr>
+        <tr><td><code>kcode benchmark</code></td><td>Run model benchmarks</td></tr>
+        <tr><td><code>kcode completions</code></td><td>Generate shell completions</td></tr>
+        <tr><td><code>kcode history</code></td><td>View session history</td></tr>
+        <tr><td><code>kcode serve</code></td><td>Start HTTP API server</td></tr>
+        <tr><td><code>kcode plugin</code></td><td>Plugin marketplace (search/install/publish)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Environment Variables</h2>
+    <table>
+      <thead><tr><th>Variable</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>KCODE_MODEL</code></td><td>Default model name</td></tr>
+        <tr><td><code>KCODE_API_KEY</code></td><td>API key for current provider</td></tr>
+        <tr><td><code>KCODE_API_BASE</code></td><td>API base URL</td></tr>
+        <tr><td><code>KCODE_PROFILE</code></td><td>Enable startup profiling (1)</td></tr>
+        <tr><td><code>DO_NOT_TRACK</code></td><td>Disable telemetry (1)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Configuration Files</h2>
+    <p>Settings hierarchy (highest priority first):</p>
+    <ol>
+      <li>CLI flags</li>
+      <li>Environment variables</li>
+      <li><code>.kcode/settings.local.json</code> (project, git-ignored)</li>
+      <li><code>.kcode/settings.json</code> (project)</li>
+      <li><code>~/.kcode/settings.json</code> (global)</li>
+    </ol>
+
+    <nav class="doc-nav">
+      <a href="/docs">&larr; Back to Docs</a>
+      <a href="/docs/tools">Tools Reference &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    ol { padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>
