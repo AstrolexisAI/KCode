@@ -1,0 +1,19 @@
+services:
+  kcode-backend:
+    build: .
+    ports:
+      - "10080:10080"
+    volumes:
+      - kcode-data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  kcode-data:

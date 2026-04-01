@@ -49,3 +49,4 @@ pro-cache.json
 
 # Release binaries (use GitHub Releases instead)
 release/
+backend/data/
