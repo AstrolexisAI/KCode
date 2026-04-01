@@ -41,6 +41,8 @@ export interface AutoMemorySettings {
   excludeTypes?: string[];
 }
 
+export type DeploymentMode = "cloud" | "hybrid" | "air-gap";
+
 export interface Settings {
   model?: string;
   maxTokens?: number;
@@ -69,6 +71,7 @@ export interface Settings {
   offline?: OfflineSettings; // Offline mode configuration
   ensemble?: EnsembleSettings; // Multi-model ensemble configuration
   mesh?: MeshSettings; // P2P agent mesh configuration
+  deployment?: DeploymentMode; // "cloud" (default) | "hybrid" | "air-gap" — single switch for on-prem
   hardware?: {
     autoOptimize?: boolean; // Enable hardware auto-optimization
     contextWindow?: number; // Override auto-detected context window
@@ -225,6 +228,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     thinking: typeof raw.thinking === "boolean" ? raw.thinking : undefined,
     reasoningBudget: typeof raw.reasoningBudget === "number" ? raw.reasoningBudget : undefined,
     noCache: typeof raw.noCache === "boolean" ? raw.noCache : undefined,
+    deployment: isDeploymentMode(raw.deployment) ? raw.deployment : undefined,
     offline:
       raw.offline && typeof raw.offline === "object" ? (raw.offline as OfflineSettings) : undefined,
     ensemble:
@@ -371,6 +375,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.offline !== undefined) result.offline = { ...result.offline, ...layer.offline };
     if (layer.ensemble !== undefined) result.ensemble = { ...result.ensemble, ...layer.ensemble };
     if (layer.hardware !== undefined) result.hardware = { ...result.hardware, ...layer.hardware };
+    if (layer.deployment !== undefined) result.deployment = layer.deployment;
     if (layer.language !== undefined) result.language = layer.language;
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
@@ -401,6 +406,9 @@ function envSettings(): Settings {
   }
   if (process.env.KCODE_LANG) {
     settings.language = process.env.KCODE_LANG;
+  }
+  if (process.env.KCODE_DEPLOYMENT && isDeploymentMode(process.env.KCODE_DEPLOYMENT)) {
+    settings.deployment = process.env.KCODE_DEPLOYMENT;
   }
   return settings;
 }
@@ -648,6 +656,46 @@ async function loadPermissionsFile(cwd: string, trusted: boolean): Promise<Permi
   return rules;
 }
 
+// ─── Air-Gap Mode ──────────────────────────────────────────────
+// When deployment is "air-gap", enforce privacy-safe defaults that block
+// all outbound network activity except localhost/LAN. This is a single
+// switch that replaces the need to configure 5+ separate settings.
+
+function isDeploymentMode(v: unknown): v is DeploymentMode {
+  return v === "cloud" || v === "hybrid" || v === "air-gap";
+}
+
+/**
+ * Apply air-gap overrides to merged settings. In air-gap mode, network-facing
+ * features are force-disabled regardless of what individual settings say.
+ * Logs warnings if any user-set values conflict with air-gap requirements.
+ */
+export function applyAirGapOverrides(settings: Settings): Settings {
+  const mode = settings.deployment;
+  if (mode !== "air-gap") return settings;
+
+  const overrides: Partial<Settings> = {
+    autoUpdate: false,
+    telemetry: false,
+    offline: { ...settings.offline, enabled: true, autoDetect: false },
+    marketplace: { ...settings.marketplace, disableRemote: true } as MarketplaceSettings,
+    featureFlags: {
+      ...settings.featureFlags,
+      enableAutoRoute: false, // auto-route may attempt cloud model calls
+    },
+  };
+
+  // Warn about conflicting user settings
+  if (settings.autoUpdate === true) {
+    log.warn("config", "Air-gap mode: autoUpdate forced to false (no outbound network)");
+  }
+  if (settings.telemetry === true) {
+    log.warn("config", "Air-gap mode: telemetry forced to false (no outbound network)");
+  }
+
+  return { ...settings, ...overrides };
+}
+
 export async function loadSettings(cwd: string): Promise<Settings> {
   const trusted = isWorkspaceTrusted(cwd);
 
@@ -682,6 +730,9 @@ export async function loadSettings(cwd: string): Promise<Settings> {
 
   // Apply managed policy enforcement (highest priority, overrides everything)
   merged = applyManagedPolicy(merged, policy);
+
+  // Apply air-gap overrides last — these are non-negotiable when deployment is "air-gap"
+  merged = applyAirGapOverrides(merged);
 
   return merged;
 }
@@ -827,6 +878,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     auditLog: policy.auditLog,
     orgId: policy.orgId,
     offline: settings.offline,
+    deployment: settings.deployment,
     language: settings.language,
   };
 }

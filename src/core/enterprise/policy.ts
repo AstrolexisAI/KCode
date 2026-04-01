@@ -9,11 +9,24 @@ import { kcodeHome } from "../paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
+export interface NetworkPolicy {
+  /** Hosts/IPs allowed for outbound connections (glob patterns). Empty = no restriction. */
+  allowedHosts?: string[];
+  /** Hosts/IPs explicitly blocked (glob patterns). Takes precedence over allowedHosts. */
+  blockedHosts?: string[];
+  /** Block all webhook hook destinations (default: false) */
+  allowWebhooks?: boolean;
+  /** Block all plugin network access (default: true in air-gap) */
+  allowPluginNetwork?: boolean;
+}
+
 export interface PolicyConfig {
   blockedTools?: string[];
   requiredPermissionMode?: string;
   blockedCloudModels?: string[];
   maxContextWindow?: number;
+  /** Network egress control — restrict outbound connections */
+  network?: NetworkPolicy;
 }
 
 export interface PolicyEnforcementResult {
@@ -82,7 +95,33 @@ function validatePolicyConfig(raw: unknown): PolicyConfig {
     config.maxContextWindow = obj.maxContextWindow;
   }
 
+  if (obj.network && typeof obj.network === "object") {
+    config.network = validateNetworkPolicy(obj.network as Record<string, unknown>);
+  }
+
   return config;
+}
+
+/**
+ * Validate and normalize a network policy object.
+ */
+function validateNetworkPolicy(raw: Record<string, unknown>): NetworkPolicy {
+  const policy: NetworkPolicy = {};
+
+  if (Array.isArray(raw.allowedHosts)) {
+    policy.allowedHosts = raw.allowedHosts.filter((h): h is string => typeof h === "string");
+  }
+  if (Array.isArray(raw.blockedHosts)) {
+    policy.blockedHosts = raw.blockedHosts.filter((h): h is string => typeof h === "string");
+  }
+  if (typeof raw.allowWebhooks === "boolean") {
+    policy.allowWebhooks = raw.allowWebhooks;
+  }
+  if (typeof raw.allowPluginNetwork === "boolean") {
+    policy.allowPluginNetwork = raw.allowPluginNetwork;
+  }
+
+  return policy;
 }
 
 // ─── Enforce Policy ────────────────────────────────────────────
@@ -153,6 +192,119 @@ export function enforceModelPolicy(
   return { allowed: true };
 }
 
+// ─── Network Egress Enforcement ───────────────────────────────
+
+/**
+ * Simple glob match for hostname patterns.
+ * Supports * (any chars) and ? (single char).
+ */
+function hostGlobMatch(pattern: string, hostname: string): boolean {
+  const regex = new RegExp(
+    "^" +
+      pattern
+        .replace(/([.+^${}()|[\]\\])/g, "\\$1")
+        .replace(/\*/g, ".*")
+        .replace(/\?/g, ".") +
+      "$",
+    "i",
+  );
+  return regex.test(hostname);
+}
+
+/**
+ * Check if an outbound connection to the given URL is allowed by network policy.
+ * Returns { allowed: true } or { allowed: false, reason: string }.
+ *
+ * Rules:
+ *   1. localhost/LAN always allowed (for local inference servers)
+ *   2. blockedHosts checked first (deny takes precedence)
+ *   3. If allowedHosts is set and non-empty, only those hosts are permitted (allowlist mode)
+ *   4. If neither is set, all hosts are allowed (no restriction)
+ */
+export function enforceNetworkPolicy(
+  url: string,
+  config: PolicyConfig,
+): PolicyEnforcementResult {
+  if (!config.network) return { allowed: true };
+
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return { allowed: false, reason: `Invalid URL: ${url}` };
+  }
+
+  // Always allow localhost/LAN (needed for local models, Ollama, etc.)
+  if (isLocalOrLan(hostname)) return { allowed: true };
+
+  const { allowedHosts, blockedHosts } = config.network;
+
+  // Check blockedHosts first (deny takes precedence)
+  if (blockedHosts && blockedHosts.length > 0) {
+    const blocked = blockedHosts.some((pattern) => hostGlobMatch(pattern, hostname));
+    if (blocked) {
+      return {
+        allowed: false,
+        reason: `Host "${hostname}" is blocked by network policy`,
+      };
+    }
+  }
+
+  // If allowedHosts is set, enforce allowlist (only listed hosts are permitted)
+  if (allowedHosts && allowedHosts.length > 0) {
+    const allowed = allowedHosts.some((pattern) => hostGlobMatch(pattern, hostname));
+    if (!allowed) {
+      return {
+        allowed: false,
+        reason: `Host "${hostname}" is not in the network allowlist`,
+      };
+    }
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Check if a webhook URL is allowed by network policy.
+ * Webhooks can be entirely disabled via allowWebhooks: false.
+ */
+export function enforceWebhookPolicy(
+  url: string,
+  config: PolicyConfig,
+): PolicyEnforcementResult {
+  if (config.network?.allowWebhooks === false) {
+    return {
+      allowed: false,
+      reason: "Webhooks are disabled by network policy",
+    };
+  }
+  return enforceNetworkPolicy(url, config);
+}
+
+/** Check if a hostname is localhost or LAN (always allowed even in air-gap). */
+function isLocalOrLan(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]" || h === "0.0.0.0") {
+    return true;
+  }
+  if (h.startsWith("192.168.") || h.startsWith("10.")) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  return false;
+}
+
+/**
+ * Get the default network policy for air-gap mode.
+ * Blocks all external hosts; allows only localhost and LAN.
+ */
+export function getAirGapNetworkPolicy(): NetworkPolicy {
+  return {
+    allowedHosts: ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*", "172.16.*", "172.17.*", "172.18.*", "172.19.*", "172.2?.*", "172.30.*", "172.31.*"],
+    blockedHosts: ["*"],
+    allowWebhooks: false,
+    allowPluginNetwork: false,
+  };
+}
+
 // ─── Reporting ─────────────────────────────────────────────────
 
 /**
@@ -189,6 +341,22 @@ export function formatPolicyReport(policy: PolicyConfig): string {
     lines.push("", `  Max Context Window: ${policy.maxContextWindow.toLocaleString()} tokens`);
   } else {
     lines.push("", "  Max Context Window: not set (default)");
+  }
+
+  if (policy.network) {
+    lines.push("", "  Network Policy:");
+    if (policy.network.blockedHosts?.length) {
+      lines.push(`    Blocked hosts: ${policy.network.blockedHosts.join(", ")}`);
+    }
+    if (policy.network.allowedHosts?.length) {
+      lines.push(`    Allowed hosts: ${policy.network.allowedHosts.join(", ")}`);
+    }
+    lines.push(`    Webhooks: ${policy.network.allowWebhooks !== false ? "allowed" : "blocked"}`);
+    lines.push(
+      `    Plugin network: ${policy.network.allowPluginNetwork !== false ? "allowed" : "blocked"}`,
+    );
+  } else {
+    lines.push("", "  Network Policy: not set (no restrictions)");
   }
 
   return lines.join("\n");
