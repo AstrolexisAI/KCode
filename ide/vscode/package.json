@@ -1,0 +1,121 @@
+{
+  "name": "kcode",
+  "displayName": "KCode - AI Coding Assistant",
+  "description": "Terminal-based AI coding assistant with local LLM and cloud API support",
+  "version": "0.1.0",
+  "publisher": "astrolexis",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "ai",
+    "coding-assistant",
+    "llm",
+    "local-llm",
+    "kcode"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/astrolexis/kcode"
+  },
+  "icon": "media/icon.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kcode.ask",
+        "title": "KCode: Ask",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "kcode.explain",
+        "title": "KCode: Explain Selection",
+        "icon": "$(book)"
+      },
+      {
+        "command": "kcode.commit",
+        "title": "KCode: Generate Commit Message",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "kcode.test",
+        "title": "KCode: Generate Tests",
+        "icon": "$(beaker)"
+      }
+    ],
+    "configuration": {
+      "title": "KCode",
+      "properties": {
+        "kcode.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:10091",
+          "description": "URL of the KCode HTTP API server"
+        },
+        "kcode.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for authenticating with the KCode server (if auth is enabled)"
+        },
+        "kcode.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically connect to KCode server on startup"
+        },
+        "kcode.model": {
+          "type": "string",
+          "default": "",
+          "description": "Override model selection (leave empty to use server default)"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "kcode.explain",
+          "when": "editorHasSelection",
+          "group": "kcode@1"
+        },
+        {
+          "command": "kcode.test",
+          "when": "editorHasSelection",
+          "group": "kcode@2"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kcode",
+          "title": "KCode",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "kcode": [
+        {
+          "type": "webview",
+          "id": "kcode.chat",
+          "name": "Chat"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

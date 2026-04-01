@@ -6,6 +6,7 @@
   <title>KCode Web UI</title>
   <link rel="stylesheet" href="terminal-theme.css">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
   <div id="app">
@@ -17,6 +18,14 @@
         <span id="model-name" class="model-badge">--</span>
       </div>
       <div class="header-center">
+        <!-- Navigation Tabs -->
+        <nav id="nav-tabs" class="nav-tabs">
+          <button class="nav-tab active" data-tab="chat">Chat</button>
+          <button class="nav-tab" data-tab="models">Models</button>
+          <button class="nav-tab" data-tab="analytics">Analytics</button>
+          <button class="nav-tab" data-tab="session">Session</button>
+          <button class="nav-tab" data-tab="config">Config</button>
+        </nav>
         <div id="search-bar" class="search-bar hidden">
           <input type="text" id="search-input" placeholder="Search messages..." aria-label="Search messages">
           <button id="search-close" class="btn-icon" title="Close search">&times;</button>
@@ -29,72 +38,94 @@
       </div>
     </header>
 
-    <!-- Main Content -->
-    <main id="main">
-      <!-- Messages Area -->
-      <div id="messages" role="log" aria-live="polite">
-        <div id="welcome-message" class="welcome">
-          <h2>KCode Web UI</h2>
-          <p>Connected to your local KCode session. Type a message below to get started.</p>
+    <!-- Tab Panels -->
+    <div id="tab-panels" class="tab-panels">
+      <!-- Chat Panel (default, existing functionality) -->
+      <div id="panel-chat" class="tab-panel active">
+        <!-- Main Content -->
+        <main id="main">
+          <!-- Messages Area -->
+          <div id="messages" role="log" aria-live="polite">
+            <div id="welcome-message" class="welcome">
+              <h2>KCode Web UI</h2>
+              <p>Connected to your local KCode session. Type a message below to get started.</p>
+            </div>
+          </div>
+
+          <!-- Tool Panel (expandable sidebar) -->
+          <aside id="tool-panel" class="tool-panel hidden">
+            <div class="tool-panel-header">
+              <h3>Tool Execution</h3>
+              <button id="tool-panel-close" class="btn-icon">&times;</button>
+            </div>
+            <div id="tool-panel-content"></div>
+          </aside>
+        </main>
+
+        <!-- Permission Overlay -->
+        <div id="permission-overlay" class="overlay hidden">
+          <div class="permission-dialog">
+            <h3>Permission Required</h3>
+            <p id="permission-description"></p>
+            <pre id="permission-details"></pre>
+            <div class="permission-actions">
+              <button id="perm-allow" class="btn btn-primary">Allow</button>
+              <button id="perm-always" class="btn btn-secondary">Always Allow</button>
+              <button id="perm-deny" class="btn btn-danger">Deny</button>
+            </div>
+          </div>
         </div>
+
+        <!-- Input Area -->
+        <footer id="input-area">
+          <div class="input-wrapper">
+            <textarea
+              id="message-input"
+              placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+              rows="1"
+              aria-label="Message input"
+            ></textarea>
+            <button id="send-btn" class="btn-send" title="Send message">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+            <button id="cancel-btn" class="btn-cancel hidden" title="Cancel response">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+              </svg>
+            </button>
+          </div>
+          <div class="input-footer">
+            <span id="char-count">0 chars</span>
+            <span id="streaming-indicator" class="hidden">
+              <span class="dot-pulse"></span> Generating...
+            </span>
+          </div>
+        </footer>
       </div>
 
-      <!-- Tool Panel (expandable sidebar) -->
-      <aside id="tool-panel" class="tool-panel hidden">
-        <div class="tool-panel-header">
-          <h3>Tool Execution</h3>
-          <button id="tool-panel-close" class="btn-icon">&times;</button>
-        </div>
-        <div id="tool-panel-content"></div>
-      </aside>
-    </main>
+      <!-- Models Dashboard Panel -->
+      <div id="panel-models" class="tab-panel"></div>
 
-    <!-- Permission Overlay -->
-    <div id="permission-overlay" class="overlay hidden">
-      <div class="permission-dialog">
-        <h3>Permission Required</h3>
-        <p id="permission-description"></p>
-        <pre id="permission-details"></pre>
-        <div class="permission-actions">
-          <button id="perm-allow" class="btn btn-primary">Allow</button>
-          <button id="perm-always" class="btn btn-secondary">Always Allow</button>
-          <button id="perm-deny" class="btn btn-danger">Deny</button>
-        </div>
-      </div>
+      <!-- Analytics Dashboard Panel -->
+      <div id="panel-analytics" class="tab-panel"></div>
+
+      <!-- Session Viewer Panel -->
+      <div id="panel-session" class="tab-panel"></div>
+
+      <!-- Config Panel -->
+      <div id="panel-config" class="tab-panel"></div>
     </div>
-
-    <!-- Input Area -->
-    <footer id="input-area">
-      <div class="input-wrapper">
-        <textarea
-          id="message-input"
-          placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
-          rows="1"
-          aria-label="Message input"
-        ></textarea>
-        <button id="send-btn" class="btn-send" title="Send message">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-        </button>
-        <button id="cancel-btn" class="btn-cancel hidden" title="Cancel response">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-          </svg>
-        </button>
-      </div>
-      <div class="input-footer">
-        <span id="char-count">0 chars</span>
-        <span id="streaming-indicator" class="hidden">
-          <span class="dot-pulse"></span> Generating...
-        </span>
-      </div>
-    </footer>
   </div>
 
   <script src="markdown.js"></script>
   <script src="diff-viewer.js"></script>
+  <script src="model-dashboard.js"></script>
+  <script src="analytics-dashboard.js"></script>
+  <script src="session-viewer.js"></script>
+  <script src="config-panel.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

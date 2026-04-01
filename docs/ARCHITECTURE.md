@@ -1,328 +1,196 @@
 # KCode Architecture
 
-Architecture reference documentation.
+This document describes the high-level architecture of KCode v1.8.0. For the full module-by-module reference, see [CLAUDE.md](../CLAUDE.md).
 
-## Original Reference Structure
-
-```
-reference-source
-├── cli.js          # Single minified bundle (~12MB, ~15K lines)
-├── resvg.wasm      # SVG rendering (for image processing)
-├── sdk-tools.d.ts  # Public tool type definitions
-├── vendor/
-│   ├── ripgrep/    # Bundled rg binary (multi-platform)
-│   └── tree-sitter-bash/  # Bash syntax parsing (.node addon)
-└── package.json
-```
-
-### Key Findings
-
-- **Runtime**: Bun 1.2 (compiled to standalone ELF binary, 225MB)
-- **Also works as**: Node.js >=18 (via npm install)
-- **Bundle**: Single `cli.js` file, minified with Bun's bundler
-- **UI Framework**: Ink (React for terminals)
-- **API Client**: OpenAI-compatible API (local llama-server) + native Anthropic Messages API
-- **Search**: Bundled ripgrep binary
-- **Parsing**: tree-sitter for Bash syntax analysis
-
-### Streaming & API Layer
-
-**OpenAI-compatible** (local models, OpenAI, Gemini, Groq, DeepSeek, Together):
-- SSE streaming via `/v1/chat/completions` with `stream: true`
-- Delta types: text_delta, input_json_delta, thinking_delta
-- Tool calls via `tool_calls` array in message deltas
-
-**Anthropic native** (Claude models):
-- SSE streaming via `/v1/messages` with `x-api-key` + `anthropic-version: 2023-06-01`
-- System prompt as top-level `system` field (not a message)
-- Strict user/assistant message alternation (consecutive same-role messages merged)
-- Event types: message_start, content_block_start, content_block_delta, content_block_stop, message_delta, message_stop
-- Tool use as content blocks (`tool_use`/`tool_result`) inside messages
-- Provider auto-detection from model registry `provider` field or name heuristic (`claude-*` → anthropic)
-
-**Common**:
-- Retry: exponential backoff 0.5s→8s, max 2 retries, 75-100% jitter
-- `buildRequestForModel()` + `executeModelRequest()` unified helpers handle both providers
-- Extended thinking with budget_tokens
-
-### Permission & Security System
-
-- Permission modes: ask, auto, plan, deny, acceptEdits
-- Bash command safety: prefix extraction, injection detection ($(), backticks), dangerous redirections, shell invocation blocking
-- Hooks: PreToolUse, PostToolUse, PreCompact, UserPromptSubmit, Stop, Notification
-- Hook output: { decision: allow|deny|block, reason, updatedInput }
-- Exit codes: 0=success, 2=block, other=warning
-- Policy enforcement via managed settings
-
-### Agent & Task System
-
-- Subagents as separate processes (not threads)
-- Agent types: general-purpose (all tools), explore (read-only), plan (read-only + plan)
-- Background tasks with DAG dependencies (blocks/blockedBy)
-- Git worktree isolation for parallel work
-- Agent resumption via agentId
-- Team coordination (TeamCreate, idle notifications)
-
-### Memory & Configuration
-
-- Memory: YAML frontmatter + markdown files in ~/.kcode/projects/<hash>/memory/
-- MEMORY.md index (200 line limit), @include directives
-- Settings hierarchy: user > project > local + env vars
-- KCODE.md: loaded from cwd up to git root
-- Rules directory: .kcode/rules/ recursive loading
-- Git context: branch, status, log 5 commits (snapshot at session start)
-
-### UI System (Ink/React)
-
-- Ink components: Box, Text, Static, useInput
-- Progressive text rendering via streaming deltas
-- Permission prompt with y/n/a keyboard shortcuts
-- Custom InputPrompt with history, cursor movement
-- Spinner animation during API calls
-
----
-
-## KCode Implementation
-
-### Architecture
+## Entry Point Flow
 
 ```
-src/
-├── core/                          # Core engine
-│   ├── types.ts         (183)     # Type definitions, StreamEvent, TokenUsage
-│   ├── conversation.ts  (870)     # Agent loop with SSE streaming, retry, context pruning, undo
-│   ├── tool-registry.ts  (51)     # Tool registration and dispatch
-│   ├── system-prompt.ts (341)     # Modular prompt builder (identity, tools, git, env)
-│   ├── permissions.ts   (520)     # Permission system, bash safety, pipe-to-shell, diff preview
-│   ├── hooks.ts         (333)     # Hook system (PreToolUse, PostToolUse, lifecycle)
-│   ├── config.ts        (249)     # Settings hierarchy, env vars, KCODE.md loading
-│   ├── memory.ts        (325)     # Memory files with YAML frontmatter, @include
-│   ├── git.ts           (144)     # Git context (branch, status, commits)
-│   ├── models.ts        (166)     # Dynamic model registry (~/.kcode/models.json)
-│   ├── compaction.ts    (155)     # Conversation compaction via LLM summarization
-│   ├── transcript.ts    (299)     # Session transcript persistence (JSONL) + session resume
-│   ├── skills.ts        (302)     # Skill discovery, template expansion, slash commands
-│   ├── builtin-skills.ts (80)     # Built-in skill definitions (commit, review-pr, template, etc.)
-│   ├── mcp.ts           (588)     # MCP client manager (JSON-RPC, server lifecycle, discoverTools)
-│   ├── router.ts         (79)     # Multi-model auto-routing (images → vision model)
-│   ├── stats.ts         (324)     # Usage statistics aggregation from logs/transcripts
-│   ├── diff.ts          (130)     # Unified diff generation for file change previews
-│   ├── rate-limiter.ts   (80)     # Request rate limiting (sliding window + semaphore)
-│   ├── undo.ts          (110)     # Undo system for file-modifying tools
-│   ├── indexer.ts       (240)     # Project file indexer with symbol extraction
-│   ├── templates.ts     (140)     # Reusable prompt template system
-│   ├── doctor.ts        (190)     # Setup diagnostics and health checks
-│   ├── logger.ts        (194)     # Logging system with rotation and categories
-│   ├── theme.ts         (120)     # Color theme system (default/dark/light + custom)
-│   ├── export.ts        (105)     # Conversation export (markdown/JSON)
-│   ├── clipboard.ts      (55)     # Clipboard integration (xclip/xsel/wl-copy)
-│   ├── watcher.ts       (125)     # File watcher with debouncing
-│   └── metrics.ts       (165)     # LLM performance metrics collector
-│
-├── tools/                         # 17 built-in + 2 MCP resource tools
-│   ├── bash.ts           (61)     # Shell execution with timeout
-│   ├── read.ts          (423)     # File reading: text, images, PDFs, Jupyter notebooks
-│   ├── write.ts          (41)     # File creation/overwrite
-│   ├── edit.ts           (71)     # String replacement
-│   ├── glob.ts           (46)     # File pattern matching
-│   ├── grep.ts           (86)     # Ripgrep wrapper
-│   ├── agent.ts         (223)     # Subagent spawning (general/explore/plan)
-│   ├── web-fetch.ts     (146)     # URL fetching with HTML→text, 15min cache
-│   ├── web-search.ts    (181)     # Brave Search API + DuckDuckGo fallback
-│   ├── notebook.ts      (216)     # Jupyter notebook editing
-│   ├── tasks.ts         (270)     # TaskCreate/List/Get/Update/Stop with dependencies
-│   ├── mcp-tools.ts     (202)     # MCP tool proxying and resource operations
-│   └── index.ts          (85)     # Registration of all tools + MCP integration
-│
-├── ui/                            # Ink-based terminal UI
-│   ├── App.tsx          (430)     # Main component, event processing, undo, templates
-│   ├── render.tsx        (26)     # Ink render entry point
-│   ├── print-mode.ts     (64)     # Non-interactive piped output mode
-│   └── components/
-│       ├── Header.tsx     (45)    # Model, cwd, token/tool stats
-│       ├── MessageList.tsx(342)   # Static messages + markdown rendering
-│       ├── ThinkingBlock.tsx(94)  # Collapsible thinking block (streaming/collapsed/expanded)
-│       ├── InputPrompt.tsx(302)   # Input with history, cursor, tab completion
-│       ├── PermissionDialog.tsx(81)# Allow/deny/always prompt
-│       ├── CloudMenu.tsx  (232)   # Cloud provider API key configuration
-│       ├── ModelToggle.tsx(160)   # Interactive model switcher (local/cloud)
-│       └── Spinner.tsx    (30)    # Animated braille spinner
-│
-├── index.ts             (279)     # CLI entry point (models, stats, doctor subcommands)
-└── build.ts              (67)     # Build script (Bun.build, version injection, minification)
-scripts/
-└── install.sh                     # Installer (copies binary to ~/.local/bin or /usr/local/bin)
+CLI (src/index.ts)
+  |
+  +-- Commander.js parses args and subcommands
+  |
+  +-- Subcommands: models, setup, server, pro, stats, doctor, teach, init,
+  |   resume, search, watch, new, update, benchmark, completions, history, serve
+  |
+  +-- Default command:
+       |
+       +-- --print flag? --> Print mode (non-interactive, piped output)
+       |
+       +-- Otherwise --> Interactive TUI (React/Ink)
+            |
+            +-- Load config (5-layer hierarchy)
+            +-- Initialize model registry
+            +-- Discover plugins, MCP servers, skills
+            +-- Render App.tsx (Ink)
+            +-- Enter conversation loop
 ```
 
-**Total: 51 files, ~11,000+ lines of TypeScript**
+## Core Engine
 
-### What's Implemented (v1.0)
-
-- [x] SSE streaming with delta accumulation (text, thinking, tool input JSON)
-- [x] Agent loop with tool execution cycle
-- [x] Retry logic (exponential backoff, jitter, retryable error detection)
-- [x] Context window pruning when approaching limits
-- [x] Token usage tracking (input, output, cache)
-- [x] Permission system (ask/auto/plan/deny modes)
-- [x] Bash command safety (injection detection, shell blocking, redirect analysis, pipe-to-shell detection)
-- [x] Permission allowlist ("always allow" patterns)
-- [x] Hooks system (PreToolUse, PostToolUse, lifecycle events)
-- [x] 17 built-in tools + 2 MCP resource tools + dynamic MCP server tools
-- [x] Subagent spawning (general/explore/plan types, background, resume, worktree)
-- [x] Memory system (YAML frontmatter, MEMORY.md index, @include, search)
-- [x] Configuration hierarchy (user/project/local settings + env vars)
-- [x] KCODE.md loading (cwd + parent dirs)
-- [x] Rules directory (.kcode/rules/)
-- [x] Git context gathering (branch, status, commits)
-- [x] System prompt builder (modular sections)
-- [x] Ink-based TUI (React terminal components)
-- [x] Streaming text rendering
-- [x] Input with history and cursor navigation
-- [x] Permission dialog UI
-- [x] MCP (Model Context Protocol) client with JSON-RPC, server lifecycle, health checks
-- [x] Skills / slash commands system (built-in + user + project level)
-- [x] PDF reading via pdftotext (page ranges, max 20 pages per request)
-- [x] Image reading (PNG, JPG, GIF, WEBP) with dimension detection from binary headers
-- [x] Jupyter notebook reading (.ipynb with cell outputs)
-- [x] Session transcript persistence (JSONL in ~/.kcode/transcripts/)
-- [x] Conversation compaction (LLM-powered summarization of pruned messages)
-- [x] Dynamic model registry (`kcode models` CLI + ~/.kcode/models.json)
-- [x] Print mode for piped output (`kcode --print "prompt" | less`)
-- [x] Native Anthropic Messages API (`/v1/messages` with SSE, tool_use/tool_result blocks)
-- [x] Cloud provider configuration (`/cloud` interactive TUI menu for 6 providers)
-- [x] Model switcher (`/toggle` TUI with LOCAL/CLOUD grouping)
-
-- [x] Extended thinking UI (ThinkingBlock.tsx: streaming, collapsed, expanded modes)
-- [x] Tab completion for slash commands and file paths
-- [x] Session resume (`kcode --continue` to restore last session)
-- [x] Usage statistics dashboard (`kcode stats --days N`)
-- [x] Multi-model auto-routing (images → vision model, code → code model)
-- [x] Markdown rendering in TUI (code blocks, headers, lists, bold, inline code, links)
-- [x] Diff preview in permission dialogs for Edit/Write tools
-- [x] Request rate limiting (sliding window + concurrency semaphore)
-- [x] Undo system for file modifications (`/undo` command)
-- [x] Project file indexer with symbol extraction
-- [x] Reusable prompt templates (`/template` command)
-- [x] Health check diagnostics (`kcode doctor`)
-- [x] Theme system (3 built-in themes + custom ~/.kcode/theme.json)
-- [x] Conversation export (markdown/JSON)
-- [x] Clipboard integration (xclip/xsel/wl-copy)
-- [x] File watcher for change detection
-- [x] LLM performance metrics collector
-- [x] 24 slash commands (git, code analysis, testing, docs, system)
-- [x] Standalone binary compilation (`build.ts` → `dist/kcode`, 100MB ELF)
-- [x] Installer script (`scripts/install.sh` → `~/.local/bin/kcode`)
-- [x] 149 tests across 5 suites (models, config, permissions, edit, read)
-
----
-
-### LLM Setup
-
-KCode connects to **local llama-server** (or any OpenAI-compatible endpoint) and optionally to **cloud APIs** (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI).
-
-- **Default endpoint**: `http://localhost:10091` (overridden via `KCODE_API_BASE` env var or model registry)
-- **Default model**: `mnemo:code3` (configurable via `kcode models default <name>`)
-- **Auth**: Optional `ASTROLEXIS_API_KEY` as Bearer token, or provider-specific keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, `TOGETHER_API_KEY`)
-- **Protocols**:
-  - OpenAI-compatible: `/v1/chat/completions` with SSE streaming
-  - Anthropic native: `/v1/messages` with SSE streaming, `x-api-key` header
-- **URL resolution**: Model registry entries take priority over `configBase` — each model's `baseUrl` in `~/.kcode/models.json` is authoritative
-- **Provider detection**: `provider` field in registry, or name heuristic (`claude-*` → anthropic)
-
-### Cloud Provider Configuration
-
-**Interactive** (`/cloud`, `/api-key`, `/provider`):
-- TUI menu to select provider, enter API key, save to `~/.kcode/settings.json`
-- Auto-registers provider's default models in the registry
-- Auto-switches active model to the provider's first model
-
-**Model Switching** (`/toggle`, `/model`, `/switch`):
-- TUI menu listing all registered models grouped by LOCAL and CLOUD
-- Shows current model indicator, description, GPU info
-- Switches model with proper context window and API key resolution
-- Sets `modelExplicitlySet` to prevent auto-router from overriding
-
----
-
-### `kcode models` CLI Subcommand
-
-Manage the dynamic model registry from the command line:
+The conversation loop (`src/core/conversation.ts`) is the central engine:
 
 ```
-kcode models list|ls              # List all registered models
-kcode models add <name> <url>     # Add or update a model
-  --context <size>                #   Context window size in tokens
-  --gpu <gpu>                     #   GPU identifier (informational)
-  --caps <capabilities>           #   Comma-separated capabilities
-  --desc <description>            #   Description
-  --default                       #   Set as default model
-kcode models remove|rm <name>     # Remove a model
-kcode models default <name>       # Set the default model
+User Input
+  |
+  v
+System Prompt Assembly (10 layers)
+  |
+  v
+Build Request (provider-specific formatting)
+  |
+  v
+Execute Request (SSE streaming)
+  |                           |
+  v                           v
+OpenAI-compatible API     Anthropic native API
+(/v1/chat/completions)    (/v1/messages)
+  |                           |
+  +---------------------------+
+  |
+  v
+Stream Processing (text deltas, thinking deltas, tool call extraction)
+  |
+  v
+Tool Calls Detected? --yes--> Tool Execution (parallel-safe batching)
+  |                              |
+  |                              v
+  |                           Permission Check (5 modes)
+  |                              |
+  |                              v
+  |                           Execute Tool(s)
+  |                              |
+  |                              v
+  |                           Inject tool results into conversation
+  |                              |
+  |                              +---> Loop back to Build Request
+  |                                    (max 25 tool turns per agent loop)
+  |
+  no
+  |
+  v
+Response Complete
+  |
+  +-- Context window check (prune at 80% capacity, auto-compaction)
+  +-- Transcript persistence (JSONL)
+  +-- Desktop notification (if enabled)
+  +-- Wait for next user input
 ```
 
-Example:
+## Key Modules
+
+| Module | File | Purpose |
+|--------|------|---------|
+| Conversation | `src/core/conversation.ts` | Main agent loop, SSE streaming, tool orchestration, retry, context pruning |
+| System Prompt | `src/core/system-prompt.ts` | 10-layer prompt assembly from identity, tools, environment, memory, etc. |
+| Config | `src/core/config.ts` | 5-layer settings hierarchy (CLI > env > local > project > user) |
+| Models | `src/core/models.ts` | Dynamic model registry, provider detection, URL resolution |
+| Permissions | `src/core/permissions.ts` | 5 permission modes, bash safety analysis, glob pattern rules |
+| Tool Registry | `src/core/tool-registry.ts` | Tool registration, dispatch, and MCP tool integration |
+| Hooks | `src/core/hooks.ts` | 25 lifecycle events for pre/post tool execution, session events |
+| Memory | `src/core/memory.ts` | Persistent YAML+Markdown memory across sessions |
+| Compaction | `src/core/compaction.ts` | LLM-based conversation summarization when context fills up |
+| Transcript | `src/core/transcript.ts` | JSONL session persistence for resume and search |
+| Skills | `src/core/skills.ts` | Slash command discovery and template expansion |
+| MCP | `src/core/mcp.ts` | JSON-RPC MCP client for external tool integration |
+| Swarm | `src/core/swarm.ts` | Multi-agent orchestration with parallel sub-agents |
+| Pro | `src/core/pro.ts` | Feature gating for Pro tier |
+| Database | `src/core/db.ts` | SQLite (WAL mode) for memory, user model, world model, learnings |
+| Model Manager | `src/core/model-manager.ts` | Hardware detection, model download, llama.cpp/MLX management |
+| Pricing | `src/core/pricing.ts` | Per-model cost tracking with session totals |
+| Analytics | `src/core/analytics.ts` | Tool usage frequency, token consumption, timing |
+| Auto-test | `src/core/auto-test.ts` | Detects related test files after edits, prompts to run them |
+| Codebase Index | `src/core/codebase-index.ts` | SQLite-backed file/symbol index for fast lookup |
+| Tool Cache | `src/core/tool-cache.ts` | Caches tool results within a session to avoid redundant I/O |
+
+## Tools
+
+46 built-in tools are registered in `src/tools/index.ts`. Each tool exports a definition object with:
+
+- `name` -- unique identifier
+- `description` -- used by the LLM to decide when to invoke the tool
+- `parameters` -- JSON Schema for input validation
+- `execute(params, context)` -- async function that performs the action
+
+Tools are grouped by category:
+
+- **File I/O**: Read, Write, Edit, MultiEdit, Glob, Grep, GrepReplace, Rename, DiffView, LS
+- **Shell**: Bash (with safety analysis)
+- **Git**: GitStatus, GitCommit, GitLog
+- **Testing**: TestRunner
+- **Worktree**: Enter, Exit
+- **Scheduling**: CronCreate, CronList, CronDelete
+- **Session**: Clipboard, Undo, Stash
+- **LSP**: Language Server Protocol integration
+- **Planning**: PlanMode (Enter/Exit)
+- **Agent**: Skill, ToolSearch, AskUser, SendMessage
+
+MCP tools from configured servers are dynamically merged at startup.
+
+## Plugin System
+
+Plugins provide extensibility through three mechanisms:
+
 ```
-kcode models add mnemo:code3 http://localhost:8091 --context 32000 --gpu 'RTX 5090' --default
+~/.kcode/plugins/       (global plugins)
+.kcode/plugins/         (project-level plugins)
+  |
+  +-- plugin.json       (manifest: name, version, skills, hooks, mcpServers)
+  +-- skills/           (slash command templates as Markdown files)
+  +-- ...               (any supporting files)
 ```
 
----
+- **Skills**: Markdown templates that expand into LLM prompts via `/command` syntax
+- **Hooks**: Shell commands or scripts triggered on 25 lifecycle events (PreToolUse, PostToolUse, SessionStart, SessionEnd, PreCompact, etc.)
+- **MCP Servers**: External tool servers launched and managed by KCode
 
-### Dynamic Model Registry
+Workspace trust is enforced: plugins in a project directory require explicit user approval before hooks can execute.
 
-**File**: `src/core/models.ts` | **Config**: `~/.kcode/models.json`
+## Configuration Hierarchy
 
-Each model entry stores: name, baseUrl, contextSize, capabilities, gpu, description, provider (`"openai"` | `"anthropic"`). The registry provides:
+Settings are resolved top-down (first match wins):
 
-- `getModelBaseUrl(name)` -- resolve a model name to its API endpoint (registry first, then `configBase`, then `KCODE_API_BASE` or `localhost:10091`)
-- `getModelProvider(name)` -- detect provider from registry field or name heuristic
-- `getModelContextSize(name)` -- used by the conversation manager for context pruning thresholds
-- `getDefaultModel()` -- returns the configured default or `mnemo:code3`
-- In-memory caching with `invalidateCache()` for external edits
+```
+1. CLI flags              (--model, --theme, --effort, etc.)
+   |
+2. Environment variables  (KCODE_MODEL, KCODE_API_KEY, KCODE_API_BASE, etc.)
+   |
+3. .kcode/settings.local.json    (per-machine, gitignored)
+   |
+4. .kcode/settings.json          (project-level, committed)
+   |
+5. ~/.kcode/settings.json        (user-level defaults)
+```
 
----
+Model URL resolution follows a separate chain: model registry entry (`~/.kcode/models.json`) > `configBase` > `KCODE_API_BASE` env var > `http://localhost:10091`.
 
-### Compaction System
+## Data Storage
 
-**File**: `src/core/compaction.ts`
+All persistent data lives under `~/.kcode/`:
 
-When the conversation exceeds the context window, older messages are pruned. Instead of discarding them, the `CompactionManager` summarizes them via the LLM:
+| Path | Format | Contents |
+|------|--------|----------|
+| `~/.kcode/settings.json` | JSON | User-level configuration |
+| `~/.kcode/models.json` | JSON | Dynamic model registry |
+| `~/.kcode/awareness.db` | SQLite (WAL) | Narrative, user model, interests, predictions, learnings |
+| `~/.kcode/transcripts/` | JSONL files | Session transcripts (auto-pruned to 100) |
+| `~/.kcode/plugins/` | Directories | Global plugins |
+| `~/.kcode/skills/` | Markdown | Global slash commands |
+| `~/.kcode/identity.md` | Markdown | Custom identity/personality |
+| `~/.kcode/awareness/*.md` | Markdown | Global awareness modules |
+| `~/.kcode/theme.json` | JSON | Custom color theme |
+| `~/.kcode/server.pid` | Text | llama.cpp server PID |
+| `~/.kcode/server.port` | Text | llama.cpp server port |
+| `~/.kcode/server.log` | Text | llama.cpp server log |
 
-1. Converts pruned messages to plain text (skipping thinking blocks, truncating tool I/O)
-2. Sends a summarization request to the local model (`/v1/chat/completions`, max 1024 tokens)
-3. Injects a summary message: `[Conversation Summary - Compaction #N]`
-4. Falls back to simple pruning if the summary call fails
-5. Tracks compaction count per session
+Project-level data lives in `.kcode/` within the project directory.
 
----
+## Terminal UI
 
-### Transcript System
+The UI is built with React 19 and Ink 6 (React for terminals):
 
-**File**: `src/core/transcript.ts` | **Storage**: `~/.kcode/transcripts/`
+- `src/ui/App.tsx` -- Main component: input handling, message display, streaming, permissions
+- `src/ui/print-mode.ts` -- Non-interactive output for piped usage (`--print`)
+- `src/ui/components/` -- Reusable components: Header, MessageList, ThinkingBlock, InputPrompt, PermissionDialog, CloudMenu, ModelToggle, Spinner
+- `src/ui/ThemeContext.tsx` -- 11 built-in color themes with custom theme support
 
-Session transcripts are persisted in JSONL format for crash safety and post-session review:
-
-- **Filename**: `{ISO-timestamp}-{prompt-slug}.jsonl`
-- **Entry types**: `user_message`, `assistant_text`, `tool_use`, `tool_result`, `thinking`, `error`
-- Each entry has a timestamp, role, type, and content
-- Auto-prunes to keep at most 100 session files (oldest deleted first)
-- `startSession(prompt)` / `append(role, type, content)` / `endSession()` lifecycle
-- `listSessions()` and `loadSession(filename)` for retrieval
-
----
-
-### Skills System
-
-**Files**: `src/core/skills.ts`, `src/core/builtin-skills.ts`
-
-Slash commands that expand into LLM prompts via Handlebars-style templates:
-
-- **Discovery order** (later overrides earlier): built-in > `~/.kcode/skills/*.md` > `.kcode/skills/*.md`
-- **24 built-in slash commands**:
-  - **Git**: `/commit` (`/ci`), `/diff`, `/branch` (`/br`), `/log` (`/gl`), `/stash`
-  - **Code**: `/review-pr` (`/pr`), `/simplify` (`/clean`, `/refactor`), `/explain` (`/what`), `/find-bug` (`/bug`, `/debug`), `/security` (`/audit`)
-  - **Dev**: `/test` (`/tests`), `/build`, `/lint` (`/fix`), `/deps` (`/dependencies`), `/todo` (`/todos`), `/test-for` (`/test-gen`), `/doc` (`/document`), `/type` (`/types`)
-  - **System**: `/help` (`/?`), `/template` (`/tpl`, `/tmpl`), `/stats`, `/doctor` (`/health`), `/models` (`/model`), `/clear` (`/cls`), `/compact` (`/summarize`), `/undo`, `/status`
-  - **Cloud**: `/cloud` (`/api-key`, `/provider`), `/toggle` (`/model`, `/switch`)
-- **Custom skills**: Markdown files with YAML frontmatter (`name`, `description`, `aliases`, `args`) and a template body
-- **Template expansion**: `{{args}}` substitution, `{{#if args}}...{{/if}}` conditional blocks
-- **Matching**: by name or alias, case-insensitive
+The UI renders streaming LLM output with markdown formatting, collapsible thinking blocks, permission dialogs for tool approval, and a command input with history and tab completion.
