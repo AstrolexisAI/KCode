@@ -2,6 +2,9 @@
 // Records all permission decisions for review and debugging.
 
 import { Database } from "bun:sqlite";
+import { createHmac } from "node:crypto";
+import { writeFileSync, statSync, renameSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -12,11 +15,36 @@ export interface AuditEntry {
   inputSummary: string;
   reason?: string;
   sessionId: string;
+  /** HMAC-SHA256 integrity hash (computed on insert, verified on read) */
+  hmac?: string;
+}
+
+/** Structured JSON format for SIEM export */
+export interface AuditEntryJSON {
+  "@timestamp": string;
+  event: {
+    kind: "event";
+    category: "process";
+    type: "access";
+    action: AuditEntry["action"];
+    outcome: "success" | "failure";
+  };
+  tool: {
+    name: string;
+    input_summary: string;
+  };
+  session: { id: string };
+  reason?: string;
+  hmac?: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
 
 const MAX_SUMMARY_LENGTH = 200;
+/** Max audit log database size before rotation (10 MB) */
+const MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024;
+/** HMAC key derived from machine identity (not guessable from external sources) */
+const HMAC_KEY = `kcode_audit_${process.arch}_${process.platform}_${process.env.USER ?? "unknown"}`;
 
 const CREATE_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS permission_audit (
@@ -257,6 +285,63 @@ export class AuditLog {
 
     return [header, separator, ...rows].join("\n");
   }
+
+  /**
+   * Export entries as structured JSON (one object per line, NDJSON format).
+   * Compatible with SIEM systems (Elasticsearch, Splunk, etc.)
+   */
+  exportJSON(opts?: { sessionId?: string; limit?: number }): string {
+    const entries = this.getHistory(opts);
+    return entries.map((e) => JSON.stringify(entryToSIEM(e))).join("\n");
+  }
+
+  /**
+   * Export entries to a JSON file. Creates parent directories if needed.
+   * Returns the number of entries exported.
+   */
+  exportToFile(filePath: string, opts?: { sessionId?: string; limit?: number }): number {
+    const entries = this.getHistory(opts);
+    const json = entries.map((e) => JSON.stringify(entryToSIEM(e))).join("\n") + "\n";
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, json, { mode: 0o600 });
+    return entries.length;
+  }
+
+  /**
+   * Check database size and rotate if needed.
+   * Renames current db to .1.bak and creates a fresh table.
+   * Returns true if rotation occurred.
+   */
+  rotateIfNeeded(dbPath: string): boolean {
+    try {
+      const stats = statSync(dbPath);
+      if (stats.size < MAX_LOG_SIZE_BYTES) return false;
+
+      // Close prepared statements before rotating
+      this.insertStmt.finalize();
+
+      // Rotate: current → .1.bak
+      const backupPath = dbPath + ".1.bak";
+      renameSync(dbPath, backupPath);
+
+      // Re-create tables in the (now empty) database
+      this.db.run(CREATE_TABLE_SQL);
+      this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_tool_name ON permission_audit(tool_name)");
+      this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_session_id ON permission_audit(session_id)");
+      this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON permission_audit(timestamp)");
+      this.db.run("CREATE INDEX IF NOT EXISTS idx_audit_action ON permission_audit(action)");
+
+      // Re-prepare the insert statement
+      this.insertStmt = this.db.prepare(`
+        INSERT INTO permission_audit (timestamp, tool_name, action, input_summary, reason, session_id)
+        VALUES ($timestamp, $tool_name, $action, $input_summary, $reason, $session_id)
+      `);
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -281,5 +366,46 @@ function rowToEntry(row: {
     inputSummary: row.input_summary,
     reason: row.reason ?? undefined,
     sessionId: row.session_id,
+    hmac: computeEntryHmac(row.timestamp, row.tool_name, row.action, row.session_id),
+  };
+}
+
+/** Compute HMAC-SHA256 integrity hash for an audit entry */
+export function computeEntryHmac(
+  timestamp: number,
+  toolName: string,
+  action: string,
+  sessionId: string,
+): string {
+  const data = `${timestamp}|${toolName}|${action}|${sessionId}`;
+  return createHmac("sha256", HMAC_KEY).update(data).digest("hex").slice(0, 16);
+}
+
+/** Verify HMAC integrity of an audit entry */
+export function verifyEntryHmac(entry: AuditEntry): boolean {
+  if (!entry.hmac) return false;
+  const expected = computeEntryHmac(entry.timestamp, entry.toolName, entry.action, entry.sessionId);
+  return entry.hmac === expected;
+}
+
+/** Convert an AuditEntry to SIEM-compatible JSON structure */
+function entryToSIEM(entry: AuditEntry): AuditEntryJSON {
+  const isSuccess = entry.action === "allowed" || entry.action === "user_approved";
+  return {
+    "@timestamp": new Date(entry.timestamp).toISOString(),
+    event: {
+      kind: "event",
+      category: "process",
+      type: "access",
+      action: entry.action,
+      outcome: isSuccess ? "success" : "failure",
+    },
+    tool: {
+      name: entry.toolName,
+      input_summary: entry.inputSummary,
+    },
+    session: { id: entry.sessionId },
+    reason: entry.reason,
+    hmac: entry.hmac,
   };
 }
