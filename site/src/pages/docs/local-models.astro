@@ -1,0 +1,196 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Local Models — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Local Models</span>
+    </nav>
+
+    <h1>Local Models</h1>
+    <p class="subtitle">Run AI models locally with llama.cpp, Ollama, or vLLM for full privacy and zero API costs.</p>
+
+    <h2>Setup Wizard</h2>
+    <p>The fastest way to get started with local models. The wizard detects your hardware and recommends the best model:</p>
+    <pre><code>kcode setup</code></pre>
+    <p>The wizard checks:</p>
+    <ul>
+      <li>CPU architecture and core count</li>
+      <li>Available RAM</li>
+      <li>GPU vendor, model, and VRAM (NVIDIA CUDA, AMD ROCm, Apple Metal)</li>
+      <li>Available disk space for model storage</li>
+    </ul>
+
+    <h2>llama.cpp (Built-in)</h2>
+    <p>
+      KCode includes a managed llama.cpp server. It downloads the appropriate binary for your platform
+      (Linux/Windows via llama.cpp, macOS Apple Silicon via MLX) and handles the full lifecycle.
+    </p>
+
+    <h3>Starting the Server</h3>
+    <pre><code># Start with auto-detected settings
+kcode server start
+
+# Start with a specific model
+kcode server start --model ~/.kcode/models/qwen3-30b-a3b-q4_k_m.gguf
+
+# Check server status
+kcode server status
+
+# Stop the server
+kcode server stop</code></pre>
+
+    <p>Server state files are stored in <code>~/.kcode/</code>:</p>
+    <table>
+      <thead><tr><th>File</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>server.pid</code></td><td>Process ID of the running server</td></tr>
+        <tr><td><code>server.port</code></td><td>Port the server is listening on</td></tr>
+        <tr><td><code>server.log</code></td><td>Server stdout/stderr logs</td></tr>
+      </tbody>
+    </table>
+
+    <h3>GPU Layer Offloading</h3>
+    <p>Control how many model layers are offloaded to the GPU:</p>
+    <pre><code># In ~/.kcode/settings.json
+{
+  "hardware": {
+    "autoOptimize": true,
+    "gpuLayers": 99,
+    "threads": 12,
+    "batchSize": 512,
+    "contextWindow": 32768
+  }
+}</code></pre>
+    <p>
+      With <code>autoOptimize: true</code>, KCode calculates the optimal GPU layer count based on your VRAM.
+      Set <code>gpuLayers</code> manually to override (use <code>99</code> to offload all layers).
+    </p>
+
+    <h2>GGUF Model Formats</h2>
+    <p>
+      Local models use the GGUF format. Quantization levels trade off quality vs. memory:
+    </p>
+    <table>
+      <thead><tr><th>Quantization</th><th>Size (7B model)</th><th>VRAM</th><th>Quality</th></tr></thead>
+      <tbody>
+        <tr><td><code>Q2_K</code></td><td>~2.8 GB</td><td>~3.5 GB</td><td>Low (fast, low quality)</td></tr>
+        <tr><td><code>Q4_K_M</code></td><td>~4.1 GB</td><td>~5 GB</td><td>Good (recommended balance)</td></tr>
+        <tr><td><code>Q5_K_M</code></td><td>~4.8 GB</td><td>~6 GB</td><td>Very good</td></tr>
+        <tr><td><code>Q6_K</code></td><td>~5.5 GB</td><td>~7 GB</td><td>Excellent</td></tr>
+        <tr><td><code>Q8_0</code></td><td>~7.2 GB</td><td>~8.5 GB</td><td>Near-lossless</td></tr>
+        <tr><td><code>F16</code></td><td>~14 GB</td><td>~15 GB</td><td>Full precision</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Downloading Models</h3>
+    <pre><code># The setup wizard downloads automatically, or use:
+kcode models download qwen3-30b-a3b
+
+# List available models
+kcode models list
+
+# Add a custom model from a URL or local path
+kcode models add my-model --path /path/to/model.gguf
+kcode models add my-model --url https://huggingface.co/.../model.gguf</code></pre>
+
+    <h2>Ollama Integration</h2>
+    <p>
+      If you already have <a href="https://ollama.com">Ollama</a> installed, KCode auto-detects it.
+      No additional configuration needed.
+    </p>
+    <pre><code># Pull a model with Ollama
+ollama pull qwen3:30b-a3b
+
+# KCode will auto-detect Ollama models
+kcode --model qwen3:30b-a3b</code></pre>
+    <p>Ollama typically runs on port 11434. KCode checks this automatically. To use a custom Ollama endpoint:</p>
+    <pre><code>kcode --api-base http://localhost:11434</code></pre>
+
+    <h2>vLLM</h2>
+    <p>
+      For high-throughput serving with tensor parallelism (multi-GPU), use
+      <a href="https://docs.vllm.ai">vLLM</a>:
+    </p>
+    <pre><code># Start vLLM server
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Llama-3.1-70B \
+  --tensor-parallel-size 2 \
+  --port 10091
+
+# Point KCode to the vLLM server
+kcode --api-base http://localhost:10091 --model meta-llama/Llama-3.1-70B</code></pre>
+
+    <h2>Multi-GPU Setup</h2>
+    <p>
+      KCode detects multiple GPUs automatically. For llama.cpp, layers are split across GPUs.
+      For vLLM, use tensor parallelism.
+    </p>
+    <pre><code># Check detected hardware
+kcode doctor
+
+# Example output:
+# GPU 0: NVIDIA RTX 4090 (24 GB VRAM, CUDA 12.4)
+# GPU 1: NVIDIA RTX 5090 (32 GB VRAM, CUDA 12.4)
+# Total VRAM: 56 GB — recommended: 70B Q4_K_M model</code></pre>
+
+    <h2>Model Registry</h2>
+    <p>
+      Models are tracked in <code>~/.kcode/models.json</code>. Each entry stores the model name,
+      provider type (<code>"openai"</code> or <code>"anthropic"</code>), base URL, context window size,
+      and file path for local models.
+    </p>
+    <pre><code># List registered models
+kcode models list
+
+# Remove a model
+kcode models remove my-old-model
+
+# Set default model
+kcode models default qwen3-30b-a3b</code></pre>
+
+    <h2>Performance Tips</h2>
+    <ul>
+      <li><strong>Match quantization to VRAM</strong>: Use Q4_K_M if your model barely fits. Use Q6_K or Q8_0 if you have headroom.</li>
+      <li><strong>Context window</strong>: Larger context uses more VRAM. Start with 16K and increase if needed.</li>
+      <li><strong>Batch size</strong>: Higher batch sizes improve throughput but use more memory. Default 512 is usually optimal.</li>
+      <li><strong>CPU threads</strong>: Set to your physical core count (not hyperthreaded count) for best performance.</li>
+      <li><strong>Flash attention</strong>: Enabled automatically on supported hardware for 2-4x faster inference.</li>
+      <li><strong>KV cache quantization</strong>: llama.cpp supports Q8 and Q4 KV cache to reduce VRAM usage at minimal quality cost.</li>
+    </ul>
+
+    <h2>Fallback Chain</h2>
+    <p>Configure model fallbacks so KCode automatically tries alternatives if the primary model fails:</p>
+    <pre><code>{
+  "model": "qwen3-30b-a3b",
+  "fallbackModel": "llama-3.1-8b",
+  "fallbackModels": ["qwen3-30b-a3b", "llama-3.1-8b", "gemma-2-9b"]
+}</code></pre>
+
+    <nav class="doc-nav">
+      <a href="/docs/tools">&larr; Tools Reference</a>
+      <a href="/docs/plugins">Plugins &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2.5rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; color: #c9d1d9; font-size: 1.1rem; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    ul { margin: 0.75rem 0; padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>

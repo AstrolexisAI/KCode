@@ -1,0 +1,203 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Tools Reference — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Tools Reference</span>
+    </nav>
+
+    <h1>Tools Reference</h1>
+    <p class="subtitle">All 46+ built-in tools grouped by category. MCP-discovered tools are registered dynamically at startup.</p>
+
+    <h2 id="file-ops">File Operations</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Read</code></td><td>Read file contents with optional line range. Supports text files, images, PDFs, and Jupyter notebooks.</td></tr>
+        <tr><td><code>Write</code></td><td>Write or overwrite a file. Creates parent directories automatically.</td></tr>
+        <tr><td><code>Edit</code></td><td>Exact string replacement in a file. Requires a unique <code>old_string</code> match.</td></tr>
+        <tr><td><code>MultiEdit</code></td><td>Atomic multi-file editing. Applies multiple edits across several files in a single operation.</td></tr>
+        <tr><td><code>Rename</code></td><td>Rename or move a file/directory with automatic import path updates.</td></tr>
+        <tr><td><code>NotebookEdit</code></td><td>Edit Jupyter notebook cells (code, markdown, output).</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="search">Search and Navigation</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Glob</code></td><td>Fast file pattern matching (e.g., <code>**/*.ts</code>). Returns paths sorted by modification time.</td></tr>
+        <tr><td><code>Grep</code></td><td>Regex content search powered by ripgrep. Supports context lines, file type filters, and multiline mode.</td></tr>
+        <tr><td><code>GrepReplace</code></td><td>Find-and-replace across files using regex patterns. Supports capture groups.</td></tr>
+        <tr><td><code>LS</code></td><td>Fast directory listing with file sizes and types.</td></tr>
+        <tr><td><code>DiffView</code></td><td>View unified diffs between file versions or staged changes.</td></tr>
+        <tr><td><code>ToolSearch</code></td><td>Discover available and deferred tools by keyword or name.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="shell">Shell and Execution</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Bash</code></td><td>Execute shell commands with timeout support. Working directory persists between calls.</td></tr>
+        <tr><td><code>TestRunner</code></td><td>Run test suites and return structured results (pass/fail/skip counts).</td></tr>
+        <tr><td><code>Deploy</code></td><td>Automated deployment workflows (Pro feature).</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="git">Git</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>GitStatus</code></td><td>Show working tree status (staged, modified, untracked files).</td></tr>
+        <tr><td><code>GitCommit</code></td><td>Create commits with auto-generated or custom messages.</td></tr>
+        <tr><td><code>GitLog</code></td><td>View commit history with optional filtering.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="worktree">Worktree Isolation</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>EnterWorktree</code></td><td>Create and switch to an isolated git worktree for safe experimentation.</td></tr>
+        <tr><td><code>ExitWorktree</code></td><td>Leave the worktree and optionally merge changes back.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="planning">Planning and Agents</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Plan</code></td><td>Create, view, or update structured multi-step task plans.</td></tr>
+        <tr><td><code>EnterPlanMode</code></td><td>Enter read-only planning mode (restricts write tools).</td></tr>
+        <tr><td><code>ExitPlanMode</code></td><td>Exit planning mode and resume normal operation.</td></tr>
+        <tr><td><code>Agent</code></td><td>Spawn a sub-agent to handle a delegated task independently.</td></tr>
+        <tr><td><code>Skill</code></td><td>Invoke a registered skill (slash command) programmatically.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tasks">Background Tasks</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>TaskCreate</code></td><td>Create a background task that runs independently.</td></tr>
+        <tr><td><code>TaskList</code></td><td>List all active and completed background tasks.</td></tr>
+        <tr><td><code>TaskGet</code></td><td>Get the status and output of a specific task.</td></tr>
+        <tr><td><code>TaskUpdate</code></td><td>Update a running task's parameters.</td></tr>
+        <tr><td><code>TaskStop</code></td><td>Stop a running background task.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="scheduling">Scheduling</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>CronCreate</code></td><td>Schedule a recurring task with a cron expression.</td></tr>
+        <tr><td><code>CronList</code></td><td>List all scheduled cron jobs.</td></tr>
+        <tr><td><code>CronDelete</code></td><td>Delete a scheduled cron job.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="web">Web and Browser</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>WebFetch</code></td><td>Fetch a URL and return its content (HTML, JSON, plain text).</td></tr>
+        <tr><td><code>WebSearch</code></td><td>Perform a web search and return structured results.</td></tr>
+        <tr><td><code>Browser</code></td><td>Browser automation via Playwright (navigate, click, screenshot, extract).</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="code-intelligence">Code Intelligence</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>LSP</code></td><td>Language Server Protocol integration: go-to-definition, find references, hover info, workspace symbols, diagnostics.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="session">Session Management</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Clipboard</code></td><td>Read from or write to the system clipboard.</td></tr>
+        <tr><td><code>Undo</code></td><td>Undo the last file modification made by KCode.</td></tr>
+        <tr><td><code>Stash</code></td><td>Save and restore conversation context snapshots.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="communication">Communication</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>AskUser</code></td><td>Prompt the user for structured input or clarification.</td></tr>
+        <tr><td><code>SendMessage</code></td><td>Send a one-way status message to the user (used in swarm mode).</td></tr>
+        <tr><td><code>SyntheticOutput</code></td><td>Inject content into the conversation stream programmatically.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="memory">Memory and Learning</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Learn</code></td><td>Store a learning/fact in the long-term memory database (SQLite FTS5).</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="integrations">Integrations</h2>
+    <table>
+      <thead><tr><th>Tool</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>Kulvex</code></td><td>Bridge to the Kulvex platform backend (Jarvis integration).</td></tr>
+        <tr><td><code>ImageGen</code></td><td>Generate images via cloud APIs (Flux, DALL-E).</td></tr>
+        <tr><td><code>ListMcpResources</code></td><td>List available resources from connected MCP servers.</td></tr>
+        <tr><td><code>ReadMcpResource</code></td><td>Read a specific resource from an MCP server.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>MCP-Discovered Tools</h2>
+    <p>
+      Tools from <a href="https://modelcontextprotocol.io">Model Context Protocol</a> servers are
+      registered dynamically at startup. They appear with a <code>mcp__</code> prefix (e.g.,
+      <code>mcp__github__create_issue</code>). Configure MCP servers in your
+      <a href="/docs/plugins">plugin manifest</a> or via <code>--mcp-config</code>.
+    </p>
+
+    <h2>Controlling Tool Access</h2>
+    <p>You can restrict which tools are available per session:</p>
+    <pre><code># Only allow read-only tools
+kcode --allowed-tools "Read,Glob,Grep,LS,GitStatus,GitLog"
+
+# Block specific tools
+kcode --disallowed-tools "Bash,Deploy,WebFetch"</code></pre>
+    <p>
+      For organization-wide restrictions, use
+      <a href="/docs/configuration">managed policies</a> with <code>disallowedTools</code>
+      and <code>allowedTools</code> arrays.
+    </p>
+
+    <nav class="doc-nav">
+      <a href="/docs/configuration">&larr; Configuration</a>
+      <a href="/docs/local-models">Local Models &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2.5rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>

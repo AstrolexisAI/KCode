@@ -1,0 +1,136 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Installation — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Installation</span>
+    </nav>
+
+    <h1>Installation</h1>
+    <p class="subtitle">Multiple ways to install KCode on Linux, macOS, and Windows (WSL).</p>
+
+    <h2>One-Line Install (Recommended)</h2>
+    <p>The quickest way to get started. Downloads the latest release and adds <code>kcode</code> to your PATH:</p>
+    <pre><code>curl -fsSL https://kulvex.ai/install.sh | bash</code></pre>
+    <p>The installer auto-detects your OS and architecture (x86_64, aarch64) and places the binary in <code>~/.local/bin/kcode</code>.</p>
+
+    <h2>Homebrew (macOS / Linux)</h2>
+    <pre><code>brew install astrolexis/tap/kcode</code></pre>
+    <p>Updates are handled automatically via <code>brew upgrade kcode</code>.</p>
+
+    <h2>npm</h2>
+    <pre><code>npm install -g kcode</code></pre>
+    <p>Requires Node.js 18+ or Bun. The npm package bundles the Bun runtime so no extra dependencies are needed.</p>
+
+    <h2>Bun (Native)</h2>
+    <p>Since KCode is built with Bun, you can install directly:</p>
+    <pre><code>bun install -g kcode</code></pre>
+    <p>Or run without installing:</p>
+    <pre><code>bunx kcode "your prompt here"</code></pre>
+
+    <h2>From Source</h2>
+    <p>Clone the repository and build locally. Requires <a href="https://bun.sh">Bun</a> v1.1+.</p>
+    <pre><code># Clone the repository
+git clone https://github.com/astrolexis/kcode.git
+cd kcode
+
+# Install dependencies
+bun install
+
+# Run directly (no build needed, 0 MB overhead)
+bun run src/index.ts
+
+# Or create a production build (~101 MB, minified)
+bun run build
+./dist/kcode</code></pre>
+
+    <h2>Verify Installation</h2>
+    <p>After installing, verify everything is working:</p>
+    <pre><code># Check version
+kcode --version
+
+# Run the environment diagnostic
+kcode doctor</code></pre>
+    <p>The <code>kcode doctor</code> command checks your system for:</p>
+    <ul>
+      <li>Bun / Node.js runtime availability</li>
+      <li>GPU detection (CUDA, ROCm, Metal)</li>
+      <li>Available disk space for model storage</li>
+      <li>Network connectivity to API providers</li>
+      <li>Local inference server status (llama.cpp / Ollama)</li>
+    </ul>
+
+    <h2>Shell Completions</h2>
+    <p>Generate tab completions for your shell:</p>
+    <pre><code># Bash
+kcode completions bash >> ~/.bashrc
+
+# Zsh
+kcode completions zsh >> ~/.zshrc
+
+# Fish
+kcode completions fish > ~/.config/fish/completions/kcode.fish</code></pre>
+
+    <h2>Updating</h2>
+    <p>KCode checks for updates automatically every 7 days (configurable). To update manually:</p>
+    <pre><code># Check for updates
+kcode update
+
+# Or via your package manager
+brew upgrade kcode
+npm update -g kcode</code></pre>
+    <p>Auto-update checks can be disabled in your settings:</p>
+    <pre><code>{
+  "autoUpdate": false
+}</code></pre>
+
+    <h2>Uninstalling</h2>
+    <pre><code># Remove the binary
+rm ~/.local/bin/kcode
+
+# Remove configuration and data (optional)
+rm -rf ~/.kcode
+
+# Or via package manager
+brew uninstall kcode
+npm uninstall -g kcode</code></pre>
+
+    <h2>System Requirements</h2>
+    <table>
+      <thead><tr><th>Component</th><th>Minimum</th><th>Recommended</th></tr></thead>
+      <tbody>
+        <tr><td>OS</td><td>Linux, macOS 12+, Windows (WSL2)</td><td>Linux with NVIDIA GPU</td></tr>
+        <tr><td>RAM</td><td>4 GB</td><td>16 GB+ (for local models)</td></tr>
+        <tr><td>Disk</td><td>200 MB (binary)</td><td>10 GB+ (with local models)</td></tr>
+        <tr><td>GPU (optional)</td><td>4 GB VRAM</td><td>8 GB+ VRAM (CUDA or ROCm)</td></tr>
+        <tr><td>Runtime</td><td>Bun 1.1+ or Node.js 18+</td><td>Bun 1.1+</td></tr>
+      </tbody>
+    </table>
+
+    <nav class="doc-nav">
+      <a href="/docs/quickstart">&larr; Quickstart</a>
+      <a href="/docs/configuration">Configuration &rarr;</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 800px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    ul { margin: 0.75rem 0; padding-left: 1.5rem; }
+    li { margin-bottom: 0.5rem; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>

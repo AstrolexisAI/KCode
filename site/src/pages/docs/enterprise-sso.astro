@@ -1,0 +1,94 @@
+---
+import Base from "../../layouts/Base.astro";
+---
+
+<Base title="Enterprise SSO — KCode Docs">
+  <section class="container doc-page">
+    <nav class="breadcrumb">
+      <a href="/docs">Docs</a> &rsaquo; <span>Enterprise SSO</span>
+    </nav>
+    <h1>Single Sign-On (SSO)</h1>
+    <p class="subtitle">Configure SAML 2.0 or OIDC for your organization.</p>
+
+    <h2>Overview</h2>
+    <p>KCode Enterprise supports SSO via SAML 2.0 and OpenID Connect (OIDC). Authenticate with Okta, Azure AD, Google Workspace, Auth0, and more.</p>
+
+    <h2>Configuration</h2>
+    <pre><code># Workspace or global
+.kcode/enterprise.json
+~/.kcode/enterprise.json</code></pre>
+
+    <h2>SAML 2.0</h2>
+    <pre><code>{
+  "sso": {
+    "provider": "saml",
+    "entityId": "kcode-enterprise",
+    "ssoUrl": "https://your-idp.example.com/saml/sso",
+    "certificate": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+    "callbackUrl": "http://localhost:19300/api/auth/saml/callback",
+    "allowedDomains": ["yourcompany.com"],
+    "forceSSO": true
+  }
+}</code></pre>
+    <table>
+      <thead><tr><th>Provider</th><th>SSO URL</th></tr></thead>
+      <tbody>
+        <tr><td>Okta</td><td><code>https://yourorg.okta.com/app/xxx/sso/saml</code></td></tr>
+        <tr><td>Azure AD</td><td><code>https://login.microsoftonline.com/{tenant}/saml2</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>OIDC</h2>
+    <pre><code>{
+  "sso": {
+    "provider": "oidc",
+    "clientId": "your-client-id",
+    "clientSecret": "your-client-secret",
+    "issuer": "https://accounts.google.com",
+    "authorizationEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
+    "tokenEndpoint": "https://oauth2.googleapis.com/token",
+    "callbackUrl": "http://localhost:19300/api/auth/oidc/callback",
+    "allowedDomains": ["yourcompany.com"]
+  }
+}</code></pre>
+    <table>
+      <thead><tr><th>Provider</th><th>Issuer</th></tr></thead>
+      <tbody>
+        <tr><td>Google</td><td><code>https://accounts.google.com</code></td></tr>
+        <tr><td>Auth0</td><td><code>https://yourorg.auth0.com/</code></td></tr>
+        <tr><td>Keycloak</td><td><code>https://keycloak.example.com/realms/master</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>Options</h2>
+    <table>
+      <thead><tr><th>Field</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>provider</code></td><td><code>"saml"</code> or <code>"oidc"</code></td></tr>
+        <tr><td><code>allowedDomains</code></td><td>Restrict to these email domains</td></tr>
+        <tr><td><code>forceSSO</code></td><td>Require SSO for all team members</td></tr>
+      </tbody>
+    </table>
+
+    <nav class="doc-nav">
+      <a href="/docs">&larr; Back to Docs</a>
+    </nav>
+  </section>
+
+  <style>
+    .doc-page { padding: 2rem 0 4rem; max-width: 900px; }
+    .breadcrumb { color: #888; margin-bottom: 1rem; }
+    .breadcrumb a { color: #7c8cf8; text-decoration: none; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    h2 { margin-top: 2rem; margin-bottom: 0.75rem; color: #e0e0e0; }
+    pre { background: #0d1117; border: 1px solid #333; border-radius: 6px; padding: 1rem; overflow-x: auto; }
+    code { color: #c9d1d9; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #333; }
+    th { color: #888; font-weight: 600; }
+    td code { background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+    a { color: #7c8cf8; }
+    .doc-nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #333; }
+    .doc-nav a { color: #7c8cf8; text-decoration: none; }
+  </style>
+</Base>
