@@ -53,7 +53,7 @@ kcode server stop</code></pre>
 
     <h3>GPU Layer Offloading</h3>
     <p>Control how many model layers are offloaded to the GPU:</p>
-    <pre><code># In ~/.kcode/settings.json
+    <pre><code set:html={`# In ~/.kcode/settings.json
 {
   "hardware": {
     "autoOptimize": true,
@@ -62,7 +62,7 @@ kcode server stop</code></pre>
     "batchSize": 512,
     "contextWindow": 32768
   }
-}</code></pre>
+}`} /></pre>
     <p>
       With <code>autoOptimize: true</code>, KCode calculates the optimal GPU layer count based on your VRAM.
       Set <code>gpuLayers</code> manually to override (use <code>99</code> to offload all layers).
@@ -162,11 +162,11 @@ kcode models default qwen3-30b-a3b</code></pre>
 
     <h2>Fallback Chain</h2>
     <p>Configure model fallbacks so KCode automatically tries alternatives if the primary model fails:</p>
-    <pre><code>{
+    <pre><code set:html={`{
   "model": "qwen3-30b-a3b",
   "fallbackModel": "llama-3.1-8b",
   "fallbackModels": ["qwen3-30b-a3b", "llama-3.1-8b", "gemma-2-9b"]
-}</code></pre>
+}`} /></pre>
 
     <nav class="doc-nav">
       <a href="/docs/tools">&larr; Tools Reference</a>
