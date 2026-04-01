@@ -37,6 +37,11 @@ let _config: TelemetryConfig | null = null;
  * Creates the EventQueue and registers configured sinks.
  */
 export function initTelemetry(config: TelemetryConfig): EventQueue {
+  // Respect DO_NOT_TRACK standard (https://consented.dev/do-not-track/)
+  if (process.env.DO_NOT_TRACK === "1" || process.env.DO_NOT_TRACK === "true") {
+    config = { ...config, enabled: false };
+  }
+
   _config = config;
 
   if (_queue) {

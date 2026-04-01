@@ -115,4 +115,11 @@ export const configSkills: SkillDefinition[] = [
     args: ["stats | clear"],
     template: `__builtin_cache__`,
   },
+  {
+    name: "telemetry",
+    description: "Show or toggle anonymous usage telemetry",
+    aliases: ["telem"],
+    args: ["on | off | status"],
+    template: `__builtin_telemetry__`,
+  },
 ];

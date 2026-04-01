@@ -89,6 +89,14 @@ export interface Settings {
     enableCodebaseIndex?: boolean;
     enableExperimentalTools?: boolean;
   };
+  voice?: {
+    enabled: boolean;
+    engine: "local" | "cloud" | "auto";
+    model: string; // whisper model name (e.g. "base", "small", "medium")
+    language: string; // "auto" | "en" | "es" | etc.
+    silenceThresholdMs: number; // silence duration before auto-stop (default 2000)
+    maxDurationMs: number; // max recording duration (default 30000)
+  };
 }
 
 // ─── Managed Policy ──────────────────────────────────────────────
