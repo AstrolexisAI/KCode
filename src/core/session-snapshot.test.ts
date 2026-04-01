@@ -18,6 +18,11 @@ import {
   loadSnapshot,
   listSnapshots,
   diffSnapshots,
+  AutoCheckpointer,
+  rewindToCheckpoint,
+  saveCrashRecovery,
+  checkCrashRecovery,
+  clearCrashRecovery,
   type SessionSnapshot,
   type SnapshotMessage,
 } from "./session-snapshot";
@@ -355,6 +360,93 @@ describe("session-snapshot", () => {
 
       expect(diff.newTools).toContain("Grep");
       expect(diff.removedTools).toContain("Read");
+    });
+  });
+
+  // ─── Auto-Checkpoint ────────────────────────────────────────
+
+  describe("AutoCheckpointer", () => {
+    it("does not checkpoint before interval", () => {
+      const cp = new AutoCheckpointer("test-session", { intervalTurns: 5 });
+      const result = cp.onTurnComplete(3, makeConfig(), makeState(), makeUsage(), Date.now());
+      expect(result).toBeNull();
+    });
+
+    it("creates checkpoint at interval", () => {
+      const cp = new AutoCheckpointer("test-session", { intervalTurns: 5 });
+      const result = cp.onTurnComplete(5, makeConfig(), makeState(), makeUsage(), Date.now());
+      expect(result).not.toBeNull();
+      expect(result).toContain("checkpoint");
+    });
+
+    it("tracks checkpoint IDs", () => {
+      const cp = new AutoCheckpointer("test-session", { intervalTurns: 1 });
+      cp.onTurnComplete(1, makeConfig(), makeState(), makeUsage(), Date.now());
+      cp.onTurnComplete(2, makeConfig(), makeState(), makeUsage(), Date.now());
+      expect(cp.getCheckpointIds()).toHaveLength(2);
+    });
+
+    it("disabled checkpointer does nothing", () => {
+      const cp = new AutoCheckpointer("test-session", { enabled: false });
+      const result = cp.onTurnComplete(100, makeConfig(), makeState(), makeUsage(), Date.now());
+      expect(result).toBeNull();
+    });
+  });
+
+  // ─── Rewind ─────────────────────────────────────────────────
+
+  describe("rewindToCheckpoint", () => {
+    it("returns null for nonexistent checkpoint", () => {
+      expect(rewindToCheckpoint("nonexistent-checkpoint-id")).toBeNull();
+    });
+
+    it("returns messages from a saved checkpoint", () => {
+      const snapshot = captureSnapshot(makeConfig(), makeState(), makeUsage(), Date.now());
+      snapshot.id = "rewind-test-" + Date.now();
+      saveSnapshot(snapshot);
+      const messages = rewindToCheckpoint(snapshot.id);
+      expect(messages).not.toBeNull();
+      expect(messages!.length).toBeGreaterThan(0);
+    });
+  });
+
+  // ─── Crash Recovery ─────────────────────────────────────────
+
+  describe("crash recovery", () => {
+    it("saves and loads crash recovery data", () => {
+      saveCrashRecovery({
+        sessionId: "test-session",
+        lastCheckpointId: "cp-1",
+        timestamp: Date.now(),
+        model: "test-model",
+        cwd: "/tmp/test",
+      });
+      const data = checkCrashRecovery();
+      expect(data).not.toBeNull();
+      expect(data!.sessionId).toBe("test-session");
+    });
+
+    it("clearCrashRecovery removes data", () => {
+      saveCrashRecovery({
+        sessionId: "test-session",
+        lastCheckpointId: "cp-1",
+        timestamp: Date.now(),
+        model: "test-model",
+        cwd: "/tmp/test",
+      });
+      clearCrashRecovery();
+      expect(checkCrashRecovery()).toBeNull();
+    });
+
+    it("returns null for expired recovery data", () => {
+      saveCrashRecovery({
+        sessionId: "test-session",
+        lastCheckpointId: "cp-1",
+        timestamp: Date.now() - 25 * 60 * 60 * 1000, // 25 hours ago
+        model: "test-model",
+        cwd: "/tmp/test",
+      });
+      expect(checkCrashRecovery()).toBeNull();
     });
   });
 });

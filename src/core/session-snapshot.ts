@@ -508,5 +508,183 @@ function pruneSnapshots(): void {
   }
 }
 
+// ─── Auto-Checkpoint System ────────────────────────────────────
+
+export interface CheckpointConfig {
+  /** Create a checkpoint every N turns. Default: 10 */
+  intervalTurns: number;
+  /** Maximum checkpoints to keep per session. Default: 20 */
+  maxCheckpointsPerSession: number;
+  /** Enable auto-checkpointing. Default: true */
+  enabled: boolean;
+}
+
+const DEFAULT_CHECKPOINT_CONFIG: CheckpointConfig = {
+  intervalTurns: 10,
+  maxCheckpointsPerSession: 20,
+  enabled: true,
+};
+
+/**
+ * Auto-checkpoint manager for a single session.
+ * Creates periodic snapshots that can be used for rewind and crash recovery.
+ */
+export class AutoCheckpointer {
+  private sessionId: string;
+  private config: CheckpointConfig;
+  private lastCheckpointTurn = 0;
+  private checkpointIds: string[] = [];
+
+  constructor(sessionId: string, config?: Partial<CheckpointConfig>) {
+    this.sessionId = sessionId;
+    this.config = { ...DEFAULT_CHECKPOINT_CONFIG, ...config };
+  }
+
+  /**
+   * Called after each turn. Creates a checkpoint if enough turns have passed.
+   * Returns the checkpoint ID if created, null otherwise.
+   */
+  onTurnComplete(
+    turnNumber: number,
+    config: KCodeConfig,
+    state: ConversationState,
+    usage: TokenUsage,
+    startTime: number,
+  ): string | null {
+    if (!this.config.enabled) return null;
+    if (turnNumber - this.lastCheckpointTurn < this.config.intervalTurns) return null;
+
+    try {
+      const snapshot = captureSnapshot(config, state, usage, startTime);
+      snapshot.id = `checkpoint-${this.sessionId}-turn${turnNumber}-${Date.now()}`;
+      saveSnapshot(snapshot);
+
+      this.checkpointIds.push(snapshot.id);
+      this.lastCheckpointTurn = turnNumber;
+
+      // Prune old checkpoints for this session
+      while (this.checkpointIds.length > this.config.maxCheckpointsPerSession) {
+        const oldId = this.checkpointIds.shift()!;
+        try {
+          const { unlinkSync } = require("node:fs") as typeof import("node:fs");
+          unlinkSync(join(getSnapshotsDir(), `${oldId}.json`));
+        } catch { /* already gone */ }
+      }
+
+      log.info("snapshot", `Auto-checkpoint at turn ${turnNumber}: ${snapshot.id}`);
+      return snapshot.id;
+    } catch (err) {
+      log.debug("snapshot", `Auto-checkpoint failed at turn ${turnNumber}: ${err}`);
+      return null;
+    }
+  }
+
+  /** Get all checkpoint IDs for this session (newest last) */
+  getCheckpointIds(): string[] {
+    return [...this.checkpointIds];
+  }
+
+  /** Load a specific checkpoint */
+  loadCheckpoint(checkpointId: string): SessionSnapshot | null {
+    return loadSnapshot(checkpointId);
+  }
+}
+
+/**
+ * Rewind to a previous checkpoint.
+ * Returns the messages from that checkpoint, or null if not found.
+ */
+export function rewindToCheckpoint(checkpointId: string): Message[] | null {
+  const snapshot = loadSnapshot(checkpointId);
+  if (!snapshot) return null;
+
+  // Convert SnapshotMessages back to Messages
+  return snapshot.messages.map((sm) => ({
+    role: sm.role === "tool" ? "user" : sm.role,
+    content: sm.content,
+  })) as Message[];
+}
+
+/**
+ * Rewind by N turns from the latest checkpoint.
+ * Finds the checkpoint closest to (currentTurn - N) and returns its messages.
+ */
+export function rewindByTurns(
+  checkpointIds: string[],
+  turnsBack: number,
+): { messages: Message[]; checkpointId: string } | null {
+  // Checkpoints are ordered oldest→newest, we want to go back `turnsBack` checkpoints
+  // Each checkpoint is roughly `intervalTurns` apart
+  const targetIdx = Math.max(0, checkpointIds.length - Math.ceil(turnsBack / 10));
+  const targetId = checkpointIds[targetIdx];
+  if (!targetId) return null;
+
+  const messages = rewindToCheckpoint(targetId);
+  if (!messages) return null;
+
+  return { messages, checkpointId: targetId };
+}
+
+// ─── Crash Recovery ────────────────────────────────────────────
+
+const CRASH_RECOVERY_FILE = () => join(kcodeHome(), ".crash-recovery.json");
+
+interface CrashRecoveryData {
+  sessionId: string;
+  lastCheckpointId: string;
+  timestamp: number;
+  model: string;
+  cwd: string;
+}
+
+/**
+ * Save crash recovery data (called periodically during session).
+ * If KCode crashes, this allows restoring from the last checkpoint.
+ */
+export function saveCrashRecovery(data: CrashRecoveryData): void {
+  try {
+    writeFileSync(CRASH_RECOVERY_FILE(), JSON.stringify(data), { mode: 0o600 });
+  } catch (err) {
+    log.debug("snapshot", `Failed to save crash recovery: ${err}`);
+  }
+}
+
+/**
+ * Check if there's crash recovery data from a previous session.
+ * Returns the recovery data, or null if no recovery is needed.
+ */
+export function checkCrashRecovery(): CrashRecoveryData | null {
+  try {
+    const path = CRASH_RECOVERY_FILE();
+    if (!existsSync(path)) return null;
+
+    const content = readFileSync(path, "utf-8");
+    const data = JSON.parse(content) as CrashRecoveryData;
+
+    // Only offer recovery for sessions from the last 24 hours
+    if (Date.now() - data.timestamp > 24 * 60 * 60 * 1000) {
+      clearCrashRecovery();
+      return null;
+    }
+
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear crash recovery data (called on clean session exit).
+ */
+export function clearCrashRecovery(): void {
+  try {
+    const path = CRASH_RECOVERY_FILE();
+    if (existsSync(path)) {
+      const { unlinkSync } = require("node:fs") as typeof import("node:fs");
+      unlinkSync(path);
+    }
+  } catch { /* ignore */ }
+}
+
 /** Exposed for testing: the directory where snapshots are stored. */
 export { getSnapshotsDir as getSnapshotsDirPath };
