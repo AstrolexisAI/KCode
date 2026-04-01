@@ -1,0 +1,73 @@
+<idea-plugin>
+    <id>com.astrolexis.kcode</id>
+    <name>KCode - AI Coding Assistant</name>
+    <vendor email="support@astrolexis.com" url="https://astrolexis.com">Astrolexis</vendor>
+
+    <description><![CDATA[
+        AI coding assistant for JetBrains IDEs, powered by local LLMs and cloud APIs.
+        Connects to the KCode HTTP API server for code explanation, test generation,
+        commit message creation, and interactive chat.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+            id="KCode"
+            anchor="right"
+            factoryClass="com.astrolexis.kcode.KCodeToolWindowFactory"
+            icon="/icons/kcode.svg"
+        />
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.astrolexis.kcode.KCodeSettingsConfigurable"
+            id="com.astrolexis.kcode.settings"
+            displayName="KCode"
+        />
+        <applicationService
+            serviceImplementation="com.astrolexis.kcode.KCodeSettings"
+        />
+    </extensions>
+
+    <actions>
+        <group id="KCode.EditorPopup" text="KCode" popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+
+            <action
+                id="KCode.Ask"
+                class="com.astrolexis.kcode.actions.AskAction"
+                text="Ask KCode"
+                description="Send a question to KCode"
+                icon="/icons/kcode.svg"
+            />
+            <action
+                id="KCode.Explain"
+                class="com.astrolexis.kcode.actions.ExplainAction"
+                text="Explain Selection"
+                description="Explain the selected code with KCode"
+            />
+            <action
+                id="KCode.GenerateTests"
+                class="com.astrolexis.kcode.actions.GenerateTestsAction"
+                text="Generate Tests"
+                description="Generate tests for the selected code"
+            />
+            <action
+                id="KCode.CommitMessage"
+                class="com.astrolexis.kcode.actions.CommitMessageAction"
+                text="Generate Commit Message"
+                description="Generate a commit message from current changes"
+            />
+        </group>
+
+        <action
+            id="KCode.AskToolbar"
+            class="com.astrolexis.kcode.actions.AskAction"
+            text="Ask KCode"
+            description="Send a question to KCode"
+            icon="/icons/kcode.svg"
+        >
+            <add-to-group group-id="ToolbarRunGroup" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

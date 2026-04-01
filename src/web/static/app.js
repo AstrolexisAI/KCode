@@ -35,6 +35,13 @@
     this.isDarkTheme = true;
     this.searchActive = false;
     this.sessionModel = "--";
+    this.activeTab = "chat";
+
+    // Dashboard components
+    this.modelDashboard = null;
+    this.analyticsDashboard = null;
+    this.sessionViewer = null;
+    this.configPanel = null;
 
     // DOM elements (populated in init)
     this.els = {};
@@ -49,6 +56,7 @@
     this.connect();
     this.loadTheme();
     this.autoResizeInput();
+    this.initTabs();
   };
 
   KCodeWebUI.prototype.cacheElements = function () {
@@ -826,6 +834,103 @@
 
     this.els.messages.appendChild(el);
     this.scrollToBottom();
+  };
+
+  // ─── Tab Navigation ───────────────────────────────────────────
+
+  KCodeWebUI.prototype.initTabs = function () {
+    var self = this;
+    var tabs = document.querySelectorAll(".nav-tab");
+
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].addEventListener("click", function () {
+        self.switchTab(this.dataset.tab);
+      });
+    }
+  };
+
+  KCodeWebUI.prototype.switchTab = function (tabName) {
+    if (this.activeTab === tabName) return;
+
+    // Deactivate old tab
+    var oldTab = document.querySelector('.nav-tab[data-tab="' + this.activeTab + '"]');
+    var oldPanel = document.getElementById("panel-" + this.activeTab);
+    if (oldTab) oldTab.classList.remove("active");
+    if (oldPanel) oldPanel.classList.remove("active");
+
+    // Destroy old dashboard component if leaving its tab
+    this.destroyDashboardComponent(this.activeTab);
+
+    // Activate new tab
+    this.activeTab = tabName;
+    var newTab = document.querySelector('.nav-tab[data-tab="' + tabName + '"]');
+    var newPanel = document.getElementById("panel-" + tabName);
+    if (newTab) newTab.classList.add("active");
+    if (newPanel) newPanel.classList.add("active");
+
+    // Initialize dashboard component for new tab
+    this.initDashboardComponent(tabName);
+  };
+
+  KCodeWebUI.prototype.initDashboardComponent = function (tabName) {
+    var panel = document.getElementById("panel-" + tabName);
+    if (!panel) return;
+
+    switch (tabName) {
+      case "models":
+        if (window.ModelDashboard) {
+          this.modelDashboard = new window.ModelDashboard(panel, this.authToken);
+          this.modelDashboard.init();
+        }
+        break;
+      case "analytics":
+        if (window.AnalyticsDashboard) {
+          this.analyticsDashboard = new window.AnalyticsDashboard(panel, this.authToken);
+          this.analyticsDashboard.init();
+        }
+        break;
+      case "session":
+        if (window.SessionViewer) {
+          this.sessionViewer = new window.SessionViewer(panel, this.authToken);
+          this.sessionViewer.init();
+        }
+        break;
+      case "config":
+        if (window.ConfigPanel) {
+          this.configPanel = new window.ConfigPanel(panel, this.authToken);
+          this.configPanel.init();
+        }
+        break;
+    }
+  };
+
+  KCodeWebUI.prototype.destroyDashboardComponent = function (tabName) {
+    switch (tabName) {
+      case "models":
+        if (this.modelDashboard) {
+          this.modelDashboard.destroy();
+          this.modelDashboard = null;
+        }
+        break;
+      case "analytics":
+        if (this.analyticsDashboard) {
+          this.analyticsDashboard.destroy();
+          this.analyticsDashboard = null;
+        }
+        break;
+      case "session":
+        if (this.sessionViewer) {
+          this.sessionViewer.destroy();
+          this.sessionViewer = null;
+        }
+        break;
+      case "config":
+        if (this.configPanel) {
+          this.configPanel.destroy();
+          this.configPanel = null;
+        }
+        break;
+    }
   };
 
   // ─── Utilities ────────────────────────────────────────────────
