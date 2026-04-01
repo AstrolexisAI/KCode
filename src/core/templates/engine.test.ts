@@ -1,6 +1,6 @@
 // KCode - Template Engine Tests
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { TemplateEngine } from "./engine";
 import type { Template } from "./types";
 
@@ -55,7 +55,9 @@ describe("expandTemplate", () => {
   });
 
   test("handles #each with array", () => {
-    const result = engine.expandTemplate("{{#each items}}- {{this}}\n{{/each}}", { items: ["a", "b", "c"] });
+    const result = engine.expandTemplate("{{#each items}}- {{this}}\n{{/each}}", {
+      items: ["a", "b", "c"],
+    });
     expect(result).toBe("- a\n- b\n- c\n");
   });
 
@@ -70,7 +72,10 @@ describe("expandTemplate", () => {
   });
 
   test("handles nested variables inside #if", () => {
-    const result = engine.expandTemplate("{{#if auth}}Auth: {{authType}}{{/if}}", { auth: true, authType: "JWT" });
+    const result = engine.expandTemplate("{{#if auth}}Auth: {{authType}}{{/if}}", {
+      auth: true,
+      authType: "JWT",
+    });
     expect(result).toBe("Auth: JWT");
   });
 
@@ -94,7 +99,13 @@ describe("validateParams", () => {
     tags: [],
     parameters: [
       { name: "name", description: "name", type: "string", required: true },
-      { name: "db", description: "db", type: "choice", choices: ["sqlite", "postgres"], required: false },
+      {
+        name: "db",
+        description: "db",
+        type: "choice",
+        choices: ["sqlite", "postgres"],
+        required: false,
+      },
       { name: "auth", description: "auth", type: "boolean", required: false },
     ],
     prompt: "",
@@ -138,7 +149,14 @@ describe("applyDefaults", () => {
     tags: [],
     parameters: [
       { name: "name", description: "n", type: "string", required: true },
-      { name: "db", description: "d", type: "choice", choices: ["sqlite"], default: "sqlite", required: false },
+      {
+        name: "db",
+        description: "d",
+        type: "choice",
+        choices: ["sqlite"],
+        default: "sqlite",
+        required: false,
+      },
       { name: "auth", description: "a", type: "boolean", default: true, required: false },
     ],
     prompt: "",

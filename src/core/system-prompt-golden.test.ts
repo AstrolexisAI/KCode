@@ -8,7 +8,7 @@
 // methods directly (which are pure functions) rather than build() to avoid flakiness
 // caused by the user's local ~/.kcode/ contents.
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { SystemPromptBuilder } from "./system-prompt";
 import { SectionPriority, TokenBudgetManager } from "./token-budget";
 import type { KCodeConfig } from "./types";

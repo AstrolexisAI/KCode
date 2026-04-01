@@ -2,11 +2,11 @@
 // Coordinates VAD, ASR, TTS, and audio recording into a bidirectional voice conversation.
 
 import { log } from "../logger";
-import { VoiceActivityDetector } from "./vad";
 import { StreamingASR } from "./streaming-asr";
 import { LocalTTS } from "./tts";
-import type { VoiceSessionConfig, VoiceState, TranscriptEvent } from "./types";
+import type { TranscriptEvent, VoiceSessionConfig, VoiceState } from "./types";
 import { DEFAULT_VOICE_SESSION_CONFIG } from "./types";
+import { VoiceActivityDetector } from "./vad";
 
 // ─── Audio Recorder ────────────────────────────────────────────
 
@@ -28,7 +28,9 @@ export class AudioRecorder {
   stop(): void {
     this.running = false;
     if (this.process) {
-      try { this.process.kill(); } catch {}
+      try {
+        this.process.kill();
+      } catch {}
       this.process = null;
     }
   }
@@ -80,7 +82,21 @@ export class AudioRecorder {
   private getRecordCommand(sampleRate: number): string[] {
     if (process.platform === "darwin") {
       // macOS: use sox/rec
-      return ["rec", "-q", "-r", String(sampleRate), "-c", "1", "-b", "16", "-e", "signed-integer", "-t", "raw", "-"];
+      return [
+        "rec",
+        "-q",
+        "-r",
+        String(sampleRate),
+        "-c",
+        "1",
+        "-b",
+        "16",
+        "-e",
+        "signed-integer",
+        "-t",
+        "raw",
+        "-",
+      ];
     }
     // Linux: arecord
     return ["arecord", "-f", "S16_LE", "-r", String(sampleRate), "-c", "1", "-t", "raw", "-q"];
@@ -206,7 +222,10 @@ export class VoiceSession {
         elapsed += frameDuration;
         if (elapsed >= calibrationMs) {
           calibRecorder.stop();
-          log.debug("voice/session", `VAD calibrated: baseline=${this.vad.getBaseline().toFixed(4)}, threshold=${this.vad.getThreshold().toFixed(4)}`);
+          log.debug(
+            "voice/session",
+            `VAD calibrated: baseline=${this.vad.getBaseline().toFixed(4)}, threshold=${this.vad.getThreshold().toFixed(4)}`,
+          );
           resolve();
         }
       }, this.config.sampleRate);

@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -45,14 +45,14 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(true);
-    expect(result.issues.filter(i => i.severity === "error")).toHaveLength(0);
+    expect(result.issues.filter((i) => i.severity === "error")).toHaveLength(0);
   });
 
   test("detects missing plugin.json", () => {
     mkdirSync(join(tempDir, "empty-plugin"), { recursive: true });
     const result = verifyPlugin(join(tempDir, "empty-plugin"));
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "NO_MANIFEST")).toBe(true);
+    expect(result.issues.some((i) => i.code === "NO_MANIFEST")).toBe(true);
   });
 
   test("detects invalid JSON in plugin.json", () => {
@@ -62,33 +62,38 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "INVALID_MANIFEST")).toBe(true);
+    expect(result.issues.some((i) => i.code === "INVALID_MANIFEST")).toBe(true);
   });
 
   test("detects missing name field", () => {
     const dir = createPluginDir({ version: "1.0.0" });
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "NO_NAME")).toBe(true);
+    expect(result.issues.some((i) => i.code === "NO_NAME")).toBe(true);
   });
 
   test("detects missing version field", () => {
     const dir = createPluginDir({ name: "test" });
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "NO_VERSION")).toBe(true);
+    expect(result.issues.some((i) => i.code === "NO_VERSION")).toBe(true);
   });
 
   test("detects missing skill files", () => {
-    const dir = createPluginDir({
-      name: "test",
-      version: "1.0.0",
-      skills: ["exists.md", "missing.md"],
-    }, { "exists.md": "content" });
+    const dir = createPluginDir(
+      {
+        name: "test",
+        version: "1.0.0",
+        skills: ["exists.md", "missing.md"],
+      },
+      { "exists.md": "content" },
+    );
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "MISSING_SKILL" && i.message.includes("missing.md"))).toBe(true);
+    expect(
+      result.issues.some((i) => i.code === "MISSING_SKILL" && i.message.includes("missing.md")),
+    ).toBe(true);
   });
 
   test("detects path traversal in skills", () => {
@@ -100,7 +105,7 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "PATH_TRAVERSAL")).toBe(true);
+    expect(result.issues.some((i) => i.code === "PATH_TRAVERSAL")).toBe(true);
   });
 
   test("detects path traversal with absolute path", () => {
@@ -112,7 +117,7 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "PATH_TRAVERSAL")).toBe(true);
+    expect(result.issues.some((i) => i.code === "PATH_TRAVERSAL")).toBe(true);
   });
 
   test("detects MCP server without command", () => {
@@ -124,7 +129,7 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "MCP_NO_CMD")).toBe(true);
+    expect(result.issues.some((i) => i.code === "MCP_NO_CMD")).toBe(true);
   });
 
   test("warns on unknown hook events", () => {
@@ -137,7 +142,7 @@ describe("verifyPlugin", () => {
     const result = verifyPlugin(dir);
     // Unknown hook is a warning, not an error
     expect(result.valid).toBe(true);
-    expect(result.issues.some(i => i.code === "UNKNOWN_HOOK_EVENT")).toBe(true);
+    expect(result.issues.some((i) => i.code === "UNKNOWN_HOOK_EVENT")).toBe(true);
   });
 
   test("detects hook without command", () => {
@@ -149,7 +154,7 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "HOOK_NO_CMD")).toBe(true);
+    expect(result.issues.some((i) => i.code === "HOOK_NO_CMD")).toBe(true);
   });
 
   test("warns on large plugins", () => {
@@ -161,7 +166,7 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(true); // Large size is a warning, not error
-    expect(result.issues.some(i => i.code === "LARGE_PLUGIN")).toBe(true);
+    expect(result.issues.some((i) => i.code === "LARGE_PLUGIN")).toBe(true);
   });
 
   test("validates output style paths", () => {
@@ -173,7 +178,9 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "PATH_TRAVERSAL" && i.message.includes("escape.md"))).toBe(true);
+    expect(
+      result.issues.some((i) => i.code === "PATH_TRAVERSAL" && i.message.includes("escape.md")),
+    ).toBe(true);
   });
 
   test("validates agent paths for traversal", () => {
@@ -185,14 +192,14 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "PATH_TRAVERSAL")).toBe(true);
+    expect(result.issues.some((i) => i.code === "PATH_TRAVERSAL")).toBe(true);
   });
 
   test("minimal valid plugin (name + version only)", () => {
     const dir = createPluginDir({ name: "minimal", version: "0.1.0" });
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(true);
-    expect(result.issues.filter(i => i.severity === "error")).toHaveLength(0);
+    expect(result.issues.filter((i) => i.severity === "error")).toHaveLength(0);
   });
 
   test("hook array format is validated", () => {
@@ -207,6 +214,6 @@ describe("verifyPlugin", () => {
 
     const result = verifyPlugin(dir);
     expect(result.valid).toBe(false);
-    expect(result.issues.some(i => i.code === "HOOK_NO_CMD")).toBe(true);
+    expect(result.issues.some((i) => i.code === "HOOK_NO_CMD")).toBe(true);
   });
 });

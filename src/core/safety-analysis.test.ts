@@ -1,17 +1,17 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 import {
-  extractCommandPrefix,
+  analyzeBashCommand,
   detectCommandInjection,
   detectCommandSubstitution,
   detectDangerousRedirections,
-  detectPipeToShell,
-  detectShellInvocation,
-  detectQuoteDesync,
-  detectNonShellExpression,
   detectDestructiveRemoval,
+  detectNonShellExpression,
+  detectPipeToShell,
+  detectQuoteDesync,
   detectScaffoldConflict,
-  analyzeBashCommand,
+  detectShellInvocation,
+  extractCommandPrefix,
   validateFileWritePath,
 } from "./safety-analysis.ts";
 
@@ -456,7 +456,7 @@ describe("analyzeBashCommand", () => {
   test("bash -c exception: shell invocation allowed", () => {
     const result = analyzeBashCommand("bash -c 'echo safe'");
     // bash -c should not trigger shell invocation warning
-    expect(result.issues.filter(i => i.includes("shell invocation"))).toHaveLength(0);
+    expect(result.issues.filter((i) => i.includes("shell invocation"))).toHaveLength(0);
   });
 
   test("multiple issues: highest risk wins", () => {

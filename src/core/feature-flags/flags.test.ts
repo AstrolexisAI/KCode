@@ -1,17 +1,17 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  Features,
+  describeProfile,
+  getAvailableProfiles,
+  getDefinesForProfile,
+  getProfileFeatures,
+} from "./build-defines";
+import {
+  ALL_FEATURE_NAMES,
   activeFeatures,
+  Features,
   inactiveFeatures,
   isFeatureEnabled,
-  ALL_FEATURE_NAMES,
 } from "./flags";
-import {
-  getDefinesForProfile,
-  getAvailableProfiles,
-  getProfileFeatures,
-  describeProfile,
-} from "./build-defines";
 
 describe("feature-flags", () => {
   describe("Features object", () => {

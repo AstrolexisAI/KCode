@@ -1,37 +1,35 @@
 // KCode - Main Ink application component
 // Top-level component managing conversation flow and rendering
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Box, Text, useApp } from "ink";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
-import type { KCodeConfig } from "../core/types.js";
-import type { ToolRegistry } from "../core/tool-registry.js";
 import { SkillManager } from "../core/skills.js";
-import { useTheme } from "./ThemeContext.js";
 import { CHARS_PER_TOKEN } from "../core/token-budget.js";
-
-import Header from "./components/Header.js";
-import ToolTabs from "./components/ToolTabs.js";
-import MessageList, { type MessageEntry } from "./components/MessageList.js";
-import VirtualMessageList from "./components/VirtualMessageList.js";
-import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
-import InputPrompt from "./components/InputPrompt.js";
+import type { ToolRegistry } from "../core/tool-registry.js";
+import type { KCodeConfig } from "../core/types.js";
+import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 import ActivePlanPanel from "./components/ActivePlanPanel.js";
+import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
+import ContextGrid from "./components/ContextGrid.js";
+import Header from "./components/Header.js";
+import InputPrompt from "./components/InputPrompt.js";
+import { KeybindingProvider } from "./components/KeybindingContext.js";
+import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
+import MessageList, { type MessageEntry } from "./components/MessageList.js";
+import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
 import PermissionDialog, {
-  type PermissionRequest,
   type PermissionChoice,
+  type PermissionRequest,
 } from "./components/PermissionDialog.js";
 import SudoPasswordPrompt from "./components/SudoPasswordPrompt.js";
-import ContextGrid from "./components/ContextGrid.js";
-import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
-import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
-
-import { useKeyBindings } from "./hooks/useKeyBindings.js";
+import ToolTabs from "./components/ToolTabs.js";
+import VirtualMessageList from "./components/VirtualMessageList.js";
 import { useAppEffects } from "./hooks/useAppEffects.js";
+import { useKeyBindings } from "./hooks/useKeyBindings.js";
 import { useMessageProcessor } from "./hooks/useMessageProcessor.js";
-import { KeybindingProvider } from "./components/KeybindingContext.js";
 import type { TabInfo } from "./stream-handler.js";
-import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
+import { useTheme } from "./ThemeContext.js";
 
 interface AppProps {
   config: KCodeConfig;
@@ -172,14 +170,38 @@ export default function App({ config, conversationManager, tools, initialSession
 
   // Message processing: slash commands, LLM sending, queue draining
   const { handleSubmit, messageQueueRef } = useMessageProcessor({
-    config, conversationManager, tools, skillManager,
-    mode, sessionStart, sessionNotes, sessionName, sessionTags,
-    tabRemovalTimers, switchTheme, exit,
-    setMode, setCompleted, setStreamingText, setStreamingThinking,
-    setIsThinking, setLoadingMessage, setTokenCount, setTurnTokens,
-    setTurnStartTime, setSpinnerPhase, setToolUseCount, setRunningAgentCount,
-    setActiveTabs, setBashStreamOutput, setSessionNotes, setSessionName,
-    setSessionTags, setWatcherSuggestions, setShowContextGrid, setMessageQueue,
+    config,
+    conversationManager,
+    tools,
+    skillManager,
+    mode,
+    sessionStart,
+    sessionNotes,
+    sessionName,
+    sessionTags,
+    tabRemovalTimers,
+    switchTheme,
+    exit,
+    setMode,
+    setCompleted,
+    setStreamingText,
+    setStreamingThinking,
+    setIsThinking,
+    setLoadingMessage,
+    setTokenCount,
+    setTurnTokens,
+    setTurnStartTime,
+    setSpinnerPhase,
+    setToolUseCount,
+    setRunningAgentCount,
+    setActiveTabs,
+    setBashStreamOutput,
+    setSessionNotes,
+    setSessionName,
+    setSessionTags,
+    setWatcherSuggestions,
+    setShowContextGrid,
+    setMessageQueue,
     setLastKodiEvent,
   });
 
@@ -227,7 +249,10 @@ export default function App({ config, conversationManager, tools, initialSession
   const handleCloudDone = useCallback(
     async (result: CloudResult | null) => {
       if (!result) {
-        setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: "  Cloud setup cancelled." }]);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "assistant", text: "  Cloud setup cancelled." },
+        ]);
         setMode("input");
         return;
       }
@@ -253,7 +278,8 @@ export default function App({ config, conversationManager, tools, initialSession
         }
 
         // Register default models for this provider
-        const modelProvider = provider.id === "anthropic" ? "anthropic" as const : "openai" as const;
+        const modelProvider =
+          provider.id === "anthropic" ? ("anthropic" as const) : ("openai" as const);
         const modelsToRegister = provider.models.split(",").map((m) => m.trim());
         for (const modelName of modelsToRegister) {
           await addModel({
@@ -290,7 +316,11 @@ export default function App({ config, conversationManager, tools, initialSession
       } catch (err) {
         setCompleted((prev) => [
           ...prev,
-          { kind: "text", role: "assistant", text: `  Error saving config: ${err instanceof Error ? err.message : err}` },
+          {
+            kind: "text",
+            role: "assistant",
+            text: `  Error saving config: ${err instanceof Error ? err.message : err}`,
+          },
         ]);
       }
 
@@ -327,7 +357,8 @@ export default function App({ config, conversationManager, tools, initialSession
         config.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
       }
 
-      const isLocal = result.model.baseUrl.includes("localhost") || result.model.baseUrl.includes("127.0.0.1");
+      const isLocal =
+        result.model.baseUrl.includes("localhost") || result.model.baseUrl.includes("127.0.0.1");
       const label = isLocal ? "🖥  Local" : "☁  Cloud";
 
       setCompleted((prev) => [
@@ -346,8 +377,8 @@ export default function App({ config, conversationManager, tools, initialSession
 
   return (
     <KeybindingProvider>
-    <Box flexDirection="column">
-      {useVirtualScrollEnabled ? (
+      <Box flexDirection="column">
+        {useVirtualScrollEnabled ? (
           <VirtualMessageList
             completed={completed}
             streamingText={streamingText}
@@ -379,7 +410,10 @@ export default function App({ config, conversationManager, tools, initialSession
         {watcherSuggestions.length > 0 && mode === "input" && (
           <Box marginLeft={2} marginBottom={1} flexDirection="column">
             {watcherSuggestions.map((s, i) => (
-              <Text key={i} dimColor>{"  ✱ "}{s}</Text>
+              <Text key={i} dimColor>
+                {"  ✱ "}
+                {s}
+              </Text>
             ))}
           </Box>
         )}
@@ -393,18 +427,10 @@ export default function App({ config, conversationManager, tools, initialSession
         )}
 
         {mode === "sudo-password" && (
-          <SudoPasswordPrompt
-            onSubmit={handleSudoPassword}
-            isActive={mode === "sudo-password"}
-          />
+          <SudoPasswordPrompt onSubmit={handleSudoPassword} isActive={mode === "sudo-password"} />
         )}
 
-        {mode === "cloud" && (
-          <CloudMenu
-            isActive={mode === "cloud"}
-            onDone={handleCloudDone}
-          />
-        )}
+        {mode === "cloud" && <CloudMenu isActive={mode === "cloud"} onDone={handleCloudDone} />}
 
         {mode === "toggle" && (
           <ModelToggle
@@ -414,79 +440,88 @@ export default function App({ config, conversationManager, tools, initialSession
           />
         )}
 
-        {activeTabs.length > 0 && (
-          <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />
-        )}
+        {activeTabs.length > 0 && <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />}
 
-        {showContextGrid && config.contextWindowSize && config.contextWindowSize > 0 && (() => {
-          const state = conversationManager.getState();
-          let systemTokens = 0;
-          let messageTokens = 0;
-          let toolTokens = 0;
-          for (const msg of state.messages) {
-            if (typeof msg.content === "string") {
-              const est = Math.round(msg.content.length / CHARS_PER_TOKEN);
-              if (msg.role === "user") messageTokens += est;
-              else messageTokens += est;
-            } else if (Array.isArray(msg.content)) {
-              for (const block of msg.content) {
-                if (block.type === "text") {
-                  messageTokens += Math.round(block.text.length / CHARS_PER_TOKEN);
-                } else if (block.type === "tool_result") {
-                  const c = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
-                  toolTokens += Math.round(c.length / CHARS_PER_TOKEN);
-                } else if (block.type === "tool_use") {
-                  toolTokens += Math.round(JSON.stringify(block.input).length / CHARS_PER_TOKEN);
+        {showContextGrid &&
+          config.contextWindowSize &&
+          config.contextWindowSize > 0 &&
+          (() => {
+            const state = conversationManager.getState();
+            let systemTokens = 0;
+            let messageTokens = 0;
+            let toolTokens = 0;
+            for (const msg of state.messages) {
+              if (typeof msg.content === "string") {
+                const est = Math.round(msg.content.length / CHARS_PER_TOKEN);
+                if (msg.role === "user") messageTokens += est;
+                else messageTokens += est;
+              } else if (Array.isArray(msg.content)) {
+                for (const block of msg.content) {
+                  if (block.type === "text") {
+                    messageTokens += Math.round(block.text.length / CHARS_PER_TOKEN);
+                  } else if (block.type === "tool_result") {
+                    const c =
+                      typeof block.content === "string"
+                        ? block.content
+                        : JSON.stringify(block.content);
+                    toolTokens += Math.round(c.length / CHARS_PER_TOKEN);
+                  } else if (block.type === "tool_use") {
+                    toolTokens += Math.round(JSON.stringify(block.input).length / CHARS_PER_TOKEN);
+                  }
                 }
               }
             }
-          }
-          // Estimate system prompt tokens from the difference
-          systemTokens = Math.max(0, tokenCount - messageTokens - toolTokens);
-          return (
-            <ContextGrid
-              breakdown={{
-                totalTokens: tokenCount,
-                contextWindowSize: config.contextWindowSize,
-                systemTokens,
-                messageTokens,
-                toolTokens,
-              }}
-            />
-          );
-        })()}
+            // Estimate system prompt tokens from the difference
+            systemTokens = Math.max(0, tokenCount - messageTokens - toolTokens);
+            return (
+              <ContextGrid
+                breakdown={{
+                  totalTokens: tokenCount,
+                  contextWindowSize: config.contextWindowSize,
+                  systemTokens,
+                  messageTokens,
+                  toolTokens,
+                }}
+              />
+            );
+          })()}
 
-      {/* Kodi companion — pinned above input, always visible */}
-      <KodiCompanion
-        mode={mode}
-        toolUseCount={toolUseCount}
-        tokenCount={tokenCount}
-        activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
-        isThinking={isThinking}
-        runningAgents={runningAgentCount}
-        sessionElapsedMs={Date.now() - sessionStart}
-        lastEvent={lastKodiEvent}
-        model={config.model}
-        version={config.version ?? "?"}
-        workingDirectory={config.workingDirectory}
-        permissionMode={conversationManager.getPermissions().getMode()}
-        activeProfile={config.activeProfile}
-        contextWindowSize={config.contextWindowSize}
-        sessionName={sessionName}
-        sessionStartTime={sessionStart}
-      />
-      <ActivePlanPanel plan={activePlan} />
-      <InputPrompt
-        onSubmit={handleSubmit}
-        isActive={mode !== "permission" && mode !== "sudo-password" && mode !== "cloud" && mode !== "toggle"}
-        isQueuing={mode === "responding"}
-        queueSize={messageQueue.length}
-        model={config.model}
-        cwd={config.workingDirectory}
-        completions={slashCompletions}
-        commandDescriptions={commandDescriptions}
-      />
-    </Box>
+        {/* Kodi companion — pinned above input, always visible */}
+        <KodiCompanion
+          mode={mode}
+          toolUseCount={toolUseCount}
+          tokenCount={tokenCount}
+          activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
+          isThinking={isThinking}
+          runningAgents={runningAgentCount}
+          sessionElapsedMs={Date.now() - sessionStart}
+          lastEvent={lastKodiEvent}
+          model={config.model}
+          version={config.version ?? "?"}
+          workingDirectory={config.workingDirectory}
+          permissionMode={conversationManager.getPermissions().getMode()}
+          activeProfile={config.activeProfile}
+          contextWindowSize={config.contextWindowSize}
+          sessionName={sessionName}
+          sessionStartTime={sessionStart}
+        />
+        <ActivePlanPanel plan={activePlan} />
+        <InputPrompt
+          onSubmit={handleSubmit}
+          isActive={
+            mode !== "permission" &&
+            mode !== "sudo-password" &&
+            mode !== "cloud" &&
+            mode !== "toggle"
+          }
+          isQueuing={mode === "responding"}
+          queueSize={messageQueue.length}
+          model={config.model}
+          cwd={config.workingDirectory}
+          completions={slashCompletions}
+          commandDescriptions={commandDescriptions}
+        />
+      </Box>
     </KeybindingProvider>
   );
 }

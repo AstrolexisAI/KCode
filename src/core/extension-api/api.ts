@@ -1,11 +1,17 @@
 // KCode - Extension API
 // Main API class with routing, middleware pipeline, and SSE streaming
 
-import type { ExtensionApiConfig, ExtensionEvent, HealthResponse, InfoResponse, Middleware } from "./types";
-import { DEFAULT_EXTENSION_API_CONFIG } from "./types";
 import { ExtensionEventEmitter } from "./events";
 import { getCorsHeaders } from "./middleware";
 import { generateOpenAPISchema } from "./schema";
+import type {
+  ExtensionApiConfig,
+  ExtensionEvent,
+  HealthResponse,
+  InfoResponse,
+  Middleware,
+} from "./types";
+import { DEFAULT_EXTENSION_API_CONFIG } from "./types";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -86,10 +92,7 @@ export class ExtensionAPI {
     }
 
     // CORS headers for all responses
-    const corsHeaders = getCorsHeaders(
-      this.config.corsOrigins,
-      req.headers.get("Origin"),
-    );
+    const corsHeaders = getCorsHeaders(this.config.corsOrigins, req.headers.get("Origin"));
 
     try {
       const response = await this.route(method, route, req);
@@ -205,14 +208,30 @@ export class ExtensionAPI {
     const response: InfoResponse = {
       version: VERSION,
       tools: [
-        "Read", "Write", "Edit", "MultiEdit", "Bash", "Glob", "Grep",
-        "GrepReplace", "Rename", "DiffView", "LS", "GitStatus", "GitCommit",
-        "GitLog", "TestRunner",
+        "Read",
+        "Write",
+        "Edit",
+        "MultiEdit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "GrepReplace",
+        "Rename",
+        "DiffView",
+        "LS",
+        "GitStatus",
+        "GitCommit",
+        "GitLog",
+        "TestRunner",
       ],
       models: [],
       features: [
-        "streaming", "tool-execution", "memory", "sessions",
-        "sse-events", "openapi-schema",
+        "streaming",
+        "tool-execution",
+        "memory",
+        "sessions",
+        "sse-events",
+        "openapi-schema",
       ],
     };
     return json(response);
@@ -235,7 +254,7 @@ export class ExtensionAPI {
   }
 
   private async handleSendMessage(req: Request): Promise<Response> {
-    const body = await req.json() as { content?: string; model?: string; tools?: string[] };
+    const body = (await req.json()) as { content?: string; model?: string; tools?: string[] };
     if (!body.content) {
       return json({ error: "Missing required field: content", code: "INVALID_INPUT" }, 400);
     }
@@ -288,7 +307,7 @@ export class ExtensionAPI {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
       },
     });
   }
@@ -338,9 +357,12 @@ export class ExtensionAPI {
   }
 
   private async handleCreateMemory(req: Request): Promise<Response> {
-    const body = await req.json() as { type?: string; title?: string; content?: string };
+    const body = (await req.json()) as { type?: string; title?: string; content?: string };
     if (!body.type || !body.title || !body.content) {
-      return json({ error: "Missing required fields: type, title, content", code: "INVALID_INPUT" }, 400);
+      return json(
+        { error: "Missing required fields: type, title, content", code: "INVALID_INPUT" },
+        400,
+      );
     }
 
     const memory = {
@@ -360,7 +382,7 @@ export class ExtensionAPI {
   }
 
   private async handleUpdateMemory(id: string, req: Request): Promise<Response> {
-    const body = await req.json() as Record<string, unknown>;
+    const body = (await req.json()) as Record<string, unknown>;
 
     // Placeholder: return updated memory
     return json({
@@ -381,7 +403,7 @@ export class ExtensionAPI {
   }
 
   private async handleUpdateConfig(req: Request): Promise<Response> {
-    const patch = await req.json() as Partial<ExtensionApiConfig>;
+    const patch = (await req.json()) as Partial<ExtensionApiConfig>;
 
     // Apply patch (excluding authToken for security)
     if (patch.port !== undefined) this.config.port = patch.port;
@@ -400,7 +422,7 @@ export class ExtensionAPI {
   private async handleCreateSession(req: Request): Promise<Response> {
     let body: Record<string, unknown> = {};
     try {
-      body = await req.json() as Record<string, unknown>;
+      body = (await req.json()) as Record<string, unknown>;
     } catch {
       // No body is fine for session creation
     }

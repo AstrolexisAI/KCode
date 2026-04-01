@@ -1,14 +1,14 @@
 // KCode - P2P Agent Mesh Security Tests
 
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
+  buildAuthHeaders,
+  decryptData,
+  encryptData,
+  generateNodeId,
   generateTeamToken,
   isValidTeamToken,
   verifyPeerToken,
-  buildAuthHeaders,
-  generateNodeId,
-  encryptData,
-  decryptData,
 } from "./security";
 
 // ─── generateTeamToken ─────────────────────────────────────────
@@ -103,9 +103,7 @@ describe("buildAuthHeaders", () => {
 describe("generateNodeId", () => {
   test("generates a valid UUID format", () => {
     const id = generateNodeId();
-    expect(id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   test("generates unique IDs", () => {
@@ -154,16 +152,12 @@ describe("encryptData / decryptData", () => {
 
   test("decryption of truncated data throws", async () => {
     const tooShort = new Uint8Array(10);
-    await expect(decryptData(tooShort, teamToken)).rejects.toThrow(
-      "Encrypted data too short",
-    );
+    await expect(decryptData(tooShort, teamToken)).rejects.toThrow("Encrypted data too short");
   });
 
   test("handles empty-ish data (just salt+iv, no ciphertext) gracefully", async () => {
     const minimal = new Uint8Array(16 + 12); // salt + iv but no ciphertext
-    await expect(decryptData(minimal, teamToken)).rejects.toThrow(
-      "Encrypted data too short",
-    );
+    await expect(decryptData(minimal, teamToken)).rejects.toThrow("Encrypted data too short");
   });
 
   test("round-trips binary data", async () => {

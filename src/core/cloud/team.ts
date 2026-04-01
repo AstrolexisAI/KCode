@@ -2,9 +2,9 @@
 // Handles syncing team-scoped memories between local storage and cloud,
 // plus team analytics and policy management.
 
+import { log } from "../logger";
 import type { CloudClient } from "./client";
 import type { TeamAnalytics, TeamPolicies } from "./types";
-import { log } from "../logger";
 
 export interface TeamMemoryEntry {
   id: string;
@@ -50,9 +50,7 @@ export class TeamMemory {
    * Get team analytics for the specified period.
    * Delegates to the CloudClient.
    */
-  async getTeamAnalytics(
-    period: "day" | "week" | "month",
-  ): Promise<TeamAnalytics> {
+  async getTeamAnalytics(period: "day" | "week" | "month"): Promise<TeamAnalytics> {
     return this.client.getAnalytics(period);
   }
 
@@ -82,10 +80,7 @@ export class TeamMemory {
    * - If a key exists in both, keep the one with the newer updatedAt timestamp
    *   (remote wins on tie)
    */
-  mergeMemories(
-    local: TeamMemoryEntry[],
-    remote: TeamMemoryEntry[],
-  ): TeamMemoryEntry[] {
+  mergeMemories(local: TeamMemoryEntry[], remote: TeamMemoryEntry[]): TeamMemoryEntry[] {
     const merged = new Map<string, TeamMemoryEntry>();
 
     // Add all local entries first

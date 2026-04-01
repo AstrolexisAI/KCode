@@ -2,13 +2,13 @@
 // Extracted from conversation.ts — side effects after the model responds:
 // response caching, knowledge distillation, benchmark scoring, suggestions, notifications
 
-import type { Message, StreamEvent, ConversationState, TextBlock } from "./types";
-import { log } from "./logger";
-import { getIntentionEngine } from "./intentions";
-import type { Suggestion } from "./intentions";
+import { initBenchmarkSchema, saveBenchmark, scoreResponse } from "./benchmarks";
 import { extractExample, saveExample } from "./distillation";
-import { scoreResponse, saveBenchmark, initBenchmarkSchema } from "./benchmarks";
+import type { Suggestion } from "./intentions";
+import { getIntentionEngine } from "./intentions";
+import { log } from "./logger";
 import { generateCacheKey, setCachedResponse } from "./response-cache";
+import type { ConversationState, Message, StreamEvent, TextBlock } from "./types";
 
 // ─── Post-Turn Processing ────────────────────────────────────────
 
@@ -31,16 +31,21 @@ export function cacheResponseIfEligible(
   messages: Message[],
   tokenCount: number,
 ): void {
-  if (!cacheKey || stopReason !== "end_turn" || toolCallCount > 0 || textChunks.length === 0) return;
+  if (!cacheKey || stopReason !== "end_turn" || toolCallCount > 0 || textChunks.length === 0)
+    return;
 
   try {
     const fullText = textChunks.join("");
-    const lastUserMsg = messages.filter(m => m.role === "user").pop();
+    const lastUserMsg = messages.filter((m) => m.role === "user").pop();
     const preview = lastUserMsg
-      ? (typeof lastUserMsg.content === "string" ? lastUserMsg.content : "")
+      ? typeof lastUserMsg.content === "string"
+        ? lastUserMsg.content
+        : ""
       : "";
     setCachedResponse(cacheKey, model, preview, fullText, tokenCount);
-  } catch (err) { log.debug("cache", "Failed to cache response: " + err); }
+  } catch (err) {
+    log.debug("cache", "Failed to cache response: " + err);
+  }
 }
 
 /**
@@ -61,18 +66,27 @@ export function processKnowledgeAndBenchmark(
   try {
     const example = extractExample(messages, workingDirectory);
     if (example) saveExample(example);
-  } catch (err) { log.debug("distillation", "Failed to extract distillation example: " + err); }
+  } catch (err) {
+    log.debug("distillation", "Failed to extract distillation example: " + err);
+  }
 
   // Benchmark scoring
   try {
     initBenchmarkSchema();
-    const lastAssistant = messages.filter(m => m.role === "assistant").pop();
+    const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
     const responseText = lastAssistant
-      ? (typeof lastAssistant.content === "string" ? lastAssistant.content : lastAssistant.content.filter((b): b is TextBlock => b.type === "text").map(b => b.text).join(""))
+      ? typeof lastAssistant.content === "string"
+        ? lastAssistant.content
+        : lastAssistant.content
+            .filter((b): b is TextBlock => b.type === "text")
+            .map((b) => b.text)
+            .join("")
       : "";
-    const errorCount = messages.filter(m =>
-      m.role === "assistant" && Array.isArray(m.content) &&
-      m.content.some(b => b.type === "tool_result" && b.is_error)
+    const errorCount = messages.filter(
+      (m) =>
+        m.role === "assistant" &&
+        Array.isArray(m.content) &&
+        m.content.some((b) => b.type === "tool_result" && b.is_error),
     ).length;
     const score = scoreResponse({
       response: responseText,
@@ -89,17 +103,24 @@ export function processKnowledgeAndBenchmark(
       latencyMs: 0,
       details: { turns: turnCount, tools: toolUseCount },
     });
-  } catch (err) { log.debug("benchmark", "Failed to score/save benchmark: " + err); }
+  } catch (err) {
+    log.debug("benchmark", "Failed to score/save benchmark: " + err);
+  }
 }
 
 /**
  * Evaluate intention engine suggestions and check for auto-continue conditions.
  * Returns the suggestions array and whether there's a high-priority suggestion.
  */
-export function evaluateIntentionSuggestions(): { suggestions: Suggestion[]; hasHighPrioritySuggestion: boolean } {
+export function evaluateIntentionSuggestions(): {
+  suggestions: Suggestion[];
+  hasHighPrioritySuggestion: boolean;
+} {
   try {
     const suggestions = getIntentionEngine().evaluate();
-    const hasHighPrioritySuggestion = suggestions.some(s => s.priority === "high" && s.type === "verify");
+    const hasHighPrioritySuggestion = suggestions.some(
+      (s) => s.priority === "high" && s.type === "verify",
+    );
     return { suggestions, hasHighPrioritySuggestion };
   } catch (err) {
     log.debug("intention", "Failed to evaluate intention suggestions: " + err);
@@ -119,7 +140,10 @@ export function sendDesktopNotification(title: string, body: string): void {
     if (process.platform === "linux") {
       execSync(`notify-send "${safeTitle}" "${safeBody}" 2>/dev/null`, { timeout: 3000 });
     } else if (process.platform === "darwin") {
-      execSync(`osascript -e 'display notification "${safeBody}" with title "${safeTitle}"' 2>/dev/null`, { timeout: 3000 });
+      execSync(
+        `osascript -e 'display notification "${safeBody}" with title "${safeTitle}"' 2>/dev/null`,
+        { timeout: 3000 },
+      );
     }
   } catch (err) {
     log.debug("notify", "Failed to send desktop notification: " + err);

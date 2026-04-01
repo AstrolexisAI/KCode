@@ -1,12 +1,12 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
+  contentToSource,
+  createCell,
+  findCell,
+  notebookSummary,
   parseNotebook,
   serializeNotebook,
-  findCell,
-  contentToSource,
   sourceToContent,
-  createCell,
-  notebookSummary,
 } from "./notebook-utils";
 
 const SAMPLE_NOTEBOOK = JSON.stringify({

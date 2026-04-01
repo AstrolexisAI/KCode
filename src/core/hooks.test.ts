@@ -1,9 +1,9 @@
 // KCode - Hooks System Tests
 // Tests for hook matching, execution, trust enforcement, and HTTP hooks
 
-import { describe, test, expect } from "bun:test";
-import { HookManager, trustWorkspace, isWorkspaceTrusted, setTrustPromptCallback } from "./hooks";
-import type { HookEntry, HookAction, HookConfig, HookMatcher, HookEvent } from "./hooks";
+import { describe, expect, test } from "bun:test";
+import type { HookAction, HookConfig, HookEntry, HookEvent, HookMatcher } from "./hooks";
+import { HookManager, isWorkspaceTrusted, setTrustPromptCallback, trustWorkspace } from "./hooks";
 
 // ─── HookEntry Type Tests ─────────────────────────────────────────
 
@@ -114,15 +114,34 @@ describe("HookMatcher", () => {
 describe("HookEvent types", () => {
   test("all standard events are valid", () => {
     const events: HookEvent[] = [
-      "SessionStart", "SessionEnd", "PreToolUse", "PostToolUse",
-      "PostToolUseFailure", "PreCompact", "PostCompact",
-      "UserPromptSubmit", "PermissionRequest", "Stop",
-      "Notification", "ConfigChange", "InstructionsLoaded",
-      "SubagentStart", "SubagentStop", "TaskCompleted",
-      "WorktreeCreate", "WorktreeRemove",
-      "PreEdit", "PostEdit", "PreBash", "PostBash",
-      "PreWrite", "PostWrite", "ModelSwitch",
-      "ContextOverflow", "TaskComplete", "ErrorRecovery",
+      "SessionStart",
+      "SessionEnd",
+      "PreToolUse",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "PreCompact",
+      "PostCompact",
+      "UserPromptSubmit",
+      "PermissionRequest",
+      "Stop",
+      "Notification",
+      "ConfigChange",
+      "InstructionsLoaded",
+      "SubagentStart",
+      "SubagentStop",
+      "TaskCompleted",
+      "WorktreeCreate",
+      "WorktreeRemove",
+      "PreEdit",
+      "PostEdit",
+      "PreBash",
+      "PostBash",
+      "PreWrite",
+      "PostWrite",
+      "ModelSwitch",
+      "ContextOverflow",
+      "TaskComplete",
+      "ErrorRecovery",
     ];
     expect(events.length).toBe(28);
     // All should be strings
@@ -264,9 +283,7 @@ describe("HookConfig legacy format", () => {
   test("basic legacy hook config shape", () => {
     const config: HookConfig = {
       matcher: "Bash",
-      hooks: [
-        { type: "command", command: "echo blocked", timeout: 5000 },
-      ],
+      hooks: [{ type: "command", command: "echo blocked", timeout: 5000 }],
     };
     expect(config.matcher).toBe("Bash");
     expect(config.hooks).toHaveLength(1);
@@ -325,16 +342,19 @@ describe("Stop hook", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-stop-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        Stop: [
-          {
-            type: "command",
-            command: 'echo \'{"decision":"block","reason":"task not complete"}\' && exit 2',
-          },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              type: "command",
+              command: 'echo \'{"decision":"block","reason":"task not complete"}\' && exit 2',
+            },
+          ],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
@@ -349,16 +369,19 @@ describe("Stop hook", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-stop-allow-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        Stop: [
-          {
-            type: "command",
-            command: 'echo \'{"decision":"allow"}\'',
-          },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          Stop: [
+            {
+              type: "command",
+              command: 'echo \'{"decision":"allow"}\'',
+            },
+          ],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
@@ -376,9 +399,7 @@ describe("Agent hook entries", () => {
     // This is the shape used in CustomAgentDef.hooks
     const hook = {
       event: "SubagentStart",
-      actions: [
-        { type: "command" as const, command: "echo agent started" },
-      ],
+      actions: [{ type: "command" as const, command: "echo agent started" }],
     };
     expect(hook.event).toBe("SubagentStart");
     expect(hook.actions).toHaveLength(1);
@@ -399,9 +420,7 @@ describe("Agent hook entries", () => {
     const hook = {
       event: "PreToolUse",
       matcher: "Bash",
-      actions: [
-        { type: "command" as const, command: "echo checking bash" },
-      ],
+      actions: [{ type: "command" as const, command: "echo checking bash" }],
     };
     expect(hook.matcher).toBe("Bash");
   });
@@ -415,13 +434,14 @@ describe("Hook execution with real commands", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        PreToolUse: [
-          { type: "command", command: "echo ok" },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [{ type: "command", command: "echo ok" }],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
@@ -443,16 +463,19 @@ describe("Hook execution with real commands", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-block-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        PreToolUse: [
-          {
-            type: "command",
-            command: 'echo \'{"decision":"deny","reason":"blocked by test"}\' && exit 2',
-          },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              type: "command",
+              command: 'echo \'{"decision":"deny","reason":"blocked by test"}\' && exit 2',
+            },
+          ],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
@@ -472,13 +495,14 @@ describe("Hook execution with real commands", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-post-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        PostToolUse: [
-          { type: "command", command: "echo post-hook-ran" },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          PostToolUse: [{ type: "command", command: "echo post-hook-ran" }],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
@@ -495,30 +519,39 @@ describe("Hook execution with real commands", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-matcher-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        PreToolUse: [
-          {
-            type: "command",
-            command: "echo matched",
-            matcher: { toolName: "Bash" },
-          },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              type: "command",
+              command: "echo matched",
+              matcher: { toolName: "Bash" },
+            },
+          ],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
     // Should match — tool is Bash
     const result1 = await manager.runPreToolUse({
-      type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" },
+      type: "tool_use",
+      id: "t1",
+      name: "Bash",
+      input: { command: "ls" },
     });
     expect(result1.allowed).toBe(true);
     expect(result1.contextOutput).toBeDefined(); // "matched" should be in context
 
     // Should NOT match — tool is Read
     const result2 = await manager.runPreToolUse({
-      type: "tool_use", id: "t2", name: "Read", input: { file_path: "/tmp/x" },
+      type: "tool_use",
+      id: "t2",
+      name: "Read",
+      input: { file_path: "/tmp/x" },
     });
     expect(result2.allowed).toBe(true);
     expect(result2.contextOutput).toBeUndefined(); // No hooks matched
@@ -530,21 +563,27 @@ describe("Hook execution with real commands", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-prompt-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        PreToolUse: [
-          {
-            type: "prompt",
-            prompt: "Remember: always use safe patterns",
-          },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              type: "prompt",
+              prompt: "Remember: always use safe patterns",
+            },
+          ],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
     const result = await manager.runPreToolUse({
-      type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" },
+      type: "tool_use",
+      id: "t1",
+      name: "Bash",
+      input: { command: "ls" },
     });
     expect(result.allowed).toBe(true);
     expect(result.contextOutput).toBeDefined();
@@ -557,23 +596,27 @@ describe("Hook execution with real commands", () => {
     const { mkdirSync, writeFileSync, rmSync } = await import("node:fs");
     const testDir = "/tmp/kcode-hooks-legacy-test-" + Date.now();
     mkdirSync(testDir + "/.kcode", { recursive: true });
-    writeFileSync(testDir + "/.kcode/settings.json", JSON.stringify({
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: "Bash|Edit",
-            hooks: [
-              { type: "command", command: "echo legacy-matched" },
-            ],
-          },
-        ],
-      },
-    }));
+    writeFileSync(
+      testDir + "/.kcode/settings.json",
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: "Bash|Edit",
+              hooks: [{ type: "command", command: "echo legacy-matched" }],
+            },
+          ],
+        },
+      }),
+    );
     trustWorkspace(testDir);
 
     const manager = new HookManager(testDir);
     const result = await manager.runPreToolUse({
-      type: "tool_use", id: "t1", name: "Bash", input: { command: "ls" },
+      type: "tool_use",
+      id: "t1",
+      name: "Bash",
+      input: { command: "ls" },
     });
     expect(result.allowed).toBe(true);
 

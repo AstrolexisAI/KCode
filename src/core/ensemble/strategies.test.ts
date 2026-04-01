@@ -1,13 +1,13 @@
 // KCode - Ensemble Strategies Tests
 
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   bestOfN,
+  executeStrategy,
   majorityVoteStrategy,
   mergeStrategy,
-  verifyStrategy,
   specializeStrategy,
-  executeStrategy,
+  verifyStrategy,
 } from "./strategies";
 import type { EnsembleConfig, ModelExecutor, SpecializeConfig } from "./types";
 
@@ -28,7 +28,8 @@ function makeConfig(overrides: Partial<EnsembleConfig> = {}): EnsembleConfig {
 function makeMockExecutor(responses: Record<string, string> = {}): ModelExecutor {
   const defaults: Record<string, string> = {
     "model-a": "Response from model A with some details.",
-    "model-b": "Response from model B is longer and has more comprehensive information and examples.",
+    "model-b":
+      "Response from model B is longer and has more comprehensive information and examples.",
     "model-c": "Response from model C.",
     "judge-model": "2", // Selects response 2
     "verifier-model": "APPROVED The response is correct.",
@@ -51,7 +52,7 @@ function makeSlowExecutor(slowModel: string, delayMs: number): ModelExecutor {
   return {
     execute: async (model) => {
       if (model === slowModel) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
       return {
         content: `Response from ${model}`,
@@ -213,9 +214,7 @@ describe("verifyStrategy", () => {
     const config = makeConfig({ models: ["only-one"] });
     const executor = makeMockExecutor();
 
-    await expect(verifyStrategy(testQuery, config, executor)).rejects.toThrow(
-      /at least 2 models/,
-    );
+    await expect(verifyStrategy(testQuery, config, executor)).rejects.toThrow(/at least 2 models/);
   });
 
   test("includes both candidates in result", async () => {
@@ -325,7 +324,9 @@ describe("executeStrategy", () => {
   test("throws for unknown strategy", async () => {
     const config = makeConfig({ strategy: "unknown" as any });
     const executor = makeMockExecutor();
-    await expect(executeStrategy(testQuery, config, executor)).rejects.toThrow(/Unknown ensemble strategy/);
+    await expect(executeStrategy(testQuery, config, executor)).rejects.toThrow(
+      /Unknown ensemble strategy/,
+    );
   });
 });
 
@@ -342,7 +343,7 @@ describe("timeout handling", () => {
     const executor: ModelExecutor = {
       execute: async (model) => {
         if (model === "slow-c") {
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          await new Promise((resolve) => setTimeout(resolve, 5000));
         }
         return {
           content: `Response from ${model}`,
@@ -355,6 +356,6 @@ describe("timeout handling", () => {
     const result = await bestOfN(testQuery, config, executor);
     // Should succeed with 2 fast models, slow one times out
     expect(result.candidates.length).toBeGreaterThanOrEqual(2);
-    expect(result.candidates.every(c => c.model !== "slow-c")).toBe(true);
+    expect(result.candidates.every((c) => c.model !== "slow-c")).toBe(true);
   }, 10_000);
 });

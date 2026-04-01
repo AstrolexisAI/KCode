@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { DebugTracer, getDebugTracer, resetDebugTracer } from "./debug-tracer.ts";
 
 describe("debug-tracer", () => {
@@ -56,7 +56,7 @@ describe("debug-tracer", () => {
 
     const decisions = tracer.getEvents({ category: "decision" });
     expect(decisions.length).toBe(2);
-    expect(decisions.every(e => e.category === "decision")).toBe(true);
+    expect(decisions.every((e) => e.category === "decision")).toBe(true);
   });
 
   test("getEvents filters by limit", () => {

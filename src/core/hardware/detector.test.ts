@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, mock } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { HardwareDetector } from "./detector";
 
 describe("HardwareDetector", () => {

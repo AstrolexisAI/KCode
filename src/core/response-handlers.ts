@@ -3,14 +3,24 @@
 // These handlers deal with response continuation, empty responses, truncation detection,
 // and post-turn processing.
 
-import type { ContentBlock, StreamEvent } from "./types";
-import { looksIncomplete } from "./prompt-analysis";
-import { evaluateIntentionSuggestions, sendDesktopNotification, cacheResponseIfEligible, processKnowledgeAndBenchmark } from "./post-turn";
 import { log } from "./logger";
+import {
+  cacheResponseIfEligible,
+  evaluateIntentionSuggestions,
+  processKnowledgeAndBenchmark,
+  sendDesktopNotification,
+} from "./post-turn";
+import { looksIncomplete } from "./prompt-analysis";
+import type { ContentBlock, StreamEvent } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type EmptyType = "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" | undefined;
+export type EmptyType =
+  | "thinking_only"
+  | "tools_only"
+  | "thinking_and_tools"
+  | "no_output"
+  | undefined;
 
 export interface ResponseAction {
   action: "break" | "continue";
@@ -31,24 +41,29 @@ export function handleMaxTokensContinue(
 ): ResponseAction | null {
   if (stopReason !== "max_tokens" || continuationCount >= 3) return null;
 
-  log.info("session", `Model hit output token limit (continuation ${continuationCount + 1}/3) — injecting continue prompt`);
+  log.info(
+    "session",
+    `Model hit output token limit (continuation ${continuationCount + 1}/3) — injecting continue prompt`,
+  );
   return {
     action: "continue",
     stopReason: "max_tokens_continue",
-    injectMessage: "[SYSTEM] Your previous response was cut off because you hit the output token limit. Continue EXACTLY where you left off. Do not repeat what you already said — pick up mid-sentence if needed.",
+    injectMessage:
+      "[SYSTEM] Your previous response was cut off because you hit the output token limit. Continue EXACTLY where you left off. Do not repeat what you already said — pick up mid-sentence if needed.",
   };
 }
 
 // ─── Intention Suggestions & Auto-Continue ──────────────────────
 
-export function handleIntentionSuggestions(
-  turnCount: number,
-): { suggestions: StreamEvent | null; shouldAutoContinue: boolean; continueMessage?: string } {
+export function handleIntentionSuggestions(turnCount: number): {
+  suggestions: StreamEvent | null;
+  shouldAutoContinue: boolean;
+  continueMessage?: string;
+} {
   const { suggestions, hasHighPrioritySuggestion } = evaluateIntentionSuggestions();
 
-  const suggestionEvent = suggestions.length > 0
-    ? { type: "suggestion" as const, suggestions } as StreamEvent
-    : null;
+  const suggestionEvent =
+    suggestions.length > 0 ? ({ type: "suggestion" as const, suggestions } as StreamEvent) : null;
 
   const shouldAutoContinue = hasHighPrioritySuggestion && turnCount <= 3;
 
@@ -85,15 +100,19 @@ export function handleEmptyResponseRetry(
 ): ResponseAction | null {
   if (!emptyType || emptyCount >= 2) return null;
 
-  log.info("session", `Empty response (${emptyType}) on turn ${turnCount} — retry ${emptyCount + 1}/2`);
+  log.info(
+    "session",
+    `Empty response (${emptyType}) on turn ${turnCount} — retry ${emptyCount + 1}/2`,
+  );
 
-  const retryPrompt = emptyType === "thinking_only"
-    ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
-    : emptyType === "tools_only" || toolUseCount > 0
-    ? `[SYSTEM] You executed ${toolUseCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
-    : emptyType === "thinking_and_tools"
-    ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
-    : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
+  const retryPrompt =
+    emptyType === "thinking_only"
+      ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
+      : emptyType === "tools_only" || toolUseCount > 0
+        ? `[SYSTEM] You executed ${toolUseCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
+        : emptyType === "thinking_and_tools"
+          ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
+          : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
 
   return {
     action: "continue",
@@ -111,7 +130,10 @@ export function handleTruncationRetry(
 ): { action: "continue"; injectMessage: string; previousTurnTail: string } | null {
   if (truncationRetries >= 2 || !looksIncomplete(fullText)) return null;
 
-  log.info("session", `Response looks truncated (attempt ${truncationRetries + 1}) — pushing for continuation`);
+  log.info(
+    "session",
+    `Response looks truncated (attempt ${truncationRetries + 1}) — pushing for continuation`,
+  );
   const tail = fullText.slice(-200);
 
   return {
@@ -123,11 +145,11 @@ export function handleTruncationRetry(
 
 // ─── Post-Turn Notifications ────────────────────────────────────
 
-export function handlePostTurnNotifications(
-  elapsedMs: number,
-  turnCount: number,
-): void {
+export function handlePostTurnNotifications(elapsedMs: number, turnCount: number): void {
   if (elapsedMs > 30_000 || turnCount >= 3) {
-    sendDesktopNotification("KCode", `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`);
+    sendDesktopNotification(
+      "KCode",
+      `Task completed (${turnCount} turns, ${Math.round(elapsedMs / 1000)}s)`,
+    );
   }
 }

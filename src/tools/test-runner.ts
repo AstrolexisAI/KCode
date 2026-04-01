@@ -78,7 +78,9 @@ function detectFramework(cwd: string): DetectedFramework | null {
           try {
             const content = readFileSync(join(cwd, file), "utf-8");
             if (!content.includes("pytest") && !content.includes("[tool.pytest")) continue;
-          } catch { continue; }
+          } catch {
+            continue;
+          }
         }
         return check.framework;
       }
@@ -105,12 +107,17 @@ function detectFramework(cwd: string): DetectedFramework | null {
         return { name: "npm", command: "npm test --", fileArg: "append" };
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   return null;
 }
 
-function parseTestOutput(output: string, framework: string): { passed: number; failed: number; skipped: number; errors: string[] } {
+function parseTestOutput(
+  output: string,
+  framework: string,
+): { passed: number; failed: number; skipped: number; errors: string[] } {
   let passed = 0;
   let failed = 0;
   let skipped = 0;
@@ -242,7 +249,8 @@ export async function executeTestRunner(input: Record<string, unknown>): Promise
     if (!detected) {
       return {
         tool_use_id: "",
-        content: "Error: Could not auto-detect test framework. No bunfig.toml, jest.config.*, vitest.config.*, pytest.ini, go.mod, Cargo.toml, or package.json test script found. Use framework= to specify.",
+        content:
+          "Error: Could not auto-detect test framework. No bunfig.toml, jest.config.*, vitest.config.*, pytest.ini, go.mod, Cargo.toml, or package.json test script found. Use framework= to specify.",
         is_error: true,
       };
     }
@@ -254,7 +262,11 @@ export async function executeTestRunner(input: Record<string, unknown>): Promise
   if (file && framework.fileArg === "append") {
     // Reject shell metacharacters in file argument
     if (/[;|&`$(){}[\]<>!#"'\n\r]/.test(file)) {
-      return { tool_use_id: "", content: "Error: file argument contains invalid characters.", is_error: true };
+      return {
+        tool_use_id: "",
+        content: "Error: file argument contains invalid characters.",
+        is_error: true,
+      };
     }
     // Quote the file argument to handle spaces safely
     cmd += ` "${file}"`;

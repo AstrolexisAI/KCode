@@ -1,8 +1,8 @@
 // KCode - Image Generation Tool
 // Generates images via cloud APIs: Together AI (Flux) and OpenAI (DALL-E 3/2).
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { log } from "../core/logger";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Constants ───────────────────────────────────────────────────
 

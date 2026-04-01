@@ -19,7 +19,9 @@ export function registerCompletionsCommand(program: Command): void {
   // `kcode completions install` — auto-install completions into shell config
   cmd
     .command("install")
-    .description("Auto-install shell completions into your shell config (.bashrc, .zshrc, or config.fish)")
+    .description(
+      "Auto-install shell completions into your shell config (.bashrc, .zshrc, or config.fish)",
+    )
     .option("-s, --shell <shell>", "Force a specific shell (bash, zsh, fish)")
     .action(async (opts: { shell?: string }) => {
       await installCompletions(opts.shell as Shell | undefined);
@@ -29,7 +31,9 @@ export function registerCompletionsCommand(program: Command): void {
 // ─── Auto-installer ────────────────────────────────────────────
 
 async function installCompletions(forceShell?: Shell): Promise<void> {
-  const { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync } = await import("node:fs");
+  const { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync } = await import(
+    "node:fs"
+  );
   const { join } = await import("node:path");
   const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
 
@@ -58,7 +62,9 @@ async function installCompletions(forceShell?: Shell): Promise<void> {
           console.log(`\x1b[32m✓\x1b[0m Source line added to ${bashrc}`);
         } else {
           writeFileSync(completionFile, script);
-          console.log(`\x1b[32m✓\x1b[0m Completions updated at ${completionFile} (already sourced in .bashrc)`);
+          console.log(
+            `\x1b[32m✓\x1b[0m Completions updated at ${completionFile} (already sourced in .bashrc)`,
+          );
         }
       } else {
         writeFileSync(bashrc, sourceLine);
@@ -86,7 +92,9 @@ async function installCompletions(forceShell?: Shell): Promise<void> {
           console.log(`\x1b[32m✓\x1b[0m fpath added to ${zshrc}`);
         } else {
           writeFileSync(completionFile, script);
-          console.log(`\x1b[32m✓\x1b[0m Completions updated at ${completionFile} (already in fpath)`);
+          console.log(
+            `\x1b[32m✓\x1b[0m Completions updated at ${completionFile} (already in fpath)`,
+          );
         }
       } else {
         writeFileSync(zshrc, fpathLine);
@@ -106,7 +114,9 @@ async function installCompletions(forceShell?: Shell): Promise<void> {
     }
   }
 
-  console.log(`\n  Restart your shell or run \`source ~/.${shell === "fish" ? "config/fish/config.fish" : shell === "zsh" ? "zshrc" : "bashrc"}\` to activate.`);
+  console.log(
+    `\n  Restart your shell or run \`source ~/.${shell === "fish" ? "config/fish/config.fish" : shell === "zsh" ? "zshrc" : "bashrc"}\` to activate.`,
+  );
 }
 
 function detectShell(): Shell {

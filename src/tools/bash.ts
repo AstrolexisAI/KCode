@@ -2,25 +2,38 @@
 // Executes shell commands with timeout and sandboxing
 
 import { spawn } from "node:child_process";
-import { writeFileSync, unlinkSync, readdirSync } from "node:fs";
-import type { ToolDefinition, ToolResult, BashInput } from "../core/types";
+import { readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { log } from "../core/logger";
-import { wrapWithSandbox, getDefaultSandboxConfig, isSandboxAvailable, type SandboxMode } from "../core/sandbox";
+import {
+  getDefaultSandboxConfig,
+  isSandboxAvailable,
+  type SandboxMode,
+  wrapWithSandbox,
+} from "../core/sandbox";
+import type { BashInput, ToolDefinition, ToolResult } from "../core/types";
 
 const MAX_TIMEOUT = 600_000; // 10 minutes
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
 
 export const bashDefinition: ToolDefinition = {
   name: "Bash",
-  description: "Execute a shell command and return its output. IMPORTANT: This is a non-interactive shell — there is no TTY. Always use non-interactive flags (--yes, -y, --no-input, --default, etc.) for commands that prompt for input (e.g. npx create-next-app --yes, npm init -y). If a command has no non-interactive flag, pipe defaults via echo or use heredocs. SUDO: For commands requiring elevated privileges, use 'sudo <command>' normally WITHOUT the -S flag — the system will automatically prompt the user for their password via a secure masked dialog. NEVER pipe passwords, use here-strings, or pass passwords via variables to sudo. SECURITY TOOLS: msfconsole must use -r (resource script) or -x (inline commands) for non-interactive execution.",
+  description:
+    "Execute a shell command and return its output. IMPORTANT: This is a non-interactive shell — there is no TTY. Always use non-interactive flags (--yes, -y, --no-input, --default, etc.) for commands that prompt for input (e.g. npx create-next-app --yes, npm init -y). If a command has no non-interactive flag, pipe defaults via echo or use heredocs. SUDO: For commands requiring elevated privileges, use 'sudo <command>' normally WITHOUT the -S flag — the system will automatically prompt the user for their password via a secure masked dialog. NEVER pipe passwords, use here-strings, or pass passwords via variables to sudo. SECURITY TOOLS: msfconsole must use -r (resource script) or -x (inline commands) for non-interactive execution.",
   input_schema: {
     type: "object",
     properties: {
       command: { type: "string", description: "The command to execute" },
       description: { type: "string", description: "Description of what the command does" },
       timeout: { type: "number", description: "Timeout in milliseconds (max 600000)" },
-      run_in_background: { type: "boolean", description: "Run in background, return after initial output" },
-      sandbox: { type: "boolean", description: "Enable OS-level sandbox isolation via bwrap (defaults to true when bwrap is available and permission mode is not 'auto')" },
+      run_in_background: {
+        type: "boolean",
+        description: "Run in background, return after initial output",
+      },
+      sandbox: {
+        type: "boolean",
+        description:
+          "Enable OS-level sandbox isolation via bwrap (defaults to true when bwrap is available and permission mode is not 'auto')",
+      },
     },
     required: ["command"],
   },
@@ -79,48 +92,66 @@ export function clearSudoPasswordCache(): void {
   try {
     for (const f of readdirSync("/tmp")) {
       if (f.startsWith(".kcode-askpass-")) {
-        try { unlinkSync(`/tmp/${f}`); } catch (err) { log.debug("bash", `Failed to clean up askpass script /tmp/${f}: ${err}`); }
+        try {
+          unlinkSync(`/tmp/${f}`);
+        } catch (err) {
+          log.debug("bash", `Failed to clean up askpass script /tmp/${f}: ${err}`);
+        }
       }
     }
-  } catch (err) { log.debug("bash", `Failed to list /tmp for askpass cleanup: ${err}`); }
+  } catch (err) {
+    log.debug("bash", `Failed to list /tmp for askpass cleanup: ${err}`);
+  }
 }
 
 // ─── Security Tool Registry ───────────────────────────────────
 const SECURITY_TOOLS: Record<string, { category: string; timeout: number; notes: string }> = {
-  msfconsole:      { category: "exploit",     timeout: 300_000, notes: "Use -r script.rc for resource scripts" },
-  nmap:            { category: "scanner",     timeout: 300_000, notes: "Use --max-retries and --host-timeout for large scans" },
-  nikto:           { category: "scanner",     timeout: 300_000, notes: "Web vulnerability scanner" },
-  sqlmap:          { category: "exploit",     timeout: 300_000, notes: "SQL injection tool" },
-  hydra:           { category: "bruteforce",  timeout: 300_000, notes: "Brute force tool" },
-  john:            { category: "bruteforce",  timeout: 300_000, notes: "Password cracker" },
-  hashcat:         { category: "bruteforce",  timeout: 300_000, notes: "GPU password cracker" },
-  aircrack:        { category: "wireless",    timeout: 300_000, notes: "Wireless security" },
-  "aircrack-ng":   { category: "wireless",    timeout: 300_000, notes: "Wireless security" },
-  gobuster:        { category: "scanner",     timeout: 300_000, notes: "Directory/DNS brute forcer" },
-  dirb:            { category: "scanner",     timeout: 300_000, notes: "Web content scanner" },
-  wfuzz:           { category: "scanner",     timeout: 300_000, notes: "Web fuzzer" },
-  masscan:         { category: "scanner",     timeout: 300_000, notes: "Fast port scanner" },
-  responder:       { category: "mitm",        timeout: 300_000, notes: "LLMNR/NBT-NS poisoner" },
-  crackmapexec:    { category: "exploit",     timeout: 300_000, notes: "SMB/AD exploitation" },
-  enum4linux:      { category: "scanner",     timeout: 300_000, notes: "SMB enumeration" },
-  metasploit:      { category: "exploit",     timeout: 300_000, notes: "Use msfconsole -r script.rc" },
-  searchsploit:    { category: "scanner",     timeout: 120_000, notes: "Exploit database search" },
-  setoolkit:       { category: "exploit",     timeout: 300_000, notes: "Social engineering toolkit" },
-  beef:            { category: "exploit",     timeout: 300_000, notes: "Browser exploitation framework" },
-  wireshark:       { category: "sniffer",     timeout: 300_000, notes: "Network protocol analyzer" },
-  tshark:          { category: "sniffer",     timeout: 300_000, notes: "Terminal network analyzer" },
-  tcpdump:         { category: "sniffer",     timeout: 300_000, notes: "Packet capture" },
+  msfconsole: {
+    category: "exploit",
+    timeout: 300_000,
+    notes: "Use -r script.rc for resource scripts",
+  },
+  nmap: {
+    category: "scanner",
+    timeout: 300_000,
+    notes: "Use --max-retries and --host-timeout for large scans",
+  },
+  nikto: { category: "scanner", timeout: 300_000, notes: "Web vulnerability scanner" },
+  sqlmap: { category: "exploit", timeout: 300_000, notes: "SQL injection tool" },
+  hydra: { category: "bruteforce", timeout: 300_000, notes: "Brute force tool" },
+  john: { category: "bruteforce", timeout: 300_000, notes: "Password cracker" },
+  hashcat: { category: "bruteforce", timeout: 300_000, notes: "GPU password cracker" },
+  aircrack: { category: "wireless", timeout: 300_000, notes: "Wireless security" },
+  "aircrack-ng": { category: "wireless", timeout: 300_000, notes: "Wireless security" },
+  gobuster: { category: "scanner", timeout: 300_000, notes: "Directory/DNS brute forcer" },
+  dirb: { category: "scanner", timeout: 300_000, notes: "Web content scanner" },
+  wfuzz: { category: "scanner", timeout: 300_000, notes: "Web fuzzer" },
+  masscan: { category: "scanner", timeout: 300_000, notes: "Fast port scanner" },
+  responder: { category: "mitm", timeout: 300_000, notes: "LLMNR/NBT-NS poisoner" },
+  crackmapexec: { category: "exploit", timeout: 300_000, notes: "SMB/AD exploitation" },
+  enum4linux: { category: "scanner", timeout: 300_000, notes: "SMB enumeration" },
+  metasploit: { category: "exploit", timeout: 300_000, notes: "Use msfconsole -r script.rc" },
+  searchsploit: { category: "scanner", timeout: 120_000, notes: "Exploit database search" },
+  setoolkit: { category: "exploit", timeout: 300_000, notes: "Social engineering toolkit" },
+  beef: { category: "exploit", timeout: 300_000, notes: "Browser exploitation framework" },
+  wireshark: { category: "sniffer", timeout: 300_000, notes: "Network protocol analyzer" },
+  tshark: { category: "sniffer", timeout: 300_000, notes: "Terminal network analyzer" },
+  tcpdump: { category: "sniffer", timeout: 300_000, notes: "Packet capture" },
 };
 
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
-  const { command, timeout, run_in_background, sandbox } = input as unknown as BashInput & { sandbox?: boolean };
+  const { command, timeout, run_in_background, sandbox } = input as unknown as BashInput & {
+    sandbox?: boolean;
+  };
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
 
   // Guard: block dangerous pkill/killall with broad patterns that could kill system services
   // Matches: pkill -f "serve", pkill serve, killall node, etc. anywhere in the command
-  const dangerousKillMatch = command.match(/\b(pkill|killall)\s+(?:-\w+\s+)*["']?(serve|server|node|npx|npm|python|bun|java|ruby|llama)["']?/i);
+  const dangerousKillMatch = command.match(
+    /\b(pkill|killall)\s+(?:-\w+\s+)*["']?(serve|server|node|npx|npm|python|bun|java|ruby|llama)["']?/i,
+  );
   if (dangerousKillMatch) {
     const pattern = dangerousKillMatch[2];
     log.warn("tool", `Blocked dangerous kill pattern "${pattern}": ${cmdPrefix}`);
@@ -160,8 +191,14 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   let cmdIdx = 0;
   while (cmdIdx < cmdWords.length) {
     const w = cmdWords[cmdIdx];
-    if (w === "sudo" || w === "env" || w === "nice") { cmdIdx++; continue; }
-    if (w === "timeout" && cmdIdx + 1 < cmdWords.length && /^\d/.test(cmdWords[cmdIdx + 1]!)) { cmdIdx += 2; continue; }
+    if (w === "sudo" || w === "env" || w === "nice") {
+      cmdIdx++;
+      continue;
+    }
+    if (w === "timeout" && cmdIdx + 1 < cmdWords.length && /^\d/.test(cmdWords[cmdIdx + 1]!)) {
+      cmdIdx += 2;
+      continue;
+    }
     break;
   }
   const baseSecCmd = cmdWords[cmdIdx] ?? "";
@@ -190,7 +227,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
   if (containsSudo) {
     // Check cached password first
-    if (_cachedSudoPassword && (Date.now() - _sudoPasswordCacheTime) < SUDO_PASSWORD_CACHE_TTL) {
+    if (_cachedSudoPassword && Date.now() - _sudoPasswordCacheTime < SUDO_PASSWORD_CACHE_TTL) {
       sudoPassword = _getSudoPasswordString();
     } else {
       // Clear expired cache with secure zeroing
@@ -227,8 +264,10 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
   // Detect background commands (ending with & OR run_in_background flag)
   // Auto-detect server/daemon commands that would block forever
-  const isServerCommand = /\b(http\.server|SimpleHTTPServer|serve|live-server|nodemon|uvicorn|gunicorn|flask\s+run|php\s+-S|ruby\s+-run|caddy\s+run|nginx|apache)\b/.test(command)
-    && !/&\s*$/.test(command.trim()); // only if not already backgrounded
+  const isServerCommand =
+    /\b(http\.server|SimpleHTTPServer|serve|live-server|nodemon|uvicorn|gunicorn|flask\s+run|php\s+-S|ruby\s+-run|caddy\s+run|nginx|apache)\b/.test(
+      command,
+    ) && !/&\s*$/.test(command.trim()); // only if not already backgrounded
   if (isServerCommand) {
     log.info("tool", `Auto-backgrounding server command: ${cmdPrefix}`);
   }
@@ -239,11 +278,10 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   // socket constants, etc.), so we restrict this check to identified server commands only.
   if (isServerCommand) {
     const CHROME_BLOCKED_PORTS = new Set([
-      1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 77, 79,
-      87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135,
-      139, 143, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540,
-      548, 554, 556, 563, 587, 601, 636, 993, 995, 1719, 1720, 1723, 2049, 3659,
-      4045, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080,
+      1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 77, 79, 87, 95, 101, 102,
+      103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 139, 143, 179, 389, 427, 465, 512, 513,
+      514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 993, 995, 1719, 1720,
+      1723, 2049, 3659, 4045, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080,
     ]);
     const portMatch = command.match(/(?:-[plP]\s*|--port[= ]\s*|-l\s+|:)(\d{2,5})\b/);
     if (portMatch) {
@@ -269,7 +307,7 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   // but first capture initial output for ~3 seconds via a temp file.
   if (isBackground) {
     return new Promise((resolve) => {
-      const tmpDir = '/tmp/kcode-bg';
+      const tmpDir = "/tmp/kcode-bg";
       const tmpLog = `${tmpDir}/bg-${Date.now()}-${require("node:crypto").randomBytes(4).toString("hex")}.log`;
 
       // For background sudo commands, inject password via stdin pipe or SUDO_ASKPASS
@@ -280,14 +318,22 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
           // Heredoc consumes stdin — use SUDO_ASKPASS instead
           const bgAskpass = `/tmp/.kcode-askpass-bg-${require("node:crypto").randomBytes(8).toString("hex")}`;
           const b64Pw = Buffer.from(sudoPassword).toString("base64");
-          writeFileSync(bgAskpass, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
+          writeFileSync(
+            bgAskpass,
+            `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`,
+            { mode: 0o700 },
+          );
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
           bgCommand = `SUDO_ASKPASS=${bgAskpass} ${bgCommand} ; rm -f ${bgAskpass}`;
         } else {
           // Use SUDO_ASKPASS for all background sudo — avoids password in process list
           const bgAskpassStdin = `/tmp/.kcode-askpass-bg2-${require("node:crypto").randomBytes(8).toString("hex")}`;
           const b64Pw = Buffer.from(sudoPassword).toString("base64");
-          writeFileSync(bgAskpassStdin, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
+          writeFileSync(
+            bgAskpassStdin,
+            `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`,
+            { mode: 0o700 },
+          );
           bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
           bgCommand = `SUDO_ASKPASS=${bgAskpassStdin} ${bgCommand} ; rm -f ${bgAskpassStdin}`;
         }
@@ -380,7 +426,11 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       useAskpass = true;
       askpassPath = `/tmp/.kcode-askpass-${require("node:crypto").randomBytes(8).toString("hex")}`;
       const b64Pw = Buffer.from(sudoPassword).toString("base64");
-      writeFileSync(askpassPath, `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`, { mode: 0o700 });
+      writeFileSync(
+        askpassPath,
+        `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`,
+        { mode: 0o700 },
+      );
       const rewrittenCmd = finalCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
       finalCommand = `SUDO_ASKPASS=${askpassPath} ${rewrittenCmd} ; _krc=$?; rm -f ${askpassPath}; exit $_krc`;
     } else {
@@ -423,14 +473,29 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         // Kill entire process group with SIGKILL (negative PID = process group)
         if (proc.pid) {
           if (process.platform === "win32") {
-            try { Bun.spawnSync(["taskkill", "/PID", proc.pid.toString(), "/T", "/F"], { stdout: "pipe", stderr: "pipe" }); } catch (err) { log.debug("bash", `Failed to taskkill PID ${proc.pid}: ${err}`); }
+            try {
+              Bun.spawnSync(["taskkill", "/PID", proc.pid.toString(), "/T", "/F"], {
+                stdout: "pipe",
+                stderr: "pipe",
+              });
+            } catch (err) {
+              log.debug("bash", `Failed to taskkill PID ${proc.pid}: ${err}`);
+            }
           } else {
             process.kill(-proc.pid, "SIGKILL");
           }
         }
-      } catch (err) { log.debug("bash", `Failed to kill process group on timeout: ${err}`); }
+      } catch (err) {
+        log.debug("bash", `Failed to kill process group on timeout: ${err}`);
+      }
       // Clean up askpass script on timeout
-      if (askpassPath) { try { unlinkSync(askpassPath); } catch (err) { log.debug("bash", `Failed to clean up askpass on timeout: ${err}`); } }
+      if (askpassPath) {
+        try {
+          unlinkSync(askpassPath);
+        } catch (err) {
+          log.debug("bash", `Failed to clean up askpass on timeout: ${err}`);
+        }
+      }
       if (!resolved) {
         resolved = true;
         const stdout = Buffer.concat(chunks).toString("utf-8");
@@ -440,22 +505,29 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         log.warn("tool", `Bash timed out after ${duration}s: ${cmdPrefix}`);
         resolve({
           tool_use_id: "",
-          content: (output ? output + "\n\n" : "") + `TIMED OUT after ${duration}s. The command took too long. If running tests, check for infinite loops or hanging processes. Try adding a timeout flag or running fewer tests.`,
+          content:
+            (output ? output + "\n\n" : "") +
+            `TIMED OUT after ${duration}s. The command took too long. If running tests, check for infinite loops or hanging processes. Try adding a timeout flag or running fewer tests.`,
           is_error: true,
         });
       }
     }, effectiveTimeoutMs);
 
     // Noise filter for streaming — applied in real-time to stderr for security/sudo commands
-    const streamNoiseFilter = (secToolInfo || containsSudo)
-      ? /^stty:.*(?:Función ioctl|Inappropriate ioctl).*$|^\[sudo\] (?:password for|contraseña para) .*:.*$/gm
-      : null;
+    const streamNoiseFilter =
+      secToolInfo || containsSudo
+        ? /^stty:.*(?:Función ioctl|Inappropriate ioctl).*$|^\[sudo\] (?:password for|contraseña para) .*:.*$/gm
+        : null;
 
     const streamCb = _streamCallback;
     proc.stdout.on("data", (data: Buffer) => {
       chunks.push(data);
       if (streamCb) {
-        try { streamCb(data.toString("utf-8")); } catch (err) { log.debug("bash", `Stream callback error (stdout): ${err}`); }
+        try {
+          streamCb(data.toString("utf-8"));
+        } catch (err) {
+          log.debug("bash", `Stream callback error (stdout): ${err}`);
+        }
       }
     });
     proc.stderr.on("data", (data: Buffer) => {
@@ -464,29 +536,44 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
         try {
           let text = data.toString("utf-8");
           if (streamNoiseFilter) {
-            text = text.replace(streamNoiseFilter, "").replace(/\n{3,}/g, "\n").trim();
+            text = text
+              .replace(streamNoiseFilter, "")
+              .replace(/\n{3,}/g, "\n")
+              .trim();
             streamNoiseFilter.lastIndex = 0; // reset regex state for next chunk
           }
           if (text) streamCb(text);
-        } catch (err) { log.debug("bash", `Stream callback error (stderr): ${err}`); }
+        } catch (err) {
+          log.debug("bash", `Stream callback error (stderr): ${err}`);
+        }
       }
     });
 
     proc.on("close", (code) => {
       clearTimeout(timer);
       // Always clean up askpass script on process exit (belt-and-suspenders with inline rm -f)
-      if (askpassPath) { try { unlinkSync(askpassPath); } catch (err) { log.debug("bash", `Failed to clean up askpass on close: ${err}`); } }
+      if (askpassPath) {
+        try {
+          unlinkSync(askpassPath);
+        } catch (err) {
+          log.debug("bash", `Failed to clean up askpass on close: ${err}`);
+        }
+      }
       if (resolved) return;
       resolved = true;
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
       log.debug("tool", `Bash executed in ${duration}s (exit ${code}): ${cmdPrefix}`);
-      let stdout = Buffer.concat(chunks).toString("utf-8");
+      const stdout = Buffer.concat(chunks).toString("utf-8");
       let stderr = Buffer.concat(errChunks).toString("utf-8");
 
       // Filter noise from security tools running without a TTY
       if (secToolInfo || containsSudo) {
-        const noisePatterns = /^stty:.*Función ioctl.*$|^stty:.*Inappropriate ioctl.*$|^\[sudo\] (?:password for|contraseña para) .*:.*$/gm;
-        stderr = stderr.replace(noisePatterns, "").replace(/\n{3,}/g, "\n\n").trim();
+        const noisePatterns =
+          /^stty:.*Función ioctl.*$|^stty:.*Inappropriate ioctl.*$|^\[sudo\] (?:password for|contraseña para) .*:.*$/gm;
+        stderr = stderr
+          .replace(noisePatterns, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
       }
 
       const output = stdout + (stderr ? `\n${stderr}` : "");
@@ -502,7 +589,9 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
           const workspace = getToolWorkspace();
           if (home && resolvePath(workspace) === resolvePath(home)) {
             // Check if the command created a project directory
-            const scaffoldMatch = command.match(/\b(?:bun\s+create|npx\s+create-[\w-]+|npm\s+init)\s+\S+\s+(\S+)/);
+            const scaffoldMatch = command.match(
+              /\b(?:bun\s+create|npx\s+create-[\w-]+|npm\s+init)\s+\S+\s+(\S+)/,
+            );
             const mkdirMatch = command.match(/\bmkdir\s+(?:-p\s+)?(\S+)/);
             const targetDir = scaffoldMatch?.[1] ?? mkdirMatch?.[1];
             if (targetDir) {
@@ -514,7 +603,9 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
               }
             }
           }
-        } catch (err) { log.debug("tool", `Workspace auto-detect failed: ${err}`); }
+        } catch (err) {
+          log.debug("tool", `Workspace auto-detect failed: ${err}`);
+        }
       }
 
       resolve({
@@ -526,7 +617,13 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
     proc.on("error", (err) => {
       clearTimeout(timer);
-      if (askpassPath) { try { unlinkSync(askpassPath); } catch (err2) { log.debug("bash", `Failed to clean up askpass on error: ${err2}`); } }
+      if (askpassPath) {
+        try {
+          unlinkSync(askpassPath);
+        } catch (err2) {
+          log.debug("bash", `Failed to clean up askpass on error: ${err2}`);
+        }
+      }
       if (resolved) return;
       resolved = true;
       resolve({

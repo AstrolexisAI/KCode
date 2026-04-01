@@ -10,7 +10,7 @@ const CONTEXT_LINES = 3;
 /**
  * Edit operation type in the shortest edit script.
  */
-const enum EditOp {
+enum EditOp {
   Equal,
   Insert,
   Delete,
@@ -247,11 +247,7 @@ export class DiffEngine {
   /**
    * Group edit operations into DiffHunks with context lines.
    */
-  private buildHunks(
-    editScript: EditEntry[],
-    oldLines: string[],
-    newLines: string[],
-  ): DiffHunk[] {
+  private buildHunks(editScript: EditEntry[], oldLines: string[], newLines: string[]): DiffHunk[] {
     // Find runs of changes (non-Equal entries)
     const changeRanges: Array<{ start: number; end: number }> = [];
     let inChange = false;

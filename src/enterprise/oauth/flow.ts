@@ -3,8 +3,8 @@
 // Supports Kulvex Console, GitHub, and custom enterprise IdP.
 
 import { log } from "../../core/logger";
-import type { OAuthTokens, OAuthConfig } from "../types";
-import { saveTokens, loadTokens, clearTokens } from "./token-store";
+import type { OAuthConfig, OAuthTokens } from "../types";
+import { clearTokens, loadTokens, saveTokens } from "./token-store";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -67,13 +67,13 @@ async function findAvailablePort(): Promise<number> {
       const server = Bun.serve({
         port,
         hostname: "127.0.0.1",
-        fetch() { return new Response(""); },
+        fetch() {
+          return new Response("");
+        },
       });
       server.stop(true);
       return port;
-    } catch {
-      continue;
-    }
+    } catch {}
   }
   throw new Error(`No available port found in range ${PORT_RANGE_START}-${PORT_RANGE_END}`);
 }
@@ -112,9 +112,8 @@ export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthTokens |
 
   // Open browser
   try {
-    const openCmd = process.platform === "darwin" ? "open"
-      : process.platform === "win32" ? "start"
-      : "xdg-open";
+    const openCmd =
+      process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
     Bun.spawn([openCmd, authUrl], { stdout: "ignore", stderr: "ignore" });
   } catch (err) {
     log.warn("config", `Failed to open browser for OAuth: ${err}`);
@@ -259,7 +258,7 @@ async function exchangeCodeForTokens(
       return null;
     }
 
-    const tokens = await resp.json() as OAuthTokens;
+    const tokens = (await resp.json()) as OAuthTokens;
     if (!tokens.access_token) {
       log.warn("config", "OAuth token response missing access_token");
       return null;
@@ -323,7 +322,7 @@ export async function refreshToken(config: OAuthConfig): Promise<OAuthTokens | n
         return null;
       }
 
-      const tokens = await resp.json() as OAuthTokens;
+      const tokens = (await resp.json()) as OAuthTokens;
       if (!tokens.access_token) {
         log.warn("config", "Refresh response missing access_token");
         return null;

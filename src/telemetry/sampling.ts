@@ -1,7 +1,7 @@
 // KCode - Telemetry Sampling
 // Decides whether an event should be recorded based on configurable rates.
 
-import type { TelemetryEvent, SamplingConfig } from "./types";
+import type { SamplingConfig, TelemetryEvent } from "./types";
 
 /** Error-category event names that are always sampled at 100%. */
 const ERROR_PATTERNS = [".error", ".crash", ".fatal"];
@@ -25,10 +25,7 @@ export function shouldSample(event: TelemetryEvent, config: SamplingConfig): boo
   if (ERROR_PATTERNS.some((p) => name.includes(p))) return true;
 
   // Long sessions (>20 turns) are always sampled
-  if (
-    typeof event.attributes.turn_count === "number" &&
-    event.attributes.turn_count > 20
-  ) {
+  if (typeof event.attributes.turn_count === "number" && event.attributes.turn_count > 20) {
     return true;
   }
 

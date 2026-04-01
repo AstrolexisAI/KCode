@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   checkConnectivity,
   checkKCodeInstalled,
-  executeRemoteSync,
   DEFAULT_RECONNECT,
+  executeRemoteSync,
 } from "./ssh-transport";
 
 /**
@@ -46,12 +46,7 @@ describe("ssh-transport", () => {
     });
 
     test("handles cwd parameter in command construction", () => {
-      const result = executeRemoteSync(
-        FAST_FAIL_HOST,
-        ["ls", "-la"],
-        "/some/dir",
-        FAST_FAIL_OPTS,
-      );
+      const result = executeRemoteSync(FAST_FAIL_HOST, ["ls", "-la"], "/some/dir", FAST_FAIL_OPTS);
       expect(typeof result.exitCode).toBe("number");
       expect(typeof result.stdout).toBe("string");
       expect(typeof result.stderr).toBe("string");

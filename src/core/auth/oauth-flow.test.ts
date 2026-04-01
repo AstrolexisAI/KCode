@@ -1,9 +1,9 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  generateCodeVerifier,
-  generateCodeChallenge,
-  generateState,
   buildAuthUrl,
+  generateCodeChallenge,
+  generateCodeVerifier,
+  generateState,
   isTokenExpired,
   PROVIDER_CONFIGS,
 } from "./oauth-flow";
@@ -75,9 +75,7 @@ describe("oauth-flow", () => {
     test("includes correct redirect_uri", () => {
       const url = buildAuthUrl(config, "ch", "st");
       const parsed = new URL(url);
-      expect(parsed.searchParams.get("redirect_uri")).toBe(
-        "http://127.0.0.1:19284/callback",
-      );
+      expect(parsed.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:19284/callback");
     });
 
     test("uses default port when not specified", () => {

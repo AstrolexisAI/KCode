@@ -2,19 +2,33 @@
 // Finds related test files for a given source file using multiple strategies.
 
 import { existsSync } from "node:fs";
-import { join, dirname, basename, extname } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { log } from "../logger";
 import type { TestDetection, TestFramework } from "./types";
 
 // ─── Test file detection ───────────────────────────────────────
 
-const TEST_SUFFIXES = [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx", ".test.js", ".spec.js", ".test.jsx", ".spec.jsx", "_test.go", "_test.py"];
+const TEST_SUFFIXES = [
+  ".test.ts",
+  ".spec.ts",
+  ".test.tsx",
+  ".spec.tsx",
+  ".test.js",
+  ".spec.js",
+  ".test.jsx",
+  ".spec.jsx",
+  "_test.go",
+  "_test.py",
+];
 
 /**
  * Detect related test files for a modified source file.
  * Uses 4 strategies in order of confidence.
  */
-export async function detectTests(modifiedFile: string, cwd: string): Promise<TestDetection | null> {
+export async function detectTests(
+  modifiedFile: string,
+  cwd: string,
+): Promise<TestDetection | null> {
   const ext = extname(modifiedFile);
   const base = basename(modifiedFile, ext);
 
@@ -97,7 +111,8 @@ export async function detectFramework(cwd: string): Promise<TestFramework> {
   if (existsSync(join(cwd, "bun.lockb"))) return "bun";
 
   // Non-JS ecosystems
-  if (existsSync(join(cwd, "pytest.ini")) || existsSync(join(cwd, "pyproject.toml"))) return "pytest";
+  if (existsSync(join(cwd, "pytest.ini")) || existsSync(join(cwd, "pyproject.toml")))
+    return "pytest";
   if (existsSync(join(cwd, "go.mod"))) return "go";
   if (existsSync(join(cwd, "Cargo.toml"))) return "cargo";
 
@@ -109,14 +124,22 @@ export async function detectFramework(cwd: string): Promise<TestFramework> {
 export function buildTestCommand(framework: TestFramework, testFiles: string[]): string {
   const files = testFiles.join(" ");
   switch (framework) {
-    case "bun": return `bun test ${files}`;
-    case "vitest": return `npx vitest run ${files}`;
-    case "jest": return `npx jest ${files}`;
-    case "mocha": return `npx mocha ${files}`;
-    case "pytest": return `pytest ${files}`;
-    case "go": return `go test ${files}`;
-    case "cargo": return "cargo test";
-    case "unknown": return `bun test ${files}`;
+    case "bun":
+      return `bun test ${files}`;
+    case "vitest":
+      return `npx vitest run ${files}`;
+    case "jest":
+      return `npx jest ${files}`;
+    case "mocha":
+      return `npx mocha ${files}`;
+    case "pytest":
+      return `pytest ${files}`;
+    case "go":
+      return `go test ${files}`;
+    case "cargo":
+      return "cargo test";
+    case "unknown":
+      return `bun test ${files}`;
   }
 }
 
@@ -131,7 +154,16 @@ async function findTestsByImport(sourceFile: string, cwd: string): Promise<strin
   try {
     const base = basename(sourceFile, extname(sourceFile));
     const proc = Bun.spawn(
-      ["rg", "--files-with-matches", "--glob", "*.test.*", "--glob", "*.spec.*", `from.*['\"].*${base}['\"]`, cwd],
+      [
+        "rg",
+        "--files-with-matches",
+        "--glob",
+        "*.test.*",
+        "--glob",
+        "*.spec.*",
+        `from.*['"].*${base}['"]`,
+        cwd,
+      ],
       { stdout: "pipe", stderr: "pipe" },
     );
     const code = await proc.exited;

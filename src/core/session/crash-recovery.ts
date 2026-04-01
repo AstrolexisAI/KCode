@@ -6,11 +6,11 @@
 // 3. Load latest checkpoint for recovery
 // 4. Clean up stale PID file
 
+import type { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Database } from "bun:sqlite";
 import { CheckpointManager } from "./checkpoint";
-import type { SessionCheckpoint, CrashInfo } from "./types";
+import type { CrashInfo, SessionCheckpoint } from "./types";
 
 const PID_FILE = join(homedir(), ".kcode", "kcode.pid");
 

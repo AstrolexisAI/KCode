@@ -1,10 +1,10 @@
 // KCode - Streaming Automatic Speech Recognition
 // Supports multiple backends: faster-whisper, whisper.cpp, and chunked mode.
 
-import { log } from "../logger";
+import { unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFileSync, unlinkSync } from "node:fs";
+import { log } from "../logger";
 import type { ASRConfig, TranscriptEvent } from "./types";
 import { DEFAULT_ASR_CONFIG } from "./types";
 
@@ -66,7 +66,9 @@ export class StreamingASR {
       this.chunkTimer = null;
     }
     if (this.process) {
-      try { this.process.kill(); } catch {}
+      try {
+        this.process.kill();
+      } catch {}
       this.process = null;
     }
     this.chunkBuffer = [];
@@ -81,7 +83,15 @@ export class StreamingASR {
 
   private async startFasterWhisper(): Promise<void> {
     this.process = Bun.spawn(
-      ["faster-whisper", "--model", this.config.model, "--live", "--vad_filter", "--language", this.config.language],
+      [
+        "faster-whisper",
+        "--model",
+        this.config.model,
+        "--live",
+        "--vad_filter",
+        "--language",
+        this.config.language,
+      ],
       { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
     );
 
@@ -163,7 +173,15 @@ export class StreamingASR {
       writeFileSync(tempPath, Buffer.from(wavData));
 
       const proc = Bun.spawn(
-        ["whisper", "--model", this.config.model, "--language", this.config.language, "--output-txt", tempPath],
+        [
+          "whisper",
+          "--model",
+          this.config.model,
+          "--language",
+          this.config.language,
+          "--output-txt",
+          tempPath,
+        ],
         { stdout: "pipe", stderr: "pipe" },
       );
       await proc.exited;
@@ -173,8 +191,12 @@ export class StreamingASR {
       log.debug("asr", `transcribeChunk error: ${err}`);
       return "";
     } finally {
-      try { unlinkSync(tempPath); } catch {}
-      try { unlinkSync(tempPath.replace(".wav", ".txt")); } catch {}
+      try {
+        unlinkSync(tempPath);
+      } catch {}
+      try {
+        unlinkSync(tempPath.replace(".wav", ".txt"));
+      } catch {}
     }
   }
 
@@ -200,13 +222,13 @@ export class StreamingASR {
 
     // fmt chunk
     this.writeString(view, 12, "fmt ");
-    view.setUint32(16, 16, true);             // chunk size
-    view.setUint16(20, 1, true);              // PCM format
+    view.setUint32(16, 16, true); // chunk size
+    view.setUint16(20, 1, true); // PCM format
     view.setUint16(22, channels, true);
     view.setUint32(24, sampleRate, true);
     view.setUint32(28, sampleRate * channels * 2, true); // byte rate
-    view.setUint16(32, channels * 2, true);   // block align
-    view.setUint16(34, 16, true);             // bits per sample
+    view.setUint16(32, channels * 2, true); // block align
+    view.setUint16(34, 16, true); // bits per sample
 
     // data chunk
     this.writeString(view, 36, "data");

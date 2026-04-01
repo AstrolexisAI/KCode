@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { PluginSandbox, createSandbox } from "./sandbox";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createSandbox, type PluginSandbox } from "./sandbox";
 
 describe("PluginSandbox", () => {
   let sandbox: PluginSandbox;
@@ -73,10 +73,7 @@ describe("PluginSandbox", () => {
 
     test("rejects on timeout", async () => {
       await expect(
-        sandbox.executeWithTimeout(
-          () => new Promise((r) => setTimeout(r, 5000)),
-          50,
-        ),
+        sandbox.executeWithTimeout(() => new Promise((r) => setTimeout(r, 5000)), 50),
       ).rejects.toThrow("timed out");
     });
 
@@ -112,9 +109,7 @@ describe("PluginSandbox", () => {
     });
 
     test("writeFile throws for paths outside sandbox", async () => {
-      await expect(
-        sandbox.writeFile("/tmp/outside.txt", "nope"),
-      ).rejects.toThrow();
+      await expect(sandbox.writeFile("/tmp/outside.txt", "nope")).rejects.toThrow();
     });
 
     test("listFiles lists sandbox contents", () => {
@@ -139,9 +134,7 @@ describe("PluginSandbox", () => {
     });
 
     test("rejects blocked commands", async () => {
-      await expect(
-        sandbox.runProcess("rm", ["-rf", pluginDir]),
-      ).rejects.toThrow("not allowed");
+      await expect(sandbox.runProcess("rm", ["-rf", pluginDir])).rejects.toThrow("not allowed");
     });
 
     test("runs in plugin directory by default", async () => {

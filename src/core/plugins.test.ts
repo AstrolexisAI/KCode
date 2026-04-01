@@ -1,16 +1,21 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PluginManager } from "./plugins.ts";
 import { trustWorkspace } from "./hook-trust";
+import { PluginManager } from "./plugins.ts";
 
 let tempDir: string;
 let userPluginsDir: string;
 let pm: PluginManager;
 
-function createPlugin(baseDir: string, name: string, manifest: object, skillFiles?: string[]): void {
+function createPlugin(
+  baseDir: string,
+  name: string,
+  manifest: object,
+  skillFiles?: string[],
+): void {
   const pluginsDir = join(baseDir, ".kcode", "plugins", name);
   mkdirSync(pluginsDir, { recursive: true });
   writeFileSync(join(pluginsDir, "plugin.json"), JSON.stringify(manifest));
@@ -62,16 +67,22 @@ describe("PluginManager", () => {
     const pluginsBase = join(tempDir, ".kcode", "plugins");
 
     mkdirSync(join(pluginsBase, "plugin-a"), { recursive: true });
-    writeFileSync(join(pluginsBase, "plugin-a", "plugin.json"), JSON.stringify({
-      name: "dupe",
-      version: "1.0.0",
-    }));
+    writeFileSync(
+      join(pluginsBase, "plugin-a", "plugin.json"),
+      JSON.stringify({
+        name: "dupe",
+        version: "1.0.0",
+      }),
+    );
 
     mkdirSync(join(pluginsBase, "plugin-b"), { recursive: true });
-    writeFileSync(join(pluginsBase, "plugin-b", "plugin.json"), JSON.stringify({
-      name: "dupe",
-      version: "2.0.0",
-    }));
+    writeFileSync(
+      join(pluginsBase, "plugin-b", "plugin.json"),
+      JSON.stringify({
+        name: "dupe",
+        version: "2.0.0",
+      }),
+    );
 
     pm.load(tempDir);
     const plugins = pm.getPlugins();
@@ -127,11 +138,16 @@ describe("PluginManager", () => {
   });
 
   test("getSkillPaths() resolves absolute paths", () => {
-    createPlugin(tempDir, "skill-plugin", {
-      name: "skill-plugin",
-      version: "0.3.0",
-      skills: ["deploy.md", "review.md"],
-    }, ["deploy.md", "review.md"]);
+    createPlugin(
+      tempDir,
+      "skill-plugin",
+      {
+        name: "skill-plugin",
+        version: "0.3.0",
+        skills: ["deploy.md", "review.md"],
+      },
+      ["deploy.md", "review.md"],
+    );
 
     pm.load(tempDir);
     const paths = pm.getSkillPaths();
@@ -143,11 +159,16 @@ describe("PluginManager", () => {
   });
 
   test("getSkillPaths() skips non-existent skill files", () => {
-    createPlugin(tempDir, "partial-plugin", {
-      name: "partial-plugin",
-      version: "0.1.0",
-      skills: ["exists.md", "missing.md"],
-    }, ["exists.md"]); // only create one
+    createPlugin(
+      tempDir,
+      "partial-plugin",
+      {
+        name: "partial-plugin",
+        version: "0.1.0",
+        skills: ["exists.md", "missing.md"],
+      },
+      ["exists.md"],
+    ); // only create one
 
     pm.load(tempDir);
     const paths = pm.getSkillPaths();

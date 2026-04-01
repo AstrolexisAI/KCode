@@ -1,13 +1,13 @@
 // KCode - Web UI Server
 // HTTP + WebSocket server using Bun.serve for browser-based UI
 
-import { join, extname } from "node:path";
-import { log } from "../core/logger";
-import type { WebServerConfig, ServerEvent } from "./types";
-import { DEFAULT_WEB_CONFIG, MIME_TYPES } from "./types";
-import { handleApiRequest } from "./api";
-import { handleClientMessage, setSessionContext } from "./ws-handler";
+import { extname, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
+import { log } from "../core/logger";
+import { handleApiRequest } from "./api";
+import type { ServerEvent, WebServerConfig } from "./types";
+import { DEFAULT_WEB_CONFIG, MIME_TYPES } from "./types";
+import { handleClientMessage, setSessionContext } from "./ws-handler";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -78,7 +78,8 @@ export class WebServer {
           if (config.auth.enabled) {
             const authHeader = req.headers.get("authorization");
             const queryToken = url.searchParams.get("token");
-            const validToken = authHeader === `Bearer ${config.auth.token}` || queryToken === config.auth.token;
+            const validToken =
+              authHeader === `Bearer ${config.auth.token}` || queryToken === config.auth.token;
             if (!validToken) {
               return Response.json({ error: "Unauthorized" }, { status: 401 });
             }

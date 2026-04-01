@@ -1,17 +1,17 @@
 // KCode - 简体中文
 
 export default {
-  "welcome": "欢迎使用 KCode",
-  "goodbye": "再见",
-  "error": "错误",
-  "warning": "警告",
-  "success": "成功",
-  "loading": "加载中...",
-  "cancel": "取消",
-  "confirm": "确认",
-  "yes": "是",
-  "no": "否",
-  "unknown": "未知",
+  welcome: "欢迎使用 KCode",
+  goodbye: "再见",
+  error: "错误",
+  warning: "警告",
+  success: "成功",
+  loading: "加载中...",
+  cancel: "取消",
+  confirm: "确认",
+  yes: "是",
+  no: "否",
+  unknown: "未知",
 
   "session.started": "会话已启动",
   "session.resumed": "会话已恢复",

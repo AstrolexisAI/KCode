@@ -1,7 +1,7 @@
 // KCode - Session Bookmarks
 // Mark and jump to points in conversation history
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { kcodePath } from "./paths";
 
@@ -37,7 +37,7 @@ export function addBookmark(label: string, messageIndex: number, preview: string
   };
 
   // Replace if same label exists
-  const idx = bookmarks.findIndex(b => b.label === label);
+  const idx = bookmarks.findIndex((b) => b.label === label);
   if (idx >= 0) bookmarks[idx] = bookmark;
   else bookmarks.push(bookmark);
 
@@ -58,14 +58,14 @@ export function loadBookmarks(): Bookmark[] {
 
 export function getBookmark(label: string): Bookmark | null {
   const bookmarks = loadBookmarks();
-  return bookmarks.find(b => b.label === label) ?? null;
+  return bookmarks.find((b) => b.label === label) ?? null;
 }
 
 export function removeBookmark(label: string): boolean {
   const sessionId = getSessionId();
   const file = getBookmarksFile(sessionId);
   const bookmarks = loadBookmarks();
-  const filtered = bookmarks.filter(b => b.label !== label);
+  const filtered = bookmarks.filter((b) => b.label !== label);
   if (filtered.length === bookmarks.length) return false;
   writeFileSync(file, JSON.stringify(filtered, null, 2), "utf-8");
   return true;

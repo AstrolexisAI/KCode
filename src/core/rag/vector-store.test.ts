@@ -1,12 +1,14 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { VectorStore, cosineSimilarity } from "./vector-store";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { CodeChunk } from "./types";
+import { cosineSimilarity, VectorStore } from "./vector-store";
 
 let db: Database;
 let store: VectorStore;
 
-function makeChunk(overrides: Partial<CodeChunk & { embedding: number[] }> = {}): CodeChunk & { embedding: number[] } {
+function makeChunk(
+  overrides: Partial<CodeChunk & { embedding: number[] }> = {},
+): CodeChunk & { embedding: number[] } {
   return {
     id: overrides.id ?? "chunk-1",
     filePath: overrides.filePath ?? "/project/src/test.ts",
@@ -138,10 +140,7 @@ describe("VectorStore", () => {
   });
 
   test("clear removes all chunks", () => {
-    store.upsert([
-      makeChunk({ id: "c1" }),
-      makeChunk({ id: "c2" }),
-    ]);
+    store.upsert([makeChunk({ id: "c1" }), makeChunk({ id: "c2" })]);
 
     store.clear();
     expect(store.count()).toBe(0);

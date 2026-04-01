@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { AutoModeBreaker, _resetAutoModeBreaker, getAutoModeBreaker } from "./auto-mode-breaker";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { _resetAutoModeBreaker, AutoModeBreaker, getAutoModeBreaker } from "./auto-mode-breaker";
 
 describe("AutoModeBreaker", () => {
   describe("basic operation", () => {
@@ -114,7 +114,9 @@ describe("AutoModeBreaker", () => {
     test("onTrip called when breaker trips", () => {
       const breaker = new AutoModeBreaker({ maxConsecutiveFailures: 1 });
       let tripReason = "";
-      breaker.onTrip = (reason) => { tripReason = reason; };
+      breaker.onTrip = (reason) => {
+        tripReason = reason;
+      };
       breaker.recordFailure("Bash");
       expect(tripReason).toContain("consecutive tool failures");
     });
@@ -122,7 +124,9 @@ describe("AutoModeBreaker", () => {
     test("onReset called when breaker resets", () => {
       const breaker = new AutoModeBreaker({ maxConsecutiveFailures: 1 });
       let resetCalled = false;
-      breaker.onReset = () => { resetCalled = true; };
+      breaker.onReset = () => {
+        resetCalled = true;
+      };
       breaker.recordFailure("Bash");
       breaker.reset();
       expect(resetCalled).toBe(true);
@@ -131,7 +135,9 @@ describe("AutoModeBreaker", () => {
     test("onTrip not called for duplicate trips", () => {
       const breaker = new AutoModeBreaker({ maxConsecutiveFailures: 1 });
       let tripCount = 0;
-      breaker.onTrip = () => { tripCount++; };
+      breaker.onTrip = () => {
+        tripCount++;
+      };
       breaker.recordFailure("Bash");
       breaker.recordFailure("Bash"); // already tripped
       expect(tripCount).toBe(1);

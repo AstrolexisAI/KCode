@@ -1,4 +1,4 @@
-import { describe, test, expect, mock } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import { exportInsightsData } from "./exporter";
 
 mock.module("../analytics", () => ({
@@ -17,9 +17,7 @@ mock.module("../analytics", () => ({
       { date: "2026-03-30", calls: 25 },
       { date: "2026-03-31", calls: 25 },
     ],
-    modelBreakdown: [
-      { model: "test-model", calls: 50, costUsd: 0.25 },
-    ],
+    modelBreakdown: [{ model: "test-model", calls: 50, costUsd: 0.25 }],
   }),
 }));
 

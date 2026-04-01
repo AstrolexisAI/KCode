@@ -1,10 +1,10 @@
 // KCode - Additional E2E Flow Tests
 // Tests multi-tool flows, error recovery, multi-turn, compaction, and edge cases
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ConversationManager } from "../core/conversation";
 import type { StreamEvent } from "../core/types";
-import { createTestEnv, collectEvents, type TestEnv } from "./test-env";
+import { collectEvents, createTestEnv, type TestEnv } from "./test-env";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -52,7 +52,11 @@ describe("E2E Flows: Multi-tool Read then Write", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("executes Read then Write, model receives both results", async () => {
@@ -62,13 +66,21 @@ describe("E2E Flows: Multi-tool Read then Write", () => {
     ]);
     // Step 2: After seeing Read result, model calls Write
     env.provider.addToolCallResponse([
-      { name: "Write", arguments: { file_path: "/tmp/output.txt", content: "processed data from source" } },
+      {
+        name: "Write",
+        arguments: { file_path: "/tmp/output.txt", content: "processed data from source" },
+      },
     ]);
     // Step 3: After Write result, model responds with summary
-    env.provider.addResponse("I read the source file and wrote the processed output to /tmp/output.txt successfully for you.");
+    env.provider.addResponse(
+      "I read the source file and wrote the processed output to /tmp/output.txt successfully for you.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
-    const { events, text } = await sendAndCollect(cm, "Read /tmp/source.txt and write processed data to /tmp/output.txt");
+    const { events, text } = await sendAndCollect(
+      cm,
+      "Read /tmp/source.txt and write processed data to /tmp/output.txt",
+    );
 
     // Both tools should have executed
     const toolExecs = eventsOfType(events, "tool_executing");
@@ -92,9 +104,7 @@ describe("E2E Flows: Multi-tool Read then Write", () => {
     expect(text).toContain("read the source file");
 
     // Provider should have received 3 requests (Read call, Write call, final text)
-    const completionReqs = env.provider.requests.filter(
-      (r) => r.url === "/v1/chat/completions",
-    );
+    const completionReqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
     expect(completionReqs.length).toBe(3);
   });
 });
@@ -120,7 +130,11 @@ describe("E2E Flows: Tool error recovery", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("model sees error output from tool and recovers with text", async () => {
@@ -129,7 +143,9 @@ describe("E2E Flows: Tool error recovery", () => {
       { name: "Bash", arguments: { command: "git status", description: "Check git status" } },
     ]);
     // Step 2: After seeing the error output, model responds with text
-    env.provider.addResponse("The git status command reported this is not a git repository. You may need to initialize one first with git init.");
+    env.provider.addResponse(
+      "The git status command reported this is not a git repository. You may need to initialize one first with git init.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
     const { events, text } = await sendAndCollect(cm, "Run git status");
@@ -168,15 +184,27 @@ describe("E2E Flows: Multi-turn conversation", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("message history grows across turns", async () => {
     // Queue enough responses for both turns plus buffer for retry/recovery logic
-    env.provider.addResponse("Hello! I am ready to help you with your coding project today. What would you like to work on first?");
-    env.provider.addResponse("Sure, I can help with TypeScript refactoring. Let me know which files you would like me to look at now.");
-    env.provider.addResponse("Continuing to help with the TypeScript refactoring task you requested from me earlier in our session.");
-    env.provider.addResponse("Still available and ready to assist with whatever coding task you need me to help you with next time.");
+    env.provider.addResponse(
+      "Hello! I am ready to help you with your coding project today. What would you like to work on first?",
+    );
+    env.provider.addResponse(
+      "Sure, I can help with TypeScript refactoring. Let me know which files you would like me to look at now.",
+    );
+    env.provider.addResponse(
+      "Continuing to help with the TypeScript refactoring task you requested from me earlier in our session.",
+    );
+    env.provider.addResponse(
+      "Still available and ready to assist with whatever coding task you need me to help you with next time.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
 
@@ -199,9 +227,7 @@ describe("E2E Flows: Multi-turn conversation", () => {
     expect(turn2Ends.length).toBeGreaterThanOrEqual(1);
 
     // Provider should have received at least 2 completion requests
-    const completionReqs = env.provider.requests.filter(
-      (r) => r.url === "/v1/chat/completions",
-    );
+    const completionReqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
     expect(completionReqs.length).toBeGreaterThanOrEqual(2);
 
     // The last request should contain conversation history from first turn
@@ -234,7 +260,7 @@ describe("E2E Flows: Large context compaction", () => {
       tools: {
         // Each tool result will be ~600 chars to fill the tiny window fast
         bashCommands: {
-          "cat": "X".repeat(600),
+          cat: "X".repeat(600),
         },
       },
       configOverrides: {
@@ -245,7 +271,11 @@ describe("E2E Flows: Large context compaction", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("compaction events emitted when context fills up after many tool turns", async () => {
@@ -268,11 +298,19 @@ describe("E2E Flows: Large context compaction", () => {
       { name: "Bash", arguments: { command: "cat f4", description: "f4" } },
     ]);
     // After 4 tool turns, respond with text
-    env.provider.addResponse("Done reading all four files and here is the summary of their combined contents for review.");
+    env.provider.addResponse(
+      "Done reading all four files and here is the summary of their combined contents for review.",
+    );
     // Buffer responses for second turn and any retries
-    env.provider.addResponse("Follow-up analysis after compaction occurred and context was pruned to fit the small window.");
-    env.provider.addResponse("Extra buffer response in case more model calls happen during the compaction recovery phase.");
-    env.provider.addResponse("Another buffer response to ensure the test does not run out of scripted provider responses.");
+    env.provider.addResponse(
+      "Follow-up analysis after compaction occurred and context was pruned to fit the small window.",
+    );
+    env.provider.addResponse(
+      "Extra buffer response in case more model calls happen during the compaction recovery phase.",
+    );
+    env.provider.addResponse(
+      "Another buffer response to ensure the test does not run out of scripted provider responses.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
 
@@ -315,7 +353,11 @@ describe("E2E Flows: Provider error handling", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("HTTP 500 emits error event without crashing", async () => {
@@ -353,7 +395,11 @@ describe("E2E Flows: Empty response handling", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("empty text response completes turn without crash", async () => {
@@ -387,7 +433,8 @@ describe("E2E Flows: Glob and Grep tool use", () => {
       inProcess: true,
       tools: {
         globResults: ["src/index.ts", "src/core/config.ts", "src/core/types.ts"],
-        grepResults: "src/core/config.ts:42:  apiBase: string;\nsrc/core/types.ts:10:  apiBase: string;",
+        grepResults:
+          "src/core/config.ts:42:  apiBase: string;\nsrc/core/types.ts:10:  apiBase: string;",
       },
       configOverrides: {
         systemPromptOverride: "You are a helpful test assistant.",
@@ -396,25 +443,34 @@ describe("E2E Flows: Glob and Grep tool use", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("Glob and Grep both execute and return results to model", async () => {
     // Step 1: Model calls Glob to find files
-    env.provider.addToolCallResponse([
-      { name: "Glob", arguments: { pattern: "**/*.ts" } },
-    ]);
+    env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "**/*.ts" } }]);
     // Step 2: After seeing Glob results, model calls Grep to search contents
     env.provider.addToolCallResponse([
       { name: "Grep", arguments: { pattern: "apiBase", path: "src/core" } },
     ]);
     // Step 3: Model responds with analysis
-    env.provider.addResponse("I found 3 TypeScript files and the apiBase field is defined in config.ts and types.ts in the codebase.");
+    env.provider.addResponse(
+      "I found 3 TypeScript files and the apiBase field is defined in config.ts and types.ts in the codebase.",
+    );
     // Extra buffer responses in case of retries
-    env.provider.addResponse("Additional analysis of the apiBase usage across the codebase shows consistent patterns in configuration.");
+    env.provider.addResponse(
+      "Additional analysis of the apiBase usage across the codebase shows consistent patterns in configuration.",
+    );
 
     const cm = new ConversationManager(env.config, env.registry);
-    const { events, text } = await sendAndCollect(cm, "Find all TypeScript files and search for apiBase");
+    const { events, text } = await sendAndCollect(
+      cm,
+      "Find all TypeScript files and search for apiBase",
+    );
 
     // Both tools should have executed
     const toolExecs = eventsOfType(events, "tool_executing");
@@ -440,9 +496,7 @@ describe("E2E Flows: Glob and Grep tool use", () => {
     expect(text).toContain("TypeScript files");
 
     // Provider should have received at least 3 requests (Glob, Grep, final text)
-    const completionReqs = env.provider.requests.filter(
-      (r) => r.url === "/v1/chat/completions",
-    );
+    const completionReqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
     expect(completionReqs.length).toBeGreaterThanOrEqual(3);
   });
 });
@@ -462,7 +516,11 @@ describe("E2E Flows: Thinking/reasoning mode", () => {
   });
 
   afterEach(async () => {
-    try { await env.cleanup(); } catch { /* setup may have failed */ }
+    try {
+      await env.cleanup();
+    } catch {
+      /* setup may have failed */
+    }
   });
 
   test("thinking_delta events emitted for reasoning content", async () => {
@@ -472,7 +530,10 @@ describe("E2E Flows: Thinking/reasoning mode", () => {
     );
 
     const cm = new ConversationManager(env.config, env.registry);
-    const { events, text, thinking } = await sendAndCollect(cm, "Which approach should I use for this refactoring?");
+    const { events, text, thinking } = await sendAndCollect(
+      cm,
+      "Which approach should I use for this refactoring?",
+    );
 
     // Should have thinking_delta events with the reasoning content
     const thinkingDeltas = eventsOfType(events, "thinking_delta");

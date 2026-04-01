@@ -1,7 +1,7 @@
 // KCode - Tool Call Extractor Tests
 // Tests for text-based tool call extraction patterns
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { extractToolCallsFromText } from "./tool-call-extractor";
 import { ToolRegistry } from "./tool-registry";
 import type { ToolDefinition } from "./types";

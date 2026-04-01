@@ -1,4 +1,4 @@
-import { test, expect, describe, afterAll } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -63,9 +63,7 @@ describe("keychain", () => {
     });
 
     test("generateCodeChallenge returns different value from verifier", async () => {
-      const { generateCodeVerifier, generateCodeChallenge } = await import(
-        "./oauth-flow"
-      );
+      const { generateCodeVerifier, generateCodeChallenge } = await import("./oauth-flow");
       const verifier = generateCodeVerifier();
       const challenge = await generateCodeChallenge(verifier);
       expect(challenge).not.toBe(verifier);

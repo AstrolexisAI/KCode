@@ -1,11 +1,11 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  StartupProfiler,
-  profileCheckpoint,
-  getProfileReport,
-  printProfileReport,
-  isProfilingEnabled,
   _resetProfiler,
+  getProfileReport,
+  isProfilingEnabled,
+  printProfileReport,
+  profileCheckpoint,
+  StartupProfiler,
 } from "./startup-profiler";
 
 describe("StartupProfiler", () => {

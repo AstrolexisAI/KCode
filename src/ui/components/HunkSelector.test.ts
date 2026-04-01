@@ -3,7 +3,7 @@
 // status indicators, and line number formatting.
 // Uses pure function tests since Ink components require a full render environment.
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { DiffHunk } from "../../core/diff/types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -33,10 +33,7 @@ function padLineNum(num: number, width = 4): string {
 }
 
 /** Status indicator mapping matching the component */
-const STATUS_INDICATORS: Record<
-  DiffHunk["status"],
-  { symbol: string; color: string }
-> = {
+const STATUS_INDICATORS: Record<DiffHunk["status"], { symbol: string; color: string }> = {
   accepted: { symbol: "\u2713", color: "green" },
   rejected: { symbol: "\u2717", color: "red" },
   pending: { symbol: "?", color: "yellow" },
@@ -93,17 +90,13 @@ describe("HunkSelector component logic", () => {
 
     test("line numbers are computed correctly for removed lines", () => {
       const hunk = makeHunk({ startLineOld: 10 });
-      const lineNums = hunk.linesRemoved.map(
-        (_, i) => hunk.startLineOld + i,
-      );
+      const lineNums = hunk.linesRemoved.map((_, i) => hunk.startLineOld + i);
       expect(lineNums).toEqual([10, 11]);
     });
 
     test("line numbers are computed correctly for added lines", () => {
       const hunk = makeHunk({ startLineNew: 10 });
-      const lineNums = hunk.linesAdded.map(
-        (_, i) => hunk.startLineNew + i,
-      );
+      const lineNums = hunk.linesAdded.map((_, i) => hunk.startLineNew + i);
       expect(lineNums).toEqual([10, 11, 12]);
     });
   });
@@ -117,12 +110,8 @@ describe("HunkSelector component logic", () => {
 
       // Side-by-side pads shorter side
       const maxRows = Math.max(
-        hunk.context.before.length +
-          hunk.linesRemoved.length +
-          hunk.context.after.length,
-        hunk.context.before.length +
-          hunk.linesAdded.length +
-          hunk.context.after.length,
+        hunk.context.before.length + hunk.linesRemoved.length + hunk.context.after.length,
+        hunk.context.before.length + hunk.linesAdded.length + hunk.context.after.length,
       );
 
       // Left side: 2 ctx before + 2 removed + 1 ctx after = 5
@@ -138,13 +127,9 @@ describe("HunkSelector component logic", () => {
       });
 
       const leftCount =
-        hunk.context.before.length +
-        hunk.linesRemoved.length +
-        hunk.context.after.length;
+        hunk.context.before.length + hunk.linesRemoved.length + hunk.context.after.length;
       const rightCount =
-        hunk.context.before.length +
-        hunk.linesAdded.length +
-        hunk.context.after.length;
+        hunk.context.before.length + hunk.linesAdded.length + hunk.context.after.length;
 
       // Padding brings them to the same length
       const paddedLeft = leftCount + Math.max(0, rightCount - leftCount);

@@ -1,10 +1,10 @@
 // KCode - Template Registry
 // Loads templates from builtin, user (~/.kcode/templates/), and project (.kcode/templates/).
 
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { readdirSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
-import { kcodeHome } from "../paths";
 import { log } from "../logger";
+import { kcodeHome } from "../paths";
 import type { Template, TemplateListItem, TemplateParam } from "./types";
 
 export class TemplateRegistry {
@@ -182,7 +182,10 @@ export class TemplateRegistry {
           currentKey = "";
         } else if (val.startsWith("[") && val.endsWith("]")) {
           // Inline array: [a, b, c]
-          meta[currentKey] = val.slice(1, -1).split(",").map((s) => s.trim());
+          meta[currentKey] = val
+            .slice(1, -1)
+            .split(",")
+            .map((s) => s.trim());
           currentKey = "";
         }
       }
@@ -201,13 +204,22 @@ export class TemplateRegistry {
       params.push({
         name: String(p.name ?? ""),
         description: String(p.description ?? ""),
-        type: (String(p.type ?? "string")) as TemplateParam["type"],
+        type: String(p.type ?? "string") as TemplateParam["type"],
         choices: Array.isArray(p.choices)
           ? p.choices.map(String)
           : typeof p.choices === "string"
-            ? p.choices.replace(/[\[\]]/g, "").split(",").map((s: string) => s.trim()).filter(Boolean)
+            ? p.choices
+                .replace(/[[\]]/g, "")
+                .split(",")
+                .map((s: string) => s.trim())
+                .filter(Boolean)
             : undefined,
-        default: p.default === "true" ? true : p.default === "false" ? false : p.default as string | boolean | undefined,
+        default:
+          p.default === "true"
+            ? true
+            : p.default === "false"
+              ? false
+              : (p.default as string | boolean | undefined),
         required: p.required === true || p.required === "true",
       });
     }

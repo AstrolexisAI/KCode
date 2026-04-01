@@ -1,17 +1,17 @@
 // KCode - Francais
 
 export default {
-  "welcome": "Bienvenue sur KCode",
-  "goodbye": "Au revoir",
-  "error": "Erreur",
-  "warning": "Avertissement",
-  "success": "Succes",
-  "loading": "Chargement...",
-  "cancel": "Annuler",
-  "confirm": "Confirmer",
-  "yes": "Oui",
-  "no": "Non",
-  "unknown": "Inconnu",
+  welcome: "Bienvenue sur KCode",
+  goodbye: "Au revoir",
+  error: "Erreur",
+  warning: "Avertissement",
+  success: "Succes",
+  loading: "Chargement...",
+  cancel: "Annuler",
+  confirm: "Confirmer",
+  yes: "Oui",
+  no: "Non",
+  unknown: "Inconnu",
 
   "session.started": "Session demarree",
   "session.resumed": "Session reprise",

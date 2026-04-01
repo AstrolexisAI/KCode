@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 import { MessageBus } from "./message-bus";
 import type { CoordinatorMessage } from "./types";
 
@@ -142,12 +142,16 @@ describe("MessageBus", () => {
 
   test("send rejects message without 'to' field", () => {
     const bus = new MessageBus(tempDir);
-    expect(() => bus.send({ type: "task", from: "coord", to: "", payload: {}, timestamp: 0 })).toThrow();
+    expect(() =>
+      bus.send({ type: "task", from: "coord", to: "", payload: {}, timestamp: 0 }),
+    ).toThrow();
   });
 
   test("send rejects message without 'from' field", () => {
     const bus = new MessageBus(tempDir);
-    expect(() => bus.send({ type: "task", from: "", to: "w1", payload: {}, timestamp: 0 })).toThrow();
+    expect(() =>
+      bus.send({ type: "task", from: "", to: "w1", payload: {}, timestamp: 0 }),
+    ).toThrow();
   });
 
   // ─── Polling ────────────────────────────────────────────────
@@ -202,13 +206,16 @@ describe("MessageBus", () => {
     const inboxPath = join(bus.getMessagesDir(), "inbox-worker-1.jsonl");
     const fs = require("node:fs");
     fs.appendFileSync(inboxPath, "not valid json\n");
-    fs.appendFileSync(inboxPath, JSON.stringify(makeMessage({ to: "worker-1", payload: { valid: true } })) + "\n");
+    fs.appendFileSync(
+      inboxPath,
+      JSON.stringify(makeMessage({ to: "worker-1", payload: { valid: true } })) + "\n",
+    );
 
     const received = bus.receive("worker-1");
     // Should get the valid messages, skipping the bad line
     expect(received.length).toBeGreaterThanOrEqual(1);
     // The last valid message should be present
-    const validMsg = received.find(m => m.payload.valid === true);
+    const validMsg = received.find((m) => m.payload.valid === true);
     expect(validMsg).toBeDefined();
   });
 

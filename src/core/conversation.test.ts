@@ -1,10 +1,10 @@
 // KCode - Conversation Manager Tests
 // Tests for the core conversation loop, state management, checkpoints, and error handling
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createTestEnv, type TestEnv } from "../test-harness/test-env";
 import { ConversationManager } from "./conversation";
 import type { StreamEvent } from "./types";
-import { createTestEnv, type TestEnv } from "../test-harness/test-env";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -38,7 +38,9 @@ describe("ConversationManager: state management", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("constructor initializes empty state", () => {
     const cm = new ConversationManager(env.config, env.registry);
@@ -105,7 +107,9 @@ describe("ConversationManager: basic flow", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("text-only response produces turn_start and turn_end", async () => {
     env.provider.addResponse("Hello, I can help!");
@@ -160,12 +164,12 @@ describe("ConversationManager: tool execution", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("tool call followed by text response", async () => {
-    env.provider.addToolCallResponse([
-      { name: "Read", arguments: { file_path: "/tmp/test.txt" } },
-    ]);
+    env.provider.addToolCallResponse([{ name: "Read", arguments: { file_path: "/tmp/test.txt" } }]);
     env.provider.addResponse("File read successfully.");
     const cm = new ConversationManager(env.config, env.registry);
     const { events } = await sendAndCollect(cm, "Read the file");
@@ -192,9 +196,7 @@ describe("ConversationManager: tool execution", () => {
   });
 
   test("tool use count increments", async () => {
-    env.provider.addToolCallResponse([
-      { name: "Read", arguments: { file_path: "/tmp/test.txt" } },
-    ]);
+    env.provider.addToolCallResponse([{ name: "Read", arguments: { file_path: "/tmp/test.txt" } }]);
     env.provider.addResponse("Done.");
     const cm = new ConversationManager(env.config, env.registry);
     await sendAndCollect(cm, "Read it");
@@ -207,10 +209,13 @@ describe("ConversationManager: tool execution", () => {
       { name: "Bash", arguments: { command: "ls", description: "list" } },
     ]);
     env.provider.addResponse("Bash is blocked.");
-    const cm = new ConversationManager({
-      ...env.config,
-      disallowedTools: ["Bash"],
-    }, env.registry);
+    const cm = new ConversationManager(
+      {
+        ...env.config,
+        disallowedTools: ["Bash"],
+      },
+      env.registry,
+    );
     const { events } = await sendAndCollect(cm, "List files");
 
     const toolExecs = eventsOfType(events, "tool_executing");
@@ -239,7 +244,9 @@ describe("ConversationManager: abort", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("abort sets isRunning to false", async () => {
     env.provider.addResponse("This is a response.");
@@ -271,7 +278,9 @@ describe("ConversationManager: checkpoints", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("saveCheckpoint stores checkpoint", () => {
     const cm = new ConversationManager(env.config, env.registry);
@@ -340,15 +349,15 @@ describe("ConversationManager: collectSessionData", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("collects tools used and files modified", async () => {
     env.provider.addToolCallResponse([
       { name: "Write", arguments: { file_path: "/tmp/a.txt", content: "test" } },
     ]);
-    env.provider.addToolCallResponse([
-      { name: "Read", arguments: { file_path: "/tmp/a.txt" } },
-    ]);
+    env.provider.addToolCallResponse([{ name: "Read", arguments: { file_path: "/tmp/a.txt" } }]);
     env.provider.addResponse("Done.");
     const cm = new ConversationManager(env.config, env.registry);
     await sendAndCollect(cm, "Create and read");
@@ -371,25 +380,27 @@ describe("ConversationManager: collectSessionData", () => {
     await sendAndCollect(cm, "Write twice");
 
     const data = cm.collectSessionData();
-    const count = data.filesModified.filter(f => f === "/tmp/same.txt").length;
+    const count = data.filesModified.filter((f) => f === "/tmp/same.txt").length;
     expect(count).toBe(1);
   });
 
   test("counts errors", async () => {
     // Register a tool that always fails
-    env.registry.register("FailTool", {
-      name: "FailTool",
-      description: "Always fails",
-      input_schema: { type: "object" as const, properties: {}, required: [] },
-    }, async () => ({
-      tool_use_id: "",
-      content: "Error: something went wrong",
-      is_error: true,
-    }));
+    env.registry.register(
+      "FailTool",
+      {
+        name: "FailTool",
+        description: "Always fails",
+        input_schema: { type: "object" as const, properties: {}, required: [] },
+      },
+      async () => ({
+        tool_use_id: "",
+        content: "Error: something went wrong",
+        is_error: true,
+      }),
+    );
 
-    env.provider.addToolCallResponse([
-      { name: "FailTool", arguments: {} },
-    ]);
+    env.provider.addToolCallResponse([{ name: "FailTool", arguments: {} }]);
     env.provider.addResponse("Failed.");
     const cm = new ConversationManager(env.config, env.registry);
     await sendAndCollect(cm, "Try the tool");
@@ -413,7 +424,9 @@ describe("ConversationManager: getModifiedFiles", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("extracts file paths from Write tool calls", async () => {
     env.provider.addToolCallResponse([
@@ -449,7 +462,9 @@ describe("ConversationManager: error handling", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true, configOverrides: { maxRetries: 0 } });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("API error produces error event", async () => {
     env.provider.addErrorResponse("Server error");
@@ -479,7 +494,9 @@ describe("ConversationManager: truncation handling", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("max_tokens response triggers continuation", async () => {
     env.provider.addMaxTokensResponse("This was truncated due to");
@@ -502,7 +519,9 @@ describe("ConversationManager: session restore", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("restoreMessages loads previous history", () => {
     const cm = new ConversationManager(env.config, env.registry);
@@ -538,7 +557,9 @@ describe("ConversationManager: fork", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("forkConversation creates new session ID", async () => {
     env.provider.addResponse("Message 1.");
@@ -576,24 +597,28 @@ describe("ConversationManager: abort during tool execution", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("abort mid-tool-execution terminates generator cleanly", async () => {
     // Register a tool that we can abort during
     let handlerCalled = false;
-    env.registry.register("SlowTool", {
-      name: "SlowTool",
-      description: "A tool that takes a while",
-      input_schema: { type: "object" as const, properties: {}, required: [] },
-    }, async () => {
-      handlerCalled = true;
-      await new Promise((r) => setTimeout(r, 50));
-      return { tool_use_id: "", content: "done", is_error: false };
-    });
+    env.registry.register(
+      "SlowTool",
+      {
+        name: "SlowTool",
+        description: "A tool that takes a while",
+        input_schema: { type: "object" as const, properties: {}, required: [] },
+      },
+      async () => {
+        handlerCalled = true;
+        await new Promise((r) => setTimeout(r, 50));
+        return { tool_use_id: "", content: "done", is_error: false };
+      },
+    );
 
-    env.provider.addToolCallResponse([
-      { name: "SlowTool", arguments: {} },
-    ]);
+    env.provider.addToolCallResponse([{ name: "SlowTool", arguments: {} }]);
     env.provider.addResponse("Finished.");
 
     const cm = new ConversationManager(env.config, env.registry);
@@ -628,25 +653,35 @@ describe("ConversationManager: burnedFingerprints", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("tool that fails with same error is blocked on subsequent call", async () => {
     // Override Glob (read-only, auto-approved by permission system) to always fail.
     // Due to dual recording of error fingerprints (at yield site + agent loop),
     // a single failure immediately burns the fingerprint. The second call is blocked.
     let callCount = 0;
-    env.registry.register("Glob", {
-      name: "Glob",
-      description: "Find files (fake, always fails)",
-      input_schema: { type: "object" as const, properties: { pattern: { type: "string" } }, required: ["pattern"] },
-    }, async () => {
-      callCount++;
-      return {
-        tool_use_id: "",
-        content: "Error: connection refused to host xyz",
-        is_error: true,
-      };
-    });
+    env.registry.register(
+      "Glob",
+      {
+        name: "Glob",
+        description: "Find files (fake, always fails)",
+        input_schema: {
+          type: "object" as const,
+          properties: { pattern: { type: "string" } },
+          required: ["pattern"],
+        },
+      },
+      async () => {
+        callCount++;
+        return {
+          tool_use_id: "",
+          content: "Error: connection refused to host xyz",
+          is_error: true,
+        };
+      },
+    );
 
     // Turn 1: Glob fails -> fingerprint gets burned
     env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
@@ -680,7 +715,9 @@ describe("ConversationManager: error fingerprint dedup", () => {
   beforeEach(async () => {
     env = await createTestEnv({ inProcess: true });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("different tools failing with different errors are not cross-blocked", async () => {
     // Override Glob and Grep (both read-only, auto-approved) to each fail once
@@ -688,22 +725,46 @@ describe("ConversationManager: error fingerprint dedup", () => {
     // Glob's failure should not block Grep and vice versa.
     let globCalls = 0;
     let grepCalls = 0;
-    env.registry.register("Glob", {
-      name: "Glob",
-      description: "Fails with connection error",
-      input_schema: { type: "object" as const, properties: { pattern: { type: "string" } }, required: ["pattern"] },
-    }, async () => {
-      globCalls++;
-      return { tool_use_id: "", content: "Error: connection refused to remote server", is_error: true };
-    });
-    env.registry.register("Grep", {
-      name: "Grep",
-      description: "Fails with permission error",
-      input_schema: { type: "object" as const, properties: { pattern: { type: "string" } }, required: ["pattern"] },
-    }, async () => {
-      grepCalls++;
-      return { tool_use_id: "", content: "Error: permission denied for target directory", is_error: true };
-    });
+    env.registry.register(
+      "Glob",
+      {
+        name: "Glob",
+        description: "Fails with connection error",
+        input_schema: {
+          type: "object" as const,
+          properties: { pattern: { type: "string" } },
+          required: ["pattern"],
+        },
+      },
+      async () => {
+        globCalls++;
+        return {
+          tool_use_id: "",
+          content: "Error: connection refused to remote server",
+          is_error: true,
+        };
+      },
+    );
+    env.registry.register(
+      "Grep",
+      {
+        name: "Grep",
+        description: "Fails with permission error",
+        input_schema: {
+          type: "object" as const,
+          properties: { pattern: { type: "string" } },
+          required: ["pattern"],
+        },
+      },
+      async () => {
+        grepCalls++;
+        return {
+          tool_use_id: "",
+          content: "Error: permission denied for target directory",
+          is_error: true,
+        };
+      },
+    );
 
     // Glob fails, then Grep fails — each tool fails once with its own error
     env.provider.addToolCallResponse([{ name: "Glob", arguments: { pattern: "*.ts" } }]);
@@ -742,7 +803,9 @@ describe("ConversationManager: fallback chain", () => {
       },
     });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("falls back to secondary model when primary fails", async () => {
     // First request fails, second (fallback) succeeds
@@ -772,7 +835,9 @@ describe("ConversationManager: max turns enforcement", () => {
       },
     });
   });
-  afterEach(async () => { await env.cleanup(); });
+  afterEach(async () => {
+    await env.cleanup();
+  });
 
   test("loop stops after exceeding max agent turns", async () => {
     // Queue many tool call + text responses to keep the loop going

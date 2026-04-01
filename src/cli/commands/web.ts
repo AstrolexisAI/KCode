@@ -47,8 +47,12 @@ export function registerWebCommand(program: Command): void {
           const fullUrl = opts.auth !== false ? `${url}?token=${token}` : url;
           try {
             const { exec } = await import("node:child_process");
-            const cmd = process.platform === "darwin" ? "open" :
-                        process.platform === "win32" ? "start" : "xdg-open";
+            const cmd =
+              process.platform === "darwin"
+                ? "open"
+                : process.platform === "win32"
+                  ? "start"
+                  : "xdg-open";
             exec(`${cmd} "${fullUrl}"`);
           } catch {
             console.log(`  Open in browser: ${fullUrl}`);
@@ -58,7 +62,9 @@ export function registerWebCommand(program: Command): void {
         // Keep alive
         await new Promise(() => {}); // Block forever until Ctrl+C
       } catch (err) {
-        console.error(`\x1b[31mFailed to start Web UI:\x1b[0m ${err instanceof Error ? err.message : err}`);
+        console.error(
+          `\x1b[31mFailed to start Web UI:\x1b[0m ${err instanceof Error ? err.message : err}`,
+        );
         process.exit(1);
       }
     });

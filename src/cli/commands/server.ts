@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { startServer, stopServer, getServerStatus } from "../../core/llama-server";
+import { getServerStatus, startServer, stopServer } from "../../core/llama-server";
 
 export function registerServerCommand(program: Command): void {
   const serverCmd = program

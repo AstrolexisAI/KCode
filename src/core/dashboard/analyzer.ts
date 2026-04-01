@@ -1,19 +1,19 @@
 // KCode - Project Dashboard Analyzer
 // Gathers comprehensive project metrics by running sub-analyzers in parallel.
 
-import { log } from "../logger";
 import { getDb } from "../db";
-import type { ProjectDashboard } from "./types";
+import { log } from "../logger";
 import {
-  detectLanguage,
-  detectTestFramework,
+  countDependencies,
   countFiles,
   countLinesOfCode,
-  parseCoverage,
+  detectLanguage,
+  detectTestFramework,
   getLastCommitTime,
   getProjectName,
-  countDependencies,
+  parseCoverage,
 } from "./metrics";
+import type { ProjectDashboard } from "./types";
 
 // ─── Shell helper ──────────────────────────────────────────────
 
@@ -73,10 +73,29 @@ export class ProjectAnalyzer {
     try {
       // Bun test: run a dry count of test files
       const testFiles = await run([
-        "find", dir, "-type", "f",
-        "(", "-name", "*.test.ts", "-o", "-name", "*.test.js", "-o", "-name", "*.spec.ts", "-o", "-name", "*.spec.js", ")",
-        "-not", "-path", "*/node_modules/*",
-        "-not", "-path", "*/.git/*",
+        "find",
+        dir,
+        "-type",
+        "f",
+        "(",
+        "-name",
+        "*.test.ts",
+        "-o",
+        "-name",
+        "*.test.js",
+        "-o",
+        "-name",
+        "*.spec.ts",
+        "-o",
+        "-name",
+        "*.spec.js",
+        ")",
+        "-not",
+        "-path",
+        "*/node_modules/*",
+        "-not",
+        "-path",
+        "*/.git/*",
       ]);
       if (testFiles.ok && testFiles.stdout) {
         const files = testFiles.stdout.split("\n").filter(Boolean);
@@ -111,11 +130,21 @@ export class ProjectAnalyzer {
     };
   }
 
-  private async findTodos(dir: string): Promise<Array<{ file: string; line: number; text: string }>> {
+  private async findTodos(
+    dir: string,
+  ): Promise<Array<{ file: string; line: number; text: string }>> {
     const result = await run([
-      "grep", "-rn", "--include=*.ts", "--include=*.js", "--include=*.tsx", "--include=*.jsx",
-      "--include=*.py", "--include=*.go", "--include=*.rs",
-      "-E", "\\b(TODO|FIXME|HACK|XXX)\\b",
+      "grep",
+      "-rn",
+      "--include=*.ts",
+      "--include=*.js",
+      "--include=*.tsx",
+      "--include=*.jsx",
+      "--include=*.py",
+      "--include=*.go",
+      "--include=*.rs",
+      "-E",
+      "\\b(TODO|FIXME|HACK|XXX)\\b",
       dir,
     ]);
     if (!result.ok || !result.stdout) return [];
@@ -126,7 +155,12 @@ export class ProjectAnalyzer {
       if (match) {
         const relPath = match[1]!.replace(dir + "/", "");
         // Skip node_modules, dist, .git
-        if (relPath.includes("node_modules/") || relPath.includes("dist/") || relPath.includes(".git/")) continue;
+        if (
+          relPath.includes("node_modules/") ||
+          relPath.includes("dist/") ||
+          relPath.includes(".git/")
+        )
+          continue;
         todos.push({
           file: relPath,
           line: parseInt(match[2]!, 10),
@@ -142,15 +176,21 @@ export class ProjectAnalyzer {
     // For speed, we use a grep-based approximation
     try {
       const result = await run([
-        "grep", "-rn", "--include=*.ts", "--include=*.js",
-        "-E", "^\\s*(export\\s+)?(async\\s+)?function\\s+|^\\s*(export\\s+)?(async\\s+)?[a-zA-Z_]+\\s*\\(",
+        "grep",
+        "-rn",
+        "--include=*.ts",
+        "--include=*.js",
+        "-E",
+        "^\\s*(export\\s+)?(async\\s+)?function\\s+|^\\s*(export\\s+)?(async\\s+)?[a-zA-Z_]+\\s*\\(",
         dir,
       ]);
       if (!result.ok || !result.stdout) return 0;
 
-      const lines = result.stdout.split("\n").filter(l =>
-        !l.includes("node_modules/") && !l.includes("dist/") && !l.includes(".git/")
-      );
+      const lines = result.stdout
+        .split("\n")
+        .filter(
+          (l) => !l.includes("node_modules/") && !l.includes("dist/") && !l.includes(".git/"),
+        );
       // Rough estimate: count lines that look like function starts
       // Actual line counting per function is too expensive for a dashboard
       // Instead, report total function-like declarations (user interprets)
@@ -164,16 +204,20 @@ export class ProjectAnalyzer {
     // Simple McCabe-like complexity score: count control flow keywords
     try {
       const result = await run([
-        "grep", "-rc", "--include=*.ts", "--include=*.js",
-        "-E", "\\b(if|else|for|while|switch|case|catch|\\?\\s)\\b",
+        "grep",
+        "-rc",
+        "--include=*.ts",
+        "--include=*.js",
+        "-E",
+        "\\b(if|else|for|while|switch|case|catch|\\?\\s)\\b",
         dir,
       ]);
       if (!result.ok || !result.stdout) return 0;
 
       let totalKeywords = 0;
-      const lines = result.stdout.split("\n").filter(l =>
-        l.trim() && !l.includes("node_modules/") && !l.includes("dist/")
-      );
+      const lines = result.stdout
+        .split("\n")
+        .filter((l) => l.trim() && !l.includes("node_modules/") && !l.includes("dist/"));
       for (const line of lines) {
         const count = parseInt(line.split(":").pop()!, 10);
         if (!isNaN(count)) totalKeywords += count;
@@ -197,23 +241,24 @@ export class ProjectAnalyzer {
       const db = getDb();
       const cutoff = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
 
-      const totals = db.query<
-        { sessions: number; tokens: number; cost: number; files: number },
-        [string]
-      >(
-        `SELECT
+      const totals = db
+        .query<{ sessions: number; tokens: number; cost: number; files: number }, [string]>(
+          `SELECT
            COUNT(DISTINCT session_id) as sessions,
            SUM(input_tokens + output_tokens) as tokens,
            SUM(cost_usd) as cost,
            COUNT(DISTINCT CASE WHEN tool_name IN ('Edit', 'Write', 'MultiEdit') THEN session_id || tool_name END) as files
          FROM tool_analytics WHERE created_at >= ?`,
-      ).get(cutoff);
+        )
+        .get(cutoff);
 
-      const topToolRows = db.query<{ name: string; count: number }, [string]>(
-        `SELECT tool_name as name, COUNT(*) as count
+      const topToolRows = db
+        .query<{ name: string; count: number }, [string]>(
+          `SELECT tool_name as name, COUNT(*) as count
          FROM tool_analytics WHERE created_at >= ?
          GROUP BY tool_name ORDER BY count DESC LIMIT 5`,
-      ).all(cutoff);
+        )
+        .all(cutoff);
 
       return {
         sessionsLast7Days: totals?.sessions ?? 0,

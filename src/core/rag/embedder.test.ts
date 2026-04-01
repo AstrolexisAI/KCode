@@ -1,16 +1,12 @@
-import { test, expect, describe } from "bun:test";
-import { TFIDFEmbedder, Embedder, detectBestBackend } from "./embedder";
+import { describe, expect, test } from "bun:test";
+import { detectBestBackend, Embedder, TFIDFEmbedder } from "./embedder";
 
 // ─── TF-IDF Embedder Tests ────────────────────────────────────
 
 describe("TFIDFEmbedder", () => {
   test("fit builds vocabulary from documents", () => {
     const tfidf = new TFIDFEmbedder();
-    tfidf.fit([
-      "function hello world",
-      "class greeting extends base",
-      "function goodbye world",
-    ]);
+    tfidf.fit(["function hello world", "class greeting extends base", "function goodbye world"]);
 
     expect(tfidf.dimensions).toBeGreaterThan(0);
   });
@@ -186,7 +182,9 @@ describe("detectBestBackend", () => {
 // ─── Helpers ───────────────────────────────────────────────────
 
 function cosine(a: number[], b: number[]): number {
-  let dot = 0, normA = 0, normB = 0;
+  let dot = 0,
+    normA = 0,
+    normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i]! * b[i]!;
     normA += a[i]! * a[i]!;

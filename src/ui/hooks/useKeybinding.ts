@@ -11,11 +11,7 @@ import { useKeybindingContext } from "../components/KeybindingContext.js";
  *   useKeybinding('toggle.theme', () => cycleTheme());
  *   useKeybinding('search.messages', () => setSearchOpen(true));
  */
-export function useKeybinding(
-  action: string,
-  callback: () => void,
-  deps: unknown[] = [],
-): void {
+export function useKeybinding(action: string, callback: () => void, deps: unknown[] = []): void {
   const { resolver } = useKeybindingContext();
 
   useEffect(() => {

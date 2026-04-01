@@ -9,7 +9,8 @@ import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const cronListDefinition: ToolDefinition = {
   name: "CronList",
-  description: "List all cron jobs for the current user. Shows scheduled tasks with their schedule, command, and ID.",
+  description:
+    "List all cron jobs for the current user. Shows scheduled tasks with their schedule, command, and ID.",
   input_schema: {
     type: "object",
     properties: {},
@@ -80,7 +81,8 @@ export const cronCreateDefinition: ToolDefinition = {
       },
       id: {
         type: "string",
-        description: "Optional unique ID for this job (for later deletion). Auto-generated if not provided.",
+        description:
+          "Optional unique ID for this job (for later deletion). Auto-generated if not provided.",
       },
     },
     required: ["schedule", "command"],
@@ -103,7 +105,11 @@ export async function executeCronCreate(input: Record<string, unknown>): Promise
 
   // Reject newlines in schedule or command (would corrupt crontab)
   if (/[\n\r]/.test(schedule) || /[\n\r]/.test(command)) {
-    return { tool_use_id: "", content: "Error: schedule and command must not contain newlines.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: schedule and command must not contain newlines.",
+      is_error: true,
+    };
   }
 
   // Validate cron schedule format (5 fields)
@@ -117,8 +123,12 @@ export async function executeCronCreate(input: Record<string, unknown>): Promise
   }
 
   // Validate each field (supports numbers, ranges, named months/weekdays)
-  const cronWord = /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|sun|mon|tue|wed|thu|fri|sat)/i;
-  const fieldPatterns = new RegExp(`^(\\*|(\\d+|${cronWord.source})(-(\\d+|${cronWord.source}))?(\/\\d+)?)(,(\\d+|${cronWord.source})(-(\\d+|${cronWord.source}))?(\/\\d+)?)*$`, "i");
+  const cronWord =
+    /(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|sun|mon|tue|wed|thu|fri|sat)/i;
+  const fieldPatterns = new RegExp(
+    `^(\\*|(\\d+|${cronWord.source})(-(\\d+|${cronWord.source}))?(/\\d+)?)(,(\\d+|${cronWord.source})(-(\\d+|${cronWord.source}))?(/\\d+)?)*$`,
+    "i",
+  );
   for (const field of fields) {
     if (field !== "*" && !fieldPatterns.test(field) && !/^\*\/\d+$/.test(field)) {
       return {

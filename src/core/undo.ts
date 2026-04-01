@@ -1,7 +1,7 @@
 // KCode - Undo System
 // Tracks file modifications and allows reverting the last tool action
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────

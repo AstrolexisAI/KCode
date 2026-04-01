@@ -1,10 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createPlugin } from "./create";
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { mkdtempSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { PluginScaffoldConfig } from "../../../core/plugin-sdk/types";
+import { createPlugin } from "./create";
 
 describe("createPlugin", () => {
   let originalCwd: string;
@@ -37,9 +36,7 @@ describe("createPlugin", () => {
 
   test("generates valid plugin.json", async () => {
     const dir = await createPlugin(baseConfig);
-    const manifest = JSON.parse(
-      readFileSync(join(dir, "plugin.json"), "utf-8"),
-    );
+    const manifest = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf-8"));
     expect(manifest.name).toBe("test-plugin");
     expect(manifest.version).toBe("0.1.0");
     expect(manifest.description).toBe("A test plugin");
@@ -74,9 +71,7 @@ describe("createPlugin", () => {
   test("creates hooks in manifest", async () => {
     const config = { ...baseConfig, components: ["hooks"] as any };
     const dir = await createPlugin(config);
-    const manifest = JSON.parse(
-      readFileSync(join(dir, "plugin.json"), "utf-8"),
-    );
+    const manifest = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf-8"));
     expect(manifest.hooks).toBeDefined();
     expect(manifest.hooks.PostToolUse).toBeArray();
   });
@@ -84,9 +79,7 @@ describe("createPlugin", () => {
   test("creates MCP server config", async () => {
     const config = { ...baseConfig, components: ["mcp"] as any };
     const dir = await createPlugin(config);
-    const manifest = JSON.parse(
-      readFileSync(join(dir, "plugin.json"), "utf-8"),
-    );
+    const manifest = JSON.parse(readFileSync(join(dir, "plugin.json"), "utf-8"));
     expect(manifest.mcpServers).toBeDefined();
     expect(manifest.mcpServers["example-server"]).toBeDefined();
   });

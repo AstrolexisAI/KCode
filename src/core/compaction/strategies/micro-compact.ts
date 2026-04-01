@@ -3,10 +3,16 @@
 // More aggressive than simple tool-result compression: also handles text messages
 // and generates structured JSON summaries for tool calls.
 
-import type { Message, ContentBlock, ToolUseBlock, ToolResultBlock, TextBlock } from "../../types.js";
-import type { MicroCompactConfig, MicroCompactResult } from "../types.js";
-import { HEAVY_OUTPUT_TOOLS, COHERENCE_TOOLS } from "../types.js";
 import { CHARS_PER_TOKEN } from "../../token-budget.js";
+import type {
+  ContentBlock,
+  Message,
+  TextBlock,
+  ToolResultBlock,
+  ToolUseBlock,
+} from "../../types.js";
+import type { MicroCompactConfig, MicroCompactResult } from "../types.js";
+import { COHERENCE_TOOLS, HEAVY_OUTPUT_TOOLS } from "../types.js";
 
 /**
  * Micro-compact messages: truncate tool results and long text in older messages.
@@ -24,9 +30,7 @@ export function microCompact(
   const compactableTools = config?.compactableTools
     ? new Set(config.compactableTools)
     : HEAVY_OUTPUT_TOOLS;
-  const preserveTools = config?.preserveTools
-    ? new Set(config.preserveTools)
-    : COHERENCE_TOOLS;
+  const preserveTools = config?.preserveTools ? new Set(config.preserveTools) : COHERENCE_TOOLS;
 
   let compressedCount = 0;
   let charsRecovered = 0;
@@ -43,7 +47,8 @@ export function microCompact(
       if (msg.content.length > threshold) {
         const truncLen = Math.min(200, Math.floor(threshold * 0.6));
         const original = msg.content;
-        const newContent = original.slice(0, truncLen) + `... [compactado, ${original.length} chars originales]`;
+        const newContent =
+          original.slice(0, truncLen) + `... [compactado, ${original.length} chars originales]`;
         charsRecovered += original.length - newContent.length;
         compressedCount++;
         return { ...msg, content: newContent };
@@ -73,7 +78,11 @@ export function microCompact(
         }
         // Look for the corresponding tool_result in this message or nearby
         const toolResult = findToolResult(msg.content, block.id, i);
-        if (toolResult && typeof toolResult.content === "string" && toolResult.content.length > toolResultThreshold) {
+        if (
+          toolResult &&
+          typeof toolResult.content === "string" &&
+          toolResult.content.length > toolResultThreshold
+        ) {
           // Generate structured JSON summary
           const summary = buildToolSummary(block, toolResult);
           const summaryText = JSON.stringify(summary);
@@ -129,7 +138,9 @@ export function microCompact(
         const threshold = msg.role === "assistant" ? assistantThreshold : toolResultThreshold;
         if (block.text.length > threshold) {
           const truncLen = Math.min(200, Math.floor(threshold * 0.6));
-          const newText = block.text.slice(0, truncLen) + `... [compactado, ${block.text.length} chars originales]`;
+          const newText =
+            block.text.slice(0, truncLen) +
+            `... [compactado, ${block.text.length} chars originales]`;
           charsRecovered += block.text.length - newText.length;
           newContent.push({ type: "text", text: newText } as TextBlock);
           compressedCount++;
@@ -154,10 +165,7 @@ export function microCompact(
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function findToolUse(
-  blocks: ContentBlock[],
-  toolUseId: string,
-): ToolUseBlock | null {
+function findToolUse(blocks: ContentBlock[], toolUseId: string): ToolUseBlock | null {
   for (const b of blocks) {
     if (b.type === "tool_use" && (b as ToolUseBlock).id === toolUseId) {
       return b as ToolUseBlock;
@@ -188,7 +196,8 @@ function buildToolSummary(
   return {
     summary: `Ejecuto ${toolUse.name}${target ? ` en ${target}` : ""}`,
     result: toolResult.is_error ? "error" : "exito",
-    output_preview: typeof toolResult.content === "string" ? toolResult.content.slice(0, 100) : "[complex]",
+    output_preview:
+      typeof toolResult.content === "string" ? toolResult.content.slice(0, 100) : "[complex]",
   };
 }
 

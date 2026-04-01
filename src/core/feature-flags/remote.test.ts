@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { RemoteFlagClient, _resetRemoteFlagClient, getRemoteFlagClient } from "./remote";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { _resetRemoteFlagClient, getRemoteFlagClient, RemoteFlagClient } from "./remote";
 
 describe("RemoteFlagClient", () => {
   let savedEnv: Record<string, string | undefined> = {};

@@ -1,16 +1,16 @@
 // KCode - Dashboard Metrics Tests
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  detectLanguage,
-  detectTestFramework,
+  countDependencies,
   countFiles,
   countLinesOfCode,
-  parseCoverage,
+  detectLanguage,
+  detectTestFramework,
   getProjectName,
-  countDependencies,
+  parseCoverage,
 } from "./metrics";
 
 const TEST_DIR = join(import.meta.dir, `__test_metrics_${process.pid}__`);
@@ -145,7 +145,9 @@ describe("parseCoverage", () => {
 
   test("parses lcov.info format", async () => {
     // Remove coverage-summary.json first
-    try { rmSync(join(TEST_DIR, "coverage", "coverage-summary.json")); } catch {}
+    try {
+      rmSync(join(TEST_DIR, "coverage", "coverage-summary.json"));
+    } catch {}
     writeFileSync(
       join(TEST_DIR, "coverage", "lcov.info"),
       "SF:src/a.ts\nLF:100\nLH:75\nend_of_record\nSF:src/b.ts\nLF:50\nLH:40\nend_of_record\n",
@@ -167,10 +169,7 @@ describe("parseCoverage", () => {
 
 describe("getProjectName", () => {
   test("reads name from package.json", async () => {
-    writeFileSync(
-      join(TEST_DIR, "package.json"),
-      JSON.stringify({ name: "my-cool-project" }),
-    );
+    writeFileSync(join(TEST_DIR, "package.json"), JSON.stringify({ name: "my-cool-project" }));
     expect(await getProjectName(TEST_DIR)).toBe("my-cool-project");
   });
 

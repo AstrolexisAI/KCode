@@ -2,16 +2,17 @@
 // Interactive terminal UI for reviewing diffs hunk-by-hunk.
 // Allows accepting, rejecting, and navigating through changes with keyboard controls.
 
-import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
-import type { DiffHunk, DiffResult } from "../../core/diff/types.js";
+import type React from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
-  acceptHunk,
-  rejectHunk,
   acceptAll as acceptAllHunks,
-  rejectAll as rejectAllHunks,
+  acceptHunk,
   getStats,
+  rejectAll as rejectAllHunks,
+  rejectHunk,
 } from "../../core/diff/hunk-operations.js";
+import type { DiffHunk, DiffResult } from "../../core/diff/types.js";
 import HunkSelector from "./HunkSelector.js";
 
 export interface InteractiveDiffProps {
@@ -139,9 +140,7 @@ export default function InteractiveDiff({
 
       // Toggle display mode
       if (input === "d") {
-        setDisplayMode((prev) =>
-          prev === "inline" ? "side-by-side" : "inline",
-        );
+        setDisplayMode((prev) => (prev === "inline" ? "side-by-side" : "inline"));
         return;
       }
 
@@ -189,22 +188,16 @@ export default function InteractiveDiff({
         <Text color="green">{stats.accepted} accepted</Text>
         <Text color="red">{stats.rejected} rejected</Text>
         <Text color="yellow">{stats.pending} pending</Text>
-        {stats.modified > 0 && (
-          <Text color="blue">{stats.modified} modified</Text>
-        )}
+        {stats.modified > 0 && <Text color="blue">{stats.modified} modified</Text>}
       </Box>
 
       {/* Display mode indicator */}
       <Box marginBottom={1}>
-        <Text dimColor>
-          Mode: {displayMode === "inline" ? "Inline (unified)" : "Side-by-side"}
-        </Text>
+        <Text dimColor>Mode: {displayMode === "inline" ? "Inline (unified)" : "Side-by-side"}</Text>
       </Box>
 
       {/* Scroll indicator (above) */}
-      {visibleStart > 0 && (
-        <Text dimColor>  ... {visibleStart} hunk(s) above</Text>
-      )}
+      {visibleStart > 0 && <Text dimColor> ... {visibleStart} hunk(s) above</Text>}
 
       {/* Hunks */}
       <Box flexDirection="column">
@@ -223,16 +216,12 @@ export default function InteractiveDiff({
 
       {/* Scroll indicator (below) */}
       {visibleEnd < hunks.length && (
-        <Text dimColor>
-          ... {hunks.length - visibleEnd} hunk(s) below
-        </Text>
+        <Text dimColor>... {hunks.length - visibleEnd} hunk(s) below</Text>
       )}
 
       {/* Keybinding hints */}
       <Box marginTop={1} gap={2} flexWrap="wrap">
-        <Text dimColor>
-          {"\u2191\u2193"} navigate
-        </Text>
+        <Text dimColor>{"\u2191\u2193"} navigate</Text>
         <Text dimColor>Enter accept</Text>
         <Text dimColor>x reject</Text>
         <Text dimColor>a accept-all</Text>

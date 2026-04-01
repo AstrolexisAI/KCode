@@ -1,7 +1,7 @@
 // KCode - MCP Input Sanitization Tests
 // Validates prototype pollution prevention, depth limits, and response truncation
 
-import { describe, test, expect, afterAll } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { sanitizeMcpInput, validateStdioCommand } from "./mcp-client";
 
 // ─── Prototype Pollution Prevention ─────────────────────────────
@@ -40,7 +40,9 @@ describe("sanitizeMcpInput — prototype pollution", () => {
 
   test("strips dangerous keys in arrays of objects", () => {
     // Use JSON.parse to avoid TS narrowing issues with __proto__ literal
-    const input = JSON.parse('{"items":[{"__proto__":{},"name":"a"},{"constructor":{},"name":"b"}]}');
+    const input = JSON.parse(
+      '{"items":[{"__proto__":{},"name":"a"},{"constructor":{},"name":"b"}]}',
+    );
     const result = sanitizeMcpInput(input);
     expect((result.items as unknown[])[0]).toEqual({ name: "a" });
     expect((result.items as unknown[])[1]).toEqual({ name: "b" });
@@ -110,7 +112,7 @@ describe("sanitizeMcpInput — field limits", () => {
     const result = sanitizeMcpInput({ data: bigString });
     expect(typeof result.data).toBe("string");
     expect((result.data as string).length).toBeLessThan(bigString.length);
-    expect((result.data as string)).toContain("Truncated");
+    expect(result.data as string).toContain("Truncated");
   });
 
   test("rejects objects with too many keys", () => {

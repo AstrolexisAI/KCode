@@ -1,18 +1,19 @@
 // Tool actions
 // Auto-extracted from builtin-actions.ts
 
-import type { ActionContext } from "./action-helpers.js";
 import { kcodePath } from "../../core/paths.js";
+import type { ActionContext } from "./action-helpers.js";
 
-export async function handleToolAction(
-  action: string,
-  ctx: ActionContext,
-): Promise<string | null> {
+export async function handleToolAction(action: string, ctx: ActionContext): Promise<string | null> {
   const { conversationManager, setCompleted, appConfig, args, switchTheme } = ctx;
 
   switch (action) {
     case "plan": {
-      const { getActivePlan, formatPlan, executePlan: execPlan } = await import("../../tools/plan.js");
+      const {
+        getActivePlan,
+        formatPlan,
+        executePlan: execPlan,
+      } = await import("../../tools/plan.js");
 
       if (args?.trim() === "clear") {
         await execPlan({ mode: "clear" });
@@ -89,7 +90,8 @@ export async function handleToolAction(
       if (arg.startsWith("add ")) {
         const rest = arg.slice(4).trim();
         const spaceIdx = rest.indexOf(" ");
-        if (spaceIdx === -1) return "  Usage: /memory add <category> <content>\n  Categories: preference, convention, fact, decision, learned";
+        if (spaceIdx === -1)
+          return "  Usage: /memory add <category> <content>\n  Categories: preference, convention, fact, decision, learned";
         const category = rest.slice(0, spaceIdx);
         const validCategories = ["preference", "convention", "fact", "decision", "learned"];
         if (!validCategories.includes(category)) {
@@ -138,7 +140,9 @@ export async function handleToolAction(
         // Check if it's a numeric ID (enhanced store) or a filename (legacy)
         const id = parseInt(idStr);
         if (!isNaN(id) && String(id) === idStr) {
-          const { deleteMemory, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+          const { deleteMemory, initMemoryStoreSchema } = await import(
+            "../../core/memory-store.js"
+          );
           const { getDb } = await import("../../core/db.js");
           const db = getDb();
           initMemoryStoreSchema(db);
@@ -171,7 +175,9 @@ export async function handleToolAction(
         if (!query) return "  Usage: /memory search <query>";
 
         // Search enhanced store first
-        const { searchMemories: searchStore, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { searchMemories: searchStore, initMemoryStoreSchema } = await import(
+          "../../core/memory-store.js"
+        );
         const { getDb } = await import("../../core/db.js");
         const db = getDb();
         initMemoryStoreSchema(db);
@@ -206,7 +212,9 @@ export async function handleToolAction(
       }
 
       if (arg === "stats") {
-        const { getMemoryStats, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { getMemoryStats, initMemoryStoreSchema } = await import(
+          "../../core/memory-store.js"
+        );
         const { getDb } = await import("../../core/db.js");
         const db = getDb();
         initMemoryStoreSchema(db);
@@ -235,12 +243,16 @@ export async function handleToolAction(
       }
 
       if (arg === "expire") {
-        const { expireStaleMemories, initMemoryStoreSchema } = await import("../../core/memory-store.js");
+        const { expireStaleMemories, initMemoryStoreSchema } = await import(
+          "../../core/memory-store.js"
+        );
         const { getDb } = await import("../../core/db.js");
         const db = getDb();
         initMemoryStoreSchema(db);
         const count = expireStaleMemories();
-        return count > 0 ? `  Expired ${count} stale memor${count === 1 ? "y" : "ies"}.` : "  No expired memories to clean up.";
+        return count > 0
+          ? `  Expired ${count} stale memor${count === 1 ? "y" : "ies"}.`
+          : "  No expired memories to clean up.";
       }
 
       if (arg === "global") {
@@ -250,13 +262,16 @@ export async function handleToolAction(
         initMemoryStoreSchema(db);
         const memories = getMemories({ project: "" });
 
-        if (memories.length === 0) return "  No global memories. Use /memory add <category> <content> without project scope.";
+        if (memories.length === 0)
+          return "  No global memories. Use /memory add <category> <content> without project scope.";
 
         const lines = [`  Global Memories (${memories.length}):\n`];
         for (const m of memories) {
           const approvedTag = m.approved ? "" : " (pending)";
           const confTag = m.confidence < 1.0 ? ` [${Math.round(m.confidence * 100)}%]` : "";
-          lines.push(`  #${String(m.id).padEnd(4)} [${m.category}] ${m.key}${confTag}${approvedTag}`);
+          lines.push(
+            `  #${String(m.id).padEnd(4)} [${m.category}] ${m.key}${confTag}${approvedTag}`,
+          );
           lines.push(`         ${m.content.slice(0, 70)}${m.content.length > 70 ? "..." : ""}`);
         }
         return lines.join("\n");
@@ -281,12 +296,18 @@ export async function handleToolAction(
 
         if (storeMemories.length > 0) {
           lines.push(`  Structured Memories (${storeMemories.length}):\n`);
-          lines.push(`  ${"ID".padEnd(6)} ${"Category".padEnd(14)} ${"Key".padEnd(30)} Conf  Status`);
-          lines.push(`  ${"--".padEnd(6)} ${"--------".padEnd(14)} ${"---".padEnd(30)} ----  ------`);
+          lines.push(
+            `  ${"ID".padEnd(6)} ${"Category".padEnd(14)} ${"Key".padEnd(30)} Conf  Status`,
+          );
+          lines.push(
+            `  ${"--".padEnd(6)} ${"--------".padEnd(14)} ${"---".padEnd(30)} ----  ------`,
+          );
           for (const m of storeMemories) {
             const conf = `${Math.round(m.confidence * 100)}%`.padEnd(6);
             const status = m.approved ? "approved" : "pending";
-            lines.push(`  ${String(m.id).padEnd(6)} ${m.category.padEnd(14)} ${m.key.slice(0, 28).padEnd(30)} ${conf}${status}`);
+            lines.push(
+              `  ${String(m.id).padEnd(6)} ${m.category.padEnd(14)} ${m.key.slice(0, 28).padEnd(30)} ${conf}${status}`,
+            );
           }
         }
 
@@ -345,12 +366,15 @@ export async function handleToolAction(
       ].join("\n");
     }
     case "snippet": {
-      const { saveSnippet, loadSnippet, listSnippets, deleteSnippet } = await import("../../core/snippets.js");
+      const { saveSnippet, loadSnippet, listSnippets, deleteSnippet } = await import(
+        "../../core/snippets.js"
+      );
       const arg = args?.trim() ?? "list";
 
       if (arg === "list") {
         const snippets = listSnippets();
-        if (snippets.length === 0) return "  No snippets saved. Usage: /snippet save <name> <content>";
+        if (snippets.length === 0)
+          return "  No snippets saved. Usage: /snippet save <name> <content>";
         const lines = [`  Saved Snippets (${snippets.length}):\n`];
         for (const s of snippets) {
           const preview = s.content.split("\n")[0]!.slice(0, 60);
@@ -390,7 +414,8 @@ export async function handleToolAction(
 
       if (arg === "list") {
         const aliases = loadAliases();
-        if (aliases.length === 0) return "  No custom aliases. Usage: /alias set <shortcut> <expansion>";
+        if (aliases.length === 0)
+          return "  No custom aliases. Usage: /alias set <shortcut> <expansion>";
         const lines = [`  Custom Aliases (${aliases.length}):\n`];
         for (const a of aliases) {
           lines.push(`  /${a.shortcut} \u2192 ${a.expansion}`);
@@ -401,7 +426,8 @@ export async function handleToolAction(
       if (arg.startsWith("set ")) {
         const rest = arg.slice(4).trim();
         const spaceIdx = rest.indexOf(" ");
-        if (spaceIdx === -1) return "  Usage: /alias set <shortcut> <expansion>\n  Example: /alias set s /simplify";
+        if (spaceIdx === -1)
+          return "  Usage: /alias set <shortcut> <expansion>\n  Example: /alias set s /simplify";
         const shortcut = rest.slice(0, spaceIdx).replace(/^\//, ""); // strip leading /
         const expansion = rest.slice(spaceIdx + 1);
         addAlias(shortcut, expansion);
@@ -409,7 +435,10 @@ export async function handleToolAction(
       }
 
       if (arg.startsWith("remove ") || arg.startsWith("delete ")) {
-        const shortcut = arg.replace(/^(remove|delete)\s+/, "").trim().replace(/^\//, "");
+        const shortcut = arg
+          .replace(/^(remove|delete)\s+/, "")
+          .trim()
+          .replace(/^\//, "");
         const removed = removeAlias(shortcut);
         return removed ? `  Alias /${shortcut} removed.` : `  Alias /${shortcut} not found.`;
       }
@@ -441,12 +470,94 @@ export async function handleToolAction(
 
       // Categorize builtin skills
       const categories: Record<string, typeof builtinSkills> = {
-        "Git": builtinSkills.filter(s => ["commit", "diff", "branch", "log", "stash", "stashes", "blame", "resolve"].includes(s.name)),
-        "Code Quality": builtinSkills.filter(s => ["simplify", "lint", "find-bug", "security", "security-review", "type", "test", "test-for", "auto-test", "change-review"].includes(s.name)),
-        "Session": builtinSkills.filter(s => ["context", "usage", "analytics", "budget", "compact", "export", "replay", "note", "bookmark", "search-chat", "diff-session", "profile", "session-tags", "auto-compact"].includes(s.name)),
-        "Models": builtinSkills.filter(s => ["models", "compare", "consensus", "model-health", "ratelimit", "estimate", "project-cost"].includes(s.name)),
-        "Utilities": builtinSkills.filter(s => ["explain", "doc", "deps", "depgraph", "todo", "batch", "loop", "env", "snippet", "alias", "chain", "workspace", "index", "retry"].includes(s.name)),
-        "System": builtinSkills.filter(s => ["help", "clear", "rewind", "plugins", "theme", "config", "hooks", "pin", "unpin", "template", "plan", "stats", "doctor", "memory", "fork", "branches", "branch", "gallery"].includes(s.name)),
+        Git: builtinSkills.filter((s) =>
+          ["commit", "diff", "branch", "log", "stash", "stashes", "blame", "resolve"].includes(
+            s.name,
+          ),
+        ),
+        "Code Quality": builtinSkills.filter((s) =>
+          [
+            "simplify",
+            "lint",
+            "find-bug",
+            "security",
+            "security-review",
+            "type",
+            "test",
+            "test-for",
+            "auto-test",
+            "change-review",
+          ].includes(s.name),
+        ),
+        Session: builtinSkills.filter((s) =>
+          [
+            "context",
+            "usage",
+            "analytics",
+            "budget",
+            "compact",
+            "export",
+            "replay",
+            "note",
+            "bookmark",
+            "search-chat",
+            "diff-session",
+            "profile",
+            "session-tags",
+            "auto-compact",
+          ].includes(s.name),
+        ),
+        Models: builtinSkills.filter((s) =>
+          [
+            "models",
+            "compare",
+            "consensus",
+            "model-health",
+            "ratelimit",
+            "estimate",
+            "project-cost",
+          ].includes(s.name),
+        ),
+        Utilities: builtinSkills.filter((s) =>
+          [
+            "explain",
+            "doc",
+            "deps",
+            "depgraph",
+            "todo",
+            "batch",
+            "loop",
+            "env",
+            "snippet",
+            "alias",
+            "chain",
+            "workspace",
+            "index",
+            "retry",
+          ].includes(s.name),
+        ),
+        System: builtinSkills.filter((s) =>
+          [
+            "help",
+            "clear",
+            "rewind",
+            "plugins",
+            "theme",
+            "config",
+            "hooks",
+            "pin",
+            "unpin",
+            "template",
+            "plan",
+            "stats",
+            "doctor",
+            "memory",
+            "fork",
+            "branches",
+            "branch",
+            "gallery",
+          ].includes(s.name),
+        ),
       };
 
       // Collect categorized skill names to find uncategorized ones
@@ -454,7 +565,7 @@ export async function handleToolAction(
       for (const skills of Object.values(categories)) {
         for (const s of skills) categorizedNames.add(s.name);
       }
-      const uncategorized = builtinSkills.filter(s => !categorizedNames.has(s.name));
+      const uncategorized = builtinSkills.filter((s) => !categorizedNames.has(s.name));
       if (uncategorized.length > 0) {
         categories["Other"] = uncategorized;
       }
@@ -478,7 +589,10 @@ export async function handleToolAction(
 
       const sources = [
         { label: "User (~/.kcode/settings.json)", path: kcodePath("settings.json") },
-        { label: "Project (.kcode/settings.json)", path: join(appConfig.workingDirectory, ".kcode", "settings.json") },
+        {
+          label: "Project (.kcode/settings.json)",
+          path: join(appConfig.workingDirectory, ".kcode", "settings.json"),
+        },
       ];
 
       const lines = ["  Configured Hooks\n"];
@@ -494,7 +608,10 @@ export async function handleToolAction(
           lines.push(`  ── ${src.label} ──`);
           for (const [event, configs] of Object.entries(hooks)) {
             if (!Array.isArray(configs)) continue;
-            for (const config of configs as Array<{ matcher?: string; hooks?: Array<{ type?: string; url?: string; command?: string }> }>) {
+            for (const config of configs as Array<{
+              matcher?: string;
+              hooks?: Array<{ type?: string; url?: string; command?: string }>;
+            }>) {
               const hookCount = config.hooks?.length ?? 0;
               totalHooks += hookCount;
               lines.push(`  ${event} [${config.matcher}] - ${hookCount} action(s)`);
@@ -505,7 +622,9 @@ export async function handleToolAction(
             }
           }
           lines.push("");
-        } catch { /* skip malformed */ }
+        } catch {
+          /* skip malformed */
+        }
       }
 
       if (totalHooks === 0) {
@@ -542,7 +661,8 @@ export async function handleToolAction(
       if (files.length === 0) return "  No files modified in this session.";
 
       const suggestions = getTestSuggestionsForFiles(files, appConfig.workingDirectory);
-      if (suggestions.length === 0) return `  No related test files found for ${files.length} modified file(s).`;
+      if (suggestions.length === 0)
+        return `  No related test files found for ${files.length} modified file(s).`;
 
       const lines = [`  Found ${suggestions.length} test file(s) for modified code:\n`];
       for (const s of suggestions) {
@@ -560,17 +680,18 @@ export async function handleToolAction(
       return formatReview(review);
     }
     case "swarm": {
-      if (!args?.trim()) return [
-        "  Agent Swarm\n",
-        "  Run N agents in parallel on a task.\n",
-        "  Usage:",
-        "    /swarm <prompt>                    Run 4 agents with the prompt",
-        "    /swarm <prompt> --agents 6         Use 6 agents",
-        "    /swarm <prompt> --files '*.ts'     Distribute files among agents",
-        "",
-        "  Agents run in --permission deny mode (read-only).",
-        "  Max 8 agents. Each agent gets a subset of files.",
-      ].join("\n");
+      if (!args?.trim())
+        return [
+          "  Agent Swarm\n",
+          "  Run N agents in parallel on a task.\n",
+          "  Usage:",
+          "    /swarm <prompt>                    Run 4 agents with the prompt",
+          "    /swarm <prompt> --agents 6         Use 6 agents",
+          "    /swarm <prompt> --files '*.ts'     Distribute files among agents",
+          "",
+          "  Agents run in --permission deny mode (read-only).",
+          "  Max 8 agents. Each agent gets a subset of files.",
+        ].join("\n");
 
       // Parse args
       let prompt = args.trim();
@@ -600,10 +721,12 @@ export async function handleToolAction(
         try {
           const filesRaw = execSync(
             `find . -type f -name '${fileGlob.replace(/'/g, "")}' -not -path '*/node_modules/*' -not -path '*/.git/*' | head -100`,
-            { cwd, timeout: 5000 }
-          ).toString().trim();
+            { cwd, timeout: 5000 },
+          )
+            .toString()
+            .trim();
 
-          const files = filesRaw ? filesRaw.split("\n").map(f => f.replace(/^\.\//, "")) : [];
+          const files = filesRaw ? filesRaw.split("\n").map((f) => f.replace(/^\.\//, "")) : [];
           if (files.length === 0) return `  No files matching: ${fileGlob}`;
 
           const result = await runSwarmOnFiles(prompt, files, cwd, agentCount, appConfig.model);
@@ -614,14 +737,17 @@ export async function handleToolAction(
       }
 
       // No files specified — create N identical task agents
-      const tasks = Array.from({ length: agentCount }, (_, i) =>
-        `${prompt}\n\nYou are agent ${i + 1}/${agentCount}. Be concise.`
+      const tasks = Array.from(
+        { length: agentCount },
+        (_, i) => `${prompt}\n\nYou are agent ${i + 1}/${agentCount}. Be concise.`,
       );
       const result = await runSwarm(prompt, tasks, cwd, appConfig.model);
       return formatSwarmResult(result);
     }
     case "sandbox": {
-      const { getSandboxCapabilities, getDefaultSandboxConfig } = await import("../../core/sandbox");
+      const { getSandboxCapabilities, getDefaultSandboxConfig } = await import(
+        "../../core/sandbox"
+      );
       const arg = args?.trim() ?? "status";
       const caps = getSandboxCapabilities();
       const cwd = appConfig.workingDirectory;
@@ -651,7 +777,7 @@ export async function handleToolAction(
             ? "  Install bubblewrap for strict sandbox: sudo dnf install bubblewrap"
             : "  Sandbox requires Linux with bubblewrap.";
         }
-        return "  Sandbox enabled. Set in .kcode/settings.json:\n  { \"sandbox\": { \"mode\": \"strict\" } }";
+        return '  Sandbox enabled. Set in .kcode/settings.json:\n  { "sandbox": { "mode": "strict" } }';
       }
 
       if (arg === "off" || arg === "light") {
@@ -661,7 +787,8 @@ export async function handleToolAction(
       return "  Usage: /sandbox [status | on | off | strict | light]";
     }
     case "dry_run": {
-      if (!args?.trim()) return "  Usage: /dry-run <description of changes>\n  Simulates changes and shows diffs without writing to disk.";
+      if (!args?.trim())
+        return "  Usage: /dry-run <description of changes>\n  Simulates changes and shows diffs without writing to disk.";
 
       // Inject a system instruction that forces read-only mode
       const dryPrompt = `[DRY RUN MODE] The user wants to preview what changes would be made WITHOUT actually modifying any files.
@@ -694,15 +821,18 @@ Task to preview: ${args.trim()}`;
       let command: string;
 
       if (target === "build") {
-        if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bunfig.toml"))) command = "bun run build";
+        if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bunfig.toml")))
+          command = "bun run build";
         else if (existsSync(join(cwd, "package.json"))) command = "npm run build";
         else if (existsSync(join(cwd, "Cargo.toml"))) command = "cargo build";
         else if (existsSync(join(cwd, "go.mod"))) command = "go build ./...";
         else command = "make";
       } else if (target === "test") {
-        if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bunfig.toml"))) command = "bun test";
+        if (existsSync(join(cwd, "bun.lockb")) || existsSync(join(cwd, "bunfig.toml")))
+          command = "bun test";
         else if (existsSync(join(cwd, "package.json"))) command = "npm test";
-        else if (existsSync(join(cwd, "pytest.ini")) || existsSync(join(cwd, "pyproject.toml"))) command = "pytest";
+        else if (existsSync(join(cwd, "pytest.ini")) || existsSync(join(cwd, "pyproject.toml")))
+          command = "pytest";
         else if (existsSync(join(cwd, "go.mod"))) command = "go test ./...";
         else if (existsSync(join(cwd, "Cargo.toml"))) command = "cargo test";
         else command = "npm test";
@@ -755,10 +885,14 @@ INSTRUCTIONS:
       return `__auto_fix_prompt__${fixPrompt}`;
     }
     case "btw": {
-      if (!args?.trim()) return "  Usage: /btw <question>\n  Asks a quick side question without adding to conversation history.";
+      if (!args?.trim())
+        return "  Usage: /btw <question>\n  Asks a quick side question without adding to conversation history.";
 
       const { getModelBaseUrl } = await import("../../core/models.js");
-      const baseUrl = await getModelBaseUrl(appConfig.model, appConfig.apiBase) ?? appConfig.apiBase ?? "http://localhost:10091";
+      const baseUrl =
+        (await getModelBaseUrl(appConfig.model, appConfig.apiBase)) ??
+        appConfig.apiBase ??
+        "http://localhost:10091";
 
       try {
         const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
@@ -770,7 +904,10 @@ INSTRUCTIONS:
           body: JSON.stringify({
             model: appConfig.model,
             messages: [
-              { role: "system", content: "You are a helpful assistant. Answer concisely in 1-3 sentences." },
+              {
+                role: "system",
+                content: "You are a helpful assistant. Answer concisely in 1-3 sentences.",
+              },
               { role: "user", content: args.trim() },
             ],
             max_tokens: 1024,
@@ -780,9 +917,11 @@ INSTRUCTIONS:
 
         if (!resp.ok) return `  /btw error: ${resp.status} ${resp.statusText}`;
 
-        const data = await resp.json() as Record<string, unknown>;
+        const data = (await resp.json()) as Record<string, unknown>;
         const choices = data.choices as Record<string, unknown>[] | undefined;
-        const answer = (choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(no response)";
+        const answer =
+          (choices?.[0]?.message as Record<string, unknown> | undefined)?.content ??
+          "(no response)";
         return `  [btw] ${answer}`;
       } catch (err) {
         return `  /btw error: ${err instanceof Error ? err.message : err}`;
@@ -795,7 +934,11 @@ INSTRUCTIONS:
 
       try {
         // Get git-tracked files, sorted by recency
-        const filesRaw = execSync("git ls-files --full-name", { cwd, encoding: "utf-8", timeout: 5000 });
+        const filesRaw = execSync("git ls-files --full-name", {
+          cwd,
+          encoding: "utf-8",
+          timeout: 5000,
+        });
         const allFiles = filesRaw.trim().split("\n").filter(Boolean);
 
         if (allFiles.length === 0) return "  No files found (not a git repo or empty).";
@@ -803,30 +946,43 @@ INSTRUCTIONS:
         // Get recently modified files
         let recentFiles: string[] = [];
         try {
-          const recent = execSync("git log --diff-filter=M --name-only --pretty=format: -20", { cwd, encoding: "utf-8", timeout: 5000 });
+          const recent = execSync("git log --diff-filter=M --name-only --pretty=format: -20", {
+            cwd,
+            encoding: "utf-8",
+            timeout: 5000,
+          });
           recentFiles = [...new Set(recent.trim().split("\n").filter(Boolean))].slice(0, 10);
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         // Use keyword matching from description to find relevant files
-        const keywords = description.toLowerCase().split(/\s+/).filter(w => w.length > 1);
-        const scored = allFiles.map(f => {
-          const lower = f.toLowerCase();
-          let score = 0;
-          for (const kw of keywords) {
-            if (lower.includes(kw)) score += 2;
-          }
-          if (recentFiles.includes(f)) score += 3;
-          // Boost source files over configs/docs
-          if (lower.match(/\.(ts|tsx|js|jsx|py|go|rs|swift|java|c|cpp|rb)$/)) score += 1;
-          return { file: f, score };
-        }).filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, 15);
+        const keywords = description
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((w) => w.length > 1);
+        const scored = allFiles
+          .map((f) => {
+            const lower = f.toLowerCase();
+            let score = 0;
+            for (const kw of keywords) {
+              if (lower.includes(kw)) score += 2;
+            }
+            if (recentFiles.includes(f)) score += 3;
+            // Boost source files over configs/docs
+            if (lower.match(/\.(ts|tsx|js|jsx|py|go|rs|swift|java|c|cpp|rb)$/)) score += 1;
+            return { file: f, score };
+          })
+          .filter((s) => s.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 15);
 
         if (scored.length === 0) {
           // Fall back to recently modified
           if (recentFiles.length > 0) {
             return [
               `  Suggested Files (recently modified):\n`,
-              ...recentFiles.map(f => `    ${f}`),
+              ...recentFiles.map((f) => `    ${f}`),
             ].join("\n");
           }
           return "  No matching files found. Try a more specific description.";
@@ -834,7 +990,7 @@ INSTRUCTIONS:
 
         return [
           `  Suggested Files for: "${description}"\n`,
-          ...scored.map(s => `  ${s.score >= 4 ? "*" : " "} ${s.file}`),
+          ...scored.map((s) => `  ${s.score >= 4 ? "*" : " "} ${s.file}`),
           "",
           "  * = high relevance",
         ].join("\n");
@@ -843,7 +999,9 @@ INSTRUCTIONS:
       }
     }
     case "new_project": {
-      const { listTemplates, findTemplate, createFromTemplate } = await import("../../core/project-templates");
+      const { listTemplates, findTemplate, createFromTemplate } = await import(
+        "../../core/project-templates"
+      );
       const input = args?.trim();
 
       if (!input) {
@@ -865,7 +1023,8 @@ INSTRUCTIONS:
       const projectName = parts[1]!;
 
       const template = findTemplate(templateName);
-      if (!template) return `  Template not found: ${templateName}\n  Run /new-project to see available templates.`;
+      if (!template)
+        return `  Template not found: ${templateName}\n  Run /new-project to see available templates.`;
 
       // Validate project name
       if (!/^[a-zA-Z][\w.-]*$/.test(projectName)) {
@@ -880,10 +1039,7 @@ INSTRUCTIONS:
 
       const result = createFromTemplate(template, projectName, targetDir);
 
-      const lines = [
-        `  Created ${projectName} from "${templateName}" template\n`,
-        `  Files:`,
-      ];
+      const lines = [`  Created ${projectName} from "${templateName}" template\n`, `  Files:`];
       for (const f of result.filesCreated) {
         lines.push(`    ${f}`);
       }

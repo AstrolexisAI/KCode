@@ -5,11 +5,11 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { watch, type FSWatcher } from "node:fs";
-import { mkdir, writeFile, stat } from "node:fs/promises";
-import { join, dirname } from "node:path";
-import type { SyncConflict } from "./types";
+import { type FSWatcher, watch } from "node:fs";
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { executeRemote } from "./ssh-transport";
+import type { SyncConflict } from "./types";
 
 /** Options for sync operations */
 export interface SyncOptions {
@@ -50,10 +50,7 @@ export async function initialSync(
   let excludeFile: string | undefined;
 
   try {
-    const args: string[] = [
-      "-avz",
-      "--delete",
-    ];
+    const args: string[] = ["-avz", "--delete"];
 
     if (excludes.length > 0) {
       excludeFile = await writeExcludeFile(excludes, localDir);
@@ -71,7 +68,15 @@ export async function initialSync(
     });
 
     // Count transferred files (lines that don't start with special chars)
-    const lines = stdout.split("\n").filter((l) => l.trim() && !l.startsWith("sent ") && !l.startsWith("total ") && !l.startsWith("building "));
+    const lines = stdout
+      .split("\n")
+      .filter(
+        (l) =>
+          l.trim() &&
+          !l.startsWith("sent ") &&
+          !l.startsWith("total ") &&
+          !l.startsWith("building "),
+      );
     return { success: true, filesTransferred: lines.length };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -102,12 +107,7 @@ export async function syncChanges(
     await writeFile(filesListPath, files.join("\n") + "\n", "utf-8");
 
     const source = localDir.endsWith("/") ? localDir : `${localDir}/`;
-    const args: string[] = [
-      "-avz",
-      "--files-from", filesListPath,
-      source,
-      `${host}:${remoteDir}/`,
-    ];
+    const args: string[] = ["-avz", "--files-from", filesListPath, source, `${host}:${remoteDir}/`];
 
     execFileSync("rsync", args, {
       encoding: "utf-8",
@@ -145,7 +145,8 @@ export async function syncFromRemote(
     const remoteSrc = remoteDir.endsWith("/") ? remoteDir : `${remoteDir}/`;
     const args: string[] = [
       "-avz",
-      "--files-from", filesListPath,
+      "--files-from",
+      filesListPath,
       `${host}:${remoteSrc}`,
       localDir.endsWith("/") ? localDir : `${localDir}/`,
     ];
@@ -233,11 +234,18 @@ export function startRemoteWatcher(
   onChange: (files: string[]) => void,
 ): { stop: () => void } {
   const args = [
-    "-o", "BatchMode=yes",
-    "-o", "ServerAliveInterval=15",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ServerAliveInterval=15",
     host,
-    "inotifywait", "-m", "-r", "-e", "modify,create,delete",
-    "--format", "%w%f",
+    "inotifywait",
+    "-m",
+    "-r",
+    "-e",
+    "modify,create,delete",
+    "--format",
+    "%w%f",
     remoteDir,
   ];
 
@@ -355,10 +363,7 @@ export async function resolveConflict(
 /**
  * Get modification time of a remote file.
  */
-export async function getRemoteMtime(
-  host: string,
-  remotePath: string,
-): Promise<number | null> {
+export async function getRemoteMtime(host: string, remotePath: string): Promise<number | null> {
   try {
     const result = await executeRemote(host, ["stat", "-c", "%Y", remotePath]);
     if (result.exitCode === 0) {

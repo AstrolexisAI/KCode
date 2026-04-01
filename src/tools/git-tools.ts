@@ -17,7 +17,9 @@ function runGit(args: string[], cwd: string): string {
     stdio: "pipe",
     timeout: GIT_TIMEOUT,
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-  }).toString().trim();
+  })
+    .toString()
+    .trim();
 }
 
 function isGitRepo(cwd: string): boolean {
@@ -74,9 +76,7 @@ export async function executeGitStatus(input: Record<string, unknown>): Promise<
       }
     }
 
-    const lines: string[] = [
-      `Branch: ${branch}`,
-    ];
+    const lines: string[] = [`Branch: ${branch}`];
 
     // Ahead/behind remote
     try {
@@ -88,7 +88,9 @@ export async function executeGitStatus(input: Record<string, unknown>): Promise<
         if (behind > 0) parts.push(`${behind} behind`);
         lines.push(`Remote: ${parts.join(", ")}`);
       }
-    } catch { /* no upstream */ }
+    } catch {
+      /* no upstream */
+    }
 
     lines.push("");
 
@@ -123,12 +125,18 @@ export async function executeGitStatus(input: Record<string, unknown>): Promise<
           lines.push("Diff stats (unstaged):");
           lines.push(diffStat);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
 
     return { tool_use_id: "", content: lines.join("\n") };
   } catch (err) {
-    return { tool_use_id: "", content: `Error: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+      is_error: true,
+    };
   }
 }
 
@@ -136,10 +144,19 @@ export async function executeGitStatus(input: Record<string, unknown>): Promise<
 
 // Files that should never be committed
 const SENSITIVE_PATTERNS = [
-  ".env", ".env.local", ".env.production",
-  "credentials.json", "secrets.json", "service-account.json",
-  ".pem", ".key", ".p12", ".pfx",
-  "id_rsa", "id_ed25519", "id_ecdsa",
+  ".env",
+  ".env.local",
+  ".env.production",
+  "credentials.json",
+  "secrets.json",
+  "service-account.json",
+  ".pem",
+  ".key",
+  ".p12",
+  ".pfx",
+  "id_rsa",
+  "id_ed25519",
+  "id_ecdsa",
 ];
 
 export const gitCommitDefinition: ToolDefinition = {
@@ -158,11 +175,13 @@ export const gitCommitDefinition: ToolDefinition = {
       files: {
         type: "array",
         items: { type: "string" },
-        description: "Specific files to stage and commit (if omitted, commits currently staged files)",
+        description:
+          "Specific files to stage and commit (if omitted, commits currently staged files)",
       },
       all: {
         type: "boolean",
-        description: "Stage all modified and deleted files before committing (like git add -A, default: false)",
+        description:
+          "Stage all modified and deleted files before committing (like git add -A, default: false)",
       },
     },
     required: ["message"],
@@ -198,7 +217,11 @@ export async function executeGitCommit(input: Record<string, unknown>): Promise<
     // Check what's staged
     const staged = runGit(["diff", "--cached", "--name-only"], cwd);
     if (!staged) {
-      return { tool_use_id: "", content: "Error: Nothing staged to commit. Use files=[...] or all=true to stage changes.", is_error: true };
+      return {
+        tool_use_id: "",
+        content: "Error: Nothing staged to commit. Use files=[...] or all=true to stage changes.",
+        is_error: true,
+      };
     }
 
     // Check for sensitive files
@@ -217,7 +240,11 @@ export async function executeGitCommit(input: Record<string, unknown>): Promise<
     if (sensitiveFound.length > 0) {
       // Unstage sensitive files
       for (const f of sensitiveFound) {
-        try { runGit(["reset", "HEAD", "--", f], cwd); } catch { /* ignore */ }
+        try {
+          runGit(["reset", "HEAD", "--", f], cwd);
+        } catch {
+          /* ignore */
+        }
       }
       return {
         tool_use_id: "",
@@ -232,7 +259,9 @@ export async function executeGitCommit(input: Record<string, unknown>): Promise<
       stdio: "pipe",
       timeout: GIT_TIMEOUT,
       env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-    }).toString().trim();
+    })
+      .toString()
+      .trim();
 
     // Get the commit hash
     const hash = runGit(["rev-parse", "--short", "HEAD"], cwd);
@@ -245,10 +274,16 @@ export async function executeGitCommit(input: Record<string, unknown>): Promise<
         `Files (${stagedFiles.length}):`,
         ...stagedFiles.slice(0, 20).map((f) => `  ${f}`),
         stagedFiles.length > 20 ? `  ... +${stagedFiles.length - 20} more` : "",
-      ].filter(Boolean).join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n"),
     };
   } catch (err) {
-    return { tool_use_id: "", content: `Error: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+      is_error: true,
+    };
   }
 }
 
@@ -290,13 +325,15 @@ export async function executeGitLog(input: Record<string, unknown>): Promise<Too
 
   // Reject shell metacharacters in file path
   if (file && /[;|&`$(){}[\]<>!\n\r]/.test(file)) {
-    return { tool_use_id: "", content: "Error: file path contains invalid characters.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: file path contains invalid characters.",
+      is_error: true,
+    };
   }
 
   try {
-    const format = oneline
-      ? "--format=%h %s (%cr)"
-      : "--format=%h|%an|%cr|%s";
+    const format = oneline ? "--format=%h %s (%cr)" : "--format=%h|%an|%cr|%s";
 
     const args = ["log", format, `-${count}`];
     if (file) args.push("--", file);
@@ -322,6 +359,10 @@ export async function executeGitLog(input: Record<string, unknown>): Promise<Too
 
     return { tool_use_id: "", content: lines.join("\n").trim() };
   } catch (err) {
-    return { tool_use_id: "", content: `Error: ${err instanceof Error ? err.message : String(err)}`, is_error: true };
+    return {
+      tool_use_id: "",
+      content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+      is_error: true,
+    };
   }
 }

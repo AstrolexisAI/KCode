@@ -1,8 +1,15 @@
 // KCode - Permission Rule Matching Engine
 // Glob pattern matching for files/commands, permission rule evaluation, first-match-wins logic.
 
-import type { PermissionRule, PermissionRuleAction, ToolUseBlock, BashInput, FileWriteInput, FileEditInput } from "./types";
 import { log } from "./logger";
+import type {
+  BashInput,
+  FileEditInput,
+  FileWriteInput,
+  PermissionRule,
+  PermissionRuleAction,
+  ToolUseBlock,
+} from "./types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -140,7 +147,7 @@ function getToolMatchValue(tool: ToolUseBlock): string {
     case "MultiEdit": {
       // Match against all files in the edits array — rule must match every path
       const input = tool.input as { edits?: Array<{ file_path?: string }> };
-      const paths = (input.edits ?? []).map(e => e.file_path ?? "").filter(Boolean);
+      const paths = (input.edits ?? []).map((e) => e.file_path ?? "").filter(Boolean);
       return paths.join("\n") || "";
     }
     case "GrepReplace": {
@@ -157,7 +164,10 @@ function getToolMatchValue(tool: ToolUseBlock): string {
         try {
           const u = new URL(input.url);
           return u.hostname;
-        } catch (err) { log.debug("permissions", `Failed to parse WebFetch URL: ${err}`); return input.url; }
+        } catch (err) {
+          log.debug("permissions", `Failed to parse WebFetch URL: ${err}`);
+          return input.url;
+        }
       }
       return "";
     }
@@ -231,7 +241,10 @@ function matchBashCompound(pattern: string, command: string): boolean {
  *   Write(*.test.ts)   - match writing test files
  *   mcp__server__*     - match all tools from an MCP server
  */
-export function evaluateRules(rules: PermissionRule[], tool: ToolUseBlock): PermissionRuleAction | null {
+export function evaluateRules(
+  rules: PermissionRule[],
+  tool: ToolUseBlock,
+): PermissionRuleAction | null {
   const matchValue = getToolMatchValue(tool);
 
   for (const rule of rules) {
@@ -260,7 +273,7 @@ export function evaluateRules(rules: PermissionRule[], tool: ToolUseBlock): Perm
 
     // For MultiEdit, matchValue contains newline-separated paths — rule must match ALL
     if (matchValue.includes("\n")) {
-      const allMatch = matchValue.split("\n").every(v => globMatch(parsed.innerPattern, v));
+      const allMatch = matchValue.split("\n").every((v) => globMatch(parsed.innerPattern, v));
       if (allMatch) return rule.action;
       continue;
     }

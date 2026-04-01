@@ -48,7 +48,9 @@ export async function getPrefetchedUserSettings(): Promise<Record<string, unknow
 }
 
 /** Get cached models config (non-blocking if prefetch was started early) */
-export async function getPrefetchedModelsConfig(): Promise<{ models: Array<{ name: string; provider?: string; baseUrl?: string }> }> {
+export async function getPrefetchedModelsConfig(): Promise<{
+  models: Array<{ name: string; provider?: string; baseUrl?: string }>;
+}> {
   return getPrefetched().modelsConfig;
 }
 
@@ -74,7 +76,9 @@ async function prefetchUserSettings(): Promise<Record<string, unknown>> {
   }
 }
 
-async function prefetchModelsConfig(): Promise<{ models: Array<{ name: string; provider?: string; baseUrl?: string }> }> {
+async function prefetchModelsConfig(): Promise<{
+  models: Array<{ name: string; provider?: string; baseUrl?: string }>;
+}> {
   try {
     const { loadModelsConfig } = await import("./models");
     return await loadModelsConfig();

@@ -9,7 +9,9 @@ export function registerSearchCommand(program: Command): void {
     .option("-d, --days <days>", "Limit search to last N days", parseInt, 30)
     .option("--reindex", "Rebuild the FTS search index")
     .action(async (query: string, opts: { number?: number; days?: number; reindex?: boolean }) => {
-      const { indexAllTranscripts, searchTranscripts, getIndexStats } = await import("../../core/transcript-search");
+      const { indexAllTranscripts, searchTranscripts, getIndexStats } = await import(
+        "../../core/transcript-search"
+      );
       const maxResults = opts.number ?? 10;
 
       // Auto-index on first use or when --reindex is passed
@@ -70,7 +72,9 @@ export function registerSearchCommand(program: Command): void {
         return;
       }
 
-      console.log(`\nFound ${results.length} match(es) for "${query}" (${stats.sessions} sessions indexed):\n`);
+      console.log(
+        `\nFound ${results.length} match(es) for "${query}" (${stats.sessions} sessions indexed):\n`,
+      );
       for (const r of results) {
         const preview = r.content.slice(0, 120).replace(/\n/g, " ");
         const dateStr = r.timestamp ? new Date(r.timestamp).toLocaleString() : "";

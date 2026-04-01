@@ -106,19 +106,12 @@ async function deriveKey(teamToken: string, salt: Uint8Array): Promise<CryptoKey
  * Encrypt data using AES-256-GCM with a key derived from the team token.
  * Returns a buffer containing: salt (16 bytes) || iv (12 bytes) || ciphertext.
  */
-export async function encryptData(
-  data: Uint8Array,
-  teamToken: string,
-): Promise<Uint8Array> {
+export async function encryptData(data: Uint8Array, teamToken: string): Promise<Uint8Array> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const key = await deriveKey(teamToken, salt);
 
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: AES_ALGORITHM, iv },
-    key,
-    data,
-  );
+  const ciphertext = await crypto.subtle.encrypt({ name: AES_ALGORITHM, iv }, key, data);
 
   // Concatenate: salt + iv + ciphertext
   const result = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
@@ -132,10 +125,7 @@ export async function encryptData(
  * Decrypt data that was encrypted with encryptData.
  * Expects the format: salt (16 bytes) || iv (12 bytes) || ciphertext.
  */
-export async function decryptData(
-  encrypted: Uint8Array,
-  teamToken: string,
-): Promise<Uint8Array> {
+export async function decryptData(encrypted: Uint8Array, teamToken: string): Promise<Uint8Array> {
   if (encrypted.length < 16 + IV_BYTES + 1) {
     throw new Error("Encrypted data too short");
   }
@@ -146,11 +136,7 @@ export async function decryptData(
   const key = await deriveKey(teamToken, salt);
 
   try {
-    const plaintext = await crypto.subtle.decrypt(
-      { name: AES_ALGORITHM, iv },
-      key,
-      ciphertext,
-    );
+    const plaintext = await crypto.subtle.decrypt({ name: AES_ALGORITHM, iv }, key, ciphertext);
     return new Uint8Array(plaintext);
   } catch (err) {
     log.debug("mesh-security", `Decryption failed: ${err}`);

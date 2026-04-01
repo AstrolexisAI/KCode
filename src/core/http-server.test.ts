@@ -2,8 +2,8 @@
 // Covers: allowlist enforcement, blocked tools, auth, malformed input, unknown tools
 // Tests call handleRoute() directly — no subprocess, no Pro requirement.
 
-import { describe, test, expect } from "bun:test";
-import { handleRoute, ALLOWED_HTTP_TOOLS, BLOCKED_TOOLS } from "./http-server";
+import { describe, expect, test } from "bun:test";
+import { ALLOWED_HTTP_TOOLS, BLOCKED_TOOLS, handleRoute } from "./http-server";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -11,7 +11,7 @@ const CORS = {
   "Access-Control-Allow-Origin": "http://localhost",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Id",
-  "Vary": "Origin",
+  Vary: "Origin",
 };
 
 function makeReq(method: string, path: string, body?: unknown): { req: Request; url: URL } {
@@ -24,7 +24,11 @@ function makeReq(method: string, path: string, body?: unknown): { req: Request; 
   return { req: new Request(urlStr, init), url: new URL(urlStr) };
 }
 
-async function route(method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> {
+async function route(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; body: any }> {
   const { req, url } = makeReq(method, path, body);
   const res = await handleRoute(req, url, CORS);
   return { status: res.status, body: await res.json() };
@@ -149,7 +153,7 @@ describe("POST /api/tool — malformed input", () => {
     });
     const res = await handleRoute(badReq, url, CORS);
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toContain("Invalid JSON");
   });
 
@@ -182,7 +186,16 @@ describe("Allowlist/Blocklist consistency", () => {
   });
 
   test("allowlist contains only known read-only tools", () => {
-    const expectedSafe = ["Read", "Glob", "Grep", "LS", "DiffView", "GitStatus", "GitLog", "ToolSearch"];
+    const expectedSafe = [
+      "Read",
+      "Glob",
+      "Grep",
+      "LS",
+      "DiffView",
+      "GitStatus",
+      "GitLog",
+      "ToolSearch",
+    ];
     expect([...ALLOWED_HTTP_TOOLS].sort()).toEqual(expectedSafe.sort());
   });
 });
@@ -227,8 +240,14 @@ describe("TUI vs Server permission isolation", () => {
   test("/api/tool cannot execute any write tool", async () => {
     // All tools that modify state must be blocked
     const writeTools = [
-      "Bash", "Write", "Edit", "MultiEdit", "GrepReplace", "Rename",
-      "NotebookEdit", "Agent",
+      "Bash",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "GrepReplace",
+      "Rename",
+      "NotebookEdit",
+      "Agent",
     ];
     for (const tool of writeTools) {
       const { status } = await route("POST", "/api/tool", { name: tool, input: {} });
@@ -238,8 +257,13 @@ describe("TUI vs Server permission isolation", () => {
 
   test("/api/tool cannot execute scheduling/task tools", async () => {
     const sideEffectTools = [
-      "CronCreate", "CronDelete", "Clipboard", "Stash",
-      "PlanMode", "SendMessage", "Skill",
+      "CronCreate",
+      "CronDelete",
+      "Clipboard",
+      "Stash",
+      "PlanMode",
+      "SendMessage",
+      "Skill",
     ];
     for (const tool of sideEffectTools) {
       const { status } = await route("POST", "/api/tool", { name: tool, input: {} });

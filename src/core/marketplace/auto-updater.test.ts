@@ -1,13 +1,13 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   autoUpdatePlugins,
+  isNewerVersion,
   readLastCheckTimestamp,
   writeLastCheckTimestamp,
-  isNewerVersion,
 } from "./auto-updater";
 import type { CatalogEntry } from "./types";
 
@@ -71,11 +71,7 @@ describe("auto-updater", () => {
   // ─── autoUpdatePlugins ─────────────────────────────────────
 
   test("skips if not enabled", async () => {
-    const report = await autoUpdatePlugins(
-      { enabled: false },
-      cacheDir,
-      [],
-    );
+    const report = await autoUpdatePlugins({ enabled: false }, cacheDir, []);
     expect(report.skipped).toBe(true);
     expect(report.updated).toHaveLength(0);
   });
@@ -97,9 +93,7 @@ describe("auto-updater", () => {
     // Write an old timestamp (2 days ago)
     writeLastCheckTimestamp(cacheDir, Date.now() - 2 * 86_400_000);
 
-    const catalog: CatalogEntry[] = [
-      { name: "plugin-a", version: "2.0.0", sha256: "abc" },
-    ];
+    const catalog: CatalogEntry[] = [{ name: "plugin-a", version: "2.0.0", sha256: "abc" }];
 
     let fetchCalled = false;
     const mockFetchCatalog = async (_url: string) => {
@@ -113,7 +107,12 @@ describe("auto-updater", () => {
         downloadedPlugin = name;
         return { pluginDir: "/tmp/test", version: "2.0.0", sha256: "abc", fromCache: false };
       },
-      getSHATracker: () => ({ getStoredSHA: () => null, setSHA: () => {}, needsUpdate: () => true, invalidate: () => {} }),
+      getSHATracker: () => ({
+        getStoredSHA: () => null,
+        setSHA: () => {},
+        needsUpdate: () => true,
+        invalidate: () => {},
+      }),
     };
 
     const report = await autoUpdatePlugins(
@@ -135,9 +134,7 @@ describe("auto-updater", () => {
   test("does not update if remote version is not newer", async () => {
     writeLastCheckTimestamp(cacheDir, Date.now() - 2 * 86_400_000);
 
-    const catalog: CatalogEntry[] = [
-      { name: "plugin-a", version: "1.0.0", sha256: "abc" },
-    ];
+    const catalog: CatalogEntry[] = [{ name: "plugin-a", version: "1.0.0", sha256: "abc" }];
 
     const report = await autoUpdatePlugins(
       { enabled: true, checkIntervalMs: 86_400_000, marketplaces: ["test"] },
@@ -165,7 +162,12 @@ describe("auto-updater", () => {
         if (name === "plugin-a") throw new Error("download failed");
         return { pluginDir: "/tmp/test", version: "3.0.0", sha256: "def", fromCache: false };
       },
-      getSHATracker: () => ({ getStoredSHA: () => null, setSHA: () => {}, needsUpdate: () => true, invalidate: () => {} }),
+      getSHATracker: () => ({
+        getStoredSHA: () => null,
+        setSHA: () => {},
+        needsUpdate: () => true,
+        invalidate: () => {},
+      }),
     };
 
     const report = await autoUpdatePlugins(
@@ -207,7 +209,11 @@ describe("auto-updater", () => {
       { enabled: true, checkIntervalMs: 86_400_000, marketplaces: ["test"] },
       cacheDir,
       [{ name: "plugin-a", version: "1.0.0" }],
-      { fetchCatalog: async () => { throw new Error("network error"); } },
+      {
+        fetchCatalog: async () => {
+          throw new Error("network error");
+        },
+      },
     );
 
     expect(report.skipped).toBe(false);

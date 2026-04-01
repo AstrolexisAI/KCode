@@ -1,8 +1,9 @@
 // KCode - Web UI REST API Tests
 
-import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { handleApiRequest } from "./api";
 import * as bridge from "./session-bridge";
+import { clearActivePlan } from "../tools/plan";
 
 // ─── Mock Setup ─────────────────────────────────────────────────
 
@@ -58,10 +59,12 @@ describe("API Endpoints", () => {
     originalModel = bridge.getActiveModel();
     bridge.setActiveModel("test-model");
     bridge.setWorkingDirectory("/tmp/test");
+    clearActivePlan();
   });
 
   afterEach(() => {
-    // Restore originals
+    // Restore originals — use clearConversationManager to reset to null
+    bridge.clearConversationManager();
     if (originalManager) {
       bridge.setConversationManager(originalManager as any);
     }
@@ -73,7 +76,7 @@ describe("API Endpoints", () => {
   test("GET /api/v1/health returns ok", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/health"),
-      "/api/v1/health"
+      "/api/v1/health",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -86,7 +89,7 @@ describe("API Endpoints", () => {
   test("GET /api/v1/session without manager returns defaults", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/session"),
-      "/api/v1/session"
+      "/api/v1/session",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -98,7 +101,7 @@ describe("API Endpoints", () => {
     bridge.setConversationManager(createMockManager() as any);
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/session"),
-      "/api/v1/session"
+      "/api/v1/session",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -114,7 +117,7 @@ describe("API Endpoints", () => {
   test("GET /api/v1/messages without manager returns empty", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/messages"),
-      "/api/v1/messages"
+      "/api/v1/messages",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -126,7 +129,7 @@ describe("API Endpoints", () => {
     bridge.setConversationManager(createMockManager() as any);
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/messages"),
-      "/api/v1/messages"
+      "/api/v1/messages",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -139,7 +142,7 @@ describe("API Endpoints", () => {
     bridge.setConversationManager(createMockManager() as any);
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/messages?limit=1&offset=1"),
-      "/api/v1/messages"
+      "/api/v1/messages",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -156,7 +159,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "Hello" }),
       }),
-      "/api/v1/messages"
+      "/api/v1/messages",
     );
     expect(res.status).toBe(503);
   });
@@ -169,7 +172,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
         body: "not json",
       }),
-      "/api/v1/messages"
+      "/api/v1/messages",
     );
     expect(res.status).toBe(400);
   });
@@ -182,7 +185,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: "wrong field" }),
       }),
-      "/api/v1/messages"
+      "/api/v1/messages",
     );
     expect(res.status).toBe(400);
   });
@@ -192,7 +195,7 @@ describe("API Endpoints", () => {
   test("POST /api/v1/cancel without manager returns 503", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/cancel", { method: "POST" }),
-      "/api/v1/cancel"
+      "/api/v1/cancel",
     );
     expect(res.status).toBe(503);
   });
@@ -200,11 +203,15 @@ describe("API Endpoints", () => {
   test("POST /api/v1/cancel with manager calls abort", async () => {
     let aborted = false;
     bridge.setConversationManager(
-      createMockManager({ abort: () => { aborted = true; } }) as any
+      createMockManager({
+        abort: () => {
+          aborted = true;
+        },
+      }) as any,
     );
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/cancel", { method: "POST" }),
-      "/api/v1/cancel"
+      "/api/v1/cancel",
     );
     expect(res.status).toBe(200);
     expect(aborted).toBe(true);
@@ -216,7 +223,7 @@ describe("API Endpoints", () => {
     bridge.setWorkingDirectory("/tmp/test");
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/files/../../etc/passwd"),
-      "/api/v1/files/../../etc/passwd"
+      "/api/v1/files/../../etc/passwd",
     );
     expect(res.status).toBe(403);
   });
@@ -225,7 +232,7 @@ describe("API Endpoints", () => {
     bridge.setWorkingDirectory("/tmp/test");
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/files/nonexistent.txt"),
-      "/api/v1/files/nonexistent.txt"
+      "/api/v1/files/nonexistent.txt",
     );
     expect(res.status).toBe(404);
   });
@@ -235,7 +242,7 @@ describe("API Endpoints", () => {
   test("GET /api/v1/stats without manager returns zeros", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/stats"),
-      "/api/v1/stats"
+      "/api/v1/stats",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -247,7 +254,7 @@ describe("API Endpoints", () => {
     bridge.setConversationManager(createMockManager() as any);
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/stats"),
-      "/api/v1/stats"
+      "/api/v1/stats",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -263,7 +270,7 @@ describe("API Endpoints", () => {
     bridge.setConversationManager(createMockManager() as any);
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/config"),
-      "/api/v1/config"
+      "/api/v1/config",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -281,7 +288,7 @@ describe("API Endpoints", () => {
   test("GET /api/v1/models returns model list", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/models"),
-      "/api/v1/models"
+      "/api/v1/models",
     );
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -298,7 +305,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       }),
-      "/api/v1/model"
+      "/api/v1/model",
     );
     expect(res.status).toBe(400);
   });
@@ -306,10 +313,7 @@ describe("API Endpoints", () => {
   // ─── Plan ─────────────────────────────────────────────────────
 
   test("GET /api/v1/plan returns null when no plan", async () => {
-    const res = await handleApiRequest(
-      new Request("http://localhost/api/v1/plan"),
-      "/api/v1/plan"
-    );
+    const res = await handleApiRequest(new Request("http://localhost/api/v1/plan"), "/api/v1/plan");
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.plan).toBeNull();
@@ -324,7 +328,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "invalid" }),
       }),
-      "/api/v1/permission/test-perm-1"
+      "/api/v1/permission/test-perm-1",
     );
     expect(res.status).toBe(400);
   });
@@ -336,7 +340,7 @@ describe("API Endpoints", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "allow" }),
       }),
-      "/api/v1/permission/nonexistent"
+      "/api/v1/permission/nonexistent",
     );
     expect(res.status).toBe(404);
   });
@@ -346,7 +350,7 @@ describe("API Endpoints", () => {
   test("unknown route returns 404", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/nonexistent"),
-      "/api/v1/nonexistent"
+      "/api/v1/nonexistent",
     );
     expect(res.status).toBe(404);
   });
@@ -354,7 +358,7 @@ describe("API Endpoints", () => {
   test("wrong HTTP method returns 404", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/session", { method: "DELETE" }),
-      "/api/v1/session"
+      "/api/v1/session",
     );
     expect(res.status).toBe(404);
   });
@@ -364,7 +368,7 @@ describe("API Endpoints", () => {
   test("GET /api/v1/tools returns tool list", async () => {
     const res = await handleApiRequest(
       new Request("http://localhost/api/v1/tools"),
-      "/api/v1/tools"
+      "/api/v1/tools",
     );
     expect(res.status).toBe(200);
     const data = await res.json();

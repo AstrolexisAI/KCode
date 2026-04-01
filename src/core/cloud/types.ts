@@ -1,7 +1,7 @@
 // KCode - Cloud Types
 
 export interface KCodeCloudConfig {
-  url: string;                // default: https://cloud.kulvex.ai
+  url: string; // default: https://cloud.kulvex.ai
   token: string;
   teamId: string;
   features: {

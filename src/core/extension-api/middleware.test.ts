@@ -1,11 +1,11 @@
 // KCode - Extension API Middleware Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
   createAuthMiddleware,
-  createRateLimitMiddleware,
   createCorsMiddleware,
   createLoggingMiddleware,
+  createRateLimitMiddleware,
   getCorsHeaders,
 } from "./middleware";
 
@@ -34,9 +34,11 @@ describe("auth middleware", () => {
   });
 
   test("rejects request with invalid token", async () => {
-    const res = await auth(makeReq({
-      headers: { Authorization: "Bearer wrong-token" },
-    }));
+    const res = await auth(
+      makeReq({
+        headers: { Authorization: "Bearer wrong-token" },
+      }),
+    );
     expect(res).not.toBeNull();
     expect(res!.status).toBe(401);
     const body = await res!.json();
@@ -44,17 +46,21 @@ describe("auth middleware", () => {
   });
 
   test("rejects request with non-Bearer auth format", async () => {
-    const res = await auth(makeReq({
-      headers: { Authorization: "Basic abc123" },
-    }));
+    const res = await auth(
+      makeReq({
+        headers: { Authorization: "Basic abc123" },
+      }),
+    );
     expect(res).not.toBeNull();
     expect(res!.status).toBe(401);
   });
 
   test("passes request with valid Bearer token", async () => {
-    const res = await auth(makeReq({
-      headers: { Authorization: "Bearer secret-token-123" },
-    }));
+    const res = await auth(
+      makeReq({
+        headers: { Authorization: "Bearer secret-token-123" },
+      }),
+    );
     expect(res).toBeNull();
   });
 });
@@ -99,20 +105,26 @@ describe("rate limit middleware", () => {
   test("tracks different clients separately via X-Forwarded-For", async () => {
     const limiter = createRateLimitMiddleware(1);
 
-    const res1 = await limiter(makeReq({
-      headers: { "X-Forwarded-For": "1.2.3.4" },
-    }));
+    const res1 = await limiter(
+      makeReq({
+        headers: { "X-Forwarded-For": "1.2.3.4" },
+      }),
+    );
     expect(res1).toBeNull();
 
-    const res2 = await limiter(makeReq({
-      headers: { "X-Forwarded-For": "5.6.7.8" },
-    }));
+    const res2 = await limiter(
+      makeReq({
+        headers: { "X-Forwarded-For": "5.6.7.8" },
+      }),
+    );
     expect(res2).toBeNull();
 
     // Same client again should be blocked
-    const res3 = await limiter(makeReq({
-      headers: { "X-Forwarded-For": "1.2.3.4" },
-    }));
+    const res3 = await limiter(
+      makeReq({
+        headers: { "X-Forwarded-For": "1.2.3.4" },
+      }),
+    );
     expect(res3).not.toBeNull();
     expect(res3!.status).toBe(429);
   });
@@ -123,10 +135,12 @@ describe("rate limit middleware", () => {
 describe("cors middleware", () => {
   test("handles OPTIONS preflight with wildcard origins", async () => {
     const cors = createCorsMiddleware(["*"]);
-    const res = await cors(makeReq({
-      method: "OPTIONS",
-      headers: { Origin: "http://example.com" },
-    }));
+    const res = await cors(
+      makeReq({
+        method: "OPTIONS",
+        headers: { Origin: "http://example.com" },
+      }),
+    );
 
     expect(res).not.toBeNull();
     expect(res!.status).toBe(204);
@@ -137,10 +151,12 @@ describe("cors middleware", () => {
 
   test("handles OPTIONS preflight with specific allowed origin", async () => {
     const cors = createCorsMiddleware(["http://localhost:3000"]);
-    const res = await cors(makeReq({
-      method: "OPTIONS",
-      headers: { Origin: "http://localhost:3000" },
-    }));
+    const res = await cors(
+      makeReq({
+        method: "OPTIONS",
+        headers: { Origin: "http://localhost:3000" },
+      }),
+    );
 
     expect(res).not.toBeNull();
     expect(res!.status).toBe(204);
@@ -149,10 +165,12 @@ describe("cors middleware", () => {
 
   test("rejects OPTIONS preflight from disallowed origin", async () => {
     const cors = createCorsMiddleware(["http://localhost:3000"]);
-    const res = await cors(makeReq({
-      method: "OPTIONS",
-      headers: { Origin: "http://evil.com" },
-    }));
+    const res = await cors(
+      makeReq({
+        method: "OPTIONS",
+        headers: { Origin: "http://evil.com" },
+      }),
+    );
 
     expect(res).not.toBeNull();
     expect(res!.status).toBe(403);
@@ -160,10 +178,12 @@ describe("cors middleware", () => {
 
   test("passes through non-OPTIONS requests", async () => {
     const cors = createCorsMiddleware(["*"]);
-    const res = await cors(makeReq({
-      method: "GET",
-      headers: { Origin: "http://example.com" },
-    }));
+    const res = await cors(
+      makeReq({
+        method: "GET",
+        headers: { Origin: "http://example.com" },
+      }),
+    );
 
     expect(res).toBeNull();
   });

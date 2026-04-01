@@ -1,8 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import {
-  truncateToolResults,
-  DEFAULT_TRUNCATION_CONFIG,
-} from "./tool-result-truncator";
+import { describe, expect, test } from "bun:test";
+import { DEFAULT_TRUNCATION_CONFIG, truncateToolResults } from "./tool-result-truncator";
 
 describe("truncateToolResults", () => {
   test("does not truncate short tool results", () => {
@@ -18,9 +15,7 @@ describe("truncateToolResults", () => {
 
   test("truncates tool results exceeding maxChars", () => {
     const longResult = "x".repeat(15000);
-    const messages = [
-      { role: "tool" as const, content: longResult, name: "Read" },
-    ];
+    const messages = [{ role: "tool" as const, content: longResult, name: "Read" }];
     const { messages: output, truncatedCount, charsSaved } = truncateToolResults(messages);
     expect(truncatedCount).toBe(1);
     expect(charsSaved).toBeGreaterThan(0);
@@ -33,9 +28,7 @@ describe("truncateToolResults", () => {
     const tail = "_TAIL_CONTENT";
     const middle = "m".repeat(15000);
     const longResult = head + middle + tail;
-    const messages = [
-      { role: "tool" as const, content: longResult, name: "Bash" },
-    ];
+    const messages = [{ role: "tool" as const, content: longResult, name: "Bash" }];
     const { messages: output } = truncateToolResults(messages, {
       headChars: head.length + 10,
       tailChars: tail.length + 10,
@@ -47,9 +40,7 @@ describe("truncateToolResults", () => {
 
   test("skips protected tools", () => {
     const longResult = "x".repeat(15000);
-    const messages = [
-      { role: "tool" as const, content: longResult, name: "Read" },
-    ];
+    const messages = [{ role: "tool" as const, content: longResult, name: "Read" }];
     const { truncatedCount } = truncateToolResults(messages, {
       protectedTools: ["Read"],
     });
@@ -68,9 +59,7 @@ describe("truncateToolResults", () => {
 
   test("aggressive mode uses lower threshold", () => {
     const result = "x".repeat(5000);
-    const messages = [
-      { role: "tool" as const, content: result, name: "Bash" },
-    ];
+    const messages = [{ role: "tool" as const, content: result, name: "Bash" }];
 
     // Normal mode: 5000 < 10000 default → no truncation
     const normal = truncateToolResults(messages);

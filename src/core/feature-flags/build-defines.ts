@@ -73,9 +73,7 @@ export function getAvailableProfiles(): BuildProfile[] {
 }
 
 /** Get feature set for a specific profile */
-export function getProfileFeatures(
-  profile: BuildProfile,
-): Record<FeatureName, boolean> {
+export function getProfileFeatures(profile: BuildProfile): Record<FeatureName, boolean> {
   return { ...featureProfiles[profile] };
 }
 

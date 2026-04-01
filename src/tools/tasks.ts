@@ -1,8 +1,8 @@
 // KCode - Task Management Tools
 // SQLite-backed persistent task store with dependencies and background process tracking
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { getDb } from "../core/db";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
 
@@ -41,7 +41,9 @@ const currentSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)
 function nextId(): string {
   const db = getDb();
   // Use a transaction to prevent race conditions on concurrent inserts
-  const row = db.query("SELECT MAX(CAST(id AS INTEGER)) as max_id FROM tasks").get() as { max_id: number | null } | null;
+  const row = db.query("SELECT MAX(CAST(id AS INTEGER)) as max_id FROM tasks").get() as {
+    max_id: number | null;
+  } | null;
   const next = (row?.max_id ?? 0) + 1;
   // Double-check the ID doesn't already exist (belt-and-suspenders)
   const exists = db.query("SELECT 1 FROM tasks WHERE id = ?").get(String(next));
@@ -115,7 +117,7 @@ export async function executeTaskCreate(input: Record<string, unknown>): Promise
 
   db.query(
     `INSERT INTO tasks (id, title, description, status, owner, blocks, blocked_by, created_at, updated_at, session_id)
-     VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     title,
@@ -130,24 +132,36 @@ export async function executeTaskCreate(input: Record<string, unknown>): Promise
 
   // Update reverse dependencies for tasks that this task blocks
   for (const blockedId of blocksArr) {
-    const row = db.query("SELECT blocked_by FROM tasks WHERE id = ?").get(blockedId) as { blocked_by: string } | null;
+    const row = db.query("SELECT blocked_by FROM tasks WHERE id = ?").get(blockedId) as {
+      blocked_by: string;
+    } | null;
     if (row) {
       const existing: string[] = JSON.parse(row.blocked_by);
       if (!existing.includes(id)) {
         existing.push(id);
-        db.query("UPDATE tasks SET blocked_by = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(existing), now, blockedId);
+        db.query("UPDATE tasks SET blocked_by = ?, updated_at = ? WHERE id = ?").run(
+          JSON.stringify(existing),
+          now,
+          blockedId,
+        );
       }
     }
   }
 
   // Update reverse dependencies for tasks that block this task
   for (const blockerId of blockedByArr) {
-    const row = db.query("SELECT blocks FROM tasks WHERE id = ?").get(blockerId) as { blocks: string } | null;
+    const row = db.query("SELECT blocks FROM tasks WHERE id = ?").get(blockerId) as {
+      blocks: string;
+    } | null;
     if (row) {
       const existing: string[] = JSON.parse(row.blocks);
       if (!existing.includes(id)) {
         existing.push(id);
-        db.query("UPDATE tasks SET blocks = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(existing), now, blockerId);
+        db.query("UPDATE tasks SET blocks = ?, updated_at = ? WHERE id = ?").run(
+          JSON.stringify(existing),
+          now,
+          blockerId,
+        );
       }
     }
   }
@@ -178,7 +192,11 @@ export const taskListDefinition: ToolDefinition = {
 };
 
 export async function executeTaskList(input: Record<string, unknown>): Promise<ToolResult> {
-  const { status, owner, session_id } = input as { status?: TaskStatus; owner?: string; session_id?: string };
+  const { status, owner, session_id } = input as {
+    status?: TaskStatus;
+    owner?: string;
+    session_id?: string;
+  };
 
   const db = getDb();
   const conditions: string[] = [];
@@ -199,7 +217,7 @@ export async function executeTaskList(input: Record<string, unknown>): Promise<T
 
   const where = conditions.length > 0 ? ` WHERE ${conditions.join(" AND ")}` : "";
   const stmt = db.prepare(`SELECT * FROM tasks${where} ORDER BY CAST(id AS INTEGER)`);
-  const rows = stmt.all(...params as string[]) as Record<string, unknown>[];
+  const rows = stmt.all(...(params as string[])) as Record<string, unknown>[];
 
   if (rows.length === 0) {
     return { tool_use_id: "", content: "No tasks found." };
@@ -233,7 +251,10 @@ export const taskGetDefinition: ToolDefinition = {
 export async function executeTaskGet(input: Record<string, unknown>): Promise<ToolResult> {
   const { id } = input as { id: string };
   const db = getDb();
-  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown> | null;
+  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<
+    string,
+    unknown
+  > | null;
 
   if (!row) {
     return {
@@ -282,7 +303,10 @@ export async function executeTaskUpdate(input: Record<string, unknown>): Promise
   };
 
   const db = getDb();
-  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown> | null;
+  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<
+    string,
+    unknown
+  > | null;
 
   if (!row) {
     return {
@@ -321,7 +345,7 @@ export async function executeTaskUpdate(input: Record<string, unknown>): Promise
   }
 
   params.push(id);
-  db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).run(...params as string[]);
+  db.prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).run(...(params as string[]));
 
   // Re-read the updated row
   const updated = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown>;
@@ -329,7 +353,12 @@ export async function executeTaskUpdate(input: Record<string, unknown>): Promise
 
   return {
     tool_use_id: "",
-    content: JSON.stringify({ id: task.id, title: task.title, status: task.status, owner: task.owner }),
+    content: JSON.stringify({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      owner: task.owner,
+    }),
   };
 }
 
@@ -350,7 +379,10 @@ export const taskStopDefinition: ToolDefinition = {
 export async function executeTaskStop(input: Record<string, unknown>): Promise<ToolResult> {
   const { id } = input as { id: string };
   const db = getDb();
-  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<string, unknown> | null;
+  const row = db.query("SELECT * FROM tasks WHERE id = ?").get(id) as Record<
+    string,
+    unknown
+  > | null;
 
   if (!row) {
     return {
@@ -372,7 +404,9 @@ export async function executeTaskStop(input: Record<string, unknown>): Promise<T
   }
 
   const now = new Date().toISOString();
-  db.query("UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+  db.query(
+    "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?",
+  ).run(now, now, id);
 
   return {
     tool_use_id: "",

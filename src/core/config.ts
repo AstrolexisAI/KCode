@@ -1,19 +1,19 @@
 // KCode - Configuration System
 // Settings hierarchy: user > project > local, plus env vars and KCODE.md loading
 
-import { join, dirname, resolve } from "node:path";
-import { kcodeHome, kcodePath } from "./paths";
 import { readdirSync, statSync } from "node:fs";
-import type { KCodeConfig, PermissionMode, PermissionRule, PermissionRuleAction } from "./types";
-import { getGitRoot } from "./git";
-import { getModelBaseUrl, getModelContextSize, getDefaultModel } from "./models";
-import { isPro } from "./pro";
-import { log } from "./logger";
-import { isWorkspaceTrusted } from "./hook-trust";
-import type { MarketplaceSettings } from "./marketplace/types";
-import type { OfflineSettings } from "./offline/types";
+import { dirname, join, resolve } from "node:path";
 import type { EnsembleStrategy, EnsembleTrigger } from "./ensemble/types";
+import { getGitRoot } from "./git";
+import { isWorkspaceTrusted } from "./hook-trust";
+import { log } from "./logger";
+import type { MarketplaceSettings } from "./marketplace/types";
 import type { MeshSettings } from "./mesh/types";
+import { getDefaultModel, getModelBaseUrl, getModelContextSize } from "./models";
+import type { OfflineSettings } from "./offline/types";
+import { kcodeHome, kcodePath } from "./paths";
+import { isPro } from "./pro";
+import type { KCodeConfig, PermissionMode, PermissionRule, PermissionRuleAction } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -70,9 +70,9 @@ export interface Settings {
   hardware?: {
     autoOptimize?: boolean; // Enable hardware auto-optimization
     contextWindow?: number; // Override auto-detected context window
-    batchSize?: number;     // Override auto-detected batch size
-    threads?: number;       // Override auto-detected thread count
-    gpuLayers?: number;     // Override auto-detected GPU layer count
+    batchSize?: number; // Override auto-detected batch size
+    threads?: number; // Override auto-detected thread count
+    gpuLayers?: number; // Override auto-detected GPU layer count
   };
   coordinator?: {
     enabled?: boolean;
@@ -125,8 +125,8 @@ export interface ManagedPolicy {
 const KCODE_HOME = kcodeHome();
 const USER_SETTINGS_PATH = kcodePath("settings.json");
 const MANAGED_SETTINGS_PATHS = [
-  "/etc/kcode/policy.json",                  // System-wide admin policy
-  kcodePath("managed-settings.json"),         // Per-user admin-deployed policy
+  "/etc/kcode/policy.json", // System-wide admin policy
+  kcodePath("managed-settings.json"), // Per-user admin-deployed policy
 ];
 
 // Cached managed policy with mtime tracking for invalidation
@@ -178,13 +178,17 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     model: typeof raw.model === "string" ? raw.model : undefined,
     maxTokens: typeof raw.maxTokens === "number" ? raw.maxTokens : undefined,
     permissionMode: isPermissionMode(raw.permissionMode) ? raw.permissionMode : undefined,
-    autoMemory: typeof raw.autoMemory === "boolean" ? raw.autoMemory
-      : (raw.autoMemory && typeof raw.autoMemory === "object") ? raw.autoMemory as AutoMemorySettings
-      : undefined,
+    autoMemory:
+      typeof raw.autoMemory === "boolean"
+        ? raw.autoMemory
+        : raw.autoMemory && typeof raw.autoMemory === "object"
+          ? (raw.autoMemory as AutoMemorySettings)
+          : undefined,
     effortLevel: isEffortLevel(raw.effortLevel) ? raw.effortLevel : undefined,
     apiKey: typeof raw.apiKey === "string" ? raw.apiKey : undefined,
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
-    systemPromptExtra: typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
+    systemPromptExtra:
+      typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
     autoRoute: typeof raw.autoRoute === "boolean" ? raw.autoRoute : undefined,
     theme: typeof raw.theme === "string" ? raw.theme : undefined,
     permissionRules: mergePermissionRules(
@@ -193,18 +197,33 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     ),
     fallbackModel: typeof raw.fallbackModel === "string" ? raw.fallbackModel : undefined,
     tertiaryModel: typeof raw.tertiaryModel === "string" ? raw.tertiaryModel : undefined,
-    fallbackModels: Array.isArray(raw.fallbackModels) && raw.fallbackModels.every((m: unknown) => typeof m === "string")
-      ? (raw.fallbackModels as string[])
-      : undefined,
-    maxBudgetUsd: typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0 ? raw.maxBudgetUsd : undefined,
-    compactThreshold: typeof raw.compactThreshold === "number" && raw.compactThreshold >= 0.5 && raw.compactThreshold <= 0.95 ? raw.compactThreshold : undefined,
+    fallbackModels:
+      Array.isArray(raw.fallbackModels) &&
+      raw.fallbackModels.every((m: unknown) => typeof m === "string")
+        ? (raw.fallbackModels as string[])
+        : undefined,
+    maxBudgetUsd:
+      typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0 ? raw.maxBudgetUsd : undefined,
+    compactThreshold:
+      typeof raw.compactThreshold === "number" &&
+      raw.compactThreshold >= 0.5 &&
+      raw.compactThreshold <= 0.95
+        ? raw.compactThreshold
+        : undefined,
     telemetry: typeof raw.telemetry === "boolean" ? raw.telemetry : undefined,
     thinking: typeof raw.thinking === "boolean" ? raw.thinking : undefined,
     reasoningBudget: typeof raw.reasoningBudget === "number" ? raw.reasoningBudget : undefined,
     noCache: typeof raw.noCache === "boolean" ? raw.noCache : undefined,
-    offline: (raw.offline && typeof raw.offline === "object") ? raw.offline as OfflineSettings : undefined,
-    ensemble: (raw.ensemble && typeof raw.ensemble === "object") ? parseEnsembleSettings(raw.ensemble as Record<string, unknown>) : undefined,
-    hardware: (raw.hardware && typeof raw.hardware === "object") ? parseHardwareSettings(raw.hardware as Record<string, unknown>) : undefined,
+    offline:
+      raw.offline && typeof raw.offline === "object" ? (raw.offline as OfflineSettings) : undefined,
+    ensemble:
+      raw.ensemble && typeof raw.ensemble === "object"
+        ? parseEnsembleSettings(raw.ensemble as Record<string, unknown>)
+        : undefined,
+    hardware:
+      raw.hardware && typeof raw.hardware === "object"
+        ? parseHardwareSettings(raw.hardware as Record<string, unknown>)
+        : undefined,
   };
 }
 
@@ -212,7 +231,8 @@ function parseEnsembleSettings(raw: Record<string, unknown>): EnsembleSettings {
   const settings: EnsembleSettings = {};
   if (typeof raw.enabled === "boolean") settings.enabled = raw.enabled;
   if (typeof raw.strategy === "string") settings.strategy = raw.strategy as EnsembleStrategy;
-  if (Array.isArray(raw.models)) settings.models = raw.models.filter((m: unknown) => typeof m === "string") as string[];
+  if (Array.isArray(raw.models))
+    settings.models = raw.models.filter((m: unknown) => typeof m === "string") as string[];
   if (typeof raw.judgeModel === "string") settings.judgeModel = raw.judgeModel;
   if (raw.judgeModel === null) settings.judgeModel = null;
   if (typeof raw.maxParallel === "number") settings.maxParallel = raw.maxParallel;
@@ -225,7 +245,8 @@ function parseEnsembleSettings(raw: Record<string, unknown>): EnsembleSettings {
 function parseHardwareSettings(raw: Record<string, unknown>): Settings["hardware"] {
   const settings: NonNullable<Settings["hardware"]> = {};
   if (typeof raw.autoOptimize === "boolean") settings.autoOptimize = raw.autoOptimize;
-  if (typeof raw.contextWindow === "number" && raw.contextWindow > 0) settings.contextWindow = raw.contextWindow;
+  if (typeof raw.contextWindow === "number" && raw.contextWindow > 0)
+    settings.contextWindow = raw.contextWindow;
   if (typeof raw.batchSize === "number" && raw.batchSize > 0) settings.batchSize = raw.batchSize;
   if (typeof raw.threads === "number" && raw.threads > 0) settings.threads = raw.threads;
   if (typeof raw.gpuLayers === "number") settings.gpuLayers = raw.gpuLayers;
@@ -249,7 +270,8 @@ function parsePermissionRules(raw: unknown): PermissionRule[] | undefined {
   const rules: PermissionRule[] = [];
   for (const item of raw) {
     if (
-      item && typeof item === "object" &&
+      item &&
+      typeof item === "object" &&
       typeof item.pattern === "string" &&
       isRuleAction(item.action)
     ) {
@@ -403,7 +425,9 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
           console.error(`[config] Managed policy ${path} is a symlink, skipping for security`);
           continue;
         }
-      } catch (err) { log.debug("config", `Failed to check symlink for managed policy ${path}: ${err}`); }
+      } catch (err) {
+        log.debug("config", `Failed to check symlink for managed policy ${path}: ${err}`);
+      }
       // Size check: reject policy files > 1 MB
       if (file.size > 1024 * 1024) {
         console.error(`[config] Managed policy file ${path} exceeds 1MB limit, skipping`);
@@ -420,24 +444,37 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
       }
 
       // Parse model restrictions
-      if (Array.isArray(raw.allowedModels) && raw.allowedModels.every((m: unknown) => typeof m === "string")) {
+      if (
+        Array.isArray(raw.allowedModels) &&
+        raw.allowedModels.every((m: unknown) => typeof m === "string")
+      ) {
         policy.allowedModels = raw.allowedModels;
       }
-      if (Array.isArray(raw.blockedModels) && raw.blockedModels.every((m: unknown) => typeof m === "string")) {
+      if (
+        Array.isArray(raw.blockedModels) &&
+        raw.blockedModels.every((m: unknown) => typeof m === "string")
+      ) {
         policy.blockedModels = raw.blockedModels;
       }
 
       // Parse tool restrictions
-      if (Array.isArray(raw.disallowedTools) && raw.disallowedTools.every((t: unknown) => typeof t === "string")) {
+      if (
+        Array.isArray(raw.disallowedTools) &&
+        raw.disallowedTools.every((t: unknown) => typeof t === "string")
+      ) {
         policy.disallowedTools = raw.disallowedTools;
       }
-      if (Array.isArray(raw.allowedTools) && raw.allowedTools.every((t: unknown) => typeof t === "string")) {
+      if (
+        Array.isArray(raw.allowedTools) &&
+        raw.allowedTools.every((t: unknown) => typeof t === "string")
+      ) {
         policy.allowedTools = raw.allowedTools;
       }
 
       // Parse simple fields
       if (isPermissionMode(raw.permissionMode)) policy.permissionMode = raw.permissionMode;
-      if (typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0) policy.maxBudgetUsd = raw.maxBudgetUsd;
+      if (typeof raw.maxBudgetUsd === "number" && raw.maxBudgetUsd > 0)
+        policy.maxBudgetUsd = raw.maxBudgetUsd;
       if (typeof raw.disableWebAccess === "boolean") policy.disableWebAccess = raw.disableWebAccess;
       if (typeof raw.auditLog === "boolean") policy.auditLog = raw.auditLog;
       if (typeof raw.orgId === "string") policy.orgId = raw.orgId;
@@ -448,11 +485,18 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
 
       _managedPolicy = policy;
       _managedPolicyPath = path;
-      try { _managedPolicyMtime = statSync(path).mtimeMs; } catch (err) { log.debug("config", `Failed to stat managed policy for mtime: ${err}`); _managedPolicyMtime = 0; }
+      try {
+        _managedPolicyMtime = statSync(path).mtimeMs;
+      } catch (err) {
+        log.debug("config", `Failed to stat managed policy for mtime: ${err}`);
+        _managedPolicyMtime = 0;
+      }
       console.error(`[config] Loaded managed policy from ${path}`);
       return policy;
     } catch (err) {
-      console.error(`[config] Warning: failed to parse managed policy ${path}: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `[config] Warning: failed to parse managed policy ${path}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -519,23 +563,29 @@ function applyManagedPolicy(settings: Settings, policy: ManagedPolicy): Settings
 
   // Validate model against policy
   if (result.model && !isModelAllowedByPolicy(result.model, policy)) {
-    console.error(`[config] Model "${result.model}" is not allowed by managed policy. Reverting to default.`);
+    console.error(
+      `[config] Model "${result.model}" is not allowed by managed policy. Reverting to default.`,
+    );
     result.model = undefined;
   }
 
   // Validate fallback models against policy
   if (result.fallbackModel && !isModelAllowedByPolicy(result.fallbackModel, policy)) {
-    console.error(`[config] Fallback model "${result.fallbackModel}" is not allowed by managed policy. Removing.`);
+    console.error(
+      `[config] Fallback model "${result.fallbackModel}" is not allowed by managed policy. Removing.`,
+    );
     result.fallbackModel = undefined;
   }
   if (result.tertiaryModel && !isModelAllowedByPolicy(result.tertiaryModel, policy)) {
-    console.error(`[config] Tertiary model "${result.tertiaryModel}" is not allowed by managed policy. Removing.`);
+    console.error(
+      `[config] Tertiary model "${result.tertiaryModel}" is not allowed by managed policy. Removing.`,
+    );
     result.tertiaryModel = undefined;
   }
   if (result.fallbackModels) {
-    const allowed = result.fallbackModels.filter(m => isModelAllowedByPolicy(m, policy));
+    const allowed = result.fallbackModels.filter((m) => isModelAllowedByPolicy(m, policy));
     if (allowed.length < result.fallbackModels.length) {
-      const blocked = result.fallbackModels.filter(m => !isModelAllowedByPolicy(m, policy));
+      const blocked = result.fallbackModels.filter((m) => !isModelAllowedByPolicy(m, policy));
       console.error(`[config] Blocked fallback models removed by policy: ${blocked.join(", ")}`);
     }
     result.fallbackModels = allowed.length > 0 ? allowed : undefined;
@@ -574,7 +624,9 @@ async function loadPermissionsFile(cwd: string, trusted: boolean): Promise<Permi
       const fromConfig = parsePermissionsConfig(raw);
       if (fromConfig) rules.push(...fromConfig);
     } catch (err) {
-      console.error(`[config] Warning: failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `[config] Warning: failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
   return rules;
@@ -623,9 +675,13 @@ async function warnUntrustedProjectConfig(path: string): Promise<null> {
   try {
     const file = Bun.file(path);
     if (await file.exists()) {
-      console.error(`[config] Skipping project .kcode/ config — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`);
+      console.error(
+        `[config] Skipping project .kcode/ config — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`,
+      );
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
@@ -640,7 +696,12 @@ export function saveUserSettings(settings: Settings): Promise<void> {
     await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
     await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
     // Restrict permissions — settings may contain API keys and Pro license keys
-    try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod user settings: ${err}`); }
+    try {
+      const { chmodSync } = require("node:fs") as typeof import("node:fs");
+      chmodSync(USER_SETTINGS_PATH, 0o600);
+    } catch (err) {
+      log.debug("config", `Failed to chmod user settings: ${err}`);
+    }
   };
   _settingsSaveLock = _settingsSaveLock.then(op, op);
   return _settingsSaveLock;
@@ -664,7 +725,12 @@ export function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void>
       if (v === undefined) delete merged[k];
     }
     await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
-    try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(USER_SETTINGS_PATH, 0o600); } catch (err) { log.debug("config", `Failed to chmod raw user settings: ${err}`); }
+    try {
+      const { chmodSync } = require("node:fs") as typeof import("node:fs");
+      chmodSync(USER_SETTINGS_PATH, 0o600);
+    } catch (err) {
+      log.debug("config", `Failed to chmod raw user settings: ${err}`);
+    }
   };
   _settingsSaveLock = _settingsSaveLock.then(op, op);
   return _settingsSaveLock;
@@ -675,7 +741,12 @@ export async function saveProjectSettings(cwd: string, settings: Settings): Prom
   const dir = dirname(path);
   await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
   await Bun.write(path, JSON.stringify(settings, null, 2) + "\n");
-  try { const { chmodSync } = require("node:fs") as typeof import("node:fs"); chmodSync(path, 0o600); } catch (err) { log.debug("config", `Failed to chmod project settings: ${err}`); }
+  try {
+    const { chmodSync } = require("node:fs") as typeof import("node:fs");
+    chmodSync(path, 0o600);
+  } catch (err) {
+    log.debug("config", `Failed to chmod project settings: ${err}`);
+  }
 }
 
 // ─── Build KCodeConfig ──────────────────────────────────────────
@@ -689,15 +760,19 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   // Respect locked settings: don't let env vars override policy-locked values
   const lockedApiBase = policy.locked?.apiBase;
   const lockedApiKey = policy.locked?.apiKey;
-  const apiBase = await getModelBaseUrl(model,
-    lockedApiBase ?? settings.apiBase ?? process.env.KCODE_API_BASE);
+  const apiBase = await getModelBaseUrl(
+    model,
+    lockedApiBase ?? settings.apiBase ?? process.env.KCODE_API_BASE,
+  );
   const contextSize = await getModelContextSize(model);
 
   const { getContextWindowCap } = await import("./pro.js");
   const cap = await getContextWindowCap();
   // Don't cap context for local models — the cap only applies to cloud API usage
-  const isLocalModel = apiBase && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(apiBase);
-  const effectiveContextSize = (cap && !isLocalModel) ? Math.min(contextSize ?? 32_000, cap) : (contextSize ?? 32_000);
+  const isLocalModel =
+    apiBase && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(apiBase);
+  const effectiveContextSize =
+    cap && !isLocalModel ? Math.min(contextSize ?? 32_000, cap) : (contextSize ?? 32_000);
 
   // Initialize runtime feature flags (settings → env overrides)
   const { loadRuntimeFlags } = await import("./feature-flags.js");
@@ -705,7 +780,9 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
 
   return {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? (await loadUserSettingsRaw()).anthropicApiKey as string | undefined,
+    anthropicApiKey:
+      process.env.ANTHROPIC_API_KEY ??
+      ((await loadUserSettingsRaw()).anthropicApiKey as string | undefined),
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,
@@ -758,7 +835,9 @@ export async function loadInstructionFiles(cwd: string): Promise<string | null> 
     for (const filename of INSTRUCTION_FILES) {
       const content = await readTextFile(join(current, filename));
       if (content) {
-        parts.push(`# ${filename} (${current === resolve(cwd) ? "project root" : current})\n\n${content}`);
+        parts.push(
+          `# ${filename} (${current === resolve(cwd) ? "project root" : current})\n\n${content}`,
+        );
       }
     }
 

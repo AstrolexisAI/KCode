@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
+
 // KCode - Main entry point
 // AI-powered coding assistant for the terminal by Astrolexis (Kulvex Code)
 
-import { Command } from "commander";
 import { resolve } from "node:path";
+import { Command } from "commander";
+
 // Heavy modules — lazy-loaded to reduce cold start time
 async function lazyGetConversationManager() {
   const { ConversationManager } = await import("./core/conversation");
@@ -17,17 +19,17 @@ async function lazyGetRunPrintMode() {
   const { runPrintMode } = await import("./ui/print-mode");
   return runPrintMode;
 }
+
 import { buildConfig } from "./core/config";
-import type { PermissionMode } from "./core/types";
-import { setTheme } from "./core/theme";
+import { getServerPort, isServerRunning, startServer } from "./core/llama-server";
 import { log } from "./core/logger";
-import { TranscriptManager } from "./core/transcript";
-import { clearSudoPasswordCache } from "./tools/bash";
 import { isSetupComplete } from "./core/model-manager";
-import { startServer, isServerRunning, getServerPort } from "./core/llama-server";
-import { setSandboxMode } from "./tools/bash";
-import { profileCheckpoint, isProfilingEnabled, printProfileReport } from "./core/startup-profiler";
 import { startPrefetch } from "./core/prefetch";
+import { isProfilingEnabled, printProfileReport, profileCheckpoint } from "./core/startup-profiler";
+import { setTheme } from "./core/theme";
+import { TranscriptManager } from "./core/transcript";
+import type { PermissionMode } from "./core/types";
+import { clearSudoPasswordCache, setSandboxMode } from "./tools/bash";
 
 // Lazy-loaded modules (deferred until needed)
 async function lazyGetRulesManager() {
@@ -71,41 +73,41 @@ async function lazyIsVoiceAvailable() {
   return isVoiceAvailable();
 }
 
+// Version — read from package.json at build time via Bun's JSON import
+import pkg from "../package.json";
 // CLI subcommand registrations
 import {
-  registerModelsCommand,
-  registerPluginCommand,
-  registerMcpCommand,
-  registerServerCommand,
-  registerProCommands,
-  registerSetupCommand,
+  registerBenchmarkCommands,
+  registerCloudCommand,
+  registerCompletionsCommand,
+  registerDaemonCommand,
+  registerDashboardCommand,
+  registerDistillCommand,
   registerDoctorCommand,
-  registerTeachCommand,
-  registerStatsCommand,
+  registerHistoryCommand,
   registerInitCommand,
+  registerMcpCommand,
+  registerMeshCommand,
+  registerModelsCommand,
   registerNewCommand,
+  registerPluginCommand,
+  registerProCommands,
+  registerRemoteCommand,
   registerResumeCommand,
   registerSearchCommand,
-  registerWatchCommand,
-  registerUpdateCommand,
-  registerBenchmarkCommands,
-  registerCompletionsCommand,
-  registerHistoryCommand,
   registerServeCommand,
-  registerRemoteCommand,
-  registerDaemonCommand,
-  registerMeshCommand,
-  registerDistillCommand,
-  registerCloudCommand,
-  registerTriggersCommand,
+  registerServerCommand,
   registerSessionsCommand,
-  registerDashboardCommand,
+  registerSetupCommand,
+  registerStatsCommand,
+  registerTeachCommand,
   registerTemplateCommand,
+  registerTriggersCommand,
+  registerUpdateCommand,
+  registerWatchCommand,
   registerWebCommand,
 } from "./cli/commands";
 
-// Version — read from package.json at build time via Bun's JSON import
-import pkg from "../package.json";
 const VERSION = pkg.version;
 
 /** On Windows, pause before exit so the user can read error messages (console closes on exit).
@@ -114,11 +116,19 @@ async function exitWithPause(code: number, errorMsg?: string): Promise<never> {
   // Write crash log on Windows so users can report the issue even if the console closes
   if (process.platform === "win32" && code !== 0) {
     try {
-      const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
+      const crashLog = require("node:path").join(
+        require("node:os").homedir(),
+        ".kcode",
+        "crash.log",
+      );
       require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
-      require("node:fs").appendFileSync(crashLog,
-        `[${new Date().toISOString()}] Exit code ${code}${errorMsg ? `: ${errorMsg}` : ""}\n`);
-    } catch (err) { log.debug("index", `Failed to write crash log: ${err}`); }
+      require("node:fs").appendFileSync(
+        crashLog,
+        `[${new Date().toISOString()}] Exit code ${code}${errorMsg ? `: ${errorMsg}` : ""}\n`,
+      );
+    } catch (err) {
+      log.debug("index", `Failed to write crash log: ${err}`);
+    }
   }
 
   if (process.platform === "win32") {
@@ -129,10 +139,18 @@ async function exitWithPause(code: number, errorMsg?: string): Promise<never> {
         const timer = setTimeout(resolve, 60_000); // auto-close after 60s
         try {
           process.stdin.resume();
-          process.stdin.once("data", () => { clearTimeout(timer); resolve(); });
-        } catch (err) { log.debug("index", `Failed to resume stdin for pause: ${err}`); resolve(); }
+          process.stdin.once("data", () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        } catch (err) {
+          log.debug("index", `Failed to resume stdin for pause: ${err}`);
+          resolve();
+        }
       });
-    } catch (err) { log.debug("index", `Stdin pause error: ${err}`); }
+    } catch (err) {
+      log.debug("index", `Stdin pause error: ${err}`);
+    }
   }
   process.exit(code);
 }
@@ -142,11 +160,27 @@ async function exitWithPause(code: number, errorMsg?: string): Promise<never> {
 // from child processes or system sockets should be logged but not kill the TUI.
 process.on("uncaughtException", (err) => {
   const msg = err.message ?? String(err);
-  const code = (err as NodeJS.ErrnoException).code
-    ?? msg.match(/^(E[A-Z]+):/)?.[1]; // fallback: extract code from message (Bun compat)
+  const code = (err as NodeJS.ErrnoException).code ?? msg.match(/^(E[A-Z]+):/)?.[1]; // fallback: extract code from message (Bun compat)
 
   // Non-fatal system errors from background I/O — log and continue
-  const nonFatalCodes = new Set(["ENXIO", "ECONNREFUSED", "ECONNRESET", "EPIPE", "ENOENT", "ETIMEDOUT", "EACCES", "ENODEV", "EISDIR", "EMFILE", "ENFILE", "ENOSPC", "EROFS", "ENOTCONN", "EHOSTUNREACH", "ENETUNREACH"]);
+  const nonFatalCodes = new Set([
+    "ENXIO",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "EPIPE",
+    "ENOENT",
+    "ETIMEDOUT",
+    "EACCES",
+    "ENODEV",
+    "EISDIR",
+    "EMFILE",
+    "ENFILE",
+    "ENOSPC",
+    "EROFS",
+    "ENOTCONN",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+  ]);
   if (code && nonFatalCodes.has(code)) {
     log.error("process", `Non-fatal uncaught exception (${code}): ${msg}`);
     return; // Don't exit
@@ -161,14 +195,27 @@ process.on("uncaughtException", (err) => {
   // On Windows, write crash log and pause so user can read the error
   if (process.platform === "win32") {
     try {
-      const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
+      const crashLog = require("node:path").join(
+        require("node:os").homedir(),
+        ".kcode",
+        "crash.log",
+      );
       require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
-      require("node:fs").appendFileSync(crashLog, `[${new Date().toISOString()}] CRASH: ${crashMsg}\n`);
+      require("node:fs").appendFileSync(
+        crashLog,
+        `[${new Date().toISOString()}] CRASH: ${crashMsg}\n`,
+      );
       process.stderr.write(`\nCrash log saved to: ${crashLog}\n`);
       process.stderr.write("Press Enter to exit...\n");
       // Sync read — can't use async in uncaughtException handler
-      try { require("node:fs").readSync(0, Buffer.alloc(1)); } catch (err) { log.debug("index", `Sync stdin read for pause failed: ${err}`); }
-    } catch (err) { log.debug("index", `Failed to write crash log on uncaught exception: ${err}`); }
+      try {
+        require("node:fs").readSync(0, Buffer.alloc(1));
+      } catch (err) {
+        log.debug("index", `Sync stdin read for pause failed: ${err}`);
+      }
+    } catch (err) {
+      log.debug("index", `Failed to write crash log on uncaught exception: ${err}`);
+    }
   }
   process.exit(1);
 });
@@ -180,10 +227,19 @@ process.on("unhandledRejection", (reason) => {
   // On Windows, write crash log for unhandled promise rejections too
   if (process.platform === "win32") {
     try {
-      const crashLog = require("node:path").join(require("node:os").homedir(), ".kcode", "crash.log");
+      const crashLog = require("node:path").join(
+        require("node:os").homedir(),
+        ".kcode",
+        "crash.log",
+      );
       require("node:fs").mkdirSync(require("node:path").dirname(crashLog), { recursive: true });
-      require("node:fs").appendFileSync(crashLog, `[${new Date().toISOString()}] UNHANDLED REJECTION: ${stack ?? msg}\n`);
-    } catch (err) { log.debug("index", `Failed to write crash log on unhandled rejection: ${err}`); }
+      require("node:fs").appendFileSync(
+        crashLog,
+        `[${new Date().toISOString()}] UNHANDLED REJECTION: ${stack ?? msg}\n`,
+      );
+    } catch (err) {
+      log.debug("index", `Failed to write crash log on unhandled rejection: ${err}`);
+    }
   }
 });
 
@@ -220,7 +276,10 @@ program
   .option("-p, --permission <mode>", "Set permission mode (ask/auto/plan/deny/acceptEdits)")
   .option("-c, --continue", "Continue the last session")
   .option("--print", "Print mode: output only text, no UI (for piping)")
-  .option("--json-schema <schema>", "Validate output against JSON schema (inline JSON or file path)")
+  .option(
+    "--json-schema <schema>",
+    "Validate output against JSON schema (inline JSON or file path)",
+  )
   .option("--thinking", "Enable extended thinking mode")
   .option("--reasoning-budget <tokens>", "Thinking token budget (-1 = unlimited)")
   .option("--no-cache", "Disable response cache (always call the model)")
@@ -230,7 +289,10 @@ program
   .option("--sandbox [mode]", "Run bash commands in a sandbox (light or strict)")
   .option("--voice", "Enable voice input (record from microphone)")
   .option("--add-dir <dirs...>", "Add additional working directories")
-  .option("--compact-threshold <pct>", "Auto-compact threshold as percentage of context window (50-95, default 80)")
+  .option(
+    "--compact-threshold <pct>",
+    "Auto-compact threshold as percentage of context window (50-95, default 80)",
+  )
   .option("--no-tools", "Chat-only mode without tool calling")
   .option("--fallback-model <model>", "Auto-switch to this model if primary fails")
   .option("--max-budget-usd <amount>", "Max spend per session in USD")
@@ -266,11 +328,7 @@ program
 
     // Collect any excess args as part of the prompt
     const args = program.args;
-    const promptText = prompt
-      ? args.length > 1
-        ? args.join(" ")
-        : prompt
-      : undefined;
+    const promptText = prompt ? (args.length > 1 ? args.join(" ") : prompt) : undefined;
 
     await runMain(promptText, options);
   });
@@ -316,7 +374,45 @@ program.parse();
 
 async function runMain(
   promptText: string | undefined,
-  opts: { model?: string; permission?: string; continue?: boolean; print?: boolean; jsonSchema?: string; thinking?: boolean; noCache?: boolean; reasoningBudget?: string; worktree?: string; fork?: boolean; theme?: string; sandbox?: string | boolean; voice?: boolean; addDir?: string[]; compactThreshold?: string; noTools?: boolean; fallbackModel?: string; maxBudgetUsd?: string; outputFormat?: string; effort?: string; systemPrompt?: string; appendSystemPrompt?: string; name?: string; fromPr?: string; allowedTools?: string; disallowedTools?: string; sessionId?: string; agent?: string; sessionPersistence?: boolean; mcpConfig?: string; agents?: string; tmux?: boolean; profile?: string; file?: string; debug?: boolean; offline?: boolean; startupProfile?: boolean },
+  opts: {
+    model?: string;
+    permission?: string;
+    continue?: boolean;
+    print?: boolean;
+    jsonSchema?: string;
+    thinking?: boolean;
+    noCache?: boolean;
+    reasoningBudget?: string;
+    worktree?: string;
+    fork?: boolean;
+    theme?: string;
+    sandbox?: string | boolean;
+    voice?: boolean;
+    addDir?: string[];
+    compactThreshold?: string;
+    noTools?: boolean;
+    fallbackModel?: string;
+    maxBudgetUsd?: string;
+    outputFormat?: string;
+    effort?: string;
+    systemPrompt?: string;
+    appendSystemPrompt?: string;
+    name?: string;
+    fromPr?: string;
+    allowedTools?: string;
+    disallowedTools?: string;
+    sessionId?: string;
+    agent?: string;
+    sessionPersistence?: boolean;
+    mcpConfig?: string;
+    agents?: string;
+    tmux?: boolean;
+    profile?: string;
+    file?: string;
+    debug?: boolean;
+    offline?: boolean;
+    startupProfile?: boolean;
+  },
 ) {
   const cwd = process.cwd();
 
@@ -354,7 +450,9 @@ async function runMain(
     // Auto-setup on first run — launch the installation wizard
     // The wizard handles PATH installation and model setup
     if (!isSetupComplete()) {
-      console.log("\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n");
+      console.log(
+        "\n\x1b[1m\x1b[36mWelcome to KCode!\x1b[0m\x1b[2m Starting first-time setup wizard...\x1b[0m\n",
+      );
       try {
         const { runSetup } = await import("./core/model-manager");
         await runSetup();
@@ -379,11 +477,16 @@ async function runMain(
         const modelBase = await getModelBaseUrl(modelName);
         const provider = await getModelProvider(modelName);
         // If the model has a non-default baseUrl or a non-openai provider, it's external
-        if (provider === "mnemocuda" || provider === "anthropic" ||
-            (modelBase && !modelBase.includes("localhost:10091"))) {
+        if (
+          provider === "mnemocuda" ||
+          provider === "anthropic" ||
+          (modelBase && !modelBase.includes("localhost:10091"))
+        ) {
           externalServerUrl = modelBase;
         }
-      } catch { /* fallback to normal server management */ }
+      } catch {
+        /* fallback to normal server management */
+      }
 
       if (externalServerUrl) {
         // External server: just check it's reachable, don't try to start llama.cpp
@@ -394,12 +497,19 @@ async function runMain(
         while (Date.now() - start < maxWait) {
           for (const endpoint of healthEndpoints) {
             try {
-              const resp = await fetch(`${externalServerUrl}${endpoint}`, { signal: AbortSignal.timeout(2000) });
-              if (resp.ok) { ready = true; break; }
-            } catch { /* retry */ }
+              const resp = await fetch(`${externalServerUrl}${endpoint}`, {
+                signal: AbortSignal.timeout(2000),
+              });
+              if (resp.ok) {
+                ready = true;
+                break;
+              }
+            } catch {
+              /* retry */
+            }
           }
           if (ready) break;
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 500));
         }
         if (ready) {
           profileCheckpoint("server_ready");
@@ -410,63 +520,72 @@ async function runMain(
           await exitWithPause(1, `External server not reachable: ${externalServerUrl}`);
         }
       } else {
-      // Local llama.cpp server management
-      const serverRunning = await isServerRunning();
-      let port: number = 0;
+        // Local llama.cpp server management
+        const serverRunning = await isServerRunning();
+        let port: number = 0;
 
-      if (!serverRunning) {
-        try {
-          process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
-          const result = await startServer();
-          port = result.port;
-          process.stderr.write(`\r\x1b[2mLoading model into VRAM...\x1b[0m\x1b[K`);
-        } catch (err) {
-          console.error(`\n\x1b[31m✗ Server start failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
-          await exitWithPause(1, `Server start failed: ${err instanceof Error ? err.message : err}`);
+        if (!serverRunning) {
+          try {
+            process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
+            const result = await startServer();
+            port = result.port;
+            process.stderr.write(`\r\x1b[2mLoading model into VRAM...\x1b[0m\x1b[K`);
+          } catch (err) {
+            console.error(
+              `\n\x1b[31m✗ Server start failed: ${err instanceof Error ? err.message : err}\x1b[0m`,
+            );
+            await exitWithPause(
+              1,
+              `Server start failed: ${err instanceof Error ? err.message : err}`,
+            );
+          }
+        } else {
+          port = getServerPort()!;
         }
-      } else {
-        port = getServerPort()!;
-      }
 
-      // Wait until model is fully loaded and ready — do NOT proceed without this
-      const maxWait = 180_000;
-      const start = Date.now();
-      let ready = false;
-      while (Date.now() - start < maxWait) {
-        try {
-          const healthResp = await fetch(`http://localhost:${port}/health`, {
-            signal: AbortSignal.timeout(3000),
-          });
-          if (healthResp.ok) {
-            const health = await healthResp.json() as Record<string, unknown>;
-            if (health.status === "ok") {
-              const modelsResp = await fetch(`http://localhost:${port}/v1/models`, {
-                signal: AbortSignal.timeout(3000),
-              });
-              if (modelsResp.ok) {
-                ready = true;
-                break;
+        // Wait until model is fully loaded and ready — do NOT proceed without this
+        const maxWait = 180_000;
+        const start = Date.now();
+        let ready = false;
+        while (Date.now() - start < maxWait) {
+          try {
+            const healthResp = await fetch(`http://localhost:${port}/health`, {
+              signal: AbortSignal.timeout(3000),
+            });
+            if (healthResp.ok) {
+              const health = (await healthResp.json()) as Record<string, unknown>;
+              if (health.status === "ok") {
+                const modelsResp = await fetch(`http://localhost:${port}/v1/models`, {
+                  signal: AbortSignal.timeout(3000),
+                });
+                if (modelsResp.ok) {
+                  ready = true;
+                  break;
+                }
               }
             }
+          } catch (err) {
+            log.debug("index", `Server health check not ready yet: ${err}`);
           }
-        } catch (err) { log.debug("index", `Server health check not ready yet: ${err}`); }
 
-        const elapsed = Math.round((Date.now() - start) / 1000);
-        if (!serverRunning) {
-          process.stderr.write(`\r\x1b[2mLoading model into VRAM... (${elapsed}s)\x1b[0m\x1b[K`);
+          const elapsed = Math.round((Date.now() - start) / 1000);
+          if (!serverRunning) {
+            process.stderr.write(`\r\x1b[2mLoading model into VRAM... (${elapsed}s)\x1b[0m\x1b[K`);
+          }
+          await new Promise((r) => setTimeout(r, 500));
         }
-        await new Promise((r) => setTimeout(r, 500));
-      }
 
-      if (ready) {
-        profileCheckpoint("server_ready");
-        if (!serverRunning) {
-          process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
+        if (ready) {
+          profileCheckpoint("server_ready");
+          if (!serverRunning) {
+            process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
+          }
+        } else {
+          console.error(
+            `\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s. Check ~/.kcode/server.log\x1b[0m`,
+          );
+          process.exit(1);
         }
-      } else {
-        console.error(`\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s. Check ~/.kcode/server.log\x1b[0m`);
-        process.exit(1);
-      }
       } // close else (local llama.cpp server management)
     }
   }
@@ -482,9 +601,13 @@ async function runMain(
     if (existsSync(kcodeDir) && !isWorkspaceTrusted(cwd)) {
       const isTTY = process.stdin.isTTY && process.stdout.isTTY;
       if (isTTY) {
-        process.stderr.write(`\n\x1b[33m⚠ This workspace has a .kcode/ directory with project-specific config.\x1b[0m\n`);
+        process.stderr.write(
+          `\n\x1b[33m⚠ This workspace has a .kcode/ directory with project-specific config.\x1b[0m\n`,
+        );
         process.stderr.write(`  Path: ${kcodeDir}\n`);
-        process.stderr.write(`  Trusting a workspace allows it to run hooks, MCP servers, and plugins.\n\n`);
+        process.stderr.write(
+          `  Trusting a workspace allows it to run hooks, MCP servers, and plugins.\n\n`,
+        );
         process.stderr.write(`  \x1b[1mDo you trust this workspace? (y/N)\x1b[0m `);
 
         const answer = await new Promise<string>((resolve) => {
@@ -502,7 +625,9 @@ async function runMain(
           trustWorkspace(cwd);
           process.stderr.write(`\x1b[32m✓\x1b[0m Workspace trusted.\n\n`);
         } else {
-          process.stderr.write(`\x1b[2m  Skipping .kcode/ config. Run \`kcode init --trust\` to trust later.\x1b[0m\n\n`);
+          process.stderr.write(
+            `\x1b[2m  Skipping .kcode/ config. Run \`kcode init --trust\` to trust later.\x1b[0m\n\n`,
+          );
         }
       }
     }
@@ -533,11 +658,17 @@ async function runMain(
     const profile = getProfile(opts.profile);
     if (profile) {
       applyProfile(config, profile);
-      console.error(`\x1b[36mProfile: ${profile.icon} ${profile.name}\x1b[0m — ${profile.description}`);
+      console.error(
+        `\x1b[36mProfile: ${profile.icon} ${profile.name}\x1b[0m — ${profile.description}`,
+      );
     } else {
       const { listProfiles } = await import("./core/profiles");
-      const available = listProfiles().map(p => p.name).join(", ");
-      console.error(`\x1b[33mWarning: unknown profile "${opts.profile}". Available: ${available}\x1b[0m`);
+      const available = listProfiles()
+        .map((p) => p.name)
+        .join(", ");
+      console.error(
+        `\x1b[33mWarning: unknown profile "${opts.profile}". Available: ${available}\x1b[0m`,
+      );
     }
   }
 
@@ -555,10 +686,14 @@ async function runMain(
       if (registered) {
         config.apiBase = await resolveBase(opts.model, config.apiBase);
       } else {
-        console.error(`\x1b[33mWarning: model "${opts.model}" is not registered. Use 'kcode models add' to register it. Falling back to ${process.env.KCODE_API_BASE ?? "http://localhost:10091"}.\x1b[0m`);
+        console.error(
+          `\x1b[33mWarning: model "${opts.model}" is not registered. Use 'kcode models add' to register it. Falling back to ${process.env.KCODE_API_BASE ?? "http://localhost:10091"}.\x1b[0m`,
+        );
       }
     } else {
-      console.error(`\x1b[33mWarning: model "${opts.model}" is blocked by managed policy. Using "${config.model}" instead.\x1b[0m`);
+      console.error(
+        `\x1b[33mWarning: model "${opts.model}" is blocked by managed policy. Using "${config.model}" instead.\x1b[0m`,
+      );
     }
   }
   if (opts.permission) {
@@ -566,7 +701,9 @@ async function runMain(
     const { loadManagedPolicy } = await import("./core/config");
     const policy = await loadManagedPolicy();
     if (policy.permissionMode) {
-      console.error(`\x1b[33mWarning: permission mode is locked to "${policy.permissionMode}" by managed policy.\x1b[0m`);
+      console.error(
+        `\x1b[33mWarning: permission mode is locked to "${policy.permissionMode}" by managed policy.\x1b[0m`,
+      );
     } else {
       config.permissionMode = opts.permission as PermissionMode;
     }
@@ -665,17 +802,25 @@ async function runMain(
 
   // Apply allowed/disallowed tools
   if (opts.allowedTools) {
-    config.allowedTools = opts.allowedTools.split(",").map((s: string) => s.trim()).filter(Boolean);
+    config.allowedTools = opts.allowedTools
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
   }
   if (opts.disallowedTools) {
-    config.disallowedTools = opts.disallowedTools.split(",").map((s: string) => s.trim()).filter(Boolean);
+    config.disallowedTools = opts.disallowedTools
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean);
   }
 
   // Validate and apply session ID
   if (opts.sessionId) {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(opts.sessionId)) {
-      console.error("Error: --session-id must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000)");
+      console.error(
+        "Error: --session-id must be a valid UUID (e.g. 550e8400-e29b-41d4-a716-446655440000)",
+      );
       process.exit(1);
     }
   }
@@ -685,7 +830,9 @@ async function runMain(
     const { findCustomAgent } = await import("./core/custom-agents");
     const agentDef = findCustomAgent(opts.agent, cwd);
     if (!agentDef) {
-      console.error(`Error: Agent '${opts.agent}' not found. Place agent definitions in ~/.kcode/agents/${opts.agent}.md or .kcode/agents/${opts.agent}.md`);
+      console.error(
+        `Error: Agent '${opts.agent}' not found. Place agent definitions in ~/.kcode/agents/${opts.agent}.md or .kcode/agents/${opts.agent}.md`,
+      );
       process.exit(1);
     }
     if (agentDef.model) {
@@ -706,7 +853,9 @@ async function runMain(
       if (validPerms.includes(agentDef.permissionMode)) {
         config.permissionMode = agentDef.permissionMode as import("./core/types").PermissionMode;
       } else {
-        console.error(`Warning: Agent '${agentDef.name}' has invalid permissionMode '${agentDef.permissionMode}'. Ignoring.`);
+        console.error(
+          `Warning: Agent '${agentDef.name}' has invalid permissionMode '${agentDef.permissionMode}'. Ignoring.`,
+        );
       }
     }
     log.info("session", `Using agent '${agentDef.name}' from ${agentDef.sourcePath}`);
@@ -729,7 +878,9 @@ async function runMain(
     try {
       const voiceStatus = await lazyIsVoiceAvailable();
       if (!voiceStatus.available) {
-        console.error("\x1b[31mVoice input not available. Install arecord/sox and faster-whisper.\x1b[0m");
+        console.error(
+          "\x1b[31mVoice input not available. Install arecord/sox and faster-whisper.\x1b[0m",
+        );
       } else {
         const text = await lazyVoiceToText();
         if (text) {
@@ -751,10 +902,19 @@ async function runMain(
     try {
       // Create worktree with a new branch (using execFileSync to prevent shell injection)
       try {
-        execFileSync("git", ["worktree", "add", worktreePath, "-b", `kcode/${worktreeName}`], { cwd, stdio: "pipe" });
+        execFileSync("git", ["worktree", "add", worktreePath, "-b", `kcode/${worktreeName}`], {
+          cwd,
+          stdio: "pipe",
+        });
       } catch (err) {
-        log.debug("index", `Worktree creation with new branch failed, trying existing branch: ${err}`);
-        execFileSync("git", ["worktree", "add", worktreePath, `kcode/${worktreeName}`], { cwd, stdio: "pipe" });
+        log.debug(
+          "index",
+          `Worktree creation with new branch failed, trying existing branch: ${err}`,
+        );
+        execFileSync("git", ["worktree", "add", worktreePath, `kcode/${worktreeName}`], {
+          cwd,
+          stdio: "pipe",
+        });
       }
       // Change working directory to worktree
       process.chdir(resolve(cwd, worktreePath));
@@ -798,7 +958,7 @@ async function runMain(
         console.error(`Error: MCP config file not found: ${mcpConfigPath}`);
         process.exit(1);
       }
-      const data = await file.json() as Record<string, unknown>;
+      const data = (await file.json()) as Record<string, unknown>;
       if (data?.mcpServers && typeof data.mcpServers === "object") {
         const { getMcpManager } = await import("./core/mcp");
         const manager = getMcpManager();
@@ -806,21 +966,35 @@ async function runMain(
         manager.registerTools(tools);
         const serverNames = manager.getServerNames();
         if (serverNames.length > 0) {
-          const toolCount = tools.getToolNames().filter((n: string) => n.startsWith("mcp__")).length;
-          console.error(`[MCP] Loaded ${serverNames.length} server(s) from ${mcpConfigPath}, registered ${toolCount} tool(s)`);
+          const toolCount = tools
+            .getToolNames()
+            .filter((n: string) => n.startsWith("mcp__")).length;
+          console.error(
+            `[MCP] Loaded ${serverNames.length} server(s) from ${mcpConfigPath}, registered ${toolCount} tool(s)`,
+          );
         }
       } else {
-        console.error(`Warning: --mcp-config file has no "mcpServers" key. Expected format: { "mcpServers": { ... } }`);
+        console.error(
+          `Warning: --mcp-config file has no "mcpServers" key. Expected format: { "mcpServers": { ... } }`,
+        );
       }
     } catch (err) {
-      console.error(`Warning: Failed to load MCP config: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `Warning: Failed to load MCP config: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
   // Parse --agents inline JSON definitions
   if (opts.agents) {
     try {
-      const agentDefs = JSON.parse(opts.agents) as Array<{ name: string; model?: string; systemPrompt?: string; tools?: string[]; maxTurns?: number }>;
+      const agentDefs = JSON.parse(opts.agents) as Array<{
+        name: string;
+        model?: string;
+        systemPrompt?: string;
+        tools?: string[];
+        maxTurns?: number;
+      }>;
       if (!Array.isArray(agentDefs)) {
         console.error("Error: --agents must be a JSON array of agent objects.");
         process.exit(1);
@@ -855,7 +1029,9 @@ async function runMain(
     const tracer = getDebugTracer();
     tracer.enable();
     conversationManager.setDebugTracer(tracer);
-    console.error("\x1b[36mDebug tracing enabled. Use /debug trace to view agent decisions.\x1b[0m");
+    console.error(
+      "\x1b[36mDebug tracing enabled. Use /debug trace to view agent decisions.\x1b[0m",
+    );
   }
 
   // Apply explicit session ID if provided
@@ -867,18 +1043,27 @@ async function runMain(
   try {
     const { setUndoManager } = await import("./tools/undo.js");
     setUndoManager(conversationManager.getUndo());
-  } catch (err) { log.debug("index", `Failed to wire undo manager: ${err}`); }
+  } catch (err) {
+    log.debug("index", `Failed to wire undo manager: ${err}`);
+  }
 
   // Wire stash callbacks for conversation context snapshots
   try {
     const { setStashCallbacks } = await import("./tools/stash.js");
     setStashCallbacks(
       () => conversationManager.getState().messages,
-      (msgs) => { conversationManager.restoreMessages(msgs); },
+      (msgs) => {
+        conversationManager.restoreMessages(msgs);
+      },
     );
-  } catch (err) { log.debug("index", `Failed to wire stash callbacks: ${err}`); }
+  } catch (err) {
+    log.debug("index", `Failed to wire stash callbacks: ${err}`);
+  }
 
-  log.info("session", `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}, noTools=${!!opts.noTools}`);
+  log.info(
+    "session",
+    `Session started: model=${config.model}, cwd=${cwd}, version=${VERSION}, noTools=${!!opts.noTools}`,
+  );
 
   // Resume previous session if --continue flag is set
   if (opts.continue) {
@@ -922,22 +1107,31 @@ async function runMain(
       const prNumber = prMatch ? prMatch[1] : prArg;
 
       if (!/^\d+$/.test(prNumber!)) {
-        console.error(`Error: Invalid PR reference "${opts.fromPr}". Use a number, #number, or GitHub PR URL.`);
+        console.error(
+          `Error: Invalid PR reference "${opts.fromPr}". Use a number, #number, or GitHub PR URL.`,
+        );
         process.exit(1);
       }
 
       // Fetch PR details using gh CLI
       console.error(`Fetching PR #${prNumber} details...`);
       const { execSync } = await import("node:child_process");
-      let prData: { title: string; body: string; files: Array<{ path: string }>; comments: Array<{ body: string; author: { login: string } }> };
+      let prData: {
+        title: string;
+        body: string;
+        files: Array<{ path: string }>;
+        comments: Array<{ body: string; author: { login: string } }>;
+      };
       try {
-        const raw = execSync(
-          `gh pr view ${prNumber} --json title,body,files,comments`,
-          { encoding: "utf-8", timeout: 15_000 },
-        ).trim();
+        const raw = execSync(`gh pr view ${prNumber} --json title,body,files,comments`, {
+          encoding: "utf-8",
+          timeout: 15_000,
+        }).trim();
         prData = JSON.parse(raw);
       } catch (err) {
-        console.error(`Error: Could not fetch PR #${prNumber}. Make sure 'gh' CLI is installed and authenticated.`);
+        console.error(
+          `Error: Could not fetch PR #${prNumber}. Make sure 'gh' CLI is installed and authenticated.`,
+        );
         console.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
       }
@@ -952,26 +1146,40 @@ async function runMain(
         for (const session of sessions) {
           // Check if session prompt mentions this PR
           const promptLower = session.prompt.toLowerCase();
-          const isRelated = prSearchTerms.some(term => promptLower.includes(term.toLowerCase()));
+          const isRelated = prSearchTerms.some((term) => promptLower.includes(term.toLowerCase()));
 
           if (isRelated) {
             const messages = transcript.loadSessionMessages(session.filename);
             if (messages.length > 0) {
               conversationManager.restoreMessages(messages);
-              console.error(`Resumed session linked to PR #${prNumber} (${messages.length} messages from ${session.startedAt})`);
-              log.info("session", `Resumed PR-linked session from ${session.filename} for PR #${prNumber}`);
+              console.error(
+                `Resumed session linked to PR #${prNumber} (${messages.length} messages from ${session.startedAt})`,
+              );
+              log.info(
+                "session",
+                `Resumed PR-linked session from ${session.filename} for PR #${prNumber}`,
+              );
               resumedFromTranscript = true;
               break;
             }
           }
         }
-      } catch (err) { log.debug("index", `Transcript search for PR-linked session failed: ${err}`); }
+      } catch (err) {
+        log.debug("index", `Transcript search for PR-linked session failed: ${err}`);
+      }
 
       // If no related session found, inject PR context into the conversation
       if (!resumedFromTranscript) {
-        const fileList = prData.files?.map((f: { path: string }) => f.path).join("\n  ") ?? "(none)";
+        const fileList =
+          prData.files?.map((f: { path: string }) => f.path).join("\n  ") ?? "(none)";
         const commentSummary = prData.comments?.length
-          ? prData.comments.slice(0, 5).map((c: { author: { login: string }; body: string }) => `  @${c.author.login}: ${c.body.slice(0, 200)}`).join("\n")
+          ? prData.comments
+              .slice(0, 5)
+              .map(
+                (c: { author: { login: string }; body: string }) =>
+                  `  @${c.author.login}: ${c.body.slice(0, 200)}`,
+              )
+              .join("\n")
           : "(no comments)";
 
         const prContext = [
@@ -992,14 +1200,24 @@ async function runMain(
         // Inject as a system-like user message so the LLM has PR context
         conversationManager.restoreMessages([
           { role: "user", content: prContext },
-          { role: "assistant", content: [{ type: "text", text: `I have the context for PR #${prNumber}: "${prData.title}". I can see the changed files and comments. How can I help with this PR?` }] },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: `I have the context for PR #${prNumber}: "${prData.title}". I can see the changed files and comments. How can I help with this PR?`,
+              },
+            ],
+          },
         ]);
         console.error(`Started new session with PR #${prNumber} context: "${prData.title}"`);
         log.info("session", `New session with PR #${prNumber} context injected`);
       }
     } catch (err) {
       if (!(err instanceof Error && err.message.includes("process.exit"))) {
-        console.error(`Warning: --from-pr failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(
+          `Warning: --from-pr failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
         console.error("Starting session without PR context.");
       } else {
         throw err;
@@ -1018,10 +1236,15 @@ async function runMain(
         const url = new URL(fileArg);
         const hostname = url.hostname.toLowerCase();
         if (
-          hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" ||
-          hostname.startsWith("169.254.") || hostname.startsWith("10.") ||
-          hostname.startsWith("192.168.") || hostname.match(/^172\.(1[6-9]|2\d|3[01])\./) ||
-          hostname === "metadata.google.internal" || hostname.endsWith(".internal")
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "::1" ||
+          hostname.startsWith("169.254.") ||
+          hostname.startsWith("10.") ||
+          hostname.startsWith("192.168.") ||
+          hostname.match(/^172\.(1[6-9]|2\d|3[01])\./) ||
+          hostname === "metadata.google.internal" ||
+          hostname.endsWith(".internal")
         ) {
           throw new Error(`Blocked: cannot fetch from private/internal URL: ${fileArg}`);
         }
@@ -1059,15 +1282,26 @@ async function runMain(
 
       if (fileContent.trim()) {
         // Inject as context messages in the conversation
-        const truncated = fileContent.length > 500_000
-          ? fileContent.slice(0, 500_000) + "\n\n[... truncated at 500K characters ...]"
-          : fileContent;
+        const truncated =
+          fileContent.length > 500_000
+            ? fileContent.slice(0, 500_000) + "\n\n[... truncated at 500K characters ...]"
+            : fileContent;
         conversationManager.restoreMessages([
           ...conversationManager.getState().messages,
           { role: "user", content: `<file source="${fileArg}">\n${truncated}\n</file>` },
-          { role: "assistant", content: [{ type: "text", text: `I have the contents of ${fileArg} in context. How can I help?` }] },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: `I have the contents of ${fileArg} in context. How can I help?`,
+              },
+            ],
+          },
         ]);
-        console.error(`Added file to context: ${fileArg} (${fileContent.length.toLocaleString()} chars)`);
+        console.error(
+          `Added file to context: ${fileArg} (${fileContent.length.toLocaleString()} chars)`,
+        );
         log.info("session", `--file loaded: ${fileArg} (${fileContent.length} chars)`);
       }
     } catch (err) {
@@ -1100,7 +1334,9 @@ async function runMain(
           promptText = `${promptText}\n\n<stdin>\n${stdinContent}\n</stdin>`;
         }
       }
-    } catch (err) { log.debug("index", `Failed to read piped stdin: ${err}`); }
+    } catch (err) {
+      log.debug("index", `Failed to read piped stdin: ${err}`);
+    }
   }
 
   // ─── Route to the appropriate mode ──────────────────────────
@@ -1108,7 +1344,11 @@ async function runMain(
   if (promptText && opts.print) {
     // Print mode: output only text, suitable for piping
     const runPrintMode = await lazyGetRunPrintMode();
-    const exitCode = await runPrintMode(conversationManager, promptText, config.outputFormat ?? "text");
+    const exitCode = await runPrintMode(
+      conversationManager,
+      promptText,
+      config.outputFormat ?? "text",
+    );
     process.exit(exitCode);
   }
 
@@ -1125,11 +1365,15 @@ async function runMain(
     const { getCodebaseIndex } = await import("./core/codebase-index.js");
     fileWatcher = getFileWatcher(cwd);
     // Initialize RAG auto-indexer (lazy, non-blocking)
-    let ragAutoIndexer: Awaited<ReturnType<typeof import("./core/rag/auto-index")["getRagAutoIndexer"]>> | null = null;
+    let ragAutoIndexer: Awaited<
+      ReturnType<typeof import("./core/rag/auto-index")["getRagAutoIndexer"]>
+    > | null = null;
     try {
       const { getRagAutoIndexer } = await import("./core/rag/auto-index");
       ragAutoIndexer = getRagAutoIndexer(cwd);
-    } catch (err) { log.debug("index", `RAG auto-indexer init skipped: ${err}`); }
+    } catch (err) {
+      log.debug("index", `RAG auto-indexer init skipped: ${err}`);
+    }
 
     fileWatcher.start((changes) => {
       // Rebuild codebase index when files change externally
@@ -1137,12 +1381,16 @@ async function runMain(
         const idx = getCodebaseIndex(cwd);
         idx.build();
         log.info("watcher", `Re-indexed after ${changes.length} external file change(s)`);
-      } catch (err) { log.debug("index", `Failed to re-index after file changes: ${err}`); }
+      } catch (err) {
+        log.debug("index", `Failed to re-index after file changes: ${err}`);
+      }
 
       // Feed changes to RAG auto-indexer for incremental re-indexing
       ragAutoIndexer?.onFileChanges(changes);
     });
-  } catch (err) { log.debug("index", `File watcher initialization failed: ${err}`); }
+  } catch (err) {
+    log.debug("index", `File watcher initialization failed: ${err}`);
+  }
 
   profileCheckpoint("ready");
 
@@ -1167,7 +1415,9 @@ async function runMain(
       const narrativeManager = await lazyGetNarrativeManager();
       narrativeManager.updateNarrative(sessionData);
     }
-  } catch (err) { log.debug("index", `Failed to save session narrative: ${err}`); }
+  } catch (err) {
+    log.debug("index", `Failed to save session narrative: ${err}`);
+  }
 
   log.info("session", "Session ended");
   await lazyShutdownLsp();
@@ -1201,9 +1451,7 @@ async function runNonInteractive(
 
       case "tool_result":
         if (event.isError) {
-          process.stderr.write(
-            `\x1b[31m✗ ${event.name}: ${event.result}\x1b[0m\n`,
-          );
+          process.stderr.write(`\x1b[31m✗ ${event.name}: ${event.result}\x1b[0m\n`);
         }
         break;
 

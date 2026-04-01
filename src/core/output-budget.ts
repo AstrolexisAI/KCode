@@ -22,13 +22,23 @@ export interface OutputBudgetDecision {
  */
 const LONG_RESPONSE_SIGNALS = [
   // N words ≈ N*5 chars ≈ N*5/3.5 tokens ≈ N*1.4 tokens
-  { pattern: /\b(\d{3,})\s*(words?|palabras)\b/i, multiplier: (m: RegExpMatchArray) => Math.round(parseInt(m[1]!) * 1.4) },
+  {
+    pattern: /\b(\d{3,})\s*(words?|palabras)\b/i,
+    multiplier: (m: RegExpMatchArray) => Math.round(parseInt(m[1]!) * 1.4),
+  },
   { pattern: /\bextens[oa]?\b|\bexhaustiv/i, multiplier: () => 2000 },
   { pattern: /\bcada\s+década\b|\beach\s+decade\b/i, multiplier: () => 1500 },
   { pattern: /\bhistoria\s+completa\b|\bcomplete\s+history\b/i, multiplier: () => 2000 },
-  { pattern: /\btodos?\s+los\s+(?:cálculos|pasos|detalles)\b|\ball\s+(?:calculations|steps|details)\b/i, multiplier: () => 1500 },
+  {
+    pattern:
+      /\btodos?\s+los\s+(?:cálculos|pasos|detalles)\b|\ball\s+(?:calculations|steps|details)\b/i,
+    multiplier: () => 1500,
+  },
   { pattern: /\bmostrá?\s+(?:todos?|cada)\b|\bshow\s+(?:all|every)\b/i, multiplier: () => 1200 },
-  { pattern: /\b(5|6|7|8|9|10)\s*(?:partes?|parts?|secciones?|sections?)\b/i, multiplier: (m: RegExpMatchArray) => parseInt(m[1]!) * 400 },
+  {
+    pattern: /\b(5|6|7|8|9|10)\s*(?:partes?|parts?|secciones?|sections?)\b/i,
+    multiplier: (m: RegExpMatchArray) => parseInt(m[1]!) * 400,
+  },
 ];
 
 /**
@@ -74,7 +84,11 @@ export function evaluateOutputBudget(
   const effectiveBudget = contextUsagePercent > 80 ? budget * 0.5 : budget;
 
   if (estimatedTokens <= effectiveBudget) {
-    return { strategy: "normal", estimatedOutputTokens: estimatedTokens, maxAllowedTokens: maxOutputTokens };
+    return {
+      strategy: "normal",
+      estimatedOutputTokens: estimatedTokens,
+      maxAllowedTokens: maxOutputTokens,
+    };
   }
 
   if (estimatedTokens <= effectiveBudget * 2) {
@@ -83,7 +97,8 @@ export function evaluateOutputBudget(
       estimatedOutputTokens: estimatedTokens,
       maxAllowedTokens: maxOutputTokens,
       reason: `Response may exceed output limit (~${Math.round(estimatedTokens)} tokens estimated, ${maxOutputTokens} max)`,
-      systemHint: "[SYSTEM] This prompt may require a long response. Be concise and prioritize key points. If you need more space, structure your answer in sections and indicate which section you're on.",
+      systemHint:
+        "[SYSTEM] This prompt may require a long response. Be concise and prioritize key points. If you need more space, structure your answer in sections and indicate which section you're on.",
     };
   }
 
@@ -93,7 +108,8 @@ export function evaluateOutputBudget(
       estimatedOutputTokens: estimatedTokens,
       maxAllowedTokens: maxOutputTokens,
       reason: `Response will likely exceed output limit (~${Math.round(estimatedTokens)} tokens, ${maxOutputTokens} max)`,
-      systemHint: "[SYSTEM] This prompt requires a very long response that will exceed your output limit. Respond in a structured, compact format. Focus on the most important points first. Use bullet points and tables instead of long paragraphs. If you must truncate, end at a natural section boundary.",
+      systemHint:
+        "[SYSTEM] This prompt requires a very long response that will exceed your output limit. Respond in a structured, compact format. Focus on the most important points first. Use bullet points and tables instead of long paragraphs. If you must truncate, end at a natural section boundary.",
     };
   }
 
@@ -102,6 +118,7 @@ export function evaluateOutputBudget(
     estimatedOutputTokens: estimatedTokens,
     maxAllowedTokens: maxOutputTokens,
     reason: `Response will far exceed output limit (~${Math.round(estimatedTokens)} tokens, ${maxOutputTokens} max)`,
-    systemHint: "[SYSTEM] WARNING: This prompt asks for far more content than can fit in one response. Provide a condensed version covering the key points. Use sections with headers so the user can ask for expansion on specific parts. Do NOT attempt to write everything — it will be truncated.",
+    systemHint:
+      "[SYSTEM] WARNING: This prompt asks for far more content than can fit in one response. Provide a condensed version covering the key points. Use sections with headers so the user can ask for expansion on specific parts. Do NOT attempt to write everything — it will be truncated.",
   };
 }

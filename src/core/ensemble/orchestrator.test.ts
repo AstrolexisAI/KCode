@@ -1,8 +1,8 @@
 // KCode - Ensemble Orchestrator Tests
 
-import { test, expect, describe, beforeEach } from "bun:test";
-import { EnsembleOrchestrator, createEnsembleFromSettings } from "./orchestrator";
-import type { ModelExecutor, EnsembleConfig } from "./types";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { createEnsembleFromSettings, EnsembleOrchestrator } from "./orchestrator";
+import type { EnsembleConfig, ModelExecutor } from "./types";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -27,19 +27,16 @@ function makeOrchestrator(
   overrides?: Partial<EnsembleConfig> & { enabled?: boolean },
   executor?: ModelExecutor,
 ): EnsembleOrchestrator {
-  return new EnsembleOrchestrator(
-    executor ?? makeMockExecutor(),
-    {
-      enabled: true,
-      models: ["model-a", "model-b", "model-c"],
-      strategy: "best-of-n",
-      maxParallel: 3,
-      timeout: 5000,
-      minResponses: 2,
-      triggerOn: "always",
-      ...overrides,
-    },
-  );
+  return new EnsembleOrchestrator(executor ?? makeMockExecutor(), {
+    enabled: true,
+    models: ["model-a", "model-b", "model-c"],
+    strategy: "best-of-n",
+    maxParallel: 3,
+    timeout: 5000,
+    minResponses: 2,
+    triggerOn: "always",
+    ...overrides,
+  });
 }
 
 // ─── Enable / Disable ───────────────────────────────────────────
@@ -146,9 +143,7 @@ describe("EnsembleOrchestrator - shouldTrigger", () => {
 describe("EnsembleOrchestrator - run", () => {
   test("runs ensemble and returns result", async () => {
     const orch = makeOrchestrator();
-    const result = await orch.run([
-      { role: "user", content: "What is TypeScript?" },
-    ]);
+    const result = await orch.run([{ role: "user", content: "What is TypeScript?" }]);
 
     expect(result.strategy).toBe("best-of-n");
     expect(result.candidates.length).toBeGreaterThanOrEqual(2);
@@ -157,16 +152,12 @@ describe("EnsembleOrchestrator - run", () => {
 
   test("throws when ensemble is not enabled", async () => {
     const orch = makeOrchestrator({ enabled: false });
-    await expect(
-      orch.run([{ role: "user", content: "test" }]),
-    ).rejects.toThrow(/not enabled/);
+    await expect(orch.run([{ role: "user", content: "test" }])).rejects.toThrow(/not enabled/);
   });
 
   test("throws when fewer than 2 models", async () => {
     const orch = makeOrchestrator({ enabled: true, models: ["single"] });
-    await expect(
-      orch.run([{ role: "user", content: "test" }]),
-    ).rejects.toThrow(/not enabled/);
+    await expect(orch.run([{ role: "user", content: "test" }])).rejects.toThrow(/not enabled/);
   });
 });
 
@@ -175,29 +166,20 @@ describe("EnsembleOrchestrator - run", () => {
 describe("EnsembleOrchestrator - tryRun", () => {
   test("returns result when trigger conditions are met", async () => {
     const orch = makeOrchestrator({ triggerOn: "always" });
-    const result = await orch.tryRun(
-      [{ role: "user", content: "test" }],
-      "test",
-    );
+    const result = await orch.tryRun([{ role: "user", content: "test" }], "test");
     expect(result).not.toBeNull();
     expect(result!.strategy).toBe("best-of-n");
   });
 
   test("returns null when trigger conditions are not met", async () => {
     const orch = makeOrchestrator({ triggerOn: "manual" });
-    const result = await orch.tryRun(
-      [{ role: "user", content: "test" }],
-      "test",
-    );
+    const result = await orch.tryRun([{ role: "user", content: "test" }], "test");
     expect(result).toBeNull();
   });
 
   test("returns null when ensemble is disabled", async () => {
     const orch = makeOrchestrator({ enabled: false, triggerOn: "always" });
-    const result = await orch.tryRun(
-      [{ role: "user", content: "test" }],
-      "test",
-    );
+    const result = await orch.tryRun([{ role: "user", content: "test" }], "test");
     expect(result).toBeNull();
   });
 });
@@ -216,7 +198,7 @@ describe("EnsembleOrchestrator - setExecutor", () => {
     orch.setExecutor(newExecutor);
 
     const result = await orch.run([{ role: "user", content: "test" }]);
-    expect(result.candidates.some(c => c.response.startsWith("New"))).toBe(true);
+    expect(result.candidates.some((c) => c.response.startsWith("New"))).toBe(true);
   });
 });
 

@@ -12,9 +12,12 @@ export interface CompletionSpec {
 
 export function generateCompletions(shell: Shell, spec: CompletionSpec): string {
   switch (shell) {
-    case "bash": return generateBashCompletions(spec);
-    case "zsh": return generateZshCompletions(spec);
-    case "fish": return generateFishCompletions(spec);
+    case "bash":
+      return generateBashCompletions(spec);
+    case "zsh":
+      return generateZshCompletions(spec);
+    case "fish":
+      return generateFishCompletions(spec);
   }
 }
 
@@ -72,7 +75,10 @@ export function getDefaultSpec(): CompletionSpec {
 function generateBashCompletions(spec: CompletionSpec): string {
   const cmds = spec.subcommands.map((c) => c.name).join(" ");
   const flags = spec.globalFlags.map((f) => f.name).join(" ");
-  const shorts = spec.globalFlags.filter((f) => f.short).map((f) => f.short).join(" ");
+  const shorts = spec.globalFlags
+    .filter((f) => f.short)
+    .map((f) => f.short)
+    .join(" ");
 
   return `# KCode Bash Completions
 # Add to ~/.bashrc: eval "$(kcode completions bash)"
@@ -152,7 +158,7 @@ _kcode() {
   output += `  )
 
   _arguments -C \\
-    \$global_flags \\
+    $global_flags \\
     '1:command:->command' \\
     '*::arg:->args'
 

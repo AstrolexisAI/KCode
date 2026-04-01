@@ -109,10 +109,7 @@ export class BudgetTracker {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - keepDays);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const result = this.db.run(
-      `DELETE FROM daily_usage WHERE date < ?`,
-      [cutoffStr],
-    );
+    const result = this.db.run(`DELETE FROM daily_usage WHERE date < ?`, [cutoffStr]);
     return result.changes;
   }
 }

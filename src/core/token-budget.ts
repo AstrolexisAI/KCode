@@ -7,17 +7,17 @@ import { log } from "./logger";
 // ─── Constants ───────────────────────────────────────────────────
 
 // Hard cap: system prompt must never exceed this fraction of context window
-const MAX_SYSTEM_PROMPT_RATIO = 0.30; // 30% of context window
+const MAX_SYSTEM_PROMPT_RATIO = 0.3; // 30% of context window
 const ABSOLUTE_MAX_TOKENS = 24_000; // Never exceed 24K tokens regardless of context window
 export const CHARS_PER_TOKEN = 3.5; // Conservative estimate for English text
 
 // Priority levels — higher number = first to be truncated
 export enum SectionPriority {
-  CRITICAL = 0,    // Identity, tools — never truncated
-  HIGH = 1,        // Code guidelines, git, environment
-  MEDIUM = 2,      // Project instructions, metacognition, situational awareness
-  LOW = 3,         // Learnings, distillation, world model, narrative
-  OPTIONAL = 4,    // Extended identity, user model, rules
+  CRITICAL = 0, // Identity, tools — never truncated
+  HIGH = 1, // Code guidelines, git, environment
+  MEDIUM = 2, // Project instructions, metacognition, situational awareness
+  LOW = 3, // Learnings, distillation, world model, narrative
+  OPTIONAL = 4, // Extended identity, user model, rules
 }
 
 export interface PromptSection {
@@ -31,7 +31,11 @@ export interface PromptSection {
 export class TokenBudgetManager {
   private maxTokens: number;
 
-  constructor(contextWindowSize: number, toolTokenOverhead = 0, maxTokensCap = ABSOLUTE_MAX_TOKENS) {
+  constructor(
+    contextWindowSize: number,
+    toolTokenOverhead = 0,
+    maxTokensCap = ABSOLUTE_MAX_TOKENS,
+  ) {
     // Subtract tool definition tokens from available space before computing budget.
     // On small context windows (e.g., 32K with 27K of tools), this prevents the
     // system prompt from consuming space the tools already claimed.
@@ -72,7 +76,8 @@ export class TokenBudgetManager {
         const remainingTokens = this.maxTokens - totalTokens;
         if (remainingTokens > 100) {
           const maxChars = Math.floor(remainingTokens * CHARS_PER_TOKEN);
-          const truncatedContent = section.content.slice(0, maxChars) + "\n\n[... truncated to fit token budget ...]";
+          const truncatedContent =
+            section.content.slice(0, maxChars) + "\n\n[... truncated to fit token budget ...]";
           included.push({ ...section, content: truncatedContent });
           totalTokens += remainingTokens;
           truncated.push(`${section.label} (partial)`);
@@ -84,7 +89,10 @@ export class TokenBudgetManager {
     }
 
     if (truncated.length > 0) {
-      log.info("budget", `Token budget ${this.maxTokens} tokens — dropped/truncated: ${truncated.join(", ")}`);
+      log.info(
+        "budget",
+        `Token budget ${this.maxTokens} tokens — dropped/truncated: ${truncated.join(", ")}`,
+      );
     }
 
     return included.map((s) => s.content).join("\n\n");

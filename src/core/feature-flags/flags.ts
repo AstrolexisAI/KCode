@@ -35,9 +35,7 @@ function safeCheck(globalName: string): boolean | undefined {
   try {
     // In built mode, Bun replaces these with literal true/false.
     // In dev mode, the global doesn't exist → undefined → defaults to true.
-    return (globalThis as Record<string, unknown>)[globalName] as
-      | boolean
-      | undefined;
+    return (globalThis as Record<string, unknown>)[globalName] as boolean | undefined;
   } catch {
     return undefined;
   }
@@ -45,9 +43,7 @@ function safeCheck(globalName: string): boolean | undefined {
 
 export const Features: Readonly<Record<FeatureName, boolean>> = {
   voice: featureEnabled(
-    typeof __FEATURE_VOICE__ !== "undefined"
-      ? __FEATURE_VOICE__
-      : safeCheck("__FEATURE_VOICE__"),
+    typeof __FEATURE_VOICE__ !== "undefined" ? __FEATURE_VOICE__ : safeCheck("__FEATURE_VOICE__"),
   ),
   bridge: featureEnabled(
     typeof __FEATURE_BRIDGE__ !== "undefined"
@@ -65,14 +61,10 @@ export const Features: Readonly<Record<FeatureName, boolean>> = {
       : safeCheck("__FEATURE_TELEMETRY__"),
   ),
   lsp: featureEnabled(
-    typeof __FEATURE_LSP__ !== "undefined"
-      ? __FEATURE_LSP__
-      : safeCheck("__FEATURE_LSP__"),
+    typeof __FEATURE_LSP__ !== "undefined" ? __FEATURE_LSP__ : safeCheck("__FEATURE_LSP__"),
   ),
   swarm: featureEnabled(
-    typeof __FEATURE_SWARM__ !== "undefined"
-      ? __FEATURE_SWARM__
-      : safeCheck("__FEATURE_SWARM__"),
+    typeof __FEATURE_SWARM__ !== "undefined" ? __FEATURE_SWARM__ : safeCheck("__FEATURE_SWARM__"),
   ),
   browser: featureEnabled(
     typeof __FEATURE_BROWSER__ !== "undefined"
@@ -80,9 +72,7 @@ export const Features: Readonly<Record<FeatureName, boolean>> = {
       : safeCheck("__FEATURE_BROWSER__"),
   ),
   mesh: featureEnabled(
-    typeof __FEATURE_MESH__ !== "undefined"
-      ? __FEATURE_MESH__
-      : safeCheck("__FEATURE_MESH__"),
+    typeof __FEATURE_MESH__ !== "undefined" ? __FEATURE_MESH__ : safeCheck("__FEATURE_MESH__"),
   ),
   distillation: featureEnabled(
     typeof __FEATURE_DISTILLATION__ !== "undefined"
@@ -95,9 +85,7 @@ export const Features: Readonly<Record<FeatureName, boolean>> = {
       : safeCheck("__FEATURE_COLLAB__"),
   ),
   rag: featureEnabled(
-    typeof __FEATURE_RAG__ !== "undefined"
-      ? __FEATURE_RAG__
-      : safeCheck("__FEATURE_RAG__"),
+    typeof __FEATURE_RAG__ !== "undefined" ? __FEATURE_RAG__ : safeCheck("__FEATURE_RAG__"),
   ),
 };
 

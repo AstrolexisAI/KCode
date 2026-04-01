@@ -3,8 +3,8 @@
 // These handlers evaluate whether the agent loop should stop, continue, or modify behavior
 // based on force-stop, theoretical mode, checkpoint mode, and plan coherence.
 
-import type { ContentBlock, ToolUseBlock } from "./types";
 import { log } from "./logger";
+import type { ContentBlock, ToolUseBlock } from "./types";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -34,8 +34,11 @@ export function handleForceStop(
     return { action: "pass" };
   }
 
-  log.warn("session", `Force-stop active but model returned ${toolCalls.length} tool calls — dropping them`);
-  const textOnly = assistantContent.filter(b => b.type === "text");
+  log.warn(
+    "session",
+    `Force-stop active but model returned ${toolCalls.length} tool calls — dropping them`,
+  );
+  const textOnly = assistantContent.filter((b) => b.type === "text");
   return {
     action: "break",
     stopReason: "force_stop",
@@ -56,19 +59,31 @@ export function handleTheoreticalMode(
   }
 
   const newRetryCount = retryCount + 1;
-  log.info("session", `Theoretical mode: dropping ${toolCalls.length} tool call(s) (attempt ${newRetryCount})`);
-  const textOnly = assistantContent.filter(b => b.type === "text");
+  log.info(
+    "session",
+    `Theoretical mode: dropping ${toolCalls.length} tool call(s) (attempt ${newRetryCount})`,
+  );
+  const textOnly = assistantContent.filter((b) => b.type === "text");
   const updatedContent = textOnly.length > 0 ? textOnly : [{ type: "text" as const, text: "" }];
 
   if (newRetryCount >= 2) {
-    log.warn("session", "Theoretical mode: model persists with tool calls after 2 retries — accepting text and stopping");
-    const hasText = textOnly.length > 0 && textOnly.some(b => b.type === "text" && (b as { text: string }).text);
+    log.warn(
+      "session",
+      "Theoretical mode: model persists with tool calls after 2 retries — accepting text and stopping",
+    );
+    const hasText =
+      textOnly.length > 0 &&
+      textOnly.some((b) => b.type === "text" && (b as { text: string }).text);
     return {
       action: "break",
       stopReason: "theoretical_no_tools",
       updatedContent,
       newRetryCount: 0,
-      error: hasText ? undefined : new Error("The model could not produce a text-only response for this theoretical question. Try rephrasing or using a different model."),
+      error: hasText
+        ? undefined
+        : new Error(
+            "The model could not produce a text-only response for this theoretical question. Try rephrasing or using a different model.",
+          ),
     };
   }
 
@@ -76,7 +91,8 @@ export function handleTheoreticalMode(
     action: "continue",
     stopReason: "theoretical_no_tools",
     updatedContent,
-    injectMessage: "[SYSTEM] Tools are disabled for theoretical questions. Answer with text only. Do not attempt any tool calls.",
+    injectMessage:
+      "[SYSTEM] Tools are disabled for theoretical questions. Answer with text only. Do not attempt any tool calls.",
     newRetryCount,
   };
 }
@@ -98,14 +114,18 @@ export function handleCheckpointMode(
     return { action: "pass", newToolCount };
   }
 
-  log.info("session", `Checkpoint mode: ${newToolCount} tools used — forcing stop for stage summary`);
-  const textOnly = assistantContent.filter(b => b.type === "text");
+  log.info(
+    "session",
+    `Checkpoint mode: ${newToolCount} tools used — forcing stop for stage summary`,
+  );
+  const textOnly = assistantContent.filter((b) => b.type === "text");
 
   return {
     action: "continue",
     stopReason: "checkpoint_reached",
     updatedContent: textOnly.length > 0 ? textOnly : [{ type: "text" as const, text: "" }],
-    injectMessage: "[SYSTEM] CHECKPOINT REACHED: You have completed enough work for the initial stage the user requested. STOP executing tools NOW. Provide a clear summary of: (1) what was created, (2) what still needs to be done, (3) suggested next step. Do NOT continue implementing.",
+    injectMessage:
+      "[SYSTEM] CHECKPOINT REACHED: You have completed enough work for the initial stage the user requested. STOP executing tools NOW. Provide a clear summary of: (1) what was created, (2) what still needs to be done, (3) suggested next step. Do NOT continue implementing.",
     setForceStop: true,
     newToolCount,
   };
@@ -136,16 +156,23 @@ export async function handlePlanCoherence(
   };
 
   try {
-    const { countInProgressSteps, getActiveStep, shouldStopAfterCurrentStep, classifyToolCoherence } = await import("../tools/plan.js");
+    const {
+      countInProgressSteps,
+      getActiveStep,
+      shouldStopAfterCurrentStep,
+      classifyToolCoherence,
+    } = await import("../tools/plan.js");
 
     // Check if stopAfterStep was reached
     if (shouldStopAfterCurrentStep()) {
       log.info("session", "Plan stopAfterStep reached — forcing stop");
-      const textOnly = assistantContent.filter(b => b.type === "text");
+      const textOnly = assistantContent.filter((b) => b.type === "text");
       return {
         ...result,
         keptCalls: [],
-        injectMessages: ["[SYSTEM] The plan's stop-after step has been completed. STOP and provide a summary of what was done. Do NOT continue to further steps."],
+        injectMessages: [
+          "[SYSTEM] The plan's stop-after step has been completed. STOP and provide a summary of what was done. Do NOT continue to further steps.",
+        ],
         setForceStop: true,
         stopReason: "plan_stop_reached",
       };
@@ -154,7 +181,10 @@ export async function handlePlanCoherence(
     // Check multiple in_progress
     const inProgress = countInProgressSteps();
     if (inProgress > 1) {
-      log.warn("session", `Plan coherence: ${inProgress} steps in_progress simultaneously — injecting correction`);
+      log.warn(
+        "session",
+        `Plan coherence: ${inProgress} steps in_progress simultaneously — injecting correction`,
+      );
       result.injectMessages.push(
         `[SYSTEM] Plan coherence warning: you have ${inProgress} steps marked as in_progress simultaneously. Finish the current step before starting another. Update the plan to reflect actual progress.`,
       );
@@ -168,13 +198,23 @@ export async function handlePlanCoherence(
       let warned = false;
 
       for (const tc of toolCalls) {
-        const coherence = classifyToolCoherence(tc.name, tc.input as Record<string, unknown>, activeStep.title);
+        const coherence = classifyToolCoherence(
+          tc.name,
+          tc.input as Record<string, unknown>,
+          activeStep.title,
+        );
         if (coherence === "block") {
-          log.warn("session", `Plan block: tool ${tc.name} contradicts step "${activeStep.title}" — blocking`);
+          log.warn(
+            "session",
+            `Plan block: tool ${tc.name} contradicts step "${activeStep.title}" — blocking`,
+          );
           blocked.push(tc);
         } else if (coherence === "warn" && !warned) {
           warned = true;
-          log.warn("session", `Plan deviation: tool ${tc.name} may not match step "${activeStep.title}"`);
+          log.warn(
+            "session",
+            `Plan deviation: tool ${tc.name} may not match step "${activeStep.title}"`,
+          );
           result.injectMessages.push(
             `[SYSTEM] Plan deviation detected: your action (${tc.name}) doesn't seem to match the current plan step "${activeStep.id}. ${activeStep.title}". Finish the current step first, or update the plan if you're intentionally changing approach.`,
           );
@@ -185,7 +225,7 @@ export async function handlePlanCoherence(
       }
 
       if (blocked.length > 0) {
-        result.blockedResults = blocked.map(tc => ({
+        result.blockedResults = blocked.map((tc) => ({
           tool_use_id: tc.id,
           content: `BLOCKED by plan: "${tc.name}" contradicts the current step "${activeStep.id}. ${activeStep.title}". Finish or update the current step first.`,
           name: tc.name,
@@ -193,7 +233,9 @@ export async function handlePlanCoherence(
         result.keptCalls = kept;
       }
     }
-  } catch { /* plan module not loaded */ }
+  } catch {
+    /* plan module not loaded */
+  }
 
   return result;
 }

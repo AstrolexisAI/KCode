@@ -1,19 +1,71 @@
 // KCode - Changelog Generator Tests
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { generateChangelog, getLastTag, getCommitsSince } from "./generator";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { generateChangelog, getCommitsSince, getLastTag } from "./generator";
 
 const TEST_DIR = join(import.meta.dir, `__test_changelog_${process.pid}__`);
 
 beforeAll(() => {
   mkdirSync(TEST_DIR, { recursive: true });
   Bun.spawnSync(["git", "init"], { cwd: TEST_DIR });
-  Bun.spawnSync(["git", "-c", "user.name=test", "-c", "user.email=t@t.com", "commit", "--allow-empty", "-m", "feat: initial commit"], { cwd: TEST_DIR });
-  Bun.spawnSync(["git", "-c", "user.name=test", "-c", "user.email=t@t.com", "commit", "--allow-empty", "-m", "fix(auth): resolve login bug"], { cwd: TEST_DIR });
-  Bun.spawnSync(["git", "-c", "user.name=test", "-c", "user.email=t@t.com", "commit", "--allow-empty", "-m", "docs: update README"], { cwd: TEST_DIR });
-  Bun.spawnSync(["git", "-c", "user.name=test", "-c", "user.email=t@t.com", "commit", "--allow-empty", "-m", "Update some stuff"], { cwd: TEST_DIR });
+  Bun.spawnSync(
+    [
+      "git",
+      "-c",
+      "user.name=test",
+      "-c",
+      "user.email=t@t.com",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "feat: initial commit",
+    ],
+    { cwd: TEST_DIR },
+  );
+  Bun.spawnSync(
+    [
+      "git",
+      "-c",
+      "user.name=test",
+      "-c",
+      "user.email=t@t.com",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "fix(auth): resolve login bug",
+    ],
+    { cwd: TEST_DIR },
+  );
+  Bun.spawnSync(
+    [
+      "git",
+      "-c",
+      "user.name=test",
+      "-c",
+      "user.email=t@t.com",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "docs: update README",
+    ],
+    { cwd: TEST_DIR },
+  );
+  Bun.spawnSync(
+    [
+      "git",
+      "-c",
+      "user.name=test",
+      "-c",
+      "user.email=t@t.com",
+      "commit",
+      "--allow-empty",
+      "-m",
+      "Update some stuff",
+    ],
+    { cwd: TEST_DIR },
+  );
 });
 
 afterAll(() => {

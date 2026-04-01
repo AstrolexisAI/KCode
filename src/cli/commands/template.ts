@@ -1,8 +1,8 @@
 import type { Command } from "commander";
-import { TemplateRegistry } from "../../core/templates/registry";
-import { TemplateEngine } from "../../core/templates/engine";
-import { Scaffolder } from "../../core/templates/scaffolder";
 import { buildConfig } from "../../core/config";
+import { TemplateEngine } from "../../core/templates/engine";
+import { TemplateRegistry } from "../../core/templates/registry";
+import { Scaffolder } from "../../core/templates/scaffolder";
 
 export function registerTemplateCommand(program: Command): void {
   const tmpl = program
@@ -45,7 +45,9 @@ export function registerTemplateCommand(program: Command): void {
       const t = registry.get(name);
 
       if (!t) {
-        console.error(`Template "${name}" not found. Use "kcode template list" to see available templates.`);
+        console.error(
+          `Template "${name}" not found. Use "kcode template list" to see available templates.`,
+        );
         process.exit(1);
       }
 
@@ -77,7 +79,9 @@ export function registerTemplateCommand(program: Command): void {
       const t = registry.get(name);
 
       if (!t) {
-        console.error(`Template "${name}" not found. Use "kcode template list" to see available templates.`);
+        console.error(
+          `Template "${name}" not found. Use "kcode template list" to see available templates.`,
+        );
         process.exit(1);
       }
 

@@ -2,9 +2,9 @@
 // Covers: line alignment, state machine, transitions, width stability,
 // event interruption, overlapping transitions, cooldown phase, Unicode safety.
 
-import { describe, test, expect } from "bun:test";
-import { KodiAnimEngine } from "./kodi-animation";
+import { describe, expect, test } from "bun:test";
 import type { KodiAnimState } from "./kodi-animation";
+import { KodiAnimEngine } from "./kodi-animation";
 
 // ─── Helper ─────────────────────────────────────────────────────
 
@@ -46,9 +46,20 @@ describe("KodiAnimEngine — basic", () => {
 
 describe("KodiAnimEngine — line alignment", () => {
   const ALL_MOODS = [
-    "idle", "happy", "excited", "thinking", "reasoning", "working",
-    "worried", "sleeping", "celebrating", "curious", "mischievous",
-    "crazy", "angry", "smug",
+    "idle",
+    "happy",
+    "excited",
+    "thinking",
+    "reasoning",
+    "working",
+    "worried",
+    "sleeping",
+    "celebrating",
+    "curious",
+    "mischievous",
+    "crazy",
+    "angry",
+    "smug",
   ] as const;
 
   test("all 5 lines have identical width within every frame", () => {
@@ -58,12 +69,12 @@ describe("KodiAnimEngine — line alignment", () => {
       advance(engine, 500);
       for (let i = 0; i < 30; i++) {
         const frame = engine.tick(100);
-        const widths = frame.lines.map(l => [...l].length);
-        const allSame = widths.every(w => w === widths[0]);
+        const widths = frame.lines.map((l) => [...l].length);
+        const allSame = widths.every((w) => w === widths[0]);
         if (!allSame) {
           throw new Error(
             `Width mismatch in mood "${mood}" frame ${i}: ${widths.join(",")}\n` +
-            frame.lines.map((l, j) => `  [${j}] "${l}" (${[...l].length})`).join("\n")
+              frame.lines.map((l, j) => `  [${j}] "${l}" (${[...l].length})`).join("\n"),
           );
         }
       }
@@ -239,13 +250,19 @@ describe("KodiAnimEngine — context", () => {
 
 describe("KodiAnimEngine — no ambiguous-width Unicode", () => {
   const AMBIGUOUS_RANGES: Array<[number, number]> = [
-    [0x2010, 0x2027], [0x2030, 0x2044], [0x2190, 0x21FF],
-    [0x2200, 0x22FF], [0x2300, 0x23FF], [0x2460, 0x24FF],
-    [0x25A0, 0x25FF], [0x2600, 0x26FF], [0x2700, 0x27BF],
+    [0x2010, 0x2027],
+    [0x2030, 0x2044],
+    [0x2190, 0x21ff],
+    [0x2200, 0x22ff],
+    [0x2300, 0x23ff],
+    [0x2460, 0x24ff],
+    [0x25a0, 0x25ff],
+    [0x2600, 0x26ff],
+    [0x2700, 0x27bf],
   ];
 
   function isAmbiguous(cp: number): boolean {
-    if (cp >= 0x2500 && cp <= 0x259F) return false; // box-drawing OK
+    if (cp >= 0x2500 && cp <= 0x259f) return false; // box-drawing OK
     for (const [lo, hi] of AMBIGUOUS_RANGES) {
       if (cp >= lo && cp <= hi) return true;
     }
@@ -254,9 +271,22 @@ describe("KodiAnimEngine — no ambiguous-width Unicode", () => {
 
   test("all lines use only ASCII-safe characters", () => {
     const engine = new KodiAnimEngine();
-    const moods = ["idle", "happy", "excited", "thinking", "reasoning", "working",
-      "worried", "sleeping", "celebrating", "curious", "mischievous",
-      "crazy", "angry", "smug"] as const;
+    const moods = [
+      "idle",
+      "happy",
+      "excited",
+      "thinking",
+      "reasoning",
+      "working",
+      "worried",
+      "sleeping",
+      "celebrating",
+      "curious",
+      "mischievous",
+      "crazy",
+      "angry",
+      "smug",
+    ] as const;
     for (const mood of moods) {
       engine.setMood(mood);
       advance(engine, 500);
@@ -266,7 +296,9 @@ describe("KodiAnimEngine — no ambiguous-width Unicode", () => {
           for (const ch of line) {
             const cp = ch.codePointAt(0)!;
             if (isAmbiguous(cp)) {
-              throw new Error(`Ambiguous U+${cp.toString(16).toUpperCase()} ('${ch}') in mood "${mood}": "${line}"`);
+              throw new Error(
+                `Ambiguous U+${cp.toString(16).toUpperCase()} ('${ch}') in mood "${mood}": "${line}"`,
+              );
             }
           }
         }

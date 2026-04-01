@@ -2,8 +2,8 @@
 // Legacy interface — delegates to the new keybindings/ module.
 // Kept for backward compatibility with existing imports.
 
-import { kcodePath } from "./paths.js";
 import { loadUserBindings } from "./keybindings/loader.js";
+import { kcodePath } from "./paths.js";
 
 export interface KeybindingConfig {
   /** Enable vim-style normal/insert mode toggle */
@@ -34,25 +34,24 @@ export function isVimModeEnabled(): boolean {
   return loadKeybindings().vimMode === true;
 }
 
+export type {
+  BindingContext,
+  BindingSource,
+  KeyBinding,
+  KeyChord,
+  KeyCombo,
+  ValidationResult,
+} from "./keybindings/index.js";
 // Re-export new module for consumers that want the advanced system
 export {
+  DEFAULT_BINDINGS,
+  formatKeyChord,
   KeybindingResolver,
+  loadUserBindings,
   parseKeyChord,
   parseKeyCombo,
-  formatKeyChord,
+  RESERVED_KEYS,
   serializeChord,
   serializeCombo,
   validateBindings,
-  DEFAULT_BINDINGS,
-  RESERVED_KEYS,
-  loadUserBindings,
-} from "./keybindings/index.js";
-
-export type {
-  KeyCombo,
-  KeyChord,
-  KeyBinding,
-  BindingSource,
-  BindingContext,
-  ValidationResult,
 } from "./keybindings/index.js";

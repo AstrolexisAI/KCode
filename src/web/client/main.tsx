@@ -2,7 +2,8 @@
 // This is the modern React SPA that replaces the vanilla JS static UI.
 // Connects to the KCode web server via WebSocket for streaming responses.
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import type React from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -36,10 +37,14 @@ function useWebSocket(url: string) {
       try {
         const event = JSON.parse(e.data) as WebSocketEvent;
         setEvents((prev) => [...prev, event]);
-      } catch { /* ignore non-JSON messages */ }
+      } catch {
+        /* ignore non-JSON messages */
+      }
     };
 
-    return () => { ws.close(); };
+    return () => {
+      ws.close();
+    };
   }, [url]);
 
   const send = useCallback((data: object) => {
@@ -75,9 +80,15 @@ function App() {
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (last?.role === "assistant") {
-            return [...prev.slice(0, -1), { ...last, content: last.content + (latest.text as string) }];
+            return [
+              ...prev.slice(0, -1),
+              { ...last, content: last.content + (latest.text as string) },
+            ];
           }
-          return [...prev, { role: "assistant", content: latest.text as string, timestamp: Date.now() }];
+          return [
+            ...prev,
+            { role: "assistant", content: latest.text as string, timestamp: Date.now() },
+          ];
         });
         break;
 
@@ -114,12 +125,37 @@ function App() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: "system-ui, -apple-system, sans-serif", background: "#1a1a2e", color: "#e0e0e0" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        fontFamily: "system-ui, -apple-system, sans-serif",
+        background: "#1a1a2e",
+        color: "#e0e0e0",
+      }}
+    >
       {/* Header */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px", borderBottom: "1px solid #333", background: "#16213e" }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "8px 16px",
+          borderBottom: "1px solid #333",
+          background: "#16213e",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontWeight: "bold", color: "#6c63ff" }}>KCode</span>
-          <span style={{ width: 8, height: 8, borderRadius: "50%", background: connected ? "#4caf50" : "#f44336" }} />
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: connected ? "#4caf50" : "#f44336",
+            }}
+          />
           <span style={{ fontSize: 12, color: "#888" }}>{model}</span>
         </div>
         <div style={{ fontSize: 12, color: "#888" }}>
@@ -136,17 +172,20 @@ function App() {
           </div>
         )}
         {messages.map((msg, i) => (
-          <div key={i} style={{
-            margin: "8px 0",
-            padding: "12px 16px",
-            borderRadius: 8,
-            background: msg.role === "user" ? "#1e3a5f" : "#2a2a4a",
-            borderLeft: msg.role === "user" ? "3px solid #6c63ff" : "3px solid #4caf50",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            fontFamily: msg.role === "assistant" ? "'Fira Code', monospace" : "inherit",
-            fontSize: 14,
-          }}>
+          <div
+            key={i}
+            style={{
+              margin: "8px 0",
+              padding: "12px 16px",
+              borderRadius: 8,
+              background: msg.role === "user" ? "#1e3a5f" : "#2a2a4a",
+              borderLeft: msg.role === "user" ? "3px solid #6c63ff" : "3px solid #4caf50",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              fontFamily: msg.role === "assistant" ? "'Fira Code', monospace" : "inherit",
+              fontSize: 14,
+            }}
+          >
             {msg.content}
           </div>
         ))}
@@ -165,9 +204,15 @@ function App() {
             disabled={!connected}
             rows={1}
             style={{
-              flex: 1, padding: "10px 14px", borderRadius: 8,
-              background: "#1a1a2e", color: "#e0e0e0", border: "1px solid #444",
-              resize: "none", fontFamily: "inherit", fontSize: 14,
+              flex: 1,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "#1a1a2e",
+              color: "#e0e0e0",
+              border: "1px solid #444",
+              resize: "none",
+              fontFamily: "inherit",
+              fontSize: 14,
               outline: "none",
             }}
           />
@@ -175,10 +220,14 @@ function App() {
             onClick={handleSend}
             disabled={!connected || streaming || !input.trim()}
             style={{
-              padding: "10px 20px", borderRadius: 8,
+              padding: "10px 20px",
+              borderRadius: 8,
               background: connected && !streaming && input.trim() ? "#6c63ff" : "#444",
-              color: "#fff", border: "none", cursor: "pointer",
-              fontWeight: "bold", fontSize: 14,
+              color: "#fff",
+              border: "none",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: 14,
             }}
           >
             Send

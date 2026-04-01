@@ -7,10 +7,10 @@
 // Our contribution: quantization tuning, hardware-aware selection, and ecosystem
 // integration — not the base model training.
 
-import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { kcodePath } from "./paths";
+import { join } from "node:path";
 import type { HardwareInfo } from "./hardware";
+import { kcodePath } from "./paths";
 
 // ─── Paths & Config ─────────────────────────────────────────────
 
@@ -24,18 +24,18 @@ export const MODEL_CDN = process.env.KCODE_MODEL_CDN ?? "https://kulvex.ai/model
 // Real model names and repos are NEVER exposed to the user.
 
 export interface CatalogEntry {
-  codename: string;        // e.g. "mnemo:mark5-7b"
-  paramBillions: number;   // e.g. 7
-  quant: string;           // e.g. "Q5_K_M"
-  sizeGB: number;          // approximate download size
-  minVramMB: number;       // minimum VRAM to run
-  contextSize: number;     // context window
-  localFile: string;       // filename on CDN and locally (codename-based, no real names)
-  description: string;     // user-facing description
-  split?: number;          // number of split files (for >50GB models)
-  cdnUrl?: string;         // override CDN URL (for HuggingFace direct downloads before CDN upload)
-  mlxRepo?: string;        // MLX HuggingFace repo for macOS (INTERNAL — never shown to user)
-  mlxQuant?: string;       // MLX quantization (4bit, 8bit)
+  codename: string; // e.g. "mnemo:mark5-7b"
+  paramBillions: number; // e.g. 7
+  quant: string; // e.g. "Q5_K_M"
+  sizeGB: number; // approximate download size
+  minVramMB: number; // minimum VRAM to run
+  contextSize: number; // context window
+  localFile: string; // filename on CDN and locally (codename-based, no real names)
+  description: string; // user-facing description
+  split?: number; // number of split files (for >50GB models)
+  cdnUrl?: string; // override CDN URL (for HuggingFace direct downloads before CDN upload)
+  mlxRepo?: string; // MLX HuggingFace repo for macOS (INTERNAL — never shown to user)
+  mlxQuant?: string; // MLX quantization (4bit, 8bit)
   // NOTE: real model identity is NEVER stored. Files are pre-renamed on the CDN.
   // The CDN URL is: ${MODEL_CDN}/${localFile} (or cdnUrl if set)
 }
@@ -135,7 +135,13 @@ export const MODEL_CATALOG: CatalogEntry[] = [
 // ─── Public API ─────────────────────────────────────────────────
 
 /** Get the model catalog (codenames and descriptions only) */
-export function getAvailableModels(): { codename: string; paramBillions: number; sizeGB: number; description: string; minVramMB: number }[] {
+export function getAvailableModels(): {
+  codename: string;
+  paramBillions: number;
+  sizeGB: number;
+  description: string;
+  minVramMB: number;
+}[] {
   return MODEL_CATALOG.map((m) => ({
     codename: m.codename,
     paramBillions: m.paramBillions,

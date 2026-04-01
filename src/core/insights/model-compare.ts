@@ -1,8 +1,8 @@
 // KCode - Model Comparison
 
-import type { ModelComparison } from "./types";
 import { getAnalyticsSummary } from "../analytics";
 import { charts } from "./charts";
+import type { ModelComparison } from "./types";
 
 export async function compareModels(period: number = 30): Promise<ModelComparison[]> {
   const analytics = getAnalyticsSummary(period);
@@ -17,22 +17,17 @@ export async function compareModels(period: number = 30): Promise<ModelCompariso
     const totalErrors = toolsForModel.reduce((s, t) => s + t.errors, 0);
     const avgLatency =
       totalToolCalls > 0
-        ? toolsForModel.reduce((s, t) => s + t.avgMs * t.count, 0) /
-          totalToolCalls
+        ? toolsForModel.reduce((s, t) => s + t.avgMs * t.count, 0) / totalToolCalls
         : 0;
 
     // Estimate sessions per model proportionally
     const sessionProportion = model.calls / analytics.totalToolCalls;
-    const sessions = Math.max(
-      1,
-      Math.round(analytics.totalSessions * sessionProportion),
-    );
+    const sessions = Math.max(1, Math.round(analytics.totalSessions * sessionProportion));
 
     const avgTokens =
       sessions > 0
         ? Math.round(
-            ((analytics.totalInputTokens + analytics.totalOutputTokens) *
-              sessionProportion) /
+            ((analytics.totalInputTokens + analytics.totalOutputTokens) * sessionProportion) /
               sessions,
           )
         : 0;
@@ -41,15 +36,10 @@ export async function compareModels(period: number = 30): Promise<ModelCompariso
       model: model.model,
       sessions,
       avgTokensPerSession: avgTokens,
-      avgCostPerSession:
-        sessions > 0 ? model.costUsd / sessions : 0,
+      avgCostPerSession: sessions > 0 ? model.costUsd / sessions : 0,
       avgLatencyMs: Math.round(avgLatency),
-      successRate:
-        totalToolCalls > 0
-          ? 1 - totalErrors / totalToolCalls
-          : 1,
-      toolCallsPerSession:
-        sessions > 0 ? Math.round(model.calls / sessions) : 0,
+      successRate: totalToolCalls > 0 ? 1 - totalErrors / totalToolCalls : 1,
+      toolCallsPerSession: sessions > 0 ? Math.round(model.calls / sessions) : 0,
     });
   }
 

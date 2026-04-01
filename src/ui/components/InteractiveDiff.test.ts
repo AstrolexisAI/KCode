@@ -3,16 +3,16 @@
 // since Ink components require a full render environment.
 // Validates hunk navigation, accept/reject state transitions, and finalization.
 
-import { describe, test, expect } from "bun:test";
-import type { DiffHunk, DiffResult } from "../../core/diff/types.js";
-import {
-  acceptHunk,
-  rejectHunk,
-  acceptAll,
-  rejectAll,
-  getStats,
-} from "../../core/diff/hunk-operations.js";
+import { describe, expect, test } from "bun:test";
 import { DiffEngine } from "../../core/diff/engine.js";
+import {
+  acceptAll,
+  acceptHunk,
+  getStats,
+  rejectAll,
+  rejectHunk,
+} from "../../core/diff/hunk-operations.js";
+import type { DiffHunk, DiffResult } from "../../core/diff/types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -56,11 +56,7 @@ function makeDiffResult(hunkCount: number): DiffResult {
  * Simulates the component's navigation logic.
  * Returns the clamped index after applying a delta.
  */
-function navigateHunk(
-  currentIndex: number,
-  delta: number,
-  hunkCount: number,
-): number {
+function navigateHunk(currentIndex: number, delta: number, hunkCount: number): number {
   return Math.max(0, Math.min(currentIndex + delta, hunkCount - 1));
 }
 

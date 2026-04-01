@@ -5,7 +5,7 @@
 // Documentation: docs/extension-api.md (forthcoming)
 
 import { log } from "./logger";
-import type { Message, KCodeConfig } from "./types";
+import type { KCodeConfig, Message } from "./types";
 
 // ─── Extension API Types ────────────────────────────────────────
 
@@ -24,14 +24,14 @@ export interface ExtensionManifest {
 }
 
 export type ExtensionPermission =
-  | "tools:register"        // Register custom tools
-  | "commands:register"     // Register slash commands
-  | "conversation:read"     // Read conversation messages
-  | "config:read"           // Read config (excluding secrets)
-  | "hooks:listen"          // Subscribe to lifecycle hooks
-  | "filesystem:read"       // Read files in project directory
-  | "filesystem:write"      // Write files in project directory
-  | "network:fetch";        // Make HTTP requests
+  | "tools:register" // Register custom tools
+  | "commands:register" // Register slash commands
+  | "conversation:read" // Read conversation messages
+  | "config:read" // Read config (excluding secrets)
+  | "hooks:listen" // Subscribe to lifecycle hooks
+  | "filesystem:read" // Read files in project directory
+  | "filesystem:write" // Write files in project directory
+  | "network:fetch"; // Make HTTP requests
 
 export interface ExtensionContext {
   /** Extension name */
@@ -103,7 +103,10 @@ export function registerExtension(
     loadedAt: Date.now(),
   });
 
-  log.info("extension", `Registered extension: ${manifest.name} v${manifest.version} (${setup.tools?.length ?? 0} tools, ${setup.commands?.length ?? 0} commands)`);
+  log.info(
+    "extension",
+    `Registered extension: ${manifest.name} v${manifest.version} (${setup.tools?.length ?? 0} tools, ${setup.commands?.length ?? 0} commands)`,
+  );
 }
 
 /** Unregister an extension */

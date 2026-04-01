@@ -2,7 +2,7 @@
 // Tests the merge resolution logic using pure function tests on the underlying operations.
 // Validates conflict display, resolution selection, navigation, and output generation.
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { ThreeWayMerge } from "../../core/diff/three-way-merge.js";
 import type { MergeConflict, MergeResult } from "../../core/diff/types.js";
 
@@ -18,26 +18,23 @@ function makeConflictResult(): MergeResult {
 }
 
 function makeMultiConflictResult(): MergeResult {
-  const base = [
-    "header",
-    "section A",
-    "middle 1",
-    "middle 2",
-    "middle 3",
-    "middle 4",
-    "middle 5",
-    "middle 6",
-    "middle 7",
-    "section B",
-    "footer",
-  ].join("\n") + "\n";
+  const base =
+    [
+      "header",
+      "section A",
+      "middle 1",
+      "middle 2",
+      "middle 3",
+      "middle 4",
+      "middle 5",
+      "middle 6",
+      "middle 7",
+      "section B",
+      "footer",
+    ].join("\n") + "\n";
 
-  const ours = base
-    .replace("section A", "OUR A")
-    .replace("section B", "OUR B");
-  const theirs = base
-    .replace("section A", "THEIR A")
-    .replace("section B", "THEIR B");
+  const ours = base.replace("section A", "OUR A").replace("section B", "OUR B");
+  const theirs = base.replace("section A", "THEIR A").replace("section B", "THEIR B");
 
   return merger.merge(base, ours, theirs);
 }
@@ -45,11 +42,7 @@ function makeMultiConflictResult(): MergeResult {
 /**
  * Simulates navigation between conflicts.
  */
-function navigateConflict(
-  currentIndex: number,
-  delta: number,
-  conflictCount: number,
-): number {
+function navigateConflict(currentIndex: number, delta: number, conflictCount: number): number {
   if (delta > 0) return Math.min(currentIndex + 1, conflictCount - 1);
   if (delta < 0) return Math.max(currentIndex - 1, 0);
   return currentIndex;
@@ -171,23 +164,15 @@ describe("MergeResolver component logic", () => {
 
     test("resolved count tracks progress", () => {
       let result = makeMultiConflictResult();
-      const resolvedBefore = result.conflicts.filter(
-        (c) => c.resolution != null,
-      ).length;
+      const resolvedBefore = result.conflicts.filter((c) => c.resolution != null).length;
       expect(resolvedBefore).toBe(0);
 
       // Resolve first conflict
       if (result.conflicts.length > 0) {
-        result = merger.resolveConflict(
-          result,
-          result.conflicts[0].id,
-          "ours",
-        );
+        result = merger.resolveConflict(result, result.conflicts[0].id, "ours");
       }
 
-      const resolvedAfter = result.conflicts.filter(
-        (c) => c.resolution != null,
-      ).length;
+      const resolvedAfter = result.conflicts.filter((c) => c.resolution != null).length;
       expect(resolvedAfter).toBe(1);
     });
   });
@@ -236,11 +221,7 @@ describe("MergeResolver component logic", () => {
       let result = makeMultiConflictResult();
       if (result.conflicts.length >= 2) {
         // Resolve first, leave second unresolved
-        result = merger.resolveConflict(
-          result,
-          result.conflicts[0].id,
-          "ours",
-        );
+        result = merger.resolveConflict(result, result.conflicts[0].id, "ours");
 
         const final = merger.applyResolutions(result);
         // First conflict resolved

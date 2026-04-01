@@ -2,8 +2,8 @@
 // Supports KCode Cloud, Anthropic, OpenAI, and custom providers.
 
 import { randomBytes } from "node:crypto";
+import { deleteSecret, getSecret, setSecret } from "./keychain";
 import type { OAuthConfig, OAuthTokens } from "./types";
-import { setSecret, getSecret, deleteSecret } from "./keychain";
 
 const DEFAULT_REDIRECT_PORT = 19284;
 const TOKEN_ACCOUNT_PREFIX = "oauth-token-";
@@ -31,10 +31,7 @@ function generateCodeVerifier(): string {
 }
 
 async function generateCodeChallenge(verifier: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(verifier),
-  );
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   return btoa(String.fromCharCode(...new Uint8Array(digest)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -61,9 +58,7 @@ export interface OAuthFlowResult {
  * 5. Exchange code for tokens
  * 6. Store tokens in keychain
  */
-export async function startOAuthFlow(
-  config: OAuthConfig,
-): Promise<OAuthFlowResult> {
+export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthFlowResult> {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const state = generateState();
@@ -125,10 +120,13 @@ export async function openBrowser(url: string): Promise<void> {
 /** Start temporary HTTP server and wait for OAuth callback */
 async function waitForCallback(port: number, expectedState: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      server.stop();
-      reject(new Error("OAuth callback timed out after 5 minutes"));
-    }, 5 * 60 * 1000);
+    const timeout = setTimeout(
+      () => {
+        server.stop();
+        reject(new Error("OAuth callback timed out after 5 minutes"));
+      },
+      5 * 60 * 1000,
+    );
 
     const server = Bun.serve({
       port,
@@ -206,9 +204,7 @@ async function exchangeCode(
   return {
     accessToken: data.access_token as string,
     refreshToken: data.refresh_token as string | undefined,
-    expiresAt: data.expires_in
-      ? Date.now() + (data.expires_in as number) * 1000
-      : undefined,
+    expiresAt: data.expires_in ? Date.now() + (data.expires_in as number) * 1000 : undefined,
     tokenType: (data.token_type as string) ?? "Bearer",
     scope: data.scope as string | undefined,
   };
@@ -217,20 +213,12 @@ async function exchangeCode(
 // ── Token management ──
 
 /** Store tokens securely in keychain */
-export async function storeTokens(
-  provider: string,
-  tokens: OAuthTokens,
-): Promise<void> {
-  await setSecret(
-    `${TOKEN_ACCOUNT_PREFIX}${provider}`,
-    JSON.stringify(tokens),
-  );
+export async function storeTokens(provider: string, tokens: OAuthTokens): Promise<void> {
+  await setSecret(`${TOKEN_ACCOUNT_PREFIX}${provider}`, JSON.stringify(tokens));
 }
 
 /** Retrieve stored tokens from keychain */
-export async function getStoredTokens(
-  provider: string,
-): Promise<OAuthTokens | null> {
+export async function getStoredTokens(provider: string): Promise<OAuthTokens | null> {
   const raw = await getSecret(`${TOKEN_ACCOUNT_PREFIX}${provider}`);
   if (!raw) return null;
   try {
@@ -269,9 +257,7 @@ export async function refreshAccessToken(
   return {
     accessToken: data.access_token as string,
     refreshToken: (data.refresh_token as string) ?? refreshToken,
-    expiresAt: data.expires_in
-      ? Date.now() + (data.expires_in as number) * 1000
-      : undefined,
+    expiresAt: data.expires_in ? Date.now() + (data.expires_in as number) * 1000 : undefined,
     tokenType: (data.token_type as string) ?? "Bearer",
     scope: data.scope as string | undefined,
   };
@@ -286,10 +272,7 @@ export async function clearTokens(provider: string): Promise<void> {
 // ── API key migration ──
 
 /** Migrate a plaintext API key to keychain storage */
-export async function migrateApiKey(
-  provider: string,
-  apiKey: string,
-): Promise<boolean> {
+export async function migrateApiKey(provider: string, apiKey: string): Promise<boolean> {
   return setSecret(`apikey-${provider}`, apiKey);
 }
 
@@ -299,4 +282,4 @@ export async function getApiKey(provider: string): Promise<string | null> {
 }
 
 // Re-export PKCE helpers for testing
-export { generateCodeVerifier, generateCodeChallenge, generateState };
+export { generateCodeChallenge, generateCodeVerifier, generateState };

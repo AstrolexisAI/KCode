@@ -37,7 +37,16 @@ export class CostTracker {
       db.run(
         `INSERT INTO cost_history (timestamp, session_id, model, provider, input_tokens, output_tokens, cost_usd, tool_name)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [entry.timestamp, entry.sessionId, entry.model, entry.provider, entry.inputTokens, entry.outputTokens, entry.costUsd, entry.toolName ?? null],
+        [
+          entry.timestamp,
+          entry.sessionId,
+          entry.model,
+          entry.provider,
+          entry.inputTokens,
+          entry.outputTokens,
+          entry.costUsd,
+          entry.toolName ?? null,
+        ],
       );
     } catch (err) {
       log.debug("cost/tracker", `Record error: ${err}`);
@@ -48,25 +57,34 @@ export class CostTracker {
     const db = getDb();
     const since = this.periodToTimestamp(period);
 
-    const totals = db.query<{ sessions: number; input_tokens: number; output_tokens: number; cost_usd: number }, [number]>(
-      `SELECT COUNT(DISTINCT session_id) as sessions,
+    const totals = db
+      .query<
+        { sessions: number; input_tokens: number; output_tokens: number; cost_usd: number },
+        [number]
+      >(
+        `SELECT COUNT(DISTINCT session_id) as sessions,
               COALESCE(SUM(input_tokens), 0) as input_tokens,
               COALESCE(SUM(output_tokens), 0) as output_tokens,
               COALESCE(SUM(cost_usd), 0) as cost_usd
        FROM cost_history WHERE timestamp >= ?`,
-    ).get(since);
+      )
+      .get(since);
 
-    const byModel = db.query<{ model: string; cost_usd: number }, [number]>(
-      `SELECT model, SUM(cost_usd) as cost_usd
+    const byModel = db
+      .query<{ model: string; cost_usd: number }, [number]>(
+        `SELECT model, SUM(cost_usd) as cost_usd
        FROM cost_history WHERE timestamp >= ?
        GROUP BY model ORDER BY cost_usd DESC`,
-    ).all(since);
+      )
+      .all(since);
 
-    const byDay = db.query<{ date: string; cost_usd: number }, [number]>(
-      `SELECT date(timestamp / 1000, 'unixepoch') as date, SUM(cost_usd) as cost_usd
+    const byDay = db
+      .query<{ date: string; cost_usd: number }, [number]>(
+        `SELECT date(timestamp / 1000, 'unixepoch') as date, SUM(cost_usd) as cost_usd
        FROM cost_history WHERE timestamp >= ?
        GROUP BY date ORDER BY date`,
-    ).all(since);
+      )
+      .all(since);
 
     const totalCost = totals?.cost_usd ?? 0;
     const sessions = totals?.sessions ?? 0;
@@ -92,16 +110,21 @@ export class CostTracker {
     };
   }
 
-  private calculateTrend(since: number, currentCost: number): { trend: "up" | "down" | "stable"; trendPercentage: number } {
+  private calculateTrend(
+    since: number,
+    currentCost: number,
+  ): { trend: "up" | "down" | "stable"; trendPercentage: number } {
     const periodLength = Date.now() - since;
     if (periodLength <= 0 || since === 0) return { trend: "stable", trendPercentage: 0 };
 
     const previousSince = since - periodLength;
     try {
       const db = getDb();
-      const prev = db.query<{ cost_usd: number }, [number, number]>(
-        `SELECT COALESCE(SUM(cost_usd), 0) as cost_usd FROM cost_history WHERE timestamp >= ? AND timestamp < ?`,
-      ).get(previousSince, since);
+      const prev = db
+        .query<{ cost_usd: number }, [number, number]>(
+          `SELECT COALESCE(SUM(cost_usd), 0) as cost_usd FROM cost_history WHERE timestamp >= ? AND timestamp < ?`,
+        )
+        .get(previousSince, since);
 
       const prevCost = prev?.cost_usd ?? 0;
       if (prevCost === 0 && currentCost === 0) return { trend: "stable", trendPercentage: 0 };
@@ -118,10 +141,14 @@ export class CostTracker {
   private periodToTimestamp(period: CostPeriod): number {
     const now = Date.now();
     switch (period) {
-      case "today": return now - 24 * 60 * 60 * 1000;
-      case "week": return now - 7 * 24 * 60 * 60 * 1000;
-      case "month": return now - 30 * 24 * 60 * 60 * 1000;
-      case "all": return 0;
+      case "today":
+        return now - 24 * 60 * 60 * 1000;
+      case "week":
+        return now - 7 * 24 * 60 * 60 * 1000;
+      case "month":
+        return now - 30 * 24 * 60 * 60 * 1000;
+      case "all":
+        return 0;
     }
   }
 }

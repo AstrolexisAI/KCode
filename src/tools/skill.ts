@@ -1,8 +1,8 @@
 // KCode - Skill Execution Tool
 // Allows the LLM to invoke slash commands (skills) programmatically
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { builtinSkills } from "../core/builtin-skills";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const skillDefinition: ToolDefinition = {
   name: "Skill",
@@ -14,7 +14,8 @@ export const skillDefinition: ToolDefinition = {
     properties: {
       skill: {
         type: "string",
-        description: "The skill name to invoke (e.g., 'commit', 'test', 'build', 'lint'). Do not include the leading slash.",
+        description:
+          "The skill name to invoke (e.g., 'commit', 'test', 'build', 'lint'). Do not include the leading slash.",
       },
       args: {
         type: "string",
@@ -26,7 +27,9 @@ export const skillDefinition: ToolDefinition = {
 };
 
 export async function executeSkill(input: Record<string, unknown>): Promise<ToolResult> {
-  const skillName = String(input.skill ?? "").trim().replace(/^\//, "");
+  const skillName = String(input.skill ?? "")
+    .trim()
+    .replace(/^\//, "");
   const args = String(input.args ?? "").trim();
 
   if (!skillName) {
@@ -34,9 +37,7 @@ export async function executeSkill(input: Record<string, unknown>): Promise<Tool
   }
 
   // Find the skill by name or alias
-  const skill = builtinSkills.find(
-    (s) => s.name === skillName || s.aliases.includes(skillName),
-  );
+  const skill = builtinSkills.find((s) => s.name === skillName || s.aliases.includes(skillName));
 
   if (!skill) {
     // List available skills as suggestion

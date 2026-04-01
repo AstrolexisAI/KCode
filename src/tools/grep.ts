@@ -2,8 +2,8 @@
 // Search file contents using ripgrep
 
 import { spawn } from "node:child_process";
-import { resolve, relative } from "node:path";
-import type { ToolDefinition, ToolResult, GrepInput } from "../core/types";
+import { relative, resolve } from "node:path";
+import type { GrepInput, ToolDefinition, ToolResult } from "../core/types";
 import { getToolWorkspace } from "./workspace";
 
 export const grepDefinition: ToolDefinition = {
@@ -60,14 +60,15 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
   if (home && resolve(workspace) === resolve(home) && !opts.path) {
     return Promise.resolve({
       tool_use_id: "",
-      content: `Warning: Workspace is your home directory (${workspace}). ` +
+      content:
+        `Warning: Workspace is your home directory (${workspace}). ` +
         `Grep will search your entire home. ` +
         `Specify a path parameter or run KCode from a project directory.`,
       is_error: true,
     } as ToolResult);
   }
 
-  let searchCwd = workspace;
+  const searchCwd = workspace;
   if (opts.path) {
     const resolved = resolve(workspace, opts.path);
     const rel = relative(workspace, resolved);

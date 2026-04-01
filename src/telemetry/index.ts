@@ -1,32 +1,31 @@
 // KCode - Telemetry Module Entry Point
 // Initializes the telemetry pipeline: PII filter -> Sampling -> Event Queue -> Sinks
 
-import type { TelemetryConfig, TelemetryEvent } from "./types";
 import { EventQueue } from "./event-queue";
 import { filterPII } from "./pii-filter";
 import { shouldSample } from "./sampling";
-import { startSpan, endSpan, getTraceId, resetTraceId, setTraceId } from "./spans";
+import { endSpan, getTraceId, resetTraceId, setTraceId, startSpan } from "./spans";
+import type { TelemetryConfig, TelemetryEvent } from "./types";
 
 // Re-export all public types and utilities
 export { EventQueue } from "./event-queue";
 export { filterPII } from "./pii-filter";
 export { shouldSample } from "./sampling";
-export { startSpan, endSpan, withSpan, getTraceId, resetTraceId, setTraceId } from "./spans";
+// Sinks
+export { ConsoleSink } from "./sinks/console";
+export { CustomHTTPSink } from "./sinks/custom-http";
+export { OTLPSink } from "./sinks/otlp";
+export { SQLiteSink } from "./sinks/sqlite";
+export { endSpan, getTraceId, resetTraceId, setTraceId, startSpan, withSpan } from "./spans";
 export type {
-  TelemetryEvent,
-  TelemetrySink,
-  TelemetryConfig,
-  TelemetryLevel,
   SamplingConfig,
   SinkConfig,
   Span,
+  TelemetryConfig,
+  TelemetryEvent,
+  TelemetryLevel,
+  TelemetrySink,
 } from "./types";
-
-// Sinks
-export { ConsoleSink } from "./sinks/console";
-export { SQLiteSink } from "./sinks/sqlite";
-export { OTLPSink } from "./sinks/otlp";
-export { CustomHTTPSink } from "./sinks/custom-http";
 
 // ─── Singleton ─────────────────────────────────────────────────
 
@@ -70,7 +69,8 @@ export function initTelemetry(config: TelemetryConfig): EventQueue {
   }
 
   if (config.sinks["custom-http"]?.enabled) {
-    const { CustomHTTPSink } = require("./sinks/custom-http") as typeof import("./sinks/custom-http");
+    const { CustomHTTPSink } =
+      require("./sinks/custom-http") as typeof import("./sinks/custom-http");
     const sinkConf = config.sinks["custom-http"];
     _queue.addSink(
       new CustomHTTPSink({

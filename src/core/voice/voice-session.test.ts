@@ -1,14 +1,20 @@
 // KCode - Voice Session Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
-import { VoiceSession, AudioRecorder } from "./voice-session";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { AudioRecorder, VoiceSession } from "./voice-session";
 
 describe("VoiceSession", () => {
   let session: VoiceSession;
 
   beforeEach(() => {
     session = new VoiceSession({
-      vad: { energyThreshold: 0.02, silenceDuration: 100, speechDuration: 50, calibrationDuration: 100, sensitivity: "medium" },
+      vad: {
+        energyThreshold: 0.02,
+        silenceDuration: 100,
+        speechDuration: 50,
+        calibrationDuration: 100,
+        sensitivity: "medium",
+      },
       asr: { backend: "chunked", model: "small", language: "en", chunkDuration: 100 },
       tts: { backend: "espeak", voice: "en", language: "en", speed: 1.0 },
       noTts: true, // Disable TTS for tests
@@ -29,7 +35,9 @@ describe("VoiceSession", () => {
 
   test("onTranscript callback can be set", () => {
     let received = "";
-    session.onTranscript = (text) => { received = text; };
+    session.onTranscript = (text) => {
+      received = text;
+    };
     expect(session.onTranscript).toBeDefined();
   });
 

@@ -1,7 +1,7 @@
 // KCode - Execution Profiles Tests
 
-import { describe, test, expect } from "bun:test";
-import { getProfile, listProfiles, applyProfile, getCurrentProfileName } from "./profiles";
+import { describe, expect, test } from "bun:test";
+import { applyProfile, getCurrentProfileName, getProfile, listProfiles } from "./profiles";
 import type { KCodeConfig } from "./types";
 
 function makeConfig(overrides: Partial<KCodeConfig> = {}): KCodeConfig {
@@ -71,7 +71,7 @@ describe("listProfiles", () => {
   test("returns all 5 built-in profiles", () => {
     const profiles = listProfiles();
     expect(profiles).toHaveLength(5);
-    const names = profiles.map(p => p.name);
+    const names = profiles.map((p) => p.name);
     expect(names).toContain("safe");
     expect(names).toContain("fast");
     expect(names).toContain("review");

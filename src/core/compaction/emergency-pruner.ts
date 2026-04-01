@@ -54,9 +54,7 @@ function estimateTokens(text: string): number {
 function getMessageText(msg: Message): string {
   if (typeof msg.content === "string") return msg.content;
   if (Array.isArray(msg.content)) {
-    return msg.content
-      .map((c) => c.text ?? "")
-      .join("\n");
+    return msg.content.map((c) => c.text ?? "").join("\n");
   }
   return "";
 }
@@ -68,9 +66,7 @@ function setMessageText(msg: Message, text: string): Message {
   if (Array.isArray(msg.content) && msg.content.length > 0) {
     return {
       ...msg,
-      content: msg.content.map((c, i) =>
-        i === 0 ? { ...c, text } : c,
-      ),
+      content: msg.content.map((c, i) => (i === 0 ? { ...c, text } : c)),
     };
   }
   return { ...msg, content: text };
@@ -192,9 +188,7 @@ function nuclearPrune(
 ): { messages: Message[]; result: PruneResult } {
   const systemMsg = messages.find((m) => m.role === "system");
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const lastAssistant = [...messages]
-    .reverse()
-    .find((m) => m.role === "assistant");
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
 
   const output: Message[] = [];
   if (systemMsg) output.push(systemMsg);
@@ -212,8 +206,7 @@ function nuclearPrune(
       strategy: "nuclear",
       messagesRemoved: removedCount,
       estimatedTokensFreed: removedTokens,
-      warning:
-        "NUCLEAR PRUNE: Only system prompt and last turn preserved. Context history lost.",
+      warning: "NUCLEAR PRUNE: Only system prompt and last turn preserved. Context history lost.",
     },
   };
 }

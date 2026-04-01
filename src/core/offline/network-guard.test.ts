@@ -1,6 +1,6 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { initOfflineMode, OfflineMode, resetOfflineMode } from "./mode";
 import { isLocalHost, OfflineError, offlineAwareFetch } from "./network-guard";
-import { OfflineMode, resetOfflineMode, initOfflineMode } from "./mode";
 
 describe("network-guard", () => {
   afterEach(() => {

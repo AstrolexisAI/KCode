@@ -1,11 +1,11 @@
 // KCode - Context Manager
 // Extracted from conversation.ts — context window management, pruning, and compaction
 
-import type { Message, StreamEvent, ConversationState, KCodeConfig } from "./types";
+import { CompactionCircuitBreaker, compact as multiStrategyCompact } from "./compaction/index.js";
+import type { LlmSummarizer } from "./compaction/types.js";
 import { log } from "./logger";
 import { CHARS_PER_TOKEN } from "./token-budget";
-import { compact as multiStrategyCompact, CompactionCircuitBreaker } from "./compaction/index.js";
-import type { LlmSummarizer } from "./compaction/types.js";
+import type { ConversationState, KCodeConfig, Message, StreamEvent } from "./types";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -76,7 +76,10 @@ export async function* pruneMessagesIfNeeded(
     return;
   }
 
-  log.info("session", `Context pruning triggered: ~${estimatedTokens} tokens, threshold ${Math.floor(threshold)}`);
+  log.info(
+    "session",
+    `Context pruning triggered: ~${estimatedTokens} tokens, threshold ${Math.floor(threshold)}`,
+  );
 
   // Phase 1: Compress large tool results in older messages (keep recent messages intact)
   const compressibleEnd = Math.max(0, messages.length - KEEP_RECENT_MESSAGES);
@@ -86,7 +89,11 @@ export async function* pruneMessagesIfNeeded(
     if (Array.isArray(msg.content)) {
       for (let j = 0; j < msg.content.length; j++) {
         const block = msg.content[j]!;
-        if (block.type === "tool_result" && typeof block.content === "string" && block.content.length > COMPRESS_THRESHOLD_CHARS) {
+        if (
+          block.type === "tool_result" &&
+          typeof block.content === "string" &&
+          block.content.length > COMPRESS_THRESHOLD_CHARS
+        ) {
           // Summarize tool results: keep first line + truncate
           const firstLine = block.content.split("\n")[0]!.slice(0, 200);
           const wasError = block.is_error ? " (error)" : "";
@@ -103,7 +110,11 @@ export async function* pruneMessagesIfNeeded(
   if (compressed > 0) {
     log.info("session", `Compressed ${compressed} tool results`);
     yield { type: "compaction_start", messageCount: compressed, tokensBefore: estimatedTokens };
-    yield { type: "compaction_end", tokensAfter: estimateContextTokens(systemPrompt, state.messages), method: "compressed" };
+    yield {
+      type: "compaction_end",
+      tokensAfter: estimateContextTokens(systemPrompt, state.messages),
+      method: "compressed",
+    };
   }
 
   // Re-check after compression
@@ -137,14 +148,20 @@ export async function* pruneMessagesIfNeeded(
       // Use tertiary/fallback model for compaction to avoid competing with the main model for GPU
       const compactModel = config.tertiaryModel ?? config.fallbackModel ?? config.model;
       if (compactModel === config.model) {
-        log.warn("session", "No tertiary/fallback model configured — compaction uses the primary model (may compete for GPU)");
+        log.warn(
+          "session",
+          "No tertiary/fallback model configured — compaction uses the primary model (may compete for GPU)",
+        );
       }
       const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase);
       const summary = await compactor.compact(toPrune);
       if (summary) {
         messages.splice(keepFirst, pruneCount, summary);
         state.tokenCount = estimateContextTokens(systemPrompt, state.messages);
-        log.info("session", `Auto-compacted ${pruneCount} messages into summary, ~${state.tokenCount} tokens remaining`);
+        log.info(
+          "session",
+          `Auto-compacted ${pruneCount} messages into summary, ~${state.tokenCount} tokens remaining`,
+        );
         yield { type: "compaction_end", tokensAfter: state.tokenCount, method: "llm" };
         return;
       }
@@ -175,12 +192,25 @@ export function emergencyPrune(
     return [];
   }
 
-  const dropCount = Math.max(EMERGENCY_MIN_DROP, Math.floor(state.messages.length * EMERGENCY_DROP_RATIO));
-  log.warn("session", `Emergency prune: ~${postPruneTokens} tokens >= 95% of ${contextWindowSize}. Dropping ${dropCount} oldest messages.`);
+  const dropCount = Math.max(
+    EMERGENCY_MIN_DROP,
+    Math.floor(state.messages.length * EMERGENCY_DROP_RATIO),
+  );
+  log.warn(
+    "session",
+    `Emergency prune: ~${postPruneTokens} tokens >= 95% of ${contextWindowSize}. Dropping ${dropCount} oldest messages.`,
+  );
   const kept = state.messages.slice(0, 1); // keep system/first message
   const rest = state.messages.slice(1);
   const remaining = rest.slice(dropCount);
-  state.messages = [...kept, { role: "user" as const, content: `[SYSTEM] Context was emergency-pruned to avoid exceeding the ${contextWindowSize}-token limit. ${dropCount} older messages were removed. Continue with the current task.` }, ...remaining];
+  state.messages = [
+    ...kept,
+    {
+      role: "user" as const,
+      content: `[SYSTEM] Context was emergency-pruned to avoid exceeding the ${contextWindowSize}-token limit. ${dropCount} older messages were removed. Continue with the current task.`,
+    },
+    ...remaining,
+  ];
   state.tokenCount = estimateContextTokens(systemPrompt, state.messages);
 
   return [
@@ -222,13 +252,13 @@ export async function* compactMultiStrategy(
   const estimatedTokens = estimateContextTokens(systemPrompt, state.messages);
   const contextUsage = estimatedTokens / contextWindowSize;
 
-  if (contextUsage < 0.60) return;
+  if (contextUsage < 0.6) return;
 
   const tokensBefore = estimatedTokens;
   yield { type: "compaction_start", messageCount: state.messages.length, tokensBefore };
 
   // Build an LLM summarizer from config if none provided
-  const llmSummarizer: LlmSummarizer | null = summarizer ?? await buildLlmSummarizer(config);
+  const llmSummarizer: LlmSummarizer | null = summarizer ?? (await buildLlmSummarizer(config));
 
   try {
     const result = await multiStrategyCompact(
@@ -270,7 +300,11 @@ async function buildLlmSummarizer(config: KCodeConfig): Promise<LlmSummarizer | 
     const compactModel = config.tertiaryModel ?? config.fallbackModel ?? config.model;
     const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase);
 
-    return async (prompt: string, systemPrompt: string, maxTokens: number): Promise<string | null> => {
+    return async (
+      prompt: string,
+      systemPrompt: string,
+      maxTokens: number,
+    ): Promise<string | null> => {
       // Wrap the CompactionManager's compact call as a summarizer
       const fakeMessages: Message[] = [{ role: "user", content: prompt }];
       const result = await compactor.compact(fakeMessages);

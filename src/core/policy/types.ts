@@ -33,9 +33,7 @@ export interface PolicyViolation {
   limit: number;
 }
 
-export type PolicyCheckResult =
-  | { allowed: true }
-  | { allowed: false; violation: PolicyViolation };
+export type PolicyCheckResult = { allowed: true } | { allowed: false; violation: PolicyViolation };
 
 export interface BudgetSnapshot {
   sessionTokensUsed: number;

@@ -1,10 +1,10 @@
 // Re-export from new location for backwards compatibility
 export {
-  profileCheckpoint,
-  isProfilingEnabled,
-  getProfileReport,
-  printProfileReport,
   _resetProfiler,
+  getProfileReport,
+  isProfilingEnabled,
+  printProfileReport,
+  profileCheckpoint,
   StartupProfiler,
 } from "./profiler/startup-profiler";
 

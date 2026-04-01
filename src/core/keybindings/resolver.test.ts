@@ -1,11 +1,16 @@
 // KCode - Resolver tests for keybinding matching and chord handling
 
-import { describe, test, expect, beforeEach } from "bun:test";
-import { KeybindingResolver } from "./resolver.js";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { parseKeyChord, parseKeyCombo } from "./parser.js";
+import { KeybindingResolver } from "./resolver.js";
 import type { KeyBinding } from "./types.js";
 
-function makeBinding(action: string, key: string, source: "default" | "user" = "default", context?: string): KeyBinding {
+function makeBinding(
+  action: string,
+  key: string,
+  source: "default" | "user" = "default",
+  context?: string,
+): KeyBinding {
   return {
     action,
     chord: parseKeyChord(key),
@@ -97,21 +102,27 @@ describe("KeybindingResolver", () => {
   describe("events", () => {
     test("emits action event on match", () => {
       let emitted: string | null = null;
-      resolver.on("action", (action: string) => { emitted = action; });
+      resolver.on("action", (action: string) => {
+        emitted = action;
+      });
       resolver.processKeyPress(parseKeyCombo("ctrl+l"));
       expect(emitted).toBe("clear");
     });
 
     test("emits chord-pending when waiting for more keys", () => {
       let pending = false;
-      resolver.on("chord-pending", () => { pending = true; });
+      resolver.on("chord-pending", () => {
+        pending = true;
+      });
       resolver.processKeyPress(parseKeyCombo("ctrl+k"));
       expect(pending).toBe(true);
     });
 
     test("emits chord-cancelled on cancelChord", () => {
       let cancelled = false;
-      resolver.on("chord-cancelled", () => { cancelled = true; });
+      resolver.on("chord-cancelled", () => {
+        cancelled = true;
+      });
       resolver.processKeyPress(parseKeyCombo("ctrl+k"));
       resolver.cancelChord();
       expect(cancelled).toBe(true);

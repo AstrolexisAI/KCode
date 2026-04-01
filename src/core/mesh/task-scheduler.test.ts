@@ -1,19 +1,19 @@
 // KCode - P2P Agent Mesh Task Scheduler Tests
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { PeerDiscovery } from "./discovery";
+import { generateTeamToken } from "./security";
 import {
-  TaskScheduler,
-  SCORE_HAS_MODEL,
-  SCORE_PER_GB_VRAM,
-  SCORE_PER_CPU_CORE,
+  HIGH_LATENCY_THRESHOLD_MS,
   PENALTY_BUSY,
   PENALTY_HIGH_LATENCY,
-  HIGH_LATENCY_THRESHOLD_MS,
+  SCORE_HAS_MODEL,
+  SCORE_PER_CPU_CORE,
+  SCORE_PER_GB_VRAM,
+  TaskScheduler,
 } from "./task-scheduler";
-import { PeerDiscovery } from "./discovery";
 import { MeshTransport } from "./transport";
-import { generateTeamToken } from "./security";
-import type { PeerInfo, MeshTask, MeshResult } from "./types";
+import type { MeshResult, MeshTask, PeerInfo } from "./types";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -55,11 +55,7 @@ function makeScheduler(
   const token = generateTeamToken();
   const transport = new MeshTransport({ port: 0, teamToken: token });
 
-  const scheduler = new TaskScheduler(
-    discovery,
-    transport,
-    localExecutor,
-  );
+  const scheduler = new TaskScheduler(discovery, transport, localExecutor);
 
   return { scheduler, discovery, transport };
 }
@@ -69,7 +65,9 @@ function makeScheduler(
 describe("TaskScheduler - scorePeer", () => {
   test("gives bonus for matching model", () => {
     const { scheduler } = makeScheduler();
-    const peer = makePeer({ capabilities: { models: ["llama-70b"], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
+    const peer = makePeer({
+      capabilities: { models: ["llama-70b"], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
     const task = makeTask({ model: "llama-70b" });
     const score = scheduler.scorePeer(peer, task, 10);
     expect(score).toBeGreaterThanOrEqual(SCORE_HAS_MODEL);
@@ -77,7 +75,9 @@ describe("TaskScheduler - scorePeer", () => {
 
   test("no model bonus when task has no model preference", () => {
     const { scheduler } = makeScheduler();
-    const peer = makePeer({ capabilities: { models: ["llama-70b"], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
+    const peer = makePeer({
+      capabilities: { models: ["llama-70b"], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
     const task = makeTask({ model: undefined });
     const score = scheduler.scorePeer(peer, task, 10);
     expect(score).toBeLessThan(SCORE_HAS_MODEL);
@@ -85,7 +85,9 @@ describe("TaskScheduler - scorePeer", () => {
 
   test("no model bonus when peer lacks the model", () => {
     const { scheduler } = makeScheduler();
-    const peer = makePeer({ capabilities: { models: ["other-model"], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
+    const peer = makePeer({
+      capabilities: { models: ["other-model"], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
     const task = makeTask({ model: "llama-70b" });
     const score = scheduler.scorePeer(peer, task, 10);
     expect(score).toBeLessThan(SCORE_HAS_MODEL);
@@ -94,8 +96,12 @@ describe("TaskScheduler - scorePeer", () => {
   test("higher VRAM gives higher score", () => {
     const { scheduler } = makeScheduler();
     const task = makeTask();
-    const peerLow = makePeer({ capabilities: { models: [], gpuVram: 8, cpuCores: 1, maxConcurrent: 1 } });
-    const peerHigh = makePeer({ capabilities: { models: [], gpuVram: 48, cpuCores: 1, maxConcurrent: 1 } });
+    const peerLow = makePeer({
+      capabilities: { models: [], gpuVram: 8, cpuCores: 1, maxConcurrent: 1 },
+    });
+    const peerHigh = makePeer({
+      capabilities: { models: [], gpuVram: 48, cpuCores: 1, maxConcurrent: 1 },
+    });
     const scoreLow = scheduler.scorePeer(peerLow, task, 10);
     const scoreHigh = scheduler.scorePeer(peerHigh, task, 10);
     expect(scoreHigh).toBeGreaterThan(scoreLow);
@@ -104,8 +110,12 @@ describe("TaskScheduler - scorePeer", () => {
   test("more CPU cores gives higher score", () => {
     const { scheduler } = makeScheduler();
     const task = makeTask();
-    const peerFew = makePeer({ capabilities: { models: [], gpuVram: 0, cpuCores: 2, maxConcurrent: 1 } });
-    const peerMany = makePeer({ capabilities: { models: [], gpuVram: 0, cpuCores: 32, maxConcurrent: 1 } });
+    const peerFew = makePeer({
+      capabilities: { models: [], gpuVram: 0, cpuCores: 2, maxConcurrent: 1 },
+    });
+    const peerMany = makePeer({
+      capabilities: { models: [], gpuVram: 0, cpuCores: 32, maxConcurrent: 1 },
+    });
     const scoreFew = scheduler.scorePeer(peerFew, task, 10);
     const scoreMany = scheduler.scorePeer(peerMany, task, 10);
     expect(scoreMany).toBeGreaterThan(scoreFew);
@@ -114,8 +124,14 @@ describe("TaskScheduler - scorePeer", () => {
   test("busy peer gets penalty", () => {
     const { scheduler } = makeScheduler();
     const task = makeTask();
-    const available = makePeer({ status: "online", capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
-    const busy = makePeer({ status: "busy", capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
+    const available = makePeer({
+      status: "online",
+      capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
+    const busy = makePeer({
+      status: "busy",
+      capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
     const scoreAvailable = scheduler.scorePeer(available, task, 10);
     const scoreBusy = scheduler.scorePeer(busy, task, 10);
     expect(scoreBusy).toBeLessThan(scoreAvailable);
@@ -124,7 +140,9 @@ describe("TaskScheduler - scorePeer", () => {
   test("high latency gets penalty", () => {
     const { scheduler } = makeScheduler();
     const task = makeTask();
-    const peer = makePeer({ capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
+    const peer = makePeer({
+      capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
     const scoreLow = scheduler.scorePeer(peer, task, 10);
     const scoreHigh = scheduler.scorePeer(peer, task, HIGH_LATENCY_THRESHOLD_MS + 1);
     expect(scoreHigh).toBeLessThan(scoreLow);
@@ -221,11 +239,23 @@ describe("TaskScheduler - mergeResults", () => {
     const results: PromiseSettledResult<MeshResult>[] = [
       {
         status: "fulfilled",
-        value: { taskId: "t1", status: "completed", output: "part-a", durationMs: 10, fromNode: "a" },
+        value: {
+          taskId: "t1",
+          status: "completed",
+          output: "part-a",
+          durationMs: 10,
+          fromNode: "a",
+        },
       },
       {
         status: "fulfilled",
-        value: { taskId: "t1", status: "completed", output: "part-b", durationMs: 20, fromNode: "b" },
+        value: {
+          taskId: "t1",
+          status: "completed",
+          output: "part-b",
+          durationMs: 20,
+          fromNode: "b",
+        },
       },
     ];
     const merged = scheduler.mergeResults("t1", results, Date.now() - 50);

@@ -2,7 +2,7 @@
 // Finds and suggests related test files after code edits
 
 import { existsSync } from "node:fs";
-import { join, dirname, basename, extname } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 
 /**
  * Given a source file path, find the most likely related test file.

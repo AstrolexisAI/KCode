@@ -1,12 +1,12 @@
 // KCode - MCP OAuth Tests
 // Tests for OAuth 2.0 PKCE flow, token storage, and discovery
 
-import { describe, test, expect, afterAll } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { McpOAuthClient, discoverOAuthConfig, type OAuthConfig } from "./mcp-oauth";
+import { discoverOAuthConfig, McpOAuthClient, type OAuthConfig } from "./mcp-oauth";
 
 // Use an isolated temp directory for token storage so tests never touch ~/.kcode/
 const TEST_DIR = join(tmpdir(), `kcode-oauth-test-${process.pid}-${Date.now()}`);
@@ -174,7 +174,11 @@ describe("MCP tool permission config", () => {
     return new RegExp(`^${regex}$`, "i").test(name);
   }
 
-  function isToolAllowed(toolName: string, allowedTools?: string[], blockedTools?: string[]): boolean {
+  function isToolAllowed(
+    toolName: string,
+    allowedTools?: string[],
+    blockedTools?: string[],
+  ): boolean {
     if (blockedTools && blockedTools.length > 0) {
       for (const pattern of blockedTools) {
         if (mcpToolGlobMatch(pattern, toolName)) return false;

@@ -3,10 +3,10 @@
 // Settings URL is configured via KCODE_SETTINGS_URL env var.
 
 import { join } from "node:path";
-import { kcodeHome } from "../core/paths";
-import { log } from "../core/logger";
-import type { RemoteSettingsResponse, RemoteSettingsCache } from "./types";
 import type { Settings } from "../core/config";
+import { log } from "../core/logger";
+import { kcodeHome } from "../core/paths";
+import type { RemoteSettingsCache, RemoteSettingsResponse } from "./types";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ export async function computeChecksum(settings: Record<string, unknown>): Promis
 }
 
 function retryDelay(attempt: number): number {
-  const exponential = Math.min(BASE_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+  const exponential = Math.min(BASE_DELAY_MS * 2 ** attempt, MAX_DELAY_MS);
   const jitter = 0.75 + Math.random() * 0.5;
   return Math.round(exponential * jitter);
 }
@@ -82,7 +82,9 @@ async function saveToCache(cache: RemoteSettingsCache): Promise<void> {
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
       chmodSync(path, 0o600);
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   } catch (err) {
     log.debug("config", `Failed to save remote settings cache: ${err}`);
   }
@@ -104,7 +106,9 @@ export async function fetchSettings(): Promise<RemoteSettingsResponse | null> {
     let etag: string | undefined;
     const cached = await loadFromCache();
     if (cached?.response?.settings) {
-      const checksum = await computeChecksum(cached.response.settings as unknown as Record<string, unknown>);
+      const checksum = await computeChecksum(
+        cached.response.settings as unknown as Record<string, unknown>,
+      );
       etag = `sha256:${checksum}`;
     }
 
@@ -153,7 +157,10 @@ export async function fetchSettings(): Promise<RemoteSettingsResponse | null> {
 
         // Non-retryable errors
         if (NON_RETRYABLE_STATUS.has(resp.status)) {
-          log.warn("config", `Remote settings fetch failed with non-retryable status ${resp.status}`);
+          log.warn(
+            "config",
+            `Remote settings fetch failed with non-retryable status ${resp.status}`,
+          );
           return cached?.response ?? null;
         }
 
@@ -161,20 +168,22 @@ export async function fetchSettings(): Promise<RemoteSettingsResponse | null> {
         if (!resp.ok) {
           lastError = new Error(`HTTP ${resp.status}`);
           if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-            await new Promise(r => setTimeout(r, retryDelay(attempt)));
+            await new Promise((r) => setTimeout(r, retryDelay(attempt)));
             continue;
           }
           break;
         }
 
         // 200 OK - Parse and cache
-        const body = await resp.json() as RemoteSettingsResponse;
+        const body = (await resp.json()) as RemoteSettingsResponse;
         if (!body || typeof body !== "object" || !body.settings) {
           log.warn("config", "Remote settings response is invalid, ignoring");
           return cached?.response ?? null;
         }
 
-        const newChecksum = await computeChecksum(body.settings as unknown as Record<string, unknown>);
+        const newChecksum = await computeChecksum(
+          body.settings as unknown as Record<string, unknown>,
+        );
         await saveToCache({
           etag: `sha256:${newChecksum}`,
           response: body,
@@ -185,13 +194,16 @@ export async function fetchSettings(): Promise<RemoteSettingsResponse | null> {
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-          await new Promise(r => setTimeout(r, retryDelay(attempt)));
+          await new Promise((r) => setTimeout(r, retryDelay(attempt)));
         }
       }
     }
 
     if (lastError) {
-      log.warn("config", `Remote settings fetch failed after ${MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`);
+      log.warn(
+        "config",
+        `Remote settings fetch failed after ${MAX_RETRY_ATTEMPTS} attempts: ${lastError.message}`,
+      );
     }
     return cached?.response ?? null;
   } finally {
@@ -205,7 +217,7 @@ export function startPolling(): void {
   if (_pollTimer) return;
   const interval = getPollInterval();
   _pollTimer = setInterval(() => {
-    fetchSettings().catch(err => {
+    fetchSettings().catch((err) => {
       log.warn("config", `Remote settings poll error: ${err}`);
     });
   }, interval);

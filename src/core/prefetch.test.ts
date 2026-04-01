@@ -1,11 +1,11 @@
-import { test, expect, describe, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  startPrefetch,
+  _resetPrefetch,
   getPrefetched,
+  getPrefetchedModelsConfig,
   getPrefetchedProStatus,
   getPrefetchedUserSettings,
-  getPrefetchedModelsConfig,
-  _resetPrefetch,
+  startPrefetch,
 } from "./prefetch";
 
 describe("prefetch", () => {

@@ -2,8 +2,8 @@
 // SQLite FTS5 index over transcript entries for instant cross-session search
 
 import { getDb } from "./db";
-import { TranscriptManager } from "./transcript";
 import { log } from "./logger";
+import { TranscriptManager } from "./transcript";
 
 export interface TranscriptSearchResult {
   sessionFile: string;
@@ -22,9 +22,11 @@ export function indexTranscriptSession(sessionFile: string): number {
   const tm = new TranscriptManager();
 
   // Check if already indexed
-  const existing = db.query<{ cnt: number }, [string]>(
-    "SELECT COUNT(*) as cnt FROM transcript_entries WHERE session_file = ?"
-  ).get(sessionFile);
+  const existing = db
+    .query<{ cnt: number }, [string]>(
+      "SELECT COUNT(*) as cnt FROM transcript_entries WHERE session_file = ?",
+    )
+    .get(sessionFile);
 
   if (existing && existing.cnt > 0) return 0;
 
@@ -32,7 +34,7 @@ export function indexTranscriptSession(sessionFile: string): number {
   if (entries.length === 0) return 0;
 
   const stmt = db.prepare(
-    "INSERT INTO transcript_entries (session_file, role, entry_type, content, timestamp) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO transcript_entries (session_file, role, entry_type, content, timestamp) VALUES (?, ?, ?, ?, ?)",
   );
 
   let count = 0;
@@ -55,7 +57,10 @@ export function indexTranscriptSession(sessionFile: string): number {
  * Index all unindexed transcript sessions.
  * If reindex is true, clears all existing entries and re-indexes everything.
  */
-export function indexAllTranscripts(reindex: boolean = false): { indexed: number; entries: number } {
+export function indexAllTranscripts(reindex: boolean = false): {
+  indexed: number;
+  entries: number;
+} {
   if (reindex) {
     const db = getDb();
     db.exec("DELETE FROM transcript_entries");
@@ -97,46 +102,61 @@ export async function searchTranscripts(
   // 1. Strip FTS5 operators and special syntax to prevent query injection
   // 2. Wrap each word in quotes so they're treated as literals
   const words = query
-    .replace(/[*"():^{}~]/g, " ")  // Remove FTS5 special chars
+    .replace(/[*"():^{}~]/g, " ") // Remove FTS5 special chars
     .split(/\s+/)
-    .filter(w => w.length > 0)
-    .filter(w => !/^(AND|OR|NOT|NEAR)$/i.test(w))  // Strip FTS operators
-    .map(w => `"${w.replace(/"/g, '""')}"`)  // Quote each word
-    .slice(0, 20);  // Limit terms to prevent DoS
+    .filter((w) => w.length > 0)
+    .filter((w) => !/^(AND|OR|NOT|NEAR)$/i.test(w)) // Strip FTS operators
+    .map((w) => `"${w.replace(/"/g, '""')}"`) // Quote each word
+    .slice(0, 20); // Limit terms to prevent DoS
 
   if (words.length === 0) return [];
 
   const ftsQuery = words.join(" ");
 
   try {
-    const cutoff = hoursLimit != null
-      ? new Date(Date.now() - hoursLimit * 3600_000).toISOString()
-      : null;
+    const cutoff =
+      hoursLimit != null ? new Date(Date.now() - hoursLimit * 3600_000).toISOString() : null;
     const rows = cutoff
-      ? db.query<
-          { session_file: string; role: string; content: string; timestamp: string; rank: number },
-          [string, string, number]
-        >(
-          `SELECT te.session_file, te.role, te.content, te.timestamp, rank
+      ? db
+          .query<
+            {
+              session_file: string;
+              role: string;
+              content: string;
+              timestamp: string;
+              rank: number;
+            },
+            [string, string, number]
+          >(
+            `SELECT te.session_file, te.role, te.content, te.timestamp, rank
            FROM transcript_fts
            JOIN transcript_entries te ON transcript_fts.rowid = te.id
            WHERE transcript_fts MATCH ? AND te.timestamp >= ?
            ORDER BY rank
-           LIMIT ?`
-        ).all(ftsQuery, cutoff, maxResults)
-      : db.query<
-          { session_file: string; role: string; content: string; timestamp: string; rank: number },
-          [string, number]
-        >(
-          `SELECT te.session_file, te.role, te.content, te.timestamp, rank
+           LIMIT ?`,
+          )
+          .all(ftsQuery, cutoff, maxResults)
+      : db
+          .query<
+            {
+              session_file: string;
+              role: string;
+              content: string;
+              timestamp: string;
+              rank: number;
+            },
+            [string, number]
+          >(
+            `SELECT te.session_file, te.role, te.content, te.timestamp, rank
            FROM transcript_fts
            JOIN transcript_entries te ON transcript_fts.rowid = te.id
            WHERE transcript_fts MATCH ?
            ORDER BY rank
-           LIMIT ?`
-        ).all(ftsQuery, maxResults);
+           LIMIT ?`,
+          )
+          .all(ftsQuery, maxResults);
 
-    return rows.map(r => ({
+    return rows.map((r) => ({
       sessionFile: r.session_file,
       role: r.role,
       content: r.content,
@@ -155,9 +175,11 @@ export async function searchTranscripts(
 export function getIndexStats(): { sessions: number; entries: number } {
   const db = getDb();
 
-  const stats = db.query<{ sessions: number; entries: number }, []>(
-    `SELECT COUNT(DISTINCT session_file) as sessions, COUNT(*) as entries FROM transcript_entries`
-  ).get();
+  const stats = db
+    .query<{ sessions: number; entries: number }, []>(
+      `SELECT COUNT(DISTINCT session_file) as sessions, COUNT(*) as entries FROM transcript_entries`,
+    )
+    .get();
 
   return {
     sessions: stats?.sessions ?? 0,

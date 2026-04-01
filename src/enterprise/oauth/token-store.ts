@@ -3,8 +3,8 @@
 // macOS: Keychain, Linux: secret-tool (fallback: file), Windows: file fallback
 
 import { join } from "node:path";
-import { kcodeHome } from "../../core/paths";
 import { log } from "../../core/logger";
+import { kcodeHome } from "../../core/paths";
 import type { OAuthTokens } from "../types";
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -37,7 +37,11 @@ export function normalizeIssuer(issuer: string): string {
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-async function runCommand(cmd: string, args: string[], stdin?: string): Promise<{ ok: boolean; stdout: string }> {
+async function runCommand(
+  cmd: string,
+  args: string[],
+  stdin?: string,
+): Promise<{ ok: boolean; stdout: string }> {
   try {
     const proc = Bun.spawn([cmd, ...args], {
       stdout: "pipe",
@@ -53,7 +57,11 @@ async function runCommand(cmd: string, args: string[], stdin?: string): Promise<
 
     const timeoutPromise = new Promise<{ ok: false; stdout: "" }>((resolve) => {
       setTimeout(() => {
-        try { proc.kill(); } catch { /* ignore */ }
+        try {
+          proc.kill();
+        } catch {
+          /* ignore */
+        }
         resolve({ ok: false, stdout: "" });
       }, SUBPROCESS_TIMEOUT_MS);
     });
@@ -76,9 +84,12 @@ async function saveMacOS(tokens: OAuthTokens): Promise<boolean> {
   const json = JSON.stringify(tokens);
   const result = await runCommand("security", [
     "add-generic-password",
-    "-a", KEYCHAIN_ACCOUNT,
-    "-s", KEYCHAIN_SERVICE,
-    "-w", json,
+    "-a",
+    KEYCHAIN_ACCOUNT,
+    "-s",
+    KEYCHAIN_SERVICE,
+    "-w",
+    json,
     "-U", // Update if exists
   ]);
   return result.ok;
@@ -87,8 +98,10 @@ async function saveMacOS(tokens: OAuthTokens): Promise<boolean> {
 async function loadMacOS(): Promise<OAuthTokens | null> {
   const result = await runCommand("security", [
     "find-generic-password",
-    "-a", KEYCHAIN_ACCOUNT,
-    "-s", KEYCHAIN_SERVICE,
+    "-a",
+    KEYCHAIN_ACCOUNT,
+    "-s",
+    KEYCHAIN_SERVICE,
     "-w",
   ]);
   if (!result.ok || !result.stdout) return null;
@@ -102,8 +115,10 @@ async function loadMacOS(): Promise<OAuthTokens | null> {
 async function clearMacOS(): Promise<boolean> {
   const result = await runCommand("security", [
     "delete-generic-password",
-    "-a", KEYCHAIN_ACCOUNT,
-    "-s", KEYCHAIN_SERVICE,
+    "-a",
+    KEYCHAIN_ACCOUNT,
+    "-s",
+    KEYCHAIN_SERVICE,
   ]);
   return result.ok;
 }
@@ -112,21 +127,16 @@ async function clearMacOS(): Promise<boolean> {
 
 async function saveLinuxSecretTool(tokens: OAuthTokens): Promise<boolean> {
   const json = JSON.stringify(tokens);
-  const result = await runCommand("secret-tool", [
-    "store",
-    "--label=" + SECRET_TOOL_LABEL,
-    "service", "kcode",
-    "type", "oauth",
-  ], json);
+  const result = await runCommand(
+    "secret-tool",
+    ["store", "--label=" + SECRET_TOOL_LABEL, "service", "kcode", "type", "oauth"],
+    json,
+  );
   return result.ok;
 }
 
 async function loadLinuxSecretTool(): Promise<OAuthTokens | null> {
-  const result = await runCommand("secret-tool", [
-    "lookup",
-    "service", "kcode",
-    "type", "oauth",
-  ]);
+  const result = await runCommand("secret-tool", ["lookup", "service", "kcode", "type", "oauth"]);
   if (!result.ok || !result.stdout) return null;
   try {
     return JSON.parse(result.stdout) as OAuthTokens;
@@ -136,11 +146,7 @@ async function loadLinuxSecretTool(): Promise<OAuthTokens | null> {
 }
 
 async function clearLinuxSecretTool(): Promise<boolean> {
-  const result = await runCommand("secret-tool", [
-    "clear",
-    "service", "kcode",
-    "type", "oauth",
-  ]);
+  const result = await runCommand("secret-tool", ["clear", "service", "kcode", "type", "oauth"]);
   return result.ok;
 }
 
@@ -153,7 +159,9 @@ async function saveToFile(tokens: OAuthTokens): Promise<boolean> {
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
       chmodSync(path, 0o600);
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
     return true;
   } catch (err) {
     log.debug("config", `Failed to save tokens to file: ${err}`);
@@ -207,7 +215,10 @@ export async function saveTokens(tokens: OAuthTokens): Promise<void> {
   // Windows and all fallbacks use file storage
   const saved = await saveToFile(tokens);
   if (saved && platform !== "win32") {
-    log.warn("config", "Tokens saved to file (~/.kcode/tokens.json) — less secure than system keychain");
+    log.warn(
+      "config",
+      "Tokens saved to file (~/.kcode/tokens.json) — less secure than system keychain",
+    );
   }
 }
 

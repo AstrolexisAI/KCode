@@ -1,6 +1,9 @@
-import { describe, test, expect, beforeEach } from "bun:test";
-import { PluginAPI, createPluginAPI } from "./plugin-api";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { PluginContext } from "./plugin-api";
+import { createPluginAPI, PluginAPI } from "./plugin-api";
 
 const TEST_CTX: PluginContext = {
   pluginName: "test-plugin",
@@ -12,6 +15,13 @@ describe("PluginAPI", () => {
   let api: PluginAPI;
 
   beforeEach(() => {
+    // Clean up leftover memory files from previous test runs
+    try {
+      rmSync(join(homedir(), ".kcode", "plugins", "test-plugin", "memories"), {
+        recursive: true,
+        force: true,
+      });
+    } catch { /* ignore */ }
     api = createPluginAPI(TEST_CTX);
   });
 
@@ -79,7 +89,9 @@ describe("PluginAPI", () => {
 
     test("off removes handler", () => {
       let count = 0;
-      const handler = () => { count++; };
+      const handler = () => {
+        count++;
+      };
       api.on("evt", handler);
       api.emit("evt");
       expect(count).toBe(1);
@@ -117,9 +129,7 @@ describe("PluginAPI", () => {
 
   describe("UI helpers", () => {
     test("showNotification does not throw", async () => {
-      await expect(
-        api.showNotification("test message", "info"),
-      ).resolves.toBeUndefined();
+      await expect(api.showNotification("test message", "info")).resolves.toBeUndefined();
     });
 
     test("showProgress runs function", async () => {

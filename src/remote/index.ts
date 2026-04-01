@@ -3,56 +3,52 @@
  * Re-exports all public types and classes for remote session management.
  */
 
-// Types
-export type {
-  RemoteConfig,
-  RemoteSessionInfo,
-  SyncConflict,
-  RemoteMode,
-  RemoteAgentInfo,
-  TunnelInfo,
-} from "./types";
-export { DEFAULT_SYNC_EXCLUDES, DEFAULT_REMOTE_CONFIG } from "./types";
-
-// SSH Transport
-export {
-  checkConnectivity,
-  checkKCodeInstalled,
-  startRemoteAgent,
-  createTunnel,
-  executeRemote,
-  executeRemoteSync,
-  reconnect,
-  installRemoteKCode,
-  DEFAULT_RECONNECT,
-} from "./ssh-transport";
-
 // File Sync
 export {
+  getLocalMtime,
+  getRemoteMtime,
   initialSync,
+  resolveConflict,
+  startRemoteWatcher,
+  startWatcher,
   syncChanges,
   syncFromRemote,
-  startWatcher,
-  startRemoteWatcher,
-  resolveConflict,
-  getRemoteMtime,
-  getLocalMtime,
 } from "./file-sync";
-
+// Remote Permission
+export {
+  createAutoPrompt,
+  PERMISSION_TIMEOUT_MS,
+  type PermissionPromptFn,
+  type PermissionRequest,
+  type PermissionResult,
+  RemotePermissionBridge,
+} from "./remote-permission";
 // Remote Session
 export {
   RemoteSession,
   type RemoteSessionEvent,
-  type SessionEventHandler,
   type RemoteSessionOptions,
+  type SessionEventHandler,
 } from "./remote-session";
-
-// Remote Permission
+// SSH Transport
 export {
-  RemotePermissionBridge,
-  createAutoPrompt,
-  PERMISSION_TIMEOUT_MS,
-  type PermissionRequest,
-  type PermissionResult,
-  type PermissionPromptFn,
-} from "./remote-permission";
+  checkConnectivity,
+  checkKCodeInstalled,
+  createTunnel,
+  DEFAULT_RECONNECT,
+  executeRemote,
+  executeRemoteSync,
+  installRemoteKCode,
+  reconnect,
+  startRemoteAgent,
+} from "./ssh-transport";
+// Types
+export type {
+  RemoteAgentInfo,
+  RemoteConfig,
+  RemoteMode,
+  RemoteSessionInfo,
+  SyncConflict,
+  TunnelInfo,
+} from "./types";
+export { DEFAULT_REMOTE_CONFIG, DEFAULT_SYNC_EXCLUDES } from "./types";

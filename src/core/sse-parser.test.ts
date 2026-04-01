@@ -1,8 +1,8 @@
 // KCode - SSE Stream Parser Tests
 // Tests for OpenAI-compatible and Anthropic SSE stream parsing
 
-import { describe, test, expect } from "bun:test";
-import { parseSSEStream, parseAnthropicSSEStream, type SSEChunk } from "./sse-parser";
+import { describe, expect, test } from "bun:test";
+import { parseAnthropicSSEStream, parseSSEStream, type SSEChunk } from "./sse-parser";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -45,8 +45,14 @@ describe("parseSSEStream", () => {
   test("parses content deltas", async () => {
     // Content must be >12 chars each to exceed the think-tag parser buffer threshold
     const resp = mockResponse([
-      dataLine({ choices: [{ delta: { content: "Hello, this is a longer message" }, finish_reason: null }] }),
-      dataLine({ choices: [{ delta: { content: " and here is more content to parse" }, finish_reason: null }] }),
+      dataLine({
+        choices: [{ delta: { content: "Hello, this is a longer message" }, finish_reason: null }],
+      }),
+      dataLine({
+        choices: [
+          { delta: { content: " and here is more content to parse" }, finish_reason: null },
+        ],
+      }),
     ]);
     const chunks = await collect(parseSSEStream(resp));
     const contentChunks = chunks.filter((c) => c.type === "content_delta");
@@ -59,27 +65,35 @@ describe("parseSSEStream", () => {
   test("parses tool call deltas", async () => {
     const resp = mockResponse([
       dataLine({
-        choices: [{
-          delta: {
-            tool_calls: [{
-              index: 0,
-              id: "call_abc",
-              function: { name: "Read", arguments: '{"file' },
-            }],
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_abc",
+                  function: { name: "Read", arguments: '{"file' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       dataLine({
-        choices: [{
-          delta: {
-            tool_calls: [{
-              index: 0,
-              function: { arguments: '_path":"/x"}' },
-            }],
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  function: { arguments: '_path":"/x"}' },
+                },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       "data: [DONE]\n\n",
     ]);
@@ -94,7 +108,9 @@ describe("parseSSEStream", () => {
 
   test("parses reasoning_content as thinking_delta", async () => {
     const resp = mockResponse([
-      dataLine({ choices: [{ delta: { reasoning_content: "Let me think..." }, finish_reason: null }] }),
+      dataLine({
+        choices: [{ delta: { reasoning_content: "Let me think..." }, finish_reason: null }],
+      }),
       "data: [DONE]\n\n",
     ]);
     const chunks = await collect(parseSSEStream(resp));
@@ -143,7 +159,11 @@ describe("parseSSEStream", () => {
   test("skips malformed JSON lines gracefully", async () => {
     const resp = mockResponse([
       "data: {not valid json\n\n",
-      dataLine({ choices: [{ delta: { content: "This is valid content after malformed JSON" }, finish_reason: null }] }),
+      dataLine({
+        choices: [
+          { delta: { content: "This is valid content after malformed JSON" }, finish_reason: null },
+        ],
+      }),
     ]);
     const chunks = await collect(parseSSEStream(resp));
     const content = chunks.filter((c) => c.type === "content_delta");
@@ -153,7 +173,11 @@ describe("parseSSEStream", () => {
   test("skips SSE comment lines", async () => {
     const resp = mockResponse([
       ": this is a comment\n",
-      dataLine({ choices: [{ delta: { content: "Content after a comment line in SSE" }, finish_reason: null }] }),
+      dataLine({
+        choices: [
+          { delta: { content: "Content after a comment line in SSE" }, finish_reason: null },
+        ],
+      }),
     ]);
     const chunks = await collect(parseSSEStream(resp));
     const content = chunks.filter((c) => c.type === "content_delta");
@@ -178,12 +202,13 @@ describe("parseSSEStream", () => {
   test("handles partial SSE lines split across chunks", async () => {
     // Simulate the data line being split across two ReadableStream chunks
     // Use long content to exceed think-tag parser buffer threshold
-    const fullLine = dataLine({ choices: [{ delta: { content: "This content was split across stream chunks" }, finish_reason: null }] });
+    const fullLine = dataLine({
+      choices: [
+        { delta: { content: "This content was split across stream chunks" }, finish_reason: null },
+      ],
+    });
     const mid = Math.floor(fullLine.length / 2);
-    const resp = mockResponse([
-      fullLine.slice(0, mid),
-      fullLine.slice(mid),
-    ]);
+    const resp = mockResponse([fullLine.slice(0, mid), fullLine.slice(mid)]);
     const chunks = await collect(parseSSEStream(resp));
     const content = chunks.filter((c) => c.type === "content_delta");
     expect(content.length).toBeGreaterThanOrEqual(1);
@@ -198,15 +223,17 @@ describe("parseSSEStream", () => {
   test("handles multiple tool calls in single delta", async () => {
     const resp = mockResponse([
       dataLine({
-        choices: [{
-          delta: {
-            tool_calls: [
-              { index: 0, id: "c1", function: { name: "Read", arguments: '{}' } },
-              { index: 1, id: "c2", function: { name: "Glob", arguments: '{}' } },
-            ],
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                { index: 0, id: "c1", function: { name: "Read", arguments: "{}" } },
+                { index: 1, id: "c2", function: { name: "Glob", arguments: "{}" } },
+              ],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       "data: [DONE]\n\n",
     ]);
@@ -224,8 +251,14 @@ describe("parseAnthropicSSEStream", () => {
   test("parses text_delta content", async () => {
     const resp = mockResponse([
       anthropicEvent("content_block_start", { index: 0, content_block: { type: "text" } }),
-      anthropicEvent("content_block_delta", { index: 0, delta: { type: "text_delta", text: "Hello" } }),
-      anthropicEvent("content_block_delta", { index: 0, delta: { type: "text_delta", text: " world" } }),
+      anthropicEvent("content_block_delta", {
+        index: 0,
+        delta: { type: "text_delta", text: "Hello" },
+      }),
+      anthropicEvent("content_block_delta", {
+        index: 0,
+        delta: { type: "text_delta", text: " world" },
+      }),
       anthropicEvent("content_block_stop", { index: 0 }),
       anthropicEvent("message_stop", {}),
     ]);
@@ -239,7 +272,10 @@ describe("parseAnthropicSSEStream", () => {
   test("parses thinking_delta", async () => {
     const resp = mockResponse([
       anthropicEvent("content_block_start", { index: 0, content_block: { type: "thinking" } }),
-      anthropicEvent("content_block_delta", { index: 0, delta: { type: "thinking_delta", thinking: "reasoning..." } }),
+      anthropicEvent("content_block_delta", {
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "reasoning..." },
+      }),
       anthropicEvent("content_block_stop", { index: 0 }),
       anthropicEvent("message_stop", {}),
     ]);
@@ -346,7 +382,10 @@ describe("parseAnthropicSSEStream", () => {
   test("skips malformed JSON in Anthropic stream", async () => {
     const resp = mockResponse([
       "event: content_block_delta\ndata: {broken json\n\n",
-      anthropicEvent("content_block_delta", { index: 0, delta: { type: "text_delta", text: "ok" } }),
+      anthropicEvent("content_block_delta", {
+        index: 0,
+        delta: { type: "text_delta", text: "ok" },
+      }),
       anthropicEvent("message_stop", {}),
     ]);
     const chunks = await collect(parseAnthropicSSEStream(resp));
@@ -367,9 +406,9 @@ describe("SSE Parser — empty response edge cases", () => {
       `data: [DONE]\n\n`,
     ]);
     const chunks = await collect(parseSSEStream(resp));
-    const thinking = chunks.filter(c => c.type === "thinking_delta");
-    const content = chunks.filter(c => c.type === "content_delta");
-    const finish = chunks.filter(c => c.type === "finish");
+    const thinking = chunks.filter((c) => c.type === "thinking_delta");
+    const content = chunks.filter((c) => c.type === "content_delta");
+    const finish = chunks.filter((c) => c.type === "finish");
     expect(thinking.length).toBe(2);
     expect(content.length).toBe(0);
     expect(finish.length).toBe(1);
@@ -384,8 +423,8 @@ describe("SSE Parser — empty response edge cases", () => {
       `data: [DONE]\n\n`,
     ]);
     const chunks = await collect(parseSSEStream(resp));
-    const content = chunks.filter(c => c.type === "content_delta");
-    const tools = chunks.filter(c => c.type === "tool_call_delta");
+    const content = chunks.filter((c) => c.type === "content_delta");
+    const tools = chunks.filter((c) => c.type === "tool_call_delta");
     expect(content.length).toBe(0);
     expect(tools.length).toBe(2);
   });
@@ -396,11 +435,11 @@ describe("SSE Parser — empty response edge cases", () => {
       `data: [DONE]\n\n`,
     ]);
     const chunks = await collect(parseSSEStream(resp));
-    const content = chunks.filter(c => c.type === "content_delta");
-    const thinking = chunks.filter(c => c.type === "thinking_delta");
+    const content = chunks.filter((c) => c.type === "content_delta");
+    const thinking = chunks.filter((c) => c.type === "thinking_delta");
     expect(content.length).toBe(0);
     expect(thinking.length).toBe(0);
-    const finish = chunks.filter(c => c.type === "finish");
+    const finish = chunks.filter((c) => c.type === "finish");
     expect(finish.length).toBe(1);
   });
 
@@ -412,8 +451,8 @@ describe("SSE Parser — empty response edge cases", () => {
       `data: [DONE]\n\n`,
     ]);
     const chunks = await collect(parseSSEStream(resp));
-    const thinking = chunks.filter(c => c.type === "thinking_delta");
-    const content = chunks.filter(c => c.type === "content_delta");
+    const thinking = chunks.filter((c) => c.type === "thinking_delta");
+    const content = chunks.filter((c) => c.type === "content_delta");
     // The thinking tag parser should extract reasoning as thinking_delta
     expect(thinking.length).toBeGreaterThan(0);
     // No visible content should come through
@@ -426,7 +465,7 @@ describe("SSE Parser — empty response edge cases", () => {
       `data: [DONE]\n\n`,
     ]);
     const chunks = await collect(parseSSEStream(resp));
-    const finish = chunks.filter(c => c.type === "finish");
+    const finish = chunks.filter((c) => c.type === "finish");
     expect(finish.length).toBe(1);
     expect(finish[0]!.finishReason).toBe("length");
   });

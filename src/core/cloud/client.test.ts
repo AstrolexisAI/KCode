@@ -1,6 +1,12 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CloudClient, CloudClientError } from "./client";
-import type { KCodeCloudConfig, CloudAuthResult, CloudTeam, TeamAnalytics, TeamPolicies } from "./types";
+import type {
+  CloudAuthResult,
+  CloudTeam,
+  KCodeCloudConfig,
+  TeamAnalytics,
+  TeamPolicies,
+} from "./types";
 
 // ─── Test fixtures ─────────────────────────────────────────────
 
@@ -174,18 +180,16 @@ describe("CloudClient", () => {
       globalThis.fetch = mockFetchError(401, "Unauthorized") as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.login("bad@example.com", "wrong"),
-      ).rejects.toThrow("Invalid email or password");
+      await expect(client.login("bad@example.com", "wrong")).rejects.toThrow(
+        "Invalid email or password",
+      );
     });
 
     test("throws on server error during login", async () => {
       globalThis.fetch = mockFetchError(500, "Internal Server Error") as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.login("user@example.com", "pass"),
-      ).rejects.toThrow("Login failed");
+      await expect(client.login("user@example.com", "pass")).rejects.toThrow("Login failed");
     });
   });
 
@@ -226,9 +230,7 @@ describe("CloudClient", () => {
       await client.inviteMember("new@example.com", "admin");
 
       const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe(
-        "https://cloud.kulvex.ai/api/v1/teams/team-001/members",
-      );
+      expect(url).toBe("https://cloud.kulvex.ai/api/v1/teams/team-001/members");
       expect(opts.method).toBe("POST");
       const body = JSON.parse(opts.body as string);
       expect(body.email).toBe("new@example.com");
@@ -257,9 +259,7 @@ describe("CloudClient", () => {
       await client.removeMember("user-042");
 
       const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe(
-        "https://cloud.kulvex.ai/api/v1/teams/team-001/members/user-042",
-      );
+      expect(url).toBe("https://cloud.kulvex.ai/api/v1/teams/team-001/members/user-042");
       expect(opts.method).toBe("DELETE");
     });
   });
@@ -332,47 +332,35 @@ describe("CloudClient", () => {
       globalThis.fetch = mockFetchError(401) as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.request("GET", "/api/v1/data"),
-      ).rejects.toThrow("Authentication expired");
+      await expect(client.request("GET", "/api/v1/data")).rejects.toThrow("Authentication expired");
     });
 
     test("throws descriptive error on 404", async () => {
       globalThis.fetch = mockFetchError(404) as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.request("GET", "/api/v1/missing"),
-      ).rejects.toThrow("Resource not found");
+      await expect(client.request("GET", "/api/v1/missing")).rejects.toThrow("Resource not found");
     });
 
     test("throws descriptive error on 429", async () => {
       globalThis.fetch = mockFetchError(429) as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.request("GET", "/api/v1/data"),
-      ).rejects.toThrow("Rate limit exceeded");
+      await expect(client.request("GET", "/api/v1/data")).rejects.toThrow("Rate limit exceeded");
     });
 
     test("throws descriptive error on 500", async () => {
       globalThis.fetch = mockFetchError(500) as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.request("GET", "/api/v1/data"),
-      ).rejects.toThrow("Cloud service error");
+      await expect(client.request("GET", "/api/v1/data")).rejects.toThrow("Cloud service error");
     });
 
     test("throws network error when fetch fails", async () => {
-      globalThis.fetch = mock(() =>
-        Promise.reject(new Error("ECONNREFUSED")),
-      ) as any;
+      globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as any;
 
       const client = new CloudClient(TEST_CONFIG);
-      await expect(
-        client.request("GET", "/api/v1/data"),
-      ).rejects.toThrow("unable to connect");
+      await expect(client.request("GET", "/api/v1/data")).rejects.toThrow("unable to connect");
     });
   });
 

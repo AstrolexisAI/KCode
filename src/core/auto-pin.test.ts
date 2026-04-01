@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { AutoPinManager, _resetAutoPinManager, getAutoPinManager } from "./auto-pin";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { _resetAutoPinManager, AutoPinManager, getAutoPinManager } from "./auto-pin";
 import { clearPinnedFiles, listPinnedFiles } from "./context-pin";
 
 describe("AutoPinManager", () => {

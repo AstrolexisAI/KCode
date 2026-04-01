@@ -2,7 +2,7 @@
 // Records timestamps, memory usage, and module counts at key init phases.
 // Activated via KCODE_PROFILE=1, KCODE_PROFILE_STARTUP=1, or --startup-profile flag.
 
-import type { ProfileCheckpoint, ProfileReport, PhaseCategory } from "./types";
+import type { PhaseCategory, ProfileCheckpoint, ProfileReport } from "./types";
 import { STARTUP_TARGETS } from "./types";
 
 /** Map checkpoint names to categories for grouped reporting */
@@ -31,8 +31,7 @@ class StartupProfiler {
   constructor(enabled?: boolean) {
     this.startTime = performance.now();
     this.enabled =
-      enabled ??
-      (process.env.KCODE_PROFILE === "1" || process.env.KCODE_PROFILE_STARTUP === "1");
+      enabled ?? (process.env.KCODE_PROFILE === "1" || process.env.KCODE_PROFILE_STARTUP === "1");
   }
 
   /** Whether profiling is active */
@@ -61,7 +60,13 @@ class StartupProfiler {
   /** Generate report with automatic recommendations */
   report(): ProfileReport {
     const emptyCategoryTotals: Record<PhaseCategory, number> = {
-      init: 0, config: 0, server: 0, plugins: 0, tools: 0, ui: 0, other: 0,
+      init: 0,
+      config: 0,
+      server: 0,
+      plugins: 0,
+      tools: 0,
+      ui: 0,
+      other: 0,
     };
 
     if (this.checkpoints.length === 0) {
@@ -89,9 +94,7 @@ class StartupProfiler {
     // Phase-level recommendations
     for (const cp of this.checkpoints) {
       if (cp.deltaMs > STARTUP_TARGETS.phaseCriticalMs) {
-        recommendations.push(
-          `"${cp.name}" took ${cp.deltaMs}ms [CRITICAL] — investigate or defer`,
-        );
+        recommendations.push(`"${cp.name}" took ${cp.deltaMs}ms [CRITICAL] — investigate or defer`);
       } else if (cp.deltaMs > STARTUP_TARGETS.phaseWarningMs) {
         recommendations.push(
           `"${cp.name}" took ${cp.deltaMs}ms — consider lazy-loading or caching`,
@@ -100,9 +103,7 @@ class StartupProfiler {
     }
 
     // Check if server phase is included (local model startup is expected to be slow)
-    const hasServerPhase = this.checkpoints.some(
-      (cp) => cp.name === "server_ready",
-    );
+    const hasServerPhase = this.checkpoints.some((cp) => cp.name === "server_ready");
     const target = hasServerPhase
       ? STARTUP_TARGETS.coldStartWithServerMs
       : STARTUP_TARGETS.coldStartNoServerMs;
@@ -114,12 +115,11 @@ class StartupProfiler {
     }
 
     // Category-level insights
-    const slowestCategory = (Object.entries(categoryTotals) as [PhaseCategory, number][])
-      .sort(([, a], [, b]) => b - a)[0];
+    const slowestCategory = (Object.entries(categoryTotals) as [PhaseCategory, number][]).sort(
+      ([, a], [, b]) => b - a,
+    )[0];
     if (slowestCategory && slowestCategory[1] > STARTUP_TARGETS.phaseWarningMs) {
-      recommendations.push(
-        `Slowest category: "${slowestCategory[0]}" at ${slowestCategory[1]}ms`,
-      );
+      recommendations.push(`Slowest category: "${slowestCategory[0]}" at ${slowestCategory[1]}ms`);
     }
 
     return {
@@ -240,5 +240,5 @@ export function _resetProfiler(): void {
   _globalProfiler = undefined;
 }
 
-export { StartupProfiler };
 export type { ProfileCheckpoint, ProfileReport };
+export { StartupProfiler };

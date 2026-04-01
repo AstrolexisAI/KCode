@@ -222,17 +222,18 @@ export function listHardwareProfiles(): string[] {
  * For Apple Silicon, returns 0 (unified memory is tracked separately).
  */
 export function getTotalVram(profile: HardwareProfile): number {
-  return profile.gpus
-    .filter(g => g.vendor !== "apple")
-    .reduce((sum, g) => sum + g.vramGb, 0);
+  return profile.gpus.filter((g) => g.vendor !== "apple").reduce((sum, g) => sum + g.vramGb, 0);
 }
 
 /**
  * Determine the effective available memory for model loading.
  * Apple Silicon uses unified memory (RAM), others use VRAM + RAM overflow.
  */
-export function getEffectiveMemoryForModels(profile: HardwareProfile): { gpuGb: number; cpuGb: number } {
-  const hasApple = profile.gpus.some(g => g.vendor === "apple");
+export function getEffectiveMemoryForModels(profile: HardwareProfile): {
+  gpuGb: number;
+  cpuGb: number;
+} {
+  const hasApple = profile.gpus.some((g) => g.vendor === "apple");
   if (hasApple) {
     // Apple Silicon: unified memory, reserve 4GB for OS
     const available = Math.max(0, profile.memory.availableGb - 4);

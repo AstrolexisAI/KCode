@@ -2,8 +2,8 @@
 // Tracks scroll offset, visible range, follow mode, and height cache
 // Only renders messages in the visible viewport + buffer for performance
 
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useInput } from "ink";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MessageEntry } from "../components/MessageList.js";
 
 // ─── Constants ──────────────────────────────────────────────────

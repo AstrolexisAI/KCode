@@ -1,5 +1,5 @@
-import React from "react";
 import { Box, Text } from "ink";
+import React from "react";
 import type { Plan } from "../../tools/plan.js";
 import { useTheme } from "../ThemeContext.js";
 
@@ -35,11 +35,14 @@ export default function ActivePlanPanel({ plan }: ActivePlanPanelProps) {
 
   return (
     <Box flexDirection="column" marginTop={1} marginBottom={1} paddingLeft={2}>
-      <Text bold color={theme.primary}>{plan.title} ({done}/{total} - {pct}%)</Text>
-      <Text color={theme.dimmed}>  [{bar}]</Text>
+      <Text bold color={theme.primary}>
+        {plan.title} ({done}/{total} - {pct}%)
+      </Text>
+      <Text color={theme.dimmed}> [{bar}]</Text>
       {plan.steps.map((step, i) => (
         <Text key={`active-plan-step-${i}`} color={statusColors[step.status] ?? theme.dimmed}>
-          {"  "}{statusIcons[step.status] ?? "[ ]"} {step.id}. {step.title}
+          {"  "}
+          {statusIcons[step.status] ?? "[ ]"} {step.id}. {step.title}
         </Text>
       ))}
     </Box>

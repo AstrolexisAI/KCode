@@ -1,15 +1,21 @@
 // KCode - Agent Tool
 // Spawns subagent processes for parallel/background task execution
 
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { writeFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { ToolDefinition, ToolResult } from "../core/types";
-import { findCustomAgent, getAgentMemoryPath, type CustomAgentDef, type AgentHookEntry, type AgentHookAction } from "../core/custom-agents";
+import { unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  type AgentHookAction,
+  type AgentHookEntry,
+  type CustomAgentDef,
+  findCustomAgent,
+  getAgentMemoryPath,
+} from "../core/custom-agents";
 import { HookManager, isWorkspaceTrusted } from "../core/hooks";
 import { log } from "../core/logger";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Agent Hook Helpers ──────────────────────────────────────────
 
@@ -20,7 +26,12 @@ function isHookUrlSafe(url: string): boolean {
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
     const hostname = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
     // Block internal/metadata hostnames
-    if (hostname === "localhost" || hostname === "metadata.google.internal" || hostname === "metadata.google") return false;
+    if (
+      hostname === "localhost" ||
+      hostname === "metadata.google.internal" ||
+      hostname === "metadata.google"
+    )
+      return false;
     // Block private IP ranges
     if (/^127\./.test(hostname)) return false;
     if (/^10\./.test(hostname)) return false;
@@ -88,7 +99,10 @@ function executeAgentScopedHooks(
           body: JSON.stringify({ event: eventName, ...context }),
           signal: AbortSignal.timeout(action.timeout ?? 10_000),
         }).catch((err) => {
-          log.warn("agent-hooks", `Agent HTTP hook failed: ${err instanceof Error ? err.message : err}`);
+          log.warn(
+            "agent-hooks",
+            `Agent HTTP hook failed: ${err instanceof Error ? err.message : err}`,
+          );
         });
       }
     }
@@ -304,7 +318,9 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
     // MCP config: write to temp file and pass via --mcp-config
     if (customAgent.mcpServers && Object.keys(customAgent.mcpServers).length > 0) {
       const mcpConfigPath = `/tmp/kcode-agent-mcp-${agentId}.json`;
-      writeFileSync(mcpConfigPath, JSON.stringify({ mcpServers: customAgent.mcpServers }), { mode: 0o600 });
+      writeFileSync(mcpConfigPath, JSON.stringify({ mcpServers: customAgent.mcpServers }), {
+        mode: 0o600,
+      });
       args.push("--mcp-config", mcpConfigPath);
     }
   } else if (agentType === "explore") {
@@ -342,8 +358,12 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
     const launcherFile = join(worktreePath, ".kcode-launcher.sh");
     writeFileSync(taskFile, opts.task, { mode: 0o600 });
     // Build launcher script with properly quoted arguments
-    const quotedArgs = args.map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
-    writeFileSync(launcherFile, `#!/bin/sh\nbun ${quotedArgs} < .kcode-task.txt\nrm -f .kcode-task.txt .kcode-launcher.sh\n`, { mode: 0o700 });
+    const quotedArgs = args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ");
+    writeFileSync(
+      launcherFile,
+      `#!/bin/sh\nbun ${quotedArgs} < .kcode-task.txt\nrm -f .kcode-task.txt .kcode-launcher.sh\n`,
+      { mode: 0o700 },
+    );
     try {
       execFileSync("tmux", ["split-window", "-h", "-c", worktreePath, "sh", ".kcode-launcher.sh"], {
         cwd: worktreePath,
@@ -359,7 +379,9 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
       };
     } catch (err) {
       // Fall through to normal spawn if tmux fails
-      console.error(`[Agent] tmux spawn failed, falling back to normal: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(
+        `[Agent] tmux spawn failed, falling back to normal: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -391,9 +413,19 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
     // Clean up worktree if spawn fails synchronously
     if (worktreePath) {
       try {
-        execFileSync("git", ["worktree", "remove", worktreePath, "--force"], { cwd: process.cwd(), stdio: "pipe", timeout: 10000 });
-        execFileSync("git", ["branch", "-D", `kcode-agent-${agentId}`], { cwd: process.cwd(), stdio: "pipe", timeout: 5000 });
-      } catch { /* best effort */ }
+        execFileSync("git", ["worktree", "remove", worktreePath, "--force"], {
+          cwd: process.cwd(),
+          stdio: "pipe",
+          timeout: 10000,
+        });
+        execFileSync("git", ["branch", "-D", `kcode-agent-${agentId}`], {
+          cwd: process.cwd(),
+          stdio: "pipe",
+          timeout: 5000,
+        });
+      } catch {
+        /* best effort */
+      }
     }
     return {
       tool_use_id: "",
@@ -467,9 +499,17 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
 
   // Execute agent-scoped hooks (from custom agent definition)
   if (customAgent?.hooks) {
-    executeAgentScopedHooks(customAgent.hooks, "SubagentStart", {
-      agent_id: agentId, agent_type: agentType, agent_name: customAgent.name,
-    }, cwd, customAgent.sourcePath);
+    executeAgentScopedHooks(
+      customAgent.hooks,
+      "SubagentStart",
+      {
+        agent_id: agentId,
+        agent_type: agentType,
+        agent_name: customAgent.name,
+      },
+      cwd,
+      customAgent.sourcePath,
+    );
   }
 
   const chunks: Buffer[] = [];
@@ -499,15 +539,29 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
 
       // Execute agent-scoped stop hooks
       if (customAgent?.hooks) {
-        executeAgentScopedHooks(customAgent.hooks, "SubagentStop", {
-          agent_id: agentId, agent_type: agentType, agent_name: customAgent.name,
-          status: record.status, duration_ms: record.durationMs, exit_code: code ?? 1,
-        }, cwd, customAgent.sourcePath);
+        executeAgentScopedHooks(
+          customAgent.hooks,
+          "SubagentStop",
+          {
+            agent_id: agentId,
+            agent_type: agentType,
+            agent_name: customAgent.name,
+            status: record.status,
+            duration_ms: record.durationMs,
+            exit_code: code ?? 1,
+          },
+          cwd,
+          customAgent.sourcePath,
+        );
       }
 
       // Clean up temp MCP config file
       const mcpConfigPath = `/tmp/kcode-agent-mcp-${agentId}.json`;
-      try { unlinkSync(mcpConfigPath); } catch { /* may not exist */ }
+      try {
+        unlinkSync(mcpConfigPath);
+      } catch {
+        /* may not exist */
+      }
 
       // Handle worktree cleanup — check for changes first
       if (worktreePath) {
@@ -517,14 +571,26 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
             cwd: worktreePath,
             stdio: "pipe",
             timeout: 5000,
-          }).toString().trim();
+          })
+            .toString()
+            .trim();
 
           if (diffStat) {
             // Agent made changes — commit them and report the branch
             try {
-              execFileSync("git", ["add", "-A"], { cwd: worktreePath, stdio: "pipe", timeout: 5000 });
-              execFileSync("git", ["commit", "-m", `Agent ${agentId} changes`], { cwd: worktreePath, stdio: "pipe", timeout: 10000 });
-            } catch { /* best-effort commit — worktree may have no staged changes */ }
+              execFileSync("git", ["add", "-A"], {
+                cwd: worktreePath,
+                stdio: "pipe",
+                timeout: 5000,
+              });
+              execFileSync("git", ["commit", "-m", `Agent ${agentId} changes`], {
+                cwd: worktreePath,
+                stdio: "pipe",
+                timeout: 10000,
+              });
+            } catch {
+              /* best-effort commit — worktree may have no staged changes */
+            }
             const branch = `kcode-agent-${agentId}`;
             record.content += `\n\n[Worktree: changes on branch "${branch}" at ${worktreePath}. Merge with: git merge ${branch}]`;
           } else {
@@ -540,7 +606,9 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
                 stdio: "pipe",
                 timeout: 5000,
               });
-            } catch { /* best-effort branch cleanup */ }
+            } catch {
+              /* best-effort branch cleanup */
+            }
           }
         } catch {
           // Best effort cleanup

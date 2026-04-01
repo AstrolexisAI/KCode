@@ -50,13 +50,7 @@ export interface ChangeReview {
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-const TEST_PATTERNS = [
-  /\.test\.\w+$/,
-  /\.spec\.\w+$/,
-  /_test\.\w+$/,
-  /^tests?\//,
-  /__tests__\//,
-];
+const TEST_PATTERNS = [/\.test\.\w+$/, /\.spec\.\w+$/, /_test\.\w+$/, /^tests?\//, /__tests__\//];
 
 const DOC_EXTENSIONS = new Set([".md", ".mdx", ".txt", ".rst", ".adoc"]);
 
@@ -155,9 +149,7 @@ function isDependencyFile(path: string): boolean {
 
 function isPublicApiFile(path: string): boolean {
   return (
-    /src\/tools\//.test(path) ||
-    /src\/core\/types/.test(path) ||
-    /index\.\w+$/.test(basename(path))
+    /src\/tools\//.test(path) || /src\/core\/types/.test(path) || /index\.\w+$/.test(basename(path))
   );
 }
 
@@ -286,10 +278,7 @@ export function assessRisk(files: FileChange[]): RiskAssessment {
   }
 
   // Low risk: only tests or docs
-  if (
-    files.every((f) => isTestFile(f.path) || isDocFile(f.path)) &&
-    reasons.length === 0
-  ) {
+  if (files.every((f) => isTestFile(f.path) || isDocFile(f.path)) && reasons.length === 0) {
     return { level: "low", reasons: ["Tests/docs only"] };
   }
 
@@ -461,10 +450,7 @@ function parseDiffStat(output: string, files: FileChange[]): void {
   }
 }
 
-export async function reviewChanges(
-  workingDir?: string,
-  staged = false,
-): Promise<ChangeReview> {
+export async function reviewChanges(workingDir?: string, staged = false): Promise<ChangeReview> {
   const cwd = workingDir ?? process.cwd();
   const diffFlag = staged ? "--cached" : "";
 
@@ -518,16 +504,16 @@ export async function reviewChanges(
 // ─── Formatting ─────────────────────────────────────────────────
 
 const RISK_COLORS: Record<RiskAssessment["level"], string> = {
-  low: "\x1b[32m",      // green
-  medium: "\x1b[33m",   // yellow
-  high: "\x1b[31m",     // red
+  low: "\x1b[32m", // green
+  medium: "\x1b[33m", // yellow
+  high: "\x1b[31m", // red
   critical: "\x1b[35m", // magenta
 };
 
 const PRIORITY_MARKERS: Record<ReviewSuggestion["priority"], string> = {
-  info: "\x1b[36m",    // cyan
+  info: "\x1b[36m", // cyan
   warning: "\x1b[33m", // yellow
-  action: "\x1b[31m",  // red
+  action: "\x1b[31m", // red
 };
 
 const RESET = "\x1b[0m";
@@ -556,9 +542,7 @@ export function formatReview(review: ChangeReview): string {
 
   // Risk
   const riskColor = RISK_COLORS[review.risk.level];
-  lines.push(
-    `  ${BOLD}Risk:${RESET} ${riskColor}${review.risk.level.toUpperCase()}${RESET}`,
-  );
+  lines.push(`  ${BOLD}Risk:${RESET} ${riskColor}${review.risk.level.toUpperCase()}${RESET}`);
   for (const reason of review.risk.reasons) {
     lines.push(`    ${DIM}- ${reason}${RESET}`);
   }
@@ -575,9 +559,7 @@ export function formatReview(review: ChangeReview): string {
   for (const f of review.files) {
     const icon = typeIcons[f.type];
     const stat =
-      f.linesAdded || f.linesRemoved
-        ? ` ${DIM}(+${f.linesAdded} -${f.linesRemoved})${RESET}`
-        : "";
+      f.linesAdded || f.linesRemoved ? ` ${DIM}(+${f.linesAdded} -${f.linesRemoved})${RESET}` : "";
     lines.push(`    ${icon} ${f.path}${stat}`);
   }
   lines.push("");

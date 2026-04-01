@@ -1,21 +1,19 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
-import { Database } from "bun:sqlite";
 
 import { DatasetExporter } from "./exporter";
-import type { ExportConfig, DistilledExampleRow } from "./types";
+import type { DistilledExampleRow, ExportConfig } from "./types";
 
 // ─── Test Helpers ──────────────────────────────────────────────
 
 let tempDir: string;
 let db: Database;
 
-function insertExample(
-  overrides: Partial<DistilledExampleRow> = {},
-): void {
+function insertExample(overrides: Partial<DistilledExampleRow> = {}): void {
   const defaults: DistilledExampleRow = {
     id: 0,
     user_query: "Write a hello world function in TypeScript",
@@ -405,9 +403,7 @@ describe("DatasetExporter", () => {
 
   test("estimateTokens returns a positive number", () => {
     const exporter = new DatasetExporter();
-    const data = [
-      { messages: [{ role: "user", content: "Hello world" }] },
-    ];
+    const data = [{ messages: [{ role: "user", content: "Hello world" }] }];
     const tokens = exporter.estimateTokens(data);
     expect(tokens).toBeGreaterThan(0);
   });
@@ -453,9 +449,7 @@ describe("DatasetExporter", () => {
       });
 
       const exporter = new DatasetExporter(db);
-      const results = exporter.queryExamples(
-        makeConfig({ filterTags: ["typescript"] }),
-      );
+      const results = exporter.queryExamples(makeConfig({ filterTags: ["typescript"] }));
       expect(results.length).toBe(1);
       expect(results[0]!.tags).toContain("typescript");
     });
@@ -486,9 +480,7 @@ describe("DatasetExporter", () => {
     });
 
     const exporter = new DatasetExporter(db);
-    const report = await exporter.export(
-      makeConfig({ format: "jsonl-chat" }),
-    );
+    const report = await exporter.export(makeConfig({ format: "jsonl-chat" }));
 
     expect(report.examplesExported).toBe(2);
     expect(report.format).toBe("jsonl-chat");
@@ -496,9 +488,7 @@ describe("DatasetExporter", () => {
     expect(existsSync(report.outputFile)).toBe(true);
 
     // Verify each line is valid JSON with messages array
-    const lines = readFileSync(report.outputFile, "utf-8")
-      .trim()
-      .split("\n");
+    const lines = readFileSync(report.outputFile, "utf-8").trim().split("\n");
     expect(lines.length).toBe(2);
     for (const line of lines) {
       const parsed = JSON.parse(line);
@@ -511,9 +501,7 @@ describe("DatasetExporter", () => {
     insertExample();
 
     const exporter = new DatasetExporter(db);
-    const report = await exporter.export(
-      makeConfig({ format: "sharegpt" }),
-    );
+    const report = await exporter.export(makeConfig({ format: "sharegpt" }));
 
     expect(report.examplesExported).toBe(1);
     expect(report.format).toBe("sharegpt");
@@ -528,9 +516,7 @@ describe("DatasetExporter", () => {
     // No examples inserted — DB is empty
 
     const exporter = new DatasetExporter(db);
-    const report = await exporter.export(
-      makeConfig({ format: "jsonl-chat" }),
-    );
+    const report = await exporter.export(makeConfig({ format: "jsonl-chat" }));
 
     expect(report.examplesExported).toBe(0);
     expect(report.totalTokens).toBe(0);

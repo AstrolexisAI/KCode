@@ -1,6 +1,6 @@
 // Tests for per-tool permission policies
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
   evaluateToolPolicy,
   globMatch,
@@ -202,79 +202,47 @@ describe("evaluateToolPolicy", () => {
   });
 
   test("uses defaultAction when no rules match", () => {
-    const result = evaluateToolPolicy(
-      "Bash",
-      { command: "echo hello" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Bash", { command: "echo hello" }, policies);
     expect(result.action).toBe("ask");
   });
 
   test("uses defaultAction for policy with no rules", () => {
-    const result = evaluateToolPolicy(
-      "Read",
-      { file_path: "/some/file.ts" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Read", { file_path: "/some/file.ts" }, policies);
     expect(result.action).toBe("allow");
   });
 
   test("rule with matches operator works with glob patterns", () => {
-    const result = evaluateToolPolicy(
-      "Bash",
-      { command: "git status" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Bash", { command: "git status" }, policies);
     expect(result.action).toBe("allow");
     expect(result.reason).toBe("Git commands are safe");
   });
 
   test("deny rule blocks dangerous commands", () => {
-    const result = evaluateToolPolicy(
-      "Bash",
-      { command: "rm -rf /" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Bash", { command: "rm -rf /" }, policies);
     expect(result.action).toBe("deny");
     expect(result.reason).toBe("Dangerous recursive deletion");
   });
 
   test("allow rule permits safe commands", () => {
-    const result = evaluateToolPolicy(
-      "Bash",
-      { command: "git log --oneline" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Bash", { command: "git log --oneline" }, policies);
     expect(result.action).toBe("allow");
   });
 
   test("first matching rule wins (order matters)", () => {
     // "rm -rf" matches deny rule before any other rule
-    const result = evaluateToolPolicy(
-      "Bash",
-      { command: "rm -rf /tmp/test" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Bash", { command: "rm -rf /tmp/test" }, policies);
     expect(result.action).toBe("deny");
     expect(result.reason).toBe("Dangerous recursive deletion");
   });
 
   test("reason is returned with deny actions", () => {
-    const result = evaluateToolPolicy(
-      "Write",
-      { file_path: ".env.local" },
-      policies,
-    );
+    const result = evaluateToolPolicy("Write", { file_path: ".env.local" }, policies);
     expect(result.action).toBe("deny");
     expect(result.reason).toBe("Cannot write to env files");
   });
 
   test("tool name matching is case-insensitive", () => {
-    const result = evaluateToolPolicy(
-      "bash",
-      { command: "git status" },
-      policies,
-    );
+    const result = evaluateToolPolicy("bash", { command: "git status" }, policies);
     expect(result.action).toBe("allow");
   });
 

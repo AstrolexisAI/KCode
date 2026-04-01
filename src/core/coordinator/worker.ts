@@ -1,21 +1,14 @@
 // KCode - Coordinator Worker Logic
 // Tool restrictions and worker spawning for coordinator mode
 
-import type { WorkerConfig, WorkerMode, WorkerHandle, WorkerSpawnConfig } from "./types";
 import { log } from "../logger";
+import type { WorkerConfig, WorkerHandle, WorkerMode, WorkerSpawnConfig } from "./types";
 
 // ─── Tool Restriction Tables ───────────────────────────────────
 
 /** Tools permitted per worker mode */
 export const WORKER_TOOLS: Record<WorkerMode, string[]> = {
-  simple: [
-    "Bash",
-    "Read",
-    "Edit",
-    "Write",
-    "Glob",
-    "Grep",
-  ],
+  simple: ["Bash", "Read", "Edit", "Write", "Glob", "Grep"],
   complex: [
     "Bash",
     "Read",
@@ -36,12 +29,7 @@ export const WORKER_TOOLS: Record<WorkerMode, string[]> = {
 };
 
 /** Tools NEVER allowed for workers (reserved for coordinator) */
-export const COORDINATOR_ONLY_TOOLS: string[] = [
-  "Agent",
-  "SendMessage",
-  "Skill",
-  "Plan",
-];
+export const COORDINATOR_ONLY_TOOLS: string[] = ["Agent", "SendMessage", "Skill", "Plan"];
 
 /**
  * Compute the effective tool list for a worker based on mode, extras, and blocks.
@@ -55,20 +43,20 @@ export function getWorkerTools(config: WorkerConfig, mcpTools: string[] = []): s
 
   // Add extra tools (excluding coordinator-only)
   if (config.extraTools) {
-    const allowed = config.extraTools.filter(t => !COORDINATOR_ONLY_TOOLS.includes(t));
+    const allowed = config.extraTools.filter((t) => !COORDINATOR_ONLY_TOOLS.includes(t));
     tools.push(...allowed);
   }
 
   // In complex mode, add MCP tools (also excluding coordinator-only)
   if (config.mode === "complex") {
-    const safeMcp = mcpTools.filter(t => !COORDINATOR_ONLY_TOOLS.includes(t));
+    const safeMcp = mcpTools.filter((t) => !COORDINATOR_ONLY_TOOLS.includes(t));
     tools.push(...safeMcp);
   }
 
   // Remove blocked tools
   if (config.blockedTools) {
     const blocked = new Set(config.blockedTools);
-    tools = tools.filter(t => !blocked.has(t));
+    tools = tools.filter((t) => !blocked.has(t));
   }
 
   // Deduplicate
@@ -113,8 +101,10 @@ export function buildWorkerArgs(config: WorkerSpawnConfig): string[] {
     "run",
     "src/index.ts",
     "--print",
-    "--permission", "deny",
-    "--allowed-tools", config.allowedTools.join(","),
+    "--permission",
+    "deny",
+    "--allowed-tools",
+    config.allowedTools.join(","),
   ];
 
   if (config.model) {

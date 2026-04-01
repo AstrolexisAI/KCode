@@ -1,9 +1,7 @@
 // KCode - Lightweight Markdown Renderer
 // No external dependencies. XSS-safe.
 
-(function () {
-  "use strict";
-
+(() => {
   /**
    * Escape HTML entities to prevent XSS
    * @param {string} text
@@ -25,7 +23,7 @@
    */
   function processInline(text) {
     // Inline code (must be first to prevent inner processing)
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
 
     // Bold + Italic
     text = text.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
@@ -44,13 +42,13 @@
     // Links [text](url)
     text = text.replace(
       /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
     );
 
     // Auto-link bare URLs
     text = text.replace(
       /(?<!")(?<!=)(https?:\/\/[^\s<]+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
     );
 
     return text;
@@ -88,11 +86,7 @@
 
     function flushBlockquote() {
       if (inBlockquote && blockquoteLines.length > 0) {
-        html.push(
-          "<blockquote>" +
-            renderMarkdown(blockquoteLines.join("\n")) +
-            "</blockquote>"
-        );
+        html.push("<blockquote>" + renderMarkdown(blockquoteLines.join("\n")) + "</blockquote>");
         blockquoteLines = [];
         inBlockquote = false;
       }
@@ -115,19 +109,10 @@
           var cells = tableRows[r]
             .replace(/^\||\|$/g, "")
             .split("|")
-            .map(function (c) {
-              return c.trim();
-            });
+            .map((c) => c.trim());
           tableHtml += "<tr>";
           for (var c = 0; c < cells.length; c++) {
-            tableHtml +=
-              "<" +
-              tag +
-              ">" +
-              processInline(escapeHtml(cells[c])) +
-              "</" +
-              tag +
-              ">";
+            tableHtml += "<" + tag + ">" + processInline(escapeHtml(cells[c])) + "</" + tag + ">";
           }
           tableHtml += "</tr>";
         }
@@ -150,9 +135,7 @@
             ? ' class="language-' + escapeHtml(codeBlockLang) + '"'
             : "";
           var langLabel = codeBlockLang
-            ? '<span class="code-lang-label">' +
-              escapeHtml(codeBlockLang) +
-              "</span>"
+            ? '<span class="code-lang-label">' + escapeHtml(codeBlockLang) + "</span>"
             : "";
           html.push(
             '<div class="code-block-wrapper">' +
@@ -162,7 +145,7 @@
               langClass +
               ">" +
               escapedCode +
-              "</code></pre></div>"
+              "</code></pre></div>",
           );
           codeLines = [];
           codeBlockLang = "";
@@ -203,13 +186,7 @@
         flushTable();
         var level = headerMatch[1].length;
         html.push(
-          "<h" +
-            level +
-            ">" +
-            processInline(escapeHtml(headerMatch[2])) +
-            "</h" +
-            level +
-            ">"
+          "<h" + level + ">" + processInline(escapeHtml(headerMatch[2])) + "</h" + level + ">",
         );
         continue;
       }
@@ -316,15 +293,15 @@
 
     navigator.clipboard
       .writeText(text)
-      .then(function () {
+      .then(() => {
         btn.textContent = "Copied!";
         btn.classList.add("copied");
-        setTimeout(function () {
+        setTimeout(() => {
           btn.textContent = "Copy";
           btn.classList.remove("copied");
         }, 2000);
       })
-      .catch(function () {
+      .catch(() => {
         // Fallback for older browsers
         var textarea = document.createElement("textarea");
         textarea.value = text;
@@ -336,7 +313,7 @@
         document.body.removeChild(textarea);
         btn.textContent = "Copied!";
         btn.classList.add("copied");
-        setTimeout(function () {
+        setTimeout(() => {
           btn.textContent = "Copy";
           btn.classList.remove("copied");
         }, 2000);

@@ -2,9 +2,9 @@
 // Handles running hook commands, HTTP hooks, agent hooks, and LLM prompt hooks
 
 import { spawn } from "node:child_process";
+import type { HookAction, HookConfig, HookEntry, HookMatcher, HookOutput } from "./hook-types";
 import { log } from "./logger";
 import { evaluatePromptHook } from "./prompt-hooks";
-import type { HookAction, HookConfig, HookEntry, HookMatcher, HookOutput } from "./hook-types";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -25,7 +25,9 @@ export function isHookEntry(entry: HookConfig | HookEntry): entry is HookEntry {
 
 /** Check if a config entry is the legacy HookConfig format */
 export function isLegacyHookConfig(entry: HookConfig | HookEntry): entry is HookConfig {
-  return typeof (entry as HookConfig).matcher === "string" && Array.isArray((entry as HookConfig).hooks);
+  return (
+    typeof (entry as HookConfig).matcher === "string" && Array.isArray((entry as HookConfig).hooks)
+  );
 }
 
 // ─── Matching Utilities ─────────────────────────────────────────
@@ -149,7 +151,11 @@ export async function executeHookCommand(
     // Strip sensitive env vars from hook subprocess environment
     const hookEnv = { ...process.env };
     for (const key of Object.keys(hookEnv)) {
-      if (/^(KCODE_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|DEEPSEEK_API_KEY|TOGETHER_API_KEY|GEMINI_API_KEY)$/i.test(key)) {
+      if (
+        /^(KCODE_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|GROQ_API_KEY|DEEPSEEK_API_KEY|TOGETHER_API_KEY|GEMINI_API_KEY)$/i.test(
+          key,
+        )
+      ) {
         delete hookEnv[key];
       }
     }
@@ -233,14 +239,22 @@ export async function executeHookHttp(
   // Block SSRF to private/internal IPs
   const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
   if (isPrivateHostname(hostname)) {
-    return { exitCode: 1, stdout: "", stderr: `Hook URL blocked (private/internal): ${action.url}` };
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: `Hook URL blocked (private/internal): ${action.url}`,
+    };
   }
 
   // Enforce HTTPS when auth headers are present (legacy format protection)
   if (action.headers && parsed.protocol !== "https:") {
-    const hasAuth = Object.keys(action.headers).some(k => k.toLowerCase() === "authorization");
+    const hasAuth = Object.keys(action.headers).some((k) => k.toLowerCase() === "authorization");
     if (hasAuth) {
-      return { exitCode: 1, stdout: "", stderr: `Hook auth headers require HTTPS, got: ${parsed.protocol}` };
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Hook auth headers require HTTPS, got: ${parsed.protocol}`,
+      };
     }
   }
 
@@ -323,7 +337,9 @@ async function executeHookAgent(
   let parsed: Record<string, unknown> = {};
   try {
     parsed = JSON.parse(jsonData);
-  } catch (err) { log.debug("hooks", `Failed to parse JSON context for agent hook: ${err}`); }
+  } catch (err) {
+    log.debug("hooks", `Failed to parse JSON context for agent hook: ${err}`);
+  }
 
   const expandedPrompt = expandAgentTemplate(config.prompt, {
     event: parsed.event as string | undefined,
@@ -355,7 +371,11 @@ async function executeHookAgent(
     // Fire and forget — but enforce a max timeout to prevent zombie processes
     const bgTimeout = Math.max(timeout, 300_000); // at least 5 minutes
     const bgTimer = setTimeout(() => {
-      try { proc.kill(); } catch (err) { log.debug("hooks", `Failed to kill background agent hook: ${err}`); }
+      try {
+        proc.kill();
+      } catch (err) {
+        log.debug("hooks", `Failed to kill background agent hook: ${err}`);
+      }
       log.warn("hooks", `Agent hook (background) killed after ${bgTimeout}ms timeout`);
     }, bgTimeout);
     proc.on("error", (err) => {
@@ -380,7 +400,11 @@ async function executeHookAgent(
     proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
 
     const timer = setTimeout(() => {
-      try { proc.kill(); } catch (err) { log.debug("hooks", `Failed to kill foreground agent hook: ${err}`); }
+      try {
+        proc.kill();
+      } catch (err) {
+        log.debug("hooks", `Failed to kill foreground agent hook: ${err}`);
+      }
       resolve({ exitCode: 1, stdout: "", stderr: `Agent hook timed out after ${timeout}ms` });
     }, timeout);
 
@@ -420,7 +444,11 @@ export async function executeHookEntry(
       try {
         const parsed = new URL(entry.url);
         if (parsed.protocol !== "https:") {
-          return { exitCode: 1, stdout: "", stderr: `Hook auth requires HTTPS, got: ${parsed.protocol}` };
+          return {
+            exitCode: 1,
+            stdout: "",
+            stderr: `Hook auth requires HTTPS, got: ${parsed.protocol}`,
+          };
         }
       } catch (err) {
         log.debug("hooks", `Invalid hook entry URL "${entry.url}": ${err}`);
@@ -446,7 +474,11 @@ export async function executeHookEntry(
   if (entry.type === "llm-prompt" && entry.promptConfig) {
     const result = await evaluatePromptHook(entry.promptConfig, jsonData);
     if (result.decision === "block" || result.decision === "deny") {
-      return { exitCode: 2, stdout: JSON.stringify({ decision: "block", reason: result.reason }), stderr: "" };
+      return {
+        exitCode: 2,
+        stdout: JSON.stringify({ decision: "block", reason: result.reason }),
+        stderr: "",
+      };
     }
     if (result.decision === "warn") {
       return { exitCode: 0, stdout: result.reason ?? "", stderr: "" };

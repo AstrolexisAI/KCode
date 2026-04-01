@@ -1,54 +1,85 @@
 // KCode - Tool Registration
 // Registers all built-in tools with the registry, plus MCP-discovered tools
 
-import { ToolRegistry } from "../core/tool-registry";
 import { getMcpManager, type McpManager } from "../core/mcp";
-import { bashDefinition, executeBash } from "./bash";
-import { readDefinition, executeRead } from "./read";
-import { writeDefinition, executeWrite } from "./write";
-import { editDefinition, executeEdit } from "./edit";
-import { globDefinition, executeGlob } from "./glob";
-import { grepDefinition, executeGrep } from "./grep";
+import { ToolRegistry } from "../core/tool-registry";
 import { agentDefinition, executeAgent } from "./agent";
-import { webFetchDefinition, executeWebFetch } from "./web-fetch";
-import { webSearchDefinition, executeWebSearch } from "./web-search";
-import { notebookEditDefinition, executeNotebookEdit } from "./notebook";
-import {
-  taskCreateDefinition, executeTaskCreate,
-  taskListDefinition, executeTaskList,
-  taskGetDefinition, executeTaskGet,
-  taskUpdateDefinition, executeTaskUpdate,
-  taskStopDefinition, executeTaskStop,
-} from "./tasks";
-import {
-  listMcpResourcesDefinition, executeListMcpResources,
-  readMcpResourceDefinition, executeReadMcpResource,
-} from "./mcp-tools";
-import { learnDefinition, executeLearn } from "./learn";
-import { kulvexDefinition, executeKulvex } from "./kulvex";
-import { browserDefinition, executeBrowser } from "./browser";
-import { imageGenDefinition, executeImageGen } from "./image-gen";
-import { planDefinition, executePlan } from "./plan";
-import { multiEditDefinition, executeMultiEdit } from "./multi-edit";
-import { skillDefinition, executeSkill } from "./skill";
-import { cronListDefinition, executeCronList, cronCreateDefinition, executeCronCreate, cronDeleteDefinition, executeCronDelete } from "./cron";
-import { enterPlanModeDefinition, executeEnterPlanMode, exitPlanModeDefinition, executeExitPlanMode } from "./plan-mode";
-import { enterWorktreeDefinition, executeEnterWorktree, exitWorktreeDefinition, executeExitWorktree } from "./worktree";
-import { diffViewerDefinition, executeDiffViewer } from "./diff-viewer";
-import { testRunnerDefinition, executeTestRunner } from "./test-runner";
-import { renameDefinition, executeRename } from "./rename";
-import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
-import { undoDefinition, executeUndo } from "./undo";
-import { gitStatusDefinition, executeGitStatus, gitCommitDefinition, executeGitCommit, gitLogDefinition, executeGitLog } from "./git-tools";
-import { grepReplaceDefinition, executeGrepReplace } from "./grep-replace";
-import { stashDefinition, executeStash } from "./stash";
-import { lspDefinition, executeLsp } from "./lsp-tool";
 import { askUserDefinition, executeAskUser } from "./ask-user";
-import { sendMessageDefinition, executeSendMessage } from "./send-message";
-import { lsDefinition, executeLs } from "./ls";
-import { toolSearchDefinition, executeToolSearch } from "./tool-search";
+import { bashDefinition, executeBash } from "./bash";
+import { browserDefinition, executeBrowser } from "./browser";
+import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
+import {
+  cronCreateDefinition,
+  cronDeleteDefinition,
+  cronListDefinition,
+  executeCronCreate,
+  executeCronDelete,
+  executeCronList,
+} from "./cron";
 import { deployDefinition, executeDeploy } from "./deploy";
-import { syntheticOutputDefinition, executeSyntheticOutput } from "./synthetic-output";
+import { diffViewerDefinition, executeDiffViewer } from "./diff-viewer";
+import { editDefinition, executeEdit } from "./edit";
+import {
+  executeGitCommit,
+  executeGitLog,
+  executeGitStatus,
+  gitCommitDefinition,
+  gitLogDefinition,
+  gitStatusDefinition,
+} from "./git-tools";
+import { executeGlob, globDefinition } from "./glob";
+import { executeGrep, grepDefinition } from "./grep";
+import { executeGrepReplace, grepReplaceDefinition } from "./grep-replace";
+import { executeImageGen, imageGenDefinition } from "./image-gen";
+import { executeKulvex, kulvexDefinition } from "./kulvex";
+import { executeLearn, learnDefinition } from "./learn";
+import { executeLs, lsDefinition } from "./ls";
+import { executeLsp, lspDefinition } from "./lsp-tool";
+import {
+  executeListMcpResources,
+  executeReadMcpResource,
+  listMcpResourcesDefinition,
+  readMcpResourceDefinition,
+} from "./mcp-tools";
+import { executeMultiEdit, multiEditDefinition } from "./multi-edit";
+import { executeNotebookEdit, notebookEditDefinition } from "./notebook";
+import { executePlan, planDefinition } from "./plan";
+import {
+  enterPlanModeDefinition,
+  executeEnterPlanMode,
+  executeExitPlanMode,
+  exitPlanModeDefinition,
+} from "./plan-mode";
+import { executeRead, readDefinition } from "./read";
+import { executeRename, renameDefinition } from "./rename";
+import { executeSendMessage, sendMessageDefinition } from "./send-message";
+import { executeSkill, skillDefinition } from "./skill";
+import { executeStash, stashDefinition } from "./stash";
+import { executeSyntheticOutput, syntheticOutputDefinition } from "./synthetic-output";
+import {
+  executeTaskCreate,
+  executeTaskGet,
+  executeTaskList,
+  executeTaskStop,
+  executeTaskUpdate,
+  taskCreateDefinition,
+  taskGetDefinition,
+  taskListDefinition,
+  taskStopDefinition,
+  taskUpdateDefinition,
+} from "./tasks";
+import { executeTestRunner, testRunnerDefinition } from "./test-runner";
+import { executeToolSearch, toolSearchDefinition } from "./tool-search";
+import { executeUndo, undoDefinition } from "./undo";
+import { executeWebFetch, webFetchDefinition } from "./web-fetch";
+import { executeWebSearch, webSearchDefinition } from "./web-search";
+import {
+  enterWorktreeDefinition,
+  executeEnterWorktree,
+  executeExitWorktree,
+  exitWorktreeDefinition,
+} from "./worktree";
+import { executeWrite, writeDefinition } from "./write";
 
 /**
  * Register all built-in tools and optionally MCP-discovered tools.
@@ -182,7 +213,9 @@ export async function registerMcpTools(registry: ToolRegistry, cwd: string): Pro
     const serverNames = manager.getServerNames();
     if (serverNames.length > 0) {
       const toolCount = registry.getToolNames().filter((n) => n.startsWith("mcp__")).length;
-      console.error(`[MCP] Connected to ${serverNames.length} server(s), registered ${toolCount} tool(s)`);
+      console.error(
+        `[MCP] Connected to ${serverNames.length} server(s), registered ${toolCount} tool(s)`,
+      );
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

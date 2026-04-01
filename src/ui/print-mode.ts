@@ -156,11 +156,20 @@ async function runPrintModeStreamJson(
         break;
 
       case "tool_use_start":
-        process.stdout.write(JSON.stringify({ type: "tool_start", name: event.name, id: event.toolUseId }) + "\n");
+        process.stdout.write(
+          JSON.stringify({ type: "tool_start", name: event.name, id: event.toolUseId }) + "\n",
+        );
         break;
 
       case "tool_result":
-        process.stdout.write(JSON.stringify({ type: "tool_result", name: event.name, result: event.result, isError: event.isError || undefined }) + "\n");
+        process.stdout.write(
+          JSON.stringify({
+            type: "tool_result",
+            name: event.name,
+            result: event.result,
+            isError: event.isError || undefined,
+          }) + "\n",
+        );
         break;
 
       case "usage_update":
@@ -168,7 +177,9 @@ async function runPrintModeStreamJson(
         break;
 
       case "error":
-        process.stdout.write(JSON.stringify({ type: "error", message: event.error.message }) + "\n");
+        process.stdout.write(
+          JSON.stringify({ type: "error", message: event.error.message }) + "\n",
+        );
         hadError = true;
         break;
 

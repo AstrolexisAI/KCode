@@ -1,9 +1,9 @@
-import { test, expect, describe, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { writePidFile, removePidFile, detectCrash, cleanupCrash } from "./crash-recovery";
+import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { cleanupCrash, detectCrash, removePidFile, writePidFile } from "./crash-recovery";
 
 const PID_FILE = join(homedir(), ".kcode", "kcode.pid");
 

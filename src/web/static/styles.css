@@ -3,13 +3,16 @@
 
 /* ─── Reset & Base ───────────────────────────────────────────── */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
   font-family: var(--font-sans);
@@ -61,7 +64,8 @@ html, body {
   z-index: 10;
 }
 
-.header-left, .header-right {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -519,7 +523,9 @@ html, body {
   font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .btn-primary {
@@ -592,7 +598,8 @@ html, body {
   color: var(--text-muted);
 }
 
-.btn-send, .btn-cancel {
+.btn-send,
+.btn-cancel {
   background: none;
   border: none;
   cursor: pointer;
@@ -719,11 +726,18 @@ html, body {
   font-weight: 600;
 }
 
-.message-body h1 { font-size: 1.4em; }
-.message-body h2 { font-size: 1.25em; }
-.message-body h3 { font-size: 1.1em; }
+.message-body h1 {
+  font-size: 1.4em;
+}
+.message-body h2 {
+  font-size: 1.25em;
+}
+.message-body h3 {
+  font-size: 1.1em;
+}
 
-.message-body ul, .message-body ol {
+.message-body ul,
+.message-body ol {
   padding-left: 20px;
   margin: 6px 0;
 }
@@ -748,7 +762,8 @@ html, body {
   font-size: 13px;
 }
 
-.message-body th, .message-body td {
+.message-body th,
+.message-body td {
   border: 1px solid var(--border-primary);
   padding: 6px 10px;
   text-align: left;
@@ -785,18 +800,37 @@ html, body {
 /* ─── Animations ─────────────────────────────────────────────── */
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 @keyframes dotPulse {
-  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-  40% { opacity: 1; transform: scale(1); }
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ─── Utility Classes ────────────────────────────────────────── */

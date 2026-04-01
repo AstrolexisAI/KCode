@@ -1,6 +1,6 @@
-import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
-import { SessionSync } from "./sync";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { CloudClient } from "./client";
+import { SessionSync } from "./sync";
 import type { KCodeCloudConfig, SyncResult } from "./types";
 
 // ─── Test fixtures ─────────────────────────────────────────────
@@ -80,9 +80,7 @@ describe("SessionSync", () => {
       const result = sync.sanitizeMessage(msg);
 
       expect(result.content[0].text).toEndWith("[truncated]");
-      expect(result.content[0].text.length).toBeLessThanOrEqual(
-        2048 + " [truncated]".length,
-      );
+      expect(result.content[0].text.length).toBeLessThanOrEqual(2048 + " [truncated]".length);
       expect(result.content[1].text).toBe("short");
     });
 
@@ -185,9 +183,7 @@ describe("SessionSync", () => {
       client = new CloudClient(TEST_CONFIG);
       sync = new SessionSync(client);
 
-      const messages = [
-        { role: "user", content: "c".repeat(5000) },
-      ];
+      const messages = [{ role: "user", content: "c".repeat(5000) }];
 
       await sync.syncSession("sess-003", messages, null);
 

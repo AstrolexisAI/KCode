@@ -1,9 +1,7 @@
 // KCode - Diff Viewer Component
 // Line-by-line diff with LCS algorithm, collapsible unchanged regions
 
-(function () {
-  "use strict";
-
+(() => {
   // ─── LCS-based Diff Algorithm ─────────────────────────────────
 
   /**
@@ -122,10 +120,7 @@
    * @returns {string}
    */
   function escapeHtml(text) {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   // ─── Rendering ────────────────────────────────────────────────
@@ -207,12 +202,10 @@
             '" onclick="window.DiffViewer.expandCollapsed(this)">' +
             "... " +
             op.count +
-            " unchanged lines ...</div>"
+            " unchanged lines ...</div>",
         );
         html.push(
-          '<div class="diff-collapsed-content" id="' +
-            collapseId +
-            '" style="display:none">'
+          '<div class="diff-collapsed-content" id="' + collapseId + '" style="display:none">',
         );
         for (var c = 0; c < op.lines.length; c++) {
           var cl = op.lines[c];
@@ -226,7 +219,7 @@
               "</span>" +
               " " +
               escapeHtml(cl.content) +
-              "</div>"
+              "</div>",
           );
         }
         html.push("</div>");
@@ -251,7 +244,7 @@
           prefix +
           " " +
           escapeHtml(op.content) +
-          "</div>"
+          "</div>",
       );
     }
 
@@ -281,7 +274,7 @@
             op.oldLine +
             "</span> " +
             escapeHtml(op.content) +
-            "</div>"
+            "</div>",
         );
       } else if (op.type === "deletion") {
         html.push(
@@ -289,14 +282,16 @@
             op.oldLine +
             "</span>-" +
             escapeHtml(op.content) +
-            "</div>"
+            "</div>",
         );
       } else {
         html.push('<div class="diff-line" style="visibility:hidden">&nbsp;</div>');
       }
     }
 
-    html.push('</div><div style="flex:1;overflow-x:auto;border-left:1px solid var(--border-subtle)">');
+    html.push(
+      '</div><div style="flex:1;overflow-x:auto;border-left:1px solid var(--border-subtle)">',
+    );
 
     // Right side (new)
     for (var j = 0; j < ops.length; j++) {
@@ -307,7 +302,7 @@
             op2.newLine +
             "</span> " +
             escapeHtml(op2.content) +
-            "</div>"
+            "</div>",
         );
       } else if (op2.type === "addition") {
         html.push(
@@ -315,7 +310,7 @@
             op2.newLine +
             "</span>+" +
             escapeHtml(op2.content) +
-            "</div>"
+            "</div>",
         );
       } else {
         html.push('<div class="diff-line" style="visibility:hidden">&nbsp;</div>');

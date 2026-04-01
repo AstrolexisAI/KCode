@@ -1,9 +1,9 @@
 // KCode - P2P Agent Mesh Node Tests
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { MeshNode, getMeshNode, shutdownMeshNode, _resetMeshNode } from "./node";
-import type { MeshTask, PeerInfo, PeerCapabilities } from "./types";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { _resetMeshNode, getMeshNode, MeshNode, shutdownMeshNode } from "./node";
 import { generateTeamToken } from "./security";
+import type { MeshTask, PeerCapabilities, PeerInfo } from "./types";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
@@ -42,9 +42,7 @@ describe("MeshNode - construction", () => {
     const node1 = new MeshNode();
     const node2 = new MeshNode();
     expect(node1.nodeId).not.toBe(node2.nodeId);
-    expect(node1.nodeId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(node1.nodeId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   test("starts in stopped state", () => {
@@ -184,12 +182,14 @@ describe("MeshNode - task submission", () => {
     await node.start();
 
     // Add a fake peer that won't be reachable
-    node.addPeer(makePeer({
-      nodeId: "unreachable",
-      ip: "127.0.0.1",
-      port: 19999,
-      status: "online",
-    }));
+    node.addPeer(
+      makePeer({
+        nodeId: "unreachable",
+        ip: "127.0.0.1",
+        port: 19999,
+        status: "online",
+      }),
+    );
 
     const task = makeTask();
     const result = await node.submitTask(task);
@@ -254,7 +254,9 @@ describe("MeshNode - peer management", () => {
   });
 
   test("updateCapabilities modifies local info", () => {
-    const node = new MeshNode({ capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 } });
+    const node = new MeshNode({
+      capabilities: { models: [], gpuVram: 0, cpuCores: 1, maxConcurrent: 1 },
+    });
     node.updateCapabilities({ gpuVram: 48, models: ["big-model"] });
     const info = node.getLocalPeerInfo();
     expect(info.capabilities.gpuVram).toBe(48);

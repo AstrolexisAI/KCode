@@ -2,9 +2,9 @@
 // EnterWorktree creates an isolated git worktree for safe experimentation
 // ExitWorktree returns to the main working directory, optionally merging changes
 
-import { execSync, execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { execFileSync, execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { join } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Worktree State ────────────────────────────────────────────
@@ -62,7 +62,11 @@ export async function executeEnterWorktree(input: Record<string, unknown>): Prom
 
   // Check if we're in a git repo
   try {
-    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd, stdio: "pipe", timeout: 5000 });
+    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd,
+      stdio: "pipe",
+      timeout: 5000,
+    });
   } catch {
     return {
       tool_use_id: "",
@@ -72,13 +76,17 @@ export async function executeEnterWorktree(input: Record<string, unknown>): Prom
   }
 
   const id = randomUUID().slice(0, 8);
-  const nameSlug = String(input.name ?? "").trim().replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 30) || "experiment";
+  const nameSlug =
+    String(input.name ?? "")
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .slice(0, 30) || "experiment";
   const branchName = `kcode-wt-${nameSlug}-${id}`;
   const base = String(input.base ?? "HEAD").trim();
   const worktreePath = join("/tmp", `kcode-worktree-${id}`);
 
   // Validate base parameter against injection
-  if (!/^[a-zA-Z0-9_./@^~{}\-]+$/.test(base)) {
+  if (!/^[a-zA-Z0-9_./@^~{}-]+$/.test(base)) {
     return {
       tool_use_id: "",
       content: `Error: Base ref "${base}" contains invalid characters.`,
@@ -123,7 +131,11 @@ export async function executeEnterWorktree(input: Record<string, unknown>): Prom
     process.chdir(worktreePath);
   } catch (err) {
     // Cleanup on chdir failure
-    try { execFileSync("git", ["worktree", "remove", worktreePath, "--force"], { cwd, stdio: "pipe" }); } catch { /* best-effort worktree cleanup */ }
+    try {
+      execFileSync("git", ["worktree", "remove", worktreePath, "--force"], { cwd, stdio: "pipe" });
+    } catch {
+      /* best-effort worktree cleanup */
+    }
     _activeWorktree = null;
     return {
       tool_use_id: "",
@@ -159,11 +171,13 @@ export const exitWorktreeDefinition: ToolDefinition = {
     properties: {
       merge: {
         type: "boolean",
-        description: "Merge the worktree branch changes back into the original branch (default: false)",
+        description:
+          "Merge the worktree branch changes back into the original branch (default: false)",
       },
       cleanup: {
         type: "boolean",
-        description: "Delete the worktree and branch after exiting (default: true for no changes, false if changes exist)",
+        description:
+          "Delete the worktree and branch after exiting (default: true for no changes, false if changes exist)",
       },
     },
   },
@@ -186,7 +200,11 @@ export async function executeExitWorktree(input: Record<string, unknown>): Promi
   // Check if there are changes in the worktree
   let hasChanges = false;
   try {
-    const status = execFileSync("git", ["status", "--porcelain"], { cwd: worktreePath, stdio: "pipe", timeout: 5000 }).toString();
+    const status = execFileSync("git", ["status", "--porcelain"], {
+      cwd: worktreePath,
+      stdio: "pipe",
+      timeout: 5000,
+    }).toString();
     hasChanges = status.trim().length > 0;
 
     if (hasChanges) {
@@ -211,7 +229,10 @@ export async function executeExitWorktree(input: Record<string, unknown>): Promi
       stdio: "pipe",
       timeout: 5000,
     }).toString();
-    commitCount = log.trim().split("\n").filter((l) => l.length > 0).length;
+    commitCount = log
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0).length;
   } catch {
     // May fail if branch diverged
   }
@@ -259,7 +280,9 @@ export async function executeExitWorktree(input: Record<string, unknown>): Promi
             stdio: "pipe",
             timeout: 5000,
           });
-        } catch { /* best-effort branch cleanup — branch may not exist */ }
+        } catch {
+          /* best-effort branch cleanup — branch may not exist */
+        }
       }
       lines.push("Worktree and branch cleaned up.");
     } catch {
@@ -268,14 +291,15 @@ export async function executeExitWorktree(input: Record<string, unknown>): Promi
   } else if (commitCount > 0 && !doMerge) {
     lines.push(`Worktree branch preserved: ${branchName} (${commitCount} commit(s))`);
     lines.push(`To merge later: git merge ${branchName}`);
-    lines.push(`To delete: git worktree remove ${worktreePath} --force && git branch -D ${branchName}`);
+    lines.push(
+      `To delete: git worktree remove ${worktreePath} --force && git branch -D ${branchName}`,
+    );
   }
 
   _activeWorktree = null;
 
-  const durationStr = durationMs > 60000
-    ? `${Math.round(durationMs / 60000)}m`
-    : `${Math.round(durationMs / 1000)}s`;
+  const durationStr =
+    durationMs > 60000 ? `${Math.round(durationMs / 60000)}m` : `${Math.round(durationMs / 1000)}s`;
 
   return {
     tool_use_id: "",

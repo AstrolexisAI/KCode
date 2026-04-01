@@ -22,10 +22,7 @@ export function createAuthMiddleware(token: string): Middleware {
   return async (req: Request): Promise<Response | null> => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonResponse(
-        { error: "Missing Authorization header", code: "AUTH_REQUIRED" },
-        401,
-      );
+      return jsonResponse({ error: "Missing Authorization header", code: "AUTH_REQUIRED" }, 401);
     }
 
     const parts = authHeader.split(" ");
@@ -37,10 +34,7 @@ export function createAuthMiddleware(token: string): Middleware {
     }
 
     if (parts[1] !== token) {
-      return jsonResponse(
-        { error: "Invalid token", code: "AUTH_INVALID" },
-        401,
-      );
+      return jsonResponse({ error: "Invalid token", code: "AUTH_INVALID" }, 401);
     }
 
     return null; // Pass through
@@ -80,11 +74,9 @@ export function createRateLimitMiddleware(maxPerMinute: number): Middleware {
 
     if (timestamps.length >= maxPerMinute) {
       const retryAfter = Math.ceil((timestamps[0] + windowMs - now) / 1000);
-      return jsonResponse(
-        { error: "Rate limit exceeded", code: "RATE_LIMITED" },
-        429,
-        { "Retry-After": String(retryAfter) },
-      );
+      return jsonResponse({ error: "Rate limit exceeded", code: "RATE_LIMITED" }, 429, {
+        "Retry-After": String(retryAfter),
+      });
     }
 
     timestamps.push(now);
@@ -101,9 +93,11 @@ export function createRateLimitMiddleware(maxPerMinute: number): Middleware {
 export function createCorsMiddleware(origins: string[]): Middleware {
   return async (req: Request): Promise<Response | null> => {
     const requestOrigin = req.headers.get("Origin") || "*";
-    const allowedOrigin = origins.includes("*") ? "*" : (
-      origins.includes(requestOrigin) ? requestOrigin : null
-    );
+    const allowedOrigin = origins.includes("*")
+      ? "*"
+      : origins.includes(requestOrigin)
+        ? requestOrigin
+        : null;
 
     // Handle preflight OPTIONS requests
     if (req.method === "OPTIONS") {
@@ -137,11 +131,12 @@ export function createCorsMiddleware(origins: string[]): Middleware {
 /**
  * Returns CORS headers for a given origin against the allowed origins list.
  */
-export function getCorsHeaders(origins: string[], requestOrigin: string | null): Record<string, string> {
+export function getCorsHeaders(
+  origins: string[],
+  requestOrigin: string | null,
+): Record<string, string> {
   const origin = requestOrigin || "*";
-  const allowedOrigin = origins.includes("*") ? "*" : (
-    origins.includes(origin) ? origin : ""
-  );
+  const allowedOrigin = origins.includes("*") ? "*" : origins.includes(origin) ? origin : "";
 
   if (!allowedOrigin) return {};
 

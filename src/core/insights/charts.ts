@@ -3,10 +3,7 @@
 import type { ChartData } from "./types";
 
 export class ASCIICharts {
-  barChart(
-    data: ChartData[],
-    config?: { width?: number; showValue?: boolean },
-  ): string {
+  barChart(data: ChartData[], config?: { width?: number; showValue?: boolean }): string {
     if (data.length === 0) return "";
     const maxValue = Math.max(...data.map((d) => d.value));
     const maxWidth = config?.width || 40;
@@ -14,8 +11,7 @@ export class ASCIICharts {
 
     return data
       .map((d) => {
-        const barLen =
-          maxValue > 0 ? Math.round((d.value / maxValue) * maxWidth) : 0;
+        const barLen = maxValue > 0 ? Math.round((d.value / maxValue) * maxWidth) : 0;
         const bar = "\u2588".repeat(barLen);
         const label = d.label.padEnd(maxLabel);
         const value = config?.showValue !== false ? ` ${d.value}` : "";
@@ -46,15 +42,11 @@ export class ASCIICharts {
     );
 
     const sep = (l: string, m: string, r: string) =>
-      l +
-      colWidths.map((w) => "\u2500".repeat(w + 2)).join(m) +
-      r;
+      l + colWidths.map((w) => "\u2500".repeat(w + 2)).join(m) + r;
 
     const formatRow = (cells: string[]) =>
       "\u2502" +
-      cells
-        .map((c, i) => ` ${(c || "").padEnd(colWidths[i])} `)
-        .join("\u2502") +
+      cells.map((c, i) => ` ${(c || "").padEnd(colWidths[i])} `).join("\u2502") +
       "\u2502";
 
     return [
@@ -78,8 +70,7 @@ export class ASCIICharts {
       .map((d) => {
         const pct = (d.value / total) * 100;
         const filled = Math.round((pct / 100) * barWidth);
-        const bar =
-          "\u2588".repeat(filled) + "\u2591".repeat(barWidth - filled);
+        const bar = "\u2588".repeat(filled) + "\u2591".repeat(barWidth - filled);
         return `${d.label.padEnd(maxLabel)} ${bar} ${pct.toFixed(1)}%`;
       })
       .join("\n");
@@ -106,8 +97,7 @@ export class ASCIICharts {
         const lo = (min + i * binWidth).toFixed(1);
         const hi = (min + (i + 1) * binWidth).toFixed(1);
         const label = `${lo}-${hi}`.padEnd(15);
-        const barLen =
-          maxCount > 0 ? Math.round((count / maxCount) * barWidth) : 0;
+        const barLen = maxCount > 0 ? Math.round((count / maxCount) * barWidth) : 0;
         const bar = "\u2588".repeat(barLen);
         return `${label} \u2502${bar} ${count}`;
       })

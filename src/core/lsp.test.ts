@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { LspManager, getLspManager, shutdownLsp } from "./lsp.ts";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { getLspManager, LspManager, shutdownLsp } from "./lsp.ts";
 
 describe("LspManager", () => {
   let lsp: LspManager;

@@ -1,12 +1,12 @@
 // KCode - MessageList component
 // Renders conversation messages with formatting for text, tool use, and tool results
 
+import { Box, Static, Text } from "ink";
 import React from "react";
-import { Box, Text, Static } from "ink";
+import { useTheme } from "../ThemeContext.js";
+import MarkdownRenderer from "./MarkdownRenderer.js";
 import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
-import MarkdownRenderer from "./MarkdownRenderer.js";
-import { useTheme } from "../ThemeContext.js";
 
 // --- Types for rendered message entries ---
 
@@ -78,7 +78,18 @@ export interface IncompleteResponseEntry {
   stopReason: string;
 }
 
-export type MessageEntry = TextEntry | ToolUseEntry | ToolResultEntry | ThinkingEntry | BannerEntry | LearnEntry | SuggestionEntry | PlanEntry | DiffEntry | PartialProgressEntry | IncompleteResponseEntry;
+export type MessageEntry =
+  | TextEntry
+  | ToolUseEntry
+  | ToolResultEntry
+  | ThinkingEntry
+  | BannerEntry
+  | LearnEntry
+  | SuggestionEntry
+  | PlanEntry
+  | DiffEntry
+  | PartialProgressEntry
+  | IncompleteResponseEntry;
 
 interface MessageListProps {
   /** Completed message entries (rendered via <Static>) */
@@ -128,10 +139,7 @@ export default function MessageList({
 
       {/* Live thinking indicator while thinking_delta events stream in */}
       {isThinking && streamingThinking.length > 0 && (
-        <ThinkingBlockComponent
-          text={streamingThinking}
-          isStreaming={true}
-        />
+        <ThinkingBlockComponent text={streamingThinking} isStreaming={true} />
       )}
 
       {/* Currently streaming text */}
@@ -142,9 +150,7 @@ export default function MessageList({
       )}
 
       {/* Live streaming Bash output */}
-      {bashStreamOutput.length > 0 && (
-        <BashStreamDisplay output={bashStreamOutput} />
-      )}
+      {bashStreamOutput.length > 0 && <BashStreamDisplay output={bashStreamOutput} />}
 
       {/* Loading spinner with tokens and elapsed time */}
       {isLoading && (
@@ -168,7 +174,14 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
     case "tool_use":
       return <ToolUseMessage name={entry.name} summary={entry.summary} />;
     case "tool_result":
-      return <ToolResultMessage name={entry.name} result={entry.result} isError={entry.isError} durationMs={entry.durationMs} />;
+      return (
+        <ToolResultMessage
+          name={entry.name}
+          result={entry.result}
+          isError={entry.isError}
+          durationMs={entry.durationMs}
+        />
+      );
     case "thinking":
       return <ThinkingMessage text={entry.text} />;
     case "banner":
@@ -183,9 +196,22 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
     case "diff":
       return <DiffMessage filePath={entry.filePath} hunks={entry.hunks} />;
     case "partial_progress":
-      return <PartialProgressMessage toolsUsed={entry.toolsUsed} elapsedMs={entry.elapsedMs} filesModified={entry.filesModified} lastError={entry.lastError} summary={entry.summary} />;
+      return (
+        <PartialProgressMessage
+          toolsUsed={entry.toolsUsed}
+          elapsedMs={entry.elapsedMs}
+          filesModified={entry.filesModified}
+          lastError={entry.lastError}
+          summary={entry.summary}
+        />
+      );
     case "incomplete_response":
-      return <IncompleteResponseMessage continuations={entry.continuations} stopReason={entry.stopReason} />;
+      return (
+        <IncompleteResponseMessage
+          continuations={entry.continuations}
+          stopReason={entry.stopReason}
+        />
+      );
   }
 }
 
@@ -203,13 +229,20 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
       return (
         <Box flexDirection="column" paddingLeft={2}>
           <Box>
-            <Text bold color={theme.userPrompt}>{"❯ "}</Text>
+            <Text bold color={theme.userPrompt}>
+              {"❯ "}
+            </Text>
             <Text color={theme.accent}>{"📋 "}</Text>
-            <Text bold color={theme.dimmed}>{`paste — ${lineCount} lines, ${text.length.toLocaleString()} chars`}</Text>
+            <Text
+              bold
+              color={theme.dimmed}
+            >{`paste — ${lineCount} lines, ${text.length.toLocaleString()} chars`}</Text>
           </Box>
           <Box flexDirection="column" paddingLeft={4} marginTop={0}>
             {lines.map((line, i) => (
-              <Text key={i} color={theme.dimmed}>{line || " "}</Text>
+              <Text key={i} color={theme.dimmed}>
+                {line || " "}
+              </Text>
             ))}
           </Box>
         </Box>
@@ -218,7 +251,9 @@ function TextMessage({ role, text }: { role: "user" | "assistant"; text: string 
 
     return (
       <Box paddingLeft={2}>
-        <Text bold color={theme.userPrompt}>{"❯ "}</Text>
+        <Text bold color={theme.userPrompt}>
+          {"❯ "}
+        </Text>
         <Text bold>{text}</Text>
       </Box>
     );
@@ -265,13 +300,20 @@ function ToolResultMessage({
 }) {
   const { theme } = useTheme();
   const safeResult = result ?? "";
-  const durationStr = durationMs != null && durationMs > 100 ? ` (${formatDuration(durationMs)})` : "";
+  const durationStr =
+    durationMs != null && durationMs > 100 ? ` (${formatDuration(durationMs)})` : "";
 
   if (isError) {
     return (
       <Box flexDirection="column" paddingLeft={2}>
-        <Text color={theme.error}>{"✗ "}{name} failed{durationStr}</Text>
-        <Text dimColor color={theme.error}>{"    "}{safeResult.slice(0, 200)}</Text>
+        <Text color={theme.error}>
+          {"✗ "}
+          {name} failed{durationStr}
+        </Text>
+        <Text dimColor color={theme.error}>
+          {"    "}
+          {safeResult.slice(0, 200)}
+        </Text>
       </Box>
     );
   }
@@ -279,22 +321,23 @@ function ToolResultMessage({
   const preview = safeResult.split("\n").slice(0, 3).join("\n    ");
   return (
     <Box flexDirection="column" paddingLeft={2}>
-      <Text color={theme.toolResult} dimColor>{"✓ "}{name}{durationStr}</Text>
+      <Text color={theme.toolResult} dimColor>
+        {"✓ "}
+        {name}
+        {durationStr}
+      </Text>
       {preview.length > 0 && preview.length < 500 && (
-        <Text dimColor>{"    "}{preview}</Text>
+        <Text dimColor>
+          {"    "}
+          {preview}
+        </Text>
       )}
     </Box>
   );
 }
 
 function ThinkingMessage({ text }: { text: string }) {
-  return (
-    <ThinkingBlockComponent
-      text={text}
-      isStreaming={false}
-      defaultExpanded={false}
-    />
-  );
+  return <ThinkingBlockComponent text={text} isStreaming={false} defaultExpanded={false} />;
 }
 
 function LearnMessage({ text }: { text: string }) {
@@ -302,22 +345,39 @@ function LearnMessage({ text }: { text: string }) {
 
   return (
     <Box paddingLeft={2} marginTop={0} marginBottom={0}>
-      <Text color={theme.accent} bold>{"✧ "}</Text>
-      <Text color={theme.accent} italic>{text}</Text>
+      <Text color={theme.accent} bold>
+        {"✧ "}
+      </Text>
+      <Text color={theme.accent} italic>
+        {text}
+      </Text>
     </Box>
   );
 }
 
-function SuggestionMessage({ suggestions }: { suggestions: { type: string; message: string; priority: string }[] }) {
+function SuggestionMessage({
+  suggestions,
+}: {
+  suggestions: { type: string; message: string; priority: string }[];
+}) {
   const { theme } = useTheme();
 
   const icons: Record<string, string> = {
-    test: "⚗", verify: "🔍", commit: "📦", cleanup: "🧹", safety: "⚠", optimize: "⚡",
+    test: "⚗",
+    verify: "🔍",
+    commit: "📦",
+    cleanup: "🧹",
+    safety: "⚠",
+    optimize: "⚡",
   };
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={0}>
       {suggestions.map((s, i) => (
-        <Text key={`sug-${i}`} color={s.priority === "high" ? theme.warning : theme.dimmed} dimColor={s.priority === "low"}>
+        <Text
+          key={`sug-${i}`}
+          color={s.priority === "high" ? theme.warning : theme.dimmed}
+          dimColor={s.priority === "low"}
+        >
           {icons[s.type] ?? "💡"} {s.message}
         </Text>
       ))}
@@ -325,7 +385,13 @@ function SuggestionMessage({ suggestions }: { suggestions: { type: string; messa
   );
 }
 
-function PlanMessage({ title, steps }: { title: string; steps: Array<{ id: string; title: string; status: string }> }) {
+function PlanMessage({
+  title,
+  steps,
+}: {
+  title: string;
+  steps: Array<{ id: string; title: string; status: string }>;
+}) {
   const { theme } = useTheme();
 
   const statusIcons: Record<string, string> = {
@@ -353,11 +419,14 @@ function PlanMessage({ title, steps }: { title: string; steps: Array<{ id: strin
 
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
-      <Text bold color={theme.primary}>{title} ({done}/{total} - {pct}%)</Text>
-      <Text color={theme.dimmed}>  [{bar}]</Text>
+      <Text bold color={theme.primary}>
+        {title} ({done}/{total} - {pct}%)
+      </Text>
+      <Text color={theme.dimmed}> [{bar}]</Text>
       {steps.map((step, i) => (
         <Text key={`plan-step-${i}`} color={statusColors[step.status] ?? theme.dimmed}>
-          {"  "}{statusIcons[step.status] ?? "[ ]"} {step.id}. {step.title}
+          {"  "}
+          {statusIcons[step.status] ?? "[ ]"} {step.id}. {step.title}
         </Text>
       ))}
     </Box>
@@ -370,7 +439,9 @@ function BannerMessage({ title, subtitle }: { title: string; subtitle: string })
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box gap={1}>
-        <Text bold color={theme.primary}>{title}</Text>
+        <Text bold color={theme.primary}>
+          {title}
+        </Text>
         <Text color={theme.dimmed}>{subtitle}</Text>
       </Box>
     </Box>
@@ -387,12 +458,19 @@ function BashStreamDisplay({ output }: { output: string }) {
 
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
-      <Text color={theme.warning} bold>{"  streaming"}</Text>
+      <Text color={theme.warning} bold>
+        {"  streaming"}
+      </Text>
       {truncated && (
-        <Text dimColor color={theme.dimmed}>{"    "}...({lines.length - 10} lines above)</Text>
+        <Text dimColor color={theme.dimmed}>
+          {"    "}...({lines.length - 10} lines above)
+        </Text>
       )}
       {displayLines.map((line, i) => (
-        <Text key={`stream-${i}`} dimColor>{"    "}{line}</Text>
+        <Text key={`stream-${i}`} dimColor>
+          {"    "}
+          {line}
+        </Text>
       ))}
     </Box>
   );
@@ -405,7 +483,10 @@ function DiffMessage({ filePath, hunks }: { filePath: string; hunks: string }) {
 
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={0} marginBottom={0}>
-      <Text bold color={theme.primary}>{"  "}{filePath}</Text>
+      <Text bold color={theme.primary}>
+        {"  "}
+        {filePath}
+      </Text>
       <Box flexDirection="column" paddingLeft={2}>
         {lines.map((line, i) => {
           let color = theme.dimmed;
@@ -436,35 +517,65 @@ function DiffMessage({ filePath, hunks }: { filePath: string; hunks: string }) {
   );
 }
 
-function PartialProgressMessage({ toolsUsed, elapsedMs, filesModified, lastError, summary }: {
-  toolsUsed: number; elapsedMs: number; filesModified: string[]; lastError?: string; summary: string;
+function PartialProgressMessage({
+  toolsUsed,
+  elapsedMs,
+  filesModified,
+  lastError,
+  summary,
+}: {
+  toolsUsed: number;
+  elapsedMs: number;
+  filesModified: string[];
+  lastError?: string;
+  summary: string;
 }) {
   const { theme } = useTheme();
   const elapsed = Math.round(elapsedMs / 1000);
 
   return (
     <Box flexDirection="column" paddingLeft={2} marginTop={1} marginBottom={1}>
-      <Text color={theme.warning} bold>{"--- Partial Progress ---"}</Text>
+      <Text color={theme.warning} bold>
+        {"--- Partial Progress ---"}
+      </Text>
       <Text color={theme.dimmed}>{summary}</Text>
-      <Text color={theme.dimmed}>{"  Tools used: "}{toolsUsed}{" | Time: "}{elapsed}{"s"}</Text>
+      <Text color={theme.dimmed}>
+        {"  Tools used: "}
+        {toolsUsed}
+        {" | Time: "}
+        {elapsed}
+        {"s"}
+      </Text>
       {filesModified.length > 0 && (
         <Box flexDirection="column" paddingLeft={2}>
           <Text color={theme.success}>{"Files modified:"}</Text>
           {filesModified.map((f, i) => (
-            <Text key={i} color={theme.dimmed}>{"  "}{f}</Text>
+            <Text key={i} color={theme.dimmed}>
+              {"  "}
+              {f}
+            </Text>
           ))}
         </Box>
       )}
       {lastError && (
         <Box paddingLeft={2}>
-          <Text color={theme.error}>{"Last error: "}{lastError}</Text>
+          <Text color={theme.error}>
+            {"Last error: "}
+            {lastError}
+          </Text>
         </Box>
       )}
     </Box>
   );
 }
 
-function IncompleteResponseMessage({ continuations, stopReason }: { continuations: number; stopReason: string }) {
+function IncompleteResponseMessage({
+  continuations,
+  stopReason,
+}: {
+  continuations: number;
+  stopReason: string;
+}) {
   const { theme } = useTheme();
   return (
     <Box paddingLeft={2} marginTop={0}>
@@ -472,8 +583,7 @@ function IncompleteResponseMessage({ continuations, stopReason }: { continuation
         {"--- "}
         {stopReason === "max_tokens" || stopReason === "truncation_retry"
           ? `Response incomplete — model reached output limit (${continuations} continuation${continuations !== 1 ? "s" : ""} attempted)`
-          : `Response may be incomplete (${stopReason})`
-        }
+          : `Response may be incomplete (${stopReason})`}
         {" ---"}
       </Text>
     </Box>

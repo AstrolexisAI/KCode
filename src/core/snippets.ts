@@ -1,8 +1,15 @@
 // KCode - Snippet Manager
 // Save and retrieve reusable code/text snippets
 
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { kcodePath } from "./paths";
 
 const SNIPPETS_DIR = kcodePath("snippets");
@@ -44,12 +51,14 @@ export function loadSnippet(name: string): Snippet | null {
 
 export function listSnippets(): Snippet[] {
   ensureDir();
-  const files = readdirSync(SNIPPETS_DIR).filter(f => f.endsWith(".json"));
+  const files = readdirSync(SNIPPETS_DIR).filter((f) => f.endsWith(".json"));
   const snippets: Snippet[] = [];
   for (const file of files.sort()) {
     try {
       snippets.push(JSON.parse(readFileSync(join(SNIPPETS_DIR, file), "utf-8")) as Snippet);
-    } catch { /* skip corrupt files */ }
+    } catch {
+      /* skip corrupt files */
+    }
   }
   return snippets;
 }

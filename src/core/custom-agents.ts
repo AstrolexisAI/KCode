@@ -10,8 +10,8 @@
 //
 // The markdown body becomes the agent's system prompt.
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -115,7 +115,12 @@ export function parseFrontmatter(content: string): { meta: Record<string, unknow
           const nextTrimmed = nextLine.trim();
           if (nextTrimmed.startsWith("- ")) {
             isArray = true;
-            collected.push(nextTrimmed.slice(2).trim().replace(/^["']|["']$/g, ""));
+            collected.push(
+              nextTrimmed
+                .slice(2)
+                .trim()
+                .replace(/^["']|["']$/g, ""),
+            );
           } else if (nextTrimmed.startsWith("{") || nextTrimmed.startsWith("[")) {
             // Inline JSON continuation
             collected.push(nextTrimmed);
@@ -155,20 +160,36 @@ export function parseFrontmatter(content: string): { meta: Record<string, unknow
 
     // Inline array: [item1, item2]
     if (rawValue.startsWith("[") && rawValue.endsWith("]")) {
-      meta[key] = rawValue.slice(1, -1).split(",").map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+      meta[key] = rawValue
+        .slice(1, -1)
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
       continue;
     }
 
     // Parse booleans
-    if (rawValue === "true") { meta[key] = true; continue; }
-    if (rawValue === "false") { meta[key] = false; continue; }
+    if (rawValue === "true") {
+      meta[key] = true;
+      continue;
+    }
+    if (rawValue === "false") {
+      meta[key] = false;
+      continue;
+    }
 
     // Parse numbers
     const num = Number(rawValue);
-    if (rawValue !== "" && !isNaN(num)) { meta[key] = num; continue; }
+    if (rawValue !== "" && !isNaN(num)) {
+      meta[key] = num;
+      continue;
+    }
 
     // Strip quotes
-    if ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"))) {
+    if (
+      (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+      (rawValue.startsWith("'") && rawValue.endsWith("'"))
+    ) {
       rawValue = rawValue.slice(1, -1);
     }
 
@@ -222,7 +243,7 @@ function validateMcpServers(value: unknown): Record<string, AgentMcpServer> | un
     result[name] = {
       command: typeof c.command === "string" ? c.command : undefined,
       args: Array.isArray(c.args) ? c.args.map(String) : undefined,
-      env: c.env && typeof c.env === "object" ? c.env as Record<string, string> : undefined,
+      env: c.env && typeof c.env === "object" ? (c.env as Record<string, string>) : undefined,
       url: typeof c.url === "string" ? c.url : undefined,
     };
   }
@@ -266,7 +287,13 @@ function validateHooks(value: unknown): AgentHookEntry[] | undefined {
 /** Security-sensitive fields that project-level agents must not escalate. */
 const RESTRICTED_PERMISSION_MODES = new Set(["auto"]);
 
-function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile: string, sourcePath: string, isProjectLevel = false): CustomAgentDef {
+function buildAgentDef(
+  meta: Record<string, unknown>,
+  body: string,
+  nameFromFile: string,
+  sourcePath: string,
+  isProjectLevel = false,
+): CustomAgentDef {
   let permissionMode = validatePermissionMode(meta.permissionMode);
   // Project-level agents cannot escalate to "auto" permission mode (security)
   if (isProjectLevel && permissionMode && RESTRICTED_PERMISSION_MODES.has(permissionMode)) {
@@ -274,8 +301,11 @@ function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile
   }
 
   // Project-level agents cannot override apiKey or apiBase (prevent credential exfiltration)
-  const apiKey = isProjectLevel ? undefined
-    : (typeof meta.apiKey === "string" && validateEnvValue(meta.apiKey) ? meta.apiKey : undefined);
+  const apiKey = isProjectLevel
+    ? undefined
+    : typeof meta.apiKey === "string" && validateEnvValue(meta.apiKey)
+      ? meta.apiKey
+      : undefined;
   const apiBase = isProjectLevel ? undefined : validateApiBase(meta.apiBase);
 
   // Sanitize system prompt from project-level agents
@@ -283,25 +313,30 @@ function buildAgentDef(meta: Record<string, unknown>, body: string, nameFromFile
   if (isProjectLevel && systemPrompt) {
     // Limit length and strip prompt injection attempts
     if (systemPrompt.length > 20_000) {
-      systemPrompt = systemPrompt.slice(0, 20_000) + "\n[truncated: agent prompt exceeds 20KB limit]";
+      systemPrompt =
+        systemPrompt.slice(0, 20_000) + "\n[truncated: agent prompt exceeds 20KB limit]";
     }
   }
 
   return {
     name: typeof meta.name === "string" ? meta.name : nameFromFile,
-    description: typeof meta.description === "string" ? meta.description : `Custom agent: ${nameFromFile}`,
+    description:
+      typeof meta.description === "string" ? meta.description : `Custom agent: ${nameFromFile}`,
     model: validateModel(meta.model),
-    tools: Array.isArray(meta.tools) ? meta.tools as string[] : undefined,
-    disallowedTools: Array.isArray(meta.disallowedTools) ? meta.disallowedTools as string[] : undefined,
+    tools: Array.isArray(meta.tools) ? (meta.tools as string[]) : undefined,
+    disallowedTools: Array.isArray(meta.disallowedTools)
+      ? (meta.disallowedTools as string[])
+      : undefined,
     permissionMode,
-    maxTurns: typeof meta.maxTurns === "number" ? Math.min(Math.max(meta.maxTurns, 1), 100) : undefined,
+    maxTurns:
+      typeof meta.maxTurns === "number" ? Math.min(Math.max(meta.maxTurns, 1), 100) : undefined,
     effort: validateEffort(meta.effort),
     apiKey,
     apiBase,
     mcpServers: validateMcpServers(meta.mcpServers),
     hooks: isProjectLevel ? undefined : validateHooks(meta.hooks), // Project agents cannot define hooks
     memory: meta.memory === true,
-    skills: Array.isArray(meta.skills) ? meta.skills as string[] : undefined,
+    skills: Array.isArray(meta.skills) ? (meta.skills as string[]) : undefined,
     systemPrompt,
     sourcePath,
   };
@@ -374,7 +409,15 @@ export function registerInlineAgents(defs: Array<Record<string, unknown>>): void
   for (const def of defs) {
     const name = def.name;
     if (!name || typeof name !== "string") continue;
-    inlineAgents.set(name, buildAgentDef(def, typeof def.systemPrompt === "string" ? def.systemPrompt : "", name, "(inline)"));
+    inlineAgents.set(
+      name,
+      buildAgentDef(
+        def,
+        typeof def.systemPrompt === "string" ? def.systemPrompt : "",
+        name,
+        "(inline)",
+      ),
+    );
   }
 }
 
@@ -393,7 +436,7 @@ export function findCustomAgent(name: string, cwd: string): CustomAgentDef | nul
   }
 
   const agents = loadCustomAgents(cwd);
-  return agents.find(a => a.name === name || a.name.toLowerCase() === nameLower) ?? null;
+  return agents.find((a) => a.name === name || a.name.toLowerCase() === nameLower) ?? null;
 }
 
 /**

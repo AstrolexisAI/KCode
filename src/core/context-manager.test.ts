@@ -1,6 +1,6 @@
-import { test, expect, describe } from "bun:test";
-import { estimateContextTokens, emergencyPrune } from "./context-manager.ts";
-import type { Message, ConversationState, StreamEvent } from "./types.ts";
+import { describe, expect, test } from "bun:test";
+import { emergencyPrune, estimateContextTokens } from "./context-manager.ts";
+import type { ConversationState, Message, StreamEvent } from "./types.ts";
 
 // CHARS_PER_TOKEN = 3.5 (from token-budget.ts)
 
@@ -40,9 +40,7 @@ describe("estimateContextTokens", () => {
   });
 
   test("array content with text blocks counted by text.length", () => {
-    const msg = makeMsg("assistant", [
-      { type: "text", text: "a".repeat(35) },
-    ]);
+    const msg = makeMsg("assistant", [{ type: "text", text: "a".repeat(35) }]);
     // 35 chars -> ceil(35/3.5) = 10
     expect(estimateContextTokens("", [msg])).toBe(10);
   });
@@ -70,16 +68,14 @@ describe("estimateContextTokens", () => {
   test("array content with tool_use counted by JSON.stringify(input).length", () => {
     const input = { file: "test.ts" };
     const inputLen = JSON.stringify(input).length; // {"file":"test.ts"} = 18
-    const msg = makeMsg("assistant", [
-      { type: "tool_use", id: "tu1", name: "Read", input },
-    ]);
+    const msg = makeMsg("assistant", [{ type: "tool_use", id: "tu1", name: "Read", input }]);
     expect(estimateContextTokens("", [msg])).toBe(Math.ceil(inputLen / 3.5));
   });
 
   test("multiple messages accumulate chars", () => {
     const msgs: Message[] = [
-      makeMsg("user", "a".repeat(35)),       // 35
-      makeMsg("assistant", "b".repeat(35)),   // 35
+      makeMsg("user", "a".repeat(35)), // 35
+      makeMsg("assistant", "b".repeat(35)), // 35
     ];
     // total 70 -> ceil(70/3.5) = 20
     expect(estimateContextTokens("", msgs)).toBe(20);
@@ -93,9 +89,7 @@ describe("estimateContextTokens", () => {
   });
 
   test("thinking blocks are not counted", () => {
-    const msg = makeMsg("assistant", [
-      { type: "thinking", thinking: "a".repeat(1000) },
-    ]);
+    const msg = makeMsg("assistant", [{ type: "thinking", thinking: "a".repeat(1000) }]);
     // thinking blocks don't match text/tool_result/tool_use → 0 chars
     expect(estimateContextTokens("", [msg])).toBe(0);
   });
@@ -103,8 +97,8 @@ describe("estimateContextTokens", () => {
   test("mixed content blocks sum correctly", () => {
     const input = { a: 1 }; // JSON.stringify = {"a":1} -> 7 chars
     const msg = makeMsg("assistant", [
-      { type: "text", text: "a".repeat(35) },                          // 35
-      { type: "tool_use", id: "tu1", name: "Bash", input },            // 7
+      { type: "text", text: "a".repeat(35) }, // 35
+      { type: "tool_use", id: "tu1", name: "Bash", input }, // 7
       { type: "tool_result", tool_use_id: "tu1", content: "c".repeat(28) }, // 28
     ]);
     // total = 35 + 7 + 28 = 70 -> ceil(70/3.5) = 20
@@ -192,8 +186,8 @@ describe("emergencyPrune", () => {
     const sysMsg = state.messages[1]!;
     expect(sysMsg.role).toBe("user");
     expect(typeof sysMsg.content).toBe("string");
-    expect((sysMsg.content as string)).toContain("[SYSTEM]");
-    expect((sysMsg.content as string)).toContain("emergency-pruned");
+    expect(sysMsg.content as string).toContain("[SYSTEM]");
+    expect(sysMsg.content as string).toContain("emergency-pruned");
   });
 
   test("message count decreases after pruning", () => {

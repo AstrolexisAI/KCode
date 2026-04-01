@@ -4,7 +4,7 @@
  */
 
 import type { Command } from "commander";
-import { DEFAULT_SYNC_EXCLUDES, DEFAULT_REMOTE_CONFIG } from "../../remote/types";
+import { DEFAULT_REMOTE_CONFIG, DEFAULT_SYNC_EXCLUDES } from "../../remote/types";
 
 /**
  * Parse a host:/path target string.
@@ -34,7 +34,9 @@ export function registerRemoteCommand(program: Command): void {
     .action(async (target: string, opts: { localOnly: boolean }) => {
       const { host, dir } = parseTarget(target);
       if (!dir) {
-        console.error("\x1b[31m✗ Please specify a remote directory: user@server:/path/to/project\x1b[0m");
+        console.error(
+          "\x1b[31m✗ Please specify a remote directory: user@server:/path/to/project\x1b[0m",
+        );
         process.exit(1);
       }
 
@@ -99,7 +101,9 @@ export function registerRemoteCommand(program: Command): void {
     .action(async (target: string, opts: { interval?: number; watch?: boolean }) => {
       const { host, dir } = parseTarget(target);
       if (!dir) {
-        console.error("\x1b[31m✗ Please specify a remote directory: user@server:/path/to/project\x1b[0m");
+        console.error(
+          "\x1b[31m✗ Please specify a remote directory: user@server:/path/to/project\x1b[0m",
+        );
         process.exit(1);
       }
 
@@ -295,7 +299,9 @@ export function registerRemoteCommand(program: Command): void {
     .description("Install KCode on a remote server")
     .action(async (host: string) => {
       try {
-        const { checkConnectivity, installRemoteKCode, checkKCodeInstalled } = await import("../../remote/ssh-transport");
+        const { checkConnectivity, installRemoteKCode, checkKCodeInstalled } = await import(
+          "../../remote/ssh-transport"
+        );
 
         console.log(`Checking connectivity to ${host}...`);
         if (!checkConnectivity(host)) {
@@ -305,7 +311,9 @@ export function registerRemoteCommand(program: Command): void {
 
         const existing = checkKCodeInstalled(host);
         if (existing.installed) {
-          console.log(`\x1b[33mKCode is already installed (${existing.version ?? "unknown version"})\x1b[0m`);
+          console.log(
+            `\x1b[33mKCode is already installed (${existing.version ?? "unknown version"})\x1b[0m`,
+          );
           return;
         }
 

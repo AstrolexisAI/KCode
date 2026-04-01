@@ -1,7 +1,7 @@
 // KCode - Image Stripper Strategy
 // Pre-processor that removes base64 images from older messages to free tokens
 
-import type { Message, ContentBlock } from "../../types.js";
+import type { ContentBlock, Message } from "../../types.js";
 import type { ImageStripConfig, ImageStripResult } from "../types.js";
 
 /** Estimated tokens per image block (base64 images are typically 1000-2000 tokens). */

@@ -1,17 +1,17 @@
 // KCode - 日本語
 
 export default {
-  "welcome": "KCode へようこそ",
-  "goodbye": "さようなら",
-  "error": "エラー",
-  "warning": "警告",
-  "success": "成功",
-  "loading": "読み込み中...",
-  "cancel": "キャンセル",
-  "confirm": "確認",
-  "yes": "はい",
-  "no": "いいえ",
-  "unknown": "不明",
+  welcome: "KCode へようこそ",
+  goodbye: "さようなら",
+  error: "エラー",
+  warning: "警告",
+  success: "成功",
+  loading: "読み込み中...",
+  cancel: "キャンセル",
+  confirm: "確認",
+  yes: "はい",
+  no: "いいえ",
+  unknown: "不明",
 
   "session.started": "セッションを開始しました",
   "session.resumed": "セッションを再開しました",

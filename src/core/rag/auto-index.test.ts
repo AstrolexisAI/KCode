@@ -1,8 +1,11 @@
-import { test, expect, describe, beforeEach } from "bun:test";
-import { RagAutoIndexer, _resetRagAutoIndexer, getRagAutoIndexer } from "./auto-index";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { FileChangeEvent } from "../file-watcher";
+import { _resetRagAutoIndexer, getRagAutoIndexer, RagAutoIndexer } from "./auto-index";
 
-function makeChange(path: string, type: "create" | "modify" | "delete" = "modify"): FileChangeEvent {
+function makeChange(
+  path: string,
+  type: "create" | "modify" | "delete" = "modify",
+): FileChangeEvent {
   return { type, path, timestamp: Date.now(), relativePath: path };
 }
 
@@ -19,19 +22,13 @@ describe("RagAutoIndexer", () => {
 
   test("accumulates pending files from changes", () => {
     const indexer = new RagAutoIndexer("/tmp/test", { enabled: true, debounceMs: 999999 });
-    indexer.onFileChanges([
-      makeChange("/tmp/test/a.ts"),
-      makeChange("/tmp/test/b.ts"),
-    ]);
+    indexer.onFileChanges([makeChange("/tmp/test/a.ts"), makeChange("/tmp/test/b.ts")]);
     expect(indexer.getStats().pendingFiles).toBe(2);
   });
 
   test("deduplicates same file", () => {
     const indexer = new RagAutoIndexer("/tmp/test", { enabled: true, debounceMs: 999999 });
-    indexer.onFileChanges([
-      makeChange("/tmp/test/a.ts"),
-      makeChange("/tmp/test/a.ts"),
-    ]);
+    indexer.onFileChanges([makeChange("/tmp/test/a.ts"), makeChange("/tmp/test/a.ts")]);
     expect(indexer.getStats().pendingFiles).toBe(1);
   });
 

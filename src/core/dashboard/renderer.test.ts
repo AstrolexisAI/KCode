@@ -1,13 +1,13 @@
 // KCode - Dashboard Renderer Tests
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
+  formatCost,
+  formatNumber,
+  formatTokens,
+  padRight,
   renderDashboard,
   renderDashboardJson,
-  padRight,
-  formatNumber,
-  formatCost,
-  formatTokens,
   timeAgo,
 } from "./renderer";
 import type { ProjectDashboard } from "./types";
@@ -16,10 +16,38 @@ import type { ProjectDashboard } from "./types";
 
 function makeDashboard(overrides?: Partial<ProjectDashboard>): ProjectDashboard {
   return {
-    project: { name: "test-app", language: "TypeScript", files: 156, linesOfCode: 12456, lastCommit: new Date().toISOString() },
-    tests: { framework: "bun:test", total: 234, passing: 230, failing: 4, coverage: 78, lastRun: "2m ago" },
-    codeQuality: { todos: 23, todoList: [], longFunctions: 8, duplicateCode: 3, complexityScore: 72 },
-    activity: { sessionsLast7Days: 12, tokensLast7Days: 450_000, costLast7Days: 3.45, topTools: [{ name: "Bash", count: 45 }, { name: "Edit", count: 32 }], filesModifiedByAI: 34 },
+    project: {
+      name: "test-app",
+      language: "TypeScript",
+      files: 156,
+      linesOfCode: 12456,
+      lastCommit: new Date().toISOString(),
+    },
+    tests: {
+      framework: "bun:test",
+      total: 234,
+      passing: 230,
+      failing: 4,
+      coverage: 78,
+      lastRun: "2m ago",
+    },
+    codeQuality: {
+      todos: 23,
+      todoList: [],
+      longFunctions: 8,
+      duplicateCode: 3,
+      complexityScore: 72,
+    },
+    activity: {
+      sessionsLast7Days: 12,
+      tokensLast7Days: 450_000,
+      costLast7Days: 3.45,
+      topTools: [
+        { name: "Bash", count: 45 },
+        { name: "Edit", count: 32 },
+      ],
+      filesModifiedByAI: 34,
+    },
     dependencies: { total: 45, outdated: 7, vulnerable: 0 },
     ...overrides,
   };
@@ -196,7 +224,13 @@ describe("renderDashboard", () => {
 
   test("handles zero values", () => {
     const d = makeDashboard({
-      activity: { sessionsLast7Days: 0, tokensLast7Days: 0, costLast7Days: 0, topTools: [], filesModifiedByAI: 0 },
+      activity: {
+        sessionsLast7Days: 0,
+        tokensLast7Days: 0,
+        costLast7Days: 0,
+        topTools: [],
+        filesModifiedByAI: 0,
+      },
       dependencies: { total: 0, outdated: 0, vulnerable: 0 },
     });
     const output = renderDashboard(d);

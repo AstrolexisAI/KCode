@@ -1,6 +1,6 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -94,9 +94,7 @@ describe("multi-edit tool", () => {
     const filePath = await createTempFile("test.ts", "const hello = 1;");
 
     const result = await executeMultiEdit({
-      edits: [
-        { file_path: filePath, old_string: "goodbye", new_string: "world" },
-      ],
+      edits: [{ file_path: filePath, old_string: "goodbye", new_string: "world" }],
     });
 
     expect(result.is_error).toBe(true);
@@ -130,9 +128,7 @@ describe("multi-edit tool", () => {
     const filePath = await createTempFile("test.ts", "const x = 1;");
 
     const result = await executeMultiEdit({
-      edits: [
-        { file_path: filePath, old_string: "const x", new_string: "const x" },
-      ],
+      edits: [{ file_path: filePath, old_string: "const x", new_string: "const x" }],
     });
 
     expect(result.is_error).toBe(true);

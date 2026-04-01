@@ -1,16 +1,14 @@
 import type { Command } from "commander";
 import {
-  loadModelsConfig,
-  listModels,
   addModel,
+  listModels,
+  loadModelsConfig,
   removeModel,
   setDefaultModel,
 } from "../../core/models";
 
 export function registerModelsCommand(program: Command): void {
-  const modelsCmd = program
-    .command("models")
-    .description("Manage registered LLM models");
+  const modelsCmd = program.command("models").description("Manage registered LLM models");
 
   modelsCmd
     .command("list")
@@ -23,7 +21,9 @@ export function registerModelsCommand(program: Command): void {
       if (models.length === 0) {
         console.log("No models registered. Use 'kcode models add' to register one.");
         console.log("\nExample:");
-        console.log("  kcode models add mnemo:code3 http://localhost:8091 --context 32000 --gpu 'RTX 5090'");
+        console.log(
+          "  kcode models add mnemo:code3 http://localhost:8091 --context 32000 --gpu 'RTX 5090'",
+        );
         return;
       }
 

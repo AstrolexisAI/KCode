@@ -1,17 +1,17 @@
 // KCode - Portugues (Brasil)
 
 export default {
-  "welcome": "Bem-vindo ao KCode",
-  "goodbye": "Ate logo",
-  "error": "Erro",
-  "warning": "Aviso",
-  "success": "Sucesso",
-  "loading": "Carregando...",
-  "cancel": "Cancelar",
-  "confirm": "Confirmar",
-  "yes": "Sim",
-  "no": "Nao",
-  "unknown": "Desconhecido",
+  welcome: "Bem-vindo ao KCode",
+  goodbye: "Ate logo",
+  error: "Erro",
+  warning: "Aviso",
+  success: "Sucesso",
+  loading: "Carregando...",
+  cancel: "Cancelar",
+  confirm: "Confirmar",
+  yes: "Sim",
+  no: "Nao",
+  unknown: "Desconhecido",
 
   "session.started": "Sessao iniciada",
   "session.resumed": "Sessao restaurada",

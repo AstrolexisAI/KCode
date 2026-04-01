@@ -1,8 +1,8 @@
 // KCode - Prompt Template Manager
 // Lets users save and reuse common prompts as .md files in ~/.kcode/templates/
 
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readdirSync, readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────

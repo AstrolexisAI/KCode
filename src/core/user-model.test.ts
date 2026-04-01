@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { UserModel } from "./user-model";
 
 // Each test uses a fresh in-memory SQLite database to avoid contamination
@@ -70,7 +70,9 @@ describe("UserModel", () => {
   });
 
   test("updateFromMessage detects technical terms and increases expertise", () => {
-    model.updateFromMessage("I need to refactor the API and add a new interface for the component module");
+    model.updateFromMessage(
+      "I need to refactor the API and add a new interface for the component module",
+    );
     const profile = model.getProfile();
     // Should have increased expertise toward 0.8
     expect(profile.expertise).toBeGreaterThanOrEqual(0.5);

@@ -1,8 +1,8 @@
 // KCode - Project Indexer
 // Builds a lightweight in-memory index of project files for faster searches and context
 
-import { readdirSync, statSync, readFileSync } from "node:fs";
-import { join, relative, extname } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { extname, join, relative } from "node:path";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -36,29 +36,77 @@ const PREVIEW_LINES = 5;
 
 // Directories to always skip
 const SKIP_DIRS = new Set([
-  "node_modules", ".git", ".svn", ".hg",
-  "dist", "build", "out", ".next", ".nuxt",
-  "__pycache__", ".pytest_cache", ".mypy_cache",
-  "vendor", "venv", ".venv", "env",
-  "coverage", ".coverage", ".nyc_output",
-  ".cache", ".parcel-cache", ".turbo",
+  "node_modules",
+  ".git",
+  ".svn",
+  ".hg",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  ".nuxt",
+  "__pycache__",
+  ".pytest_cache",
+  ".mypy_cache",
+  "vendor",
+  "venv",
+  ".venv",
+  "env",
+  "coverage",
+  ".coverage",
+  ".nyc_output",
+  ".cache",
+  ".parcel-cache",
+  ".turbo",
   "target", // Rust/Java
   "data", // data directories (databases, backups, models)
 ]);
 
 // File extensions to index
 const INDEXABLE_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".rb", ".go", ".rs", ".java", ".kt",
-  ".c", ".cpp", ".h", ".hpp", ".cs",
-  ".swift", ".m", ".mm",
-  ".sh", ".bash", ".zsh", ".fish",
-  ".json", ".yaml", ".yml", ".toml",
-  ".md", ".txt", ".rst",
-  ".html", ".css", ".scss", ".less",
-  ".sql", ".graphql", ".gql",
-  ".proto", ".dockerfile",
-  ".lua", ".vim", ".el",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".rb",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".c",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".swift",
+  ".m",
+  ".mm",
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".fish",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".md",
+  ".txt",
+  ".rst",
+  ".html",
+  ".css",
+  ".scss",
+  ".less",
+  ".sql",
+  ".graphql",
+  ".gql",
+  ".proto",
+  ".dockerfile",
+  ".lua",
+  ".vim",
+  ".el",
 ]);
 
 // Symbol extraction patterns by language group
@@ -71,14 +119,8 @@ const SYMBOL_PATTERNS: Record<string, RegExp[]> = {
     /(?:export\s+)?const\s+(\w+)\s*=/g,
     /(?:export\s+)?enum\s+(\w+)/g,
   ],
-  python: [
-    /^(?:async\s+)?def\s+(\w+)/gm,
-    /^class\s+(\w+)/gm,
-  ],
-  go: [
-    /^func\s+(?:\([^)]+\)\s+)?(\w+)/gm,
-    /^type\s+(\w+)\s+(?:struct|interface)/gm,
-  ],
+  python: [/^(?:async\s+)?def\s+(\w+)/gm, /^class\s+(\w+)/gm],
+  go: [/^func\s+(?:\([^)]+\)\s+)?(\w+)/gm, /^type\s+(\w+)\s+(?:struct|interface)/gm],
   rust: [
     /^(?:pub\s+)?(?:async\s+)?fn\s+(\w+)/gm,
     /^(?:pub\s+)?struct\s+(\w+)/gm,
@@ -94,12 +136,17 @@ const SYMBOL_PATTERNS: Record<string, RegExp[]> = {
 
 // Map extensions to language groups
 const EXT_TO_LANG: Record<string, string> = {
-  ".ts": "typescript", ".tsx": "typescript", ".js": "typescript", ".jsx": "typescript",
-  ".mjs": "typescript", ".cjs": "typescript",
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".js": "typescript",
+  ".jsx": "typescript",
+  ".mjs": "typescript",
+  ".cjs": "typescript",
   ".py": "python",
   ".go": "go",
   ".rs": "rust",
-  ".java": "java", ".kt": "java",
+  ".java": "java",
+  ".kt": "java",
 };
 
 // ─── Indexer ────────────────────────────────────────────────────
@@ -149,9 +196,7 @@ export class ProjectIndexer {
   searchSymbols(query: string): IndexedFile[] {
     if (!this.index) return [];
     const lower = query.toLowerCase();
-    return this.index.files.filter((f) =>
-      f.symbols.some((s) => s.toLowerCase().includes(lower)),
-    );
+    return this.index.files.filter((f) => f.symbols.some((s) => s.toLowerCase().includes(lower)));
   }
 
   /**
@@ -160,9 +205,7 @@ export class ProjectIndexer {
   searchFiles(query: string): IndexedFile[] {
     if (!this.index) return [];
     const lower = query.toLowerCase();
-    return this.index.files.filter((f) =>
-      f.relativePath.toLowerCase().includes(lower),
-    );
+    return this.index.files.filter((f) => f.relativePath.toLowerCase().includes(lower));
   }
 
   /**

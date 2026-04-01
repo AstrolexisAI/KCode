@@ -35,9 +35,7 @@ export const askUserDefinition: ToolDefinition = {
   },
 };
 
-export async function executeAskUser(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeAskUser(input: Record<string, unknown>): Promise<ToolResult> {
   const question = String(input.question ?? "");
   const choices = input.choices as string[] | undefined;
   const defaultChoice = input.default_choice as string | undefined;

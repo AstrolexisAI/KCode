@@ -1,8 +1,8 @@
 // Session actions
 // Auto-extracted from builtin-actions.ts
 
-import type { ActionContext } from "./action-helpers.js";
 import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
+import type { ActionContext } from "./action-helpers.js";
 
 export async function handleSessionAction(
   action: string,
@@ -12,11 +12,13 @@ export async function handleSessionAction(
 
   switch (action) {
     case "clear": {
-      setCompleted(() => [{
-        kind: "banner",
-        title: `KCode v${appConfig.version ?? "?"}`,
-        subtitle: "Kulvex Code by Astrolexis",
-      }]);
+      setCompleted(() => [
+        {
+          kind: "banner",
+          title: `KCode v${appConfig.version ?? "?"}`,
+          subtitle: "Kulvex Code by Astrolexis",
+        },
+      ]);
       return "  Conversation cleared.";
     }
     case "compact": {
@@ -34,9 +36,12 @@ export async function handleSessionAction(
       if (args?.trim() === "preview") {
         const summary = await compactor.compact(toPrune);
         if (!summary) return "  Preview failed — could not generate summary.";
-        const summaryText = typeof summary.content === "string"
-          ? summary.content
-          : (summary.content as Array<{ type: string; text?: string }>).map((b) => b.text ?? "").join("\n");
+        const summaryText =
+          typeof summary.content === "string"
+            ? summary.content
+            : (summary.content as Array<{ type: string; text?: string }>)
+                .map((b) => b.text ?? "")
+                .join("\n");
         const lines = [
           `  Compact Preview:`,
           `  Messages to compact: ${toPrune.length}`,
@@ -68,12 +73,12 @@ export async function handleSessionAction(
 
       // Build a visual bar with color zones
       const barLen = 40;
-      const filled = Math.round(barLen * pct / 100);
+      const filled = Math.round((barLen * pct) / 100);
       const bar = "\u2588".repeat(filled) + "\u2591".repeat(barLen - filled);
       const status = pct >= 90 ? " CRITICAL" : pct >= 70 ? " WARNING" : "";
 
       // Analyze context breakdown by category
-      let systemChars = 0;
+      const systemChars = 0;
       let userChars = 0;
       let assistantChars = 0;
       let toolResultChars = 0;
@@ -90,7 +95,8 @@ export async function handleSessionAction(
               if (msg.role === "user") userChars += block.text.length;
               else assistantChars += block.text.length;
             } else if (block.type === "tool_result") {
-              const c = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+              const c =
+                typeof block.content === "string" ? block.content : JSON.stringify(block.content);
               toolResultChars += c.length;
             } else if (block.type === "tool_use") {
               toolCalls++;
@@ -103,12 +109,13 @@ export async function handleSessionAction(
       }
 
       const totalChars = userChars + assistantChars + toolResultChars + thinkingChars;
-      const pctOf = (chars: number) => totalChars > 0 ? Math.round((chars / totalChars) * 100) : 0;
+      const pctOf = (chars: number) =>
+        totalChars > 0 ? Math.round((chars / totalChars) * 100) : 0;
 
       // Breakdown bars
       const miniBar = (p: number) => {
         const w = 15;
-        const f = Math.round(w * Math.min(p, 100) / 100);
+        const f = Math.round((w * Math.min(p, 100)) / 100);
         return "\u2588".repeat(f) + "\u2591".repeat(w - f);
       };
 
@@ -126,7 +133,9 @@ export async function handleSessionAction(
 
       if (usage.cacheReadInputTokens > 0 || usage.cacheCreationInputTokens > 0) {
         lines.push(``);
-        lines.push(`  Cache: ${usage.cacheReadInputTokens.toLocaleString()} read, ${usage.cacheCreationInputTokens.toLocaleString()} created`);
+        lines.push(
+          `  Cache: ${usage.cacheReadInputTokens.toLocaleString()} read, ${usage.cacheCreationInputTokens.toLocaleString()} created`,
+        );
       }
 
       if (pct >= 70) {
@@ -147,7 +156,10 @@ export async function handleSessionAction(
         for (const cp of cps) {
           lines.push(`  ${cp.index}. [${cp.age}] "${cp.label}" (message ${cp.messageIndex})`);
         }
-        lines.push("", "  Use /rewind <number> to rewind to a checkpoint, or /rewind last for the most recent.");
+        lines.push(
+          "",
+          "  Use /rewind <number> to rewind to a checkpoint, or /rewind last for the most recent.",
+        );
         return lines.join("\n");
       }
 
@@ -178,7 +190,10 @@ export async function handleSessionAction(
       }
 
       const cpCount = conversationManager.getCheckpointCount();
-      const cpHint = cpCount > 0 ? `\n  (${cpCount} conversation checkpoint${cpCount === 1 ? "" : "s"} available — use /rewind list)` : "";
+      const cpHint =
+        cpCount > 0
+          ? `\n  (${cpCount} conversation checkpoint${cpCount === 1 ? "" : "s"} available — use /rewind list)`
+          : "";
 
       if (undoResults.length === 0) return `  Nothing to rewind.${cpHint}`;
       return undoResults.join("\n") + cpHint;
@@ -221,7 +236,9 @@ export async function handleSessionAction(
       const sessions = tm.listSessions();
       if (sessions.length === 0) return "  No saved sessions.";
 
-      const lines = [`  Recent Sessions (${Math.min(sessions.length, 20)} of ${sessions.length}):\n`];
+      const lines = [
+        `  Recent Sessions (${Math.min(sessions.length, 20)} of ${sessions.length}):\n`,
+      ];
       const recent = sessions.slice(0, 20);
       for (const s of recent) {
         const date = s.startedAt.replace(/T/g, " ").slice(0, 16);
@@ -236,7 +253,9 @@ export async function handleSessionAction(
       return lines.join("\n");
     }
     case "branches": {
-      const { getBranchManager: getBM, formatBranchTree: fmtTree } = await import("../../core/branch-manager.js");
+      const { getBranchManager: getBM, formatBranchTree: fmtTree } = await import(
+        "../../core/branch-manager.js"
+      );
       const branchMgr = getBM();
       const allBranches = branchMgr.listBranches();
 
@@ -305,7 +324,8 @@ export async function handleSessionAction(
       return `  Loaded branch: "${branch.name}" (${branch.messages.length} messages)\n  Branched at message ${branch.branchPoint} on ${branch.createdAt}\n  You can continue the conversation from here.`;
     }
     case "compare": {
-      if (!args?.trim()) return "  Usage: /compare <model1> <model2> <prompt>\n  Example: /compare gpt-4o claude-sonnet-4-6 explain this code";
+      if (!args?.trim())
+        return "  Usage: /compare <model1> <model2> <prompt>\n  Example: /compare gpt-4o claude-sonnet-4-6 explain this code";
 
       const parts = args.trim().split(/\s+/);
       if (parts.length < 3) return "  Usage: /compare <model1> <model2> <prompt>";
@@ -316,18 +336,23 @@ export async function handleSessionAction(
 
       const { getModelBaseUrl } = await import("../../core/models.js");
 
-      const lines: string[] = [`  Comparing: ${model1} vs ${model2}\n  Prompt: "${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}"\n`];
+      const lines: string[] = [
+        `  Comparing: ${model1} vs ${model2}\n  Prompt: "${prompt.slice(0, 60)}${prompt.length > 60 ? "..." : ""}"\n`,
+      ];
 
       // Send to both models in parallel
-      const fetchModel = async (model: string): Promise<{ text: string; tokens: number; timeMs: number }> => {
-        const baseUrl = await getModelBaseUrl(model) ?? appConfig.apiBase ?? "http://localhost:10091";
+      const fetchModel = async (
+        model: string,
+      ): Promise<{ text: string; tokens: number; timeMs: number }> => {
+        const baseUrl =
+          (await getModelBaseUrl(model)) ?? appConfig.apiBase ?? "http://localhost:10091";
         const start = Date.now();
         try {
           const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(appConfig.apiKey ? { "Authorization": `Bearer ${appConfig.apiKey}` } : {}),
+              ...(appConfig.apiKey ? { Authorization: `Bearer ${appConfig.apiKey}` } : {}),
             },
             body: JSON.stringify({
               model,
@@ -337,14 +362,21 @@ export async function handleSessionAction(
             }),
             signal: AbortSignal.timeout(30000),
           });
-          const data = await resp.json() as Record<string, unknown>;
+          const data = (await resp.json()) as Record<string, unknown>;
           const choices = data.choices as Record<string, unknown>[] | undefined;
           const usage = data.usage as Record<string, unknown> | undefined;
-          const text = String((choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(no response)");
+          const text = String(
+            (choices?.[0]?.message as Record<string, unknown> | undefined)?.content ??
+              "(no response)",
+          );
           const tokens = Number(usage?.total_tokens ?? 0);
           return { text, tokens, timeMs: Date.now() - start };
         } catch (err) {
-          return { text: `Error: ${err instanceof Error ? err.message : String(err)}`, tokens: 0, timeMs: Date.now() - start };
+          return {
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+            tokens: 0,
+            timeMs: Date.now() - start,
+          };
         }
       };
 
@@ -382,11 +414,24 @@ export async function handleSessionAction(
       if (rawFilename.endsWith(".json")) format = "json";
       else if (rawFilename.endsWith(".html")) format = "html";
       else if (rawFilename.endsWith(".txt")) format = "txt";
-      else if (rawFilename === "json") { format = "json"; filename = ""; }
-      else if (rawFilename === "html") { format = "html"; filename = ""; }
-      else if (rawFilename === "txt") { format = "txt"; filename = ""; }
+      else if (rawFilename === "json") {
+        format = "json";
+        filename = "";
+      } else if (rawFilename === "html") {
+        format = "html";
+        filename = "";
+      } else if (rawFilename === "txt") {
+        format = "txt";
+        filename = "";
+      }
 
-      if (!filename || filename === "json" || filename === "html" || filename === "md" || filename === "txt") {
+      if (
+        !filename ||
+        filename === "json" ||
+        filename === "html" ||
+        filename === "md" ||
+        filename === "txt"
+      ) {
         filename = `/tmp/kcode-export-${timestamp}.${format}`;
       }
 
@@ -399,16 +444,22 @@ export async function handleSessionAction(
           model: appConfig.model,
           exportedAt: new Date().toISOString(),
           messageCount: state.messages.length,
-          messages: state.messages.map(msg => {
+          messages: state.messages.map((msg) => {
             if (typeof msg.content === "string") {
               return { role: msg.role, content: msg.content };
             }
             return {
               role: msg.role,
-              blocks: msg.content.map(b => {
+              blocks: msg.content.map((b) => {
                 if (b.type === "text") return { type: "text", text: b.text };
-                if (b.type === "tool_use") return { type: "tool_use", name: b.name, input: b.input };
-                if (b.type === "tool_result") return { type: "tool_result", content: typeof b.content === "string" ? b.content.slice(0, 500) : "[complex]", isError: b.is_error };
+                if (b.type === "tool_use")
+                  return { type: "tool_use", name: b.name, input: b.input };
+                if (b.type === "tool_result")
+                  return {
+                    type: "tool_result",
+                    content: typeof b.content === "string" ? b.content.slice(0, 500) : "[complex]",
+                    isError: b.is_error,
+                  };
                 return { type: b.type };
               }),
             };
@@ -420,29 +471,30 @@ export async function handleSessionAction(
 
       if (format === "html") {
         // HTML export — shareable page with collapsible tool calls and syntax highlighting
-        const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const escHtml = (s: string) =>
+          s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const htmlLines: string[] = [
-          '<!DOCTYPE html>',
+          "<!DOCTYPE html>",
           '<html><head><meta charset="utf-8"><title>KCode Conversation</title>',
-          '<style>',
-          '*{box-sizing:border-box}',
+          "<style>",
+          "*{box-sizing:border-box}",
           'body{font-family:"JetBrains Mono","Fira Code",monospace;max-width:860px;margin:2em auto;padding:0 1em;background:#1e1e2e;color:#cdd6f4;line-height:1.6}',
-          '.user{background:#313244;padding:1em 1.2em;border-radius:8px;margin:1em 0;border-left:3px solid #89b4fa}',
-          '.assistant{background:#181825;padding:1em 1.2em;border-radius:8px;margin:1em 0;border-left:3px solid #a6e3a1}',
-          '.tool-group{margin:0.4em 0}',
-          '.tool-header{cursor:pointer;background:#1e1e2e;padding:0.4em 0.8em;border-radius:4px;border-left:3px solid #fab387;color:#fab387;font-size:0.9em;user-select:none}',
-          '.tool-header:hover{background:#313244}',
+          ".user{background:#313244;padding:1em 1.2em;border-radius:8px;margin:1em 0;border-left:3px solid #89b4fa}",
+          ".assistant{background:#181825;padding:1em 1.2em;border-radius:8px;margin:1em 0;border-left:3px solid #a6e3a1}",
+          ".tool-group{margin:0.4em 0}",
+          ".tool-header{cursor:pointer;background:#1e1e2e;padding:0.4em 0.8em;border-radius:4px;border-left:3px solid #fab387;color:#fab387;font-size:0.9em;user-select:none}",
+          ".tool-header:hover{background:#313244}",
           '.tool-header::before{content:"▸ ";display:inline}',
           '.tool-header.open::before{content:"▾ "}',
-          '.tool-body{display:none;padding:0.4em 0.8em 0.4em 1.2em;border-left:3px solid #45475a;margin-left:0.3em;font-size:0.85em;color:#a6adc8}',
-          '.tool-body.open{display:block}',
-          '.tool-error{border-left-color:#f38ba8}',
-          'pre{background:#11111b;padding:1em;border-radius:4px;overflow-x:auto;margin:0.5em 0}',
-          'code{font-family:inherit}',
-          '.kw{color:#cba6f7;font-weight:bold}.str{color:#a6e3a1}.num{color:#fab387}.cmt{color:#6c7086;font-style:italic}.type{color:#f9e2af}.fn{color:#89b4fa}',
-          'h1{color:#cba6f7;margin-bottom:0.3em}',
-          '.meta{color:#6c7086;font-size:0.85em;margin-bottom:2em}',
-          '</style></head><body>',
+          ".tool-body{display:none;padding:0.4em 0.8em 0.4em 1.2em;border-left:3px solid #45475a;margin-left:0.3em;font-size:0.85em;color:#a6adc8}",
+          ".tool-body.open{display:block}",
+          ".tool-error{border-left-color:#f38ba8}",
+          "pre{background:#11111b;padding:1em;border-radius:4px;overflow-x:auto;margin:0.5em 0}",
+          "code{font-family:inherit}",
+          ".kw{color:#cba6f7;font-weight:bold}.str{color:#a6e3a1}.num{color:#fab387}.cmt{color:#6c7086;font-style:italic}.type{color:#f9e2af}.fn{color:#89b4fa}",
+          "h1{color:#cba6f7;margin-bottom:0.3em}",
+          ".meta{color:#6c7086;font-size:0.85em;margin-bottom:2em}",
+          "</style></head><body>",
           `<h1>KCode Conversation</h1>`,
           `<p class="meta">Model: ${escHtml(appConfig.model)} | ${new Date().toISOString()} | ${state.messages.length} messages</p>`,
         ];
@@ -450,7 +502,9 @@ export async function handleSessionAction(
         for (const msg of state.messages) {
           if (typeof msg.content === "string") {
             const cls = msg.role === "user" ? "user" : "assistant";
-            htmlLines.push(`<div class="${cls}"><strong>${escHtml(msg.role)}:</strong><br>${escHtml(msg.content).replace(/\n/g, "<br>")}</div>`);
+            htmlLines.push(
+              `<div class="${cls}"><strong>${escHtml(msg.role)}:</strong><br>${escHtml(msg.content).replace(/\n/g, "<br>")}</div>`,
+            );
           } else {
             // Group consecutive tool_use + tool_result into collapsible blocks
             for (const block of msg.content) {
@@ -461,34 +515,50 @@ export async function handleSessionAction(
                 html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) => {
                   return `<pre><code>${code}</code></pre>`;
                 });
-                html = html.replace(/`([^`]+)`/g, '<code style="background:#313244;padding:0.1em 0.3em;border-radius:3px">$1</code>');
-                html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                html = html.replace(
+                  /`([^`]+)`/g,
+                  '<code style="background:#313244;padding:0.1em 0.3em;border-radius:3px">$1</code>',
+                );
+                html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
                 html = html.replace(/\n/g, "<br>");
-                htmlLines.push(`<div class="${cls}"><strong>${escHtml(msg.role)}:</strong><br>${html}</div>`);
+                htmlLines.push(
+                  `<div class="${cls}"><strong>${escHtml(msg.role)}:</strong><br>${html}</div>`,
+                );
               } else if (block.type === "tool_use") {
                 const inputStr = escHtml(JSON.stringify(block.input, null, 2).slice(0, 500));
-                htmlLines.push(`<div class="tool-group"><div class="tool-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">⚡ ${escHtml(block.name)}</div>`);
+                htmlLines.push(
+                  `<div class="tool-group"><div class="tool-header" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">⚡ ${escHtml(block.name)}</div>`,
+                );
                 htmlLines.push(`<div class="tool-body"><pre>${inputStr}</pre></div></div>`);
               } else if (block.type === "tool_result") {
-                const content = typeof block.content === "string" ? block.content.slice(0, 500) : "[complex]";
+                const content =
+                  typeof block.content === "string" ? block.content.slice(0, 500) : "[complex]";
                 const errCls = block.is_error ? " tool-error" : "";
                 const icon = block.is_error ? "✗" : "✓";
-                htmlLines.push(`<div class="tool-group"><div class="tool-header${errCls}" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">${icon} result</div>`);
+                htmlLines.push(
+                  `<div class="tool-group"><div class="tool-header${errCls}" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')">${icon} result</div>`,
+                );
                 htmlLines.push(`<div class="tool-body"><pre>${escHtml(content)}</pre></div></div>`);
               }
             }
           }
         }
 
-        htmlLines.push('<p class="meta" style="text-align:center;margin-top:2em">Exported by KCode (Kulvex Code by Astrolexis)</p>');
-        htmlLines.push('</body></html>');
+        htmlLines.push(
+          '<p class="meta" style="text-align:center;margin-top:2em">Exported by KCode (Kulvex Code by Astrolexis)</p>',
+        );
+        htmlLines.push("</body></html>");
         writeFileSync(filename, htmlLines.join("\n"), "utf-8");
         return `  Exported ${state.messages.length} messages to ${filename} (HTML)`;
       }
 
       if (format === "txt") {
         // Plain text export
-        const txtLines: string[] = [`KCode Conversation Export`, `Date: ${new Date().toISOString()}`, ``];
+        const txtLines: string[] = [
+          `KCode Conversation Export`,
+          `Date: ${new Date().toISOString()}`,
+          ``,
+        ];
 
         for (const msg of state.messages) {
           const role = msg.role === "user" ? "User" : "Assistant";
@@ -501,7 +571,8 @@ export async function handleSessionAction(
               } else if (block.type === "tool_use") {
                 txtLines.push(`[Tool: ${block.name}]`, ``);
               } else if (block.type === "tool_result") {
-                const content = typeof block.content === "string" ? block.content.slice(0, 500) : "[complex]";
+                const content =
+                  typeof block.content === "string" ? block.content.slice(0, 500) : "[complex]";
                 txtLines.push(`[Result${block.is_error ? " (Error)" : ""}]: ${content}`, ``);
               }
             }
@@ -513,7 +584,10 @@ export async function handleSessionAction(
       }
 
       // Default: Markdown export (existing behavior)
-      const lines: string[] = [`# KCode Conversation Export\n`, `Date: ${new Date().toISOString()}\n`];
+      const lines: string[] = [
+        `# KCode Conversation Export\n`,
+        `Date: ${new Date().toISOString()}\n`,
+      ];
 
       for (const msg of state.messages) {
         if (typeof msg.content === "string") {
@@ -523,10 +597,23 @@ export async function handleSessionAction(
             if (block.type === "text") {
               lines.push(`## ${msg.role === "user" ? "User" : "Assistant"}\n`, block.text, "");
             } else if (block.type === "tool_use") {
-              lines.push(`### Tool: ${block.name}\n`, "```json", JSON.stringify(block.input, null, 2), "```", "");
+              lines.push(
+                `### Tool: ${block.name}\n`,
+                "```json",
+                JSON.stringify(block.input, null, 2),
+                "```",
+                "",
+              );
             } else if (block.type === "tool_result") {
-              const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content);
-              lines.push(`### Result${block.is_error ? " (Error)" : ""}\n`, "```", content.slice(0, 1000), "```", "");
+              const content =
+                typeof block.content === "string" ? block.content : JSON.stringify(block.content);
+              lines.push(
+                `### Result${block.is_error ? " (Error)" : ""}\n`,
+                "```",
+                content.slice(0, 1000),
+                "```",
+                "",
+              );
             }
           }
         }
@@ -557,26 +644,34 @@ export async function handleSessionAction(
         if (typeof msg.content === "string") {
           const preview = msg.content.split("\n")[0]!.slice(0, 70);
           const icon = msg.role === "user" ? "\u25B6" : "\u25C0";
-          lines.push(`  ${num} ${icon} [${msg.role}] ${preview}${msg.content.length > 70 ? "..." : ""}`);
+          lines.push(
+            `  ${num} ${icon} [${msg.role}] ${preview}${msg.content.length > 70 ? "..." : ""}`,
+          );
         } else {
           // Count blocks
-          const textBlocks = msg.content.filter(b => b.type === "text");
-          const toolBlocks = msg.content.filter(b => b.type === "tool_use");
-          const resultBlocks = msg.content.filter(b => b.type === "tool_result");
+          const textBlocks = msg.content.filter((b) => b.type === "text");
+          const toolBlocks = msg.content.filter((b) => b.type === "tool_use");
+          const resultBlocks = msg.content.filter((b) => b.type === "tool_result");
           toolCallCount += toolBlocks.length;
 
           if (textBlocks.length > 0) {
             const firstText = textBlocks[0]!.type === "text" ? textBlocks[0]!.text : "";
             const preview = firstText.split("\n")[0]!.slice(0, 60);
             const icon = msg.role === "user" ? "\u25B6" : "\u25C0";
-            lines.push(`  ${num} ${icon} [${msg.role}] ${preview}${firstText.length > 60 ? "..." : ""}`);
+            lines.push(
+              `  ${num} ${icon} [${msg.role}] ${preview}${firstText.length > 60 ? "..." : ""}`,
+            );
           }
           if (toolBlocks.length > 0) {
-            const toolNames = toolBlocks.map(b => b.type === "tool_use" ? b.name : "?").join(", ");
+            const toolNames = toolBlocks
+              .map((b) => (b.type === "tool_use" ? b.name : "?"))
+              .join(", ");
             lines.push(`        \u2699 ${toolBlocks.length} tool(s): ${toolNames}`);
           }
           if (resultBlocks.length > 0) {
-            const errors = resultBlocks.filter(b => b.type === "tool_result" && b.is_error).length;
+            const errors = resultBlocks.filter(
+              (b) => b.type === "tool_result" && b.is_error,
+            ).length;
             if (errors > 0) lines.push(`        \u2717 ${errors} error(s)`);
           }
         }
@@ -587,7 +682,9 @@ export async function handleSessionAction(
       return lines.join("\n");
     }
     case "bookmark": {
-      const { addBookmark, loadBookmarks, getBookmark, removeBookmark } = await import("../../core/bookmarks.js");
+      const { addBookmark, loadBookmarks, getBookmark, removeBookmark } = await import(
+        "../../core/bookmarks.js"
+      );
       const arg = args?.trim() ?? "list";
       const state = conversationManager.getState();
 
@@ -596,7 +693,9 @@ export async function handleSessionAction(
         if (bookmarks.length === 0) return "  No bookmarks set. Usage: /bookmark <label>";
         const lines = ["  Bookmarks:\n"];
         for (const b of bookmarks) {
-          lines.push(`  \u{1F4CC} ${b.label} \u2014 msg #${b.messageIndex} (${b.timestamp.slice(0, 16)})`);
+          lines.push(
+            `  \u{1F4CC} ${b.label} \u2014 msg #${b.messageIndex} (${b.timestamp.slice(0, 16)})`,
+          );
           lines.push(`     ${b.preview}`);
         }
         return lines.join("\n");
@@ -609,7 +708,8 @@ export async function handleSessionAction(
 
         // Truncate conversation to bookmark point
         const msgCount = bookmark.messageIndex;
-        if (msgCount >= state.messages.length) return `  Bookmark "${label}" points beyond current conversation.`;
+        if (msgCount >= state.messages.length)
+          return `  Bookmark "${label}" points beyond current conversation.`;
 
         conversationManager.restoreMessages(state.messages.slice(0, msgCount));
         return `  Jumped to bookmark "${label}" (message #${msgCount}). ${state.messages.length - msgCount} messages removed.`;
@@ -637,14 +737,15 @@ export async function handleSessionAction(
 
       for (let i = 0; i < state.messages.length; i++) {
         const msg = state.messages[i]!;
-        let texts: string[] = [];
+        const texts: string[] = [];
 
         if (typeof msg.content === "string") {
           texts.push(msg.content);
         } else {
           for (const block of msg.content) {
             if (block.type === "text") texts.push(block.text);
-            else if (block.type === "tool_use") texts.push(`${block.name}: ${JSON.stringify(block.input).slice(0, 200)}`);
+            else if (block.type === "tool_use")
+              texts.push(`${block.name}: ${JSON.stringify(block.input).slice(0, 200)}`);
           }
         }
 
@@ -653,17 +754,24 @@ export async function handleSessionAction(
             const lineIdx = text.toLowerCase().indexOf(query);
             const start = Math.max(0, lineIdx - 40);
             const end = Math.min(text.length, lineIdx + query.length + 40);
-            const snippet = (start > 0 ? "..." : "") + text.slice(start, end).replace(/\n/g, " ") + (end < text.length ? "..." : "");
+            const snippet =
+              (start > 0 ? "..." : "") +
+              text.slice(start, end).replace(/\n/g, " ") +
+              (end < text.length ? "..." : "");
             matches.push(`  #${i + 1} [${msg.role}] ${snippet}`);
             break; // One match per message
           }
         }
       }
 
-      if (matches.length === 0) return `  No matches for "${args.trim()}" in ${state.messages.length} messages.`;
+      if (matches.length === 0)
+        return `  No matches for "${args.trim()}" in ${state.messages.length} messages.`;
 
-      return [`  Search: "${args.trim()}" (${matches.length} matches)\n`, ...matches.slice(0, 20)].join("\n") +
-        (matches.length > 20 ? `\n  ... and ${matches.length - 20} more` : "");
+      return (
+        [`  Search: "${args.trim()}" (${matches.length} matches)\n`, ...matches.slice(0, 20)].join(
+          "\n",
+        ) + (matches.length > 20 ? `\n  ... and ${matches.length - 20} more` : "")
+      );
     }
     case "rename": {
       // Handled specially in processMessage since it needs setSessionName
@@ -698,7 +806,9 @@ export async function handleSessionAction(
       return `  Auto-compaction threshold set to ${pct}% of context window.`;
     }
     case "snapshot": {
-      const { captureSnapshot, saveSnapshot, exportSnapshot } = await import("../../core/session-snapshot.js");
+      const { captureSnapshot, saveSnapshot, exportSnapshot } = await import(
+        "../../core/session-snapshot.js"
+      );
       const state = conversationManager.getState();
       const usage = conversationManager.getUsage();
       const startTime = Date.now() - 60_000; // approximate — real start time not available here
@@ -708,9 +818,21 @@ export async function handleSessionAction(
       let gitCommit: string | undefined;
       try {
         const { execSync } = await import("node:child_process");
-        gitBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: appConfig.workingDirectory, timeout: 3000 }).toString().trim();
-        gitCommit = execSync("git rev-parse --short HEAD", { cwd: appConfig.workingDirectory, timeout: 3000 }).toString().trim();
-      } catch (_) { /* not a git repo */ }
+        gitBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+          cwd: appConfig.workingDirectory,
+          timeout: 3000,
+        })
+          .toString()
+          .trim();
+        gitCommit = execSync("git rev-parse --short HEAD", {
+          cwd: appConfig.workingDirectory,
+          timeout: 3000,
+        })
+          .toString()
+          .trim();
+      } catch (_) {
+        /* not a git repo */
+      }
 
       // Calculate total cost from turn costs
       const turnCosts = conversationManager.getTurnCosts();
@@ -757,7 +879,9 @@ export async function handleSessionAction(
       ].join("\n");
     }
     case "snapshots": {
-      const { listSnapshots, loadSnapshot, diffSnapshots, exportSnapshot } = await import("../../core/session-snapshot.js");
+      const { listSnapshots, loadSnapshot, diffSnapshots, exportSnapshot } = await import(
+        "../../core/session-snapshot.js"
+      );
       const arg = args?.trim() ?? "";
 
       // /snapshots view <id>
@@ -769,7 +893,8 @@ export async function handleSessionAction(
         const md = exportSnapshot(snap, "markdown");
         // Show a truncated version in terminal
         const lines = md.split("\n").slice(0, 40);
-        if (md.split("\n").length > 40) lines.push("", "  ... (truncated, use /snapshot markdown for full export)");
+        if (md.split("\n").length > 40)
+          lines.push("", "  ... (truncated, use /snapshot markdown for full export)");
         return lines.map((l) => `  ${l}`).join("\n");
       }
 
@@ -785,10 +910,7 @@ export async function handleSessionAction(
 
         const diff = diffSnapshots(snapA, snapB);
 
-        const lines = [
-          `  Snapshot Diff: ${parts[0]} vs ${parts[1]}`,
-          ``,
-        ];
+        const lines = [`  Snapshot Diff: ${parts[0]} vs ${parts[1]}`, ``];
 
         if (diff.configChanges.length > 0) {
           lines.push(`  Config changes:`);
@@ -799,17 +921,25 @@ export async function handleSessionAction(
           lines.push(`  Config: identical`);
         }
 
-        lines.push(`  Messages: ${diff.messageCountDelta >= 0 ? "+" : ""}${diff.messageCountDelta}`);
-        lines.push(`  Tokens: ${diff.tokenDelta >= 0 ? "+" : ""}${diff.tokenDelta.toLocaleString()}`);
+        lines.push(
+          `  Messages: ${diff.messageCountDelta >= 0 ? "+" : ""}${diff.messageCountDelta}`,
+        );
+        lines.push(
+          `  Tokens: ${diff.tokenDelta >= 0 ? "+" : ""}${diff.tokenDelta.toLocaleString()}`,
+        );
         if (diff.costDelta !== undefined) {
           lines.push(`  Cost: ${diff.costDelta >= 0 ? "+" : ""}$${diff.costDelta.toFixed(4)}`);
         }
-        lines.push(`  Duration: ${diff.durationDelta >= 0 ? "+" : ""}${Math.round(diff.durationDelta / 1000)}s`);
+        lines.push(
+          `  Duration: ${diff.durationDelta >= 0 ? "+" : ""}${Math.round(diff.durationDelta / 1000)}s`,
+        );
 
         if (diff.newTools.length > 0) lines.push(`  New tools: ${diff.newTools.join(", ")}`);
-        if (diff.removedTools.length > 0) lines.push(`  Removed tools: ${diff.removedTools.join(", ")}`);
+        if (diff.removedTools.length > 0)
+          lines.push(`  Removed tools: ${diff.removedTools.join(", ")}`);
         if (diff.newFiles.length > 0) lines.push(`  New files: ${diff.newFiles.join(", ")}`);
-        if (diff.removedFiles.length > 0) lines.push(`  Removed files: ${diff.removedFiles.join(", ")}`);
+        if (diff.removedFiles.length > 0)
+          lines.push(`  Removed files: ${diff.removedFiles.join(", ")}`);
 
         return lines.join("\n");
       }
@@ -822,10 +952,13 @@ export async function handleSessionAction(
       const lines = [`  Saved Snapshots (${snapshots.length}):\n`];
       for (const s of snapshots) {
         const date = s.createdAt.slice(0, 16).replace("T", " ");
-        const dur = s.duration < 60_000
-          ? `${Math.round(s.duration / 1000)}s`
-          : `${Math.round(s.duration / 60_000)}m`;
-        lines.push(`  ${date}  ${s.model.slice(0, 20).padEnd(20)}  ${s.turnCount} turns  ${s.messageCount} msgs  ${dur}`);
+        const dur =
+          s.duration < 60_000
+            ? `${Math.round(s.duration / 1000)}s`
+            : `${Math.round(s.duration / 60_000)}m`;
+        lines.push(
+          `  ${date}  ${s.model.slice(0, 20).padEnd(20)}  ${s.turnCount} turns  ${s.messageCount} msgs  ${dur}`,
+        );
         lines.push(`    ${s.id}`);
       }
       lines.push(`\n  View: /snapshots view <id>`);

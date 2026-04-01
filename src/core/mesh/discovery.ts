@@ -1,17 +1,17 @@
 // KCode - P2P Agent Mesh Discovery
 // Discover peers on LAN via mDNS multicast, manual config, or shared file directory.
 
-import type { PeerInfo, PeerCapabilities, DiscoveryMethod } from "./types";
 import { log } from "../logger";
+import type { DiscoveryMethod, PeerCapabilities, PeerInfo } from "./types";
 
 // ─── Constants ─────────────────────────────────────────────────
 
 const MDNS_MULTICAST_ADDR = "224.0.0.251";
 const MDNS_PORT = 5353;
 const KCODE_SERVICE_TYPE = "_kcode-mesh._tcp";
-const ANNOUNCE_INTERVAL_MS = 30_000;    // Re-announce every 30s
-const PEER_TIMEOUT_MS = 90_000;         // Consider peer offline after 90s without heartbeat
-const SHARED_FILE_POLL_MS = 10_000;     // Poll shared directory every 10s
+const ANNOUNCE_INTERVAL_MS = 30_000; // Re-announce every 30s
+const PEER_TIMEOUT_MS = 90_000; // Consider peer offline after 90s without heartbeat
+const SHARED_FILE_POLL_MS = 10_000; // Poll shared directory every 10s
 
 // ─── PeerDiscovery ─────────────────────────────────────────────
 
@@ -88,22 +88,15 @@ export class PeerDiscovery {
    * Probe a single peer to get its info.
    * Returns null if the peer is unreachable.
    */
-  async probePeer(
-    host: string,
-    port: number,
-    teamToken: string,
-  ): Promise<PeerInfo | null> {
+  async probePeer(host: string, port: number, teamToken: string): Promise<PeerInfo | null> {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5_000);
 
-      const response = await fetch(
-        `http://${host}:${port}/api/v1/capabilities`,
-        {
-          headers: { "X-Team-Token": teamToken },
-          signal: controller.signal,
-        },
-      );
+      const response = await fetch(`http://${host}:${port}/api/v1/capabilities`, {
+        headers: { "X-Team-Token": teamToken },
+        signal: controller.signal,
+      });
       clearTimeout(timeout);
 
       if (!response.ok) return null;
@@ -222,9 +215,7 @@ export class PeerDiscovery {
    */
   getAvailablePeers(): PeerInfo[] {
     return Array.from(this.peers.values())
-      .filter(
-        (p) => p.status === "online" && p.nodeId !== this.localNodeId,
-      )
+      .filter((p) => p.status === "online" && p.nodeId !== this.localNodeId)
       .sort((a, b) => b.capabilities.gpuVram - a.capabilities.gpuVram);
   }
 
@@ -282,10 +273,10 @@ export class PeerDiscovery {
 // ─── Exports ───────────────────────────────────────────────────
 
 export {
+  ANNOUNCE_INTERVAL_MS,
+  KCODE_SERVICE_TYPE,
   MDNS_MULTICAST_ADDR,
   MDNS_PORT,
-  KCODE_SERVICE_TYPE,
-  ANNOUNCE_INTERVAL_MS,
   PEER_TIMEOUT_MS,
   SHARED_FILE_POLL_MS,
 };

@@ -2,12 +2,8 @@
 // Tests the component logic, visible range slicing, scroll indicator, and spacers.
 // Uses pure function tests since Ink components require a full render environment.
 
-import { describe, test, expect } from "bun:test";
-import {
-  calculateVisibleRange,
-  BUFFER_SIZE,
-  DEFAULT_HEIGHT,
-} from "../hooks/useVirtualScroll";
+import { describe, expect, test } from "bun:test";
+import { BUFFER_SIZE, calculateVisibleRange, DEFAULT_HEIGHT } from "../hooks/useVirtualScroll";
 import type { MessageEntry } from "./MessageList";
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -175,16 +171,16 @@ describe("VirtualMessageList — message entry rendering", () => {
 describe("VirtualMessageList — mixed heights", () => {
   test("conversation with varied message heights", () => {
     const heights = makeHeights([
-      [0, 2],   // short user message
-      [1, 15],  // long assistant response
-      [2, 1],   // tool use
-      [3, 3],   // tool result
-      [4, 1],   // tool use
-      [5, 5],   // tool result
-      [6, 20],  // long assistant response
-      [7, 2],   // user message
-      [8, 10],  // assistant response
-      [9, 1],   // tool use
+      [0, 2], // short user message
+      [1, 15], // long assistant response
+      [2, 1], // tool use
+      [3, 3], // tool result
+      [4, 1], // tool use
+      [5, 5], // tool result
+      [6, 20], // long assistant response
+      [7, 2], // user message
+      [8, 10], // assistant response
+      [9, 1], // tool use
     ]);
     // Total = 2+15+1+3+1+5+20+2+10+1 = 60
     const range = calculateVisibleRange(10, heights, 0, 20, 2, makeGetId());

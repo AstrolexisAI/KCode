@@ -1,21 +1,21 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
-import {
-  parseExtractionResponse,
-  titleToSlug,
-  generateFilename,
-  saveExtractedMemories,
-  buildUserPrompt,
-  runAutoMemoryExtraction,
-  getMemoryTitles,
-  EXTRACTOR_SYSTEM_PROMPT,
-} from "./extractor";
-import { DEFAULT_AUTO_MEMORY_CONFIG } from "./types";
-import type { ExtractedMemory } from "./types";
 import { initMemoryStoreSchema } from "../memory-store";
+import {
+  buildUserPrompt,
+  EXTRACTOR_SYSTEM_PROMPT,
+  generateFilename,
+  getMemoryTitles,
+  parseExtractionResponse,
+  runAutoMemoryExtraction,
+  saveExtractedMemories,
+  titleToSlug,
+} from "./extractor";
+import type { ExtractedMemory } from "./types";
+import { DEFAULT_AUTO_MEMORY_CONFIG } from "./types";
 
 // ─── parseExtractionResponse ────────────────────────────────────
 
@@ -84,7 +84,7 @@ describe("parseExtractionResponse", () => {
     const raw = JSON.stringify({
       memories: [
         { type: "user", title: "No Content" }, // missing content
-        { type: "user", content: "No Title" },  // missing title
+        { type: "user", content: "No Title" }, // missing title
         { type: "user", title: "Valid", content: "Has both", confidence: 0.8 },
       ],
       reasoning: "test",
@@ -110,9 +110,7 @@ describe("parseExtractionResponse", () => {
   test("truncates titles longer than 80 chars", () => {
     const longTitle = "A".repeat(100);
     const raw = JSON.stringify({
-      memories: [
-        { type: "user", title: longTitle, content: "Content", confidence: 0.9 },
-      ],
+      memories: [{ type: "user", title: longTitle, content: "Content", confidence: 0.9 }],
       reasoning: "test",
     });
     const result = parseExtractionResponse(raw);
@@ -121,9 +119,7 @@ describe("parseExtractionResponse", () => {
 
   test("defaults missing confidence to 0.5", () => {
     const raw = JSON.stringify({
-      memories: [
-        { type: "user", title: "Test", content: "Content" },
-      ],
+      memories: [{ type: "user", title: "Test", content: "Content" }],
       reasoning: "test",
     });
     const result = parseExtractionResponse(raw);
@@ -132,9 +128,7 @@ describe("parseExtractionResponse", () => {
 
   test("uses title as description fallback", () => {
     const raw = JSON.stringify({
-      memories: [
-        { type: "user", title: "My Title", content: "Content", confidence: 0.9 },
-      ],
+      memories: [{ type: "user", title: "My Title", content: "Content", confidence: 0.9 }],
       reasoning: "test",
     });
     const result = parseExtractionResponse(raw);
@@ -148,7 +142,8 @@ describe("parseExtractionResponse", () => {
           type: "feedback",
           title: "No mocks in tests",
           description: "User prefers real implementations over mocks",
-          content: "User said: 'Don't use mocks in tests, I prefer real implementations because they catch more bugs.'",
+          content:
+            "User said: 'Don't use mocks in tests, I prefer real implementations because they catch more bugs.'",
           confidence: 0.95,
         },
       ],
@@ -340,7 +335,8 @@ describe("runAutoMemoryExtraction", () => {
           type: "user",
           title: "User is a backend engineer",
           description: "The user is a backend engineer specializing in Go",
-          content: "The user mentioned they are a backend engineer who primarily works with Go and PostgreSQL.",
+          content:
+            "The user mentioned they are a backend engineer who primarily works with Go and PostgreSQL.",
           confidence: 0.9,
         },
       ],
@@ -406,7 +402,11 @@ describe("runAutoMemoryExtraction", () => {
 
     const result = await runAutoMemoryExtraction({
       recentMessages: [
-        { role: "user", content: "Don't use mocks in the tests. I prefer real implementations because they catch more bugs." },
+        {
+          role: "user",
+          content:
+            "Don't use mocks in the tests. I prefer real implementations because they catch more bugs.",
+        },
         { role: "assistant", content: "Understood, I'll use real implementations." },
       ],
       existingTitles: [],

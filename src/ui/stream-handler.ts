@@ -1,12 +1,12 @@
 // KCode - Stream event handler
 // Extracted from App.tsx — processes LLM streaming events and updates UI state
 
-import type { StreamEvent } from "../core/types.js";
 import type { ConversationManager } from "../core/conversation.js";
-import type { MessageEntry } from "./components/MessageList.js";
-import type { KodiEvent } from "./components/Kodi.js";
 import { getFileChangeSuggester } from "../core/file-watcher.js";
+import type { StreamEvent } from "../core/types.js";
 import { summarizeInput } from "./builtin-actions.js";
+import type { KodiEvent } from "./components/Kodi.js";
+import type { MessageEntry } from "./components/MessageList.js";
 
 export interface TabInfo {
   toolUseId: string;
@@ -47,12 +47,23 @@ export async function processStreamEvents(
   deps: StreamHandlerDeps,
 ): Promise<void> {
   const {
-    config, conversationManager, tabRemovalTimers,
-    setLoadingMessage, setLastKodiEvent, setIsThinking,
-    setStreamingThinking, setCompleted, setStreamingText,
-    setToolUseCount, setBashStreamOutput, setActiveTabs,
-    setTokenCount, setTurnTokens, setSpinnerPhase,
-    setRunningAgentCount, setWatcherSuggestions,
+    config,
+    conversationManager,
+    tabRemovalTimers,
+    setLoadingMessage,
+    setLastKodiEvent,
+    setIsThinking,
+    setStreamingThinking,
+    setCompleted,
+    setStreamingText,
+    setToolUseCount,
+    setBashStreamOutput,
+    setActiveTabs,
+    setTokenCount,
+    setTurnTokens,
+    setSpinnerPhase,
+    setRunningAgentCount,
+    setWatcherSuggestions,
   } = deps;
 
   let currentText = "";
@@ -75,7 +86,9 @@ export async function processStreamEvents(
         try {
           const { getRunningAgentCount } = await import("../tools/agent.js");
           setRunningAgentCount(getRunningAgentCount());
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         break;
 
       case "text_delta":
@@ -85,10 +98,7 @@ export async function processStreamEvents(
           const thinking = currentThinking;
           setIsThinking(false);
           setStreamingThinking("");
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "thinking", text: thinking },
-          ]);
+          setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
           currentThinking = "";
         }
         currentText += event.text;
@@ -112,19 +122,13 @@ export async function processStreamEvents(
           const thinking = currentThinking;
           setIsThinking(false);
           setStreamingThinking("");
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "thinking", text: thinking },
-          ]);
+          setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
           currentThinking = "";
         }
         // Finalize any accumulated text
         if (currentText.length > 0) {
           const text = currentText;
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "text", role: "assistant", text },
-          ]);
+          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text }]);
           currentText = "";
           setStreamingText("");
         }
@@ -137,19 +141,22 @@ export async function processStreamEvents(
       case "tool_executing": {
         setLastKodiEvent({ type: "tool_start", detail: event.name });
         const summary = summarizeInput(event.name, event.input);
-        setCompleted((prev) => [
-          ...prev,
-          { kind: "tool_use", name: event.name, summary },
-        ]);
+        setCompleted((prev) => [...prev, { kind: "tool_use", name: event.name, summary }]);
         // Enhanced loading message with command/file details
         const detail = summary ? summary.slice(0, 60) : "";
         setLoadingMessage(detail ? `Running ${event.name}: ${detail}` : `Running ${event.name}...`);
         setSpinnerPhase("tool");
         // Add to active tabs, except for Plan which has its own persistent panel.
         if (event.name !== "Plan") {
-          setActiveTabs(prev => [
-            ...prev.filter(t => t.toolUseId !== event.toolUseId),
-            { toolUseId: event.toolUseId, name: event.name, summary: detail, status: "running", startTime: Date.now() },
+          setActiveTabs((prev) => [
+            ...prev.filter((t) => t.toolUseId !== event.toolUseId),
+            {
+              toolUseId: event.toolUseId,
+              name: event.name,
+              summary: detail,
+              status: "running",
+              startTime: Date.now(),
+            },
           ]);
         }
         break;
@@ -218,19 +225,27 @@ export async function processStreamEvents(
           try {
             const { getRunningAgentCount } = await import("../tools/agent.js");
             setRunningAgentCount(getRunningAgentCount());
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         }
         // Update tab: mark as done/error, then remove after 1.5s.
         // Plan is excluded from ToolTabs because it lives in the fixed ActivePlanPanel.
         if (event.name !== "Plan") {
-          setActiveTabs(prev => prev.map(t =>
-            t.toolUseId === event.toolUseId
-              ? { ...t, status: (event.isError ? "error" : "done") as "done" | "error", durationMs: event.durationMs }
-              : t
-          ));
+          setActiveTabs((prev) =>
+            prev.map((t) =>
+              t.toolUseId === event.toolUseId
+                ? {
+                    ...t,
+                    status: (event.isError ? "error" : "done") as "done" | "error",
+                    durationMs: event.durationMs,
+                  }
+                : t,
+            ),
+          );
           {
             const timerId = setTimeout(() => {
-              setActiveTabs(prev => prev.filter(t => t.toolUseId !== event.toolUseId));
+              setActiveTabs((prev) => prev.filter((t) => t.toolUseId !== event.toolUseId));
               tabRemovalTimers.current.delete(timerId);
             }, 1500);
             tabRemovalTimers.current.add(timerId);
@@ -264,10 +279,7 @@ export async function processStreamEvents(
 
       case "suggestion":
         if (event.suggestions.length > 0) {
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "suggestion", suggestions: event.suggestions },
-          ]);
+          setCompleted((prev) => [...prev, { kind: "suggestion", suggestions: event.suggestions }]);
         }
         break;
 
@@ -290,7 +302,11 @@ export async function processStreamEvents(
         setLastKodiEvent({ type: "compaction" });
         setCompleted((prev) => [
           ...prev,
-          { kind: "banner", title: "Compacting context...", subtitle: `Summarizing ${event.messageCount} messages (~${Math.round(event.tokensBefore / 1000)}k tokens)` },
+          {
+            kind: "banner",
+            title: "Compacting context...",
+            subtitle: `Summarizing ${event.messageCount} messages (~${Math.round(event.tokensBefore / 1000)}k tokens)`,
+          },
         ]);
         setLoadingMessage("Compacting context...");
         break;
@@ -298,14 +314,22 @@ export async function processStreamEvents(
       case "compaction_end":
         setCompleted((prev) => [
           ...prev,
-          { kind: "banner", title: "Context compacted", subtitle: `${event.method === "llm" ? "LLM summary" : event.method === "compressed" ? "Tool results compressed" : "Messages pruned"} \u2192 ~${Math.round(event.tokensAfter / 1000)}k tokens` },
+          {
+            kind: "banner",
+            title: "Context compacted",
+            subtitle: `${event.method === "llm" ? "LLM summary" : event.method === "compressed" ? "Tool results compressed" : "Messages pruned"} \u2192 ~${Math.round(event.tokensAfter / 1000)}k tokens`,
+          },
         ]);
         break;
 
       case "budget_warning":
         setCompleted((prev) => [
           ...prev,
-          { kind: "banner", title: `Budget ${event.pct >= 100 ? "EXCEEDED" : "warning"}: ${event.pct}%`, subtitle: `$${event.costUsd.toFixed(2)} / $${event.limitUsd.toFixed(2)}` },
+          {
+            kind: "banner",
+            title: `Budget ${event.pct >= 100 ? "EXCEEDED" : "warning"}: ${event.pct}%`,
+            subtitle: `$${event.costUsd.toFixed(2)} / $${event.limitUsd.toFixed(2)}`,
+          },
         ]);
         break;
 
@@ -313,12 +337,18 @@ export async function processStreamEvents(
         if (event.status === "running" || event.status === "queued") {
           setLoadingMessage(`Parallel: ${event.name} (${event.index + 1}/${event.total})...`);
           // Update tab status
-          setActiveTabs(prev => prev.map(t =>
-            t.toolUseId === event.toolUseId ? { ...t, status: event.status as "running" | "queued" } : t
-          ));
+          setActiveTabs((prev) =>
+            prev.map((t) =>
+              t.toolUseId === event.toolUseId
+                ? { ...t, status: event.status as "running" | "queued" }
+                : t,
+            ),
+          );
         } else if (event.status === "done") {
           const ms = event.durationMs ? ` ${event.durationMs}ms` : "";
-          setLoadingMessage(`Parallel: ${event.name} done${ms} (${event.index + 1}/${event.total})`);
+          setLoadingMessage(
+            `Parallel: ${event.name} done${ms} (${event.index + 1}/${event.total})`,
+          );
         }
         break;
 
@@ -329,10 +359,7 @@ export async function processStreamEvents(
           const thinking = currentThinking;
           setIsThinking(false);
           setStreamingThinking("");
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "thinking", text: thinking },
-          ]);
+          setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
           currentThinking = "";
         }
         // Finalize any remaining streamed text
@@ -348,27 +375,33 @@ export async function processStreamEvents(
                 text = text.slice(0, lastNewline).trimEnd();
               }
             }
-          } catch { /* module not loaded */ }
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "text", role: "assistant", text },
-          ]);
+          } catch {
+            /* module not loaded */
+          }
+          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text }]);
           currentText = "";
           setStreamingText("");
-        } else if (!hadPartialProgress && event.stopReason !== "tool_use" && event.stopReason !== "max_tokens_continue" && event.stopReason !== "empty_response_retry" && event.stopReason !== "checkpoint_reached" && event.stopReason !== "theoretical_no_tools" && event.stopReason !== "truncation_retry" && event.stopReason !== "plan_stop_reached") {
+        } else if (
+          !hadPartialProgress &&
+          event.stopReason !== "tool_use" &&
+          event.stopReason !== "max_tokens_continue" &&
+          event.stopReason !== "empty_response_retry" &&
+          event.stopReason !== "checkpoint_reached" &&
+          event.stopReason !== "theoretical_no_tools" &&
+          event.stopReason !== "truncation_retry" &&
+          event.stopReason !== "plan_stop_reached"
+        ) {
           // Model returned empty response — show a diagnostic fallback
           const emptyType = event.emptyType;
-          const hint = emptyType === "thinking_only"
-            ? "(the model reasoned but produced no visible answer — try a different model or disable thinking)"
-            : emptyType === "tools_only"
-            ? "(the model used tools but gave no response — try rephrasing)"
-            : emptyType === "no_output"
-            ? "(empty response — the model returned no text. Try rephrasing or use a different model.)"
-            : "(empty response \u2014 the model returned no text. Try rephrasing or use a different model.)";
-          setCompleted((prev) => [
-            ...prev,
-            { kind: "text", role: "assistant", text: `  ${hint}` },
-          ]);
+          const hint =
+            emptyType === "thinking_only"
+              ? "(the model reasoned but produced no visible answer — try a different model or disable thinking)"
+              : emptyType === "tools_only"
+                ? "(the model used tools but gave no response — try rephrasing)"
+                : emptyType === "no_output"
+                  ? "(empty response — the model returned no text. Try rephrasing or use a different model.)"
+                  : "(empty response \u2014 the model returned no text. Try rephrasing or use a different model.)";
+          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  ${hint}` }]);
         }
         // Show incomplete response banner if the session ended incomplete
         try {
@@ -376,21 +409,34 @@ export async function processStreamEvents(
           const lastSession = getLastSession();
           // Only show the incomplete banner once: on the final turn_end, for
           // sessions that closed recently (within 5s) and with terminal stop reasons.
-          const isTerminalStop = event.stopReason === "end_turn" || event.stopReason === "error"
-            || event.stopReason === "force_stop" || event.stopReason === "aborted";
-          const isRecent = lastSession && (Date.now() - lastSession.updatedAt < 5000);
-          if (lastSession && isRecent && isTerminalStop
-              && (lastSession.status === "incomplete" || lastSession.status === "failed")) {
+          const isTerminalStop =
+            event.stopReason === "end_turn" ||
+            event.stopReason === "error" ||
+            event.stopReason === "force_stop" ||
+            event.stopReason === "aborted";
+          const isRecent = lastSession && Date.now() - lastSession.updatedAt < 5000;
+          if (
+            lastSession &&
+            isRecent &&
+            isTerminalStop &&
+            (lastSession.status === "incomplete" || lastSession.status === "failed")
+          ) {
             setCompleted((prev) => {
               // Don't add duplicate banners
-              if (prev.some(e => e.kind === "incomplete_response")) return prev;
+              if (prev.some((e) => e.kind === "incomplete_response")) return prev;
               return [
                 ...prev,
-                { kind: "incomplete_response" as const, continuations: lastSession.continuationCount, stopReason: event.stopReason },
+                {
+                  kind: "incomplete_response" as const,
+                  continuations: lastSession.continuationCount,
+                  stopReason: event.stopReason,
+                },
               ];
             });
           }
-        } catch { /* module not loaded */ }
+        } catch {
+          /* module not loaded */
+        }
 
         // Show any pending file change suggestions
         {

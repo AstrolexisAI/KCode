@@ -2,16 +2,16 @@
 // Atomic download of plugin tarballs from CDN with integrity verification.
 // Flow: download -> verify SHA -> extract -> validate manifest -> atomic swap
 
-import { existsSync, mkdirSync, rmSync, renameSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "../logger";
 import { SHATracker } from "./sha-tracker";
-import { verifyPlugin } from "./verifier";
 import type { CDNFetcherConfig, FetchResult } from "./types";
+import { verifyPlugin } from "./verifier";
 
 const DEFAULT_CONFIG: CDNFetcherConfig = {
   cdnBaseUrl: "https://cdn.kulvex.ai/plugins",
-  cacheDir: "",  // Must be set by caller
+  cacheDir: "", // Must be set by caller
   timeoutMs: 30_000,
 };
 
@@ -87,7 +87,7 @@ export class CDNFetcher {
       const expectedSHA = response.headers.get("x-content-sha256");
       if (expectedSHA && computedSHA !== expectedSHA) {
         throw new IntegrityError(
-          `SHA256 mismatch for ${pluginName}: expected ${expectedSHA}, got ${computedSHA}`
+          `SHA256 mismatch for ${pluginName}: expected ${expectedSHA}, got ${computedSHA}`,
         );
       }
 
@@ -104,8 +104,8 @@ export class CDNFetcher {
       const verification = verifyPlugin(extractTmpDir);
       if (!verification.valid) {
         const errors = verification.issues
-          .filter(i => i.severity === "error")
-          .map(i => i.message)
+          .filter((i) => i.severity === "error")
+          .map((i) => i.message)
           .join("; ");
         throw new Error(`Plugin verification failed: ${errors}`);
       }
@@ -118,7 +118,7 @@ export class CDNFetcher {
       // Verify name matches
       if (manifest.name && manifest.name !== pluginName) {
         throw new Error(
-          `Plugin name mismatch: expected "${pluginName}", manifest says "${manifest.name}"`
+          `Plugin name mismatch: expected "${pluginName}", manifest says "${manifest.name}"`,
         );
       }
 
@@ -148,7 +148,10 @@ export class CDNFetcher {
       if (existsSync(prevDir) && !existsSync(currentDir)) {
         try {
           renameSync(prevDir, currentDir);
-          log.warn("marketplace", `Download of ${pluginName} failed, rolled back to previous version`);
+          log.warn(
+            "marketplace",
+            `Download of ${pluginName} failed, rolled back to previous version`,
+          );
         } catch {
           // Best effort rollback
         }

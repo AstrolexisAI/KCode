@@ -1,5 +1,5 @@
-import { test, expect, describe } from "bun:test";
-import { classifyEffort, getEffortProfile, EFFORT_PROFILES } from "./effort-classifier";
+import { describe, expect, test } from "bun:test";
+import { classifyEffort, EFFORT_PROFILES, getEffortProfile } from "./effort-classifier";
 
 describe("effort-classifier", () => {
   describe("classifyEffort", () => {
@@ -24,17 +24,23 @@ describe("effort-classifier", () => {
     });
 
     test("multi-file refactor → high or max", () => {
-      const result = classifyEffort("Refactor the authentication system across the codebase to use the new patterns");
+      const result = classifyEffort(
+        "Refactor the authentication system across the codebase to use the new patterns",
+      );
       expect(["high", "max"]).toContain(result.level);
     });
 
     test("performance optimization → high or max", () => {
-      const result = classifyEffort("Optimize the performance of the database query system across multiple modules");
+      const result = classifyEffort(
+        "Optimize the performance of the database query system across multiple modules",
+      );
       expect(["high", "max"]).toContain(result.level);
     });
 
     test("full rewrite → max", () => {
-      const result = classifyEffort("Do a full rewrite of the router from scratch with a new architecture");
+      const result = classifyEffort(
+        "Do a full rewrite of the router from scratch with a new architecture",
+      );
       expect(result.level).toBe("max");
     });
 
@@ -61,7 +67,7 @@ describe("effort-classifier", () => {
 
     test("many file references → higher effort", () => {
       const result = classifyEffort(
-        "Update src/a.ts, src/b.ts, src/c.ts, src/d.ts, src/e.ts, src/f.ts to use the new API"
+        "Update src/a.ts, src/b.ts, src/c.ts, src/d.ts, src/e.ts, src/f.ts to use the new API",
       );
       expect(["high", "max"]).toContain(result.level);
     });

@@ -1,8 +1,8 @@
 // KCode - SQLite Telemetry Sink
 // Appends telemetry events to a local SQLite table for offline analysis.
 
-import type { TelemetrySink, TelemetryEvent } from "../types";
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
+import type { TelemetryEvent, TelemetrySink } from "../types";
 
 export class SQLiteSink implements TelemetrySink {
   name = "sqlite";

@@ -1,9 +1,9 @@
 // KCode - File Watcher
 // Watches project directory for external file changes and auto-refreshes codebase index
 
-import { watch, type FSWatcher, existsSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import { existsSync, type FSWatcher, statSync, watch } from "node:fs";
 import { homedir } from "node:os";
+import { extname, join } from "node:path";
 import { log } from "./logger";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -21,16 +21,46 @@ export type FileChangeCallback = (changes: FileChangeEvent[]) => void;
 // ─── Constants ──────────────────────────────────────────────────
 
 const WATCH_EXTENSIONS = new Set([
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".rs", ".go", ".java", ".kt", ".swift",
-  ".c", ".cpp", ".h", ".hpp", ".cs", ".rb",
-  ".vue", ".svelte", ".json", ".toml", ".yaml", ".yml",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".rs",
+  ".go",
+  ".java",
+  ".kt",
+  ".swift",
+  ".c",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".rb",
+  ".vue",
+  ".svelte",
+  ".json",
+  ".toml",
+  ".yaml",
+  ".yml",
 ]);
 
 const IGNORE_DIRS = new Set([
-  "node_modules", "dist", "build", ".git", "__pycache__",
-  "venv", ".next", ".nuxt", "target", "vendor",
-  ".kcode", "coverage", "data",
+  "node_modules",
+  "dist",
+  "build",
+  ".git",
+  "__pycache__",
+  "venv",
+  ".next",
+  ".nuxt",
+  "target",
+  "vendor",
+  ".kcode",
+  "coverage",
+  "data",
 ]);
 
 // Debounce interval in ms — batch rapid changes
@@ -92,7 +122,12 @@ export class FileWatcher {
           changeType = "modify";
         }
 
-        this.pendingChanges.set(relPath, { type: changeType, path: relPath, timestamp: Date.now(), relativePath: relPath });
+        this.pendingChanges.set(relPath, {
+          type: changeType,
+          path: relPath,
+          timestamp: Date.now(),
+          relativePath: relPath,
+        });
 
         // Debounce: batch rapid changes
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
@@ -101,12 +136,18 @@ export class FileWatcher {
 
       // Handle async errors from recursive watch (e.g. EACCES on restricted subdirectories)
       this.watcher.on("error", (err) => {
-        log.warn("watcher", `Watch error (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+        log.warn(
+          "watcher",
+          `Watch error (non-fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
       });
 
       log.info("watcher", `File watcher started for ${this.cwd}`);
     } catch (err) {
-      log.warn("watcher", `Failed to start file watcher: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(
+        "watcher",
+        `Failed to start file watcher: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -161,10 +202,21 @@ export class FileWatcher {
 // ─── Safety ────────────────────────────────────────────────────
 
 const PROJECT_MARKERS = [
-  ".git", "package.json", "Cargo.toml", "go.mod", "pyproject.toml",
-  "setup.py", "requirements.txt", "Makefile", "CMakeLists.txt",
-  "tsconfig.json", "pom.xml", "build.gradle", ".kcode",
-  "KCODE.md", "CLAUDE.md",
+  ".git",
+  "package.json",
+  "Cargo.toml",
+  "go.mod",
+  "pyproject.toml",
+  "setup.py",
+  "requirements.txt",
+  "Makefile",
+  "CMakeLists.txt",
+  "tsconfig.json",
+  "pom.xml",
+  "build.gradle",
+  ".kcode",
+  "KCODE.md",
+  "CLAUDE.md",
 ];
 
 /** Check if a directory looks like a project root (not home/root/random dir). */
@@ -176,7 +228,11 @@ function isProjectDirectory(dir: string): boolean {
 
   // Check for at least one project marker
   return PROJECT_MARKERS.some((marker) => {
-    try { return existsSync(`${normalized}/${marker}`); } catch { return false; }
+    try {
+      return existsSync(`${normalized}/${marker}`);
+    } catch {
+      return false;
+    }
   });
 }
 
@@ -185,10 +241,19 @@ function isProjectDirectory(dir: string): boolean {
 const SUGGEST_DEBOUNCE_MS = 500;
 
 const CONFIG_FILES = new Set([
-  ".env", ".env.local", ".env.production", ".env.development",
-  "tsconfig.json", "webpack.config.js", "webpack.config.ts",
-  "vite.config.ts", "vite.config.js", "next.config.js", "next.config.mjs",
-  "rollup.config.js", "rollup.config.ts",
+  ".env",
+  ".env.local",
+  ".env.production",
+  ".env.development",
+  "tsconfig.json",
+  "webpack.config.js",
+  "webpack.config.ts",
+  "vite.config.ts",
+  "vite.config.js",
+  "next.config.js",
+  "next.config.mjs",
+  "rollup.config.js",
+  "rollup.config.ts",
 ]);
 
 export type SuggestionCallback = (suggestions: string[]) => void;
@@ -289,7 +354,6 @@ export class FileChangeSuggester {
       // File deleted
       if (ev.type === "delete") {
         add(`File deleted: ${ev.path} — update imports?`);
-        continue;
       }
     }
 
@@ -297,7 +361,12 @@ export class FileChangeSuggester {
     for (const [dir, group] of dirChanges) {
       const sourceFiles = group.filter((e) => {
         const n = e.path.split("/").pop() ?? "";
-        return !n.includes(".test.") && !n.includes(".spec.") && !CONFIG_FILES.has(n) && n !== "package.json";
+        return (
+          !n.includes(".test.") &&
+          !n.includes(".spec.") &&
+          !CONFIG_FILES.has(n) &&
+          n !== "package.json"
+        );
       });
       if (sourceFiles.length >= 2) {
         add(`${sourceFiles.length} files changed in ${dir}/ — review changes?`);

@@ -2,11 +2,11 @@
 // Checks for plugin updates on startup (respecting a configurable interval),
 // fetches new versions via CDN, and reports results.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { log } from "../logger";
 import { CDNFetcher } from "./cdn-fetcher";
-import type { AutoUpdateConfig, UpdateReport, CatalogEntry } from "./types";
+import type { AutoUpdateConfig, CatalogEntry, UpdateReport } from "./types";
 
 const DEFAULT_CONFIG: AutoUpdateConfig = {
   enabled: true,
@@ -57,17 +57,20 @@ export async function autoUpdatePlugins(
     try {
       catalog = await fetchCatalogFn(marketplace);
     } catch (err) {
-      log.warn("marketplace", `Failed to fetch catalog from ${marketplace}: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(
+        "marketplace",
+        `Failed to fetch catalog from ${marketplace}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       continue;
     }
 
     // [2b] Filter installed plugins from this marketplace
     const matchingPlugins = installedPlugins.filter(
-      p => !p.marketplace || p.marketplace === marketplace
+      (p) => !p.marketplace || p.marketplace === marketplace,
     );
 
     for (const installed of matchingPlugins) {
-      const remote = catalog.find(c => c.name === installed.name);
+      const remote = catalog.find((c) => c.name === installed.name);
       if (!remote) continue;
 
       // [2c] Compare versions using semver-like comparison
@@ -81,13 +84,19 @@ export async function autoUpdatePlugins(
           from: installed.version,
           to: remote.version,
         });
-        log.info("marketplace", `Auto-updated ${installed.name}: ${installed.version} -> ${remote.version}`);
+        log.info(
+          "marketplace",
+          `Auto-updated ${installed.name}: ${installed.version} -> ${remote.version}`,
+        );
       } catch (err) {
         report.failed.push({
           name: installed.name,
           error: err instanceof Error ? err.message : String(err),
         });
-        log.warn("marketplace", `Auto-update failed for ${installed.name}: ${err instanceof Error ? err.message : String(err)}`);
+        log.warn(
+          "marketplace",
+          `Auto-update failed for ${installed.name}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }

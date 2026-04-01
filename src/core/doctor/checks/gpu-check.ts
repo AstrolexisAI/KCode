@@ -9,12 +9,18 @@ async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string }> {
     const code = await proc.exited;
     const stdout = await new Response(proc.stdout).text();
     return { ok: code === 0, stdout: stdout.trim() };
-  } catch { return { ok: false, stdout: "" }; }
+  } catch {
+    return { ok: false, stdout: "" };
+  }
 }
 
 export async function checkGpu(): Promise<HealthCheck> {
   // Check NVIDIA GPU
-  const nvResult = await run(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]);
+  const nvResult = await run([
+    "nvidia-smi",
+    "--query-gpu=name,memory.total",
+    "--format=csv,noheader,nounits",
+  ]);
   if (nvResult.ok && nvResult.stdout) {
     const lines = nvResult.stdout.split("\n").filter(Boolean);
     const gpus = lines.map((line) => {

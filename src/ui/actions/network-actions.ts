@@ -84,7 +84,8 @@ export async function handleNetworkAction(
             const preview = formatted.split("\n").slice(0, 25);
             lines.push(`  Response (JSON):`);
             for (const l of preview) lines.push(`  ${l}`);
-            if (formatted.split("\n").length > 25) lines.push(`  ... ${formatted.split("\n").length - 25} more lines`);
+            if (formatted.split("\n").length > 25)
+              lines.push(`  ... ${formatted.split("\n").length - 25} more lines`);
           } catch {
             const preview = responseText.slice(0, 500);
             lines.push(`  Response:`);
@@ -119,7 +120,7 @@ export async function handleNetworkAction(
 
         lines.push(`  Status: ${resp.status} ${resp.statusText}\n`);
 
-        const maxKeyLen = Math.max(...[...resp.headers.keys()].map(k => k.length), 4);
+        const maxKeyLen = Math.max(...[...resp.headers.keys()].map((k) => k.length), 4);
         const sorted = [...resp.headers.entries()].sort((a, b) => a[0].localeCompare(b[0]));
         for (const [key, value] of sorted) {
           lines.push(`  ${key.padEnd(maxKeyLen)}  ${value}`);
@@ -181,7 +182,8 @@ export async function handleNetworkAction(
 
         // Response size
         const contentLength = resp.headers.get("content-length");
-        if (contentLength) lines.push(`  Size:      ${parseInt(contentLength).toLocaleString()} bytes`);
+        if (contentLength)
+          lines.push(`  Size:      ${parseInt(contentLength).toLocaleString()} bytes`);
 
         lines.push(`\n  Verdict:   ${isUp ? "UP \u2714" : "DOWN \u2718"}`);
       } catch (err: any) {
@@ -198,7 +200,10 @@ export async function handleNetworkAction(
 
       // Public IP
       try {
-        const resp = await fetch("https://ifconfig.me/ip", { signal: AbortSignal.timeout(5000), headers: { "User-Agent": "curl/8.0" } });
+        const resp = await fetch("https://ifconfig.me/ip", {
+          signal: AbortSignal.timeout(5000),
+          headers: { "User-Agent": "curl/8.0" },
+        });
         const publicIp = (await resp.text()).trim();
         lines.push(`  Public IP:  ${publicIp}`);
       } catch {
@@ -207,7 +212,11 @@ export async function handleNetworkAction(
 
       // Local interfaces
       try {
-        const output = execSync(`ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\\s)\\S+'`, { timeout: 3000 }).toString().trim();
+        const output = execSync(`ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\\s)\\S+'`, {
+          timeout: 3000,
+        })
+          .toString()
+          .trim();
         if (output) {
           lines.push(``);
           lines.push(`  Local Interfaces:`);
@@ -222,29 +231,45 @@ export async function handleNetworkAction(
           if (output) {
             lines.push(`  Local IPs:  ${output}`);
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
 
       // Hostname
       try {
         const hostname = execSync(`hostname 2>/dev/null`, { timeout: 2000 }).toString().trim();
         lines.push(`  Hostname:   ${hostname}`);
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       // Default gateway
       try {
-        const gw = execSync(`ip route show default 2>/dev/null | grep -oP '(?<=via\\s)\\S+'`, { timeout: 3000 }).toString().trim();
+        const gw = execSync(`ip route show default 2>/dev/null | grep -oP '(?<=via\\s)\\S+'`, {
+          timeout: 3000,
+        })
+          .toString()
+          .trim();
         if (gw) lines.push(`  Gateway:    ${gw}`);
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       // DNS
       try {
-        const dns = execSync(`grep '^nameserver' /etc/resolv.conf 2>/dev/null | head -3`, { timeout: 2000 }).toString().trim();
+        const dns = execSync(`grep '^nameserver' /etc/resolv.conf 2>/dev/null | head -3`, {
+          timeout: 2000,
+        })
+          .toString()
+          .trim();
         if (dns) {
-          const servers = dns.split("\n").map(l => l.replace("nameserver ", "").trim());
+          const servers = dns.split("\n").map((l) => l.replace("nameserver ", "").trim());
           lines.push(`  DNS:        ${servers.join(", ")}`);
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       return lines.join("\n");
     }
@@ -262,14 +287,26 @@ export async function handleNetworkAction(
 
         // Common dev ports
         const knownPorts: Record<number, string> = {
-          3000: "React/Next.js", 3001: "Dev server", 4000: "GraphQL",
-          4200: "Angular", 5000: "Flask/Vite", 5173: "Vite",
-          5432: "PostgreSQL", 6379: "Redis", 8000: "Django/FastAPI",
-          8080: "HTTP alt", 8443: "HTTPS alt", 9090: "Prometheus",
-          10091: "KCode LLM", 27017: "MongoDB",
+          3000: "React/Next.js",
+          3001: "Dev server",
+          4000: "GraphQL",
+          4200: "Angular",
+          5000: "Flask/Vite",
+          5173: "Vite",
+          5432: "PostgreSQL",
+          6379: "Redis",
+          8000: "Django/FastAPI",
+          8080: "HTTP alt",
+          8443: "HTTPS alt",
+          9090: "Prometheus",
+          10091: "KCode LLM",
+          27017: "MongoDB",
         };
 
-        const maxAddrLen = Math.max(...rows.map(r => (r.trim().split(/\s+/)[3] ?? "").length), 10);
+        const maxAddrLen = Math.max(
+          ...rows.map((r) => (r.trim().split(/\s+/)[3] ?? "").length),
+          10,
+        );
 
         for (const row of rows) {
           const parts = row.trim().split(/\s+/);
@@ -286,7 +323,9 @@ export async function handleNetworkAction(
       } catch {
         // Fallback to netstat
         try {
-          const output = execSync(`netstat -tlnp 2>/dev/null | tail -n +3`, { timeout: 5000 }).toString().trim();
+          const output = execSync(`netstat -tlnp 2>/dev/null | tail -n +3`, { timeout: 5000 })
+            .toString()
+            .trim();
           if (output) {
             lines.push(output);
           } else {
@@ -310,7 +349,9 @@ export async function handleNetworkAction(
       try {
         execSync(`ss -tlnp 2>/dev/null | grep -q ':${port} '`, { timeout: 3000 });
         return `  Port ${port} is already in use.`;
-      } catch { /* port is free */ }
+      } catch {
+        /* port is free */
+      }
 
       // Try python3 http.server, then npx serve
       const cmds = [
@@ -327,7 +368,9 @@ export async function handleNetworkAction(
           serverCmd = cmd;
           serverName = name;
           break;
-        } catch { /* not available */ }
+        } catch {
+          /* not available */
+        }
       }
 
       if (!serverCmd) return "  No HTTP server found (install python3, npx, or php).";
@@ -387,25 +430,74 @@ export async function handleNetworkAction(
     }
     case "network_ports": {
       const PORTS: Record<number, string> = {
-        20: "FTP Data", 21: "FTP Control", 22: "SSH", 23: "Telnet",
-        25: "SMTP", 53: "DNS", 67: "DHCP Server", 68: "DHCP Client",
-        69: "TFTP", 80: "HTTP", 110: "POP3", 119: "NNTP",
-        123: "NTP", 135: "MS RPC", 137: "NetBIOS Name", 138: "NetBIOS Datagram",
-        139: "NetBIOS Session", 143: "IMAP", 161: "SNMP", 162: "SNMP Trap",
-        179: "BGP", 194: "IRC", 389: "LDAP", 443: "HTTPS",
-        445: "SMB", 465: "SMTPS", 514: "Syslog", 515: "LPD/LPR",
-        543: "Kerberos Login", 544: "Kerberos Shell", 546: "DHCPv6 Client",
-        547: "DHCPv6 Server", 554: "RTSP", 587: "SMTP Submission",
-        631: "IPP/CUPS", 636: "LDAPS", 873: "rsync", 993: "IMAPS",
-        995: "POP3S", 1080: "SOCKS", 1433: "MS SQL", 1434: "MS SQL Monitor",
-        1521: "Oracle DB", 1723: "PPTP", 2049: "NFS", 2181: "ZooKeeper",
-        3000: "Dev Server", 3306: "MySQL", 3389: "RDP", 4443: "Pharos",
-        5000: "Flask/UPnP", 5432: "PostgreSQL", 5672: "AMQP/RabbitMQ",
-        5900: "VNC", 6379: "Redis", 6443: "Kubernetes API",
-        8000: "HTTP Alt", 8080: "HTTP Proxy", 8443: "HTTPS Alt",
-        8888: "Jupyter", 9090: "Prometheus", 9200: "Elasticsearch",
-        9300: "Elasticsearch Transport", 9418: "Git", 11211: "Memcached",
-        27017: "MongoDB", 27018: "MongoDB Shard", 27019: "MongoDB Config",
+        20: "FTP Data",
+        21: "FTP Control",
+        22: "SSH",
+        23: "Telnet",
+        25: "SMTP",
+        53: "DNS",
+        67: "DHCP Server",
+        68: "DHCP Client",
+        69: "TFTP",
+        80: "HTTP",
+        110: "POP3",
+        119: "NNTP",
+        123: "NTP",
+        135: "MS RPC",
+        137: "NetBIOS Name",
+        138: "NetBIOS Datagram",
+        139: "NetBIOS Session",
+        143: "IMAP",
+        161: "SNMP",
+        162: "SNMP Trap",
+        179: "BGP",
+        194: "IRC",
+        389: "LDAP",
+        443: "HTTPS",
+        445: "SMB",
+        465: "SMTPS",
+        514: "Syslog",
+        515: "LPD/LPR",
+        543: "Kerberos Login",
+        544: "Kerberos Shell",
+        546: "DHCPv6 Client",
+        547: "DHCPv6 Server",
+        554: "RTSP",
+        587: "SMTP Submission",
+        631: "IPP/CUPS",
+        636: "LDAPS",
+        873: "rsync",
+        993: "IMAPS",
+        995: "POP3S",
+        1080: "SOCKS",
+        1433: "MS SQL",
+        1434: "MS SQL Monitor",
+        1521: "Oracle DB",
+        1723: "PPTP",
+        2049: "NFS",
+        2181: "ZooKeeper",
+        3000: "Dev Server",
+        3306: "MySQL",
+        3389: "RDP",
+        4443: "Pharos",
+        5000: "Flask/UPnP",
+        5432: "PostgreSQL",
+        5672: "AMQP/RabbitMQ",
+        5900: "VNC",
+        6379: "Redis",
+        6443: "Kubernetes API",
+        8000: "HTTP Alt",
+        8080: "HTTP Proxy",
+        8443: "HTTPS Alt",
+        8888: "Jupyter",
+        9090: "Prometheus",
+        9200: "Elasticsearch",
+        9300: "Elasticsearch Transport",
+        9418: "Git",
+        11211: "Memcached",
+        27017: "MongoDB",
+        27018: "MongoDB Shard",
+        27019: "MongoDB Config",
       };
 
       const input = args?.trim();
@@ -432,7 +524,7 @@ export async function handleNetworkAction(
       // Lookup by service name
       const query = input.toLowerCase();
       const matches = Object.entries(PORTS).filter(([, name]) =>
-        name.toLowerCase().includes(query)
+        name.toLowerCase().includes(query),
       );
 
       if (matches.length === 0) return `  No service matching "${input}" found.`;

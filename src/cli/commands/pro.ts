@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { isPro, clearProCache, PRO_FEATURES } from "../../core/pro";
+import { clearProCache, isPro, PRO_FEATURES } from "../../core/pro";
 
 export function registerProCommands(program: Command): void {
   // ─── Activate subcommand (legacy alias) ────────────────────────
@@ -38,9 +38,7 @@ export function registerProCommands(program: Command): void {
     });
 
   // ─── Pro subcommand ─────────────────────────────────────────
-  const proCmd = program
-    .command("pro")
-    .description("Manage KCode Pro subscription");
+  const proCmd = program.command("pro").description("Manage KCode Pro subscription");
 
   proCmd
     .command("status")
@@ -138,14 +136,19 @@ export function registerProCommands(program: Command): void {
           signal: AbortSignal.timeout(10000),
         });
 
-        const data = await resp.json() as { url?: string; error?: string };
+        const data = (await resp.json()) as { url?: string; error?: string };
 
         if (data.url) {
           console.log(`\x1b[32m✓\x1b[0m Billing portal: \x1b[36m${data.url}\x1b[0m\n`);
           // Try to open in browser
           try {
             const { execSync } = await import("node:child_process");
-            const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+            const cmd =
+              process.platform === "darwin"
+                ? "open"
+                : process.platform === "win32"
+                  ? "start"
+                  : "xdg-open";
             const { execFileSync: openExec } = await import("node:child_process");
             openExec(cmd, [data.url], { stdio: "ignore" });
             console.log("  Opened in your browser.");

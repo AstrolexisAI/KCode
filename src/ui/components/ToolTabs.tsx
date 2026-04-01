@@ -1,8 +1,8 @@
 // KCode - ToolTabs component
 // Interactive tab bar showing active running tools/agents with status indicators
 
-import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
+import React, { useEffect, useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -49,14 +49,14 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
 
   // Animate spinner for running tabs
   useEffect(() => {
-    const hasRunning = tabs.some(t => t.status === "running");
+    const hasRunning = tabs.some((t) => t.status === "running");
     if (!hasRunning) return;
     const timer = setInterval(() => {
-      setFrame(f => (f + 1) % SPINNER_FRAMES.length);
+      setFrame((f) => (f + 1) % SPINNER_FRAMES.length);
       setNow(Date.now());
     }, 150);
     return () => clearInterval(timer);
-  }, [tabs.length, tabs.some(t => t.status === "running")]);
+  }, [tabs.length, tabs.some((t) => t.status === "running")]);
 
   if (tabs.length === 0) return null;
 
@@ -70,27 +70,26 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
           const isError = tab.status === "error";
 
           // Status icon — animated for running
-          const icon = isRunning
-            ? SPINNER_FRAMES[frame]
-            : STATUS_ICONS[tab.status] ?? "?";
+          const icon = isRunning ? SPINNER_FRAMES[frame] : (STATUS_ICONS[tab.status] ?? "?");
 
           // Color based on status
-          const tabColor = isError ? theme.error
-            : isDone ? theme.success
-            : isRunning ? theme.warning
-            : theme.dimmed;
+          const tabColor = isError
+            ? theme.error
+            : isDone
+              ? theme.success
+              : isRunning
+                ? theme.warning
+                : theme.dimmed;
 
           // Elapsed time
           const elapsed = isRunning
             ? formatElapsed(now - tab.startTime)
             : tab.durationMs
-            ? formatElapsed(tab.durationMs)
-            : "";
+              ? formatElapsed(tab.durationMs)
+              : "";
 
           // Tab label: truncate summary
-          const label = tab.summary
-            ? tab.summary.slice(0, 40)
-            : tab.name;
+          const label = tab.summary ? tab.summary.slice(0, 40) : tab.name;
 
           // Border style for selected tab
           const borderColor = isSelected ? tabColor : theme.dimmed;
@@ -98,24 +97,17 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
           return (
             <Box key={tab.toolUseId} paddingX={0} marginRight={0}>
               {/* Tab with top border to indicate selection */}
-              <Text color={borderColor}>
-                {isSelected ? "┃" : "│"}
-              </Text>
+              <Text color={borderColor}>{isSelected ? "┃" : "│"}</Text>
               <Text color={isSelected ? tabColor : theme.dimmed} bold={isSelected}>
-                {" "}{icon} {tab.name}
+                {" "}
+                {icon} {tab.name}
                 {tab.summary ? ": " : ""}
               </Text>
               {tab.summary && (
-                <Text color={isSelected ? theme.assistantText : theme.dimmed}>
-                  {label}
-                </Text>
+                <Text color={isSelected ? theme.assistantText : theme.dimmed}>{label}</Text>
               )}
-              {elapsed && (
-                <Text color={theme.dimmed}> ({elapsed})</Text>
-              )}
-              <Text color={borderColor}>
-                {" "}{isSelected ? "┃" : "│"}
-              </Text>
+              {elapsed && <Text color={theme.dimmed}> ({elapsed})</Text>}
+              <Text color={borderColor}> {isSelected ? "┃" : "│"}</Text>
             </Box>
           );
         })}

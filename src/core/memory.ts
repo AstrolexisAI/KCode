@@ -1,11 +1,11 @@
 // KCode - Memory System
 // Read/write memory files with YAML frontmatter + markdown content
 
-import { join, dirname, basename } from "node:path";
-import { kcodeHome } from "./paths";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, statSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { basename, dirname, join } from "node:path";
+import { kcodeHome } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -185,9 +185,10 @@ export async function writeMemoryIndex(projectPath: string, content: string): Pr
 
   // Enforce line limit
   const lines = content.split("\n");
-  const truncated = lines.length > MEMORY_LINE_LIMIT
-    ? lines.slice(0, MEMORY_LINE_LIMIT).join("\n") + "\n\n... (truncated at 200 lines)\n"
-    : content;
+  const truncated =
+    lines.length > MEMORY_LINE_LIMIT
+      ? lines.slice(0, MEMORY_LINE_LIMIT).join("\n") + "\n\n... (truncated at 200 lines)\n"
+      : content;
 
   await Bun.write(indexPath, truncated);
 }
@@ -278,7 +279,10 @@ export async function resolveIncludes(content: string, baseDir: string): Promise
     const { resolve: resolvePath } = await import("node:path");
     const resolvedFull = resolvePath(fullPath);
     if (!resolvedFull.startsWith(resolvePath(baseDir))) {
-      resolved = resolved.replace(match[0], `<!-- include blocked: path outside memory directory -->`);
+      resolved = resolved.replace(
+        match[0],
+        `<!-- include blocked: path outside memory directory -->`,
+      );
       continue;
     }
 
@@ -290,7 +294,10 @@ export async function resolveIncludes(content: string, baseDir: string): Promise
       try {
         realFull = realpathSync(resolvedFull);
         if (!realFull.startsWith(resolvePath2(baseDir))) {
-          resolved = resolved.replace(match[0], `<!-- include blocked: symlink escapes memory directory -->`);
+          resolved = resolved.replace(
+            match[0],
+            `<!-- include blocked: symlink escapes memory directory -->`,
+          );
           continue;
         }
       } catch {

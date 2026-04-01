@@ -3,11 +3,11 @@
 // Supports: authorization URL generation, callback handling, token storage/refresh,
 // token encryption, browser-based auth flow, and token revocation.
 
-import { randomBytes, createHash, createCipheriv, createDecipheriv, pbkdf2Sync } from "node:crypto";
-import { homedir, platform } from "node:os";
-import { kcodeHome, kcodePath } from "./paths";
+import { createCipheriv, createDecipheriv, createHash, pbkdf2Sync, randomBytes } from "node:crypto";
 import { createServer, type Server } from "node:http";
+import { homedir, platform } from "node:os";
 import { log } from "./logger";
+import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -72,10 +72,14 @@ function requireHttpsEndpoint(url: string, purpose: string): void {
   if (parsed.protocol === "https:") return;
   // Allow localhost for local development servers
   const host = parsed.hostname;
-  if (parsed.protocol === "http:" && (host === "localhost" || host === "127.0.0.1" || host === "::1")) return;
+  if (
+    parsed.protocol === "http:" &&
+    (host === "localhost" || host === "127.0.0.1" || host === "::1")
+  )
+    return;
   throw new Error(
     `${purpose} must use HTTPS (got "${parsed.protocol}//${parsed.hostname}"). ` +
-    `HTTP is only allowed for localhost. A malicious MCP server could intercept OAuth tokens over plain HTTP.`
+      `HTTP is only allowed for localhost. A malicious MCP server could intercept OAuth tokens over plain HTTP.`,
   );
 }
 
@@ -86,7 +90,8 @@ const OAUTH_SALT_FILE = kcodePath(".oauth-key-salt");
 
 function getOrCreateOAuthSalt(): string {
   try {
-    const { existsSync, readFileSync, writeFileSync, mkdirSync } = require("node:fs") as typeof import("node:fs");
+    const { existsSync, readFileSync, writeFileSync, mkdirSync } =
+      require("node:fs") as typeof import("node:fs");
     if (existsSync(OAUTH_SALT_FILE)) {
       return readFileSync(OAUTH_SALT_FILE, "utf-8").trim();
     }
@@ -99,7 +104,9 @@ function getOrCreateOAuthSalt(): string {
     // Fallback: use a hash of machine-specific data plus randomness (less secure but functional)
     const { hostname } = require("node:os") as typeof import("node:os");
     return createHash("sha256")
-      .update(`${homedir()}:${process.env.USER ?? "kcode"}:${hostname()}:${process.getuid?.() ?? 0}:${Date.now()}`)
+      .update(
+        `${homedir()}:${process.env.USER ?? "kcode"}:${hostname()}:${process.getuid?.() ?? 0}:${Date.now()}`,
+      )
       .digest("hex");
   }
 }
@@ -155,7 +162,7 @@ async function loadTokenStore(tokenFile?: string): Promise<Map<string, TokenStor
     try {
       const file = Bun.file(path);
       if (await file.exists()) {
-        const data = await file.json() as Record<string, TokenStorageEntry>;
+        const data = (await file.json()) as Record<string, TokenStorageEntry>;
         for (const [key, entry] of Object.entries(data)) {
           if (store.has(key)) continue;
           if (entry?.encrypted) {
@@ -183,7 +190,10 @@ async function loadTokenStore(tokenFile?: string): Promise<Map<string, TokenStor
   return store;
 }
 
-async function saveTokenStore(store: Map<string, TokenStorageEntry>, tokenFile?: string): Promise<void> {
+async function saveTokenStore(
+  store: Map<string, TokenStorageEntry>,
+  tokenFile?: string,
+): Promise<void> {
   const targetFile = tokenFile ?? TOKEN_FILE;
   const data: Record<string, TokenStorageEntry> = {};
   for (const [key, entry] of store) {
@@ -253,7 +263,10 @@ export class McpOAuthClient {
           await this.storeTokens(refreshed);
           return refreshed;
         } catch (err) {
-          log.warn("mcp-oauth", `Token refresh failed for "${this.serverName}": ${err instanceof Error ? err.message : String(err)}`);
+          log.warn(
+            "mcp-oauth",
+            `Token refresh failed for "${this.serverName}": ${err instanceof Error ? err.message : String(err)}`,
+          );
           return null;
         }
       }
@@ -282,7 +295,11 @@ export class McpOAuthClient {
     await saveTokenStore(store, this.tokenStorePath);
   }
 
-  async startAuthFlow(): Promise<{ url: string; port: number; waitForCallback: () => Promise<OAuthTokens> }> {
+  async startAuthFlow(): Promise<{
+    url: string;
+    port: number;
+    waitForCallback: () => Promise<OAuthTokens>;
+  }> {
     requireHttpsEndpoint(this.config.authorizationUrl, "OAuth authorization URL");
     requireHttpsEndpoint(this.config.tokenUrl, "OAuth token URL");
 
@@ -292,7 +309,7 @@ export class McpOAuthClient {
     this.codeVerifier = codeVerifier;
 
     const { server, port } = await startCallbackServer(
-      this.config.redirectUri ? undefined : DEFAULT_CALLBACK_PORT
+      this.config.redirectUri ? undefined : DEFAULT_CALLBACK_PORT,
     );
     const redirectUri = this.config.redirectUri ?? `http://localhost:${port}/callback`;
 
@@ -313,53 +330,69 @@ export class McpOAuthClient {
 
     const waitForCallback = (): Promise<OAuthTokens> => {
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          server.close();
-          reject(new Error("OAuth callback timed out after 5 minutes"));
-        }, 5 * 60 * 1000);
-
-        (server as Server & { _oauthResolve?: (code: string) => void }).on("request", async (req, res) => {
-          const reqUrl = new URL(req.url ?? "/", `http://localhost:${port}`);
-
-          if (reqUrl.pathname === "/callback") {
-            const code = reqUrl.searchParams.get("code");
-            const returnedState = reqUrl.searchParams.get("state");
-            const error = reqUrl.searchParams.get("error");
-
-            if (error) {
-              const safeError = String(error).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-              res.writeHead(400, { "Content-Type": "text/html" });
-              res.end(`<html><body><h2>OAuth Error</h2><p>${safeError}</p></body></html>`);
-              clearTimeout(timeout);
-              server.close();
-              reject(new Error(`OAuth error: ${error}`));
-              return;
-            }
-
-            if (!code || returnedState !== state) {
-              res.writeHead(400, { "Content-Type": "text/html" });
-              res.end("<html><body><h2>Invalid callback</h2><p>State mismatch or missing authorization code.</p></body></html>");
-              clearTimeout(timeout);
-              server.close();
-              reject(new Error("Invalid OAuth callback: state mismatch or missing authorization code"));
-              return;
-            }
-
-            res.writeHead(200, { "Content-Type": "text/html" });
-            res.end("<html><body><h2>Authorization successful!</h2><p>You can close this tab and return to KCode.</p></body></html>");
-
-            clearTimeout(timeout);
+        const timeout = setTimeout(
+          () => {
             server.close();
+            reject(new Error("OAuth callback timed out after 5 minutes"));
+          },
+          5 * 60 * 1000,
+        );
 
-            try {
-              const tokens = await this.exchangeCode(code, redirectUri);
-              await this.storeTokens(tokens);
-              resolve(tokens);
-            } catch (err) {
-              reject(err);
+        (server as Server & { _oauthResolve?: (code: string) => void }).on(
+          "request",
+          async (req, res) => {
+            const reqUrl = new URL(req.url ?? "/", `http://localhost:${port}`);
+
+            if (reqUrl.pathname === "/callback") {
+              const code = reqUrl.searchParams.get("code");
+              const returnedState = reqUrl.searchParams.get("state");
+              const error = reqUrl.searchParams.get("error");
+
+              if (error) {
+                const safeError = String(error)
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+                  .replace(/"/g, "&quot;");
+                res.writeHead(400, { "Content-Type": "text/html" });
+                res.end(`<html><body><h2>OAuth Error</h2><p>${safeError}</p></body></html>`);
+                clearTimeout(timeout);
+                server.close();
+                reject(new Error(`OAuth error: ${error}`));
+                return;
+              }
+
+              if (!code || returnedState !== state) {
+                res.writeHead(400, { "Content-Type": "text/html" });
+                res.end(
+                  "<html><body><h2>Invalid callback</h2><p>State mismatch or missing authorization code.</p></body></html>",
+                );
+                clearTimeout(timeout);
+                server.close();
+                reject(
+                  new Error("Invalid OAuth callback: state mismatch or missing authorization code"),
+                );
+                return;
+              }
+
+              res.writeHead(200, { "Content-Type": "text/html" });
+              res.end(
+                "<html><body><h2>Authorization successful!</h2><p>You can close this tab and return to KCode.</p></body></html>",
+              );
+
+              clearTimeout(timeout);
+              server.close();
+
+              try {
+                const tokens = await this.exchangeCode(code, redirectUri);
+                await this.storeTokens(tokens);
+                resolve(tokens);
+              } catch (err) {
+                reject(err);
+              }
             }
-          }
-        });
+          },
+        );
       });
     };
 
@@ -396,7 +429,7 @@ export class McpOAuthClient {
       throw new Error(`Token exchange failed: HTTP ${response.status} — ${errorText}`);
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     return this.parseTokenResponse(data);
   }
 
@@ -423,7 +456,7 @@ export class McpOAuthClient {
       throw new Error(`Token refresh failed: HTTP ${response.status}`);
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     const tokens = this.parseTokenResponse(data);
     if (!tokens.refreshToken) {
       tokens.refreshToken = refreshToken;
@@ -591,7 +624,7 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
 
     if (!response.ok) return null;
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
 
     const authorizationUrl = data.authorization_endpoint;
     const tokenUrl = data.token_endpoint;
@@ -605,7 +638,10 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
       requireHttpsEndpoint(authorizationUrl, "Discovered OAuth authorization URL");
       requireHttpsEndpoint(tokenUrl, "Discovered OAuth token URL");
     } catch (err) {
-      log.warn("mcp-oauth", `OAuth discovery rejected: ${err instanceof Error ? err.message : String(err)}`);
+      log.warn(
+        "mcp-oauth",
+        `OAuth discovery rejected: ${err instanceof Error ? err.message : String(err)}`,
+      );
       return null;
     }
 
@@ -613,7 +649,9 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
       clientId: "",
       authorizationUrl,
       tokenUrl,
-      scopes: Array.isArray(data.scopes_supported) ? data.scopes_supported as string[] : undefined,
+      scopes: Array.isArray(data.scopes_supported)
+        ? (data.scopes_supported as string[])
+        : undefined,
     };
   } catch (err) {
     log.debug("mcp-oauth", "OAuth auto-discovery failed: " + err);
@@ -621,7 +659,10 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
   }
 }
 
-export async function getAccessToken(serverName: string, oauthConfig?: OAuthConfig): Promise<string | null> {
+export async function getAccessToken(
+  serverName: string,
+  oauthConfig?: OAuthConfig,
+): Promise<string | null> {
   if (!oauthConfig) return null;
 
   const client = new McpOAuthClient(serverName, oauthConfig);

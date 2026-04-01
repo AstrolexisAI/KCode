@@ -16,7 +16,7 @@ export function looksIncomplete(text: string): boolean {
   // Ends with a hyphen (word split mid-token: "preser-", "no-de")
   if (/[-–—]\s*$/.test(trimmed)) return true;
   // Ends with open bracket/paren (unclosed expression)
-  if (/[(\[{]\s*$/.test(trimmed)) return true;
+  if (/[([{]\s*$/.test(trimmed)) return true;
   // Ends with a backtick (broken inline code)
   if (/`\s*$/.test(trimmed) && openFences % 2 === 0) return true;
   // Ends with a single letter (truncated mid-word: "Next.js 15 c", "la")
@@ -26,29 +26,51 @@ export function looksIncomplete(text: string): boolean {
   // Last word looks like a truncated prefix (2-4 chars, no punctuation, not a common word)
   const lastWord = trimmed.match(/(\S+)\s*$/)?.[1] ?? "";
   if (lastWord.length >= 2 && lastWord.length <= 4 && /^[a-zA-Z]+$/.test(lastWord)) {
-    const commonShortWords = new Set(["ok", "yes", "is", "it", "or", "if", "do", "so", "go", "at", "be", "we", "he", "up", "by", "my", "me", "us", "am", "oh", "ya"]);
+    const commonShortWords = new Set([
+      "ok",
+      "yes",
+      "is",
+      "it",
+      "or",
+      "if",
+      "do",
+      "so",
+      "go",
+      "at",
+      "be",
+      "we",
+      "he",
+      "up",
+      "by",
+      "my",
+      "me",
+      "us",
+      "am",
+      "oh",
+      "ya",
+    ]);
     if (!commonShortWords.has(lastWord.toLowerCase()) && !/[.!?:;)]$/.test(trimmed)) return true;
   }
   // Ends mid-sentence: preposition, article, conjunction (English + Spanish)
   const lastLine = trimmed.split("\n").pop() ?? "";
   const midSentenceEndings = new RegExp(
     "\\b(" +
-    // English
-    "the|a|an|of|in|to|for|with|and|or|but|that|is|are|was|from|by|as|at|on|into|" +
-    "not only|not just|rather|although|because|since|while|whereas|however|" +
-    "this|these|which|where|when|how|if|than|between|through|about|over|under|" +
-    "provides?|contains?|includes?|requires?|ensures?|means|implies|suggests|" +
-    // Spanish
-    "del?|la|los|las|un|una|unos|unas|en|para|con|sin|sobre|entre|que|como|" +
-    "sino|aunque|porque|mientras|según|también|además|entonces|pero|ni|" +
-    "mediante|donde|cuando|hacia|desde|hasta|por|al|su|sus|este|esta|estos|estas|" +
-    "ya que|dado que|puesto que|siempre que|a menos que|no solo|no sólo|" +
-    "preserva|caracteriza|reduce|incluye|requiere|permite|genera|produce|define|" +
-    // French/Portuguese common
-    "le|les|des|du|dans|avec|pour|sur|sous|qui|dont|mais|donc|" +
-    "ou|et|das|dos|nas|nos|pelo|pela|uma|com|sem|sobre" +
-    ")\\s*$",
-    "i"
+      // English
+      "the|a|an|of|in|to|for|with|and|or|but|that|is|are|was|from|by|as|at|on|into|" +
+      "not only|not just|rather|although|because|since|while|whereas|however|" +
+      "this|these|which|where|when|how|if|than|between|through|about|over|under|" +
+      "provides?|contains?|includes?|requires?|ensures?|means|implies|suggests|" +
+      // Spanish
+      "del?|la|los|las|un|una|unos|unas|en|para|con|sin|sobre|entre|que|como|" +
+      "sino|aunque|porque|mientras|según|también|además|entonces|pero|ni|" +
+      "mediante|donde|cuando|hacia|desde|hasta|por|al|su|sus|este|esta|estos|estas|" +
+      "ya que|dado que|puesto que|siempre que|a menos que|no solo|no sólo|" +
+      "preserva|caracteriza|reduce|incluye|requiere|permite|genera|produce|define|" +
+      // French/Portuguese common
+      "le|les|des|du|dans|avec|pour|sur|sous|qui|dont|mais|donc|" +
+      "ou|et|das|dos|nas|nos|pelo|pela|uma|com|sem|sobre" +
+      ")\\s*$",
+    "i",
   );
   if (midSentenceEndings.test(lastLine)) return true;
   return false;
@@ -59,9 +81,21 @@ export function looksIncomplete(text: string): boolean {
  */
 export function detectLanguage(text: string): "es" | "fr" | "pt" | "en" {
   const lower = text.toLowerCase();
-  const es = (lower.match(/\b(que|del?|para|con|por|como|una?|los?|las?|sobre|entre|desde|hasta|también|puede|tiene|cada|este|esta|demuestra|dado|propón|diseña)\b/g) || []).length;
-  const fr = (lower.match(/\b(les?|des|une?|dans|pour|avec|qui|sur|sont|cette|aussi|peut|chaque|mais|donc)\b/g) || []).length;
-  const pt = (lower.match(/\b(uma?|dos?|das?|para|com|que|sobre|entre|desde|também|pode|cada|este|esta)\b/g) || []).length;
+  const es = (
+    lower.match(
+      /\b(que|del?|para|con|por|como|una?|los?|las?|sobre|entre|desde|hasta|también|puede|tiene|cada|este|esta|demuestra|dado|propón|diseña)\b/g,
+    ) || []
+  ).length;
+  const fr = (
+    lower.match(
+      /\b(les?|des|une?|dans|pour|avec|qui|sur|sont|cette|aussi|peut|chaque|mais|donc)\b/g,
+    ) || []
+  ).length;
+  const pt = (
+    lower.match(
+      /\b(uma?|dos?|das?|para|com|que|sobre|entre|desde|também|pode|cada|este|esta)\b/g,
+    ) || []
+  ).length;
   if (es > fr && es > pt && es >= 3) return "es";
   if (fr > es && fr > pt && fr >= 3) return "fr";
   if (pt > es && pt > fr && pt >= 3) return "pt";
@@ -93,31 +127,64 @@ export function looksTheoretical(prompt: string): boolean {
     /\bsistema\s+de\s+transici[oó]n\b/,
     /\btransition\s+system\b/,
   ];
-  if (strongPatterns.some(p => p.test(lower))) return true;
+  if (strongPatterns.some((p) => p.test(lower))) return true;
 
   // ── Structured reasoning prompt: long, multiline, with sections ──
-  const hasStructuredSections = /^#{2,4}\s+/m.test(prompt) || /\bparte\s+\d/i.test(prompt) || /\b(task|tarea)\s*\d/i.test(prompt);
+  const hasStructuredSections =
+    /^#{2,4}\s+/m.test(prompt) ||
+    /\bparte\s+\d/i.test(prompt) ||
+    /\b(task|tarea)\s*\d/i.test(prompt);
   const hasDataTables = /\|.*\|.*\|/m.test(prompt);
   const hasReasoningKeywords = [
-    "razonamiento", "reasoning", "paso a paso", "step by step",
-    "trade-off", "contraejemplo", "counterexample", "diagnóstico",
-    "diagnostic", "optimización", "optimization", "consistencia",
-    "consistency", "meta razonamiento", "meta reasoning",
-    "maximizar", "maximize", "minimizar", "minimize",
-  ].filter(kw => lower.includes(kw)).length;
+    "razonamiento",
+    "reasoning",
+    "paso a paso",
+    "step by step",
+    "trade-off",
+    "contraejemplo",
+    "counterexample",
+    "diagnóstico",
+    "diagnostic",
+    "optimización",
+    "optimization",
+    "consistencia",
+    "consistency",
+    "meta razonamiento",
+    "meta reasoning",
+    "maximizar",
+    "maximize",
+    "minimizar",
+    "minimize",
+  ].filter((kw) => lower.includes(kw)).length;
 
   if (prompt.length > 500 && hasStructuredSections && hasReasoningKeywords >= 1) return true;
   if (hasDataTables && hasReasoningKeywords >= 2) return true;
 
   // ── Moderate signals: multiple formal keywords ─────────────
   const formalKeywords = [
-    "demuestra", "prove", "formalmente", "formally", "reducible",
-    "decidible", "decidability", "equivalencia", "equivalence",
-    "alcanzabilidad", "reachability", "idempotent", "append-only",
-    "subsecuencia", "subsequence", "compaction", "preservar",
-    "filesystem", "tool calls", "restricciones", "constraints",
+    "demuestra",
+    "prove",
+    "formalmente",
+    "formally",
+    "reducible",
+    "decidible",
+    "decidability",
+    "equivalencia",
+    "equivalence",
+    "alcanzabilidad",
+    "reachability",
+    "idempotent",
+    "append-only",
+    "subsecuencia",
+    "subsequence",
+    "compaction",
+    "preservar",
+    "filesystem",
+    "tool calls",
+    "restricciones",
+    "constraints",
   ];
-  const matches = formalKeywords.filter(kw => lower.includes(kw));
+  const matches = formalKeywords.filter((kw) => lower.includes(kw));
   if (matches.length >= 3) return true;
 
   return false;
@@ -143,7 +210,7 @@ export function looksCheckpointed(prompt: string): boolean {
     /\b(empieza|empezá|comienza|comenzá)\s+(con|por)\b.*\b(muéstrame|y\s+par[áa])\b/,
     /\b(start|begin)\s+(with|by)\b.*\b(show|stop|then)\b/,
   ];
-  return patterns.some(p => p.test(lower));
+  return patterns.some((p) => p.test(lower));
 }
 
 /**
@@ -161,7 +228,7 @@ export function dedupContinuation(previousTail: string, continuation: string): s
     for (let i = 0; i < Math.min(newLines.length, 10); i++) {
       const line = newLines[i]!.trim();
       if (line.length < 10) continue;
-      const tailIdx = tailLines.findIndex(tl => tl.trim() === line);
+      const tailIdx = tailLines.findIndex((tl) => tl.trim() === line);
       if (tailIdx >= 0 && tailIdx >= tailLines.length - 10) {
         const remainingTailLines = tailLines.length - tailIdx;
         const stripCount = Math.min(remainingTailLines, newLines.length);
@@ -172,7 +239,11 @@ export function dedupContinuation(previousTail: string, continuation: string): s
 
   // Char-level dedup fallback
   const tailToMatch = previousTail.slice(-200);
-  for (let overlapLen = Math.min(tailToMatch.length, continuation.length); overlapLen >= 20; overlapLen--) {
+  for (
+    let overlapLen = Math.min(tailToMatch.length, continuation.length);
+    overlapLen >= 20;
+    overlapLen--
+  ) {
     const tailSuffix = tailToMatch.slice(-overlapLen);
     if (continuation.startsWith(tailSuffix)) {
       return continuation.slice(overlapLen);

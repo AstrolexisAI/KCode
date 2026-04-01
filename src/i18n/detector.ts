@@ -1,8 +1,6 @@
 // KCode - Locale Detection
 
-export const SUPPORTED_LOCALES = [
-  "en", "es", "pt", "fr", "de", "zh", "ja", "ko",
-] as const;
+export const SUPPORTED_LOCALES = ["en", "es", "pt", "fr", "de", "zh", "ja", "ko"] as const;
 
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -13,8 +11,7 @@ export function detectLocale(): string {
   }
 
   // 2. System locale env vars
-  const envLang =
-    process.env.LANG || process.env.LC_ALL || process.env.LC_MESSAGES;
+  const envLang = process.env.LANG || process.env.LC_ALL || process.env.LC_MESSAGES;
   if (envLang) {
     const match = envLang.match(/^([a-z]{2})([_-][A-Za-z]{2})?/i);
     if (match) return match[1].toLowerCase();

@@ -38,7 +38,7 @@ export function chunkFiles(files: string[], n: number): string[][] {
   for (let i = 0; i < files.length; i++) {
     chunks[i % count]!.push(files[i]!);
   }
-  return chunks.filter(c => c.length > 0);
+  return chunks.filter((c) => c.length > 0);
 }
 
 /**
@@ -95,20 +95,25 @@ function runAgent(
       }
     }
 
-    execFile(kcodebin, args, {
-      cwd,
-      timeout: AGENT_TIMEOUT,
-      maxBuffer: 512 * 1024,
-      env: subEnv,
-    }, (err, stdout, stderr) => {
-      if (err) {
-        const msg = stderr || err.message;
-        // Non-zero exit code means the agent failed — reject so runSwarm catches it
-        reject(new Error(msg.slice(0, 500)));
-      } else {
-        resolve({ output: stdout.trim(), durationMs: Date.now() - start });
-      }
-    });
+    execFile(
+      kcodebin,
+      args,
+      {
+        cwd,
+        timeout: AGENT_TIMEOUT,
+        maxBuffer: 512 * 1024,
+        env: subEnv,
+      },
+      (err, stdout, stderr) => {
+        if (err) {
+          const msg = stderr || err.message;
+          // Non-zero exit code means the agent failed — reject so runSwarm catches it
+          reject(new Error(msg.slice(0, 500)));
+        } else {
+          resolve({ output: stdout.trim(), durationMs: Date.now() - start });
+        }
+      },
+    );
   });
 }
 
@@ -168,8 +173,8 @@ export async function runSwarm(
 
   await Promise.all(promises);
 
-  const successCount = swarmTasks.filter(t => t.status === "done").length;
-  const errorCount = swarmTasks.filter(t => t.status === "error").length;
+  const successCount = swarmTasks.filter((t) => t.status === "done").length;
+  const errorCount = swarmTasks.filter((t) => t.status === "error").length;
 
   // Merge results
   const mergedParts: string[] = [];
@@ -215,12 +220,22 @@ export async function runSwarmOnFiles(
 
 // ─── Coordinator Mode Integration ──────────────────────────────
 
-export { Coordinator, detectCoordinatorSession, loadCoordinatorProgress, parseCoordinatorConfig } from "./coordinator/coordinator";
-export { Scratchpad } from "./coordinator/scratchpad";
+export {
+  Coordinator,
+  detectCoordinatorSession,
+  loadCoordinatorProgress,
+  parseCoordinatorConfig,
+} from "./coordinator/coordinator";
 export { MessageBus } from "./coordinator/message-bus";
-export { getWorkerTools, WORKER_TOOLS, COORDINATOR_ONLY_TOOLS } from "./coordinator/worker";
-export type { CoordinatorConfig, WorkerConfig, WorkerResult, WorkerMode } from "./coordinator/types";
+export { Scratchpad } from "./coordinator/scratchpad";
+export type {
+  CoordinatorConfig,
+  WorkerConfig,
+  WorkerMode,
+  WorkerResult,
+} from "./coordinator/types";
 export { DEFAULT_COORDINATOR_CONFIG } from "./coordinator/types";
+export { COORDINATOR_ONLY_TOOLS, getWorkerTools, WORKER_TOOLS } from "./coordinator/worker";
 
 /**
  * Format swarm results for display.

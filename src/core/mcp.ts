@@ -3,48 +3,45 @@
 // Low-level client connections live in mcp-client.ts; tool adaptation in mcp-tools.ts (core).
 
 import { join } from "node:path";
-import type { ToolDefinition } from "./types";
+import { log } from "./logger";
 import { kcodePath } from "./paths";
 import type { ToolRegistry } from "./tool-registry";
-import { log } from "./logger";
+import type { ToolDefinition } from "./types";
 
+export { addAlias, listAliases, removeAlias, resolveAlias, type ToolAlias } from "./mcp-aliases";
 // Re-export all public types and classes from sub-modules so existing
 // consumers that import from "./mcp" continue to work unchanged.
 export type {
+  ElicitationCallback,
+  ElicitationRequest,
+  ElicitationResponse,
+  McpConnection,
+  McpResource,
+  McpResourceContent,
   McpServerConfig,
   McpServersConfig,
   McpToolSchema,
-  McpResource,
-  McpResourceContent,
-  ElicitationRequest,
-  ElicitationResponse,
-  ElicitationCallback,
-  McpConnection,
 } from "./mcp-client";
-
 export {
-  McpServerConnection,
   McpHttpConnection,
-} from "./mcp-client";
-
-export { McpHealthMonitor, type ServerHealth, type CircuitBreakerConfig } from "./mcp-health";
-export { addAlias, removeAlias, resolveAlias, listAliases, type ToolAlias } from "./mcp-aliases";
-
-import {
   McpServerConnection,
-  McpHttpConnection,
-  type McpServerConfig,
-  type McpServersConfig,
-  type McpResourceContent,
-  type McpResource,
-  type McpConnection,
-  type ElicitationCallback,
 } from "./mcp-client";
+export { type CircuitBreakerConfig, McpHealthMonitor, type ServerHealth } from "./mcp-health";
 
-import { registerMcpTools, discoverMcpTools } from "./mcp-tools";
-import { McpHealthMonitor } from "./mcp-health";
-import { resolveAlias } from "./mcp-aliases";
 import { isWorkspaceTrusted } from "./hook-trust";
+import { resolveAlias } from "./mcp-aliases";
+import {
+  type ElicitationCallback,
+  type McpConnection,
+  McpHttpConnection,
+  type McpResource,
+  type McpResourceContent,
+  type McpServerConfig,
+  McpServerConnection,
+  type McpServersConfig,
+} from "./mcp-client";
+import { McpHealthMonitor } from "./mcp-health";
+import { discoverMcpTools, registerMcpTools } from "./mcp-tools";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -74,7 +71,11 @@ function isValidServerConfig(value: unknown): value is McpServerConfig {
       for (const urlField of ["authorizationUrl", "tokenUrl"] as const) {
         try {
           const parsed = new URL(oauth[urlField] as string);
-          const isLocalhost = parsed.protocol === "http:" && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1");
+          const isLocalhost =
+            parsed.protocol === "http:" &&
+            (parsed.hostname === "localhost" ||
+              parsed.hostname === "127.0.0.1" ||
+              parsed.hostname === "::1");
           if (parsed.protocol !== "https:" && !isLocalhost) return false;
         } catch {
           return false;
@@ -83,10 +84,18 @@ function isValidServerConfig(value: unknown): value is McpServerConfig {
     }
     // Validate allowedTools/blockedTools for HTTP transport too
     if (obj.allowedTools !== undefined) {
-      if (!Array.isArray(obj.allowedTools) || !obj.allowedTools.every((t: unknown) => typeof t === "string")) return false;
+      if (
+        !Array.isArray(obj.allowedTools) ||
+        !obj.allowedTools.every((t: unknown) => typeof t === "string")
+      )
+        return false;
     }
     if (obj.blockedTools !== undefined) {
-      if (!Array.isArray(obj.blockedTools) || !obj.blockedTools.every((t: unknown) => typeof t === "string")) return false;
+      if (
+        !Array.isArray(obj.blockedTools) ||
+        !obj.blockedTools.every((t: unknown) => typeof t === "string")
+      )
+        return false;
     }
     return true;
   }
@@ -98,10 +107,18 @@ function isValidServerConfig(value: unknown): value is McpServerConfig {
 
   // Validate allowedTools/blockedTools if present
   if (obj.allowedTools !== undefined) {
-    if (!Array.isArray(obj.allowedTools) || !obj.allowedTools.every((t: unknown) => typeof t === "string")) return false;
+    if (
+      !Array.isArray(obj.allowedTools) ||
+      !obj.allowedTools.every((t: unknown) => typeof t === "string")
+    )
+      return false;
   }
   if (obj.blockedTools !== undefined) {
-    if (!Array.isArray(obj.blockedTools) || !obj.blockedTools.every((t: unknown) => typeof t === "string")) return false;
+    if (
+      !Array.isArray(obj.blockedTools) ||
+      !obj.blockedTools.every((t: unknown) => typeof t === "string")
+    )
+      return false;
   }
 
   return true;
@@ -215,11 +232,19 @@ export class McpManager {
           const file = Bun.file(path);
           if (await file.exists()) {
             const data = await file.json();
-            if (data?.mcpServers && typeof data.mcpServers === "object" && Object.keys(data.mcpServers).length > 0) {
-              console.error(`[MCP] Skipping project .kcode/ MCP servers — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`);
+            if (
+              data?.mcpServers &&
+              typeof data.mcpServers === "object" &&
+              Object.keys(data.mcpServers).length > 0
+            ) {
+              console.error(
+                `[MCP] Skipping project .kcode/ MCP servers — workspace not trusted. Run \`kcode init --trust\` to trust this workspace.`,
+              );
             }
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         continue;
       }
 
@@ -249,7 +274,10 @@ export class McpManager {
   private async startServers(configs: McpServersConfig): Promise<void> {
     const startPromises = Object.entries(configs).map(async ([name, config]) => {
       // Choose transport based on config
-      const isHttp = config.transport === "http" || config.transport === "sse" || (!config.command && config.url);
+      const isHttp =
+        config.transport === "http" ||
+        config.transport === "sse" ||
+        (!config.command && config.url);
       const connection: McpConnection = isHttp
         ? new McpHttpConnection(name, config)
         : new McpServerConnection(name, config);
@@ -267,7 +295,9 @@ export class McpManager {
         this.serverConfigs.set(name, config);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[MCP] Failed to start server "${name}" (${isHttp ? "HTTP" : "stdio"}): ${msg}`);
+        console.error(
+          `[MCP] Failed to start server "${name}" (${isHttp ? "HTTP" : "stdio"}): ${msg}`,
+        );
         connection.shutdown();
       }
     });
@@ -316,13 +346,17 @@ export class McpManager {
    * Call a tool on a specific MCP server.
    * Checks circuit breaker before calling and records success/failure with latency.
    */
-  async callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<string> {
+  async callTool(
+    serverName: string,
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<string> {
     // Check circuit breaker — block if circuit is open
     if (this.healthMonitor.isCircuitOpen(serverName)) {
       const health = this.healthMonitor.getHealth(serverName);
       throw new Error(
         `MCP server "${serverName}" circuit breaker is open (${health.consecutiveFailures} consecutive failures). ` +
-        `Wait for automatic recovery or run /mcp reset ${serverName}.`
+          `Wait for automatic recovery or run /mcp reset ${serverName}.`,
       );
     }
 
@@ -344,7 +378,10 @@ export class McpManager {
       this.healthMonitor.recordSuccess(serverName, Date.now() - start);
       return result;
     } catch (err) {
-      this.healthMonitor.recordFailure(serverName, err instanceof Error ? err.message : String(err));
+      this.healthMonitor.recordFailure(
+        serverName,
+        err instanceof Error ? err.message : String(err),
+      );
       throw err;
     }
   }
@@ -403,7 +440,9 @@ export class McpManager {
 
     const interval = setInterval(async () => {
       // Collect dead servers first, then act — avoids Map mutation during async iteration
-      const deadServers: Array<[string, typeof this.servers extends Map<string, infer V> ? V : never]> = [];
+      const deadServers: Array<
+        [string, typeof this.servers extends Map<string, infer V> ? V : never]
+      > = [];
       for (const [name, connection] of this.servers) {
         if (!connection.isAlive()) deadServers.push([name, connection]);
       }

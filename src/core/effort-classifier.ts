@@ -65,7 +65,7 @@ const LOW_PATTERNS = [
   /^(?:explain|describe|tell me about|what does)\b/i,
   /^(?:show|list|print|display)\b/i,
   /^(?:rename|move|copy|delete)\s+\w+/i,
-  /\?$/,  // Simple questions
+  /\?$/, // Simple questions
 ];
 
 const MEDIUM_PATTERNS = [
@@ -162,14 +162,10 @@ export function classifyEffort(message: string): ClassificationResult {
 
   // Map score to effort level
   const level: EffortLevel =
-    score >= 2 ? "max" :
-    score >= 1 ? "high" :
-    score <= -2 ? "low" : "medium";
+    score >= 2 ? "max" : score >= 1 ? "high" : score <= -2 ? "low" : "medium";
 
   // Confidence: higher when signals are clear
-  const confidence = signals.length > 0
-    ? Math.min(1, 0.5 + signals.length * 0.15)
-    : 0.3;
+  const confidence = signals.length > 0 ? Math.min(1, 0.5 + signals.length * 0.15) : 0.3;
 
   return { level, confidence, signals };
 }
@@ -178,10 +174,7 @@ export function classifyEffort(message: string): ClassificationResult {
  * Get the effort profile for a given level.
  * If auto-detect is requested, classifies from the message.
  */
-export function getEffortProfile(
-  level: EffortLevel | "auto",
-  message?: string,
-): EffortProfile {
+export function getEffortProfile(level: EffortLevel | "auto", message?: string): EffortProfile {
   if (level === "auto" && message) {
     const result = classifyEffort(message);
     return EFFORT_PROFILES[result.level];

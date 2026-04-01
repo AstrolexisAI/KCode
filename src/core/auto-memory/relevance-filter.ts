@@ -2,8 +2,8 @@
 // Filters extracted memories against existing ones to prevent duplicates.
 // Uses fuzzy title matching and content comparison.
 
-import type { ExtractedMemory, AutoMemoryConfig } from "./types";
 import type { MemoryType } from "../memory";
+import type { AutoMemoryConfig, ExtractedMemory } from "./types";
 
 // ─── Fuzzy String Similarity ────────────────────────────────────
 
@@ -38,8 +38,8 @@ function levenshteinDistance(a: string, b: string): number {
     for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       curr[j] = Math.min(
-        prev[j] + 1,       // deletion
-        curr[j - 1] + 1,   // insertion
+        prev[j] + 1, // deletion
+        curr[j - 1] + 1, // insertion
         prev[j - 1] + cost, // substitution
       );
     }
@@ -103,7 +103,10 @@ export function filterMemories(
   for (const memory of memories) {
     // Check confidence threshold
     if (memory.confidence < config.minConfidence) {
-      rejected.push({ memory, reason: `confidence ${memory.confidence} < ${config.minConfidence}` });
+      rejected.push({
+        memory,
+        reason: `confidence ${memory.confidence} < ${config.minConfidence}`,
+      });
       continue;
     }
 

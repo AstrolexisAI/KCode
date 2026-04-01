@@ -6,18 +6,40 @@
 // ─── Types ──────────────────────────────────────────────────────
 
 export type KodiMood =
-  | "idle" | "happy" | "excited" | "thinking" | "reasoning"
-  | "working" | "worried" | "sleeping" | "celebrating"
-  | "curious" | "mischievous" | "crazy" | "angry" | "smug";
+  | "idle"
+  | "happy"
+  | "excited"
+  | "thinking"
+  | "reasoning"
+  | "working"
+  | "worried"
+  | "sleeping"
+  | "celebrating"
+  | "curious"
+  | "mischievous"
+  | "crazy"
+  | "angry"
+  | "smug";
 
 export type AnimPhase = "idle" | "anticipation" | "performing" | "settling" | "cooldown";
 
 export type AnimRhythm = "slow" | "medium" | "fast";
 
 export interface KodiEvent {
-  type: "tool_start" | "tool_done" | "tool_error" | "thinking" | "streaming"
-    | "idle" | "turn_end" | "compaction" | "agent_spawn"
-    | "test_pass" | "test_fail" | "commit" | "error";
+  type:
+    | "tool_start"
+    | "tool_done"
+    | "tool_error"
+    | "thinking"
+    | "streaming"
+    | "idle"
+    | "turn_end"
+    | "compaction"
+    | "agent_spawn"
+    | "test_pass"
+    | "test_fail"
+    | "commit"
+    | "error";
   detail?: string;
 }
 
@@ -29,7 +51,7 @@ export interface KodiAnimState {
   lines: [string, string, string, string, string];
   bubble: string;
   moodColor: string;
-  intensity: number;   // 0-1
+  intensity: number; // 0-1
 }
 
 // ─── Fixed-Width Helpers ────────────────────────────────────────
@@ -51,144 +73,157 @@ const LINE_WIDTH = 14;
 // All eye sprites use only ASCII + box-drawing (no ambiguous-width Unicode).
 // This guarantees stable column alignment across all terminals and locales.
 const EYES: Record<KodiMood, string[]> = {
-  idle:         ["o  .o", "o  _o", "o  .o", "o   o"],
-  happy:        ["^  .^", "^  _^", "^  -^"],
-  excited:      ["* . *", "* v *", "o . o"],
-  thinking:     ["o  _ o", "o  -o", "o  -o"],
-  reasoning:    ["O   O", "O  _O", "O   O"],
-  working:      ["o  :o", "o  :o", "-  :-"],
-  worried:      ["o  ~o", "o  ~o", ";  _;"],
-  sleeping:     ["-  _-", "_  __", "-  _-"],
-  celebrating:  ["* v *", "^ v ^", "^ v ^"],
-  curious:      ["o  .o", "o  -o", "o  .o"],
-  mischievous:  [">  ->", "<  -<", ">  -~"],
-  crazy:        ["@  .o", "* v @", "o . O"],
-  angry:        ["># <#", ">  _<", ">  ^<"],
-  smug:         ["~  -~", "- -- ", "^ -^ "],
+  idle: ["o  .o", "o  _o", "o  .o", "o   o"],
+  happy: ["^  .^", "^  _^", "^  -^"],
+  excited: ["* . *", "* v *", "o . o"],
+  thinking: ["o  _ o", "o  -o", "o  -o"],
+  reasoning: ["O   O", "O  _O", "O   O"],
+  working: ["o  :o", "o  :o", "-  :-"],
+  worried: ["o  ~o", "o  ~o", ";  _;"],
+  sleeping: ["-  _-", "_  __", "-  _-"],
+  celebrating: ["* v *", "^ v ^", "^ v ^"],
+  curious: ["o  .o", "o  -o", "o  .o"],
+  mischievous: [">  ->", "<  -<", ">  -~"],
+  crazy: ["@  .o", "* v @", "o . O"],
+  angry: ["># <#", ">  _<", ">  ^<"],
+  smug: ["~  -~", "- -- ", "^ -^ "],
 };
 
 // Body sprites: the `|` (torso) must be at position 5 to align under `┬`.
 // Head: " ╭───────╮" → ┬ at pos 5.  So body: "    /|\\" puts | at pos 5.
 const BODY: Record<KodiMood, string[]> = {
-  idle:         ["    /|\\  ", "    /|\\  ", "    /|\\  "],
-  happy:        ["    \\|/  ", "    /|\\  ", "    /|\\  "],
-  excited:      ["   \\(|)/ ", "    \\|/  ", "   \\(|)/ "],
-  thinking:     ["    /|   ", "     |\\  ", "    /|   "],
-  reasoning:    ["    /|\\  ", "     |\\  ", "    /|   "],
-  working:      ["    /|\\ |", "    /|\\ |", "    /|\\  "],
-  worried:      ["    /|\\  ", "   .-|-. ", "    \\|   "],
-  sleeping:     ["    /|\\  ", "    \\|   ", "   __|__ "],
-  celebrating:  ["   \\(|)/ ", "   \\(|)/ ", "   \\(|)/ "],
-  curious:      ["    /|   ", "     |\\  ", "    /|   "],
-  mischievous:  ["    /|-- ", "   .-|/  ", "   _/|\\  "],
-  crazy:        ["  ~\\(|)/~", "   /(|)\\ ", "  ~\\(|)/~"],
-  angry:        ["   =/|\\= ", "   [/|\\] ", "   =/|\\= "],
-  smug:         ["   _/|\\  ", "    /|-- ", "   _/|\\  "],
+  idle: ["    /|\\  ", "    /|\\  ", "    /|\\  "],
+  happy: ["    \\|/  ", "    /|\\  ", "    /|\\  "],
+  excited: ["   \\(|)/ ", "    \\|/  ", "   \\(|)/ "],
+  thinking: ["    /|   ", "     |\\  ", "    /|   "],
+  reasoning: ["    /|\\  ", "     |\\  ", "    /|   "],
+  working: ["    /|\\ |", "    /|\\ |", "    /|\\  "],
+  worried: ["    /|\\  ", "   .-|-. ", "    \\|   "],
+  sleeping: ["    /|\\  ", "    \\|   ", "   __|__ "],
+  celebrating: ["   \\(|)/ ", "   \\(|)/ ", "   \\(|)/ "],
+  curious: ["    /|   ", "     |\\  ", "    /|   "],
+  mischievous: ["    /|-- ", "   .-|/  ", "   _/|\\  "],
+  crazy: ["  ~\\(|)/~", "   /(|)\\ ", "  ~\\(|)/~"],
+  angry: ["   =/|\\= ", "   [/|\\] ", "   =/|\\= "],
+  smug: ["   _/|\\  ", "    /|-- ", "   _/|\\  "],
 };
 
 // Legs: `/ \` should center under `|` at pos 5 → `/` at 4, `\` at 6.
 const LEGS: Record<KodiMood, string[]> = {
-  idle:         ["    / \\  "],
-  happy:        ["    / \\  "],
-  excited:      ["   _/ \\_ ", "    / \\  "],
-  thinking:     ["    / \\  "],
-  reasoning:    ["    / \\  "],
-  working:      ["    / \\  "],
-  worried:      ["   </ \\> ", "    / \\  "],
-  sleeping:     ["    / \\  "],
-  celebrating:  ["   _/ \\_ ", "    / \\  "],
-  curious:      ["    / \\  "],
-  mischievous:  ["    / \\  ", "   // \\\\  "],
-  crazy:        ["   </ \\> ", "  ~/   \\~", "  _/   \\_"],
-  angry:        ["    / \\  ", "   _/ \\_ "],
-  smug:         ["    / \\  "],
+  idle: ["    / \\  "],
+  happy: ["    / \\  "],
+  excited: ["   _/ \\_ ", "    / \\  "],
+  thinking: ["    / \\  "],
+  reasoning: ["    / \\  "],
+  working: ["    / \\  "],
+  worried: ["   </ \\> ", "    / \\  "],
+  sleeping: ["    / \\  "],
+  celebrating: ["   _/ \\_ ", "    / \\  "],
+  curious: ["    / \\  "],
+  mischievous: ["    / \\  ", "   // \\\\  "],
+  crazy: ["   </ \\> ", "  ~/   \\~", "  _/   \\_"],
+  angry: ["    / \\  ", "   _/ \\_ "],
+  smug: ["    / \\  "],
 };
 
 // Accessories — all entries must be 1-2 chars; padded to W_ACC in output
 const ACCESSORIES: Record<KodiMood, string[]> = {
-  idle:         [" ", " ", " ", " ", " ", " ", " ", "."],
-  happy:        ["<3", "  ", "  "],
-  excited:      ["! ", "! ", "* "],
-  thinking:     ["? ", "  ", "  "],
-  reasoning:    ["@ ", "@ ", "! "],
-  working:      ["! ", "* ", "> "],
-  worried:      ["  ", "! ", ". "],
-  sleeping:     ["z ", "Z ", "zZ"],
-  celebrating:  ["+ ", "* ", "! "],
-  curious:      ["? ", "? ", "  "],
-  mischievous:  ["  ", "~ ", "  "],
-  crazy:        ["! ", "?!", "!!"],
-  angry:        ["  ", "! ", "!!"],
-  smug:         ["  ", "* ", "~ "],
+  idle: [" ", " ", " ", " ", " ", " ", " ", "."],
+  happy: ["<3", "  ", "  "],
+  excited: ["! ", "! ", "* "],
+  thinking: ["? ", "  ", "  "],
+  reasoning: ["@ ", "@ ", "! "],
+  working: ["! ", "* ", "> "],
+  worried: ["  ", "! ", ". "],
+  sleeping: ["z ", "Z ", "zZ"],
+  celebrating: ["+ ", "* ", "! "],
+  curious: ["? ", "? ", "  "],
+  mischievous: ["  ", "~ ", "  "],
+  crazy: ["! ", "?!", "!!"],
+  angry: ["  ", "! ", "!!"],
+  smug: ["  ", "* ", "~ "],
 };
 
 // Effect particles
 const EFFECTS_L: Record<AnimPhase, Record<AnimRhythm, string[]>> = {
-  idle:         { slow: ["  ", "  ", " ."], medium: ["  ", "  "], fast: ["  "] },
+  idle: { slow: ["  ", "  ", " ."], medium: ["  ", "  "], fast: ["  "] },
   anticipation: { slow: [" >"], medium: [" >", " >"], fast: [" >", ">>"] },
-  performing:   { slow: [" ."], medium: [" :", " ."], fast: [" !", " .", " :"] },
-  settling:     { slow: [" .", "  "], medium: [" .", "  "], fast: [" .", "  "] },
-  cooldown:     { slow: ["  ", "  "], medium: ["  "], fast: ["  "] },
+  performing: { slow: [" ."], medium: [" :", " ."], fast: [" !", " .", " :"] },
+  settling: { slow: [" .", "  "], medium: [" .", "  "], fast: [" .", "  "] },
+  cooldown: { slow: ["  ", "  "], medium: ["  "], fast: ["  "] },
 };
 
 const EFFECTS_R: Record<AnimPhase, Record<AnimRhythm, string[]>> = {
-  idle:         { slow: ["  ", "  ", ". "], medium: ["  ", "  "], fast: ["  "] },
+  idle: { slow: ["  ", "  ", ". "], medium: ["  ", "  "], fast: ["  "] },
   anticipation: { slow: ["< "], medium: ["< ", "< "], fast: ["< ", "<<"] },
-  performing:   { slow: [". "], medium: [": ", ". "], fast: ["! ", ". ", ": "] },
-  settling:     { slow: [". ", "  "], medium: [". ", "  "], fast: [". ", "  "] },
-  cooldown:     { slow: ["  ", "  "], medium: ["  "], fast: ["  "] },
+  performing: { slow: [". "], medium: [": ", ". "], fast: ["! ", ". ", ": "] },
+  settling: { slow: [". ", "  "], medium: [". ", "  "], fast: [". ", "  "] },
+  cooldown: { slow: ["  ", "  "], medium: ["  "], fast: ["  "] },
 };
 
 // ─── Speech Chips ───────────────────────────────────────────────
 
 export const SPEECH_CHIPS: Record<string, string[]> = {
-  tool_start:    ["on it", "working", "sec...", "got it"],
-  tool_done:     ["done!", "ok", "good", "ok!"],
-  tool_error:    ["oops", "hmm", "uh oh", "retry?"],
-  thinking:      ["hmm...", "thinking", "..."],
-  reasoning:     ["deep...", "brain", "analyzing"],
-  streaming:     ["writing", "...", "typing"],
-  idle:          ["ready", "...", "~", ""],
-  turn_end:      ["done!", "your turn", "ok"],
-  compaction:    ["cleanup", "compacting"],
-  agent_spawn:   ["team!", "+agent"],
-  error:         ["broke!", "!!", "help"],
-  commit:        ["saved!", "commit!"],
-  test_pass:     ["green!", "tests ok", "ship it"],
-  test_fail:     ["red!", "tests!", "bugs"],
+  tool_start: ["on it", "working", "sec...", "got it"],
+  tool_done: ["done!", "ok", "good", "ok!"],
+  tool_error: ["oops", "hmm", "uh oh", "retry?"],
+  thinking: ["hmm...", "thinking", "..."],
+  reasoning: ["deep...", "brain", "analyzing"],
+  streaming: ["writing", "...", "typing"],
+  idle: ["ready", "...", "~", ""],
+  turn_end: ["done!", "your turn", "ok"],
+  compaction: ["cleanup", "compacting"],
+  agent_spawn: ["team!", "+agent"],
+  error: ["broke!", "!!", "help"],
+  commit: ["saved!", "commit!"],
+  test_pass: ["green!", "tests ok", "ship it"],
+  test_fail: ["red!", "tests!", "bugs"],
 };
 
 // ─── Mood Rhythm ────────────────────────────────────────────────
 
 const MOOD_RHYTHM: Record<KodiMood, AnimRhythm> = {
-  idle: "slow", sleeping: "slow",
-  thinking: "medium", curious: "medium", reasoning: "medium",
-  happy: "medium", smug: "medium", mischievous: "medium",
-  working: "fast", excited: "fast", celebrating: "fast", crazy: "fast",
-  worried: "medium", angry: "fast",
+  idle: "slow",
+  sleeping: "slow",
+  thinking: "medium",
+  curious: "medium",
+  reasoning: "medium",
+  happy: "medium",
+  smug: "medium",
+  mischievous: "medium",
+  working: "fast",
+  excited: "fast",
+  celebrating: "fast",
+  crazy: "fast",
+  worried: "medium",
+  angry: "fast",
 };
 
 // ─── Phase durations (ms, consumed by tick accumulator) ─────────
 
 const PHASE_DURATION: Record<AnimPhase, number> = {
-  idle: Infinity,         // stays until externally changed
-  anticipation: 200,      // bridge mood display time
-  performing: 800,        // main expression hold
-  settling: 300,          // fade back
-  cooldown: 400,          // quiet before idle
+  idle: Infinity, // stays until externally changed
+  anticipation: 200, // bridge mood display time
+  performing: 800, // main expression hold
+  settling: 300, // fade back
+  cooldown: 400, // quiet before idle
 };
 
 // ─── Transition Map ─────────────────────────────────────────────
 
-const TRANSITIONS: Array<{ from: KodiMood[]; to: KodiMood[]; via: KodiMood; durationMs: number }> = [
-  { from: ["idle", "happy"],         to: ["thinking", "reasoning"],  via: "curious",  durationMs: 200 },
-  { from: ["thinking", "reasoning"], to: ["working"],                via: "curious",  durationMs: 150 },
-  { from: ["working"],               to: ["celebrating", "happy"],   via: "excited",  durationMs: 200 },
-  { from: ["idle", "happy"],         to: ["worried", "angry"],       via: "curious",  durationMs: 180 },
-  { from: ["working", "thinking"],   to: ["worried"],                via: "worried",  durationMs: 120 },
-];
+const TRANSITIONS: Array<{ from: KodiMood[]; to: KodiMood[]; via: KodiMood; durationMs: number }> =
+  [
+    { from: ["idle", "happy"], to: ["thinking", "reasoning"], via: "curious", durationMs: 200 },
+    { from: ["thinking", "reasoning"], to: ["working"], via: "curious", durationMs: 150 },
+    { from: ["working"], to: ["celebrating", "happy"], via: "excited", durationMs: 200 },
+    { from: ["idle", "happy"], to: ["worried", "angry"], via: "curious", durationMs: 180 },
+    { from: ["working", "thinking"], to: ["worried"], via: "worried", durationMs: 120 },
+  ];
 
-function findTransition(from: KodiMood, to: KodiMood): { via: KodiMood; durationMs: number } | null {
+function findTransition(
+  from: KodiMood,
+  to: KodiMood,
+): { via: KodiMood; durationMs: number } | null {
   if (from === to) return null;
   for (const t of TRANSITIONS) {
     if (t.from.includes(from) && t.to.includes(to)) return { via: t.via, durationMs: t.durationMs };
@@ -240,7 +275,7 @@ export class KodiAnimEngine {
 
   // Speech
   bubble = "";
-  private bubbleTimer = 0;   // counts down
+  private bubbleTimer = 0; // counts down
 
   // Context
   runningAgents = 0;
@@ -321,11 +356,14 @@ export class KodiAnimEngine {
     if (this.glancing && eyes.length >= 4) eyeIdx = 3;
 
     const bodyVariants = BODY[displayMood];
-    const bodyIdx = (this.breathPhase + (this.phase === "performing" ? 1 : 0)) % bodyVariants.length;
+    const bodyIdx =
+      (this.breathPhase + (this.phase === "performing" ? 1 : 0)) % bodyVariants.length;
 
     const legsVariants = LEGS[displayMood];
-    const legsIdx = (this.phase === "performing" || this.phase === "anticipation")
-      ? Math.min(1, legsVariants.length - 1) : 0;
+    const legsIdx =
+      this.phase === "performing" || this.phase === "anticipation"
+        ? Math.min(1, legsVariants.length - 1)
+        : 0;
 
     const accVariants = ACCESSORIES[displayMood];
     const accIdx = this.frameIndex % accVariants.length;
@@ -343,11 +381,11 @@ export class KodiAnimEngine {
     const legsStr = legsVariants[legsIdx] ?? "";
 
     const lines: [string, string, string, string, string] = [
-      padFixed(` ╭───────╮`,    LINE_WIDTH),   // head
-      padFixed(`${face}${acc}`, LINE_WIDTH),    // face + accessory
-      padFixed(` ╰───┬───╯`,    LINE_WIDTH),   // neck
-      padFixed(`${bodyStr}`,     LINE_WIDTH),   // body (| at pos 5 = under ┬)
-      padFixed(`${legsStr}`,     LINE_WIDTH),   // legs (/ \ centered under |)
+      padFixed(` ╭───────╮`, LINE_WIDTH), // head
+      padFixed(`${face}${acc}`, LINE_WIDTH), // face + accessory
+      padFixed(` ╰───┬───╯`, LINE_WIDTH), // neck
+      padFixed(`${bodyStr}`, LINE_WIDTH), // body (| at pos 5 = under ┬)
+      padFixed(`${legsStr}`, LINE_WIDTH), // legs (/ \ centered under |)
     ];
 
     return {
@@ -369,11 +407,20 @@ export class KodiAnimEngine {
 
   private advancePhase(): void {
     switch (this.phase) {
-      case "anticipation": this.enterPhase("performing"); break;
-      case "performing":   this.enterPhase("settling"); break;
-      case "settling":     this.enterPhase("cooldown"); break;
-      case "cooldown":     this.enterPhase("idle"); break;
-      case "idle":         break; // stays
+      case "anticipation":
+        this.enterPhase("performing");
+        break;
+      case "performing":
+        this.enterPhase("settling");
+        break;
+      case "settling":
+        this.enterPhase("cooldown");
+        break;
+      case "cooldown":
+        this.enterPhase("idle");
+        break;
+      case "idle":
+        break; // stays
     }
   }
 
@@ -416,33 +463,72 @@ export class KodiAnimEngine {
         this.say(event.detail ? `${chip} ${event.detail}` : chip, 2000);
         break;
       case "tool_done":
-        if (event.detail === "TestRunner") { this.setMood("smug"); this.say("green!", 3000); }
-        else if (event.detail === "GitCommit") { this.setMood("celebrating"); this.say("committed!", 3000); }
-        else { this.setMood("happy"); this.say(chip, 2000); }
+        if (event.detail === "TestRunner") {
+          this.setMood("smug");
+          this.say("green!", 3000);
+        } else if (event.detail === "GitCommit") {
+          this.setMood("celebrating");
+          this.say("committed!", 3000);
+        } else {
+          this.setMood("happy");
+          this.say(chip, 2000);
+        }
         this.intensity = 0.6;
         break;
       case "tool_error":
-        this.setMood("worried"); this.intensity = 0.8; this.say(chip, 3000); break;
+        this.setMood("worried");
+        this.intensity = 0.8;
+        this.say(chip, 3000);
+        break;
       case "test_pass":
-        this.setMood("celebrating"); this.intensity = 0.9; this.say("tests ok!", 3000); break;
+        this.setMood("celebrating");
+        this.intensity = 0.9;
+        this.say("tests ok!", 3000);
+        break;
       case "test_fail":
-        this.setMood("angry"); this.intensity = 0.8; this.say("tests!", 3000); break;
+        this.setMood("angry");
+        this.intensity = 0.8;
+        this.say("tests!", 3000);
+        break;
       case "thinking":
-        this.setMood("reasoning"); this.intensity = 0.6; this.say(chip, 4000); break;
+        this.setMood("reasoning");
+        this.intensity = 0.6;
+        this.say(chip, 4000);
+        break;
       case "streaming":
-        this.setMood("happy"); this.intensity = 0.5; this.say(chip, 2000); break;
+        this.setMood("happy");
+        this.intensity = 0.5;
+        this.say(chip, 2000);
+        break;
       case "compaction":
-        this.setMood("thinking"); this.intensity = 0.5; this.say(chip, 3000); break;
+        this.setMood("thinking");
+        this.intensity = 0.5;
+        this.say(chip, 3000);
+        break;
       case "agent_spawn":
-        this.setMood("excited"); this.intensity = 0.8; this.say(chip, 3000); break;
+        this.setMood("excited");
+        this.intensity = 0.8;
+        this.say(chip, 3000);
+        break;
       case "commit":
-        this.setMood("celebrating"); this.intensity = 0.9; this.say("saved!", 3000); break;
+        this.setMood("celebrating");
+        this.intensity = 0.9;
+        this.say("saved!", 3000);
+        break;
       case "error":
-        this.setMood("worried"); this.intensity = 0.7; this.say(chip, 3000); break;
+        this.setMood("worried");
+        this.intensity = 0.7;
+        this.say(chip, 3000);
+        break;
       case "turn_end":
-        this.setMood("idle"); this.intensity = 0.3; this.say(chip, 2000); break;
+        this.setMood("idle");
+        this.intensity = 0.3;
+        this.say(chip, 2000);
+        break;
       case "idle":
-        this.setMood("idle"); this.intensity = 0.2; break;
+        this.setMood("idle");
+        this.intensity = 0.2;
+        break;
     }
 
     if (this.runningAgents > 0) this.intensity = Math.min(1, this.intensity + 0.15);

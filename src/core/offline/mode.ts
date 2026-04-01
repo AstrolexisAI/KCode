@@ -3,10 +3,10 @@
 // and provides a singleton that the rest of the codebase queries.
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { log } from "../logger";
-import type { OfflineState, LocalResources, OfflineSettings } from "./types";
+import type { LocalResources, OfflineSettings, OfflineState } from "./types";
 
 // ─── Defaults ──────────────────────────────────────────────────
 
@@ -136,15 +136,14 @@ export class OfflineMode {
 
   /** Check if a local inference server is reachable */
   private async detectLocalModel(): Promise<boolean> {
-    const endpoints = [
-      "http://localhost:10091/health",
-      "http://localhost:11434/api/tags",
-    ];
+    const endpoints = ["http://localhost:10091/health", "http://localhost:11434/api/tags"];
     for (const url of endpoints) {
       try {
         const r = await this.fetchFn(url, { signal: AbortSignal.timeout(2000) });
         if (r.ok) return true;
-      } catch { /* continue */ }
+      } catch {
+        /* continue */
+      }
     }
     return false;
   }
@@ -154,19 +153,25 @@ export class OfflineMode {
     try {
       const r1 = Bun.spawnSync(["which", "whisper-cpp"]);
       if (r1.exitCode === 0) return true;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     try {
       const r2 = Bun.spawnSync(["which", "faster-whisper"]);
       if (r2.exitCode === 0) return true;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return false;
   }
 
   /** Default DNS resolver using Bun.dns */
   private static async defaultDnsResolver(hostname: string): Promise<unknown> {
     // Bun.dns.resolve returns an array of addresses — if it throws, no network
-    return (Bun as any).dns?.resolve?.(hostname, "A")
-      ?? Promise.reject(new Error("Bun.dns not available"));
+    return (
+      (Bun as any).dns?.resolve?.(hostname, "A") ??
+      Promise.reject(new Error("Bun.dns not available"))
+    );
   }
 }
 

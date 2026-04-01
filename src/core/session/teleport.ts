@@ -5,10 +5,10 @@
 //
 // Import: restores session from package on another machine.
 
-import { hostname } from "node:os";
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { hostname } from "node:os";
+import { join, resolve } from "node:path";
 import type { SessionCheckpoint, TeleportPackage } from "./types";
 
 const TELEPORT_VERSION = "1.0.0";
@@ -111,10 +111,7 @@ export function importSession(serialized: string): TeleportPackage {
 /**
  * Save teleport package to a local file.
  */
-export async function saveToFile(
-  serialized: string,
-  outputPath: string,
-): Promise<void> {
+export async function saveToFile(serialized: string, outputPath: string): Promise<void> {
   // Compress with gzip
   const compressed = Bun.gzipSync(new TextEncoder().encode(serialized));
   await Bun.write(outputPath, compressed);
@@ -148,10 +145,7 @@ export async function loadFromFile(filePath: string): Promise<TeleportPackage> {
  * Apply referenced files from a teleport package to the local filesystem.
  * Returns the list of files written.
  */
-export async function applyFiles(
-  pkg: TeleportPackage,
-  targetDir: string,
-): Promise<string[]> {
+export async function applyFiles(pkg: TeleportPackage, targetDir: string): Promise<string[]> {
   const written: string[] = [];
   for (const { path: relPath, content } of pkg.referencedFiles) {
     const absPath = join(targetDir, relPath);
@@ -164,10 +158,7 @@ export async function applyFiles(
 /**
  * Apply git diff from a teleport package.
  */
-export async function applyGitDiff(
-  pkg: TeleportPackage,
-  targetDir: string,
-): Promise<boolean> {
+export async function applyGitDiff(pkg: TeleportPackage, targetDir: string): Promise<boolean> {
   if (!pkg.gitDiff) return false;
   try {
     const proc = Bun.spawn(["git", "apply", "--check"], {

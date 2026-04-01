@@ -1,8 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { generateDocs, formatDocs } from "./docs-gen";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { formatDocs, generateDocs } from "./docs-gen";
 
 describe("docs-gen", () => {
   let dir: string;
@@ -65,9 +65,7 @@ describe("docs-gen", () => {
   test("generates hook docs", async () => {
     createPlugin({
       hooks: {
-        PostToolUse: [
-          { match: { toolName: "Bash" }, command: "echo", args: ["done"] },
-        ],
+        PostToolUse: [{ match: { toolName: "Bash" }, command: "echo", args: ["done"] }],
       },
     });
     const sections = await generateDocs(dir);

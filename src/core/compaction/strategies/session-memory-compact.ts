@@ -2,13 +2,13 @@
 // Generates a structured summary of a previous session for /resume continuations.
 // Only activates when transcript exceeds the threshold (default 50 messages).
 
+import { log } from "../../logger.js";
 import type { Message, TextBlock } from "../../types.js";
 import type {
+  LlmSummarizer,
   SessionMemoryCompactConfig,
   SessionMemoryCompactResult,
-  LlmSummarizer,
 } from "../types.js";
-import { log } from "../../logger.js";
 
 // ─── Session Memory Prompt ──────────────────────────────────────
 
@@ -43,7 +43,10 @@ export async function sessionMemoryCompact(
   const threshold = config?.thresholdMessages ?? 50;
 
   if (messages.length <= threshold) {
-    log.info("compaction", `Session transcript (${messages.length} msgs) below threshold (${threshold}), skipping session-memory compact`);
+    log.info(
+      "compaction",
+      `Session transcript (${messages.length} msgs) below threshold (${threshold}), skipping session-memory compact`,
+    );
     return null;
   }
 
@@ -51,11 +54,7 @@ export async function sessionMemoryCompact(
   const transcriptText = messagesToTranscript(messages);
   const prompt = SESSION_MEMORY_USER_PROMPT_TEMPLATE + transcriptText;
 
-  const summaryText = await summarizer(
-    prompt,
-    SESSION_MEMORY_SYSTEM_PROMPT,
-    3000,
-  );
+  const summaryText = await summarizer(prompt, SESSION_MEMORY_SYSTEM_PROMPT, 3000);
 
   if (!summaryText) {
     log.warn("compaction", "Session memory compact: LLM returned null");
@@ -78,11 +77,7 @@ export async function sessionMemoryCompact(
  * suitable for injection at the start of a resumed conversation.
  */
 export function buildSessionResumptionMessage(result: SessionMemoryCompactResult): Message {
-  const parts = [
-    `[Sesion anterior resumida]`,
-    ``,
-    result.summary,
-  ];
+  const parts = [`[Sesion anterior resumida]`, ``, result.summary];
 
   if (result.filesModified.length > 0) {
     parts.push("", "Archivos modificados:", ...result.filesModified.map((f) => `  - ${f}`));
@@ -119,7 +114,8 @@ function messagesToTranscript(messages: Message[]): string {
       } else if (block.type === "tool_use") {
         lines.push(`${role} [${block.name}]: ${JSON.stringify(block.input).slice(0, 200)}`);
       } else if (block.type === "tool_result") {
-        const content = typeof block.content === "string" ? block.content.slice(0, 200) : "[result]";
+        const content =
+          typeof block.content === "string" ? block.content.slice(0, 200) : "[result]";
         lines.push(`${role} [result${block.is_error ? " ERROR" : ""}]: ${content}`);
       }
     }
@@ -143,9 +139,7 @@ function parseSessionSummary(
 
   // If LLM didn't extract files, scan messages for tool_use with file paths
   const finalFiles =
-    filesModified.length > 0
-      ? filesModified
-      : extractFilePathsFromMessages(originalMessages);
+    filesModified.length > 0 ? filesModified : extractFilePathsFromMessages(originalMessages);
 
   return {
     summary: summaryText,

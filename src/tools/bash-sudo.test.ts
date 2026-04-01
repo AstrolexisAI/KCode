@@ -1,22 +1,27 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { readdirSync, unlinkSync } from "node:fs";
 import {
-  executeBash,
-  setSudoPasswordPromptFn,
   clearSudoPasswordCache,
+  executeBash,
   type SudoPasswordPromptFn,
+  setSudoPasswordPromptFn,
 } from "./bash.ts";
 
 let hasBash = false;
-try { execFileSync("bash", ["--version"], { stdio: "pipe" }); hasBash = true; } catch {}
+try {
+  execFileSync("bash", ["--version"], { stdio: "pipe" });
+  hasBash = true;
+} catch {}
 
 // Clean up askpass files after each test
 function cleanupAskpass() {
   try {
     for (const f of readdirSync("/tmp")) {
       if (f.startsWith(".kcode-askpass-")) {
-        try { unlinkSync(`/tmp/${f}`); } catch {}
+        try {
+          unlinkSync(`/tmp/${f}`);
+        } catch {}
       }
     }
   } catch {}
@@ -89,7 +94,7 @@ function cleanupAskpass() {
   });
 
   test("allows msfconsole -x flag (not blocked by guard)", async () => {
-    const result = await executeBash({ command: 'echo \'msfconsole -q -x "exit" would run\'' });
+    const result = await executeBash({ command: "echo 'msfconsole -q -x \"exit\" would run'" });
     expect(result.content).not.toContain("BLOCKED");
   });
 
@@ -177,7 +182,7 @@ function cleanupAskpass() {
     const heredocRegex = /<<[-~]?\s*['"]?\w+['"]?/;
     expect(heredocRegex.test("sudo cat << EOF")).toBe(true);
     expect(heredocRegex.test("sudo cat <<'EOF'")).toBe(true);
-    expect(heredocRegex.test("sudo cat <<\"EOF\"")).toBe(true);
+    expect(heredocRegex.test('sudo cat <<"EOF"')).toBe(true);
     expect(heredocRegex.test("sudo cat <<-EOF")).toBe(true);
     expect(heredocRegex.test("sudo cat <<~MARKER")).toBe(true);
     // Non-heredoc
@@ -197,7 +202,7 @@ EOF`,
     });
 
     // Askpass file should be cleaned up after execution
-    const leftover = readdirSync("/tmp").filter(f => f.startsWith(".kcode-askpass-"));
+    const leftover = readdirSync("/tmp").filter((f) => f.startsWith(".kcode-askpass-"));
     expect(leftover.length).toBe(0);
   }, 15000);
 
@@ -207,7 +212,7 @@ EOF`,
     await executeBash({ command: "sudo echo simple", timeout: 2000 });
 
     // No askpass file should exist
-    const leftover = readdirSync("/tmp").filter(f => f.startsWith(".kcode-askpass-"));
+    const leftover = readdirSync("/tmp").filter((f) => f.startsWith(".kcode-askpass-"));
     expect(leftover.length).toBe(0);
   });
 
@@ -230,7 +235,9 @@ EOF`,
 
   test("noise filter matches stty errors (Spanish)", () => {
     const pattern = /^stty:.*Función ioctl.*$/m;
-    expect(pattern.test("stty: 'standard input': Función ioctl no apropiada para el dispositivo")).toBe(true);
+    expect(
+      pattern.test("stty: 'standard input': Función ioctl no apropiada para el dispositivo"),
+    ).toBe(true);
   });
 
   test("noise filter does NOT match regular output", () => {
@@ -244,7 +251,10 @@ EOF`,
 
   test("security tools get recognized without blocking", async () => {
     // nmap --version should run fine, not be blocked
-    const result = await executeBash({ command: "nmap --version 2>/dev/null || echo 'nmap not found'", timeout: 5000 });
+    const result = await executeBash({
+      command: "nmap --version 2>/dev/null || echo 'nmap not found'",
+      timeout: 5000,
+    });
     expect(result.content).not.toContain("BLOCKED");
   });
 

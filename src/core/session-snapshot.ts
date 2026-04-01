@@ -2,13 +2,13 @@
 // Captures complete session state for reproducibility and debugging.
 // Snapshots are saved as JSON to ~/.kcode/snapshots/{id}.json
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { kcodeHome } from "./paths";
-import type { Message, KCodeConfig, ConversationState, TokenUsage, ContentBlock } from "./types";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { log } from "./logger";
+import { kcodeHome } from "./paths";
 import { CHARS_PER_TOKEN } from "./token-budget";
+import type { ContentBlock, ConversationState, KCodeConfig, Message, TokenUsage } from "./types";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -144,9 +144,8 @@ function flattenMessages(messages: Message[], startTime: number): SnapshotMessag
             toolInput: block.input,
           });
         } else if (block.type === "tool_result") {
-          const contentStr = typeof block.content === "string"
-            ? block.content
-            : JSON.stringify(block.content);
+          const contentStr =
+            typeof block.content === "string" ? block.content : JSON.stringify(block.content);
           result.push({
             role: "tool",
             type: "tool_result",
@@ -309,7 +308,9 @@ export function exportSnapshot(
   }
   lines.push(`- Duration: ${Math.round(snapshot.duration / 1000)}s`);
   lines.push(`- Context Window: ${snapshot.contextWindowSize.toLocaleString()}`);
-  lines.push(`- System Prompt: ${snapshot.systemPromptLength.toLocaleString()} chars (hash: ${snapshot.systemPromptHash})`);
+  lines.push(
+    `- System Prompt: ${snapshot.systemPromptLength.toLocaleString()} chars (hash: ${snapshot.systemPromptHash})`,
+  );
 
   if (snapshot.toolsUsed.length > 0) {
     lines.push("");
@@ -339,11 +340,15 @@ export function exportSnapshot(
       lines.push(`${prefix} [${msg.role}] Tool: ${msg.toolName ?? msg.content}`);
     } else if (msg.type === "tool_result") {
       const errTag = msg.isError ? " (ERROR)" : "";
-      lines.push(`${prefix} [tool] Result${errTag}: ${msg.content.slice(0, 100)}${msg.content.length > 100 ? "..." : ""}`);
+      lines.push(
+        `${prefix} [tool] Result${errTag}: ${msg.content.slice(0, 100)}${msg.content.length > 100 ? "..." : ""}`,
+      );
     } else if (msg.type === "thinking") {
       lines.push(`${prefix} [assistant] (thinking) ${msg.content.slice(0, 80)}...`);
     } else {
-      lines.push(`${prefix} [${msg.role}] ${msg.content.slice(0, 120)}${msg.content.length > 120 ? "..." : ""}`);
+      lines.push(
+        `${prefix} [${msg.role}] ${msg.content.slice(0, 120)}${msg.content.length > 120 ? "..." : ""}`,
+      );
     }
   }
 
@@ -446,7 +451,9 @@ export function diffSnapshots(a: SessionSnapshot, b: SessionSnapshot): SnapshotD
     configChanges.push(`thinking: ${a.config.thinking} -> ${b.config.thinking}`);
   }
   if (a.config.effortLevel !== b.config.effortLevel) {
-    configChanges.push(`effortLevel: ${a.config.effortLevel ?? "default"} -> ${b.config.effortLevel ?? "default"}`);
+    configChanges.push(
+      `effortLevel: ${a.config.effortLevel ?? "default"} -> ${b.config.effortLevel ?? "default"}`,
+    );
   }
   if (a.config.permissionMode !== b.config.permissionMode) {
     configChanges.push(`permissionMode: ${a.config.permissionMode} -> ${b.config.permissionMode}`);
@@ -455,7 +462,9 @@ export function diffSnapshots(a: SessionSnapshot, b: SessionSnapshot): SnapshotD
     configChanges.push(`contextWindowSize: ${a.contextWindowSize} -> ${b.contextWindowSize}`);
   }
   if (a.systemPromptHash !== b.systemPromptHash) {
-    configChanges.push(`systemPrompt changed (hash: ${a.systemPromptHash} -> ${b.systemPromptHash})`);
+    configChanges.push(
+      `systemPrompt changed (hash: ${a.systemPromptHash} -> ${b.systemPromptHash})`,
+    );
   }
 
   const aToolSet = new Set(a.toolsUsed);
@@ -472,9 +481,10 @@ export function diffSnapshots(a: SessionSnapshot, b: SessionSnapshot): SnapshotD
     configChanges,
     messageCountDelta: b.messages.length - a.messages.length,
     tokenDelta: b.totalTokens - a.totalTokens,
-    costDelta: (b.totalCost !== undefined && a.totalCost !== undefined)
-      ? b.totalCost - a.totalCost
-      : undefined,
+    costDelta:
+      b.totalCost !== undefined && a.totalCost !== undefined
+        ? b.totalCost - a.totalCost
+        : undefined,
     newTools,
     removedTools,
     newFiles,
@@ -568,7 +578,9 @@ export class AutoCheckpointer {
         try {
           const { unlinkSync } = require("node:fs") as typeof import("node:fs");
           unlinkSync(join(getSnapshotsDir(), `${oldId}.json`));
-        } catch { /* already gone */ }
+        } catch {
+          /* already gone */
+        }
       }
 
       log.info("snapshot", `Auto-checkpoint at turn ${turnNumber}: ${snapshot.id}`);
@@ -683,7 +695,9 @@ export function clearCrashRecovery(): void {
       const { unlinkSync } = require("node:fs") as typeof import("node:fs");
       unlinkSync(path);
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Exposed for testing: the directory where snapshots are stored. */

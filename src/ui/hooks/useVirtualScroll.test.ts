@@ -1,12 +1,12 @@
 // KCode - useVirtualScroll pure function tests
 // Tests calculateVisibleRange and maxScrollOffset without React
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import {
-  calculateVisibleRange,
-  maxScrollOffset,
   BUFFER_SIZE,
+  calculateVisibleRange,
   DEFAULT_HEIGHT,
+  maxScrollOffset,
 } from "./useVirtualScroll";
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -144,8 +144,8 @@ describe("calculateVisibleRange", () => {
 
   test("mixed measured and unmeasured heights", () => {
     const heights = makeHeights([
-      [0, 10],  // large
-      [2, 1],   // small
+      [0, 10], // large
+      [2, 1], // small
       // rest use DEFAULT_HEIGHT = 3
     ]);
     // msg0=10, msg1=3, msg2=1, msg3=3, msg4=3 = 20 total

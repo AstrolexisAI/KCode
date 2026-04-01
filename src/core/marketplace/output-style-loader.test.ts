@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -116,9 +116,13 @@ Be thorough and detailed.`,
   });
 
   test("skips disabled plugins", () => {
-    const plugin = createPluginWithStyles("disabled-plugin", {
-      "style.md": "Some style",
-    }, { enabled: false });
+    const plugin = createPluginWithStyles(
+      "disabled-plugin",
+      {
+        "style.md": "Some style",
+      },
+      { enabled: false },
+    );
 
     const styles = loadPluginOutputStyles([plugin]);
     expect(styles).toHaveLength(0);
@@ -179,8 +183,8 @@ Be thorough and detailed.`,
 
     const styles = loadPluginOutputStyles([plugin1, plugin2]);
     expect(styles).toHaveLength(2);
-    expect(styles.some(s => s.name === "plugin-a:a-style")).toBe(true);
-    expect(styles.some(s => s.name === "plugin-b:b-style")).toBe(true);
+    expect(styles.some((s) => s.name === "plugin-a:a-style")).toBe(true);
+    expect(styles.some((s) => s.name === "plugin-b:b-style")).toBe(true);
   });
 
   test("namespaces correctly with plugin prefix", () => {

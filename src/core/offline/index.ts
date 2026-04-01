@@ -1,17 +1,17 @@
 // KCode - Offline Module
 // Re-exports for convenient imports
 
-export { OfflineMode, getOfflineMode, initOfflineMode, resetOfflineMode } from "./mode";
-export { isLocalHost, OfflineError, offlineAwareFetch } from "./network-guard";
 export { CacheWarmer } from "./cache-warmer";
 export { localSearch, searchManPages } from "./local-search";
+export { getOfflineMode, initOfflineMode, OfflineMode, resetOfflineMode } from "./mode";
+export { isLocalHost, OfflineError, offlineAwareFetch } from "./network-guard";
 export type {
-  OfflineState,
-  LocalResources,
-  OfflineSettings,
   CacheWarmerConfig,
+  LocalResources,
+  LocalSearchResult,
   LocalSearchSettings,
   LocalSearchSource,
-  LocalSearchResult,
+  OfflineSettings,
+  OfflineState,
   WarmupReport,
 } from "./types";

@@ -53,9 +53,10 @@ export function isTruncated(msg: Message): boolean {
  * This happens when a response is truncated and the model continues
  * in a new message.
  */
-export function mergeConsecutiveAssistant(
-  messages: Message[],
-): { messages: Message[]; mergeCount: number } {
+export function mergeConsecutiveAssistant(messages: Message[]): {
+  messages: Message[];
+  mergeCount: number;
+} {
   if (messages.length < 2) return { messages, mergeCount: 0 };
 
   const output: Message[] = [];
@@ -64,12 +65,7 @@ export function mergeConsecutiveAssistant(
   for (const msg of messages) {
     const prev = output.at(-1);
 
-    if (
-      prev &&
-      prev.role === "assistant" &&
-      msg.role === "assistant" &&
-      isTruncated(prev)
-    ) {
+    if (prev && prev.role === "assistant" && msg.role === "assistant" && isTruncated(prev)) {
       // Merge into previous
       const prevText = getTextContent(prev);
       const currText = getTextContent(msg);

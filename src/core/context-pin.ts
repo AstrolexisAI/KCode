@@ -1,7 +1,7 @@
 // KCode - Context Pinning
 // Pin files to always be included in the conversation context
 
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { log } from "./logger";
 
@@ -16,7 +16,10 @@ const MAX_PIN_SIZE = 8_000; // max chars per pinned file
  */
 export function pinFile(filePath: string, cwd: string): { success: boolean; message: string } {
   if (_pinnedFiles.size >= MAX_PINNED_FILES) {
-    return { success: false, message: `Cannot pin more than ${MAX_PINNED_FILES} files. Unpin one first.` };
+    return {
+      success: false,
+      message: `Cannot pin more than ${MAX_PINNED_FILES} files. Unpin one first.`,
+    };
   }
 
   if (!existsSync(filePath)) {
@@ -26,7 +29,10 @@ export function pinFile(filePath: string, cwd: string): { success: boolean; mess
   try {
     const content = readFileSync(filePath, "utf-8");
     if (content.length > MAX_PIN_SIZE) {
-      return { success: false, message: `File too large to pin (${content.length} chars, max ${MAX_PIN_SIZE}). Pin a smaller file or a specific section.` };
+      return {
+        success: false,
+        message: `File too large to pin (${content.length} chars, max ${MAX_PIN_SIZE}). Pin a smaller file or a specific section.`,
+      };
     }
 
     _pinnedFiles.set(filePath, content);
@@ -34,7 +40,10 @@ export function pinFile(filePath: string, cwd: string): { success: boolean; mess
     log.info("session", `Pinned file: ${rel}`);
     return { success: true, message: `Pinned: ${rel} (${content.length} chars)` };
   } catch (err) {
-    return { success: false, message: `Error reading file: ${err instanceof Error ? err.message : err}` };
+    return {
+      success: false,
+      message: `Error reading file: ${err instanceof Error ? err.message : err}`,
+    };
   }
 }
 
@@ -85,7 +94,11 @@ export function formatPinnedForPrompt(cwd: string): string | null {
 
   refreshPinnedFiles();
 
-  const lines: string[] = ["# Pinned Files", "", "These files are pinned to the context by the user:"];
+  const lines: string[] = [
+    "# Pinned Files",
+    "",
+    "These files are pinned to the context by the user:",
+  ];
 
   for (const [path, content] of _pinnedFiles) {
     const rel = relative(cwd, path) || path;

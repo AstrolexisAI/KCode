@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { localSearch, searchManPages } from "./local-search";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { localSearch, searchManPages } from "./local-search";
 
 describe("local-search", () => {
   let tempHome: string;
@@ -66,7 +66,11 @@ describe("local-search", () => {
         JSON.stringify({
           query: "bun runtime",
           results: [
-            { title: "Bun - Fast JS Runtime", url: "https://bun.sh", snippet: "Bun is a fast JavaScript runtime" },
+            {
+              title: "Bun - Fast JS Runtime",
+              url: "https://bun.sh",
+              snippet: "Bun is a fast JavaScript runtime",
+            },
           ],
           timestamp: Date.now(),
         }),
@@ -110,7 +114,10 @@ describe("local-search", () => {
     test("sorts results by relevance descending", async () => {
       const docsDir = join(process.env.KCODE_HOME!, "cache", "docs");
       await mkdir(docsDir, { recursive: true });
-      await writeFile(join(docsDir, "relevant.md"), "React hooks are great for state management in React apps");
+      await writeFile(
+        join(docsDir, "relevant.md"),
+        "React hooks are great for state management in React apps",
+      );
 
       const searchDir = join(process.env.KCODE_HOME!, "cache", "search");
       await mkdir(searchDir, { recursive: true });
@@ -118,7 +125,13 @@ describe("local-search", () => {
         join(searchDir, "r1.json"),
         JSON.stringify({
           query: "React hooks",
-          results: [{ title: "React Hooks Guide", url: "https://react.dev", snippet: "Learn about React hooks" }],
+          results: [
+            {
+              title: "React Hooks Guide",
+              url: "https://react.dev",
+              snippet: "Learn about React hooks",
+            },
+          ],
           timestamp: Date.now(),
         }),
       );

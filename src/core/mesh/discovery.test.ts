@@ -1,7 +1,7 @@
 // KCode - P2P Agent Mesh Discovery Tests
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { PeerDiscovery, PEER_TIMEOUT_MS } from "./discovery";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { PEER_TIMEOUT_MS, PeerDiscovery } from "./discovery";
 import type { PeerInfo } from "./types";
 
 // ─── Helpers ───────────────────────────────────────────────────
@@ -107,9 +107,7 @@ describe("PeerDiscovery - getAvailablePeers", () => {
   });
 
   test("excludes the local node", () => {
-    discovery.updatePeer(
-      makePeer({ nodeId: "local-node", status: "online" }),
-    );
+    discovery.updatePeer(makePeer({ nodeId: "local-node", status: "online" }));
     discovery.updatePeer(makePeer({ nodeId: "remote-1", status: "online" }));
     expect(discovery.getAvailablePeers()).toHaveLength(1);
     expect(discovery.getAvailablePeers()[0].nodeId).toBe("remote-1");

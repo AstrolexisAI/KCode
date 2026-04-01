@@ -1,4 +1,4 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { analyzeInsights, formatInsights } from "./analyzer";
 
 // Mock analytics
@@ -27,7 +27,7 @@ const mockSummary = {
     { date: "2026-03-31", calls: 30 },
   ],
   modelBreakdown: [
-    { model: "gpt-4", calls: 100, costUsd: 0.80 },
+    { model: "gpt-4", calls: 100, costUsd: 0.8 },
     { model: "llama-3", calls: 100, costUsd: 0.05 },
   ],
 };
@@ -53,17 +53,13 @@ describe("analyzeInsights", () => {
 
   test("detects underused tools", async () => {
     const insights = await analyzeInsights(30);
-    const underused = insights.find(
-      (i) => i.type === "pattern" && i.title.includes("rarely used"),
-    );
+    const underused = insights.find((i) => i.type === "pattern" && i.title.includes("rarely used"));
     expect(underused).toBeDefined();
   });
 
   test("detects high error rate", async () => {
     const insights = await analyzeInsights(30);
-    const errorInsight = insights.find(
-      (i) => i.type === "alert" && i.title.includes("error rate"),
-    );
+    const errorInsight = insights.find((i) => i.type === "alert" && i.title.includes("error rate"));
     expect(errorInsight).toBeDefined();
     expect(errorInsight!.title).toContain("Bash");
   });
@@ -86,9 +82,7 @@ describe("analyzeInsights", () => {
 
   test("includes token usage summary", async () => {
     const insights = await analyzeInsights(30);
-    const tokenInsight = insights.find(
-      (i) => i.title.includes("tokens used"),
-    );
+    const tokenInsight = insights.find((i) => i.title.includes("tokens used"));
     expect(tokenInsight).toBeDefined();
   });
 });

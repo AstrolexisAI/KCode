@@ -1,16 +1,16 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  generateCodeVerifier,
-  generateCodeChallenge,
-  generateState,
-  startOAuthFlow,
-  getAccessToken,
-} from "./flow";
-import { clearTokens, saveTokens, loadTokens } from "./token-store";
 import type { OAuthConfig, OAuthTokens } from "../types";
+import {
+  generateCodeChallenge,
+  generateCodeVerifier,
+  generateState,
+  getAccessToken,
+  startOAuthFlow,
+} from "./flow";
+import { clearTokens, loadTokens, saveTokens } from "./token-store";
 
 let tempDir: string;
 let origEnv: Record<string, string | undefined>;
@@ -150,12 +150,14 @@ describe("oauth/flow", () => {
           const params = new URLSearchParams(body);
 
           if (params.get("grant_type") === "authorization_code") {
-            return new Response(JSON.stringify({
-              access_token: "new-access-token",
-              refresh_token: "new-refresh-token",
-              expires_in: 3600,
-              token_type: "Bearer",
-            }));
+            return new Response(
+              JSON.stringify({
+                access_token: "new-access-token",
+                refresh_token: "new-refresh-token",
+                expires_in: 3600,
+                token_type: "Bearer",
+              }),
+            );
           }
 
           return new Response("Bad request", { status: 400 });
@@ -167,15 +169,18 @@ describe("oauth/flow", () => {
         const flowPromise = startOAuthFlow(testConfig);
 
         // Give the callback server time to start
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
 
         // Find the callback server port by trying ports in range
         let callbackPort: number | null = null;
         for (let port = 19000; port <= 19999; port++) {
           try {
-            const resp = await fetch(`http://127.0.0.1:${port}/callback?code=test-auth-code&state=invalid`, {
-              redirect: "manual",
-            });
+            const resp = await fetch(
+              `http://127.0.0.1:${port}/callback?code=test-auth-code&state=invalid`,
+              {
+                redirect: "manual",
+              },
+            );
             // If we get a response (even error), the server is there
             if (resp.status !== 0) {
               callbackPort = port;

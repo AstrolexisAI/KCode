@@ -2,22 +2,22 @@
 // Individual mesh node that combines discovery, transport, scheduling, and security.
 // This is the main entry point for the mesh subsystem.
 
+import { log } from "../logger";
+import { PeerDiscovery } from "./discovery";
+import { generateNodeId, generateTeamToken } from "./security";
+import { type LocalExecutor, TaskScheduler } from "./task-scheduler";
+import { MeshTransport } from "./transport";
 import type {
-  PeerInfo,
-  PeerCapabilities,
-  MeshTask,
-  MeshTaskHandle,
+  DiscoveryMethod,
   MeshResult,
   MeshSettings,
+  MeshTask,
+  MeshTaskHandle,
+  PeerCapabilities,
+  PeerInfo,
   TransportConfig,
-  DiscoveryMethod,
 } from "./types";
 import { DEFAULT_MESH_SETTINGS, DEFAULT_TRANSPORT_CONFIG } from "./types";
-import { PeerDiscovery } from "./discovery";
-import { MeshTransport } from "./transport";
-import { TaskScheduler, type LocalExecutor } from "./task-scheduler";
-import { generateTeamToken, generateNodeId } from "./security";
-import { log } from "../logger";
 
 // ─── MeshNode ──────────────────────────────────────────────────
 
@@ -119,10 +119,7 @@ export class MeshNode {
       await this.startDiscovery(this.settings.discovery, localInfo);
 
       this._status = "running";
-      log.debug(
-        "mesh-node",
-        `Mesh node ${this.nodeId} started on port ${this.settings.port}`,
-      );
+      log.debug("mesh-node", `Mesh node ${this.nodeId} started on port ${this.settings.port}`);
     } catch (err) {
       this._status = "error";
       this._error = err instanceof Error ? err.message : String(err);
@@ -144,20 +141,14 @@ export class MeshNode {
 
   // ─── Discovery ────────────────────────────────────────────────
 
-  private async startDiscovery(
-    method: DiscoveryMethod,
-    localInfo: PeerInfo,
-  ): Promise<void> {
+  private async startDiscovery(method: DiscoveryMethod, localInfo: PeerInfo): Promise<void> {
     switch (method) {
       case "mdns":
         await this.discovery.startMDNS(localInfo);
         break;
       case "manual":
         if (this.settings.peers.length > 0) {
-          await this.discovery.loadManualPeers(
-            this.settings.peers,
-            this.settings.teamToken!,
-          );
+          await this.discovery.loadManualPeers(this.settings.peers, this.settings.teamToken!);
         }
         break;
       case "shared-file":
@@ -179,9 +170,7 @@ export class MeshNode {
   async submitTask(task: MeshTask): Promise<MeshResult> {
     // Check concurrent task limit
     if (this.activeTasks.size >= this.settings.maxConcurrentTasks) {
-      throw new Error(
-        `Concurrent task limit reached (${this.settings.maxConcurrentTasks})`,
-      );
+      throw new Error(`Concurrent task limit reached (${this.settings.maxConcurrentTasks})`);
     }
 
     this.activeTasks.set(task.id, task);
@@ -219,10 +208,7 @@ export class MeshNode {
         return result;
       } catch (err) {
         // Peer failed — fallback to local
-        log.debug(
-          "mesh-node",
-          `Peer ${bestPeer.nodeId} failed, falling back to local: ${err}`,
-        );
+        log.debug("mesh-node", `Peer ${bestPeer.nodeId} failed, falling back to local: ${err}`);
         const result = await this.scheduler.executeLocal(task);
         this.taskResults.set(task.id, result);
         return result;

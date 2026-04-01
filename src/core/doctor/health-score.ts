@@ -2,13 +2,13 @@
 // Modular health checks with weighted scoring and grade calculation.
 
 import { log } from "../logger";
-import { checkRuntime } from "./checks/runtime-check";
-import { checkModels } from "./checks/model-check";
 import { checkConfig } from "./checks/config-check";
-import { checkNetwork } from "./checks/network-check";
-import { checkStorage } from "./checks/storage-check";
 import { checkGpu } from "./checks/gpu-check";
+import { checkModels } from "./checks/model-check";
+import { checkNetwork } from "./checks/network-check";
 import { checkPlugins } from "./checks/plugin-check";
+import { checkRuntime } from "./checks/runtime-check";
+import { checkStorage } from "./checks/storage-check";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -61,7 +61,15 @@ export function scoreToGrade(score: number): HealthReport["grade"] {
 export async function runHealthChecks(): Promise<HealthReport> {
   const checks: HealthCheck[] = [];
 
-  const runners = [checkRuntime, checkModels, checkConfig, checkNetwork, checkStorage, checkGpu, checkPlugins];
+  const runners = [
+    checkRuntime,
+    checkModels,
+    checkConfig,
+    checkNetwork,
+    checkStorage,
+    checkGpu,
+    checkPlugins,
+  ];
 
   for (const runner of runners) {
     try {
@@ -94,14 +102,35 @@ export async function runHealthChecks(): Promise<HealthReport> {
 export function renderHealthReport(report: HealthReport): string {
   const lines: string[] = [];
   const icon = (s: string) =>
-    s === "pass" ? "\x1b[32m✓\x1b[0m" : s === "warn" ? "\x1b[33m!\x1b[0m" : s === "fail" ? "\x1b[31m✗\x1b[0m" : "\x1b[2m-\x1b[0m";
+    s === "pass"
+      ? "\x1b[32m✓\x1b[0m"
+      : s === "warn"
+        ? "\x1b[33m!\x1b[0m"
+        : s === "fail"
+          ? "\x1b[31m✗\x1b[0m"
+          : "\x1b[2m-\x1b[0m";
   const tag = (s: string) =>
-    s === "pass" ? "\x1b[32m[PASS]\x1b[0m" : s === "warn" ? "\x1b[33m[WARN]\x1b[0m" : s === "fail" ? "\x1b[31m[FAIL]\x1b[0m" : "\x1b[2m[SKIP]\x1b[0m";
+    s === "pass"
+      ? "\x1b[32m[PASS]\x1b[0m"
+      : s === "warn"
+        ? "\x1b[33m[WARN]\x1b[0m"
+        : s === "fail"
+          ? "\x1b[31m[FAIL]\x1b[0m"
+          : "\x1b[2m[SKIP]\x1b[0m";
 
-  const gradeColor = report.grade === "A" ? "\x1b[32m" : report.grade === "B" ? "\x1b[32m" : report.grade === "C" ? "\x1b[33m" : "\x1b[31m";
+  const gradeColor =
+    report.grade === "A"
+      ? "\x1b[32m"
+      : report.grade === "B"
+        ? "\x1b[32m"
+        : report.grade === "C"
+          ? "\x1b[33m"
+          : "\x1b[31m";
 
   lines.push("");
-  lines.push(`  KCode Health Report — Score: ${gradeColor}${report.score}/100 (${report.grade})\x1b[0m`);
+  lines.push(
+    `  KCode Health Report — Score: ${gradeColor}${report.score}/100 (${report.grade})\x1b[0m`,
+  );
   lines.push("");
 
   for (const check of report.checks) {

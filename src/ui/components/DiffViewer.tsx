@@ -1,8 +1,8 @@
 // KCode - DiffViewer component
 // Interactive diff viewer showing git diffs with turn-by-turn navigation
 
-import React, { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
+import React, { useEffect, useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 interface DiffViewerProps {
@@ -103,10 +103,14 @@ export default function DiffViewer({ diffs, isActive = true, onClose }: DiffView
     <Box flexDirection="column" paddingX={1}>
       {/* Header bar */}
       <Box gap={2}>
-        <Text bold color={theme.primary}>Diff Viewer</Text>
+        <Text bold color={theme.primary}>
+          Diff Viewer
+        </Text>
         <Text color={theme.dimmed}>|</Text>
         <Text color={theme.warning}>{label}</Text>
-        <Text color={theme.dimmed}>({turnIndex + 1}/{diffs.length})</Text>
+        <Text color={theme.dimmed}>
+          ({turnIndex + 1}/{diffs.length})
+        </Text>
         <Text color={theme.dimmed}>|</Text>
         <Text color="green">+{additions}</Text>
         <Text color="red">-{deletions}</Text>
@@ -114,7 +118,10 @@ export default function DiffViewer({ diffs, isActive = true, onClose }: DiffView
       </Box>
 
       {/* Navigation hint */}
-      <Text color={theme.dimmed}>  {"\u2190\u2192"} turns  {"\u2191\u2193"} scroll  Esc close</Text>
+      <Text color={theme.dimmed}>
+        {" "}
+        {"\u2190\u2192"} turns {"\u2191\u2193"} scroll Esc close
+      </Text>
 
       {/* Diff content */}
       <Box flexDirection="column" marginTop={1}>
@@ -129,7 +136,10 @@ export default function DiffViewer({ diffs, isActive = true, onClose }: DiffView
       </Box>
 
       {scrollOffset + maxVisible < lines.length && (
-        <Text color={theme.dimmed}>  ... {lines.length - scrollOffset - maxVisible} more lines below</Text>
+        <Text color={theme.dimmed}>
+          {" "}
+          ... {lines.length - scrollOffset - maxVisible} more lines below
+        </Text>
       )}
     </Box>
   );

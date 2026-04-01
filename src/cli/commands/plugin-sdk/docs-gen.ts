@@ -1,8 +1,8 @@
 // KCode - Plugin Documentation Generator
 // Generates markdown documentation from plugin manifest and content files.
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
 import type { DocsSection, PluginManifest } from "../../../core/plugin-sdk/types";
 
 export async function generateDocs(dir: string): Promise<DocsSection[]> {
@@ -121,9 +121,7 @@ function generateInstallation(manifest: PluginManifest): string {
     `kcode plugin install ${manifest.name}`,
     "```",
     "",
-    manifest.kcode
-      ? `Requires KCode ${manifest.kcode}.`
-      : "Compatible with all KCode versions.",
+    manifest.kcode ? `Requires KCode ${manifest.kcode}.` : "Compatible with all KCode versions.",
   ].join("\n");
 }
 
@@ -167,9 +165,7 @@ function generateSkillDocs(dir: string, patterns: string[]): string | null {
   return found ? lines.join("\n") : null;
 }
 
-function generateHookDocs(
-  hooks: Record<string, unknown>,
-): string {
+function generateHookDocs(hooks: Record<string, unknown>): string {
   const lines: string[] = [];
 
   for (const [event, handlers] of Object.entries(hooks)) {
@@ -195,9 +191,7 @@ function generateHookDocs(
   return lines.join("\n");
 }
 
-function generateMcpDocs(
-  servers: Record<string, unknown>,
-): string {
+function generateMcpDocs(servers: Record<string, unknown>): string {
   const lines: string[] = [];
 
   for (const [name, config] of Object.entries(servers)) {
@@ -292,9 +286,7 @@ function findFiles(dir: string, pattern: string): string[] {
   if (!existsSync(targetDir)) return [];
 
   try {
-    const regex = new RegExp(
-      "^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
-    );
+    const regex = new RegExp("^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
     return readdirSync(targetDir)
       .filter((e) => regex.test(e))
       .map((e) => (dirPart ? `${dirPart}/${e}` : e));

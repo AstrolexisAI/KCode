@@ -29,18 +29,26 @@ export function extractToolCallsFromText(text: string, tools: ToolRegistry): Ext
     try {
       const parsed = JSON.parse(match[1]!);
       const rawName = parsed.name ?? parsed.function ?? parsed.tool;
-      const toolName = typeof rawName === "string" ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
+      const toolName =
+        typeof rawName === "string" ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
       const args = parsed.arguments ?? parsed.parameters ?? parsed.input ?? {};
       if (toolName && knownTools.has(toolName)) {
         if (match.index < firstMatchIndex) firstMatchIndex = match.index;
-        results.push({ name: toolName, input: typeof args === "object" ? args : {}, prefixText: text.slice(0, firstMatchIndex) });
+        results.push({
+          name: toolName,
+          input: typeof args === "object" ? args : {},
+          prefixText: text.slice(0, firstMatchIndex),
+        });
       }
-    } catch { /* not valid JSON */ }
+    } catch {
+      /* not valid JSON */
+    }
   }
   if (results.length > 0) return results;
 
   // Pattern 2: Raw JSON {"name": "ToolName", "arguments": {...}} anywhere in text
-  const rawJsonRe = /\{\s*"(?:name|function|tool)"\s*:\s*"(\w+)"\s*,\s*"(?:arguments|parameters|input)"\s*:\s*(\{[^}]*\})\s*\}/g;
+  const rawJsonRe =
+    /\{\s*"(?:name|function|tool)"\s*:\s*"(\w+)"\s*,\s*"(?:arguments|parameters|input)"\s*:\s*(\{[^}]*\})\s*\}/g;
   while ((match = rawJsonRe.exec(text)) !== null) {
     const rawName = match[1];
     const toolName = rawName ? (toolNameMap.get(rawName.toLowerCase()) ?? rawName) : null;
@@ -48,8 +56,14 @@ export function extractToolCallsFromText(text: string, tools: ToolRegistry): Ext
       try {
         const args = JSON.parse(match[2]!);
         if (match.index < firstMatchIndex) firstMatchIndex = match.index;
-        results.push({ name: toolName, input: typeof args === "object" ? args : {}, prefixText: text.slice(0, firstMatchIndex) });
-      } catch { /* bad args JSON */ }
+        results.push({
+          name: toolName,
+          input: typeof args === "object" ? args : {},
+          prefixText: text.slice(0, firstMatchIndex),
+        });
+      } catch {
+        /* bad args JSON */
+      }
     }
   }
   if (results.length > 0) return results;
@@ -60,7 +74,13 @@ export function extractToolCallsFromText(text: string, tools: ToolRegistry): Ext
   while ((match = bashBlockRe.exec(text)) !== null) {
     const cmd = match[1]!.trim();
     // Only extract if it looks like a real command (not multiline explanation)
-    if (cmd && !cmd.includes("\n") && cmd.length < 500 && !cmd.startsWith("#") && !cmd.startsWith("//")) {
+    if (
+      cmd &&
+      !cmd.includes("\n") &&
+      cmd.length < 500 &&
+      !cmd.startsWith("#") &&
+      !cmd.startsWith("//")
+    ) {
       if (match.index < firstMatchIndex) firstMatchIndex = match.index;
       results.push({
         name: "Bash",

@@ -1,15 +1,15 @@
 // Auth Session — Manages the active authentication session.
 // Handles token lifecycle: load from keychain, auto-refresh, expiry.
 
-import type { OAuthConfig, OAuthTokens, AuthSession } from "./types";
 import {
-  getStoredTokens,
-  storeTokens,
-  isTokenExpired,
-  refreshAccessToken,
   clearTokens,
   getApiKey,
+  getStoredTokens,
+  isTokenExpired,
+  refreshAccessToken,
+  storeTokens,
 } from "./oauth-flow";
+import type { AuthSession, OAuthConfig, OAuthTokens } from "./types";
 
 export class AuthSessionManager {
   private sessions: Map<string, AuthSession> = new Map();
@@ -30,10 +30,7 @@ export class AuthSessionManager {
   }
 
   /** Get a valid access token, refreshing if needed */
-  async getAccessToken(
-    provider: string,
-    config?: OAuthConfig,
-  ): Promise<string | null> {
+  async getAccessToken(provider: string, config?: OAuthConfig): Promise<string | null> {
     let session = this.sessions.get(provider);
 
     if (!session) {
@@ -47,10 +44,7 @@ export class AuthSessionManager {
     // Auto-refresh if expired
     if (isTokenExpired(session.tokens) && session.tokens.refreshToken && config) {
       try {
-        const newTokens = await refreshAccessToken(
-          config,
-          session.tokens.refreshToken,
-        );
+        const newTokens = await refreshAccessToken(config, session.tokens.refreshToken);
         session.tokens = newTokens;
         session.lastRefreshed = Date.now();
         await storeTokens(provider, newTokens);

@@ -2,8 +2,8 @@
 // Tracks SHA256 hashes for cached plugin downloads to avoid redundant re-downloads.
 // Sentinel files stored at: ~/.kcode/plugins/marketplace-cache/{name}/.sha256
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { SHASentinel } from "./types";
 
 export class SHATracker {

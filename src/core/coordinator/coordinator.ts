@@ -1,19 +1,13 @@
 // KCode - Coordinator Mode
 // Orchestrates multiple workers with restricted tools, shared scratchpad, and message bus
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { join } from "node:path";
+import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { Scratchpad } from "./scratchpad";
+import { join } from "node:path";
+import { log } from "../logger";
 import { MessageBus } from "./message-bus";
-import {
-  getWorkerTools,
-  buildWorkerPrompt,
-  buildWorkerArgs,
-  buildWorkerEnv,
-  createWorkerHandle,
-} from "./worker";
+import { Scratchpad } from "./scratchpad";
 import type {
   CoordinatorConfig,
   CoordinatorMessage,
@@ -23,7 +17,13 @@ import type {
   WorkerSpawnConfig,
 } from "./types";
 import { DEFAULT_COORDINATOR_CONFIG } from "./types";
-import { log } from "../logger";
+import {
+  buildWorkerArgs,
+  buildWorkerEnv,
+  buildWorkerPrompt,
+  createWorkerHandle,
+  getWorkerTools,
+} from "./worker";
 
 export class Coordinator {
   private scratchpad: Scratchpad;
@@ -136,7 +136,11 @@ export class Coordinator {
           handle.status = "timeout";
           handle.durationMs = Date.now() - handle.startedAt;
           handle.error = `Worker timed out after ${this.config.workerTimeoutMs}ms`;
-          try { proc.kill(); } catch { /* best effort */ }
+          try {
+            proc.kill();
+          } catch {
+            /* best effort */
+          }
           this.updateProgress(`Worker ${id} timed out`);
         }
       }, this.config.workerTimeoutMs);
@@ -186,7 +190,11 @@ export class Coordinator {
     const results: WorkerResult[] = [];
 
     for (const [id, handle] of this.workers) {
-      if (handle.status === "completed" || handle.status === "failed" || handle.status === "timeout") {
+      if (
+        handle.status === "completed" ||
+        handle.status === "failed" ||
+        handle.status === "timeout"
+      ) {
         const scratchpadOutput = this.scratchpad.read(`worker-${id}.md`);
         results.push({
           id,
@@ -208,9 +216,7 @@ export class Coordinator {
     return Array.from(this.workers.entries()).map(([id, handle]) => ({
       id,
       status: handle.status,
-      durationMs: handle.status === "running"
-        ? Date.now() - handle.startedAt
-        : handle.durationMs,
+      durationMs: handle.status === "running" ? Date.now() - handle.startedAt : handle.durationMs,
     }));
   }
 
@@ -244,7 +250,11 @@ export class Coordinator {
 
     // Kill process
     if (handle.process && !handle.process.killed) {
-      try { handle.process.kill(); } catch { /* best effort */ }
+      try {
+        handle.process.kill();
+      } catch {
+        /* best effort */
+      }
     }
 
     handle.status = "failed";

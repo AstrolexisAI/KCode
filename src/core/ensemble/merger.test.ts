@@ -1,12 +1,7 @@
 // KCode - Ensemble Merger Tests
 
-import { test, expect, describe } from "bun:test";
-import {
-  extractSections,
-  scoreSection,
-  mergeSections,
-  llmMerge,
-} from "./merger";
+import { describe, expect, test } from "bun:test";
+import { extractSections, llmMerge, mergeSections, scoreSection } from "./merger";
 import type { CandidateResponse, ModelExecutor } from "./types";
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -36,9 +31,9 @@ describe("extractSections", () => {
 
     const sections = extractSections(response, "model-a");
     expect(sections.length).toBeGreaterThanOrEqual(3);
-    expect(sections.some(s => s.heading === "Introduction")).toBe(true);
-    expect(sections.some(s => s.heading === "Details")).toBe(true);
-    expect(sections.every(s => s.source === "model-a")).toBe(true);
+    expect(sections.some((s) => s.heading === "Introduction")).toBe(true);
+    expect(sections.some((s) => s.heading === "Details")).toBe(true);
+    expect(sections.every((s) => s.source === "model-a")).toBe(true);
   });
 
   test("falls back to paragraph splitting when no headings", () => {
@@ -121,11 +116,13 @@ describe("mergeSections", () => {
     const candidates: CandidateResponse[] = [
       makeCandidate({
         model: "model-a",
-        response: "# Setup\nBasic setup.\n\n# Usage\nFor example, use `map()` to transform arrays with code:\n```js\narr.map(x => x * 2)\n```",
+        response:
+          "# Setup\nBasic setup.\n\n# Usage\nFor example, use `map()` to transform arrays with code:\n```js\narr.map(x => x * 2)\n```",
       }),
       makeCandidate({
         model: "model-b",
-        response: "# Setup\nDetailed setup with step-by-step instructions and configuration.\n\n# Usage\nJust use it.",
+        response:
+          "# Setup\nDetailed setup with step-by-step instructions and configuration.\n\n# Usage\nJust use it.",
       }),
     ];
 
@@ -196,7 +193,9 @@ describe("llmMerge", () => {
     ];
 
     const failingExecutor: ModelExecutor = {
-      execute: async () => { throw new Error("Merge model failed"); },
+      execute: async () => {
+        throw new Error("Merge model failed");
+      },
     };
 
     const result = await llmMerge(
@@ -221,12 +220,7 @@ describe("llmMerge", () => {
       execute: async () => ({ content: "merged", tokensUsed: 5, durationMs: 50 }),
     };
 
-    const result = await llmMerge(
-      candidates,
-      [{ role: "user", content: "q" }],
-      "judge",
-      executor,
-    );
+    const result = await llmMerge(candidates, [{ role: "user", content: "q" }], "judge", executor);
 
     for (const c of result.candidates) {
       expect(c.score).toBe(0.5);

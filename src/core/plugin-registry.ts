@@ -5,8 +5,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
-import { kcodePath } from "./paths";
 import type { ExtendedManifestFields } from "./marketplace/types";
+import { kcodePath } from "./paths";
 
 const REGISTRY_URL = "https://registry.kulvex.ai/plugins";
 
@@ -77,15 +77,52 @@ export async function fetchRegistry(): Promise<RegistryEntry[]> {
       signal: AbortSignal.timeout(5000),
     });
     if (resp.ok) return (await resp.json()) as RegistryEntry[];
-  } catch { /* offline */ }
+  } catch {
+    /* offline */
+  }
 
   // Bundled fallback — a few example plugins
   return [
-    { name: "git-hooks", description: "Pre-commit and post-push automation", version: "1.0.0", author: "Astrolexis", url: "https://github.com/Astrolexis/kcode-plugin-git-hooks", tags: ["git", "automation"] },
-    { name: "docker", description: "Docker container management tools", version: "1.0.0", author: "Astrolexis", url: "https://github.com/Astrolexis/kcode-plugin-docker", tags: ["docker", "devops"] },
-    { name: "database", description: "SQL query tools for PostgreSQL, MySQL, SQLite", version: "1.0.0", author: "Astrolexis", url: "https://github.com/Astrolexis/kcode-plugin-database", tags: ["sql", "database"] },
-    { name: "kubernetes", description: "Kubernetes cluster management", version: "0.9.0", author: "Astrolexis", url: "https://github.com/Astrolexis/kcode-plugin-kubernetes", tags: ["k8s", "devops"] },
-    { name: "terraform", description: "Terraform plan/apply integration", version: "0.9.0", author: "Astrolexis", url: "https://github.com/Astrolexis/kcode-plugin-terraform", tags: ["terraform", "iac"] },
+    {
+      name: "git-hooks",
+      description: "Pre-commit and post-push automation",
+      version: "1.0.0",
+      author: "Astrolexis",
+      url: "https://github.com/Astrolexis/kcode-plugin-git-hooks",
+      tags: ["git", "automation"],
+    },
+    {
+      name: "docker",
+      description: "Docker container management tools",
+      version: "1.0.0",
+      author: "Astrolexis",
+      url: "https://github.com/Astrolexis/kcode-plugin-docker",
+      tags: ["docker", "devops"],
+    },
+    {
+      name: "database",
+      description: "SQL query tools for PostgreSQL, MySQL, SQLite",
+      version: "1.0.0",
+      author: "Astrolexis",
+      url: "https://github.com/Astrolexis/kcode-plugin-database",
+      tags: ["sql", "database"],
+    },
+    {
+      name: "kubernetes",
+      description: "Kubernetes cluster management",
+      version: "0.9.0",
+      author: "Astrolexis",
+      url: "https://github.com/Astrolexis/kcode-plugin-kubernetes",
+      tags: ["k8s", "devops"],
+    },
+    {
+      name: "terraform",
+      description: "Terraform plan/apply integration",
+      version: "0.9.0",
+      author: "Astrolexis",
+      url: "https://github.com/Astrolexis/kcode-plugin-terraform",
+      tags: ["terraform", "iac"],
+    },
   ];
 }
 
@@ -94,8 +131,11 @@ export async function fetchRegistry(): Promise<RegistryEntry[]> {
  */
 export function searchRegistry(entries: RegistryEntry[], query: string): RegistryEntry[] {
   const q = query.toLowerCase();
-  return entries.filter(e =>
-    e.name.includes(q) || e.description.toLowerCase().includes(q) || e.tags.some(t => t.includes(q))
+  return entries.filter(
+    (e) =>
+      e.name.includes(q) ||
+      e.description.toLowerCase().includes(q) ||
+      e.tags.some((t) => t.includes(q)),
   );
 }
 
@@ -104,7 +144,7 @@ export function searchRegistry(entries: RegistryEntry[], query: string): Registr
  */
 export async function installPlugin(name: string): Promise<{ success: boolean; message: string }> {
   const entries = await fetchRegistry();
-  const entry = entries.find(e => e.name === name);
+  const entry = entries.find((e) => e.name === name);
   if (!entry) return { success: false, message: `Plugin "${name}" not found in registry.` };
 
   const pluginDir = join(kcodePath("plugins"), name);
@@ -124,14 +164,19 @@ export async function installPlugin(name: string): Promise<{ success: boolean; m
     log.info("plugins", `Installed plugin: ${name} v${entry.version}`);
     return { success: true, message: `Installed "${name}" v${entry.version} to ${pluginDir}` };
   } catch (err) {
-    return { success: false, message: `Install failed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      success: false,
+      message: `Install failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
 /**
  * Uninstall a plugin by name.
  */
-export async function uninstallPlugin(name: string): Promise<{ success: boolean; message: string }> {
+export async function uninstallPlugin(
+  name: string,
+): Promise<{ success: boolean; message: string }> {
   const pluginDir = join(kcodePath("plugins"), name);
   if (!existsSync(pluginDir)) {
     return { success: false, message: `Plugin "${name}" is not installed.` };
@@ -143,6 +188,9 @@ export async function uninstallPlugin(name: string): Promise<{ success: boolean;
     log.info("plugins", `Uninstalled plugin: ${name}`);
     return { success: true, message: `Uninstalled "${name}"` };
   } catch (err) {
-    return { success: false, message: `Uninstall failed: ${err instanceof Error ? err.message : String(err)}` };
+    return {
+      success: false,
+      message: `Uninstall failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }

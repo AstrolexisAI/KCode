@@ -1,7 +1,7 @@
 // KCode - Diff Engine Tests
 // Tests for the Myers diff algorithm implementation and hunk generation.
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { DiffEngine, getDiffEngine } from "./engine.js";
 import type { DiffHunk } from "./types.js";
 

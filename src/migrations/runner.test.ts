@@ -1,14 +1,14 @@
 // KCode - Migration Runner Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { MigrationRunner } from "./runner";
-import type { Migration, MigrationContext, MigrationLogger } from "./types";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { migration as m001 } from "./migrations/001_add_schema_version";
-import { migration as m002, MODEL_RENAMES } from "./migrations/002_migrate_model_names";
+import { MODEL_RENAMES, migration as m002 } from "./migrations/002_migrate_model_names";
 import { migration as m003 } from "./migrations/003_add_compaction_config";
 import { migration as m004 } from "./migrations/004_migrate_legacy_memory";
 import { ALL_MIGRATIONS } from "./registry";
+import { MigrationRunner } from "./runner";
+import type { Migration, MigrationContext, MigrationLogger } from "./types";
 
 // ─── Test Helpers ──────────────────────────────────────────────
 
@@ -200,9 +200,7 @@ describe("MigrationRunner", () => {
     expect(report.failed).not.toBeNull();
     // Table should not exist because transaction was rolled back
     const table = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_rollback'",
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='test_rollback'")
       .get();
     expect(table).toBeFalsy();
   });
@@ -273,9 +271,7 @@ describe("MigrationRunner", () => {
         name: "create_table",
         type: "sql",
         up: async ({ db: d }) => {
-          d.exec(
-            "CREATE TABLE IF NOT EXISTS rollback_test (id INTEGER PRIMARY KEY)",
-          );
+          d.exec("CREATE TABLE IF NOT EXISTS rollback_test (id INTEGER PRIMARY KEY)");
         },
         down: async ({ db: d }) => {
           d.exec("DROP TABLE IF EXISTS rollback_test");
@@ -288,9 +284,7 @@ describe("MigrationRunner", () => {
 
     // Table should exist
     let table = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='rollback_test'",
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rollback_test'")
       .get();
     expect(table).toBeTruthy();
 
@@ -300,9 +294,7 @@ describe("MigrationRunner", () => {
 
     // Table should be gone
     table = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='rollback_test'",
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='rollback_test'")
       .get();
     expect(table).toBeFalsy();
 
@@ -422,9 +414,7 @@ describe("Migration 001: add_schema_version", () => {
     await runner.run();
 
     const table = db
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'",
-      )
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'")
       .get();
     expect(table).toBeTruthy();
   });
@@ -522,11 +512,7 @@ describe("Migration 003: add_compaction_config", () => {
   test("adds compaction config when not present", async () => {
     const settingsData: Record<string, unknown> = {};
 
-    const { runner, settings } = createRunner(
-      db,
-      [m001, m002, m003],
-      settingsData,
-    );
+    const { runner, settings } = createRunner(db, [m001, m002, m003], settingsData);
     await runner.run();
 
     const compaction = settings.data.compaction as Record<string, unknown>;
@@ -549,11 +535,7 @@ describe("Migration 003: add_compaction_config", () => {
       compaction: customCompaction,
     };
 
-    const { runner, settings } = createRunner(
-      db,
-      [m001, m002, m003],
-      settingsData,
-    );
+    const { runner, settings } = createRunner(db, [m001, m002, m003], settingsData);
     await runner.run();
 
     // Should keep the custom config
@@ -587,38 +569,44 @@ describe("Migration 004: migrate_legacy_memory", () => {
 
   test("sets source='user' on memory entries with empty source", async () => {
     // Insert entries with empty source
-    db.prepare(
-      "INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)",
-    ).run("test-key", "test content", "");
-    db.prepare(
-      "INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)",
-    ).run("test-key-2", "test content 2", "");
+    db.prepare("INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)").run(
+      "test-key",
+      "test content",
+      "",
+    );
+    db.prepare("INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)").run(
+      "test-key-2",
+      "test content 2",
+      "",
+    );
 
     const { runner } = createRunner(db, [m001, m004]);
     await runner.run();
 
-    const rows = db
-      .prepare("SELECT source FROM memory_store")
-      .all() as Array<{ source: string }>;
+    const rows = db.prepare("SELECT source FROM memory_store").all() as Array<{ source: string }>;
     for (const row of rows) {
       expect(row.source).toBe("user");
     }
   });
 
   test("does not touch memory entries that already have source set", async () => {
-    db.prepare(
-      "INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)",
-    ).run("auto-key", "auto content", "auto");
-    db.prepare(
-      "INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)",
-    ).run("promoted-key", "promoted content", "promoted");
+    db.prepare("INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)").run(
+      "auto-key",
+      "auto content",
+      "auto",
+    );
+    db.prepare("INSERT INTO memory_store (key, content, source) VALUES (?, ?, ?)").run(
+      "promoted-key",
+      "promoted content",
+      "promoted",
+    );
 
     const { runner } = createRunner(db, [m001, m004]);
     await runner.run();
 
-    const autoRow = db
-      .prepare("SELECT source FROM memory_store WHERE key = ?")
-      .get("auto-key") as { source: string };
+    const autoRow = db.prepare("SELECT source FROM memory_store WHERE key = ?").get("auto-key") as {
+      source: string;
+    };
     const promotedRow = db
       .prepare("SELECT source FROM memory_store WHERE key = ?")
       .get("promoted-key") as { source: string };

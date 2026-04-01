@@ -2,8 +2,8 @@
 // Routes permission requests through multi-user approval flow.
 
 import { log } from "../logger";
-import type { CollabEvent } from "./types";
 import type { SessionShare } from "./session-share";
+import type { CollabEvent } from "./types";
 
 interface PendingRequest {
   resolve: (allowed: boolean) => void;

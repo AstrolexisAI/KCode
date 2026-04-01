@@ -1,6 +1,6 @@
-import { test, expect, describe } from "bun:test";
-import { rerank, pathProximity, getFileAge, DEFAULT_RERANKER_CONFIG } from "./reranker";
-import type { SearchResult, RerankerConfig } from "./types";
+import { describe, expect, test } from "bun:test";
+import { DEFAULT_RERANKER_CONFIG, getFileAge, pathProximity, rerank } from "./reranker";
+import type { RerankerConfig, SearchResult } from "./types";
 
 function makeResult(overrides: Partial<SearchResult> = {}): SearchResult {
   return {

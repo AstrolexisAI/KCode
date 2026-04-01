@@ -7,13 +7,7 @@ import { getOfflineMode } from "./mode";
 
 // ─── Host Classification ───────────────────────────────────────
 
-const LOCAL_HOSTS = new Set([
-  "localhost",
-  "127.0.0.1",
-  "::1",
-  "[::1]",
-  "0.0.0.0",
-]);
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0"]);
 
 /**
  * Returns true if the URL points to a local/LAN host that should always be

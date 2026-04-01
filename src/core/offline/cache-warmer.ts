@@ -4,8 +4,8 @@
 // recent search results, and local model metadata.
 
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { log } from "../logger";
 import type { CacheWarmerConfig, WarmupReport } from "./types";
 
@@ -61,7 +61,10 @@ export class CacheWarmer {
     await this.cachePluginManifests(report);
 
     report.totalSizeMb = this.computeCacheSizeMb();
-    log.info("cache-warmer", `Warmup complete: ${report.cached.length} items cached, ${report.errors.length} errors, ${report.totalSizeMb.toFixed(1)} MB total`);
+    log.info(
+      "cache-warmer",
+      `Warmup complete: ${report.cached.length} items cached, ${report.errors.length} errors, ${report.totalSizeMb.toFixed(1)} MB total`,
+    );
     return report;
   }
 
@@ -147,9 +150,13 @@ function dirSizeMb(dir: string): number {
       } else {
         try {
           total += statSync(fullPath).size;
-        } catch { /* skip unreadable files */ }
+        } catch {
+          /* skip unreadable files */
+        }
       }
     }
-  } catch { /* dir may not exist or not be readable */ }
+  } catch {
+    /* dir may not exist or not be readable */
+  }
   return total / (1024 * 1024);
 }

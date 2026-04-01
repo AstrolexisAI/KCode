@@ -2,9 +2,9 @@
 // Handles syncing conversation sessions to the cloud service,
 // supporting both full and incremental (delta) sync modes.
 
+import { log } from "../logger";
 import type { CloudClient } from "./client";
 import type { SyncResult } from "./types";
-import { log } from "../logger";
 
 /** Maximum content length before truncation during sanitization */
 const MAX_CONTENT_LENGTH = 2048;
@@ -25,11 +25,7 @@ export class SessionSync {
    * Full sync: uploads all messages and stats for a session.
    * Replaces any previously synced data on the server.
    */
-  async syncSession(
-    sessionId: string,
-    messages: any[],
-    stats: any,
-  ): Promise<SyncResult> {
+  async syncSession(sessionId: string, messages: any[], stats: any): Promise<SyncResult> {
     const sanitized = messages.map((msg) => this.sanitizeMessage(msg));
 
     const result = await this.client.request<SyncResult>(
@@ -43,10 +39,7 @@ export class SessionSync {
     );
 
     this.setLastSyncIndex(sessionId, messages.length);
-    log.debug(
-      "cloud-sync",
-      `Full sync for session ${sessionId}: ${messages.length} messages`,
-    );
+    log.debug("cloud-sync", `Full sync for session ${sessionId}: ${messages.length} messages`);
 
     return result;
   }
@@ -55,11 +48,7 @@ export class SessionSync {
    * Incremental sync: only uploads messages added since the last sync.
    * Falls back to full sync if lastSyncIndex is 0 or missing.
    */
-  async syncDelta(
-    sessionId: string,
-    messages: any[],
-    lastSyncIndex: number,
-  ): Promise<SyncResult> {
+  async syncDelta(sessionId: string, messages: any[], lastSyncIndex: number): Promise<SyncResult> {
     // If no previous sync, do a full sync of all messages
     if (lastSyncIndex <= 0 || lastSyncIndex >= messages.length) {
       return this.syncSession(sessionId, messages, null);
@@ -101,8 +90,7 @@ export class SessionSync {
     // Truncate string content
     if (typeof sanitized.content === "string") {
       if (sanitized.content.length > MAX_CONTENT_LENGTH) {
-        sanitized.content =
-          sanitized.content.slice(0, MAX_CONTENT_LENGTH) + " [truncated]";
+        sanitized.content = sanitized.content.slice(0, MAX_CONTENT_LENGTH) + " [truncated]";
       }
     }
 
@@ -115,8 +103,7 @@ export class SessionSync {
           typeof sanitizedPart.text === "string" &&
           sanitizedPart.text.length > MAX_CONTENT_LENGTH
         ) {
-          sanitizedPart.text =
-            sanitizedPart.text.slice(0, MAX_CONTENT_LENGTH) + " [truncated]";
+          sanitizedPart.text = sanitizedPart.text.slice(0, MAX_CONTENT_LENGTH) + " [truncated]";
         }
         return sanitizedPart;
       });
@@ -144,8 +131,7 @@ export class SessionSync {
       // Truncate tool content too
       if (typeof sanitized.content === "string") {
         if (sanitized.content.length > MAX_CONTENT_LENGTH) {
-          sanitized.content =
-            sanitized.content.slice(0, MAX_CONTENT_LENGTH) + " [truncated]";
+          sanitized.content = sanitized.content.slice(0, MAX_CONTENT_LENGTH) + " [truncated]";
         }
       }
     }

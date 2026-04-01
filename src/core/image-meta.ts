@@ -1,8 +1,8 @@
 // KCode - Image Metadata Reader
 // Extracts basic metadata from image files without external dependencies
 
-import { openSync, readSync, closeSync, statSync } from "node:fs";
-import { extname, basename } from "node:path";
+import { closeSync, openSync, readSync, statSync } from "node:fs";
+import { basename, extname } from "node:path";
 
 export interface ImageMeta {
   filename: string;
@@ -19,9 +19,14 @@ export interface ImageMeta {
 export function getImageMeta(filePath: string): ImageMeta | null {
   const ext = extname(filePath).toLowerCase();
   const formats: Record<string, string> = {
-    ".png": "PNG", ".jpg": "JPEG", ".jpeg": "JPEG",
-    ".gif": "GIF", ".webp": "WebP", ".svg": "SVG",
-    ".bmp": "BMP", ".ico": "ICO",
+    ".png": "PNG",
+    ".jpg": "JPEG",
+    ".jpeg": "JPEG",
+    ".gif": "GIF",
+    ".webp": "WebP",
+    ".svg": "SVG",
+    ".bmp": "BMP",
+    ".ico": "ICO",
   };
 
   const format = formats[ext];
@@ -66,9 +71,12 @@ export function getImageMeta(filePath: string): ImageMeta | null {
  * Format image metadata as a display string.
  */
 export function formatImageMeta(meta: ImageMeta): string {
-  const sizeStr = meta.size < 1024 ? `${meta.size} B`
-    : meta.size < 1024 * 1024 ? `${(meta.size / 1024).toFixed(1)} KB`
-    : `${(meta.size / (1024 * 1024)).toFixed(1)} MB`;
+  const sizeStr =
+    meta.size < 1024
+      ? `${meta.size} B`
+      : meta.size < 1024 * 1024
+        ? `${(meta.size / 1024).toFixed(1)} KB`
+        : `${(meta.size / (1024 * 1024)).toFixed(1)} MB`;
 
   const dims = meta.width && meta.height ? `${meta.width}x${meta.height}` : "unknown dimensions";
   return `${meta.format} ${dims} (${sizeStr})`;

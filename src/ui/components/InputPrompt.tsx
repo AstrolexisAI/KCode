@@ -1,15 +1,15 @@
 // KCode - InputPrompt component
 // Text input with prompt character, history, multi-line support, and tab completion
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { Box, Text, useInput } from "ink";
-import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { resolve, dirname, basename } from "node:path";
-import { useTheme } from "../ThemeContext.js";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 import { kcodePath } from "../../core/paths.js";
 import { setPasteHandler } from "../paste-handler.js";
 import { isPasting } from "../paste-stream.js";
+import { useTheme } from "../ThemeContext.js";
 
 // ─── Persistent Input History ──────────────────────────────────
 
@@ -43,7 +43,7 @@ function savePersistentHistory(entries: string[]): void {
     const dir = dirname(HISTORY_FILE);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     // JSON-encode each entry to safely handle newlines and special chars
-    const lines = entries.slice(0, MAX_HISTORY).map(e => JSON.stringify(e));
+    const lines = entries.slice(0, MAX_HISTORY).map((e) => JSON.stringify(e));
     writeFileSync(HISTORY_FILE, lines.join("\n") + "\n", "utf-8");
   } catch {
     // Silently ignore write failures
@@ -95,7 +95,9 @@ function getFileCompletions(partial: string): string[] {
       if (entry.name.startsWith(prefix)) {
         const suffix = entry.isDirectory() ? "/" : "";
         // Reconstruct the path with the original prefix style
-        const dirPart = partial.endsWith("/") ? partial : partial.slice(0, partial.length - prefix.length);
+        const dirPart = partial.endsWith("/")
+          ? partial
+          : partial.slice(0, partial.length - prefix.length);
         matches.push(dirPart + entry.name + suffix);
       }
     }
@@ -123,7 +125,16 @@ function commonPrefix(strings: string[]): string {
   return prefix;
 }
 
-export default function InputPrompt({ onSubmit, isActive, isQueuing = false, queueSize = 0, model, cwd, completions = [], commandDescriptions = {} }: InputPromptProps) {
+export default function InputPrompt({
+  onSubmit,
+  isActive,
+  isQueuing = false,
+  queueSize = 0,
+  model,
+  cwd,
+  completions = [],
+  commandDescriptions = {},
+}: InputPromptProps) {
   const { theme } = useTheme();
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -188,10 +199,13 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
   }, [flushInputBuffer]);
 
   // Cleanup timers on unmount
-  useEffect(() => () => {
-    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
-    if (pasteSettleTimerRef.current) clearTimeout(pasteSettleTimerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+      if (pasteSettleTimerRef.current) clearTimeout(pasteSettleTimerRef.current);
+    },
+    [],
+  );
 
   // ─── Paste handler ──────────────────────────────────────────
   // Receives complete paste content from the stdin interceptor
@@ -217,7 +231,9 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       setCursor(cursorRef.current);
     };
     setPasteHandler(handler);
-    return () => { setPasteHandler(null); };
+    return () => {
+      setPasteHandler(null);
+    };
   }, [isActive]);
 
   const resetTabState = useCallback(() => {
@@ -235,9 +251,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     // Compute final value: current state + any pending buffer
     const pending = inputBufferRef.current;
     inputBufferRef.current = "";
-    const finalValue = pending.length > 0
-      ? value.slice(0, cursorRef.current) + pending + value.slice(cursorRef.current)
-      : value;
+    const finalValue =
+      pending.length > 0
+        ? value.slice(0, cursorRef.current) + pending + value.slice(cursorRef.current)
+        : value;
 
     if (finalValue.trim().length === 0) return;
 
@@ -254,7 +271,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     cursorRef.current = 0;
     resetTabState();
     pasteActiveRef.current = false;
-    if (pasteSettleTimerRef.current) { clearTimeout(pasteSettleTimerRef.current); pasteSettleTimerRef.current = null; }
+    if (pasteSettleTimerRef.current) {
+      clearTimeout(pasteSettleTimerRef.current);
+      pasteSettleTimerRef.current = null;
+    }
     onSubmit(finalValue);
   }, [value, onSubmit, resetTabState]);
 
@@ -274,9 +294,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     // Slash command completion
     if (currentValue.startsWith("/") && !currentValue.includes(" ")) {
       const prefix = currentValue.toLowerCase();
-      const matches = completions
-        .filter((c) => c.toLowerCase().startsWith(prefix))
-        .sort();
+      const matches = completions.filter((c) => c.toLowerCase().startsWith(prefix)).sort();
 
       if (matches.length === 0) return;
 
@@ -311,7 +329,8 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
     // File path completion — extract last word
     const words = currentValue.split(/\s+/);
     const lastWord = words[words.length - 1] ?? "";
-    const isPathLike = lastWord.includes("/") || lastWord.startsWith("~") || lastWord.startsWith(".");
+    const isPathLike =
+      lastWord.includes("/") || lastWord.startsWith("~") || lastWord.startsWith(".");
 
     if (!isPathLike || lastWord.length === 0) return;
 
@@ -359,23 +378,68 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
       // Vim normal mode handling
       if (vimMode === "normal") {
-        if (input === "i") { setVimMode("insert"); return; }
-        if (input === "a") { setCursor(c => Math.min(value.length, c + 1)); setVimMode("insert"); return; }
-        if (input === "A") { setCursor(value.length); setVimMode("insert"); return; }
-        if (input === "I") { setCursor(0); setVimMode("insert"); return; }
-        if (input === "h" || key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return; }
-        if (input === "l" || key.rightArrow) { setCursor(c => Math.min(value.length - 1, c + 1)); return; }
-        if (input === "0") { setCursor(0); return; }
-        if (input === "$") { setCursor(value.length); return; }
-        if (input === "w") { const m = value.slice(cursor).match(/^\s*\S+\s*/); setCursor(c => m ? c + m[0].length : value.length); return; }
-        if (input === "b") { const m = value.slice(0, cursor).match(/\S+\s*$/); setCursor(c => m ? c - m[0].length : 0); return; }
-        if (input === "x") { setValue(v => v.slice(0, cursor) + v.slice(cursor + 1)); return; }
-        if (input === "d" && key.ctrl) { setCursor(0); setValue(""); return; } // dd-like clear
+        if (input === "i") {
+          setVimMode("insert");
+          return;
+        }
+        if (input === "a") {
+          setCursor((c) => Math.min(value.length, c + 1));
+          setVimMode("insert");
+          return;
+        }
+        if (input === "A") {
+          setCursor(value.length);
+          setVimMode("insert");
+          return;
+        }
+        if (input === "I") {
+          setCursor(0);
+          setVimMode("insert");
+          return;
+        }
+        if (input === "h" || key.leftArrow) {
+          setCursor((c) => Math.max(0, c - 1));
+          return;
+        }
+        if (input === "l" || key.rightArrow) {
+          setCursor((c) => Math.min(value.length - 1, c + 1));
+          return;
+        }
+        if (input === "0") {
+          setCursor(0);
+          return;
+        }
+        if (input === "$") {
+          setCursor(value.length);
+          return;
+        }
+        if (input === "w") {
+          const m = value.slice(cursor).match(/^\s*\S+\s*/);
+          setCursor((c) => (m ? c + m[0].length : value.length));
+          return;
+        }
+        if (input === "b") {
+          const m = value.slice(0, cursor).match(/\S+\s*$/);
+          setCursor((c) => (m ? c - m[0].length : 0));
+          return;
+        }
+        if (input === "x") {
+          setValue((v) => v.slice(0, cursor) + v.slice(cursor + 1));
+          return;
+        }
+        if (input === "d" && key.ctrl) {
+          setCursor(0);
+          setValue("");
+          return;
+        } // dd-like clear
         return; // Block all other input in normal mode
       }
 
       // Escape enters vim normal mode (if vim mode is enabled)
-      if (key.escape && isVimModeEnabled()) { setVimMode("normal"); return; }
+      if (key.escape && isVimModeEnabled()) {
+        setVimMode("normal");
+        return;
+      }
 
       if (key.return) {
         // Alt+Enter (Meta+Return): always submit, even during paste
@@ -599,9 +663,7 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   // Shorten CWD for display
   const home = process.env.HOME ?? "";
-  const shortCwd = cwd && home && cwd.startsWith(home)
-    ? "~" + cwd.slice(home.length)
-    : cwd;
+  const shortCwd = cwd && home && cwd.startsWith(home) ? "~" + cwd.slice(home.length) : cwd;
 
   // ─── Multiline / paste detection ────────────────────────────
   const isMultiline = value.includes("\n");
@@ -623,8 +685,13 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
 
   const vimIndicator = isVimModeEnabled() ? (vimMode === "normal" ? "[N] " : "[I] ") : "";
   const promptChar = isQueuing ? "+" : "❯";
-  const promptColor = isQueuing ? theme.warning : (vimMode === "normal" ? theme.accent : theme.success);
-  const queueHint = isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
+  const promptColor = isQueuing
+    ? theme.warning
+    : vimMode === "normal"
+      ? theme.accent
+      : theme.success;
+  const queueHint =
+    isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
 
   // Paste compact summary
   const pasteFirstLine = isMultiline ? (value.split("\n")[0] || "").slice(0, 50) : "";
@@ -638,11 +705,16 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       <Box gap={1}>
         {model && <Text color={promptColor}>{model}</Text>}
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
-        <Text bold color={promptColor}>{vimIndicator}{promptChar}</Text>
+        <Text bold color={promptColor}>
+          {vimIndicator}
+          {promptChar}
+        </Text>
         {isMultiline ? (
           <Text>
             <Text color={theme.accent}>{"📋 "}</Text>
-            <Text color={theme.dimmed} italic>{pasteSummary}</Text>
+            <Text color={theme.dimmed} italic>
+              {pasteSummary}
+            </Text>
             <Text color={promptColor}>{" — ↵ send"}</Text>
           </Text>
         ) : (
@@ -659,7 +731,10 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
       {/* ─── Paste preview (compact) ──────────────────────── */}
       {isMultiline && (
         <Box marginLeft={4}>
-          <Text color={theme.dimmed}>{pasteFirstLine}{pasteFirstLine.length < (value.split("\n")[0] || "").length ? "…" : ""}</Text>
+          <Text color={theme.dimmed}>
+            {pasteFirstLine}
+            {pasteFirstLine.length < (value.split("\n")[0] || "").length ? "…" : ""}
+          </Text>
         </Box>
       )}
 
@@ -676,14 +751,12 @@ export default function InputPrompt({ onSubmit, isActive, isQueuing = false, que
                 <Text bold={isSelected} color={isSelected ? theme.primary : theme.secondary}>
                   {item.name}
                 </Text>
-                {item.description && (
-                  <Text color={theme.dimmed}>{item.description}</Text>
-                )}
+                {item.description && <Text color={theme.dimmed}>{item.description}</Text>}
               </Box>
             );
           })}
           {dropdownItems.length > maxDropdown && (
-            <Text color={theme.dimmed}>  … {dropdownItems.length - maxDropdown} more</Text>
+            <Text color={theme.dimmed}> … {dropdownItems.length - maxDropdown} more</Text>
           )}
         </Box>
       )}

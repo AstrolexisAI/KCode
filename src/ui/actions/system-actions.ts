@@ -19,10 +19,16 @@ export async function handleSystemAction(
       // Common dev process patterns
       const patterns = [
         { label: "Node/Bun", cmd: `ps aux | grep -E "(node|bun|tsx|ts-node)" | grep -v grep` },
-        { label: "Python", cmd: `ps aux | grep -E "(python|uvicorn|gunicorn|flask)" | grep -v grep` },
+        {
+          label: "Python",
+          cmd: `ps aux | grep -E "(python|uvicorn|gunicorn|flask)" | grep -v grep`,
+        },
         { label: "Go", cmd: `ps aux | grep -E "go (run|build|test)" | grep -v grep` },
         { label: "Docker", cmd: `ps aux | grep -E "docker" | grep -v grep | head -5` },
-        { label: "Servers", cmd: `ps aux | grep -E "(vite|webpack|next|nuxt|nginx|httpd|caddy)" | grep -v grep` },
+        {
+          label: "Servers",
+          cmd: `ps aux | grep -E "(vite|webpack|next|nuxt|nginx|httpd|caddy)" | grep -v grep`,
+        },
       ];
 
       let totalFound = 0;
@@ -45,12 +51,19 @@ export async function handleSystemAction(
             if (procs.length > 5) lines.push(`    ... ${procs.length - 5} more`);
             lines.push(``);
           }
-        } catch { /* not found */ }
+        } catch {
+          /* not found */
+        }
       }
 
       // Show listening ports
       try {
-        const ports = execSync(`ss -tlnp 2>/dev/null | tail -n +2 | head -10`, { cwd, timeout: 5000 }).toString().trim();
+        const ports = execSync(`ss -tlnp 2>/dev/null | tail -n +2 | head -10`, {
+          cwd,
+          timeout: 5000,
+        })
+          .toString()
+          .trim();
         if (ports) {
           const portLines = ports.split("\n");
           lines.push(`  \u2500\u2500 Listening Ports (${portLines.length}) \u2500\u2500`);
@@ -62,7 +75,9 @@ export async function handleSystemAction(
           }
           lines.push(``);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       if (totalFound === 0 && lines.length <= 1) {
         lines.push(`  No development processes detected.`);
@@ -76,14 +91,22 @@ export async function handleSystemAction(
 
       try {
         // Get top-level directory sizes
-        const output = execSync(`du -h --max-depth=1 2>/dev/null | sort -rh | head -20`, { cwd, timeout: 15000 }).toString().trim();
+        const output = execSync(`du -h --max-depth=1 2>/dev/null | sort -rh | head -20`, {
+          cwd,
+          timeout: 15000,
+        })
+          .toString()
+          .trim();
         if (!output) return "  Cannot determine disk usage.";
 
-        const entries = output.split("\n").map(line => {
-          const match = line.match(/^([\d.]+[BKMGT]?)\s+(.+)$/);
-          if (!match) return null;
-          return { size: match[1]!, path: match[2]!.replace(/^\.\//, "") || "." };
-        }).filter(Boolean) as Array<{ size: string; path: string }>;
+        const entries = output
+          .split("\n")
+          .map((line) => {
+            const match = line.match(/^([\d.]+[BKMGT]?)\s+(.+)$/);
+            if (!match) return null;
+            return { size: match[1]!, path: match[2]!.replace(/^\.\//, "") || "." };
+          })
+          .filter(Boolean) as Array<{ size: string; path: string }>;
 
         // Parse sizes for bar chart
         const parseBytes = (s: string): number => {
@@ -94,7 +117,7 @@ export async function handleSystemAction(
           return num;
         };
 
-        const withBytes = entries.map(e => ({ ...e, bytes: parseBytes(e.size) }));
+        const withBytes = entries.map((e) => ({ ...e, bytes: parseBytes(e.size) }));
         const maxBytes = withBytes[0]?.bytes ?? 1;
         const barWidth = 20;
 
@@ -110,7 +133,7 @@ export async function handleSystemAction(
         }
 
         // Total project size
-        const total = withBytes.find(e => e.path === ".");
+        const total = withBytes.find((e) => e.path === ".");
         if (total) {
           lines.push(`\n  Total project size: ${total.size}`);
         }
@@ -130,7 +153,7 @@ export async function handleSystemAction(
         const crontab = execSync(`crontab -l 2>/dev/null`, { timeout: 5000 }).toString().trim();
         if (crontab && !crontab.includes("no crontab")) {
           found = true;
-          const entries = crontab.split("\n").filter(l => l.trim() && !l.startsWith("#"));
+          const entries = crontab.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
           lines.push(`  \u2500\u2500 Crontab (${entries.length} entries) \u2500\u2500`);
           for (const entry of entries.slice(0, 15)) {
             lines.push(`  ${entry}`);
@@ -138,11 +161,17 @@ export async function handleSystemAction(
           if (entries.length > 15) lines.push(`  ... ${entries.length - 15} more`);
           lines.push(``);
         }
-      } catch { /* no crontab */ }
+      } catch {
+        /* no crontab */
+      }
 
       // Systemd user timers
       try {
-        const timers = execSync(`systemctl --user list-timers --no-pager 2>/dev/null`, { timeout: 5000 }).toString().trim();
+        const timers = execSync(`systemctl --user list-timers --no-pager 2>/dev/null`, {
+          timeout: 5000,
+        })
+          .toString()
+          .trim();
         if (timers && timers.includes("NEXT")) {
           found = true;
           const timerLines = timers.split("\n");
@@ -152,11 +181,17 @@ export async function handleSystemAction(
           }
           lines.push(``);
         }
-      } catch { /* no systemd */ }
+      } catch {
+        /* no systemd */
+      }
 
       // System timers (relevant ones)
       try {
-        const sysTimers = execSync(`systemctl list-timers --no-pager 2>/dev/null | head -10`, { timeout: 5000 }).toString().trim();
+        const sysTimers = execSync(`systemctl list-timers --no-pager 2>/dev/null | head -10`, {
+          timeout: 5000,
+        })
+          .toString()
+          .trim();
         if (sysTimers && sysTimers.includes("NEXT")) {
           found = true;
           const sysLines = sysTimers.split("\n");
@@ -166,7 +201,9 @@ export async function handleSystemAction(
           }
           lines.push(``);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       if (!found) {
         lines.push(`  No crontabs or timers found.`);
@@ -182,12 +219,16 @@ export async function handleSystemAction(
       try {
         const raw = execSync(
           "nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,power.limit,driver_version --format=csv,noheader,nounits",
-          { timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
-        ).toString().trim();
+          { timeout: 5000, stdio: ["pipe", "pipe", "pipe"] },
+        )
+          .toString()
+          .trim();
 
         if (raw) {
           for (const line of raw.split("\n")) {
-            const [idx, name, temp, util, memUsed, memTotal, powerDraw, powerLimit, driver] = line.split(",").map(s => s.trim());
+            const [idx, name, temp, util, memUsed, memTotal, powerDraw, powerLimit, driver] = line
+              .split(",")
+              .map((s) => s.trim());
             const memUsedMB = parseInt(memUsed!);
             const memTotalMB = parseInt(memTotal!);
             const memPct = memTotalMB > 0 ? Math.round((memUsedMB / memTotalMB) * 100) : 0;
@@ -210,26 +251,40 @@ export async function handleSystemAction(
 
       // Check for AMD GPUs
       try {
-        const amd = execSync("rocm-smi --showmeminfo vram --csv 2>/dev/null", { timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
+        const amd = execSync("rocm-smi --showmeminfo vram --csv 2>/dev/null", {
+          timeout: 5000,
+          stdio: ["pipe", "pipe", "pipe"],
+        })
+          .toString()
+          .trim();
         if (amd && amd.includes("vram")) {
           lines.push("  AMD GPU detected (rocm-smi available)");
           for (const line of amd.split("\n").slice(1, 5)) {
             lines.push(`    ${line.trim()}`);
           }
         }
-      } catch { /* no AMD */ }
+      } catch {
+        /* no AMD */
+      }
 
       // Check for running inference processes
       try {
-        const procs = execSync("nvidia-smi --query-compute-apps=pid,name,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null", { timeout: 3000, stdio: ["pipe", "pipe", "pipe"] }).toString().trim();
+        const procs = execSync(
+          "nvidia-smi --query-compute-apps=pid,name,used_gpu_memory --format=csv,noheader,nounits 2>/dev/null",
+          { timeout: 3000, stdio: ["pipe", "pipe", "pipe"] },
+        )
+          .toString()
+          .trim();
         if (procs) {
           lines.push(`  Running GPU Processes:`);
           for (const proc of procs.split("\n")) {
-            const [pid, pname, mem] = proc.split(",").map(s => s.trim());
+            const [pid, pname, mem] = proc.split(",").map((s) => s.trim());
             lines.push(`    PID ${pid}: ${pname} (${mem} MB)`);
           }
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
 
       return lines.join("\n");
     }
@@ -265,7 +320,9 @@ export async function handleSystemAction(
           execSync(`${test} 2>/dev/null`, { timeout: 2000 });
           clipCmd = cmd;
           break;
-        } catch { /* not available */ }
+        } catch {
+          /* not available */
+        }
       }
 
       if (!clipCmd) return "  No clipboard tool found (install xclip, xsel, or wl-copy).";
@@ -305,7 +362,9 @@ export async function handleSystemAction(
           execSync(`which ${cmd} 2>/dev/null`, { timeout: 2000 });
           opener = cmd;
           break;
-        } catch { /* not available */ }
+        } catch {
+          /* not available */
+        }
       }
 
       if (!opener) return "  No system opener found (xdg-open, open, wslview).";
@@ -334,7 +393,7 @@ export async function handleSystemAction(
         // Try qrencode
         const output = execSync(
           `echo -n '${text.replace(/'/g, "'\\''")}' | qrencode -t UTF8 2>/dev/null`,
-          { timeout: 5000 }
+          { timeout: 5000 },
         ).toString();
 
         const lines = [`  QR Code\n`];
@@ -348,7 +407,7 @@ export async function handleSystemAction(
         try {
           const output = execSync(
             `python3 -c "import qrcode,sys; q=qrcode.QRCode(border=1); q.add_data(sys.stdin.read()); q.make(); q.print_ascii()" 2>/dev/null`,
-            { timeout: 5000, input: text }
+            { timeout: 5000, input: text },
           ).toString();
 
           const lines = [`  QR Code\n`];
@@ -372,8 +431,9 @@ export async function handleSystemAction(
 
       for (let i = 0; i < parts.length; i++) {
         if (parts[i] === "--no-symbols" || parts[i] === "-n") useSymbols = false;
-        else if ((parts[i] === "--count" || parts[i] === "-c") && parts[i + 1]) { count = parseInt(parts[++i]!) || 1; }
-        else if (/^\d+$/.test(parts[i]!)) length = parseInt(parts[i]!);
+        else if ((parts[i] === "--count" || parts[i] === "-c") && parts[i + 1]) {
+          count = parseInt(parts[++i]!) || 1;
+        } else if (/^\d+$/.test(parts[i]!)) length = parseInt(parts[i]!);
       }
 
       length = Math.min(Math.max(length, 8), 128);
@@ -388,7 +448,7 @@ export async function handleSystemAction(
       const generate = (): string => {
         const chars: string[] = [];
         const maxValid = 256 - (256 % charset.length); // rejection sampling threshold
-        let i = 0;
+        const i = 0;
         while (chars.length < length) {
           const bytes = randomBytes(Math.max(length - chars.length, 32));
           for (let j = 0; j < bytes.length && chars.length < length; j++) {
@@ -420,7 +480,8 @@ export async function handleSystemAction(
 
       // Parse duration
       const durationMatch = input.match(/^(\d+)\s*(s|sec|m|min|h|hr|hour)?$/i);
-      if (!durationMatch) return "  Usage: /stopwatch <duration>\n  Examples: /stopwatch 30s, /stopwatch 5m, /stopwatch 1h";
+      if (!durationMatch)
+        return "  Usage: /stopwatch <duration>\n  Examples: /stopwatch 30s, /stopwatch 5m, /stopwatch 1h";
 
       let seconds = parseInt(durationMatch[1]!);
       const unit = (durationMatch[2] ?? "s").toLowerCase();
@@ -464,8 +525,16 @@ export async function handleSystemAction(
 
       const tests = [
         { name: "Simple Q&A", prompt: "What is 2+2? Reply with just the number." },
-        { name: "Code Gen", prompt: "Write a JavaScript function that reverses a string. Reply with just the code, no explanation." },
-        { name: "Reasoning", prompt: "If all roses are flowers and some flowers fade quickly, can we conclude that some roses fade quickly? Answer yes or no with one sentence of reasoning." },
+        {
+          name: "Code Gen",
+          prompt:
+            "Write a JavaScript function that reverses a string. Reply with just the code, no explanation.",
+        },
+        {
+          name: "Reasoning",
+          prompt:
+            "If all roses are flowers and some flowers fade quickly, can we conclude that some roses fade quickly? Answer yes or no with one sentence of reasoning.",
+        },
       ];
 
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -497,10 +566,12 @@ export async function handleSystemAction(
             continue;
           }
 
-          const data = await resp.json() as Record<string, unknown>;
+          const data = (await resp.json()) as Record<string, unknown>;
           const choices = data.choices as Record<string, unknown>[] | undefined;
           const usage = data.usage as Record<string, unknown> | undefined;
-          const reply = String((choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(empty)");
+          const reply = String(
+            (choices?.[0]?.message as Record<string, unknown> | undefined)?.content ?? "(empty)",
+          );
           const tokens = (usage?.total_tokens as number) ?? 0;
           const completionTokens = (usage?.completion_tokens as number) ?? 0;
           const tokPerSec = latency > 0 ? Math.round((completionTokens / latency) * 1000) : 0;
@@ -510,7 +581,9 @@ export async function handleSystemAction(
           lines.push(`    Latency:  ${latency}ms`);
           lines.push(`    Tokens:   ${tokens} (${completionTokens} completion)`);
           lines.push(`    Speed:    ${tokPerSec} tok/s`);
-          lines.push(`    Reply:    ${reply.slice(0, 80).replace(/\n/g, " ")}${reply.length > 80 ? "..." : ""}`);
+          lines.push(
+            `    Reply:    ${reply.slice(0, 80).replace(/\n/g, " ")}${reply.length > 80 ? "..." : ""}`,
+          );
           lines.push(``);
         } catch (err: any) {
           lines.push(`  ${test.name}: ERROR \u2014 ${err.message}\n`);

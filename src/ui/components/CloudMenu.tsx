@@ -1,8 +1,8 @@
 // KCode - CloudMenu component
 // Interactive menu for configuring cloud API providers and keys
 
-import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
+import React, { useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 export interface CloudProvider {
@@ -165,9 +165,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
                     {p.name}
                   </Text>
                   {hasKey && <Text color={theme.success}>✓</Text>}
-                  {isSelected && (
-                    <Text dimColor>{p.models}</Text>
-                  )}
+                  {isSelected && <Text dimColor>{p.models}</Text>}
                 </Box>
               );
             })}
@@ -179,7 +177,9 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         <>
           <Box marginTop={1} gap={1}>
             <Text>Provider:</Text>
-            <Text bold color={theme.primary}>{selectedProvider.name}</Text>
+            <Text bold color={theme.primary}>
+              {selectedProvider.name}
+            </Text>
           </Box>
           <Box gap={1}>
             <Text>Base URL:</Text>
@@ -206,22 +206,30 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         <>
           <Box marginTop={1} gap={1}>
             <Text>Provider:</Text>
-            <Text bold color={theme.primary}>{selectedProvider.name}</Text>
+            <Text bold color={theme.primary}>
+              {selectedProvider.name}
+            </Text>
           </Box>
           <Box gap={1}>
             <Text>API Key:</Text>
             <Text color={theme.warning}>{maskKey(apiKey)}</Text>
           </Box>
           <Box marginTop={1} gap={2}>
-            <Text>Save to <Text bold>~/.kcode/settings.json</Text>?</Text>
+            <Text>
+              Save to <Text bold>~/.kcode/settings.json</Text>?
+            </Text>
           </Box>
           <Box gap={2}>
             <Text>
-              <Text bold color={theme.success}>[y]</Text>
+              <Text bold color={theme.success}>
+                [y]
+              </Text>
               <Text> Save</Text>
             </Text>
             <Text>
-              <Text bold color={theme.error}>[n]</Text>
+              <Text bold color={theme.error}>
+                [n]
+              </Text>
               <Text> Back</Text>
             </Text>
           </Box>

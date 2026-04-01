@@ -40,7 +40,9 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
       // Only bracket sequences — mark as pasting to suppress Ink
       isPasting = true;
       if (pasteTimer) clearTimeout(pasteTimer);
-      pasteTimer = setTimeout(() => { isPasting = false; }, 100);
+      pasteTimer = setTimeout(() => {
+        isPasting = false;
+      }, 100);
       return;
     }
 
@@ -56,12 +58,18 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
       isPasting = true;
       if (pasteTimer) clearTimeout(pasteTimer);
 
-      try { onPaste(normalized); } catch { /* don't break stdin */ }
+      try {
+        onPaste(normalized);
+      } catch {
+        /* don't break stdin */
+      }
 
       // Keep isPasting true long enough for Ink's handlers to be skipped.
       // All chars from this chunk will hit useInput in the same event loop
       // tick; the timer fires after they've all been ignored.
-      pasteTimer = setTimeout(() => { isPasting = false; }, 100);
+      pasteTimer = setTimeout(() => {
+        isPasting = false;
+      }, 100);
     }
   };
 
@@ -69,7 +77,10 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
 
   return () => {
     process.stdin.removeListener("data", handler);
-    if (pasteTimer) { clearTimeout(pasteTimer); pasteTimer = null; }
+    if (pasteTimer) {
+      clearTimeout(pasteTimer);
+      pasteTimer = null;
+    }
     isPasting = false;
     process.stdout.write("\x1b[?2004l");
   };

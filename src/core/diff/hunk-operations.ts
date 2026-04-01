@@ -23,15 +23,9 @@ export function rejectHunk(hunks: DiffHunk[], id: string): DiffHunk[] {
  * Modify a hunk's added lines and mark it as modified.
  * The original removed lines remain unchanged; only the replacement (added) lines are updated.
  */
-export function modifyHunk(
-  hunks: DiffHunk[],
-  id: string,
-  newLines: string[],
-): DiffHunk[] {
+export function modifyHunk(hunks: DiffHunk[], id: string, newLines: string[]): DiffHunk[] {
   return hunks.map((h) =>
-    h.id === id
-      ? { ...h, linesAdded: [...newLines], status: "modified" as const }
-      : h,
+    h.id === id ? { ...h, linesAdded: [...newLines], status: "modified" as const } : h,
   );
 }
 
@@ -89,11 +83,7 @@ export function getStats(hunks: DiffHunk[]): {
  *
  * Returns a new array with the original hunk replaced by two new hunks.
  */
-export function splitHunk(
-  hunks: DiffHunk[],
-  id: string,
-  splitAtLine: number,
-): DiffHunk[] {
+export function splitHunk(hunks: DiffHunk[], id: string, splitAtLine: number): DiffHunk[] {
   const idx = hunks.findIndex((h) => h.id === id);
   if (idx === -1) return hunks;
 

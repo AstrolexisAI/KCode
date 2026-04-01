@@ -82,19 +82,49 @@ export async function detectTestFramework(dir: string): Promise<string> {
 
 // ─── File counting ─────────────────────────────────────────────
 
-const SOURCE_EXTENSIONS = ["ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "rb", "ex", "exs", "c", "cpp", "h", "swift"];
+const SOURCE_EXTENSIONS = [
+  "ts",
+  "tsx",
+  "js",
+  "jsx",
+  "py",
+  "go",
+  "rs",
+  "java",
+  "rb",
+  "ex",
+  "exs",
+  "c",
+  "cpp",
+  "h",
+  "swift",
+];
 
 export async function countFiles(dir: string, extensions?: string[]): Promise<number> {
   const exts = extensions ?? SOURCE_EXTENSIONS;
-  const nameArgs = exts.flatMap((e, i) => (i === 0 ? ["-name", `*.${e}`] : ["-o", "-name", `*.${e}`]));
+  const nameArgs = exts.flatMap((e, i) =>
+    i === 0 ? ["-name", `*.${e}`] : ["-o", "-name", `*.${e}`],
+  );
   const result = await run([
-    "find", dir,
-    "-type", "f",
-    "(", ...nameArgs, ")",
-    "-not", "-path", "*/node_modules/*",
-    "-not", "-path", "*/.git/*",
-    "-not", "-path", "*/dist/*",
-    "-not", "-path", "*/build/*",
+    "find",
+    dir,
+    "-type",
+    "f",
+    "(",
+    ...nameArgs,
+    ")",
+    "-not",
+    "-path",
+    "*/node_modules/*",
+    "-not",
+    "-path",
+    "*/.git/*",
+    "-not",
+    "-path",
+    "*/dist/*",
+    "-not",
+    "-path",
+    "*/build/*",
   ]);
   if (!result.ok || !result.stdout) return 0;
   return result.stdout.split("\n").filter(Boolean).length;
@@ -102,14 +132,26 @@ export async function countFiles(dir: string, extensions?: string[]): Promise<nu
 
 export async function countLinesOfCode(dir: string, extensions?: string[]): Promise<number> {
   const exts = extensions ?? SOURCE_EXTENSIONS;
-  const nameArgs = exts.flatMap((e, i) => (i === 0 ? ["-name", `*.${e}`] : ["-o", "-name", `*.${e}`]));
+  const nameArgs = exts.flatMap((e, i) =>
+    i === 0 ? ["-name", `*.${e}`] : ["-o", "-name", `*.${e}`],
+  );
   const findResult = await run([
-    "find", dir,
-    "-type", "f",
-    "(", ...nameArgs, ")",
-    "-not", "-path", "*/node_modules/*",
-    "-not", "-path", "*/.git/*",
-    "-not", "-path", "*/dist/*",
+    "find",
+    dir,
+    "-type",
+    "f",
+    "(",
+    ...nameArgs,
+    ")",
+    "-not",
+    "-path",
+    "*/node_modules/*",
+    "-not",
+    "-path",
+    "*/.git/*",
+    "-not",
+    "-path",
+    "*/dist/*",
   ]);
   if (!findResult.ok || !findResult.stdout) return 0;
 
@@ -117,7 +159,11 @@ export async function countLinesOfCode(dir: string, extensions?: string[]): Prom
   if (files.length === 0) return 0;
 
   // Use xargs + wc for efficiency
-  const wcResult = await run(["sh", "-c", `echo '${files.join("\n")}' | xargs wc -l 2>/dev/null | tail -1`]);
+  const wcResult = await run([
+    "sh",
+    "-c",
+    `echo '${files.join("\n")}' | xargs wc -l 2>/dev/null | tail -1`,
+  ]);
   if (!wcResult.ok) return 0;
   const total = parseInt(wcResult.stdout.trim().split(/\s+/)[0]!, 10);
   return isNaN(total) ? 0 : total;
@@ -189,16 +235,20 @@ export async function getProjectName(dir: string): Promise<string> {
 
 // ─── Dependency counting ───────────────────────────────────────
 
-export async function countDependencies(dir: string): Promise<{ total: number; outdated: number; vulnerable: number }> {
+export async function countDependencies(
+  dir: string,
+): Promise<{ total: number; outdated: number; vulnerable: number }> {
   let total = 0;
   let outdated = 0;
-  let vulnerable = 0;
+  const vulnerable = 0;
 
   try {
     const pkg = Bun.file(`${dir}/package.json`);
     if (await pkg.exists()) {
       const json = await pkg.json();
-      total = Object.keys(json?.dependencies ?? {}).length + Object.keys(json?.devDependencies ?? {}).length;
+      total =
+        Object.keys(json?.dependencies ?? {}).length +
+        Object.keys(json?.devDependencies ?? {}).length;
     }
   } catch (err) {
     log.debug("dashboard/metrics", `countDependencies error: ${err}`);
@@ -209,7 +259,16 @@ export async function countDependencies(dir: string): Promise<{ total: number; o
     const result = await run(["bun", "outdated"]);
     if (result.ok && result.stdout) {
       // Count non-header lines
-      const lines = result.stdout.split("\n").filter(l => l.trim() && !l.startsWith("┌") && !l.startsWith("│ Package") && !l.startsWith("├") && !l.startsWith("└"));
+      const lines = result.stdout
+        .split("\n")
+        .filter(
+          (l) =>
+            l.trim() &&
+            !l.startsWith("┌") &&
+            !l.startsWith("│ Package") &&
+            !l.startsWith("├") &&
+            !l.startsWith("└"),
+        );
       outdated = lines.length;
     }
   } catch {}

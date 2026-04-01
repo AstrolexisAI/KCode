@@ -1,7 +1,7 @@
 // KCode - Paste stream integration tests
 // Tests the stdin paste interceptor logic
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // We can't test the full stdin monkey-patching, but we CAN test
 // the detection heuristic that the interceptor uses.

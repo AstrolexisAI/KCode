@@ -1,8 +1,8 @@
 // KCode - SSE Stream Parsers
 // Handles parsing of Server-Sent Events from OpenAI-compatible and Anthropic APIs
 
-import { createThinkTagParser } from "./think-tag-parser";
 import { log } from "./logger";
+import { createThinkTagParser } from "./think-tag-parser";
 
 const SSE_DEBUG = process.env.KCODE_DEBUG_SSE === "1";
 
@@ -32,9 +32,7 @@ export interface SSEChunk {
 /**
  * Parse an SSE stream from the OpenAI-compatible API and yield structured chunks.
  */
-export async function* parseSSEStream(
-  response: Response,
-): AsyncGenerator<SSEChunk> {
+export async function* parseSSEStream(response: Response): AsyncGenerator<SSEChunk> {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -101,7 +99,8 @@ export async function* parseSSEStream(
           if (SSE_DEBUG) {
             const fields: string[] = [];
             if (delta?.content) fields.push(`content(${delta.content.length})`);
-            if (delta?.reasoning_content) fields.push(`reasoning(${delta.reasoning_content.length})`);
+            if (delta?.reasoning_content)
+              fields.push(`reasoning(${delta.reasoning_content.length})`);
             if (delta?.tool_calls) fields.push(`tool_calls(${delta.tool_calls.length})`);
             if (finishReason) fields.push(`finish=${finishReason}`);
             if (fields.length > 0) log.debug("sse", `SSE delta: ${fields.join(", ")}`);
@@ -189,9 +188,7 @@ export async function* parseSSEStream(
  * Parse an SSE stream from Anthropic's Messages API and yield structured chunks.
  * Anthropic uses event: lines before data: lines, and a different JSON structure.
  */
-export async function* parseAnthropicSSEStream(
-  response: Response,
-): AsyncGenerator<SSEChunk> {
+export async function* parseAnthropicSSEStream(response: Response): AsyncGenerator<SSEChunk> {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -292,11 +289,16 @@ export async function* parseAnthropicSSEStream(
             if (parsed.delta?.stop_reason) {
               const reason = parsed.delta.stop_reason;
               // Map Anthropic stop reasons to our internal format
-              const mapped = reason === "end_turn" ? "stop"
-                : reason === "tool_use" ? "tool_calls"
-                : reason === "max_tokens" ? "length"
-                : reason === "stop_sequence" ? "stop"
-                : reason;
+              const mapped =
+                reason === "end_turn"
+                  ? "stop"
+                  : reason === "tool_use"
+                    ? "tool_calls"
+                    : reason === "max_tokens"
+                      ? "length"
+                      : reason === "stop_sequence"
+                        ? "stop"
+                        : reason;
               yield { type: "finish", finishReason: mapped };
             }
             if (parsed.usage) {

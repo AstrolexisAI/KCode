@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
+import { describe, expect, test } from "bun:test";
 import { SessionSearch } from "./search";
 
 function createSearch(): SessionSearch {

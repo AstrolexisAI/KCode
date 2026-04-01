@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CheckpointManager } from "./checkpoint";
 import type { SessionCheckpoint } from "./types";
 
@@ -158,9 +158,7 @@ describe("CheckpointManager", () => {
 
   describe("autoCheckpoint", () => {
     test("startAutoCheckpoint does not throw", () => {
-      expect(() =>
-        manager.startAutoCheckpoint(() => makeCheckpoint("auto")),
-      ).not.toThrow();
+      expect(() => manager.startAutoCheckpoint(() => makeCheckpoint("auto"))).not.toThrow();
       manager.stopAutoCheckpoint();
     });
 

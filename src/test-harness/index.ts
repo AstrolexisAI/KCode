@@ -4,22 +4,22 @@
 export { FakeProvider } from "./fake-provider";
 
 export {
-  createFakeRead,
-  createFakeWrite,
   createFakeBash,
   createFakeEdit,
   createFakeGlob,
   createFakeGrep,
+  createFakeRead,
   createFakeToolRegistry,
-  type FakeReadOptions,
+  createFakeWrite,
   type FakeBashOptions,
+  type FakeReadOptions,
   type FakeToolRegistryOptions,
 } from "./fake-tools";
 
 export {
-  createTestEnv,
   collectEvents,
   collectText,
+  createTestEnv,
   type TestEnv,
   type TestEnvOptions,
 } from "./test-env";

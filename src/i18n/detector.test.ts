@@ -1,5 +1,5 @@
-import { describe, test, expect, afterEach } from "bun:test";
-import { detectLocale, normalizeLocale, isSupportedLocale } from "./detector";
+import { afterEach, describe, expect, test } from "bun:test";
+import { detectLocale, isSupportedLocale, normalizeLocale } from "./detector";
 
 describe("detectLocale", () => {
   const origEnv = { ...process.env };

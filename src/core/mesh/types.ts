@@ -9,7 +9,7 @@ export type PeerStatus = "online" | "busy" | "offline";
 
 export interface PeerCapabilities {
   models: string[];
-  gpuVram: number;       // Total VRAM in GB
+  gpuVram: number; // Total VRAM in GB
   cpuCores: number;
   maxConcurrent: number; // Max simultaneous tasks
 }
@@ -21,18 +21,18 @@ export interface PeerInfo {
   port: number;
   capabilities: PeerCapabilities;
   status: PeerStatus;
-  lastSeen: number;      // Epoch ms
+  lastSeen: number; // Epoch ms
 }
 
 // ─── Transport ─────────────────────────────────────────────────
 
 export interface TransportConfig {
-  port: number;             // default: 19200
-  teamToken: string;        // Shared secret for the team
-  tlsCert?: string;         // Path to TLS certificate (auto-generated)
-  tlsKey?: string;          // Path to TLS private key
-  maxConnections: number;   // default: 10
-  messageMaxSize: number;   // default: 10 MB (bytes)
+  port: number; // default: 19200
+  teamToken: string; // Shared secret for the team
+  tlsCert?: string; // Path to TLS certificate (auto-generated)
+  tlsKey?: string; // Path to TLS private key
+  maxConnections: number; // default: 10
+  messageMaxSize: number; // default: 10 MB (bytes)
 }
 
 export const DEFAULT_TRANSPORT_CONFIG: TransportConfig = {
@@ -55,14 +55,14 @@ export interface MeshTask {
   files?: string[];
   model?: string;
   priority: TaskPriority;
-  timeout: number;         // ms
+  timeout: number; // ms
 }
 
 export interface MeshTaskHandle {
   taskId: string;
-  assignedTo: string;      // nodeId of the peer handling it
+  assignedTo: string; // nodeId of the peer handling it
   status: TaskStatus;
-  submittedAt: number;     // Epoch ms
+  submittedAt: number; // Epoch ms
 }
 
 export interface MeshResult {
@@ -71,7 +71,7 @@ export interface MeshResult {
   output?: string;
   error?: string;
   durationMs: number;
-  fromNode: string;        // nodeId of the peer that executed it
+  fromNode: string; // nodeId of the peer that executed it
 }
 
 // ─── Mesh Settings (stored in settings.json under "mesh") ──────

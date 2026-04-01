@@ -1,15 +1,15 @@
 // KCode - Test Environment Setup for E2E Testing
 // Creates isolated test environments with fake dependencies
 
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { execSync } from "node:child_process";
 import { Database } from "bun:sqlite";
+import { execSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { ToolRegistry } from "../core/tool-registry";
 import type { KCodeConfig } from "../core/types";
 import { FakeProvider } from "./fake-provider";
 import { createFakeToolRegistry, type FakeToolRegistryOptions } from "./fake-tools";
-import type { ToolRegistry } from "../core/tool-registry";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -103,8 +103,16 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
       await provider.start();
     } catch (err) {
       // Cleanup resources created before the failure
-      try { db.close(); } catch { /* ignore */ }
-      try { rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      try {
+        db.close();
+      } catch {
+        /* ignore */
+      }
+      try {
+        rmSync(workDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
       throw err;
     }
   }
@@ -134,8 +142,16 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
   // 7. Cleanup function
   const cleanup = async () => {
     await provider.stop();
-    try { db.close(); } catch { /* ignore */ }
-    try { rmSync(workDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      db.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      rmSync(workDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   };
 
   return {

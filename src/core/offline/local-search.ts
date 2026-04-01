@@ -116,9 +116,13 @@ async function searchCachedResults(query: string): Promise<LocalSearchResult[]> 
             });
           }
         }
-      } catch { /* skip malformed files */ }
+      } catch {
+        /* skip malformed files */
+      }
     }
-  } catch { /* dir read error */ }
+  } catch {
+    /* dir read error */
+  }
 
   return results;
 }
@@ -157,12 +161,16 @@ async function searchCachedDocs(query: string): Promise<LocalSearchResult[]> {
                 relevance: 0.5,
               });
             }
-          } catch { /* skip unreadable */ }
+          } catch {
+            /* skip unreadable */
+          }
         }
       }
     };
     walk(dir);
-  } catch { /* dir read error */ }
+  } catch {
+    /* dir read error */
+  }
 
   return results.slice(0, 10);
 }
@@ -175,25 +183,25 @@ async function searchLearnings(query: string): Promise<LocalSearchResult[]> {
     const db = getDb();
 
     // Check if learnings table exists
-    const tableCheck = db.query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='learnings'",
-    ).get();
+    const tableCheck = db
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='learnings'")
+      .get();
     if (!tableCheck) return [];
 
     // Use FTS5 if available, otherwise LIKE
-    const ftsCheck = db.query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='learnings_fts'",
-    ).get();
+    const ftsCheck = db
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='learnings_fts'")
+      .get();
 
     let rows: Array<{ content: string; topic?: string }>;
     if (ftsCheck) {
-      rows = db.query(
-        "SELECT content, topic FROM learnings_fts WHERE learnings_fts MATCH ? LIMIT 10",
-      ).all(query) as any;
+      rows = db
+        .query("SELECT content, topic FROM learnings_fts WHERE learnings_fts MATCH ? LIMIT 10")
+        .all(query) as any;
     } else {
-      rows = db.query(
-        "SELECT content, topic FROM learnings WHERE content LIKE ? LIMIT 10",
-      ).all(`%${query}%`) as any;
+      rows = db
+        .query("SELECT content, topic FROM learnings WHERE content LIKE ? LIMIT 10")
+        .all(`%${query}%`) as any;
     }
 
     return rows.map((r) => ({
@@ -216,14 +224,14 @@ async function searchCodebaseIndex(query: string): Promise<LocalSearchResult[]> 
     const db = getDb();
 
     // Check if codebase index tables exist
-    const tableCheck = db.query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='codebase_symbols'",
-    ).get();
+    const tableCheck = db
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='codebase_symbols'")
+      .get();
     if (!tableCheck) return [];
 
-    const rows = db.query(
-      "SELECT name, file_path, kind FROM codebase_symbols WHERE name LIKE ? LIMIT 10",
-    ).all(`%${query}%`) as Array<{ name: string; file_path: string; kind: string }>;
+    const rows = db
+      .query("SELECT name, file_path, kind FROM codebase_symbols WHERE name LIKE ? LIMIT 10")
+      .all(`%${query}%`) as Array<{ name: string; file_path: string; kind: string }>;
 
     return rows.map((r) => ({
       source: "codebase" as const,

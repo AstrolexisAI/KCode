@@ -36,9 +36,7 @@ export const syntheticOutputDefinition: ToolDefinition = {
   },
 };
 
-export async function executeSyntheticOutput(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeSyntheticOutput(input: Record<string, unknown>): Promise<ToolResult> {
   const opts = input as unknown as SyntheticOutputInput;
   const contentType = opts.type ?? "text";
   const visible = opts.visible !== false;

@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { RemoteSession, type RemoteSessionEvent } from "./remote-session";
 import { DEFAULT_REMOTE_CONFIG } from "./types";
 
@@ -172,9 +172,9 @@ describe("remote-session", () => {
         localDir: "/tmp/local",
       });
 
-      await expect(
-        session.executeRemoteCommand(["echo", "hello"]),
-      ).rejects.toThrow("only available in sync mode");
+      await expect(session.executeRemoteCommand(["echo", "hello"])).rejects.toThrow(
+        "only available in sync mode",
+      );
     });
   });
 

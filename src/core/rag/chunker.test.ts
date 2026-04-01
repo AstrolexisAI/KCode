@@ -1,4 +1,4 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,7 +137,7 @@ class Greeter:
 
   describe("Go chunking", () => {
     test("detects Go functions and types", () => {
-      const lines: string[] = ['package main', '', 'import "fmt"', ''];
+      const lines: string[] = ["package main", "", 'import "fmt"', ""];
       for (let i = 0; i < 3; i++) {
         lines.push(`func Handler${i}(w http.ResponseWriter, r *http.Request) {`);
         for (let j = 0; j < 30; j++) lines.push(`\tfmt.Println("${j}")`);

@@ -1,9 +1,9 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveTokens, loadTokens, clearTokens, normalizeIssuer } from "./token-store";
 import type { OAuthTokens } from "../types";
+import { clearTokens, loadTokens, normalizeIssuer, saveTokens } from "./token-store";
 
 let tempDir: string;
 let origEnv: Record<string, string | undefined>;
@@ -179,7 +179,9 @@ describe("normalizeIssuer", () => {
   });
 
   test("preserves path", () => {
-    expect(normalizeIssuer("https://auth.example.com/oauth2")).toBe("https://auth.example.com/oauth2");
+    expect(normalizeIssuer("https://auth.example.com/oauth2")).toBe(
+      "https://auth.example.com/oauth2",
+    );
   });
 
   test("adds https:// if missing", () => {

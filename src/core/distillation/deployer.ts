@@ -27,8 +27,7 @@ export class ModelDeployer {
     await addModel({
       name: modelName,
       baseUrl: "http://localhost:10091",
-      description:
-        config.description ?? `Fine-tuned model distilled from KCode sessions`,
+      description: config.description ?? `Fine-tuned model distilled from KCode sessions`,
       capabilities: ["code"],
     });
 

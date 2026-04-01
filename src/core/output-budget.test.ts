@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { evaluateOutputBudget } from "./output-budget";
 
 describe("evaluateOutputBudget", () => {
@@ -9,13 +9,19 @@ describe("evaluateOutputBudget", () => {
 
   test("explicit word count triggers non-normal strategy when exceeds budget", () => {
     // 2000 words ≈ 2800 tokens, but max is only 2048 → should trigger
-    const r = evaluateOutputBudget("Escribí un ensayo de 2000 palabras sobre la historia de la IA", 2048);
+    const r = evaluateOutputBudget(
+      "Escribí un ensayo de 2000 palabras sobre la historia de la IA",
+      2048,
+    );
     expect(r.strategy).not.toBe("normal");
     expect(r.systemHint).toBeDefined();
   });
 
   test("exhaustive keyword triggers non-normal strategy", () => {
-    const r = evaluateOutputBudget("Explicá exhaustivamente cada aspecto del problema con todos los detalles posibles", 2048);
+    const r = evaluateOutputBudget(
+      "Explicá exhaustivamente cada aspecto del problema con todos los detalles posibles",
+      2048,
+    );
     expect(r.strategy).not.toBe("normal");
   });
 
@@ -52,7 +58,10 @@ describe("evaluateOutputBudget", () => {
   });
 
   test("complete history keyword triggers non-normal", () => {
-    const r = evaluateOutputBudget("Write the complete history of computing from 1940 to 2024", 2048);
+    const r = evaluateOutputBudget(
+      "Write the complete history of computing from 1940 to 2024",
+      2048,
+    );
     expect(r.strategy).not.toBe("normal");
   });
 

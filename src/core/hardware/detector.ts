@@ -1,8 +1,8 @@
 // KCode - Hardware Detector
 // Detects CPU, RAM, GPU, storage, and OS information for auto-optimization.
 
-import type { HardwareProfile, CpuInfo, MemoryInfo, GpuInfo, StorageInfo, OsInfo } from "./types";
 import { log } from "../logger";
+import type { CpuInfo, GpuInfo, HardwareProfile, MemoryInfo, OsInfo, StorageInfo } from "./types";
 
 export class HardwareDetector {
   /**
@@ -23,7 +23,8 @@ export class HardwareDetector {
    * Detect CPU model, core/thread count, architecture, and instruction set features.
    */
   async detectCPU(): Promise<CpuInfo> {
-    const arch = process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch;
+    const arch =
+      process.arch === "arm64" ? "aarch64" : process.arch === "x64" ? "x86_64" : process.arch;
     let model = "Unknown CPU";
     let cores = 1;
     let threads = 1;
@@ -50,8 +51,19 @@ export class HardwareDetector {
         const flagsMatch = cpuinfo.match(/flags\s*:\s*(.+)/);
         if (flagsMatch) {
           const allFlags = flagsMatch[1].trim().split(/\s+/);
-          const interesting = ["avx", "avx2", "avx512f", "avx512_vnni", "amx_tile", "amx_int8", "amx_bf16", "sse4_2", "fma", "f16c"];
-          features = allFlags.filter(f => interesting.includes(f));
+          const interesting = [
+            "avx",
+            "avx2",
+            "avx512f",
+            "avx512_vnni",
+            "amx_tile",
+            "amx_int8",
+            "amx_bf16",
+            "sse4_2",
+            "fma",
+            "f16c",
+          ];
+          features = allFlags.filter((f) => interesting.includes(f));
         }
       } catch (err) {
         log.debug("hardware", `Failed to read /proc/cpuinfo: ${err}`);
@@ -76,7 +88,7 @@ export class HardwareDetector {
         const featResult = Bun.spawnSync(["sysctl", "-n", "machdep.cpu.features"]);
         if (featResult.exitCode === 0) {
           const raw = featResult.stdout.toString().trim().toLowerCase();
-          features = raw.split(/\s+/).filter(f => f.length > 0);
+          features = raw.split(/\s+/).filter((f) => f.length > 0);
         }
       } catch (err) {
         log.debug("hardware", `Failed to detect macOS CPU: ${err}`);
@@ -116,7 +128,9 @@ export class HardwareDetector {
       try {
         const memResult = Bun.spawnSync(["sysctl", "-n", "hw.memsize"]);
         if (memResult.exitCode === 0) {
-          totalGb = Math.round(parseInt(memResult.stdout.toString().trim(), 10) / 1024 / 1024 / 1024);
+          totalGb = Math.round(
+            parseInt(memResult.stdout.toString().trim(), 10) / 1024 / 1024 / 1024,
+          );
         }
         // Approximate available memory on macOS via vm_stat
         const vmResult = Bun.spawnSync(["vm_stat"]);
@@ -127,7 +141,7 @@ export class HardwareDetector {
           const inactiveMatch = output.match(/Pages inactive:\s+(\d+)/);
           const freePages = parseInt(freeMatch?.[1] ?? "0", 10);
           const inactivePages = parseInt(inactiveMatch?.[1] ?? "0", 10);
-          availableGb = Math.round((freePages + inactivePages) * pageSize / 1024 / 1024 / 1024);
+          availableGb = Math.round(((freePages + inactivePages) * pageSize) / 1024 / 1024 / 1024);
         }
       } catch (err) {
         log.debug("hardware", `Failed to detect macOS memory: ${err}`);
@@ -163,7 +177,7 @@ export class HardwareDetector {
         const lines = result.stdout.toString().trim().split("\n");
         for (const line of lines) {
           if (!line.trim()) continue;
-          const parts = line.split(",").map(s => s.trim());
+          const parts = line.split(",").map((s) => s.trim());
           if (parts.length >= 2) {
             gpus.push({
               vendor: "nvidia",
@@ -195,7 +209,9 @@ export class HardwareDetector {
                 vramGb = Math.round(parseInt(memMatch[1], 10) / 1024 / 1024 / 1024);
               }
             }
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           gpus.push({
             vendor: "amd",
             model: nameMatch[1].trim(),
@@ -265,8 +281,8 @@ export class HardwareDetector {
         if (result.exitCode === 0) {
           const lines = result.stdout.toString().trim().split("\n");
           // rota=0 means SSD, rota=1 means HDD
-          const hasSsd = lines.some(l => l.trim().endsWith("0"));
-          const hasHdd = lines.some(l => l.trim().endsWith("1"));
+          const hasSsd = lines.some((l) => l.trim().endsWith("0"));
+          const hasHdd = lines.some((l) => l.trim().endsWith("1"));
           if (hasSsd && !hasHdd) type = "ssd";
           else if (hasHdd && !hasSsd) type = "hdd";
           else if (hasSsd) type = "ssd"; // mixed, assume SSD for primary
@@ -293,7 +309,9 @@ export class HardwareDetector {
     try {
       const os = await import("node:os");
       release = os.release();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     // WSL detection
     if (platform === "linux") {

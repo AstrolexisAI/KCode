@@ -3,17 +3,19 @@
 // Supports built-in, custom (.md files), and plugin-provided output styles
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, basename } from "node:path";
-import { kcodePath } from "./paths";
+import { basename, join } from "node:path";
 import type { PluginOutputStyle } from "./marketplace/types";
+import { kcodePath } from "./paths";
 
 // ─── Built-in Styles ─────────────────────────────────────────────
 
 const BUILTIN_STYLES: Record<string, string> = {
   default: "", // no extra instructions
-  concise: "Be extremely concise. Use bullet points. No explanations unless asked. Code only when relevant.",
+  concise:
+    "Be extremely concise. Use bullet points. No explanations unless asked. Code only when relevant.",
   verbose: "Be thorough and detailed. Explain your reasoning. Show alternatives considered.",
-  "code-only": "Only output code. No explanations, no markdown headers, no commentary. Just the code.",
+  "code-only":
+    "Only output code. No explanations, no markdown headers, no commentary. Just the code.",
 };
 
 // ─── Plugin Styles Cache ─────────────────────────────────────────
@@ -89,7 +91,7 @@ export function getStyleInstructions(): string {
   }
 
   // Check plugin styles
-  const pluginStyle = pluginStyles.find(s => s.name === currentStyle);
+  const pluginStyle = pluginStyles.find((s) => s.name === currentStyle);
   if (pluginStyle) {
     return pluginStyle.instructions;
   }

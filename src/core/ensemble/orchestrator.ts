@@ -2,17 +2,12 @@
 // Top-level orchestrator that manages ensemble execution, configuration,
 // and integration with the conversation loop.
 
-import type { Message } from "../types";
-import type {
-  EnsembleConfig,
-  EnsembleResult,
-  EnsembleTrigger,
-  ModelExecutor,
-} from "./types";
-import { DEFAULT_ENSEMBLE_CONFIG, estimateEnsembleCost } from "./types";
-import { executeStrategy } from "./strategies";
-import { classifyTask, type TaskType } from "../router";
 import { log } from "../logger";
+import { classifyTask, type TaskType } from "../router";
+import type { Message } from "../types";
+import { executeStrategy } from "./strategies";
+import type { EnsembleConfig, EnsembleResult, EnsembleTrigger, ModelExecutor } from "./types";
+import { DEFAULT_ENSEMBLE_CONFIG, estimateEnsembleCost } from "./types";
 
 // ─── Ensemble Orchestrator ──────────────────────────────────────
 
@@ -97,7 +92,10 @@ export class EnsembleOrchestrator {
       throw new Error("Ensemble is not enabled or has fewer than 2 models configured");
     }
 
-    log.info("ensemble", `Running ${this.config.strategy} with ${this.config.models.length} models`);
+    log.info(
+      "ensemble",
+      `Running ${this.config.strategy} with ${this.config.models.length} models`,
+    );
 
     const start = Date.now();
 
@@ -105,7 +103,10 @@ export class EnsembleOrchestrator {
       const result = await executeStrategy(messages, this.config, this.executor);
 
       const totalDuration = Date.now() - start;
-      log.info("ensemble", `Ensemble completed in ${totalDuration}ms, strategy: ${result.strategy}`);
+      log.info(
+        "ensemble",
+        `Ensemble completed in ${totalDuration}ms, strategy: ${result.strategy}`,
+      );
       log.info("ensemble", `Reasoning: ${result.reasoning}`);
 
       return result;
@@ -132,7 +133,10 @@ export class EnsembleOrchestrator {
     if (!this.config.maxCostUsd) return false;
     const estimated = this.estimateCost(inputTokens, estimatedOutputTokens);
     if (estimated > this.config.maxCostUsd) {
-      log.info("ensemble", `Skipping ensemble: estimated cost $${estimated.toFixed(4)} exceeds limit $${this.config.maxCostUsd}`);
+      log.info(
+        "ensemble",
+        `Skipping ensemble: estimated cost $${estimated.toFixed(4)} exceeds limit $${this.config.maxCostUsd}`,
+      );
       return true;
     }
     return false;
@@ -142,7 +146,11 @@ export class EnsembleOrchestrator {
    * Run ensemble only if trigger conditions are met and cost is within limits.
    * Returns null if ensemble was not triggered (caller should use single-model).
    */
-  async tryRun(messages: Message[], userMessage: string, inputTokens?: number): Promise<EnsembleResult | null> {
+  async tryRun(
+    messages: Message[],
+    userMessage: string,
+    inputTokens?: number,
+  ): Promise<EnsembleResult | null> {
     if (!this.shouldTrigger(userMessage)) {
       return null;
     }
@@ -181,8 +189,10 @@ export function createEnsembleFromSettings(
   const config: Partial<EnsembleConfig> & { enabled?: boolean } = {};
 
   if (typeof raw.enabled === "boolean") config.enabled = raw.enabled;
-  if (typeof raw.strategy === "string") config.strategy = raw.strategy as EnsembleConfig["strategy"];
-  if (Array.isArray(raw.models)) config.models = raw.models.filter((m: unknown) => typeof m === "string") as string[];
+  if (typeof raw.strategy === "string")
+    config.strategy = raw.strategy as EnsembleConfig["strategy"];
+  if (Array.isArray(raw.models))
+    config.models = raw.models.filter((m: unknown) => typeof m === "string") as string[];
   if (typeof raw.judgeModel === "string") config.judgeModel = raw.judgeModel;
   if (typeof raw.maxParallel === "number") config.maxParallel = raw.maxParallel;
   if (typeof raw.timeout === "number") config.timeout = raw.timeout;

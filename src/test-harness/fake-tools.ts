@@ -2,7 +2,7 @@
 // Provides pre-configured fake tools that can be used in integration tests
 
 import { ToolRegistry } from "../core/tool-registry";
-import type { ToolDefinition, ToolResult, ToolHandler } from "../core/types";
+import type { ToolDefinition, ToolHandler, ToolResult } from "../core/types";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -195,7 +195,12 @@ export function createFakeEdit(): {
   /** All edits recorded. */
   edits: Array<{ filePath: string; oldString: string; newString: string; timestamp: number }>;
 } {
-  const edits: Array<{ filePath: string; oldString: string; newString: string; timestamp: number }> = [];
+  const edits: Array<{
+    filePath: string;
+    oldString: string;
+    newString: string;
+    timestamp: number;
+  }> = [];
 
   const definition: ToolDefinition = {
     name: "Edit",

@@ -13,7 +13,9 @@ export function registerMeshCommand(program: Command): void {
   mesh
     .command("start")
     .description("Start a mesh node and begin peer discovery")
-    .option("-p, --port <port>", "Port to listen on (default: 19200)", (v: string) => parseInt(v, 10))
+    .option("-p, --port <port>", "Port to listen on (default: 19200)", (v: string) =>
+      parseInt(v, 10),
+    )
     .option("-d, --discovery <method>", "Discovery method: mdns, manual, shared-file", "mdns")
     .action(async (opts: { port?: number; discovery?: string }) => {
       try {
@@ -90,12 +92,10 @@ export function registerMeshCommand(program: Command): void {
 
       console.log(`Known peers (${peers.length}):\n`);
       for (const p of peers) {
-        const models = p.capabilities.models.length > 0
-          ? p.capabilities.models.join(", ")
-          : "none";
+        const models = p.capabilities.models.length > 0 ? p.capabilities.models.join(", ") : "none";
         console.log(
           `  ${p.nodeId.slice(0, 8)}  ${p.hostname}  ${p.ip}:${p.port}  ` +
-          `[${p.status}]  VRAM: ${p.capabilities.gpuVram}GB  Models: ${models}`,
+            `[${p.status}]  VRAM: ${p.capabilities.gpuVram}GB  Models: ${models}`,
         );
       }
     });
@@ -117,7 +117,9 @@ export function registerMeshCommand(program: Command): void {
       console.log(`GPU VRAM:   ${info.capabilities.gpuVram} GB`);
       console.log(`CPU Cores:  ${info.capabilities.cpuCores}`);
       console.log(`Models:     ${info.capabilities.models.join(", ") || "none"}`);
-      console.log(`Peers:      ${node.getPeers().length} known, ${node.getAvailablePeers().length} available`);
+      console.log(
+        `Peers:      ${node.getPeers().length} known, ${node.getAvailablePeers().length} available`,
+      );
       console.log(`Active:     ${node.activeTaskCount} tasks`);
     });
 }

@@ -1,10 +1,10 @@
 // KCode - WebFetch Tool
 // Fetches URL content and converts HTML to plain text
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { resolve4, resolve6 } from "node:dns/promises";
 import { getOfflineMode } from "../core/offline/mode";
 import { OfflineError } from "../core/offline/network-guard";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 export interface WebFetchInput {
   url: string;
@@ -18,23 +18,19 @@ const MAX_CACHE_ENTRIES = 100;
 // ─── SSRF Protection ──────────────────────────────────────────
 // Block requests to private/internal networks and cloud metadata endpoints
 
-const BLOCKED_HOSTNAMES = new Set([
-  "localhost",
-  "metadata.google.internal",
-  "metadata.google",
-]);
+const BLOCKED_HOSTNAMES = new Set(["localhost", "metadata.google.internal", "metadata.google"]);
 
 /** Check if an IP address is in a private/reserved range */
 function isPrivateIP(hostname: string): boolean {
   // IPv4 private ranges
-  if (/^127\./.test(hostname)) return true;        // Loopback
-  if (/^10\./.test(hostname)) return true;          // Class A private
+  if (/^127\./.test(hostname)) return true; // Loopback
+  if (/^10\./.test(hostname)) return true; // Class A private
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return true; // Class B private
-  if (/^192\.168\./.test(hostname)) return true;    // Class C private
-  if (/^169\.254\./.test(hostname)) return true;    // Link-local / AWS metadata
-  if (/^0\./.test(hostname)) return true;           // "This" network
+  if (/^192\.168\./.test(hostname)) return true; // Class C private
+  if (/^169\.254\./.test(hostname)) return true; // Link-local / AWS metadata
+  if (/^0\./.test(hostname)) return true; // "This" network
   if (hostname === "0.0.0.0") return true;
-  if (hostname === "255.255.255.255") return true;     // IPv4 broadcast
+  if (hostname === "255.255.255.255") return true; // IPv4 broadcast
   // Hex/octal/decimal representations of loopback (e.g., 0x7f000001, 2130706433)
   try {
     if (/^0x[0-9a-f]+$/i.test(hostname)) {
@@ -43,11 +39,11 @@ function isPrivateIP(hostname: string): boolean {
       if (octet1 === 127 || octet1 === 10 || octet1 === 0) return true;
       if (octet1 === 172 && ((num >>> 16) & 0xff) >= 16 && ((num >>> 16) & 0xff) <= 31) return true;
       if (octet1 === 192 && ((num >>> 16) & 0xff) === 168) return true;
-    // Octal IP representations (e.g., 0177.0.0.1 = 127.0.0.1)
+      // Octal IP representations (e.g., 0177.0.0.1 = 127.0.0.1)
     } else if (/^0\d+\./.test(hostname)) {
       try {
-        const octets = hostname.split(".").map(o => parseInt(o, 8));
-        if (octets.length === 4 && octets.every(o => !isNaN(o) && o >= 0 && o <= 255)) {
+        const octets = hostname.split(".").map((o) => parseInt(o, 8));
+        if (octets.length === 4 && octets.every((o) => !isNaN(o) && o >= 0 && o <= 255)) {
           const [a, b, c, d] = octets;
           if (a === 127 || a === 10 || a === 0) return true;
           if (a === 172 && b! >= 16 && b! <= 31) return true;
@@ -59,7 +55,8 @@ function isPrivateIP(hostname: string): boolean {
       if (num > 0 && num <= 0xffffffff) {
         const octet1 = (num >>> 24) & 0xff;
         if (octet1 === 127 || octet1 === 10 || octet1 === 0) return true;
-        if (octet1 === 172 && ((num >>> 16) & 0xff) >= 16 && ((num >>> 16) & 0xff) <= 31) return true;
+        if (octet1 === 172 && ((num >>> 16) & 0xff) >= 16 && ((num >>> 16) & 0xff) <= 31)
+          return true;
         if (octet1 === 192 && ((num >>> 16) & 0xff) === 168) return true;
       }
     }
@@ -67,9 +64,9 @@ function isPrivateIP(hostname: string): boolean {
   // IPv6
   if (hostname === "::1" || hostname === "[::1]") return true;
   if (hostname === "::" || hostname === "[::]") return true; // Unspecified IPv6 (binds all)
-  if (/^fe80:/i.test(hostname)) return true;          // Link-local IPv6
-  if (/^fd/i.test(hostname)) return true;             // Unique local IPv6
-  if (/^fc/i.test(hostname)) return true;             // Unique local IPv6
+  if (/^fe80:/i.test(hostname)) return true; // Link-local IPv6
+  if (/^fd/i.test(hostname)) return true; // Unique local IPv6
+  if (/^fc/i.test(hostname)) return true; // Unique local IPv6
   // IPv4-mapped IPv6 (::ffff:127.0.0.1, ::ffff:10.0.0.1, etc.)
   const v4mapped = hostname.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
   if (v4mapped && isPrivateIP(v4mapped[1]!)) return true;
@@ -129,8 +126,16 @@ async function resolveDnsAndValidate(url: string): Promise<string | null> {
   if (isIPLiteral(hostname)) return null;
 
   const addresses: string[] = [];
-  try { addresses.push(...await resolve4(hostname)); } catch { /* no A records */ }
-  try { addresses.push(...await resolve6(hostname)); } catch { /* no AAAA records */ }
+  try {
+    addresses.push(...(await resolve4(hostname)));
+  } catch {
+    /* no A records */
+  }
+  try {
+    addresses.push(...(await resolve6(hostname)));
+  } catch {
+    /* no AAAA records */
+  }
 
   if (addresses.length === 0) {
     return `Blocked: DNS resolution failed for "${hostname}"`;
@@ -153,14 +158,16 @@ const responseCache = new Map<string, CacheEntry>();
 
 export const webFetchDefinition: ToolDefinition = {
   name: "WebFetch",
-  description: "Fetch the content of a URL. HTML is converted to plain text. Responses are cached for 15 minutes.",
+  description:
+    "Fetch the content of a URL. HTML is converted to plain text. Responses are cached for 15 minutes.",
   input_schema: {
     type: "object",
     properties: {
       url: { type: "string", description: "The URL to fetch" },
       prompt: {
         type: "string",
-        description: "Optional guidance for content extraction (e.g. 'extract the API documentation')",
+        description:
+          "Optional guidance for content extraction (e.g. 'extract the API documentation')",
       },
     },
     required: ["url"],
@@ -237,7 +244,9 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
         is_error: true,
       };
     }
-  } catch { /* offline module not initialized, proceed normally */ }
+  } catch {
+    /* offline module not initialized, proceed normally */
+  }
 
   try {
     // Manual redirect following with SSRF re-validation on each hop
@@ -257,7 +266,7 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
           "User-Agent": "KCode/0.1 (AI coding assistant)",
           Accept: "text/html, application/json, text/plain, */*",
         },
-        redirect: "manual",  // Don't auto-follow redirects
+        redirect: "manual", // Don't auto-follow redirects
         signal: AbortSignal.timeout(30_000),
       });
 
@@ -269,7 +278,11 @@ export async function executeWebFetch(input: Record<string, unknown>): Promise<T
         currentUrl = new URL(location, currentUrl).toString();
         const redirectSsrfError = validateFetchUrl(currentUrl);
         if (redirectSsrfError) {
-          return { tool_use_id: "", content: `Redirect blocked: ${redirectSsrfError}`, is_error: true };
+          return {
+            tool_use_id: "",
+            content: `Redirect blocked: ${redirectSsrfError}`,
+            is_error: true,
+          };
         }
         continue;
       }

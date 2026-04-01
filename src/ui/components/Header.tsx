@@ -1,8 +1,8 @@
 // KCode - Header component
 // Compact status bar that stays at the bottom, just above the input prompt
 
-import React, { useState, useEffect } from "react";
 import { Box, Text } from "ink";
+import React, { useEffect, useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 interface HeaderProps {
@@ -31,18 +31,30 @@ function ContextBar({ used, total, theme }: { used: number; total: number; theme
   if (total <= 0) return null;
   const pct = Math.min(100, Math.round((used / total) * 100));
   const barLen = 10;
-  const filled = Math.round(barLen * pct / 100);
+  const filled = Math.round((barLen * pct) / 100);
   const bar = "\u2588".repeat(filled) + "\u2591".repeat(barLen - filled);
 
   // Color based on usage: green < 60%, yellow 60-85%, red > 85%
   const color = pct > 85 ? theme.error : pct > 60 ? theme.warning : theme.success;
 
   return (
-    <Text color={color}>[{bar}] {pct}%</Text>
+    <Text color={color}>
+      [{bar}] {pct}%
+    </Text>
   );
 }
 
-export default function Header({ model, workingDirectory, tokenCount, toolUseCount, sessionStartTime, contextWindowSize, runningAgents = 0, sessionName, permissionMode }: HeaderProps) {
+export default function Header({
+  model,
+  workingDirectory,
+  tokenCount,
+  toolUseCount,
+  sessionStartTime,
+  contextWindowSize,
+  runningAgents = 0,
+  sessionName,
+  permissionMode,
+}: HeaderProps) {
   const { theme } = useTheme();
   const [elapsed, setElapsed] = useState(0);
 
@@ -56,13 +68,16 @@ export default function Header({ model, workingDirectory, tokenCount, toolUseCou
 
   // Shorten the CWD for display
   const home = process.env.HOME ?? "";
-  const shortCwd = home && workingDirectory.startsWith(home)
-    ? "~" + workingDirectory.slice(home.length)
-    : workingDirectory;
+  const shortCwd =
+    home && workingDirectory.startsWith(home)
+      ? "~" + workingDirectory.slice(home.length)
+      : workingDirectory;
 
   return (
     <Box gap={1} paddingX={1}>
-      <Text bold color={theme.primary}>KCode</Text>
+      <Text bold color={theme.primary}>
+        KCode
+      </Text>
       {sessionName && (
         <>
           <Text color={theme.dimmed}>|</Text>
@@ -74,7 +89,17 @@ export default function Header({ model, workingDirectory, tokenCount, toolUseCou
       {permissionMode && (
         <>
           <Text color={theme.dimmed}>|</Text>
-          <Text color={permissionMode === "auto" ? theme.warning : permissionMode === "plan" ? theme.info ?? theme.primary : theme.dimmed}>{permissionMode}</Text>
+          <Text
+            color={
+              permissionMode === "auto"
+                ? theme.warning
+                : permissionMode === "plan"
+                  ? (theme.info ?? theme.primary)
+                  : theme.dimmed
+            }
+          >
+            {permissionMode}
+          </Text>
         </>
       )}
       <Text color={theme.dimmed}>|</Text>

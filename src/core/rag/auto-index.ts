@@ -64,7 +64,10 @@ export class RagAutoIndexer {
       const report = await engine.updateIndex(this.projectDir);
 
       this.totalReindexed += report.filesProcessed;
-      log.info("rag", `Auto-indexed ${report.filesProcessed} files (${report.chunksCreated} chunks) in ${report.durationMs}ms`);
+      log.info(
+        "rag",
+        `Auto-indexed ${report.filesProcessed} files (${report.chunksCreated} chunks) in ${report.durationMs}ms`,
+      );
 
       return report.filesProcessed;
     } catch (err) {
@@ -109,7 +112,10 @@ export class RagAutoIndexer {
 
 let _autoIndexer: RagAutoIndexer | null = null;
 
-export function getRagAutoIndexer(projectDir: string, config?: Partial<AutoIndexConfig>): RagAutoIndexer {
+export function getRagAutoIndexer(
+  projectDir: string,
+  config?: Partial<AutoIndexConfig>,
+): RagAutoIndexer {
   if (!_autoIndexer || _autoIndexer["projectDir"] !== projectDir) {
     _autoIndexer = new RagAutoIndexer(projectDir, config);
   }

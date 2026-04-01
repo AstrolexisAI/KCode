@@ -66,7 +66,15 @@ export function extractBashLoopPattern(command: string): string | null {
   const skipPrefixes = new Set(["sudo", "nohup", "env", "bash", "-c", "sh", "timeout"]);
   let baseCmd = "";
   for (const w of words) {
-    if (skipPrefixes.has(w) || w.startsWith("-") || w.startsWith("$") || w.startsWith("\"") || w.startsWith("'") || w.startsWith("#")) continue;
+    if (
+      skipPrefixes.has(w) ||
+      w.startsWith("-") ||
+      w.startsWith("$") ||
+      w.startsWith('"') ||
+      w.startsWith("'") ||
+      w.startsWith("#")
+    )
+      continue;
     baseCmd = w.replace(/^.*\//, ""); // strip path prefix
     break;
   }
@@ -74,13 +82,51 @@ export function extractBashLoopPattern(command: string): string | null {
   if (!baseCmd) return null;
 
   // Group related tools into categories
-  const SCAN_TOOLS = new Set(["nmap", "masscan", "zmap", "netcat", "nc", "nbtscan", "nmblookup", "nikto", "gobuster", "dirb", "wfuzz", "sqlmap", "searchsploit", "enum4linux"]);
-  const SMB_TOOLS = new Set(["smbclient", "smbmap", "rpcclient", "crackmapexec", "impacket-smbclient"]);
+  const SCAN_TOOLS = new Set([
+    "nmap",
+    "masscan",
+    "zmap",
+    "netcat",
+    "nc",
+    "nbtscan",
+    "nmblookup",
+    "nikto",
+    "gobuster",
+    "dirb",
+    "wfuzz",
+    "sqlmap",
+    "searchsploit",
+    "enum4linux",
+  ]);
+  const SMB_TOOLS = new Set([
+    "smbclient",
+    "smbmap",
+    "rpcclient",
+    "crackmapexec",
+    "impacket-smbclient",
+  ]);
   const HTTP_TOOLS = new Set(["curl", "wget", "httpie", "http"]);
   const SSH_TOOLS = new Set(["ssh", "sshpass", "scp", "sftp"]);
-  const EXPLOIT_TOOLS = new Set(["dcomexec", "psexec", "wmiexec", "atexec", "smbexec", "secretsdump", "msfconsole", "hydra", "medusa",
-    "impacket-smbexec", "impacket-psexec", "impacket-wmiexec", "impacket-dcomexec", "impacket-atexec", "impacket-secretsdump",
-    "setoolkit", "beef", "responder"]);
+  const EXPLOIT_TOOLS = new Set([
+    "dcomexec",
+    "psexec",
+    "wmiexec",
+    "atexec",
+    "smbexec",
+    "secretsdump",
+    "msfconsole",
+    "hydra",
+    "medusa",
+    "impacket-smbexec",
+    "impacket-psexec",
+    "impacket-wmiexec",
+    "impacket-dcomexec",
+    "impacket-atexec",
+    "impacket-secretsdump",
+    "setoolkit",
+    "beef",
+    "responder",
+  ]);
   const BRUTE_TOOLS = new Set(["hashcat", "john", "aircrack-ng", "aircrack", "hydra", "medusa"]);
 
   // Extract target host/IP for more specific pattern grouping
@@ -134,7 +180,11 @@ export function extractBashLoopPattern(command: string): string | null {
  * Validates basic JSON Schema constraints without pulling in Ajv (~150KB).
  * Covers: type, required, properties, enum, minimum, maximum, minLength, maxLength, pattern, items.
  */
-export function validateJsonSchema(data: unknown, schema: Record<string, unknown>, path = "$"): string[] {
+export function validateJsonSchema(
+  data: unknown,
+  schema: Record<string, unknown>,
+  path = "$",
+): string[] {
   const errors: string[] = [];
 
   // type check
@@ -202,7 +252,9 @@ export function validateJsonSchema(data: unknown, schema: Record<string, unknown
       }
     }
     if (schema.properties && typeof schema.properties === "object") {
-      for (const [key, propSchema] of Object.entries(schema.properties as Record<string, Record<string, unknown>>)) {
+      for (const [key, propSchema] of Object.entries(
+        schema.properties as Record<string, Record<string, unknown>>,
+      )) {
         if (key in obj) {
           errors.push(...validateJsonSchema(obj[key], propSchema, `${path}.${key}`));
         }
@@ -220,7 +272,9 @@ export function validateJsonSchema(data: unknown, schema: Record<string, unknown
     }
     if (schema.items && typeof schema.items === "object") {
       for (let i = 0; i < data.length; i++) {
-        errors.push(...validateJsonSchema(data[i], schema.items as Record<string, unknown>, `${path}[${i}]`));
+        errors.push(
+          ...validateJsonSchema(data[i], schema.items as Record<string, unknown>, `${path}[${i}]`),
+        );
       }
     }
   }
@@ -267,9 +321,13 @@ export class LoopGuardState {
     allowedTools?: string[],
     disallowedTools?: string[],
   ) {
-    this.managedDisallowedSet = new Set(managedDisallowedTools?.map(t => t.toLowerCase()));
-    this.allowedToolsSet = allowedTools?.length ? new Set(allowedTools.map(t => t.toLowerCase())) : null;
-    this.disallowedToolsSet = disallowedTools?.length ? new Set(disallowedTools.map(t => t.toLowerCase())) : null;
+    this.managedDisallowedSet = new Set(managedDisallowedTools?.map((t) => t.toLowerCase()));
+    this.allowedToolsSet = allowedTools?.length
+      ? new Set(allowedTools.map((t) => t.toLowerCase()))
+      : null;
+    this.disallowedToolsSet = disallowedTools?.length
+      ? new Set(disallowedTools.map((t) => t.toLowerCase()))
+      : null;
   }
 
   /**
@@ -279,10 +337,10 @@ export class LoopGuardState {
   recordToolError(toolName: string, errorMessage: string): boolean {
     // Normalize error to a canonical fingerprint
     const normalized = errorMessage
-      .replace(/\/[^\s"']+/g, "<path>")       // normalize paths
-      .replace(/\d+/g, "N")                    // normalize numbers
-      .replace(/["'][^"']*["']/g, "<str>")     // normalize strings
-      .slice(0, 100);                           // cap length
+      .replace(/\/[^\s"']+/g, "<path>") // normalize paths
+      .replace(/\d+/g, "N") // normalize numbers
+      .replace(/["'][^"']*["']/g, "<str>") // normalize strings
+      .slice(0, 100); // cap length
     const fp = `${toolName}|${normalized}`;
 
     const count = (this.errorFingerprints.get(fp) ?? 0) + 1;
@@ -327,7 +385,12 @@ export class LoopGuardState {
    * Track a loop pattern for Bash commands. Returns the entry after incrementing.
    */
   trackLoopPattern(pattern: string, command: string): LoopPatternEntry {
-    const entry = this.loopPatterns.get(pattern) ?? { count: 0, warned: false, redirects: 0, examples: [] };
+    const entry = this.loopPatterns.get(pattern) ?? {
+      count: 0,
+      warned: false,
+      redirects: 0,
+      examples: [],
+    };
     entry.count++;
     if (entry.examples.length < 3) entry.examples.push(command.slice(0, 80));
     this.loopPatterns.set(pattern, entry);
@@ -368,7 +431,9 @@ export function buildDedupKey(toolName: string, input: Record<string, unknown>):
     const lim = input.limit ?? 0;
     return `${fp}:${off}:${lim}`;
   } else {
-    return String(input.file_path ?? input.pattern ?? input.query ?? JSON.stringify(input).slice(0, 120));
+    return String(
+      input.file_path ?? input.pattern ?? input.query ?? JSON.stringify(input).slice(0, 120),
+    );
   }
 }
 
@@ -395,10 +460,16 @@ export function validateModelOutput(
     const errors = validateJsonSchema(parsed, schema);
     if (errors.length > 0) {
       if (jsonSchemaRetries >= 3) {
-        log.warn("llm", `JSON schema validation failed after ${jsonSchemaRetries} retries, accepting output as-is`);
+        log.warn(
+          "llm",
+          `JSON schema validation failed after ${jsonSchemaRetries} retries, accepting output as-is`,
+        );
         return { retryMessage: null, shouldAccept: true };
       }
-      log.warn("llm", `JSON schema validation failed (attempt ${jsonSchemaRetries + 1}/3): ${errors.join(", ")}`);
+      log.warn(
+        "llm",
+        `JSON schema validation failed (attempt ${jsonSchemaRetries + 1}/3): ${errors.join(", ")}`,
+      );
       return {
         retryMessage: `[SYSTEM] Your JSON output failed schema validation:\n${errors.join("\n")}\n\nFix the output to match the required schema. Return ONLY valid JSON, no markdown fences.`,
         shouldAccept: false,
@@ -407,7 +478,10 @@ export function validateModelOutput(
   } catch (e) {
     if (e instanceof SyntaxError) {
       if (jsonSchemaRetries >= 3) {
-        log.warn("llm", `JSON parse failed after ${jsonSchemaRetries} retries, accepting output as-is`);
+        log.warn(
+          "llm",
+          `JSON parse failed after ${jsonSchemaRetries} retries, accepting output as-is`,
+        );
         return { retryMessage: null, shouldAccept: true };
       }
       log.warn("llm", `JSON parse failed (attempt ${jsonSchemaRetries + 1}/3): ${e.message}`);

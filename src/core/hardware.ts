@@ -50,29 +50,37 @@ export async function detectHardware(): Promise<HardwareInfo> {
     cudaVersion,
   };
 
-  log.debug("hardware", `Detected: ${gpus.length} GPU(s), ${totalVramMB}MB VRAM, ${ramMB}MB RAM, CUDA: ${cudaAvailable}`);
+  log.debug(
+    "hardware",
+    `Detected: ${gpus.length} GPU(s), ${totalVramMB}MB VRAM, ${ramMB}MB RAM, CUDA: ${cudaAvailable}`,
+  );
   return info;
 }
 
 /** Detect NVIDIA GPUs via nvidia-smi */
-async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boolean; cudaVersion?: string }> {
+async function detectNvidiaGpus(): Promise<{
+  gpus: GpuInfo[];
+  cudaAvailable: boolean;
+  cudaVersion?: string;
+}> {
   try {
     const { execSync } = require("node:child_process");
 
     // Try common nvidia-smi paths per platform (not always in PATH, especially via SSH)
-    const nvidiaSmiPaths: string[] = process.platform === "win32"
-      ? [
-          "nvidia-smi",
-          "C:\\Windows\\System32\\nvidia-smi.exe",
-          "C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe",
-        ]
-      : [
-          "/usr/bin/nvidia-smi",
-          "nvidia-smi",
-          "/usr/local/bin/nvidia-smi",
-          "/usr/local/cuda/bin/nvidia-smi",
-          "/opt/cuda/bin/nvidia-smi",
-        ];
+    const nvidiaSmiPaths: string[] =
+      process.platform === "win32"
+        ? [
+            "nvidia-smi",
+            "C:\\Windows\\System32\\nvidia-smi.exe",
+            "C:\\Program Files\\NVIDIA Corporation\\NVSMI\\nvidia-smi.exe",
+          ]
+        : [
+            "/usr/bin/nvidia-smi",
+            "nvidia-smi",
+            "/usr/local/bin/nvidia-smi",
+            "/usr/local/cuda/bin/nvidia-smi",
+            "/opt/cuda/bin/nvidia-smi",
+          ];
 
     const queryArgs = "--query-gpu=index,name,memory.total --format=csv,noheader,nounits";
     let output = "";
@@ -86,12 +94,17 @@ async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boo
           stdio: ["pipe", "pipe", "pipe"],
         }).trim();
         if (output) break;
-      } catch { /* try next path */ }
+      } catch {
+        /* try next path */
+      }
     }
 
     if (!output) {
       // Fallback to Bun.spawnSync
-      const env = { ...process.env, PATH: `/usr/bin:/usr/local/bin:/usr/local/cuda/bin:${process.env.PATH ?? ""}` };
+      const env = {
+        ...process.env,
+        PATH: `/usr/bin:/usr/local/bin:/usr/local/cuda/bin:${process.env.PATH ?? ""}`,
+      };
       for (const smiPath of nvidiaSmiPaths) {
         const attempt = Bun.spawnSync(
           [smiPath, "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
@@ -124,14 +137,19 @@ async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boo
     // Get CUDA version
     let cudaVersion: string | undefined;
     try {
-      const nvccOut = execSync("nvcc --version 2>/dev/null || /usr/local/cuda/bin/nvcc --version 2>/dev/null", {
-        encoding: "utf-8",
-        timeout: 5000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
+      const nvccOut = execSync(
+        "nvcc --version 2>/dev/null || /usr/local/cuda/bin/nvcc --version 2>/dev/null",
+        {
+          encoding: "utf-8",
+          timeout: 5000,
+          stdio: ["pipe", "pipe", "pipe"],
+        },
+      );
       const vMatch = nvccOut.match(/release (\d+\.\d+)/);
       if (vMatch) cudaVersion = vMatch[1];
-    } catch { /* no nvcc */ }
+    } catch {
+      /* no nvcc */
+    }
 
     return { gpus, cudaAvailable: gpus.length > 0, cudaVersion };
   } catch {
@@ -142,10 +160,10 @@ async function detectNvidiaGpus(): Promise<{ gpus: GpuInfo[]; cudaAvailable: boo
 /** Detect macOS GPU (Metal - unified memory) */
 async function detectMacGpu(ramMB: number): Promise<GpuInfo[]> {
   try {
-    const proc = Bun.spawnSync(
-      ["system_profiler", "SPDisplaysDataType", "-json"],
-      { stdout: "pipe", stderr: "pipe" },
-    );
+    const proc = Bun.spawnSync(["system_profiler", "SPDisplaysDataType", "-json"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
 
     if (proc.exitCode !== 0) {
       // Fallback: assume Apple Silicon with shared memory

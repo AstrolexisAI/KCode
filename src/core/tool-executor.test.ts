@@ -2,9 +2,9 @@
 // Tests for: preFilterToolCalls() — pure filtering of tool calls by managed policy,
 // web access, allowed/disallowed lists
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { preFilterToolCalls } from "./tool-executor";
-import type { ToolUseBlock, ContentBlock } from "./types";
+import type { ContentBlock, ToolUseBlock } from "./types";
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -12,11 +12,13 @@ function makeToolCall(name: string, id?: string): ToolUseBlock {
   return { type: "tool_use", id: id ?? `call_${name}`, name, input: {} };
 }
 
-function makeGuardState(overrides?: Partial<{
-  managedDisallowedSet: Set<string>;
-  allowedToolsSet: Set<string> | null;
-  disallowedToolsSet: Set<string> | null;
-}>): any {
+function makeGuardState(
+  overrides?: Partial<{
+    managedDisallowedSet: Set<string>;
+    allowedToolsSet: Set<string> | null;
+    disallowedToolsSet: Set<string> | null;
+  }>,
+): any {
   return {
     managedDisallowedSet: new Set<string>(),
     allowedToolsSet: null,
@@ -25,12 +27,14 @@ function makeGuardState(overrides?: Partial<{
   };
 }
 
-function makeConfig(overrides?: Partial<{
-  managedDisallowedTools: string[];
-  disableWebAccess: boolean;
-  allowedTools: string[];
-  disallowedTools: string[];
-}>): any {
+function makeConfig(
+  overrides?: Partial<{
+    managedDisallowedTools: string[];
+    disableWebAccess: boolean;
+    allowedTools: string[];
+    disallowedTools: string[];
+  }>,
+): any {
   return {
     managedDisallowedTools: undefined,
     disableWebAccess: false,
@@ -43,9 +47,11 @@ function makeConfig(overrides?: Partial<{
 /** Extract blocked result content strings for easy assertions */
 function blockedMessages(results: ContentBlock[]): string[] {
   return results
-    .filter((b): b is { type: "tool_result"; tool_use_id: string; content: string; is_error: boolean } =>
-      b.type === "tool_result")
-    .map(b => b.content as string);
+    .filter(
+      (b): b is { type: "tool_result"; tool_use_id: string; content: string; is_error: boolean } =>
+        b.type === "tool_result",
+    )
+    .map((b) => b.content as string);
 }
 
 // ─── No Filtering ───────────────────────────────────────────────
@@ -172,7 +178,7 @@ describe("preFilterToolCalls — web access disabled", () => {
     const config = makeConfig({ disableWebAccess: true });
     const { filtered, blockedResults } = preFilterToolCalls(tools, makeGuardState(), config);
     expect(filtered).toHaveLength(2);
-    expect(filtered.map(t => t.name)).toEqual(["Read", "Bash"]);
+    expect(filtered.map((t) => t.name)).toEqual(["Read", "Bash"]);
     expect(blockedResults).toHaveLength(1);
   });
 
@@ -209,7 +215,7 @@ describe("preFilterToolCalls — allowed tools list", () => {
     const config = makeConfig({ allowedTools: ["Read", "Write"] });
     const { filtered } = preFilterToolCalls(tools, guard, config);
     expect(filtered).toHaveLength(2);
-    expect(filtered.map(t => t.name)).toEqual(["Read", "Write"]);
+    expect(filtered.map((t) => t.name)).toEqual(["Read", "Write"]);
   });
 
   test("tools NOT in allowed list are blocked with correct message", () => {
@@ -302,9 +308,9 @@ describe("preFilterToolCalls — disallowed tools list", () => {
 describe("preFilterToolCalls — combined filters", () => {
   test("managed policy and allowed list both applied", () => {
     const tools = [
-      makeToolCall("Bash", "id_bash"),      // blocked by managed
-      makeToolCall("Write", "id_write"),     // blocked by allowed list (not in set)
-      makeToolCall("Read", "id_read"),       // passes both
+      makeToolCall("Bash", "id_bash"), // blocked by managed
+      makeToolCall("Write", "id_write"), // blocked by allowed list (not in set)
+      makeToolCall("Read", "id_read"), // passes both
     ];
     const guard = makeGuardState({
       managedDisallowedSet: new Set(["bash"]),
@@ -325,7 +331,7 @@ describe("preFilterToolCalls — combined filters", () => {
     const tools = [makeToolCall("Bash", "id_bash")];
     const guard = makeGuardState({
       managedDisallowedSet: new Set(["bash"]),
-      allowedToolsSet: new Set(["read"]),  // Bash would also fail this, but should not
+      allowedToolsSet: new Set(["read"]), // Bash would also fail this, but should not
     });
     const config = makeConfig({
       managedDisallowedTools: ["Bash"],
@@ -338,9 +344,9 @@ describe("preFilterToolCalls — combined filters", () => {
 
   test("managed policy and disallowed list both applied", () => {
     const tools = [
-      makeToolCall("Bash", "id_bash"),      // blocked by managed
-      makeToolCall("Write", "id_write"),     // blocked by disallowed
-      makeToolCall("Read", "id_read"),       // passes both
+      makeToolCall("Bash", "id_bash"), // blocked by managed
+      makeToolCall("Write", "id_write"), // blocked by disallowed
+      makeToolCall("Read", "id_read"), // passes both
     ];
     const guard = makeGuardState({
       managedDisallowedSet: new Set(["bash"]),
@@ -358,9 +364,9 @@ describe("preFilterToolCalls — combined filters", () => {
 
   test("web access disabled combined with disallowed list", () => {
     const tools = [
-      makeToolCall("WebFetch", "id_wf"),    // blocked by web access
-      makeToolCall("Bash", "id_bash"),       // blocked by disallowed
-      makeToolCall("Read", "id_read"),       // passes
+      makeToolCall("WebFetch", "id_wf"), // blocked by web access
+      makeToolCall("Bash", "id_bash"), // blocked by disallowed
+      makeToolCall("Read", "id_read"), // passes
     ];
     const guard = makeGuardState({
       disallowedToolsSet: new Set(["bash"]),
@@ -377,10 +383,10 @@ describe("preFilterToolCalls — combined filters", () => {
 
   test("all three filters: managed + web access + disallowed", () => {
     const tools = [
-      makeToolCall("Edit", "id_edit"),          // blocked by managed
-      makeToolCall("WebSearch", "id_ws"),        // blocked by web access
-      makeToolCall("Bash", "id_bash"),           // blocked by disallowed
-      makeToolCall("Read", "id_read"),           // passes all
+      makeToolCall("Edit", "id_edit"), // blocked by managed
+      makeToolCall("WebSearch", "id_ws"), // blocked by web access
+      makeToolCall("Bash", "id_bash"), // blocked by disallowed
+      makeToolCall("Read", "id_read"), // passes all
     ];
     const guard = makeGuardState({
       managedDisallowedSet: new Set(["edit"]),
@@ -408,10 +414,7 @@ describe("preFilterToolCalls — combined filters", () => {
   });
 
   test("each blocked result has type tool_result and is_error true", () => {
-    const tools = [
-      makeToolCall("Bash", "id_1"),
-      makeToolCall("WebFetch", "id_2"),
-    ];
+    const tools = [makeToolCall("Bash", "id_1"), makeToolCall("WebFetch", "id_2")];
     const guard = makeGuardState({ managedDisallowedSet: new Set(["bash"]) });
     const config = makeConfig({
       managedDisallowedTools: ["Bash"],
@@ -425,10 +428,7 @@ describe("preFilterToolCalls — combined filters", () => {
   });
 
   test("blocked results preserve the correct tool_use_id for each call", () => {
-    const tools = [
-      makeToolCall("Bash", "unique_id_1"),
-      makeToolCall("Write", "unique_id_2"),
-    ];
+    const tools = [makeToolCall("Bash", "unique_id_1"), makeToolCall("Write", "unique_id_2")];
     const guard = makeGuardState({
       managedDisallowedSet: new Set(["bash"]),
       disallowedToolsSet: new Set(["write"]),

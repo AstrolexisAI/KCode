@@ -1,8 +1,13 @@
 // KCode - React context for keybinding resolver
 // Provides the KeybindingResolver to all child components via React context.
 
-import React, { createContext, useContext, useMemo } from "react";
-import { KeybindingResolver, DEFAULT_BINDINGS, loadUserBindings } from "../../core/keybindings/index.js";
+import type React from "react";
+import { createContext, useContext, useMemo } from "react";
+import {
+  DEFAULT_BINDINGS,
+  KeybindingResolver,
+  loadUserBindings,
+} from "../../core/keybindings/index.js";
 
 interface KeybindingContextValue {
   resolver: KeybindingResolver;

@@ -2,7 +2,7 @@
 // Generates structured changelogs from git history.
 
 import { log } from "../logger";
-import { parseConventionalCommit, classifyCommit } from "./commit-parser";
+import { classifyCommit, parseConventionalCommit } from "./commit-parser";
 import type { Changelog, ChangelogEntry, ChangelogOptions, RawCommit } from "./types";
 
 /**
@@ -41,7 +41,11 @@ export async function generateChangelog(options: ChangelogOptions = {}): Promise
 
 export async function getLastTag(cwd: string): Promise<string> {
   try {
-    const proc = Bun.spawn(["git", "describe", "--tags", "--abbrev=0"], { cwd, stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn(["git", "describe", "--tags", "--abbrev=0"], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const code = await proc.exited;
     if (code !== 0) return "";
     const output = await new Response(proc.stdout).text();
@@ -54,10 +58,11 @@ export async function getLastTag(cwd: string): Promise<string> {
 export async function getCommitsSince(since: string, cwd: string): Promise<RawCommit[]> {
   const range = since ? `${since}..HEAD` : "HEAD";
   try {
-    const proc = Bun.spawn(
-      ["git", "log", range, "--pretty=format:%H|%s|%an|%as"],
-      { cwd, stdout: "pipe", stderr: "pipe" },
-    );
+    const proc = Bun.spawn(["git", "log", range, "--pretty=format:%H|%s|%an|%as"], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const code = await proc.exited;
     if (code !== 0) return [];
     const output = await new Response(proc.stdout).text();

@@ -1,8 +1,8 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { Scratchpad } from "./scratchpad";
 
 let tempDir: string;
@@ -87,7 +87,7 @@ describe("Scratchpad", () => {
     sp.write("worker-1.md", "result", "worker-1");
 
     const entries = sp.list();
-    const names = entries.map(e => e.file).sort();
+    const names = entries.map((e) => e.file).sort();
     expect(names).toEqual(["plan.md", "progress.md", "worker-1.md"]);
   });
 
@@ -96,14 +96,14 @@ describe("Scratchpad", () => {
     sp.write("visible.md", "yes", "coordinator");
     // The log file is hidden (.scratchpad.log)
     const entries = sp.list();
-    expect(entries.every(e => !e.file.startsWith("."))).toBe(true);
+    expect(entries.every((e) => !e.file.startsWith("."))).toBe(true);
   });
 
   test("list returns correct content", () => {
     const sp = new Scratchpad("sess-content", tempDir);
     sp.write("data.txt", "hello world", "worker-1");
     const entries = sp.list();
-    const entry = entries.find(e => e.file === "data.txt");
+    const entry = entries.find((e) => e.file === "data.txt");
     expect(entry).toBeDefined();
     expect(entry!.content).toBe("hello world");
   });
@@ -112,7 +112,7 @@ describe("Scratchpad", () => {
     const sp = new Scratchpad("sess-author", tempDir);
     sp.write("output.md", "result data", "worker-3");
     const entries = sp.list();
-    const entry = entries.find(e => e.file === "output.md");
+    const entry = entries.find((e) => e.file === "output.md");
     expect(entry).toBeDefined();
     expect(entry!.author).toBe("worker-3");
   });

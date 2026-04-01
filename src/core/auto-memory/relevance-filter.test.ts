@@ -1,10 +1,6 @@
-import { describe, test, expect } from "bun:test";
-import {
-  stringSimilarity,
-  extractTitlesFromIndex,
-  filterMemories,
-} from "./relevance-filter";
-import type { ExtractedMemory, AutoMemoryConfig } from "./types";
+import { describe, expect, test } from "bun:test";
+import { extractTitlesFromIndex, filterMemories, stringSimilarity } from "./relevance-filter";
+import type { AutoMemoryConfig, ExtractedMemory } from "./types";
 import { DEFAULT_AUTO_MEMORY_CONFIG } from "./types";
 
 // ─── stringSimilarity ───────────────────────────────────────────
@@ -182,11 +178,7 @@ describe("filterMemories", () => {
   });
 
   test("handles empty MEMORY.md (no existing titles)", () => {
-    const result = filterMemories(
-      [makeMemory({ title: "Brand New Memory" })],
-      [],
-      defaultConfig,
-    );
+    const result = filterMemories([makeMemory({ title: "Brand New Memory" })], [], defaultConfig);
     expect(result.accepted).toHaveLength(1);
   });
 
@@ -199,12 +191,12 @@ describe("filterMemories", () => {
     };
     const existing = ["Existing Memory"];
     const memories = [
-      makeMemory({ title: "Low Confidence", confidence: 0.5 }),          // rejected: confidence
-      makeMemory({ title: "Reference Link", type: "reference" }),        // rejected: excluded type
-      makeMemory({ title: "Existing Memory", confidence: 0.9 }),         // rejected: duplicate
-      makeMemory({ title: "Valid Memory 1", confidence: 0.8 }),          // accepted
-      makeMemory({ title: "Valid Memory 2", confidence: 0.9 }),          // accepted
-      makeMemory({ title: "Valid Memory 3", confidence: 0.75 }),         // rejected: maxPerTurn
+      makeMemory({ title: "Low Confidence", confidence: 0.5 }), // rejected: confidence
+      makeMemory({ title: "Reference Link", type: "reference" }), // rejected: excluded type
+      makeMemory({ title: "Existing Memory", confidence: 0.9 }), // rejected: duplicate
+      makeMemory({ title: "Valid Memory 1", confidence: 0.8 }), // accepted
+      makeMemory({ title: "Valid Memory 2", confidence: 0.9 }), // accepted
+      makeMemory({ title: "Valid Memory 3", confidence: 0.75 }), // rejected: maxPerTurn
     ];
     const result = filterMemories(memories, existing, config);
     expect(result.accepted).toHaveLength(2);

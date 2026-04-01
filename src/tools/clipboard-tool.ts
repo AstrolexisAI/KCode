@@ -1,8 +1,8 @@
 // KCode - Clipboard Tool
 // Exposes clipboard copy as a registered tool for the LLM
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { copyToClipboard, getClipboardCommand } from "../core/clipboard";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const clipboardDefinition: ToolDefinition = {
   name: "Clipboard",

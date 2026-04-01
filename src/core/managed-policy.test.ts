@@ -1,7 +1,7 @@
 // KCode - Managed Policy Tests
 // Tests for enterprise managed settings, model restrictions, and policy enforcement
 
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { isModelAllowedByPolicy, type ManagedPolicy } from "./config";
 
 // ─── Model Restriction Tests ───────────────────────────────────
@@ -146,7 +146,15 @@ describe("ManagedPolicy shape", () => {
 
 // ─── Audit Logger Tests ──────────────────────────────────────
 
-import { initAuditLogger, auditLog, auditToolExecution, auditPermissionDecision, auditPolicyViolation, getAuditEntries, isAuditEnabled } from "./audit-logger";
+import {
+  auditLog,
+  auditPermissionDecision,
+  auditPolicyViolation,
+  auditToolExecution,
+  getAuditEntries,
+  initAuditLogger,
+  isAuditEnabled,
+} from "./audit-logger";
 
 describe("Audit Logger", () => {
   test("disabled by default", () => {

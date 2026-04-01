@@ -126,7 +126,8 @@ export class FakeProvider {
   /** The base URL of the fake server (e.g., "http://localhost:12345"). */
   get baseUrl(): string {
     if (this._inProcess) return "http://fake-provider.local";
-    if (!this.server) throw new Error("FakeProvider not started — call start() or startInProcess() first");
+    if (!this.server)
+      throw new Error("FakeProvider not started — call start() or startInProcess() first");
     return `http://localhost:${this.server.port}`;
   }
 
@@ -282,10 +283,10 @@ export class FakeProvider {
     // Get next response
     const response = this.responses[this.responseIndex];
     if (!response) {
-      return new Response(
-        JSON.stringify({ error: { message: "No more scripted responses" } }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: { message: "No more scripted responses" } }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
     this.responseIndex++;
 

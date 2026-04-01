@@ -1,9 +1,9 @@
 // KCode - Auto-Test Detector Tests
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { detectTests, detectFramework, buildTestCommand } from "./detector";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { buildTestCommand, detectFramework, detectTests } from "./detector";
 
 const TEST_DIR = join(import.meta.dir, `__test_autotest_${process.pid}__`);
 
@@ -11,10 +11,19 @@ beforeAll(() => {
   mkdirSync(join(TEST_DIR, "src"), { recursive: true });
   mkdirSync(join(TEST_DIR, "__tests__"), { recursive: true });
 
-  writeFileSync(join(TEST_DIR, "src", "utils.ts"), `export function add(a: number, b: number) { return a + b; }\n`);
-  writeFileSync(join(TEST_DIR, "src", "utils.test.ts"), `import { add } from "./utils";\ntest("add", () => expect(add(1,2)).toBe(3));\n`);
+  writeFileSync(
+    join(TEST_DIR, "src", "utils.ts"),
+    `export function add(a: number, b: number) { return a + b; }\n`,
+  );
+  writeFileSync(
+    join(TEST_DIR, "src", "utils.test.ts"),
+    `import { add } from "./utils";\ntest("add", () => expect(add(1,2)).toBe(3));\n`,
+  );
   writeFileSync(join(TEST_DIR, "src", "app.ts"), `export function main() {}\n`);
-  writeFileSync(join(TEST_DIR, "src", "app.spec.ts"), `import { main } from "./app";\ntest("main", () => {});\n`);
+  writeFileSync(
+    join(TEST_DIR, "src", "app.spec.ts"),
+    `import { main } from "./app";\ntest("main", () => {});\n`,
+  );
   writeFileSync(join(TEST_DIR, "src", "no-test.ts"), `export const x = 1;\n`);
   writeFileSync(join(TEST_DIR, "src", "already.test.ts"), `test("self", () => {});\n`);
   writeFileSync(join(TEST_DIR, "package.json"), JSON.stringify({ scripts: { test: "bun test" } }));
@@ -79,7 +88,10 @@ describe("detectFramework", () => {
   test("detects vitest from devDependencies", async () => {
     const tempDir = join(TEST_DIR, "__vitest__");
     mkdirSync(tempDir, { recursive: true });
-    writeFileSync(join(tempDir, "package.json"), JSON.stringify({ devDependencies: { vitest: "^1.0" } }));
+    writeFileSync(
+      join(tempDir, "package.json"),
+      JSON.stringify({ devDependencies: { vitest: "^1.0" } }),
+    );
     expect(await detectFramework(tempDir)).toBe("vitest");
     rmSync(tempDir, { recursive: true });
   });
@@ -127,6 +139,8 @@ describe("buildTestCommand", () => {
   });
 
   test("handles multiple test files", () => {
-    expect(buildTestCommand("bun", ["a.test.ts", "b.test.ts"])).toBe("bun test a.test.ts b.test.ts");
+    expect(buildTestCommand("bun", ["a.test.ts", "b.test.ts"])).toBe(
+      "bun test a.test.ts b.test.ts",
+    );
   });
 });

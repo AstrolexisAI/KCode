@@ -1,9 +1,9 @@
 // KCode - Layer 10: Inner Narrative
 // Session summaries stored as first-person narrative in SQLite
 
-import { log } from "./logger";
-import { getDb } from "./db";
 import type { Database } from "bun:sqlite";
+import { getDb } from "./db";
+import { log } from "./logger";
 
 export interface NarrativeEntry {
   summary: string;
@@ -38,11 +38,13 @@ export class NarrativeManager {
     try {
       const summary = this.generateNarrative(data);
       const db = this.getDatabase();
-      db.query("INSERT INTO narrative (summary, project, tools_used, actions_taken) VALUES (?, ?, ?, ?)").run(
-        summary, data.project, data.toolsUsed.join(", "), data.actionsCount,
-      );
+      db.query(
+        "INSERT INTO narrative (summary, project, tools_used, actions_taken) VALUES (?, ?, ?, ?)",
+      ).run(summary, data.project, data.toolsUsed.join(", "), data.actionsCount);
       // Prune: keep last 50 or last 30 days
-      db.exec(`DELETE FROM narrative WHERE id NOT IN (SELECT id FROM narrative ORDER BY created_at DESC LIMIT 50) OR created_at < datetime('now', '-30 days')`);
+      db.exec(
+        `DELETE FROM narrative WHERE id NOT IN (SELECT id FROM narrative ORDER BY created_at DESC LIMIT 50) OR created_at < datetime('now', '-30 days')`,
+      );
       log.info("narrative", `Session narrative saved: ${summary.slice(0, 80)}...`);
     } catch (err) {
       log.error("narrative", `Failed to save narrative: ${err}`);
@@ -52,7 +54,11 @@ export class NarrativeManager {
   loadNarrative(limit = 3): string | null {
     try {
       const db = this.getDatabase();
-      const entries = db.query("SELECT summary, project, created_at FROM narrative ORDER BY created_at DESC LIMIT ?").all(limit) as NarrativeEntry[];
+      const entries = db
+        .query(
+          "SELECT summary, project, created_at FROM narrative ORDER BY created_at DESC LIMIT ?",
+        )
+        .all(limit) as NarrativeEntry[];
       if (entries.length === 0) return null;
       const lines = ["# Recent Sessions", "", "Summaries of recent sessions for continuity:", ""];
       for (const entry of entries.reverse()) {
@@ -69,14 +75,22 @@ export class NarrativeManager {
 
   getAllNarratives(limit = 20): NarrativeEntry[] {
     try {
-      return this.getDatabase().query("SELECT summary, project, tools_used, actions_taken, created_at FROM narrative ORDER BY created_at DESC LIMIT ?").all(limit) as NarrativeEntry[];
-    } catch { return []; }
+      return this.getDatabase()
+        .query(
+          "SELECT summary, project, tools_used, actions_taken, created_at FROM narrative ORDER BY created_at DESC LIMIT ?",
+        )
+        .all(limit) as NarrativeEntry[];
+    } catch {
+      return [];
+    }
   }
 
   private generateNarrative(data: SessionData): string {
     const parts: string[] = [];
     if (data.filesModified.length > 0) {
-      parts.push(`I worked on ${data.filesModified.length} file${data.filesModified.length > 1 ? "s" : ""}`);
+      parts.push(
+        `I worked on ${data.filesModified.length} file${data.filesModified.length > 1 ? "s" : ""}`,
+      );
     } else if (data.actionsCount > 0) {
       parts.push(`I performed ${data.actionsCount} action${data.actionsCount > 1 ? "s" : ""}`);
     } else {
@@ -90,11 +104,19 @@ export class NarrativeManager {
     }
     const uniqueTools = [...new Set(data.toolsUsed)];
     if (uniqueTools.length > 0) parts.push(`using ${uniqueTools.slice(0, 4).join(", ")}`);
-    if (data.errorsEncountered > 0) parts.push(`(encountered ${data.errorsEncountered} error${data.errorsEncountered > 1 ? "s" : ""})`);
+    if (data.errorsEncountered > 0)
+      parts.push(
+        `(encountered ${data.errorsEncountered} error${data.errorsEncountered > 1 ? "s" : ""})`,
+      );
     if (data.filesModified.length > 0 && data.filesModified.length <= 5) {
-      parts.push(`— modified: ${data.filesModified.map(f => f.split("/").pop()).join(", ")}`);
+      parts.push(`— modified: ${data.filesModified.map((f) => f.split("/").pop()).join(", ")}`);
     } else if (data.filesModified.length > 5) {
-      parts.push(`— modified: ${data.filesModified.slice(0, 3).map(f => f.split("/").pop()).join(", ")} and ${data.filesModified.length - 3} more`);
+      parts.push(
+        `— modified: ${data.filesModified
+          .slice(0, 3)
+          .map((f) => f.split("/").pop())
+          .join(", ")} and ${data.filesModified.length - 3} more`,
+      );
     }
     return parts.join(" ") + ".";
   }

@@ -1,9 +1,9 @@
 // KCode - File Watcher
 // Watch files for changes with debouncing, using fs.watch (no external deps)
 
-import { watch, existsSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
 import type { FSWatcher } from "node:fs";
+import { existsSync, readdirSync, statSync, watch } from "node:fs";
+import { join, resolve } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -82,19 +82,11 @@ export class FileWatcher {
     try {
       const isDir = statSync(filePath).isDirectory();
 
-      const watcher = watch(
-        filePath,
-        { recursive: isDir },
-        (_eventType, filename) => {
-          const changedPath = filename
-            ? isDir
-              ? join(filePath, filename)
-              : filePath
-            : filePath;
+      const watcher = watch(filePath, { recursive: isDir }, (_eventType, filename) => {
+        const changedPath = filename ? (isDir ? join(filePath, filename) : filePath) : filePath;
 
-          this.debouncedCallback(changedPath, callback);
-        },
-      );
+        this.debouncedCallback(changedPath, callback);
+      });
 
       watcher.on("error", () => {
         // Silently handle watcher errors (file deleted, etc.)

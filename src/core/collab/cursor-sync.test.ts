@@ -1,6 +1,6 @@
 // KCode - Cursor Sync Tests
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { CursorSync } from "./cursor-sync";
 import type { CollabEvent } from "./types";
 

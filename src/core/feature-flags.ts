@@ -4,12 +4,22 @@
 // Build-time: src/core/feature-flags/flags.ts (11 flags, 3 profiles)
 // Runtime: this file (5 flags, env/settings overrides)
 
+export {
+  describeProfile,
+  getAvailableProfiles,
+  getDefinesForProfile,
+  getProfileFeatures,
+} from "./feature-flags/build-defines";
 // ─── Build-time Feature Flags ───────────────────────────────────
 // Re-export the enhanced build-time flags from feature-flags/
-export { Features, activeFeatures, inactiveFeatures, ALL_FEATURE_NAMES } from "./feature-flags/flags";
-export { isFeatureEnabled as isBuildFeatureEnabled } from "./feature-flags/flags";
-export { getDefinesForProfile, getAvailableProfiles, getProfileFeatures, describeProfile } from "./feature-flags/build-defines";
-export type { FeatureName, BuildProfile } from "./feature-flags/types";
+export {
+  ALL_FEATURE_NAMES,
+  activeFeatures,
+  Features,
+  inactiveFeatures,
+  isFeatureEnabled as isBuildFeatureEnabled,
+} from "./feature-flags/flags";
+export type { BuildProfile, FeatureName } from "./feature-flags/types";
 
 // ─── Runtime Feature Flags ──────────────────────────────────────
 
@@ -40,7 +50,9 @@ function toEnvVarName(key: string): string {
 let _cachedFlags: RuntimeFeatureFlags | null = null;
 
 /** Load runtime feature flags. Priority: env vars > settings.json > defaults */
-export function loadRuntimeFlags(settingsFlags?: Partial<RuntimeFeatureFlags>): RuntimeFeatureFlags {
+export function loadRuntimeFlags(
+  settingsFlags?: Partial<RuntimeFeatureFlags>,
+): RuntimeFeatureFlags {
   const flags = { ...DEFAULTS };
 
   // Layer 2: settings.json overrides

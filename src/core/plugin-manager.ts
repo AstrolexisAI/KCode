@@ -2,10 +2,10 @@
 // Unified plugin lifecycle: install, remove, list, and load plugin bundles
 // Plugins provide skills (slash commands), hooks, and MCP server configs
 
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync, cpSync } from "node:fs";
-import { kcodePath } from "./paths";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -27,16 +27,16 @@ export interface PluginManifest {
   version: string;
   description: string;
   author?: string;
-  skills?: string[];                        // paths to skill .md files relative to plugin dir
-  hooks?: HookDefinition[];                 // hook configurations
+  skills?: string[]; // paths to skill .md files relative to plugin dir
+  hooks?: HookDefinition[]; // hook configurations
   mcpServers?: Record<string, McpServerConfig>; // MCP server configs
-  dependencies?: string[];                  // other plugin names
+  dependencies?: string[]; // other plugin names
 }
 
 export interface InstalledPlugin {
   manifest: PluginManifest;
   dir: string;
-  skillFiles: string[];   // resolved absolute paths to skill .md files
+  skillFiles: string[]; // resolved absolute paths to skill .md files
 }
 
 // ─── PluginManager ──────────────────────────────────────────────
@@ -75,7 +75,10 @@ export class PluginManager {
 
       // Validate name: only alphanumeric, hyphens, underscores (prevent path traversal)
       if (!/^[a-zA-Z0-9_-]+$/.test(raw.name)) {
-        log.warn("plugins", `Invalid plugin name "${raw.name}" — must be alphanumeric/hyphens/underscores only`);
+        log.warn(
+          "plugins",
+          `Invalid plugin name "${raw.name}" — must be alphanumeric/hyphens/underscores only`,
+        );
         return null;
       }
 
@@ -86,18 +89,21 @@ export class PluginManager {
 
       // Validate hooks: must be an array of objects with event + command
       const hooks = Array.isArray(raw.hooks)
-        ? raw.hooks.filter((h: unknown) =>
-            h && typeof h === "object" &&
-            typeof (h as Record<string, unknown>).event === "string" &&
-            typeof (h as Record<string, unknown>).command === "string"
+        ? raw.hooks.filter(
+            (h: unknown) =>
+              h &&
+              typeof h === "object" &&
+              typeof (h as Record<string, unknown>).event === "string" &&
+              typeof (h as Record<string, unknown>).command === "string",
           )
         : undefined;
 
       // Validate mcpServers: delegate to isValidServerConfig downstream
       // but ensure structure is an object of named configs
-      const mcpServers = raw.mcpServers && typeof raw.mcpServers === "object" && !Array.isArray(raw.mcpServers)
-        ? raw.mcpServers
-        : undefined;
+      const mcpServers =
+        raw.mcpServers && typeof raw.mcpServers === "object" && !Array.isArray(raw.mcpServers)
+          ? raw.mcpServers
+          : undefined;
 
       return {
         name: raw.name,
@@ -164,7 +170,8 @@ export class PluginManager {
   async install(source: string): Promise<PluginManifest> {
     this.ensureDir();
 
-    const isGitUrl = source.startsWith("https://") || source.startsWith("git@") || source.endsWith(".git");
+    const isGitUrl =
+      source.startsWith("https://") || source.startsWith("git@") || source.endsWith(".git");
 
     // Block remote installs when offline
     if (isGitUrl) {
@@ -173,7 +180,7 @@ export class PluginManager {
         if (getOfflineMode().isActive()) {
           throw new Error(
             `Cannot install from remote URL "${source}" while in offline mode. ` +
-            `Use a local path or disable offline mode first.`,
+              `Use a local path or disable offline mode first.`,
           );
         }
       } catch (err) {
@@ -212,7 +219,11 @@ export class PluginManager {
 
   private async installFromGit(url: string): Promise<PluginManifest> {
     // Derive a temp name from the URL for cloning
-    const repoName = url.replace(/\.git$/, "").split("/").pop() ?? "plugin";
+    const repoName =
+      url
+        .replace(/\.git$/, "")
+        .split("/")
+        .pop() ?? "plugin";
     const tempDir = join(this.pluginsDir, `.tmp-${repoName}-${Date.now()}`);
 
     try {
@@ -269,12 +280,12 @@ export class PluginManager {
     if (!manifest.dependencies || manifest.dependencies.length === 0) return;
 
     const installed = await this.list();
-    const installedNames = new Set(installed.map(p => p.name));
+    const installedNames = new Set(installed.map((p) => p.name));
 
-    const missing = manifest.dependencies.filter(dep => !installedNames.has(dep));
+    const missing = manifest.dependencies.filter((dep) => !installedNames.has(dep));
     if (missing.length > 0) {
       throw new Error(
-        `Plugin "${manifest.name}" requires missing plugin(s): ${missing.join(", ")}`
+        `Plugin "${manifest.name}" requires missing plugin(s): ${missing.join(", ")}`,
       );
     }
   }
@@ -299,12 +310,10 @@ export class PluginManager {
 
     // Check if any other plugin depends on this one
     const allPlugins = await this.list();
-    const dependents = allPlugins.filter(
-      p => p.name !== name && p.dependencies?.includes(name)
-    );
+    const dependents = allPlugins.filter((p) => p.name !== name && p.dependencies?.includes(name));
     if (dependents.length > 0) {
       throw new Error(
-        `Cannot remove "${name}": required by ${dependents.map(p => p.name).join(", ")}`
+        `Cannot remove "${name}": required by ${dependents.map((p) => p.name).join(", ")}`,
       );
     }
 

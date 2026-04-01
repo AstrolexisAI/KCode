@@ -2,8 +2,8 @@
 // Connects KCode to the Kulvex API (Jarvis backend) running on localhost:9100.
 // Enables KCode to use Kulvex's 73 orchestrator tools, channels, home automation, etc.
 
-import type { ToolDefinition, ToolResult } from "../core/types";
 import { log } from "../core/logger";
+import type { ToolDefinition, ToolResult } from "../core/types";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -58,11 +58,7 @@ interface ActionParams {
   [key: string]: unknown;
 }
 
-async function kulvexFetch(
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<any> {
+async function kulvexFetch(method: string, path: string, body?: unknown): Promise<any> {
   const url = `${KULVEX_API_BASE}${path}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -88,7 +84,11 @@ async function kulvexFetch(
 
 const actionHandlers: Record<string, (params: ActionParams) => Promise<string>> = {
   async send_message(params) {
-    const { channel, message, chat_id } = params as { channel: string; message: string; chat_id?: string };
+    const { channel, message, chat_id } = params as {
+      channel: string;
+      message: string;
+      chat_id?: string;
+    };
     const data = await kulvexFetch("POST", "/api/channels/send", {
       channel,
       message,
@@ -127,7 +127,9 @@ const actionHandlers: Record<string, (params: ActionParams) => Promise<string>> 
     const { query } = params as { query: string };
     const data = await kulvexFetch("POST", "/api/memory/search", { query });
     if (Array.isArray(data.results)) {
-      return data.results.map((r: any) => `- ${r.content ?? r.text ?? JSON.stringify(r)}`).join("\n");
+      return data.results
+        .map((r: any) => `- ${r.content ?? r.text ?? JSON.stringify(r)}`)
+        .join("\n");
     }
     return JSON.stringify(data, null, 2);
   },

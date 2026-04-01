@@ -1,12 +1,12 @@
 // KCode - Dream Tasks Tests
 
-import { describe, test, expect, mock } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import {
-  reindexTask,
-  preloadContextTask,
   analyzeUsageTask,
-  maintenanceTask,
   builtinDreamTasks,
+  maintenanceTask,
+  preloadContextTask,
+  reindexTask,
 } from "./dream-tasks";
 import type { DreamContext, DreamState } from "./types";
 
@@ -49,15 +49,11 @@ describe("reindexTask", () => {
 
   test("shouldRun returns true when lastIndexTime is old", () => {
     const tenMinAgo = Date.now() - 11 * 60 * 1000;
-    expect(reindexTask.shouldRun(makeState({ lastIndexTime: tenMinAgo }))).toBe(
-      true
-    );
+    expect(reindexTask.shouldRun(makeState({ lastIndexTime: tenMinAgo }))).toBe(true);
   });
 
   test("shouldRun returns false when lastIndexTime is recent", () => {
-    expect(
-      reindexTask.shouldRun(makeState({ lastIndexTime: Date.now() }))
-    ).toBe(false);
+    expect(reindexTask.shouldRun(makeState({ lastIndexTime: Date.now() }))).toBe(false);
   });
 
   test("execute returns completed result", async () => {
@@ -86,27 +82,21 @@ describe("reindexTask", () => {
 
 describe("preloadContextTask", () => {
   test("shouldRun returns false when turnCount is low", () => {
-    expect(
-      preloadContextTask.shouldRun(
-        makeState({ sessionTurnCount: 2, idleSeconds: 60 })
-      )
-    ).toBe(false);
+    expect(preloadContextTask.shouldRun(makeState({ sessionTurnCount: 2, idleSeconds: 60 }))).toBe(
+      false,
+    );
   });
 
   test("shouldRun returns false when idle is low", () => {
-    expect(
-      preloadContextTask.shouldRun(
-        makeState({ sessionTurnCount: 5, idleSeconds: 10 })
-      )
-    ).toBe(false);
+    expect(preloadContextTask.shouldRun(makeState({ sessionTurnCount: 5, idleSeconds: 10 }))).toBe(
+      false,
+    );
   });
 
   test("shouldRun returns true when turnCount > 3 and idle > 30", () => {
-    expect(
-      preloadContextTask.shouldRun(
-        makeState({ sessionTurnCount: 5, idleSeconds: 35 })
-      )
-    ).toBe(true);
+    expect(preloadContextTask.shouldRun(makeState({ sessionTurnCount: 5, idleSeconds: 35 }))).toBe(
+      true,
+    );
   });
 
   test("execute returns completed result", async () => {
@@ -134,15 +124,11 @@ describe("preloadContextTask", () => {
 
 describe("analyzeUsageTask", () => {
   test("shouldRun returns false when turnCount is low", () => {
-    expect(
-      analyzeUsageTask.shouldRun(makeState({ sessionTurnCount: 5 }))
-    ).toBe(false);
+    expect(analyzeUsageTask.shouldRun(makeState({ sessionTurnCount: 5 }))).toBe(false);
   });
 
   test("shouldRun returns true when turnCount > 10 and no lastAnalysisTime", () => {
-    expect(
-      analyzeUsageTask.shouldRun(makeState({ sessionTurnCount: 15 }))
-    ).toBe(true);
+    expect(analyzeUsageTask.shouldRun(makeState({ sessionTurnCount: 15 }))).toBe(true);
   });
 
   test("shouldRun returns true when lastAnalysisTime is old", () => {
@@ -152,8 +138,8 @@ describe("analyzeUsageTask", () => {
         makeState({
           sessionTurnCount: 15,
           lastAnalysisTime: sixteenMinAgo,
-        })
-      )
+        }),
+      ),
     ).toBe(true);
   });
 
@@ -163,8 +149,8 @@ describe("analyzeUsageTask", () => {
         makeState({
           sessionTurnCount: 15,
           lastAnalysisTime: Date.now(),
-        })
-      )
+        }),
+      ),
     ).toBe(false);
   });
 
@@ -193,12 +179,8 @@ describe("analyzeUsageTask", () => {
 
 describe("maintenanceTask", () => {
   test("shouldRun requires 120s idle", () => {
-    expect(maintenanceTask.shouldRun(makeState({ idleSeconds: 60 }))).toBe(
-      false
-    );
-    expect(maintenanceTask.shouldRun(makeState({ idleSeconds: 121 }))).toBe(
-      true
-    );
+    expect(maintenanceTask.shouldRun(makeState({ idleSeconds: 60 }))).toBe(false);
+    expect(maintenanceTask.shouldRun(makeState({ idleSeconds: 121 }))).toBe(true);
   });
 
   test("shouldRun returns false when lastMaintenanceTime is recent", () => {
@@ -207,8 +189,8 @@ describe("maintenanceTask", () => {
         makeState({
           idleSeconds: 200,
           lastMaintenanceTime: Date.now(),
-        })
-      )
+        }),
+      ),
     ).toBe(false);
   });
 
@@ -219,8 +201,8 @@ describe("maintenanceTask", () => {
         makeState({
           idleSeconds: 200,
           lastMaintenanceTime: thirtyOneMinAgo,
-        })
-      )
+        }),
+      ),
     ).toBe(true);
   });
 
@@ -260,7 +242,7 @@ describe("builtinDreamTasks", () => {
   test("tasks are sorted by priority", () => {
     for (let i = 1; i < builtinDreamTasks.length; i++) {
       expect(builtinDreamTasks[i].priority).toBeGreaterThanOrEqual(
-        builtinDreamTasks[i - 1].priority
+        builtinDreamTasks[i - 1].priority,
       );
     }
   });

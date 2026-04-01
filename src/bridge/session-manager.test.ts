@@ -1,6 +1,6 @@
 // Tests for Bridge Session Manager
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { SessionManager } from "./session-manager";
 
 let manager: SessionManager;
@@ -44,7 +44,9 @@ describe("createSession", () => {
     for (let i = 0; i < 5; i++) {
       manager.createSession({ dir: `/tmp/${i}`, spawnMode: "single-session" });
     }
-    expect(() => manager.createSession({ dir: "/tmp/6", spawnMode: "single-session" })).toThrow("Maximum sessions");
+    expect(() => manager.createSession({ dir: "/tmp/6", spawnMode: "single-session" })).toThrow(
+      "Maximum sessions",
+    );
   });
 
   test("uses default model when not specified", () => {
@@ -74,7 +76,9 @@ describe("destroySession", () => {
     const id = manager.createSession({
       dir: "/tmp",
       spawnMode: "single-session",
-      onDestroy: () => { called = true; },
+      onDestroy: () => {
+        called = true;
+      },
     });
     await manager.destroySession(id);
     expect(called).toBe(true);
@@ -84,7 +88,9 @@ describe("destroySession", () => {
     const id = manager.createSession({
       dir: "/tmp",
       spawnMode: "single-session",
-      onDestroy: () => { throw new Error("cleanup failed"); },
+      onDestroy: () => {
+        throw new Error("cleanup failed");
+      },
     });
     // Should not throw
     const result = await manager.destroySession(id);

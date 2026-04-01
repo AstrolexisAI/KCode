@@ -2,7 +2,7 @@
 // Automatically curates exported datasets: deduplicates, filters, balances, and cleans.
 
 import { log } from "../logger";
-import type { CurationReport, BalanceOptions } from "./types";
+import type { BalanceOptions, CurationReport } from "./types";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -113,14 +113,10 @@ export class DatasetCurator {
     // Try JSON array
     const parsed = JSON.parse(text);
     if (Array.isArray(parsed)) {
-      return parsed.map((entry: Record<string, unknown>) =>
-        this.normalizeEntry(entry),
-      );
+      return parsed.map((entry: Record<string, unknown>) => this.normalizeEntry(entry));
     }
 
-    throw new Error(
-      `Unsupported dataset format: expected JSONL or JSON array`,
-    );
+    throw new Error(`Unsupported dataset format: expected JSONL or JSON array`);
   }
 
   /**
@@ -162,25 +158,18 @@ export class DatasetCurator {
     // Direct format (our internal shape)
     return {
       user_query: String(raw.user_query ?? raw.query ?? ""),
-      assistant_response: String(
-        raw.assistant_response ?? raw.response ?? "",
-      ),
+      assistant_response: String(raw.assistant_response ?? raw.response ?? ""),
       tool_chain: raw.tool_chain != null ? String(raw.tool_chain) : undefined,
-      success:
-        raw.success != null ? Boolean(raw.success) : undefined,
+      success: raw.success != null ? Boolean(raw.success) : undefined,
       tags: raw.tags != null ? String(raw.tags) : undefined,
-      quality:
-        raw.quality != null ? Number(raw.quality) : undefined,
+      quality: raw.quality != null ? Number(raw.quality) : undefined,
     };
   }
 
   /**
    * Write curated entries to a file (JSONL format).
    */
-  async writeDataset(
-    outputFile: string,
-    entries: DatasetEntry[],
-  ): Promise<void> {
+  async writeDataset(outputFile: string, entries: DatasetEntry[]): Promise<void> {
     const content = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
     await Bun.write(outputFile, content);
   }
@@ -191,18 +180,14 @@ export class DatasetCurator {
    * Remove near-duplicate entries by comparing query strings.
    * Uses character-level trigram Jaccard similarity as a fast approximation.
    */
-  deduplicateByQuery(
-    entries: DatasetEntry[],
-    threshold: number,
-  ): DatasetEntry[] {
+  deduplicateByQuery(entries: DatasetEntry[], threshold: number): DatasetEntry[] {
     if (entries.length === 0) return [];
 
     const seen: DatasetEntry[] = [];
 
     for (const entry of entries) {
       const isDuplicate = seen.some(
-        (s) =>
-          DatasetCurator.querySimilarity(s.user_query, entry.user_query) >= threshold,
+        (s) => DatasetCurator.querySimilarity(s.user_query, entry.user_query) >= threshold,
       );
       if (!isDuplicate) {
         seen.push(entry);
@@ -262,10 +247,7 @@ export class DatasetCurator {
       if (ex.assistant_response.length < MIN_RESPONSE_LENGTH) return false;
 
       // Not failed without resolution
-      if (
-        ex.success === false ||
-        ex.success === 0
-      ) {
+      if (ex.success === false || ex.success === 0) {
         if (!ex.assistant_response.toLowerCase().includes("fix")) return false;
       }
 

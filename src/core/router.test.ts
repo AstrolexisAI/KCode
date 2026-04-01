@@ -1,5 +1,5 @@
-import { test, expect, describe, beforeEach, mock } from "bun:test";
-import { classifyTask, withCloudFailover, resetRoutingRules } from "./router.ts";
+import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { classifyTask, resetRoutingRules, withCloudFailover } from "./router.ts";
 
 // ─── classifyTask ──────────────────────────────────────────────────
 
@@ -92,7 +92,8 @@ describe("classifyTask", () => {
     });
 
     test("long message with 'show' keyword → NOT simple", () => {
-      const longMessage = "show me " + "a very detailed explanation of ".repeat(10) + "the entire architecture";
+      const longMessage =
+        "show me " + "a very detailed explanation of ".repeat(10) + "the entire architecture";
       expect(longMessage.length).toBeGreaterThan(200);
       expect(classifyTask(longMessage)).not.toBe("simple");
     });

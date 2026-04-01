@@ -4,7 +4,7 @@
 
 import { getDb } from "./db";
 import { log } from "./logger";
-import type { Message, ContentBlock, ToolUseBlock } from "./types";
+import type { ContentBlock, Message, ToolUseBlock } from "./types";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -54,10 +54,7 @@ const MIN_QUALITY_THRESHOLD = 0.3;
  * Extract a distillable example from a completed interaction.
  * Returns null if the interaction isn't worth saving (too short, all errors, etc.)
  */
-export function extractExample(
-  messages: Message[],
-  project: string,
-): DistilledExample | null {
+export function extractExample(messages: Message[], project: string): DistilledExample | null {
   // Find the last user text message (the query)
   let userQuery = "";
   let queryIdx = -1;
@@ -107,7 +104,7 @@ export function extractExample(
       for (const block of msg.content as ContentBlock[]) {
         if (block.type === "tool_result") {
           // Find the matching tool step and update success
-          const lastPending = toolSteps.findLast(s => s.success);
+          const lastPending = toolSteps.findLast((s) => s.success);
           if (lastPending && block.is_error) {
             lastPending.success = false;
             hasErrors = true;
@@ -119,8 +116,8 @@ export function extractExample(
 
   // Skip if no response or all tools errored
   if (!assistantResponse) return null;
-  const successCount = toolSteps.filter(s => s.success).length;
-  const errorCount = toolSteps.filter(s => !s.success).length;
+  const successCount = toolSteps.filter((s) => s.success).length;
+  const errorCount = toolSteps.filter((s) => !s.success).length;
 
   // Skip if more than half the tools errored (bad interaction)
   if (toolSteps.length > 0 && errorCount > successCount) return null;
@@ -185,17 +182,53 @@ function generateTags(query: string, tools: ToolStep[]): string {
 
   // Query-based keyword extraction (simple)
   const keywords = [
-    "git", "commit", "push", "pull", "branch", "merge", "rebase",
-    "test", "debug", "fix", "bug", "error",
-    "create", "build", "deploy", "install",
-    "refactor", "rename", "move", "delete",
-    "api", "endpoint", "route", "server",
-    "database", "sql", "query",
-    "typescript", "javascript", "python", "rust", "go",
-    "react", "next", "vue", "angular",
-    "docker", "kubernetes", "ci", "cd",
-    "css", "html", "style", "ui",
-    "config", "env", "setup",
+    "git",
+    "commit",
+    "push",
+    "pull",
+    "branch",
+    "merge",
+    "rebase",
+    "test",
+    "debug",
+    "fix",
+    "bug",
+    "error",
+    "create",
+    "build",
+    "deploy",
+    "install",
+    "refactor",
+    "rename",
+    "move",
+    "delete",
+    "api",
+    "endpoint",
+    "route",
+    "server",
+    "database",
+    "sql",
+    "query",
+    "typescript",
+    "javascript",
+    "python",
+    "rust",
+    "go",
+    "react",
+    "next",
+    "vue",
+    "angular",
+    "docker",
+    "kubernetes",
+    "ci",
+    "cd",
+    "css",
+    "html",
+    "style",
+    "ui",
+    "config",
+    "env",
+    "setup",
   ];
 
   const lowerQuery = query.toLowerCase();
@@ -217,9 +250,9 @@ export function saveExample(example: DistilledExample): number | null {
     const db = getDb();
 
     // Check for duplicate: same query (exact or very similar)
-    const existing = db.query(
-      "SELECT id, quality, tool_count FROM distilled_examples WHERE user_query = ? LIMIT 1"
-    ).get(example.userQuery) as { id: number; quality: number; tool_count: number } | null;
+    const existing = db
+      .query("SELECT id, quality, tool_count FROM distilled_examples WHERE user_query = ? LIMIT 1")
+      .get(example.userQuery) as { id: number; quality: number; tool_count: number } | null;
 
     if (existing) {
       // Update if new example is better quality or has more tools (richer interaction)
@@ -228,7 +261,7 @@ export function saveExample(example: DistilledExample): number | null {
           `UPDATE distilled_examples SET
             assistant_response = ?, tool_chain = ?, tool_count = ?,
             success = ?, tags = ?, quality = ?, created_at = datetime('now')
-          WHERE id = ?`
+          WHERE id = ?`,
         ).run(
           example.assistantResponse,
           example.toolChain,
@@ -238,27 +271,32 @@ export function saveExample(example: DistilledExample): number | null {
           example.quality,
           existing.id,
         );
-        log.info("distill", `Updated example #${existing.id}: "${example.userQuery.slice(0, 50)}..."`);
+        log.info(
+          "distill",
+          `Updated example #${existing.id}: "${example.userQuery.slice(0, 50)}..."`,
+        );
         return existing.id;
       }
       return null; // existing is better, skip
     }
 
     // Insert new
-    const result = db.query(
-      `INSERT INTO distilled_examples
+    const result = db
+      .query(
+        `INSERT INTO distilled_examples
         (user_query, assistant_response, tool_chain, tool_count, success, project, tags, quality)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      example.userQuery,
-      example.assistantResponse,
-      example.toolChain,
-      example.toolCount,
-      example.success ? 1 : 0,
-      example.project,
-      example.tags,
-      example.quality,
-    );
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        example.userQuery,
+        example.assistantResponse,
+        example.toolChain,
+        example.toolCount,
+        example.success ? 1 : 0,
+        example.project,
+        example.tags,
+        example.quality,
+      );
 
     const newId = Number(result.lastInsertRowid);
     log.info("distill", `Saved example #${newId}: "${example.userQuery.slice(0, 50)}..."`);
@@ -279,14 +317,15 @@ export function saveExample(example: DistilledExample): number | null {
 function pruneExamples(): void {
   try {
     const db = getDb();
-    const count = (db.query("SELECT COUNT(*) as n FROM distilled_examples").get() as { n: number }).n;
+    const count = (db.query("SELECT COUNT(*) as n FROM distilled_examples").get() as { n: number })
+      .n;
 
     if (count > MAX_STORED_EXAMPLES) {
       const excess = count - MAX_STORED_EXAMPLES;
       db.query(
         `DELETE FROM distilled_examples WHERE id IN (
           SELECT id FROM distilled_examples ORDER BY quality ASC, use_count ASC, created_at ASC LIMIT ?
-        )`
+        )`,
       ).run(excess);
       log.info("distill", `Pruned ${excess} low-quality examples`);
     }
@@ -313,9 +352,9 @@ export async function loadDistilledExamples(
     const db = getDb();
 
     // Check if table exists (first run)
-    const tableExists = db.query(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='distilled_examples'"
-    ).get();
+    const tableExists = db
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='distilled_examples'")
+      .get();
     if (!tableExists) return null;
 
     type ExampleRow = {
@@ -336,64 +375,72 @@ export async function loadDistilledExamples(
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, " ")
         .split(/\s+/)
-        .filter(w => w.length > 2)
+        .filter((w) => w.length > 2)
         .slice(0, 8)
-        .map(w => `"${w}"`)
+        .map((w) => `"${w}"`)
         .join(" OR ");
 
       if (ftsTerms) {
-        rows = db.query(
-          `SELECT e.id, e.user_query, e.assistant_response, e.tool_chain, e.tool_count, e.quality
+        rows = db
+          .query(
+            `SELECT e.id, e.user_query, e.assistant_response, e.tool_chain, e.tool_count, e.quality
            FROM distilled_examples e
            JOIN distilled_fts f ON e.id = f.rowid
            WHERE distilled_fts MATCH ? AND e.quality >= ?
            ORDER BY rank * e.quality DESC
-           LIMIT ?`
-        ).all(ftsTerms, MIN_QUALITY_THRESHOLD, MAX_EXAMPLES_IN_PROMPT) as ExampleRow[];
+           LIMIT ?`,
+          )
+          .all(ftsTerms, MIN_QUALITY_THRESHOLD, MAX_EXAMPLES_IN_PROMPT) as ExampleRow[];
       }
     }
 
     // Strategy 2: If FTS found nothing, use keyword-based tag matching
     if (rows.length === 0 && contextKeywords && contextKeywords.length > 0) {
       const tagPattern = contextKeywords.slice(0, 5).join("%");
-      rows = db.query(
-        `SELECT id, user_query, assistant_response, tool_chain, tool_count, quality
+      rows = db
+        .query(
+          `SELECT id, user_query, assistant_response, tool_chain, tool_count, quality
          FROM distilled_examples
          WHERE tags LIKE ? AND quality >= ?
          ORDER BY quality DESC, use_count DESC
-         LIMIT ?`
-      ).all(`%${tagPattern}%`, MIN_QUALITY_THRESHOLD, MAX_EXAMPLES_IN_PROMPT) as ExampleRow[];
+         LIMIT ?`,
+        )
+        .all(`%${tagPattern}%`, MIN_QUALITY_THRESHOLD, MAX_EXAMPLES_IN_PROMPT) as ExampleRow[];
     }
 
     // Strategy 3: Fall back to highest quality project-specific examples
     if (rows.length === 0 && project) {
-      rows = db.query(
-        `SELECT id, user_query, assistant_response, tool_chain, tool_count, quality
+      rows = db
+        .query(
+          `SELECT id, user_query, assistant_response, tool_chain, tool_count, quality
          FROM distilled_examples
          WHERE project = ? AND quality >= ?
          ORDER BY quality DESC, use_count DESC
-         LIMIT ?`
-      ).all(project, MIN_QUALITY_THRESHOLD, MAX_EXAMPLES_IN_PROMPT) as ExampleRow[];
+         LIMIT ?`,
+        )
+        .all(project, MIN_QUALITY_THRESHOLD, MAX_EXAMPLES_IN_PROMPT) as ExampleRow[];
     }
 
     // Strategy 4: Global best examples
     if (rows.length === 0) {
-      rows = db.query(
-        `SELECT id, user_query, assistant_response, tool_chain, tool_count, quality
+      rows = db
+        .query(
+          `SELECT id, user_query, assistant_response, tool_chain, tool_count, quality
          FROM distilled_examples
          WHERE quality >= ?
          ORDER BY quality DESC, use_count DESC
-         LIMIT ?`
-      ).all(MIN_QUALITY_THRESHOLD, 3) as ExampleRow[];
+         LIMIT ?`,
+        )
+        .all(MIN_QUALITY_THRESHOLD, 3) as ExampleRow[];
     }
 
     if (rows.length === 0) return null;
 
     // Increment use_count for selected examples (parameterized to prevent SQL injection)
-    const ids = rows.map(r => r.id);
+    const ids = rows.map((r) => r.id);
     const placeholders = ids.map(() => "?").join(",");
     db.query(
-      `UPDATE distilled_examples SET use_count = use_count + 1 WHERE id IN (${placeholders})`
+      `UPDATE distilled_examples SET use_count = use_count + 1 WHERE id IN (${placeholders})`,
     ).run(...ids);
 
     // Format as few-shot context
@@ -403,13 +450,15 @@ export async function loadDistilledExamples(
       try {
         const chain = JSON.parse(row.tool_chain) as ToolStep[];
         if (chain.length > 0) {
-          const steps = chain.map(s => `${s.name}(${s.inputSummary.slice(0, 60)})`);
+          const steps = chain.map((s) => `${s.name}(${s.inputSummary.slice(0, 60)})`);
           toolSummary = `\nTools used: ${steps.join(" → ")}`;
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       sections.push(
-        `**User**: ${row.user_query.slice(0, 300)}${toolSummary}\n**Response pattern**: ${row.assistant_response.slice(0, 500)}`
+        `**User**: ${row.user_query.slice(0, 300)}${toolSummary}\n**Response pattern**: ${row.assistant_response.slice(0, 500)}`,
       );
     }
 
@@ -432,10 +481,13 @@ ${sections.join("\n\n---\n\n")}`;
 export function boostExample(id: number, amount = 0.1): void {
   try {
     const db = getDb();
-    db.query(
-      "UPDATE distilled_examples SET quality = MIN(quality + ?, 2.0) WHERE id = ?"
-    ).run(amount, id);
-  } catch { /* ignore */ }
+    db.query("UPDATE distilled_examples SET quality = MIN(quality + ?, 2.0) WHERE id = ?").run(
+      amount,
+      id,
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -444,10 +496,13 @@ export function boostExample(id: number, amount = 0.1): void {
 export function penalizeExample(id: number, amount = 0.3): void {
   try {
     const db = getDb();
-    db.query(
-      "UPDATE distilled_examples SET quality = MAX(quality - ?, 0.0) WHERE id = ?"
-    ).run(amount, id);
-  } catch { /* ignore */ }
+    db.query("UPDATE distilled_examples SET quality = MAX(quality - ?, 0.0) WHERE id = ?").run(
+      amount,
+      id,
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 // ─── Stats ──────────────────────────────────────────────────────
@@ -460,13 +515,15 @@ export function getDistillationStats(): {
 } {
   try {
     const db = getDb();
-    const stats = db.query(
-      "SELECT COUNT(*) as total, AVG(quality) as avg_q, SUM(use_count) as total_uses FROM distilled_examples"
-    ).get() as { total: number; avg_q: number; total_uses: number };
+    const stats = db
+      .query(
+        "SELECT COUNT(*) as total, AVG(quality) as avg_q, SUM(use_count) as total_uses FROM distilled_examples",
+      )
+      .get() as { total: number; avg_q: number; total_uses: number };
 
-    const tagRows = db.query(
-      "SELECT tags FROM distilled_examples WHERE tags != '' ORDER BY quality DESC LIMIT 20"
-    ).all() as { tags: string }[];
+    const tagRows = db
+      .query("SELECT tags FROM distilled_examples WHERE tags != '' ORDER BY quality DESC LIMIT 20")
+      .all() as { tags: string }[];
 
     const tagCounts = new Map<string, number>();
     for (const row of tagRows) {

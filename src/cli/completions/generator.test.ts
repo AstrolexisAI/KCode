@@ -1,7 +1,7 @@
 // KCode - Shell Completions Generator Tests
 
-import { describe, test, expect } from "bun:test";
-import { generateCompletions, getDefaultSpec, type Shell, type CompletionSpec } from "./generator";
+import { describe, expect, test } from "bun:test";
+import { type CompletionSpec, generateCompletions, getDefaultSpec, type Shell } from "./generator";
 
 const spec = getDefaultSpec();
 

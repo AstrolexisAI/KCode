@@ -2,9 +2,7 @@
 // Vanilla JS, no frameworks. Manages WebSocket connection, message rendering,
 // input handling, and all UI interactions.
 
-(function () {
-  "use strict";
-
+(() => {
   // ─── Constants ────────────────────────────────────────────────
 
   var RECONNECT_BASE_MS = 1000;
@@ -83,76 +81,74 @@
   };
 
   KCodeWebUI.prototype.bindEvents = function () {
-    var self = this;
-
     // Send message
-    this.els.sendBtn.addEventListener("click", function () {
-      self.sendMessage();
+    this.els.sendBtn.addEventListener("click", () => {
+      this.sendMessage();
     });
 
     // Cancel
-    this.els.cancelBtn.addEventListener("click", function () {
-      self.cancelMessage();
+    this.els.cancelBtn.addEventListener("click", () => {
+      this.cancelMessage();
     });
 
     // Input handling
-    this.els.messageInput.addEventListener("keydown", function (e) {
-      self.handleInputKeydown(e);
+    this.els.messageInput.addEventListener("keydown", (e) => {
+      this.handleInputKeydown(e);
     });
 
-    this.els.messageInput.addEventListener("input", function () {
-      self.autoResizeInput();
-      self.updateCharCount();
+    this.els.messageInput.addEventListener("input", () => {
+      this.autoResizeInput();
+      this.updateCharCount();
     });
 
     // Scroll detection for auto-scroll
-    this.els.messages.addEventListener("scroll", function () {
-      var el = self.els.messages;
+    this.els.messages.addEventListener("scroll", () => {
+      var el = this.els.messages;
       var distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      self.autoScroll = distanceFromBottom < SCROLL_THRESHOLD;
+      this.autoScroll = distanceFromBottom < SCROLL_THRESHOLD;
     });
 
     // Theme toggle
-    this.els.themeToggle.addEventListener("click", function () {
-      self.toggleTheme();
+    this.els.themeToggle.addEventListener("click", () => {
+      this.toggleTheme();
     });
 
     // Search
-    this.els.searchClose.addEventListener("click", function () {
-      self.closeSearch();
+    this.els.searchClose.addEventListener("click", () => {
+      this.closeSearch();
     });
 
-    this.els.searchInput.addEventListener("input", function () {
-      self.performSearch(self.els.searchInput.value);
+    this.els.searchInput.addEventListener("input", () => {
+      this.performSearch(this.els.searchInput.value);
     });
 
     // Tool panel close
-    this.els.toolPanelClose.addEventListener("click", function () {
-      self.els.toolPanel.classList.add("hidden");
+    this.els.toolPanelClose.addEventListener("click", () => {
+      this.els.toolPanel.classList.add("hidden");
     });
 
     // Permission buttons
-    this.els.permAllow.addEventListener("click", function () {
-      self.respondPermission("allow");
+    this.els.permAllow.addEventListener("click", () => {
+      this.respondPermission("allow");
     });
-    this.els.permAlways.addEventListener("click", function () {
-      self.respondPermission("always_allow");
+    this.els.permAlways.addEventListener("click", () => {
+      this.respondPermission("always_allow");
     });
-    this.els.permDeny.addEventListener("click", function () {
-      self.respondPermission("deny");
+    this.els.permDeny.addEventListener("click", () => {
+      this.respondPermission("deny");
     });
 
     // Keyboard shortcuts
-    document.addEventListener("keydown", function (e) {
+    document.addEventListener("keydown", (e) => {
       // Ctrl+F for search
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
         e.preventDefault();
-        self.openSearch();
+        this.openSearch();
       }
       // Escape to close overlays
       if (e.key === "Escape") {
-        if (self.searchActive) self.closeSearch();
-        if (!self.els.permissionOverlay.classList.contains("hidden")) {
+        if (this.searchActive) this.closeSearch();
+        if (!this.els.permissionOverlay.classList.contains("hidden")) {
           // Don't auto-close permission — user must explicitly respond
         }
       }
@@ -168,16 +164,10 @@
     // Build WebSocket URL
     var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
     this.wsUrl =
-      proto +
-      "//" +
-      window.location.host +
-      "/ws?token=" +
-      encodeURIComponent(this.authToken);
+      proto + "//" + window.location.host + "/ws?token=" + encodeURIComponent(this.authToken);
   };
 
   KCodeWebUI.prototype.connect = function () {
-    var self = this;
-
     if (this.ws) {
       try {
         this.ws.close();
@@ -196,48 +186,44 @@
       return;
     }
 
-    this.ws.onopen = function () {
-      self.connected = true;
-      self.reconnectAttempt = 0;
-      self.setConnectionStatus("connected");
+    this.ws.onopen = () => {
+      this.connected = true;
+      this.reconnectAttempt = 0;
+      this.setConnectionStatus("connected");
     };
 
-    this.ws.onmessage = function (evt) {
+    this.ws.onmessage = (evt) => {
       try {
         var data = JSON.parse(evt.data);
-        self.handleServerEvent(data);
+        this.handleServerEvent(data);
       } catch (e) {
         console.warn("Failed to parse WebSocket message:", e);
       }
     };
 
-    this.ws.onclose = function () {
-      self.connected = false;
-      self.setConnectionStatus("disconnected");
-      self.scheduleReconnect();
+    this.ws.onclose = () => {
+      this.connected = false;
+      this.setConnectionStatus("disconnected");
+      this.scheduleReconnect();
     };
 
-    this.ws.onerror = function () {
-      self.connected = false;
-      self.setConnectionStatus("disconnected");
+    this.ws.onerror = () => {
+      this.connected = false;
+      this.setConnectionStatus("disconnected");
     };
   };
 
   KCodeWebUI.prototype.scheduleReconnect = function () {
-    var self = this;
     if (this.reconnectTimer) return;
 
-    var delay = Math.min(
-      RECONNECT_BASE_MS * Math.pow(2, this.reconnectAttempt),
-      RECONNECT_MAX_MS
-    );
+    var delay = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempt, RECONNECT_MAX_MS);
     // Add jitter
     delay = delay * (0.75 + Math.random() * 0.5);
     this.reconnectAttempt++;
 
-    this.reconnectTimer = setTimeout(function () {
-      self.reconnectTimer = null;
-      self.connect();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
     }, delay);
   };
 
@@ -310,7 +296,7 @@
 
       case "compact.done":
         this.showNotification(
-          "Context compacted to " + event.tokensAfter + " tokens (" + event.method + ")"
+          "Context compacted to " + event.tokensAfter + " tokens (" + event.method + ")",
         );
         break;
 
@@ -389,7 +375,7 @@
       // Re-render full markdown each time for correctness
       // (streaming deltas may break partial markdown)
       this.currentStreamEl.innerHTML = window.MarkdownRenderer.renderMarkdown(
-        this.currentStreamText
+        this.currentStreamText,
       );
       this.scrollToBottom();
 
@@ -414,7 +400,7 @@
       var toggle = document.createElement("div");
       toggle.className = "thinking-toggle";
       toggle.textContent = "Thinking...";
-      toggle.addEventListener("click", function () {
+      toggle.addEventListener("click", () => {
         var block = toggle.nextElementSibling;
         if (block) {
           block.style.display = block.style.display === "none" ? "block" : "none";
@@ -458,7 +444,7 @@
 
     var header = document.createElement("div");
     header.className = "tool-header";
-    header.addEventListener("click", function () {
+    header.addEventListener("click", () => {
       toolEl.classList.toggle("expanded");
     });
 
@@ -501,9 +487,7 @@
         statusSpan.textContent = "Error";
       } else {
         statusSpan.className = "tool-status success";
-        var durationText = event.durationMs
-          ? " (" + event.durationMs + "ms)"
-          : "";
+        var durationText = event.durationMs ? " (" + event.durationMs + "ms)" : "";
         statusSpan.textContent = "Done" + durationText;
       }
     }
@@ -514,10 +498,7 @@
       // Truncate very long results in the UI
       if (resultText.length > 5000) {
         resultText =
-          resultText.slice(0, 5000) +
-          "\n... (" +
-          (resultText.length - 5000) +
-          " chars truncated)";
+          resultText.slice(0, 5000) + "\n... (" + (resultText.length - 5000) + " chars truncated)";
       }
       toolBody.textContent += "\n\nResult:\n" + resultText;
     }
@@ -567,8 +548,7 @@
       this.els.modelName.textContent = stats.model;
     }
 
-    var totalTokens =
-      (stats.inputTokens || 0) + (stats.outputTokens || 0);
+    var totalTokens = (stats.inputTokens || 0) + (stats.outputTokens || 0);
     this.els.tokenCount.textContent = this.formatNumber(totalTokens) + " tokens";
 
     if (typeof stats.costUsd === "number") {
@@ -663,9 +643,7 @@
       this.inputHistoryIndex = this.inputHistory.length - 1;
     } else {
       this.els.messageInput.value =
-        this.inputHistory[
-          this.inputHistory.length - 1 - this.inputHistoryIndex
-        ];
+        this.inputHistory[this.inputHistory.length - 1 - this.inputHistoryIndex];
     }
 
     this.autoResizeInput();
@@ -709,7 +687,7 @@
     if (!this.autoScroll) return;
     var el = this.els.messages;
     // Use requestAnimationFrame for smooth scrolling
-    requestAnimationFrame(function () {
+    requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
   };
@@ -741,7 +719,7 @@
     }
   };
 
-  KCodeWebUI.prototype.highlightText = function (el, query) {
+  KCodeWebUI.prototype.highlightText = (el, query) => {
     var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
     var textNodes = [];
     var node;
@@ -852,7 +830,7 @@
 
   // ─── Utilities ────────────────────────────────────────────────
 
-  KCodeWebUI.prototype.formatNumber = function (n) {
+  KCodeWebUI.prototype.formatNumber = (n) => {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
     if (n >= 1000) return (n / 1000).toFixed(1) + "K";
     return String(n);
@@ -860,7 +838,7 @@
 
   // ─── Bootstrap ────────────────────────────────────────────────
 
-  document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener("DOMContentLoaded", () => {
     var app = new KCodeWebUI();
     app.init();
 

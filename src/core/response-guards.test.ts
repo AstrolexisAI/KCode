@@ -1,10 +1,10 @@
 // KCode - Response Guards Tests
 // Tests for: think tag parsing (<thinking>), looksIncomplete(), detectNonShellExpression()
 
-import { describe, test, expect } from "bun:test";
-import { createThinkTagParser } from "./think-tag-parser";
+import { describe, expect, test } from "bun:test";
 import { looksIncomplete } from "./conversation";
 import { detectNonShellExpression } from "./safety-analysis";
+import { createThinkTagParser } from "./think-tag-parser";
 
 // ─── Think Tag Parser — <thinking> support ──────────────────────
 
@@ -18,13 +18,21 @@ describe("Think tag parser — <thinking> variant", () => {
   }
 
   function collectByType(events: Array<{ type: string; text: string }>) {
-    const thinking = events.filter(e => e.type === "thinking").map(e => e.text).join("");
-    const content = events.filter(e => e.type === "content").map(e => e.text).join("");
+    const thinking = events
+      .filter((e) => e.type === "thinking")
+      .map((e) => e.text)
+      .join("");
+    const content = events
+      .filter((e) => e.type === "content")
+      .map((e) => e.text)
+      .join("");
     return { thinking, content };
   }
 
   test("extracts <thinking> as thinking event", () => {
-    const { thinking, content } = collectByType(parse("Hello <thinking>reasoning here</thinking> answer"));
+    const { thinking, content } = collectByType(
+      parse("Hello <thinking>reasoning here</thinking> answer"),
+    );
     expect(thinking).toBe("reasoning here");
     expect(content).toContain("Hello");
     expect(content).toContain("answer");
@@ -49,16 +57,18 @@ describe("Think tag parser — <thinking> variant", () => {
   });
 
   test("handles thinking-only content (no visible text)", () => {
-    const { thinking, content } = collectByType(parse("<thinking>only internal reasoning</thinking>"));
+    const { thinking, content } = collectByType(
+      parse("<thinking>only internal reasoning</thinking>"),
+    );
     expect(thinking).toBe("only internal reasoning");
     expect(content).toBe("");
   });
 
   test("handles mixed tags in stream", () => {
     const events = parse("a<thinking>b</thinking>c<think>d</think>e");
-    const types = events.map(e => e.type);
-    const thinkCount = types.filter(t => t === "thinking").length;
-    const contentCount = types.filter(t => t === "content").length;
+    const types = events.map((e) => e.type);
+    const thinkCount = types.filter((t) => t === "thinking").length;
+    const contentCount = types.filter((t) => t === "content").length;
     expect(thinkCount).toBe(2);
     expect(contentCount).toBeGreaterThanOrEqual(2); // may split due to buffering
   });

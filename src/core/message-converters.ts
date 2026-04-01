@@ -1,12 +1,7 @@
 // KCode - Message Converters
 // Convert internal Message[] format to provider-specific API formats (OpenAI, Anthropic)
 
-import type {
-  Message,
-  OpenAIMessage,
-  OpenAIToolCall,
-  OpenAIToolDefinition,
-} from "./types";
+import type { Message, OpenAIMessage, OpenAIToolCall, OpenAIToolDefinition } from "./types";
 
 // ─── Anthropic Types ─────────────────────────────────────────────
 
@@ -146,9 +141,7 @@ export function convertToOpenAITools(
  * - tool_use/tool_result are content blocks inside user/assistant messages (not separate roles)
  * - Strict user/assistant alternation required
  */
-export function convertToAnthropicMessages(
-  messages: Message[],
-): AnthropicMessage[] {
+export function convertToAnthropicMessages(messages: Message[]): AnthropicMessage[] {
   const result: AnthropicMessage[] = [];
 
   for (const msg of messages) {
@@ -184,9 +177,10 @@ export function convertToAnthropicMessages(
           input: block.input,
         });
       } else if (block.type === "tool_result") {
-        const content = typeof block.content === "string"
-          ? block.content
-          : block.content.map((b) => b.type === "text" ? b.text : JSON.stringify(b)).join("\n");
+        const content =
+          typeof block.content === "string"
+            ? block.content
+            : block.content.map((b) => (b.type === "text" ? b.text : JSON.stringify(b))).join("\n");
         blocks.push({
           type: "tool_result",
           tool_use_id: block.tool_use_id,

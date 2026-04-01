@@ -2,9 +2,9 @@
 // LLM-powered hooks that use natural language prompting for decisions.
 // Sends tool context to a fast local model and parses the response for approve/deny/warn.
 
+import type { PromptHookConfig } from "./hooks";
 import { log } from "./logger";
 import { getModelBaseUrl } from "./models";
-import type { PromptHookConfig } from "./hooks";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -23,7 +23,10 @@ function expandPromptTemplate(template: string, context: Record<string, unknown>
     .replace(/\$USER_PROMPT/g, String(context.user_prompt ?? ""))
     .replace(/\$EVENT/g, String(context.event ?? ""))
     .replace(/\$COMMAND/g, String((context.tool_input as Record<string, unknown>)?.command ?? ""))
-    .replace(/\$FILE_PATH/g, String((context.tool_input as Record<string, unknown>)?.file_path ?? ""));
+    .replace(
+      /\$FILE_PATH/g,
+      String((context.tool_input as Record<string, unknown>)?.file_path ?? ""),
+    );
 }
 
 // ─── Response Parsing ───────────────────────────────────────────
@@ -87,7 +90,9 @@ export async function evaluatePromptHook(
   let context: Record<string, unknown> = {};
   try {
     context = JSON.parse(jsonData);
-  } catch { /* use empty context */ }
+  } catch {
+    /* use empty context */
+  }
 
   const expandedPrompt = expandPromptTemplate(config.prompt, context);
 
@@ -121,10 +126,13 @@ Then explain your reasoning briefly.`;
 
     if (!response.ok) {
       log.warn("prompt-hooks", `Model response error: ${response.status} ${response.statusText}`);
-      return { decision: "allow", reason: `Prompt hook model error (${response.status}), defaulting to allow` };
+      return {
+        decision: "allow",
+        reason: `Prompt hook model error (${response.status}), defaulting to allow`,
+      };
     }
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
 

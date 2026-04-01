@@ -77,10 +77,7 @@ export function globMatch(value: string, pattern: string): boolean {
 /**
  * Evaluates a single condition against a string value.
  */
-export function matchesCondition(
-  value: string,
-  condition: ToolPolicyRule["condition"],
-): boolean {
+export function matchesCondition(value: string, condition: ToolPolicyRule["condition"]): boolean {
   switch (condition.operator) {
     case "matches":
       return globMatch(value, condition.pattern);
@@ -101,10 +98,7 @@ export function matchesCondition(
  * Extracts a field value from the tool input, supporting nested paths
  * with dot notation (e.g. "args.command").
  */
-function getFieldValue(
-  input: Record<string, unknown>,
-  field: string,
-): string | null {
+function getFieldValue(input: Record<string, unknown>, field: string): string | null {
   const parts = field.split(".");
   let current: unknown = input;
 
@@ -134,9 +128,7 @@ export function evaluateToolPolicy(
 ): PolicyEvalResult {
   // Find the policy for this tool (case-insensitive match, also support glob in toolName)
   const policy = policies.find(
-    (p) =>
-      p.toolName.toLowerCase() === toolName.toLowerCase() ||
-      globMatch(toolName, p.toolName),
+    (p) => p.toolName.toLowerCase() === toolName.toLowerCase() || globMatch(toolName, p.toolName),
   );
 
   if (!policy) {
@@ -202,8 +194,7 @@ function validatePolicies(raw: unknown[]): ToolPolicy[] {
     const obj = item as Record<string, unknown>;
 
     if (typeof obj.toolName !== "string") continue;
-    if (!["ask", "allow", "deny"].includes(obj.defaultAction as string))
-      continue;
+    if (!["ask", "allow", "deny"].includes(obj.defaultAction as string)) continue;
 
     const rules: ToolPolicyRule[] = [];
     if (Array.isArray(obj.rules)) {

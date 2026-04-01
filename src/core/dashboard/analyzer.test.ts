@@ -1,9 +1,9 @@
 // KCode - Dashboard Analyzer Tests
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { ProjectAnalyzer } from "./analyzer";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ProjectAnalyzer } from "./analyzer";
 
 const TEST_DIR = join(import.meta.dir, `__test_project_${process.pid}__`);
 
@@ -48,7 +48,10 @@ beforeAll(() => {
   // Git init so git log works
   Bun.spawnSync(["git", "init"], { cwd: TEST_DIR });
   Bun.spawnSync(["git", "add", "."], { cwd: TEST_DIR });
-  Bun.spawnSync(["git", "-c", "user.name=test", "-c", "user.email=test@test.com", "commit", "-m", "init"], { cwd: TEST_DIR });
+  Bun.spawnSync(
+    ["git", "-c", "user.name=test", "-c", "user.email=test@test.com", "commit", "-m", "init"],
+    { cwd: TEST_DIR },
+  );
 });
 
 afterAll(() => {
@@ -108,9 +111,9 @@ describe("ProjectAnalyzer", () => {
     expect(dashboard.codeQuality.todos).toBeGreaterThanOrEqual(2);
     expect(dashboard.codeQuality.todoList.length).toBeGreaterThanOrEqual(2);
 
-    const todoTexts = dashboard.codeQuality.todoList.map(t => t.text);
-    expect(todoTexts.some(t => t.includes("TODO"))).toBe(true);
-    expect(todoTexts.some(t => t.includes("FIXME"))).toBe(true);
+    const todoTexts = dashboard.codeQuality.todoList.map((t) => t.text);
+    expect(todoTexts.some((t) => t.includes("TODO"))).toBe(true);
+    expect(todoTexts.some((t) => t.includes("FIXME"))).toBe(true);
   });
 
   test("counts dependencies", async () => {

@@ -19,10 +19,11 @@ export class LocalTTS {
 
     switch (this.config.backend) {
       case "piper": {
-        const piper = Bun.spawn(
-          ["piper", "--model", this.config.voice, "--output-raw"],
-          { stdin: "pipe", stdout: "pipe", stderr: "pipe" },
-        );
+        const piper = Bun.spawn(["piper", "--model", this.config.voice, "--output-raw"], {
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         const playCmd = this.getPlayCommand();
         const player = Bun.spawn(playCmd, { stdin: piper.stdout, stderr: "pipe" });
         this.currentProcess = player;
@@ -37,10 +38,7 @@ export class LocalTTS {
       }
 
       case "espeak": {
-        const proc = Bun.spawn(
-          ["espeak-ng", "-v", this.config.language, text],
-          { stderr: "pipe" },
-        );
+        const proc = Bun.spawn(["espeak-ng", "-v", this.config.language, text], { stderr: "pipe" });
         this.currentProcess = proc;
         await proc.exited;
         this.currentProcess = null;
@@ -48,10 +46,7 @@ export class LocalTTS {
       }
 
       case "say": {
-        const proc = Bun.spawn(
-          ["say", "-v", this.config.voice, text],
-          { stderr: "pipe" },
-        );
+        const proc = Bun.spawn(["say", "-v", this.config.voice, text], { stderr: "pipe" });
         this.currentProcess = proc;
         await proc.exited;
         this.currentProcess = null;
@@ -83,7 +78,9 @@ export class LocalTTS {
   /** Stop any currently playing audio. */
   stop(): void {
     if (this.currentProcess) {
-      try { this.currentProcess.kill(); } catch {}
+      try {
+        this.currentProcess.kill();
+      } catch {}
       this.currentProcess = null;
     }
   }
@@ -130,9 +127,12 @@ export class LocalTTS {
 
   private getBinaryName(): string {
     switch (this.config.backend) {
-      case "piper": return "piper";
-      case "espeak": return "espeak-ng";
-      case "say": return "say";
+      case "piper":
+        return "piper";
+      case "espeak":
+        return "espeak-ng";
+      case "say":
+        return "say";
     }
   }
 

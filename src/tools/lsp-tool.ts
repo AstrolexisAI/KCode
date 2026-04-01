@@ -48,12 +48,32 @@ interface LspSymbol {
 }
 
 const SYMBOL_KINDS: Record<number, string> = {
-  1: "File", 2: "Module", 3: "Namespace", 4: "Package", 5: "Class",
-  6: "Method", 7: "Property", 8: "Field", 9: "Constructor", 10: "Enum",
-  11: "Interface", 12: "Function", 13: "Variable", 14: "Constant",
-  15: "String", 16: "Number", 17: "Boolean", 18: "Array", 19: "Object",
-  20: "Key", 21: "Null", 22: "EnumMember", 23: "Struct", 24: "Event",
-  25: "Operator", 26: "TypeParameter",
+  1: "File",
+  2: "Module",
+  3: "Namespace",
+  4: "Package",
+  5: "Class",
+  6: "Method",
+  7: "Property",
+  8: "Field",
+  9: "Constructor",
+  10: "Enum",
+  11: "Interface",
+  12: "Function",
+  13: "Variable",
+  14: "Constant",
+  15: "String",
+  16: "Number",
+  17: "Boolean",
+  18: "Array",
+  19: "Object",
+  20: "Key",
+  21: "Null",
+  22: "EnumMember",
+  23: "Struct",
+  24: "Event",
+  25: "Operator",
+  26: "TypeParameter",
 };
 
 function formatLocation(loc: LspLocation): string {
@@ -89,7 +109,12 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
     const lsp = getLspManager();
 
     if (!lsp || !lsp.isActive()) {
-      return { tool_use_id: "", content: "Error: No language servers are running. LSP requires a compatible language server (typescript-language-server, pyright, gopls, rust-analyzer) to be installed.", is_error: true };
+      return {
+        tool_use_id: "",
+        content:
+          "Error: No language servers are running. LSP requires a compatible language server (typescript-language-server, pyright, gopls, rust-analyzer) to be installed.",
+        is_error: true,
+      };
     }
 
     if (action === "diagnostics") {
@@ -97,22 +122,36 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
       if (diags.length === 0) {
         return { tool_use_id: "", content: `No diagnostics for ${filePath}.` };
       }
-      const lines = diags.map(d => `  L${d.line}:${d.column} [${d.severity}] ${d.message} (${d.source})`);
-      return { tool_use_id: "", content: `Diagnostics for ${filePath} (${diags.length}):\n${lines.join("\n")}` };
+      const lines = diags.map(
+        (d) => `  L${d.line}:${d.column} [${d.severity}] ${d.message} (${d.source})`,
+      );
+      return {
+        tool_use_id: "",
+        content: `Diagnostics for ${filePath} (${diags.length}):\n${lines.join("\n")}`,
+      };
     }
 
     if (action === "symbols") {
-      const result = await lsp.query(filePath, "textDocument/documentSymbol") as LspSymbol[] | null;
+      const result = (await lsp.query(filePath, "textDocument/documentSymbol")) as
+        | LspSymbol[]
+        | null;
       if (!result || result.length === 0) {
         return { tool_use_id: "", content: `No symbols found in ${filePath}.` };
       }
       const lines = flattenSymbols(result);
-      return { tool_use_id: "", content: `Symbols in ${filePath} (${lines.length}):\n${lines.join("\n")}` };
+      return {
+        tool_use_id: "",
+        content: `Symbols in ${filePath} (${lines.length}):\n${lines.join("\n")}`,
+      };
     }
 
     // Position-based queries require line and column
     if (!line || !column) {
-      return { tool_use_id: "", content: `Error: line and column are required for "${action}".`, is_error: true };
+      return {
+        tool_use_id: "",
+        content: `Error: line and column are required for "${action}".`,
+        is_error: true,
+      };
     }
 
     // LSP uses 0-based positions
@@ -121,31 +160,50 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
     if (action === "definition") {
       const result = await lsp.query(filePath, "textDocument/definition", position);
       if (!result) {
-        return { tool_use_id: "", content: `No definition found at ${filePath}:${line}:${column}.` };
+        return {
+          tool_use_id: "",
+          content: `No definition found at ${filePath}:${line}:${column}.`,
+        };
       }
 
-      const locations = Array.isArray(result) ? result as LspLocation[] : [result as LspLocation];
+      const locations = Array.isArray(result) ? (result as LspLocation[]) : [result as LspLocation];
       if (locations.length === 0) {
-        return { tool_use_id: "", content: `No definition found at ${filePath}:${line}:${column}.` };
+        return {
+          tool_use_id: "",
+          content: `No definition found at ${filePath}:${line}:${column}.`,
+        };
       }
 
       const formatted = locations.map(formatLocation);
-      return { tool_use_id: "", content: `Definition(s) for symbol at ${filePath}:${line}:${column}:\n${formatted.map(f => `  ${f}`).join("\n")}` };
+      return {
+        tool_use_id: "",
+        content: `Definition(s) for symbol at ${filePath}:${line}:${column}:\n${formatted.map((f) => `  ${f}`).join("\n")}`,
+      };
     }
 
     if (action === "references") {
-      const result = await lsp.query(filePath, "textDocument/references", position) as LspLocation[] | null;
+      const result = (await lsp.query(filePath, "textDocument/references", position)) as
+        | LspLocation[]
+        | null;
       if (!result || result.length === 0) {
-        return { tool_use_id: "", content: `No references found at ${filePath}:${line}:${column}.` };
+        return {
+          tool_use_id: "",
+          content: `No references found at ${filePath}:${line}:${column}.`,
+        };
       }
 
       const formatted = result.slice(0, 30).map(formatLocation);
       const extra = result.length > 30 ? `\n  ... +${result.length - 30} more` : "";
-      return { tool_use_id: "", content: `References for symbol at ${filePath}:${line}:${column} (${result.length}):\n${formatted.map(f => `  ${f}`).join("\n")}${extra}` };
+      return {
+        tool_use_id: "",
+        content: `References for symbol at ${filePath}:${line}:${column} (${result.length}):\n${formatted.map((f) => `  ${f}`).join("\n")}${extra}`,
+      };
     }
 
     if (action === "hover") {
-      const result = await lsp.query(filePath, "textDocument/hover", position) as { contents: any } | null;
+      const result = (await lsp.query(filePath, "textDocument/hover", position)) as {
+        contents: any;
+      } | null;
       if (!result?.contents) {
         return { tool_use_id: "", content: `No hover info at ${filePath}:${line}:${column}.` };
       }
@@ -156,7 +214,9 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
       } else if (result.contents.value) {
         text = result.contents.value;
       } else if (Array.isArray(result.contents)) {
-        text = result.contents.map((c: any) => typeof c === "string" ? c : c.value ?? "").join("\n");
+        text = result.contents
+          .map((c: any) => (typeof c === "string" ? c : (c.value ?? "")))
+          .join("\n");
       } else {
         text = JSON.stringify(result.contents);
       }

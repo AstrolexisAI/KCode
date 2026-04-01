@@ -1,10 +1,10 @@
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  loadRuntimeFlags,
-  getFeatureFlags,
-  isFeatureEnabled,
-  isBuildFeatureEnabled,
   _resetFlagsCache,
+  getFeatureFlags,
+  isBuildFeatureEnabled,
+  isFeatureEnabled,
+  loadRuntimeFlags,
   type RuntimeFeatureFlags,
 } from "./feature-flags";
 
@@ -71,7 +71,9 @@ describe("feature-flags", () => {
     });
 
     test("settings ignore unknown keys", () => {
-      const flags = loadRuntimeFlags({ unknownFlag: false } as unknown as Partial<RuntimeFeatureFlags>);
+      const flags = loadRuntimeFlags({
+        unknownFlag: false,
+      } as unknown as Partial<RuntimeFeatureFlags>);
       expect(flags.enableAutoRoute).toBe(true);
     });
   });

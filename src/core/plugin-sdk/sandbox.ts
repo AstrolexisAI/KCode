@@ -1,7 +1,7 @@
 // KCode - Plugin Sandbox
 // Restricts plugin execution to safe operations within plugin directory.
 
-import { resolve, relative, isAbsolute } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 export interface SandboxOptions {
   timeout?: number; // ms, default: 30000
@@ -37,9 +37,7 @@ export class PluginSandbox {
     resolved: string;
     error?: string;
   } {
-    const resolved = isAbsolute(filePath)
-      ? resolve(filePath)
-      : resolve(this.pluginDir, filePath);
+    const resolved = isAbsolute(filePath) ? resolve(filePath) : resolve(this.pluginDir, filePath);
 
     // Check path traversal
     if (filePath.includes("..")) {
@@ -70,7 +68,10 @@ export class PluginSandbox {
   /**
    * Validate a command before execution.
    */
-  validateCommand(command: string, args: string[]): {
+  validateCommand(
+    command: string,
+    args: string[],
+  ): {
     valid: boolean;
     error?: string;
   } {
@@ -130,17 +131,12 @@ export class PluginSandbox {
   /**
    * Execute a function with timeout enforcement.
    */
-  async executeWithTimeout<T>(
-    fn: () => Promise<T>,
-    timeoutMs?: number,
-  ): Promise<T> {
+  async executeWithTimeout<T>(fn: () => Promise<T>, timeoutMs?: number): Promise<T> {
     const timeout = timeoutMs ?? this.options.timeout;
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(
-          new Error(`Plugin execution timed out after ${timeout}ms`),
-        );
+        reject(new Error(`Plugin execution timed out after ${timeout}ms`));
       }, timeout);
 
       fn()
@@ -239,9 +235,7 @@ export class PluginSandbox {
    */
   listFiles(subdir?: string): string[] {
     const { readdirSync } = require("node:fs");
-    const dir = subdir
-      ? resolve(this.pluginDir, subdir)
-      : this.pluginDir;
+    const dir = subdir ? resolve(this.pluginDir, subdir) : this.pluginDir;
     const validation = this.validatePath(dir);
     if (!validation.valid) {
       throw new Error(validation.error);
@@ -262,9 +256,6 @@ export class PluginSandbox {
   }
 }
 
-export function createSandbox(
-  pluginDir: string,
-  options?: SandboxOptions,
-): PluginSandbox {
+export function createSandbox(pluginDir: string, options?: SandboxOptions): PluginSandbox {
   return new PluginSandbox(pluginDir, options);
 }

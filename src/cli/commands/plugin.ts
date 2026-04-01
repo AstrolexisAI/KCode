@@ -1,9 +1,7 @@
 import type { Command } from "commander";
 
 export function registerPluginCommand(program: Command): void {
-  const pluginCmd = program
-    .command("plugin")
-    .description("Manage KCode plugins");
+  const pluginCmd = program.command("plugin").description("Manage KCode plugins");
 
   pluginCmd
     .command("search [query]")
@@ -110,9 +108,11 @@ export function registerPluginCommand(program: Command): void {
         console.log(`  ${icon} ${r.name} (${r.duration}ms)${r.error ? ` — ${r.error}` : ""}`);
       }
       const failed = results.filter((r) => r.status === "fail");
-      console.log(failed.length === 0
-        ? `\n\u2713 All ${results.length} tests passed.`
-        : `\n\u2717 ${failed.length}/${results.length} tests failed.`);
+      console.log(
+        failed.length === 0
+          ? `\n\u2713 All ${results.length} tests passed.`
+          : `\n\u2717 ${failed.length}/${results.length} tests failed.`,
+      );
     });
 
   pluginCmd
@@ -122,7 +122,9 @@ export function registerPluginCommand(program: Command): void {
     .action(async (dir: string | undefined, opts: { registry?: string }) => {
       const { publishPlugin } = await import("./plugin-sdk/publish");
       const result = await publishPlugin(dir || process.cwd(), opts.registry);
-      console.log(`\u2713 Published ${result.name}@${result.version} (sha256: ${result.sha256.slice(0, 12)}...)`);
+      console.log(
+        `\u2713 Published ${result.name}@${result.version} (sha256: ${result.sha256.slice(0, 12)}...)`,
+      );
     });
 
   pluginCmd

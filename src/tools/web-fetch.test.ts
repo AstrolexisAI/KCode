@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
 // Import the testable functions — validateFetchUrl is exported, others need testing via it
 import { validateFetchUrl } from "./web-fetch.ts";

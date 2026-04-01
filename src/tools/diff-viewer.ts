@@ -1,11 +1,11 @@
 // KCode - Diff Viewer Tool
 // Compare two files or show git diff for a file with colored unified output
 
-import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { formatDiffPreview, generateDiff } from "../core/diff";
 import type { ToolDefinition, ToolResult } from "../core/types";
-import { generateDiff, formatDiffPreview } from "../core/diff";
 
 export const diffViewerDefinition: ToolDefinition = {
   name: "DiffView",
@@ -18,11 +18,13 @@ export const diffViewerDefinition: ToolDefinition = {
       mode: {
         type: "string",
         enum: ["files", "git"],
-        description: "Diff mode: 'files' to compare two files, 'git' to show git diff for a file (default: git)",
+        description:
+          "Diff mode: 'files' to compare two files, 'git' to show git diff for a file (default: git)",
       },
       file_a: {
         type: "string",
-        description: "First file path (for mode='files') or the file to show git diff for (for mode='git')",
+        description:
+          "First file path (for mode='files') or the file to show git diff for (for mode='git')",
       },
       file_b: {
         type: "string",
@@ -59,7 +61,11 @@ export async function executeDiffViewer(input: Record<string, unknown>): Promise
 
 function diffFiles(fileA: string, fileB: string, _contextLines: number): ToolResult {
   if (!fileB) {
-    return { tool_use_id: "", content: "Error: file_b is required for mode='files'.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: file_b is required for mode='files'.",
+      is_error: true,
+    };
   }
 
   const resolvedA = resolve(fileA);
@@ -111,7 +117,11 @@ function diffGit(file: string, staged: boolean, contextLines: number): ToolResul
 
   // Reject shell metacharacters in file path
   if (/[;|&`$(){}[\]<>!\n\r]/.test(resolvedFile)) {
-    return { tool_use_id: "", content: "Error: file path contains invalid characters.", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: file path contains invalid characters.",
+      is_error: true,
+    };
   }
 
   const flag = staged ? "--cached" : "";
@@ -155,11 +165,14 @@ function diffGit(file: string, staged: boolean, contextLines: number): ToolResul
     // git diff returns exit code 1 when there are differences — handle gracefully
     if (msg.includes("Command failed") && msg.includes("git diff")) {
       try {
-        const result = execSync(`git diff ${flag} -U${contextLines} -- "${resolvedFile}" 2>&1 || true`, {
-          cwd: process.cwd(),
-          stdio: "pipe",
-          timeout: 10000,
-        }).toString();
+        const result = execSync(
+          `git diff ${flag} -U${contextLines} -- "${resolvedFile}" 2>&1 || true`,
+          {
+            cwd: process.cwd(),
+            stdio: "pipe",
+            timeout: 10000,
+          },
+        ).toString();
         return { tool_use_id: "", content: result || `No changes for ${file}.` };
       } catch {
         return { tool_use_id: "", content: `No changes for ${file}.` };

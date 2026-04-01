@@ -1,17 +1,17 @@
 // Tests for Bridge Daemon - lifecycle, PID management, status
 
-import { describe, test, expect, afterEach } from "bun:test";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import {
+  getDaemonStatus,
   isDaemonRunning,
   readPidFile,
   readPortFile,
   readTokenFile,
   startDaemon,
   stopDaemon,
-  getDaemonStatus,
 } from "./daemon";
 
 const KCODE_DIR = join(homedir(), ".kcode");
@@ -24,9 +24,17 @@ mkdirSync(KCODE_DIR, { recursive: true });
 
 // Clean up any daemon state after each test
 afterEach(async () => {
-  try { await stopDaemon(); } catch { /* may not be running */ }
+  try {
+    await stopDaemon();
+  } catch {
+    /* may not be running */
+  }
   for (const f of [PID_FILE, PORT_FILE, TOKEN_FILE]) {
-    try { if (existsSync(f)) unlinkSync(f); } catch { /* ignore */ }
+    try {
+      if (existsSync(f)) unlinkSync(f);
+    } catch {
+      /* ignore */
+    }
   }
 });
 
@@ -34,7 +42,9 @@ afterEach(async () => {
 
 describe("file helpers", () => {
   test("readPidFile returns null when file does not exist", () => {
-    try { unlinkSync(PID_FILE); } catch {}
+    try {
+      unlinkSync(PID_FILE);
+    } catch {}
     expect(readPidFile()).toBeNull();
   });
 
@@ -49,7 +59,9 @@ describe("file helpers", () => {
   });
 
   test("readPortFile returns null when file does not exist", () => {
-    try { unlinkSync(PORT_FILE); } catch {}
+    try {
+      unlinkSync(PORT_FILE);
+    } catch {}
     expect(readPortFile()).toBeNull();
   });
 
@@ -59,7 +71,9 @@ describe("file helpers", () => {
   });
 
   test("readTokenFile returns null when file does not exist", () => {
-    try { unlinkSync(TOKEN_FILE); } catch {}
+    try {
+      unlinkSync(TOKEN_FILE);
+    } catch {}
     expect(readTokenFile()).toBeNull();
   });
 
@@ -73,7 +87,9 @@ describe("file helpers", () => {
 
 describe("isDaemonRunning", () => {
   test("returns not running when no PID file", () => {
-    try { unlinkSync(PID_FILE); } catch {}
+    try {
+      unlinkSync(PID_FILE);
+    } catch {}
     const status = isDaemonRunning();
     expect(status.running).toBe(false);
   });
@@ -134,7 +150,7 @@ describe("startDaemon / stopDaemon", () => {
     const result = await startDaemon({ port: 19194 });
     const resp = await fetch(`http://127.0.0.1:${result.port}/health`);
     expect(resp.status).toBe(200);
-    const body = await resp.json() as { status: string };
+    const body = (await resp.json()) as { status: string };
     expect(body.status).toBe("ok");
   });
 });

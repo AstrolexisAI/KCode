@@ -2,16 +2,10 @@
 // HTTP-based transport layer for mesh communication between nodes.
 // Uses Bun.serve with team-token authentication.
 
-import type {
-  TransportConfig,
-  PeerInfo,
-  MeshTask,
-  MeshTaskHandle,
-  MeshResult,
-} from "./types";
-import { DEFAULT_TRANSPORT_CONFIG } from "./types";
-import { verifyPeerToken, buildAuthHeaders } from "./security";
 import { log } from "../logger";
+import { buildAuthHeaders, verifyPeerToken } from "./security";
+import type { MeshResult, MeshTask, MeshTaskHandle, PeerInfo, TransportConfig } from "./types";
+import { DEFAULT_TRANSPORT_CONFIG } from "./types";
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -31,10 +25,7 @@ export class MeshTransport {
   private handlers: TransportEventHandlers;
   private _running = false;
 
-  constructor(
-    config: Partial<TransportConfig> = {},
-    handlers: TransportEventHandlers = {},
-  ) {
+  constructor(config: Partial<TransportConfig> = {}, handlers: TransportEventHandlers = {}) {
     this.config = { ...DEFAULT_TRANSPORT_CONFIG, ...config };
     this.handlers = handlers;
   }
@@ -51,18 +42,13 @@ export class MeshTransport {
       throw new Error("Cannot start mesh transport without a team token");
     }
 
-    const transport = this;
-
     this.server = Bun.serve({
       port: this.config.port,
-      fetch: async (req) => transport.handleRequest(req),
+      fetch: async (req) => this.handleRequest(req),
     });
 
     this._running = true;
-    log.debug(
-      "mesh-transport",
-      `Transport server started on port ${this.config.port}`,
-    );
+    log.debug("mesh-transport", `Transport server started on port ${this.config.port}`);
   }
 
   /**
@@ -103,10 +89,10 @@ export class MeshTransport {
     // Size check
     const contentLength = parseInt(req.headers.get("Content-Length") ?? "0", 10);
     if (contentLength > this.config.messageMaxSize) {
-      return new Response(
-        JSON.stringify({ error: "Payload too large" }),
-        { status: 413, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Payload too large" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const url = new URL(req.url);
@@ -122,17 +108,17 @@ export class MeshTransport {
         case "/api/v1/result":
           return await this.handleResult(req);
         default:
-          return new Response(
-            JSON.stringify({ error: "Not Found" }),
-            { status: 404, headers: { "Content-Type": "application/json" } },
-          );
+          return new Response(JSON.stringify({ error: "Not Found" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          });
       }
     } catch (err) {
       log.error("mesh-transport", `Request handler error: ${err}`);
-      return new Response(
-        JSON.stringify({ error: "Internal Server Error" }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Internal Server Error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
   }
 
@@ -146,10 +132,10 @@ export class MeshTransport {
 
   private handleCapabilities(): Response {
     if (!this.handlers.onCapabilities) {
-      return new Response(
-        JSON.stringify({ error: "Capabilities not configured" }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Capabilities not configured" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const info = this.handlers.onCapabilities();
@@ -160,18 +146,18 @@ export class MeshTransport {
 
   private async handleTask(req: Request): Promise<Response> {
     if (!this.handlers.onTask) {
-      return new Response(
-        JSON.stringify({ error: "Task handling not configured" }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Task handling not configured" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const task = (await req.json()) as MeshTask;
     if (!task.id || !task.type) {
-      return new Response(
-        JSON.stringify({ error: "Invalid task: missing id or type" }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Invalid task: missing id or type" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const handle = await this.handlers.onTask(task);
@@ -182,10 +168,10 @@ export class MeshTransport {
 
   private async handleResult(req: Request): Promise<Response> {
     if (!this.handlers.onResult) {
-      return new Response(
-        JSON.stringify({ error: "Result handling not configured" }),
-        { status: 503, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Result handling not configured" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const result = (await req.json()) as MeshResult;

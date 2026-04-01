@@ -1,18 +1,30 @@
 // KCode - Command Safety Analysis
 // Detects dangerous patterns: command injection, pipe-to-shell, redirections, quote desync, etc.
 
-import type { PermissionResult } from "./permissions";
-import { resolve, isAbsolute } from "node:path";
 import { existsSync, realpathSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { log } from "./logger";
+import type { PermissionResult } from "./permissions";
 
 // ─── Shell Detection ────────────────────────────────────────────
 
 /** Shells that should not be invoked directly */
 const SHELL_BINARIES = new Set([
-  "sh", "bash", "zsh", "fish", "csh", "tcsh", "ksh", "dash",
-  "/bin/sh", "/bin/bash", "/bin/zsh", "/usr/bin/sh", "/usr/bin/bash",
-  "/usr/bin/zsh", "/usr/bin/env",
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "csh",
+  "tcsh",
+  "ksh",
+  "dash",
+  "/bin/sh",
+  "/bin/bash",
+  "/bin/zsh",
+  "/usr/bin/sh",
+  "/usr/bin/bash",
+  "/usr/bin/zsh",
+  "/usr/bin/env",
 ]);
 
 // ─── Command Parsing ────────────────────────────────────────────
@@ -242,7 +254,16 @@ export function detectNonShellExpression(command: string): string | null {
   const funcMatch = trimmed.match(/^([A-Z][a-zA-Z]+)\s*\(/);
   if (funcMatch && !trimmed.includes("$(")) {
     const funcName = funcMatch[1]!;
-    const shellLikePascal = new Set(["Test", "Set", "New", "Get", "Install", "Remove", "Start", "Stop"]);
+    const shellLikePascal = new Set([
+      "Test",
+      "Set",
+      "New",
+      "Get",
+      "Install",
+      "Remove",
+      "Start",
+      "Stop",
+    ]);
     if (!shellLikePascal.has(funcName)) {
       return `Non-shell expression: looks like a function call, not a shell command`;
     }
@@ -262,9 +283,11 @@ export function detectNonShellExpression(command: string): string | null {
 export function detectDestructiveRemoval(command: string): string | null {
   // Match rm with any flag combination that includes both -r and -f
   // Covers short flags: rm -rf, rm -fr, rm -rfv, rm -rvf, rm -frv, etc.
-  const rmShortFlags = /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*/;
+  const rmShortFlags =
+    /\brm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|\brm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*/;
   // Covers long flags: rm --recursive --force, rm --force --recursive (with optional short flags mixed in)
-  const rmLongFlags = /\brm\s+(?:--?\S+\s+)*--recursive\b.*--force\b|\brm\s+(?:--?\S+\s+)*--force\b.*--recursive\b/;
+  const rmLongFlags =
+    /\brm\s+(?:--?\S+\s+)*--recursive\b.*--force\b|\brm\s+(?:--?\S+\s+)*--force\b.*--recursive\b/;
   if (!rmShortFlags.test(command) && !rmLongFlags.test(command)) return null;
 
   // Extract target: skip `rm`, skip all flag groups (-rf, --recursive, --force, etc.), take the rest
@@ -275,18 +298,18 @@ export function detectDestructiveRemoval(command: string): string | null {
 
   // Allow removal of clearly safe targets
   const safePatterns = [
-    /^node_modules\/?$/,           // node_modules cleanup
-    /^\.next\/?$/,                 // Next.js build cache
-    /^dist\/?$/,                   // build output
-    /^build\/?$/,                  // build output
-    /^\.cache\/?$/,                // generic cache
-    /^__pycache__\/?$/,            // Python cache
-    /^\.turbo\/?$/,                // Turborepo cache
-    /^coverage\/?$/,               // test coverage
-    /^tmp\/?$|^\/tmp\//,           // temp directories
+    /^node_modules\/?$/, // node_modules cleanup
+    /^\.next\/?$/, // Next.js build cache
+    /^dist\/?$/, // build output
+    /^build\/?$/, // build output
+    /^\.cache\/?$/, // generic cache
+    /^__pycache__\/?$/, // Python cache
+    /^\.turbo\/?$/, // Turborepo cache
+    /^coverage\/?$/, // test coverage
+    /^tmp\/?$|^\/tmp\//, // temp directories
   ];
 
-  if (safePatterns.some(p => p.test(targets))) return null;
+  if (safePatterns.some((p) => p.test(targets))) return null;
 
   return `Bash safety issue: destructive removal (rm -rf) of "${targets.slice(0, 60)}". This requires explicit user confirmation`;
 }
@@ -319,7 +342,9 @@ export function detectScaffoldConflict(command: string): string | null {
           return `Scaffold conflict: directory "${targetDir}" already exists with ${entries.length} files. Inspect it before proceeding — do NOT delete and recreate.`;
         }
       }
-    } catch { /* directory check failed, allow command */ }
+    } catch {
+      /* directory check failed, allow command */
+    }
   }
 
   return null;
@@ -363,12 +388,18 @@ export function analyzeBashCommand(command: string): {
   if (scaffoldConflict) issues.push(scaffoldConflict);
 
   let riskLevel: "safe" | "moderate" | "dangerous" =
-    issues.length === 0 ? "safe" :
-    issues.some((i) =>
-      i.includes("injection") || i.includes("shell invocation") || i.includes("sensitive system path") || i.includes("pipes to shell") || i.includes("destructive removal")
-    )
-      ? "dangerous"
-      : "moderate";
+    issues.length === 0
+      ? "safe"
+      : issues.some(
+            (i) =>
+              i.includes("injection") ||
+              i.includes("shell invocation") ||
+              i.includes("sensitive system path") ||
+              i.includes("pipes to shell") ||
+              i.includes("destructive removal"),
+          )
+        ? "dangerous"
+        : "moderate";
 
   // Sudo commands are at least moderate risk
   if (/\bsudo\b/.test(command) && riskLevel === "safe") {
@@ -380,7 +411,11 @@ export function analyzeBashCommand(command: string): {
 
 // ─── Write Validation ───────────────────────────────────────────
 
-export function validateFileWritePath(filePath: string, workingDirectory: string, additionalDirs?: string[]): PermissionResult {
+export function validateFileWritePath(
+  filePath: string,
+  workingDirectory: string,
+  additionalDirs?: string[],
+): PermissionResult {
   if (!isAbsolute(filePath)) {
     return {
       allowed: false,
@@ -417,7 +452,10 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
             };
           }
         } catch (err) {
-          log.debug("permissions", `Symlink check failed for ${resolve(realDir, basename)}: ${err}`);
+          log.debug(
+            "permissions",
+            `Symlink check failed for ${resolve(realDir, basename)}: ${err}`,
+          );
         }
       }
     }
@@ -427,8 +465,18 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
 
   // Block writes to system directories (checked first for specific error messages)
   const PROTECTED_DIRS = [
-    "/etc", "/usr", "/bin", "/sbin", "/lib", "/lib64",
-    "/boot", "/proc", "/sys", "/dev", "/var/run", "/var/lock",
+    "/etc",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/lib",
+    "/lib64",
+    "/boot",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/var/run",
+    "/var/lock",
   ];
   for (const dir of PROTECTED_DIRS) {
     if (resolved.startsWith(dir + "/") || resolved === dir) {
@@ -442,9 +490,19 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
   // Block writes to sensitive home directory dotfiles/dirs
   const home = process.env.HOME ?? "/root";
   const SENSITIVE_HOME_PATTERNS = [
-    ".ssh", ".gnupg", ".gpg", ".aws", ".azure", ".kube", ".docker",
-    ".config/gcloud", ".config/gh",
-    ".npmrc", ".pypirc", ".netrc", ".git-credentials",
+    ".ssh",
+    ".gnupg",
+    ".gpg",
+    ".aws",
+    ".azure",
+    ".kube",
+    ".docker",
+    ".config/gcloud",
+    ".config/gh",
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+    ".git-credentials",
   ];
   for (const pattern of SENSITIVE_HOME_PATTERNS) {
     const fullPath = `${home}/${pattern}`;
@@ -468,9 +526,16 @@ export function validateFileWritePath(filePath: string, workingDirectory: string
   // Block writes to dotfiles that control shell/tool behavior
   const basename = resolved.split("/").pop() ?? "";
   const sensitiveFiles = [
-    ".env", ".env.local", ".env.production",
-    ".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile",
-    ".gitconfig", ".gitignore_global",
+    ".env",
+    ".env.local",
+    ".env.production",
+    ".bashrc",
+    ".zshrc",
+    ".profile",
+    ".bash_profile",
+    ".zprofile",
+    ".gitconfig",
+    ".gitignore_global",
   ];
   if (sensitiveFiles.includes(basename)) {
     return {

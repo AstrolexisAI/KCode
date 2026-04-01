@@ -1,11 +1,11 @@
 // KCode - MCP Tool Discovery and Adaptation
 // Tool filtering, registration, and conversion from MCP schemas to KCode ToolDefinitions
 
-import type { ToolDefinition, ToolResult } from "./types";
-import type { ToolRegistry } from "./tool-registry";
-import type { McpServerConfig, McpConnection } from "./mcp-client";
-import type { McpHealthMonitor } from "./mcp-health";
 import { log } from "./logger";
+import type { McpConnection, McpServerConfig } from "./mcp-client";
+import type { McpHealthMonitor } from "./mcp-health";
+import type { ToolRegistry } from "./tool-registry";
+import type { ToolDefinition, ToolResult } from "./types";
 
 // ─── Tool Filtering ─────────────────────────────────────────────
 
@@ -49,7 +49,10 @@ export function registerMcpTools(
     for (const tool of connection.getTools()) {
       // Apply per-server tool filtering
       if (config && !isToolAllowedByConfig(tool.name, config)) {
-        log.info("mcp", `Tool "${tool.name}" from server "${serverName}" blocked by allowedTools/blockedTools config`);
+        log.info(
+          "mcp",
+          `Tool "${tool.name}" from server "${serverName}" blocked by allowedTools/blockedTools config`,
+        );
         continue;
       }
 

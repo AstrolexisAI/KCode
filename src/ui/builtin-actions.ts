@@ -4,19 +4,18 @@
 
 import type { ConversationManager } from "../core/conversation.js";
 import type { KCodeConfig } from "../core/types.js";
-import type { MessageEntry } from "./components/MessageList.js";
-import { handleSessionAction } from "./actions/session-actions.js";
+import type { ActionContext } from "./actions/action-helpers.js";
+import { handleGitAction } from "./actions/git-actions.js";
 import { handleInfoAction } from "./actions/info-actions.js";
 import { handleModelConfigAction } from "./actions/model-config-actions.js";
+import { handleSessionAction } from "./actions/session-actions.js";
 import { handleToolAction } from "./actions/tool-actions.js";
-import { handleGitAction } from "./actions/git-actions.js";
 import { handleUtilityAction } from "./actions/utility-actions.js";
-import type { ActionContext } from "./actions/action-helpers.js";
+import type { MessageEntry } from "./components/MessageList.js";
 
 export type SetCompleted = (updater: (prev: MessageEntry[]) => MessageEntry[]) => void;
 
-export
-function summarizeInput(name: string, input: Record<string, unknown>): string {
+export function summarizeInput(name: string, input: Record<string, unknown>): string {
   switch (name) {
     case "Bash":
       return String(input.command ?? "").slice(0, 80);
