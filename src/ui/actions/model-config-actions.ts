@@ -614,6 +614,36 @@ export async function handleModelConfigAction(
         `         /telemetry off  \u2014 disable local analytics`,
       ].join("\n");
     }
+    case "lang": {
+      const { getLocale, setLocale, getAvailableLocales } = await import("../../i18n/index.js");
+      const { saveUserSettingsRaw } = await import("../../core/config.js");
+      const locale = args?.trim().toLowerCase();
+      const available = getAvailableLocales();
+
+      if (!locale) {
+        const current = getLocale();
+        const lines = [`  Current language: ${current}`, "", "  Available languages:"];
+        for (const code of available) {
+          const marker = code === current ? " (active)" : "";
+          lines.push(`    ${code}${marker}`);
+        }
+        lines.push("", "  Usage: /lang <code>");
+        return lines.join("\n");
+      }
+
+      if (!available.includes(locale)) {
+        return `  Unknown language "${locale}". Available: ${available.join(", ")}`;
+      }
+
+      setLocale(locale);
+      // Persist to user settings
+      try {
+        await saveUserSettingsRaw({ language: locale });
+      } catch {
+        /* non-fatal */
+      }
+      return `  Language switched to: ${locale}`;
+    }
     case "agents": {
       const { listAllAgents, findCustomAgent } = await import("../../core/custom-agents");
       const name = (args ?? "").trim();

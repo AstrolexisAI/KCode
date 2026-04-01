@@ -944,6 +944,29 @@ export async function handleRoute(
     return Response.json({ skills }, { headers: corsHeaders });
   }
 
+  // ── Stripe Webhook ──────────────────────────────────────────────
+
+  if (pathname === "/api/webhook/stripe" && method === "POST") {
+    try {
+      const { loadPaymentConfig, verifyWebhookSignature, handleWebhookEvent } = await import("./payments.js");
+      const config = await loadPaymentConfig();
+      if (!config.stripeWebhookSecret) {
+        return jsonError("Webhook not configured", 503, corsHeaders);
+      }
+      const payload = await req.text();
+      const signature = req.headers.get("stripe-signature") ?? "";
+      if (!verifyWebhookSignature(payload, signature, config.stripeWebhookSecret)) {
+        return jsonError("Invalid signature", 401, corsHeaders);
+      }
+      const event = JSON.parse(payload);
+      await handleWebhookEvent(event);
+      return Response.json({ received: true }, { headers: corsHeaders });
+    } catch (err) {
+      log.warn("webhook", `Stripe webhook error: ${err instanceof Error ? err.message : err}`);
+      return jsonError("Webhook processing failed", 500, corsHeaders);
+    }
+  }
+
   return jsonError("Not Found", 404, corsHeaders);
 }
 

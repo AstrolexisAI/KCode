@@ -1050,6 +1050,133 @@ INSTRUCTIONS:
 
       return lines.join("\n");
     }
+    case "rag": {
+      const { getRAGEngine } = await import("../../core/rag/engine.js");
+      const { getRagAutoIndexer } = await import("../../core/rag/auto-index.js");
+      const cwd = appConfig.workingDirectory;
+      const parts = (args ?? "").trim().split(/\s+/);
+      const subCmd = parts[0]?.toLowerCase() ?? "status";
+
+      if (subCmd === "status" || subCmd === "") {
+        const engine = getRAGEngine(cwd);
+        try {
+          await engine.init();
+        } catch {
+          /* may not be initialized yet */
+        }
+        const stats = engine.stats();
+        const autoIndexer = getRagAutoIndexer(cwd);
+        const autoStats = autoIndexer.getStats();
+        const indexing = engine.isIndexing();
+
+        const lines = [
+          `  RAG Index Status\n`,
+          `  Chunks:          ${stats.total.toLocaleString()}`,
+          `  Files indexed:   ${stats.files.toLocaleString()}`,
+          `  Total tokens:    ${stats.totalTokens.toLocaleString()}`,
+          `  Currently indexing: ${indexing ? "yes" : "no"}`,
+          ``,
+          `  Auto-indexing:   ${autoStats.isIndexing ? "running" : "idle"}`,
+          `  Pending files:   ${autoStats.pendingFiles}`,
+          `  Total reindexed: ${autoStats.totalReindexed}`,
+          ``,
+          `  Subcommands:`,
+          `    /rag rebuild        — Force full re-indexation`,
+          `    /rag toggle         — Enable/disable auto RAG context injection`,
+          `    /rag search <query> — Semantic search over indexed code`,
+        ];
+        return lines.join("\n");
+      }
+
+      if (subCmd === "rebuild") {
+        const engine = getRAGEngine(cwd);
+        try {
+          engine.clear();
+          const report = await engine.indexProject(cwd);
+          return [
+            `  RAG index rebuilt.`,
+            `  Files: ${report.filesProcessed}, Chunks: ${report.chunksCreated}, Duration: ${report.durationMs}ms`,
+            report.errors.length > 0
+              ? `  Errors: ${report.errors.length} (${report.errors.slice(0, 3).map((e) => e.file).join(", ")}${report.errors.length > 3 ? "..." : ""})`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+        } catch (err) {
+          return `  RAG rebuild failed: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+
+      if (subCmd === "toggle") {
+        const autoIndexer = getRagAutoIndexer(cwd);
+        const autoStats = autoIndexer.getStats();
+
+        // Toggle: if currently enabled (not stopped), stop it; otherwise enable
+        // We check by looking at whether the config is enabled via a test reindex
+        // The simplest approach: if pending or reindexed > 0 or explicitly enabled, it's on
+        // We'll use a simple flag approach via the auto-indexer methods
+        const settingsPath = (await import("../../core/paths.js")).kcodePath("settings.json");
+        let ragEnabled = true;
+        try {
+          const file = Bun.file(settingsPath);
+          if (await file.exists()) {
+            const settings = await file.json();
+            ragEnabled = settings?.ragAutoIndex !== false;
+          }
+        } catch {
+          /* default enabled */
+        }
+
+        const newState = !ragEnabled;
+        if (newState) {
+          autoIndexer.enable();
+        } else {
+          autoIndexer.stop();
+        }
+
+        // Persist the setting
+        try {
+          const file = Bun.file(settingsPath);
+          const existing = (await file.exists()) ? await file.json() : {};
+          existing.ragAutoIndex = newState;
+          await Bun.write(settingsPath, JSON.stringify(existing, null, 2) + "\n");
+        } catch {
+          /* ignore write errors */
+        }
+
+        return `  RAG auto-indexing ${newState ? "enabled" : "disabled"}.`;
+      }
+
+      if (subCmd === "search") {
+        const query = parts.slice(1).join(" ").trim();
+        if (!query) return "  Usage: /rag search <query>\n  Performs semantic search over the indexed codebase.";
+
+        const engine = getRAGEngine(cwd);
+        try {
+          await engine.init();
+          const results = await engine.search(query, { limit: 10 });
+
+          if (results.length === 0) {
+            const stats = engine.stats();
+            if (stats.total === 0) {
+              return `  No results — index is empty. Run /rag rebuild first.`;
+            }
+            return `  No results for "${query}".`;
+          }
+
+          const lines = [`  RAG search: "${query}" (${results.length} results)\n`];
+          for (const r of results.slice(0, 10)) {
+            const sim = (r.similarity * 100).toFixed(1);
+            lines.push(`  ${sim}%  ${r.relativePath}:${r.startLine}-${r.endLine}  (${r.name})`);
+          }
+          return lines.join("\n");
+        } catch (err) {
+          return `  RAG search failed: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      }
+
+      return `  Unknown subcommand: ${subCmd}\n  Usage: /rag [status | rebuild | toggle | search <query>]`;
+    }
     default:
       return null;
   }

@@ -107,7 +107,7 @@ export class Scratchpad {
           if (entry.file === file && entry.action === "write") {
             return entry.author;
           }
-        } catch {}
+        } catch { /* cleanup — ignore failures */ }
       }
     } catch {
       // Log file unreadable

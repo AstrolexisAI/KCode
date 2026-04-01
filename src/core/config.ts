@@ -91,6 +91,7 @@ export interface Settings {
     enableCodebaseIndex?: boolean;
     enableExperimentalTools?: boolean;
   };
+  language?: string; // UI language code (e.g. "en", "es", "fr", "de", "ja", "ko", "pt", "zh")
   voice?: {
     enabled: boolean;
     engine: "local" | "cloud" | "auto";
@@ -234,6 +235,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
       raw.hardware && typeof raw.hardware === "object"
         ? parseHardwareSettings(raw.hardware as Record<string, unknown>)
         : undefined,
+    language: typeof raw.language === "string" ? raw.language : undefined,
   };
 }
 
@@ -369,6 +371,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.offline !== undefined) result.offline = { ...result.offline, ...layer.offline };
     if (layer.ensemble !== undefined) result.ensemble = { ...result.ensemble, ...layer.ensemble };
     if (layer.hardware !== undefined) result.hardware = { ...result.hardware, ...layer.hardware };
+    if (layer.language !== undefined) result.language = layer.language;
     if (layer.permissionRules !== undefined) {
       // Merge rules: later layers append (higher priority evaluated first)
       result.permissionRules = [...(result.permissionRules ?? []), ...layer.permissionRules];
@@ -395,6 +398,9 @@ function envSettings(): Settings {
   }
   if (process.env.KCODE_THEME) {
     settings.theme = process.env.KCODE_THEME;
+  }
+  if (process.env.KCODE_LANG) {
+    settings.language = process.env.KCODE_LANG;
   }
   return settings;
 }
@@ -821,6 +827,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     auditLog: policy.auditLog,
     orgId: policy.orgId,
     offline: settings.offline,
+    language: settings.language,
   };
 }
 

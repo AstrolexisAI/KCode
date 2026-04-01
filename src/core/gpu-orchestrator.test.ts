@@ -3,6 +3,9 @@ import {
   parseNvidiaSmiOutput,
   formatGpuStatusTable,
   checkGpuAlerts,
+  calculateTensorSplit,
+  getRecommendedLlamaArgs,
+  formatStatusBarGpu,
   type GpuStatus,
 } from "./gpu-orchestrator";
 
@@ -326,5 +329,307 @@ describe("checkGpuAlerts", () => {
 
     const alerts = checkGpuAlerts(statuses);
     expect(alerts.filter((a) => a.type === "vram")).toHaveLength(0);
+  });
+});
+
+// ─── calculateTensorSplit ──────────────────────────────────────
+
+describe("calculateTensorSplit", () => {
+  it("returns null for empty array", () => {
+    expect(calculateTensorSplit([])).toBeNull();
+  });
+
+  it("returns '1.00' for single GPU", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0,
+        name: "RTX 4090",
+        vramTotal: 24576,
+        vramFree: 20000,
+        vramUsed: 4576,
+        temperature: 50,
+        utilization: 30,
+        powerDraw: 100,
+        driverVersion: "550.54.14",
+      },
+    ];
+    expect(calculateTensorSplit(gpus)).toBe("1.00");
+  });
+
+  it("calculates proportional split for dual GPU (4090 + 5090)", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0,
+        name: "NVIDIA GeForce RTX 4090",
+        vramTotal: 24576,
+        vramFree: 20000,
+        vramUsed: 4576,
+        temperature: 45,
+        utilization: 30,
+        powerDraw: 120,
+        driverVersion: "550.54.14",
+      },
+      {
+        index: 1,
+        name: "NVIDIA GeForce RTX 5090",
+        vramTotal: 32768,
+        vramFree: 28000,
+        vramUsed: 4768,
+        temperature: 38,
+        utilization: 20,
+        powerDraw: 95,
+        driverVersion: "550.54.14",
+      },
+    ];
+
+    const split = calculateTensorSplit(gpus);
+    expect(split).toBeDefined();
+    const parts = split!.split(",").map(Number);
+    expect(parts).toHaveLength(2);
+    // 20000/(20000+28000) = 0.4167 -> "0.42"
+    // 28000/(20000+28000) = 0.5833 -> "0.58"
+    expect(parts[0]).toBeCloseTo(0.42, 1);
+    expect(parts[1]).toBeCloseTo(0.58, 1);
+    // Sum should be ~1.0
+    expect(parts[0]! + parts[1]!).toBeCloseTo(1.0, 1);
+  });
+
+  it("returns null when all GPUs have 0 free VRAM", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0,
+        name: "RTX 4090",
+        vramTotal: 24576,
+        vramFree: 0,
+        vramUsed: 24576,
+        temperature: 80,
+        utilization: 100,
+        powerDraw: 350,
+        driverVersion: "550.54.14",
+      },
+      {
+        index: 1,
+        name: "RTX 5090",
+        vramTotal: 32768,
+        vramFree: 0,
+        vramUsed: 32768,
+        temperature: 75,
+        utilization: 100,
+        powerDraw: 400,
+        driverVersion: "550.54.14",
+      },
+    ];
+    expect(calculateTensorSplit(gpus)).toBeNull();
+  });
+
+  it("handles three GPUs", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0, name: "GPU A", vramTotal: 16384, vramFree: 10000,
+        vramUsed: 6384, temperature: 50, utilization: 40, powerDraw: 100, driverVersion: "550",
+      },
+      {
+        index: 1, name: "GPU B", vramTotal: 24576, vramFree: 20000,
+        vramUsed: 4576, temperature: 45, utilization: 20, powerDraw: 120, driverVersion: "550",
+      },
+      {
+        index: 2, name: "GPU C", vramTotal: 32768, vramFree: 30000,
+        vramUsed: 2768, temperature: 40, utilization: 10, powerDraw: 80, driverVersion: "550",
+      },
+    ];
+
+    const split = calculateTensorSplit(gpus);
+    const parts = split!.split(",").map(Number);
+    expect(parts).toHaveLength(3);
+    expect(parts[0]! + parts[1]! + parts[2]!).toBeCloseTo(1.0, 1);
+  });
+});
+
+// ─── getRecommendedLlamaArgs ───────────────────────────────────
+
+describe("getRecommendedLlamaArgs", () => {
+  it("returns CPU-only args for no GPUs", () => {
+    const args = getRecommendedLlamaArgs([]);
+    expect(args).toContain("--n-gpu-layers");
+    expect(args[args.indexOf("--n-gpu-layers") + 1]).toBe("0");
+    expect(args).toContain("--mmap");
+    expect(args).not.toContain("--tensor-split");
+  });
+
+  it("returns -1 layers for single GPU with plenty of VRAM", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0,
+        name: "RTX 4090",
+        vramTotal: 24576,
+        vramFree: 22000,
+        vramUsed: 2576,
+        temperature: 45,
+        utilization: 10,
+        powerDraw: 80,
+        driverVersion: "550.54.14",
+      },
+    ];
+
+    const args = getRecommendedLlamaArgs(gpus);
+    expect(args).toContain("--n-gpu-layers");
+    expect(args[args.indexOf("--n-gpu-layers") + 1]).toBe("-1");
+    expect(args).toContain("--mmap");
+    expect(args).not.toContain("--tensor-split");
+  });
+
+  it("includes tensor-split for multi-GPU", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0,
+        name: "RTX 4090",
+        vramTotal: 24576,
+        vramFree: 20000,
+        vramUsed: 4576,
+        temperature: 45,
+        utilization: 30,
+        powerDraw: 120,
+        driverVersion: "550.54.14",
+      },
+      {
+        index: 1,
+        name: "RTX 5090",
+        vramTotal: 32768,
+        vramFree: 28000,
+        vramUsed: 4768,
+        temperature: 38,
+        utilization: 20,
+        powerDraw: 95,
+        driverVersion: "550.54.14",
+      },
+    ];
+
+    const args = getRecommendedLlamaArgs(gpus);
+    expect(args).toContain("--tensor-split");
+    expect(args).toContain("--n-gpu-layers");
+    expect(args).toContain("--mmap");
+
+    const splitIdx = args.indexOf("--tensor-split");
+    const splitVal = args[splitIdx + 1]!;
+    expect(splitVal).toMatch(/^\d+\.\d+,\d+\.\d+$/);
+  });
+
+  it("scales GPU layers for limited VRAM", () => {
+    const gpus: GpuStatus[] = [
+      {
+        index: 0,
+        name: "GTX 1060",
+        vramTotal: 6144,
+        vramFree: 5000,
+        vramUsed: 1144,
+        temperature: 60,
+        utilization: 20,
+        powerDraw: 80,
+        driverVersion: "535.0",
+      },
+    ];
+
+    const args = getRecommendedLlamaArgs(gpus);
+    const layerIdx = args.indexOf("--n-gpu-layers");
+    const layers = parseInt(args[layerIdx + 1]!, 10);
+    // 5000MB free = ~4.88 GB -> ~9 layers at 0.5 GB each
+    expect(layers).toBeGreaterThan(0);
+    expect(layers).toBeLessThan(20);
+  });
+});
+
+// ─── formatStatusBarGpu ────────────────────────────────────────
+
+describe("formatStatusBarGpu", () => {
+  it("returns 'GPU: none' for empty array", () => {
+    expect(formatStatusBarGpu([])).toBe("GPU: none");
+  });
+
+  it("formats single NVIDIA GPU compactly", () => {
+    const statuses: GpuStatus[] = [
+      {
+        index: 0,
+        name: "NVIDIA GeForce RTX 4090",
+        vramTotal: 24576,
+        vramFree: 12288,
+        vramUsed: 12288,
+        temperature: 45,
+        utilization: 50,
+        powerDraw: 200,
+        driverVersion: "550.54.14",
+      },
+    ];
+
+    const bar = formatStatusBarGpu(statuses);
+    expect(bar).toBe("GPU: 4090 45C 12/24GB");
+  });
+
+  it("formats dual GPU with pipe separator", () => {
+    const statuses: GpuStatus[] = [
+      {
+        index: 0,
+        name: "NVIDIA GeForce RTX 4090",
+        vramTotal: 24576,
+        vramFree: 12288,
+        vramUsed: 12288,
+        temperature: 45,
+        utilization: 50,
+        powerDraw: 200,
+        driverVersion: "550.54.14",
+      },
+      {
+        index: 1,
+        name: "NVIDIA GeForce RTX 5090",
+        vramTotal: 32768,
+        vramFree: 24576,
+        vramUsed: 8192,
+        temperature: 38,
+        utilization: 20,
+        powerDraw: 95,
+        driverVersion: "550.54.14",
+      },
+    ];
+
+    const bar = formatStatusBarGpu(statuses);
+    expect(bar).toBe("GPU: 4090 45C 12/24GB | 5090 38C 8/32GB");
+  });
+
+  it("omits temperature when 0 (Apple Silicon)", () => {
+    const statuses: GpuStatus[] = [
+      {
+        index: 0,
+        name: "Apple M2 Pro",
+        vramTotal: 12288,
+        vramFree: 10000,
+        vramUsed: 2288,
+        temperature: 0,
+        utilization: 15,
+        powerDraw: 0,
+        driverVersion: "Metal",
+      },
+    ];
+
+    const bar = formatStatusBarGpu(statuses);
+    expect(bar).toBe("GPU: Apple M2 Pro 2/12GB");
+    expect(bar).not.toContain("0C");
+  });
+
+  it("strips NVIDIA prefix variations", () => {
+    const statuses: GpuStatus[] = [
+      {
+        index: 0,
+        name: "NVIDIA GeForce GTX 1080 Ti",
+        vramTotal: 11264,
+        vramFree: 8192,
+        vramUsed: 3072,
+        temperature: 65,
+        utilization: 70,
+        powerDraw: 200,
+        driverVersion: "535.0",
+      },
+    ];
+
+    const bar = formatStatusBarGpu(statuses);
+    expect(bar).toBe("GPU: 1080 Ti 65C 3/11GB");
   });
 });

@@ -68,7 +68,7 @@ export class StreamingASR {
     if (this.process) {
       try {
         this.process.kill();
-      } catch {}
+      } catch { /* cleanup — ignore failures */ }
       this.process = null;
     }
     this.chunkBuffer = [];
@@ -193,10 +193,10 @@ export class StreamingASR {
     } finally {
       try {
         unlinkSync(tempPath);
-      } catch {}
+      } catch { /* cleanup — ignore failures */ }
       try {
         unlinkSync(tempPath.replace(".wav", ".txt"));
-      } catch {}
+      } catch { /* cleanup — ignore failures */ }
     }
   }
 

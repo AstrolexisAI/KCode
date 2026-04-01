@@ -128,6 +128,7 @@ export interface KCodeConfig {
   activeProfile?: string; // Currently active execution profile name (e.g., "safe", "fast", "review")
   customFetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>; // Inject a custom fetch function (for in-process testing)
   offline?: import("./offline/types").OfflineSettings; // Offline mode configuration
+  language?: string; // UI language code (e.g. "en", "es", "fr")
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";

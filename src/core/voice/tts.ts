@@ -80,7 +80,7 @@ export class LocalTTS {
     if (this.currentProcess) {
       try {
         this.currentProcess.kill();
-      } catch {}
+      } catch { /* cleanup — ignore failures */ }
       this.currentProcess = null;
     }
   }
