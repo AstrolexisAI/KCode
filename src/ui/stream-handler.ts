@@ -102,7 +102,17 @@ export async function processStreamEvents(
           currentThinking = "";
         }
         currentText += event.text;
-        setStreamingText(currentText);
+        // Cap the visible streaming text to avoid flooding the terminal
+        // with hundreds of lines of code. Show first lines + a counter.
+        const streamLines = currentText.split("\n");
+        if (streamLines.length > 30) {
+          const truncated =
+            streamLines.slice(0, 6).join("\n") +
+            `\n... writing (${streamLines.length} lines)`;
+          setStreamingText(truncated);
+        } else {
+          setStreamingText(currentText);
+        }
         break;
 
       case "thinking_delta":
@@ -125,9 +135,22 @@ export async function processStreamEvents(
           setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
           currentThinking = "";
         }
-        // Finalize any accumulated text
+        // Finalize any accumulated text.
+        // If the text is long code that will be written via Write/Edit, collapse it
+        // to avoid flooding the terminal with hundreds of raw code lines.
         if (currentText.length > 0) {
-          const text = currentText;
+          let text = currentText;
+          const lineCount = text.split("\n").length;
+          if (lineCount > 20) {
+            // Extract any non-code preamble (text before the first code fence or long code block)
+            const fenceIdx = text.indexOf("```");
+            if (fenceIdx >= 0) {
+              const preamble = text.slice(0, fenceIdx).trim();
+              text = preamble || text.split("\n").slice(0, 3).join("\n") + `\n... (${lineCount} lines)`;
+            } else {
+              text = text.split("\n").slice(0, 3).join("\n") + `\n... (${lineCount} lines)`;
+            }
+          }
           setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text }]);
           currentText = "";
           setStreamingText("");
