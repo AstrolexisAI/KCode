@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KCode — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 2rem;
+    }
+    .container { max-width: 480px; }
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+      opacity: 0.6;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #e6edf3;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: #8b949e;
+      margin-bottom: 1.5rem;
+    }
+    .retry-btn {
+      display: inline-block;
+      padding: 0.6rem 1.5rem;
+      background: #7c8cf8;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .retry-btn:hover { background: #6b7bf7; }
+    .status {
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: #484f58;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">&#128268;</div>
+    <h1>KCode is offline</h1>
+    <p>
+      The connection to the KCode server has been lost.
+      Make sure the KCode process is running and try again.
+    </p>
+    <button class="retry-btn" onclick="window.location.reload()">Reconnect</button>
+    <div class="status">
+      Waiting for <code>kcode web</code> on localhost:19300
+    </div>
+  </div>
+</body>
+</html>
