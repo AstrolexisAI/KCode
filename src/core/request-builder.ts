@@ -386,9 +386,18 @@ export async function executeModelRequest(
 
     // Provide actionable hint for common errors
     let hint = "";
-    if (response.status === 400 && estimatedTokens > 8000) {
+    if (response.status === 429) {
+      hint =
+        " (rate limit reached — waiting before retry. If this persists, try /compact to reduce context or switch to a smaller model)";
+    } else if (response.status === 400 && estimatedTokens > 8000) {
       hint =
         " (hint: request may exceed model context window — try /compact or reduce conversation length)";
+    }
+    // For rate limits, show a clean message instead of dumping the raw API JSON
+    if (response.status === 429) {
+      throw new Error(
+        `Rate limit reached (429)${hint}`,
+      );
     }
     throw new Error(
       `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}${hint}`,
