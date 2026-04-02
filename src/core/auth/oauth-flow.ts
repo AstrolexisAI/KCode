@@ -17,6 +17,13 @@ export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
     clientId: "kcode-cli",
     scopes: ["api", "sync"],
   },
+  anthropic: {
+    provider: "anthropic",
+    authorizationUrl: "https://console.anthropic.com/oauth/authorize",
+    tokenUrl: "https://console.anthropic.com/v1/oauth/token",
+    clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+    scopes: ["org:create_api_key"],
+  },
 };
 
 // ── PKCE utilities ──
@@ -267,6 +274,72 @@ export async function refreshAccessToken(
 export async function clearTokens(provider: string): Promise<void> {
   await deleteSecret(`${TOKEN_ACCOUNT_PREFIX}${provider}`);
   await deleteSecret(`${REFRESH_ACCOUNT_PREFIX}${provider}`);
+}
+
+// ── Anthropic OAuth → API Key ──
+
+/**
+ * Complete the Anthropic OAuth flow:
+ * 1. Run PKCE OAuth flow via browser
+ * 2. Use the obtained token to create a permanent API key
+ * Returns the permanent API key string.
+ */
+export async function anthropicOAuthLogin(): Promise<string> {
+  const providerConfig = PROVIDER_CONFIGS.anthropic!;
+  const config: OAuthConfig = {
+    provider: "anthropic",
+    authorizationUrl: providerConfig.authorizationUrl!,
+    tokenUrl: providerConfig.tokenUrl!,
+    clientId: providerConfig.clientId!,
+    scopes: providerConfig.scopes!,
+    redirectPort: DEFAULT_REDIRECT_PORT,
+  };
+
+  // Open browser for OAuth
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = await generateCodeChallenge(codeVerifier);
+  const state = generateState();
+  const redirectUri = `http://127.0.0.1:${config.redirectPort}/callback`;
+
+  const authUrl = buildAuthUrl(config, codeChallenge, state);
+  await openBrowser(authUrl);
+
+  // Wait for callback
+  const code = await waitForCallback(config.redirectPort, state);
+
+  // Exchange code for token
+  const tokens = await exchangeCode(config, code, codeVerifier, redirectUri);
+
+  // Use the token to create a permanent API key
+  const apiKey = await createAnthropicApiKey(tokens.accessToken);
+  return apiKey;
+}
+
+/** Use Anthropic OAuth token to create a permanent API key */
+async function createAnthropicApiKey(accessToken: string): Promise<string> {
+  const response = await fetch(
+    "https://api.anthropic.com/api/oauth/claude_cli/create_api_key",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: "KCode CLI" }),
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to create Anthropic API key (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as Record<string, unknown>;
+  const apiKey = data.api_key as string;
+  if (!apiKey) {
+    throw new Error("Anthropic OAuth response did not contain an API key");
+  }
+  return apiKey;
 }
 
 // ── API key migration ──

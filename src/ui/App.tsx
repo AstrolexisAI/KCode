@@ -310,7 +310,7 @@ export default function App({ config, conversationManager, tools, initialSession
           {
             kind: "text",
             role: "assistant",
-            text: `  ☁  ${provider.name} configured!\n  API key saved to ~/.kcode/settings.json\n  Registered models: ${provider.models}\n  Active model switched to: ${newModel}`,
+            text: `  ☁  ${provider.name} configured!${result.viaOAuth ? " (via OAuth)" : ""}\n  API key saved to ~/.kcode/settings.json\n  Registered models: ${provider.models}\n  Active model switched to: ${newModel}`,
           },
         ]);
       } catch (err) {
