@@ -353,7 +353,7 @@ export default function KodiCompanion({
   const bubble = frame?.bubble ?? "";
 
   return (
-    <Box flexDirection="row" borderStyle="round" borderColor={theme.dimmed} paddingX={1}>
+    <Box flexDirection="row" borderStyle="round" borderColor={theme.dimmed} paddingX={1} width={process.stdout.columns || 80}>
       {/* Kodi sprite — pre-composed, fixed-width lines */}
       <Box flexDirection="column" width={15}>
         {lines.map((line, i) => (
