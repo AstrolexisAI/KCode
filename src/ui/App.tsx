@@ -1,7 +1,7 @@
 // KCode - Main Ink application component
 // Top-level component managing conversation flow and rendering
 
-import { Box, Text, useApp } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
 import { SkillManager } from "../core/skills.js";
@@ -42,7 +42,7 @@ type AppMode = "input" | "responding" | "permission" | "sudo-password" | "cloud"
 
 export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
   const { exit } = useApp();
-  const { switchTheme } = useTheme();
+  const { theme, switchTheme } = useTheme();
   // Skills manager - created once per component instance
   const [skillManager] = useState(() => {
     const sm = new SkillManager(config.workingDirectory);
@@ -168,7 +168,9 @@ export default function App({ config, conversationManager, tools, initialSession
     });
   }, []);
 
-  // Notify user if the previous session used a different model
+  // Ask user if they want to resume the previous session's model
+  const [pendingLastModel, setPendingLastModel] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -176,20 +178,49 @@ export default function App({ config, conversationManager, tools, initialSession
         const settings = await loadUserSettingsRaw();
         const lastModel = settings.lastSessionModel as string | undefined;
         if (lastModel && lastModel !== config.model) {
-          setCompleted((prev) => [
-            ...prev,
-            {
-              kind: "text",
-              role: "assistant",
-              text: `  Previous session used ${lastModel}. Current model: ${config.model}.\n  Use /model to switch, or type to continue with ${config.model}.`,
-            },
-          ]);
+          setPendingLastModel(lastModel);
         }
       } catch {
         // Ignore — settings may not exist yet
       }
     })();
   }, []);
+
+  // Handle keypress for the model resume prompt
+  useInput(
+    (input, key) => {
+      if (!pendingLastModel) return;
+      const answer = input.toLowerCase();
+      if (answer === "y" || answer === "s" || key.return) {
+        // Switch to last session's model
+        const lastModel = pendingLastModel;
+        setPendingLastModel(null);
+        (async () => {
+          config.model = lastModel;
+          config.modelExplicitlySet = true;
+          conversationManager.getConfig().model = lastModel;
+          conversationManager.getConfig().modelExplicitlySet = true;
+          const { getModelContextSize } = await import("../core/models.js");
+          const ctxSize = await getModelContextSize(lastModel);
+          if (ctxSize) {
+            config.contextWindowSize = ctxSize;
+            conversationManager.getConfig().contextWindowSize = ctxSize;
+          }
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: `  Switched to ${lastModel} from previous session.` },
+          ]);
+        })();
+      } else if (answer === "n" || key.escape) {
+        setPendingLastModel(null);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "assistant", text: `  Continuing with ${config.model}.` },
+        ]);
+      }
+    },
+    { isActive: !!pendingLastModel },
+  );
 
   // Message processing: slash commands, LLM sending, queue draining
   const { handleSubmit, messageQueueRef } = useMessageProcessor({
@@ -537,9 +568,23 @@ export default function App({ config, conversationManager, tools, initialSession
           sessionStartTime={sessionStart}
         />
         <ActivePlanPanel plan={activePlan} />
+        {pendingLastModel && (
+          <Box marginLeft={2} marginBottom={0}>
+            <Text>
+              <Text color={theme.warning}>Previous session used </Text>
+              <Text bold color={theme.primary}>{pendingLastModel}</Text>
+              <Text color={theme.warning}>. Resume with that model? </Text>
+              <Text bold color={theme.success}>[y]</Text>
+              <Text color={theme.dimmed}> yes  </Text>
+              <Text bold color={theme.error}>[n]</Text>
+              <Text color={theme.dimmed}> no, use {config.model}</Text>
+            </Text>
+          </Box>
+        )}
         <InputPrompt
           onSubmit={handleSubmit}
           isActive={
+            !pendingLastModel &&
             mode !== "permission" &&
             mode !== "sudo-password" &&
             mode !== "cloud" &&
