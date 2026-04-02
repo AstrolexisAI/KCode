@@ -669,11 +669,36 @@ export default function InputPrompt({
   const isMultiline = value.includes("\n");
   const lineCount = isMultiline ? value.split("\n").length : 1;
 
-  // Single-line display
+  // Single-line display — truncate around cursor to prevent terminal line-wrap artifacts
+  const termWidth = process.stdout.columns || 80;
   const singleLineDisplay = !isMultiline ? value : "";
-  const before = singleLineDisplay.slice(0, Math.min(cursor, singleLineDisplay.length));
-  const cursorChar = singleLineDisplay[Math.min(cursor, singleLineDisplay.length)] ?? " ";
-  const after = singleLineDisplay.slice(Math.min(cursor, singleLineDisplay.length) + 1);
+  const cursorPos = Math.min(cursor, singleLineDisplay.length);
+
+  // Calculate prefix width: model + space + cwd + space + promptChar + space + vimIndicator
+  const prefixWidth =
+    (model ? model.length + 1 : 0) +
+    (shortCwd ? shortCwd.length + 1 : 0) +
+    (isVimModeEnabled() ? 4 : 0) + // "[N] " or "[I] "
+    2; // promptChar + trailing space
+
+  const maxInputWidth = Math.max(10, termWidth - prefixWidth - 2); // 2 for cursor + safety margin
+  let visibleStart = 0;
+  let visibleEnd = singleLineDisplay.length;
+
+  if (singleLineDisplay.length > maxInputWidth) {
+    // Keep cursor roughly centered in the visible window
+    const half = Math.floor(maxInputWidth / 2);
+    visibleStart = Math.max(0, cursorPos - half);
+    visibleEnd = visibleStart + maxInputWidth;
+    if (visibleEnd > singleLineDisplay.length) {
+      visibleEnd = singleLineDisplay.length;
+      visibleStart = Math.max(0, visibleEnd - maxInputWidth);
+    }
+  }
+
+  const before = singleLineDisplay.slice(visibleStart, cursorPos);
+  const cursorChar = singleLineDisplay[cursorPos] ?? " ";
+  const after = singleLineDisplay.slice(cursorPos + 1, visibleEnd);
 
   // Compute hint text for tab completion
   let hint = "";
@@ -719,9 +744,11 @@ export default function InputPrompt({
           </Text>
         ) : (
           <Text>
+            {visibleStart > 0 && <Text color={theme.dimmed}>{"◀"}</Text>}
             {before}
             <Text inverse>{cursorChar}</Text>
             {after}
+            {visibleEnd < singleLineDisplay.length && <Text color={theme.dimmed}>{"▶"}</Text>}
             {hint && <Text color={theme.dimmed}>{hint}</Text>}
             {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
           </Text>

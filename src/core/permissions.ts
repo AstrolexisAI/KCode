@@ -298,7 +298,9 @@ export class PermissionManager {
       case "Bash": {
         const input = tool.input as unknown as BashInput;
         const analysis = analyzeBashCommand(input.command);
-        if (!analysis.safe) {
+        // Only hard-block truly dangerous patterns (injection, pipe-to-shell, etc.)
+        // Moderate issues (&&, >, $()) fall through to the normal ask/auto permission flow
+        if (!analysis.safe && analysis.riskLevel === "dangerous") {
           return {
             allowed: false,
             reason: `Bash safety issue: ${analysis.issues.join("; ")}`,
