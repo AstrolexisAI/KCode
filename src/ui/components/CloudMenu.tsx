@@ -13,6 +13,7 @@ export interface CloudProvider {
   baseUrl: string;
   hint: string; // example key format
   models: string; // example models
+  supportsOAuth?: boolean;
 }
 
 const PROVIDERS: CloudProvider[] = [
@@ -24,6 +25,7 @@ const PROVIDERS: CloudProvider[] = [
     baseUrl: "https://api.anthropic.com",
     hint: "sk-ant-api03-...",
     models: "claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5",
+    supportsOAuth: true,
   },
   {
     id: "openai",
@@ -72,11 +74,13 @@ const PROVIDERS: CloudProvider[] = [
   },
 ];
 
-type Stage = "select" | "input" | "confirm";
+type Stage = "select" | "auth-method" | "input" | "confirm" | "oauth-pending";
 
 export interface CloudResult {
   provider: CloudProvider;
   apiKey: string;
+  /** Whether the key was obtained via OAuth (for display purposes) */
+  viaOAuth?: boolean;
 }
 
 interface CloudMenuProps {
@@ -88,8 +92,23 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
   const { theme } = useTheme();
   const [stage, setStage] = useState<Stage>("select");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [authMethodIndex, setAuthMethodIndex] = useState(0);
   const [apiKey, setApiKey] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<CloudProvider | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  const startOAuthFlow = async (provider: CloudProvider) => {
+    setStage("oauth-pending");
+    setOauthError(null);
+    try {
+      const { anthropicOAuthLogin } = await import("../../core/auth/oauth-flow.js");
+      const key = await anthropicOAuthLogin();
+      onDone({ provider, apiKey: key, viaOAuth: true });
+    } catch (err) {
+      setOauthError(err instanceof Error ? err.message : String(err));
+      setStage("auth-method");
+    }
+  };
 
   useInput(
     (input, key) => {
@@ -101,15 +120,42 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         } else if (key.downArrow || input === "j") {
           setSelectedIndex((i) => (i < PROVIDERS.length - 1 ? i + 1 : 0));
         } else if (key.return) {
-          setSelectedProvider(PROVIDERS[selectedIndex]!);
-          setStage("input");
+          const provider = PROVIDERS[selectedIndex]!;
+          setSelectedProvider(provider);
+          if (provider.supportsOAuth) {
+            setStage("auth-method");
+            setAuthMethodIndex(0);
+          } else {
+            setStage("input");
+          }
           setApiKey("");
         } else if (key.escape || input === "q") {
           onDone(null);
         }
+      } else if (stage === "auth-method") {
+        if (key.upArrow || input === "k") {
+          setAuthMethodIndex((i) => (i > 0 ? i - 1 : 1));
+        } else if (key.downArrow || input === "j") {
+          setAuthMethodIndex((i) => (i < 1 ? i + 1 : 0));
+        } else if (key.return) {
+          if (authMethodIndex === 0) {
+            // OAuth login
+            startOAuthFlow(selectedProvider!);
+          } else {
+            // Manual API key
+            setStage("input");
+          }
+        } else if (key.escape) {
+          setStage("select");
+          setOauthError(null);
+        }
       } else if (stage === "input") {
         if (key.escape) {
-          setStage("select");
+          if (selectedProvider?.supportsOAuth) {
+            setStage("auth-method");
+          } else {
+            setStage("select");
+          }
           setApiKey("");
         } else if (key.return) {
           if (apiKey.trim().length > 0) {
@@ -125,6 +171,11 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           onDone({ provider: selectedProvider!, apiKey: apiKey.trim() });
         } else if (input.toLowerCase() === "n" || key.escape) {
           setStage("input");
+        }
+      } else if (stage === "oauth-pending") {
+        if (key.escape) {
+          // Can't cancel the OAuth flow mid-flight, but go back to auth-method
+          setStage("auth-method");
         }
       }
     },
@@ -165,10 +216,79 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
                     {p.name}
                   </Text>
                   {hasKey && <Text color={theme.success}>✓</Text>}
+                  {p.supportsOAuth && <Text color={theme.info ?? theme.accent}>OAuth</Text>}
                   {isSelected && <Text dimColor>{p.models}</Text>}
                 </Box>
               );
             })}
+          </Box>
+        </>
+      )}
+
+      {stage === "auth-method" && selectedProvider && (
+        <>
+          <Box marginTop={1} gap={1}>
+            <Text>Provider:</Text>
+            <Text bold color={theme.primary}>
+              {selectedProvider.name}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Choose authentication method:</Text>
+          </Box>
+          <Box flexDirection="column" marginTop={1}>
+            <Box gap={1}>
+              <Text
+                color={authMethodIndex === 0 ? theme.primary : undefined}
+                bold={authMethodIndex === 0}
+              >
+                {authMethodIndex === 0 ? "▸ " : "  "}
+                Login with browser (OAuth)
+              </Text>
+              <Text dimColor>— sign in via Anthropic Console</Text>
+            </Box>
+            <Box gap={1}>
+              <Text
+                color={authMethodIndex === 1 ? theme.primary : undefined}
+                bold={authMethodIndex === 1}
+              >
+                {authMethodIndex === 1 ? "▸ " : "  "}
+                Paste API key manually
+              </Text>
+              <Text dimColor>— {selectedProvider.hint}</Text>
+            </Box>
+          </Box>
+          {oauthError && (
+            <Box marginTop={1}>
+              <Text color={theme.error}>OAuth error: {oauthError}</Text>
+            </Box>
+          )}
+          <Box marginTop={1}>
+            <Text dimColor>Enter to select, Esc to go back</Text>
+          </Box>
+        </>
+      )}
+
+      {stage === "oauth-pending" && selectedProvider && (
+        <>
+          <Box marginTop={1} gap={1}>
+            <Text>Provider:</Text>
+            <Text bold color={theme.primary}>
+              {selectedProvider.name}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text color={theme.warning}>
+              Waiting for browser authentication...
+            </Text>
+          </Box>
+          <Box>
+            <Text dimColor>
+              A browser window should have opened. Sign in to your Anthropic account to continue.
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>Esc to cancel</Text>
           </Box>
         </>
       )}
