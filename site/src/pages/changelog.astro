@@ -8,7 +8,18 @@ import Base from "../layouts/Base.astro";
     <p class="subtitle">All notable changes to KCode.</p>
 
     <article class="release">
-      <h2>v2.5.0 <span class="tag">Latest</span></h2>
+      <h2>v2.5.4 <span class="tag">Latest</span></h2>
+      <time>April 2, 2026</time>
+      <h3>OAuth, UX & Permissions</h3>
+      <ul>
+        <li><strong>Anthropic OAuth</strong>: /cloud menu now offers browser-based login via Anthropic Console (PKCE flow creates permanent API key)</li>
+        <li><strong>Input wrap fix</strong>: Long input text no longer causes visual border artifacts — truncated with sliding cursor window and ◀▶ scroll indicators</li>
+        <li><strong>Bash permissions</strong>: Moderate commands (&&, >, $()) now pass through ask/auto flow instead of being hard-blocked. Dangerous patterns (pipe-to-shell, injection) remain blocked</li>
+      </ul>
+    </article>
+
+    <article class="release">
+      <h2>v2.5.0</h2>
       <time>April 1, 2026</time>
       <h3>Phase 4: Technical Moat</h3>
       <ul>
