@@ -1,7 +1,7 @@
 // KCode - Main Ink application component
 // Top-level component managing conversation flow and rendering
 
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
 import { SkillManager } from "../core/skills.js";
@@ -18,6 +18,7 @@ import { KeybindingProvider } from "./components/KeybindingContext.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
 import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
+import QuestionDialog from "./components/QuestionDialog.js";
 import PermissionDialog, {
   type PermissionChoice,
   type PermissionRequest,
@@ -186,13 +187,10 @@ export default function App({ config, conversationManager, tools, initialSession
     })();
   }, []);
 
-  // Handle keypress for the model resume prompt
-  useInput(
-    (input, key) => {
+  const handleModelResumeChoice = useCallback(
+    (key: string) => {
       if (!pendingLastModel) return;
-      const answer = input.toLowerCase();
-      if (answer === "y" || answer === "s" || key.return) {
-        // Switch to last session's model
+      if (key === "y") {
         const lastModel = pendingLastModel;
         setPendingLastModel(null);
         (async () => {
@@ -211,7 +209,7 @@ export default function App({ config, conversationManager, tools, initialSession
             { kind: "text", role: "assistant", text: `  Switched to ${lastModel} from previous session.` },
           ]);
         })();
-      } else if (answer === "n" || key.escape) {
+      } else {
         setPendingLastModel(null);
         setCompleted((prev) => [
           ...prev,
@@ -219,7 +217,7 @@ export default function App({ config, conversationManager, tools, initialSession
         ]);
       }
     },
-    { isActive: !!pendingLastModel },
+    [pendingLastModel, config],
   );
 
   // Message processing: slash commands, LLM sending, queue draining
@@ -569,17 +567,17 @@ export default function App({ config, conversationManager, tools, initialSession
         />
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
-          <Box marginLeft={2} marginBottom={0}>
-            <Text>
-              <Text color={theme.warning}>Previous session used </Text>
-              <Text bold color={theme.primary}>{pendingLastModel}</Text>
-              <Text color={theme.warning}>. Resume with that model? </Text>
-              <Text bold color={theme.success}>[y]</Text>
-              <Text color={theme.dimmed}> yes  </Text>
-              <Text bold color={theme.error}>[n]</Text>
-              <Text color={theme.dimmed}> no, use {config.model}</Text>
-            </Text>
-          </Box>
+          <QuestionDialog
+            title="Resume Previous Model"
+            message={`Last session used ${pendingLastModel}. Switch to it?`}
+            detail={`Current model: ${config.model}`}
+            options={[
+              { key: "y", label: `Yes, use ${pendingLastModel}` },
+              { key: "n", label: `No, keep ${config.model}` },
+            ]}
+            onChoice={handleModelResumeChoice}
+            isActive={!!pendingLastModel}
+          />
         )}
         <InputPrompt
           onSubmit={handleSubmit}
