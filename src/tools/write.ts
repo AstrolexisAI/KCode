@@ -70,10 +70,11 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
   }
 
   try {
-    // Detect inline HTML/CSS/JS in TypeScript files — common model mistake
-    const isTS = file_path.endsWith(".ts") || file_path.endsWith(".tsx");
+    // Detect inline HTML/CSS/JS in plain .ts files — common model mistake
+    // Exclude .tsx/.jsx files: JSX is HTML-in-TypeScript by design (React, Ink, etc.)
+    const isTSPlain = file_path.endsWith(".ts") && !file_path.endsWith(".d.ts");
     const hasInlineHTML =
-      isTS &&
+      isTSPlain &&
       /<\s*(html|div|span|body|head|style|script|form|button|input|table|section|header|footer|nav|main|article)\b/i.test(
         content,
       );
