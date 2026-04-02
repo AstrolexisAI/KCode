@@ -401,7 +401,26 @@ export async function processStreamEvents(
           } catch {
             /* module not loaded */
           }
-          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text }]);
+          setCompleted((prev) => {
+            const entries: typeof prev = [...prev, { kind: "text", role: "assistant", text }];
+            // Detect question at end of response — show highlighted prompt
+            const trimmed = text.trimEnd();
+            if (trimmed.endsWith("?")) {
+              const lines = trimmed.split("\n");
+              const questionLines: string[] = [];
+              for (let i = lines.length - 1; i >= 0; i--) {
+                const line = lines[i]!.trim();
+                if (!line) break;
+                questionLines.unshift(line);
+                if (line.endsWith("?")) break;
+              }
+              const question = questionLines.join(" ").replace(/^[*_\-•>]+\s*/, "");
+              if (question.length > 5 && question.length < 300) {
+                entries.push({ kind: "question_highlight", question });
+              }
+            }
+            return entries;
+          });
           currentText = "";
           setStreamingText("");
         } else if (

@@ -78,6 +78,11 @@ export interface IncompleteResponseEntry {
   stopReason: string;
 }
 
+export interface QuestionHighlightEntry {
+  kind: "question_highlight";
+  question: string;
+}
+
 export type MessageEntry =
   | TextEntry
   | ToolUseEntry
@@ -89,7 +94,8 @@ export type MessageEntry =
   | PlanEntry
   | DiffEntry
   | PartialProgressEntry
-  | IncompleteResponseEntry;
+  | IncompleteResponseEntry
+  | QuestionHighlightEntry;
 
 interface MessageListProps {
   /** Completed message entries (rendered via <Static>) */
@@ -212,6 +218,8 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
           stopReason={entry.stopReason}
         />
       );
+    case "question_highlight":
+      return <QuestionHighlightMessage question={entry.question} />;
   }
 }
 
@@ -617,6 +625,23 @@ function IncompleteResponseMessage({
           : `Response may be incomplete (${stopReason})`}
         {" ---"}
       </Text>
+    </Box>
+  );
+}
+
+function QuestionHighlightMessage({ question }: { question: string }) {
+  const { theme } = useTheme();
+  return (
+    <Box
+      borderStyle="round"
+      borderColor={theme.info ?? theme.accent}
+      paddingX={1}
+      marginLeft={2}
+      marginTop={0}
+      width={(process.stdout.columns || 80) - 4}
+    >
+      <Text color={theme.info ?? theme.accent}>{"?  "}</Text>
+      <Text bold>{question}</Text>
     </Box>
   );
 }
