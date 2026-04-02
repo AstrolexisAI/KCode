@@ -168,6 +168,29 @@ export default function App({ config, conversationManager, tools, initialSession
     });
   }, []);
 
+  // Notify user if the previous session used a different model
+  useEffect(() => {
+    (async () => {
+      try {
+        const { loadUserSettingsRaw } = await import("../core/config.js");
+        const settings = await loadUserSettingsRaw();
+        const lastModel = settings.lastSessionModel as string | undefined;
+        if (lastModel && lastModel !== config.model) {
+          setCompleted((prev) => [
+            ...prev,
+            {
+              kind: "text",
+              role: "assistant",
+              text: `  Previous session used ${lastModel}. Current model: ${config.model}.\n  Use /model to switch, or type to continue with ${config.model}.`,
+            },
+          ]);
+        }
+      } catch {
+        // Ignore — settings may not exist yet
+      }
+    })();
+  }, []);
+
   // Message processing: slash commands, LLM sending, queue draining
   const { handleSubmit, messageQueueRef } = useMessageProcessor({
     config,
@@ -297,6 +320,9 @@ export default function App({ config, conversationManager, tools, initialSession
         conversationManager.getConfig().model = newModel;
         conversationManager.getConfig().modelExplicitlySet = true;
 
+        // Persist last used model for next session prompt
+        await saveUserSettingsRaw({ lastSessionModel: newModel });
+
         // Update context window size from registry
         const { getModelContextSize } = await import("../core/models.js");
         const ctxSize = await getModelContextSize(newModel);
@@ -356,6 +382,11 @@ export default function App({ config, conversationManager, tools, initialSession
       if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
         config.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
       }
+
+      // Persist last used model for next session prompt
+      import("../core/config.js").then(({ saveUserSettingsRaw }) =>
+        saveUserSettingsRaw({ lastSessionModel: newModel }),
+      );
 
       const isLocal =
         result.model.baseUrl.includes("localhost") || result.model.baseUrl.includes("127.0.0.1");
