@@ -5,10 +5,10 @@
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { detectHardware, formatHardware, type GpuInfo } from "./hardware";
+import { detectHardware, formatHardware } from "./hardware";
 import { log } from "./logger";
 import {
-  type CatalogEntry,
+  calculateConcurrency,
   calculateGpuLayers,
   findCatalogEntry,
   getModelPath,
@@ -17,7 +17,7 @@ import {
   recommendModel,
 } from "./model-catalog";
 import { downloadEngine } from "./model-engine";
-import { ensureDir, installToPath } from "./model-file-utils";
+import { installToPath } from "./model-file-utils";
 import { downloadMlxModel, installMlxEngine } from "./model-mlx";
 import { addModel, setDefaultModel } from "./models";
 import { kcodeHome, kcodePath } from "./paths";
@@ -410,9 +410,9 @@ export async function runSetup(options?: {
     console.log();
 
     modelPath = await downloadMlxModel(entry, (msg) => {
-      process.stderr.write(`\r    ${C.cyan}↓${C.reset} ${msg}`.padEnd(90) + "\r");
+      process.stderr.write(`${`\r    ${C.cyan}↓${C.reset} ${msg}`.padEnd(90)}\r`);
     });
-    process.stderr.write(`\r    ${C.green}✓${C.reset} Model downloaded (MLX)`.padEnd(90) + "\n");
+    process.stderr.write(`${`\r    ${C.green}✓${C.reset} Model downloaded (MLX)`.padEnd(90)}\n`);
     console.log();
   } else if (isModelDownloaded(entry.codename) && !options?.force) {
     console.log(`    ${C.green}✓${C.reset} Model already downloaded`);
@@ -464,18 +464,71 @@ export async function runSetup(options?: {
   //  Step 6: Configuration
   // ═══════════════════════════════════════════════════════════════
 
-  stepHeader(6, "Finalizing configuration");
+  stepHeader(6, "Configuring concurrency & context");
   console.log();
 
-  const configSpinner = createSpinner("Writing configuration...");
+  const configSpinner = createSpinner("Calculating optimal settings...");
 
   // Default port for local llama-server
   const port = 10091;
 
+  // Calculate optimal parallel slots based on available VRAM/RAM
+  const concurrency = calculateConcurrency(hw, entry, { cacheQuant: "q4_0" });
+
+  configSpinner.succeed("Concurrency calculated");
+
+  // Display concurrency settings
+  const freeMemMB =
+    (hw.totalVramMB > 0 ? hw.totalVramMB : hw.ramMB) -
+    entry.sizeGB * 1024 -
+    (hw.platform === "win32" ? 500 : 300);
+  const memLabel = hw.totalVramMB > 0 ? "VRAM" : "RAM";
+
+  console.log();
+  console.log(
+    `    ${C.dim}┌──────────────────────────────────────────────┐${C.reset}`,
+  );
+  console.log(
+    `    ${C.dim}│${C.reset}  ${C.bold}Parallel Sessions${C.reset}  ${C.cyan}${C.bold}${concurrency.parallelSlots}${C.reset} simultaneous users     ${C.dim}│${C.reset}`,
+  );
+  console.log(
+    `    ${C.dim}│${C.reset}  ${C.bold}Context per Slot${C.reset}   ${C.cyan}${(concurrency.contextPerSlot / 1024).toFixed(0)}K${C.reset} tokens                ${C.dim}│${C.reset}`,
+  );
+  console.log(
+    `    ${C.dim}│${C.reset}  ${C.bold}Total Context${C.reset}      ${C.cyan}${(concurrency.totalContext / 1024).toFixed(0)}K${C.reset} tokens                ${C.dim}│${C.reset}`,
+  );
+  console.log(
+    `    ${C.dim}│${C.reset}  ${C.bold}Free ${memLabel}${C.reset}          ${C.dim}~${(Math.max(0, freeMemMB) / 1024).toFixed(1)} GB after model${C.reset}       ${C.dim}│${C.reset}`,
+  );
+  console.log(
+    `    ${C.dim}│${C.reset}  ${C.bold}KV Cache${C.reset}           ${C.dim}q4_0 quantized (4x smaller)${C.reset}  ${C.dim}│${C.reset}`,
+  );
+  console.log(
+    `    ${C.dim}└──────────────────────────────────────────────┘${C.reset}`,
+  );
+
+  if (concurrency.parallelSlots > 1) {
+    console.log(
+      `    ${C.green}✓${C.reset} ${concurrency.parallelSlots} users can use the AI simultaneously, each with ${(concurrency.contextPerSlot / 1024).toFixed(0)}K context`,
+    );
+  } else {
+    console.log(
+      `    ${C.yellow}⚠${C.reset} Single-user mode — not enough ${memLabel} for multiple parallel sessions`,
+    );
+    if (hw.totalVramMB > 0) {
+      console.log(
+        `    ${C.dim}   Tip: add more VRAM or use a smaller model/quantization for multi-user${C.reset}`,
+      );
+    }
+  }
+  console.log();
+
+  const writeSpinner = createSpinner("Writing configuration...");
+
   await addModel({
     name: entry.codename,
     baseUrl: `http://localhost:${port}`,
-    contextSize: entry.contextSize,
+    contextSize: concurrency.contextPerSlot,
     gpu: hw.gpus.map((g) => g.name).join(" + ") || "CPU",
     capabilities: ["code"],
     description: entry.description,
@@ -483,31 +536,27 @@ export async function runSetup(options?: {
 
   await setDefaultModel(entry.codename);
 
-  // Save server config for llama-server.ts
   // For MLX disk offloading: calculate wired memory limit.
-  // If model > RAM, we wire 75% of RAM and let the rest page from SSD.
-  // Inspired by flash-moe's "Trust the OS" principle — let the OS page cache
-  // manage weight streaming from NVMe SSD, don't try to outsmart the kernel.
   let mlxWiredLimitMB: number | undefined;
   if (useMlx) {
     const modelMB = entry.sizeGB * 1024;
     const ramMB = hw.ramMB;
     if (modelMB > ramMB * 0.8) {
-      // Model doesn't fit comfortably in RAM — enable disk offloading
-      // Wire 75% of RAM for model weights, leave 25% for OS + KV cache + apps
       mlxWiredLimitMB = Math.floor(ramMB * 0.75);
     }
   }
 
   await Bun.write(
     join(KCODE_HOME, "server.json"),
-    JSON.stringify(
+    `${JSON.stringify(
       {
         enginePath,
         modelPath,
         codename: entry.codename,
         port,
-        contextSize: entry.contextSize,
+        contextSize: concurrency.totalContext,
+        contextPerSlot: concurrency.contextPerSlot,
+        parallelSlots: concurrency.parallelSlots,
         gpuLayers: calculateGpuLayers(hw, entry),
         gpus: hw.gpus,
         engine: useMlx ? "mlx" : "llama.cpp",
@@ -516,13 +565,13 @@ export async function runSetup(options?: {
       },
       null,
       2,
-    ) + "\n",
+    )}\n`,
   );
 
   // Mark setup as complete
   await Bun.write(SETUP_MARKER, `${new Date().toISOString()}\n${entry.codename}\n`);
 
-  configSpinner.succeed("Configuration saved");
+  writeSpinner.succeed("Configuration saved");
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
@@ -585,6 +634,9 @@ export async function runSetup(options?: {
   //  Complete!
   // ═══════════════════════════════════════════════════════════════
 
+  const slotsLabel = concurrency.parallelSlots > 1
+    ? `${concurrency.parallelSlots} slots × ${(concurrency.contextPerSlot / 1024).toFixed(0)}K ctx`
+    : `1 slot × ${(concurrency.contextPerSlot / 1024).toFixed(0)}K ctx`;
   const successBox = [
     `    ${C.green}╔══════════════════════════════════════════════╗${C.reset}`,
     `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
@@ -593,6 +645,7 @@ export async function runSetup(options?: {
     `    ${C.green}║${C.reset}   Model:   ${C.cyan}${entry.codename.padEnd(33)}${C.reset}${C.green}║${C.reset}`,
     `    ${C.green}║${C.reset}   Port:    ${C.cyan}${port.toString().padEnd(33)}${C.reset}${C.green}║${C.reset}`,
     `    ${C.green}║${C.reset}   Engine:  ${C.dim}${engineLabel.padEnd(33)}${C.reset}${C.green}║${C.reset}`,
+    `    ${C.green}║${C.reset}   Concur:  ${C.cyan}${slotsLabel.padEnd(33)}${C.reset}${C.green}║${C.reset}`,
     `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,
     `    ${C.green}╚══════════════════════════════════════════════╝${C.reset}`,
   ];

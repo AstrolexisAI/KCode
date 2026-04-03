@@ -7,6 +7,8 @@ export interface GpuInfo {
   name: string;
   vramMB: number;
   index: number;
+  /** CUDA compute capability (e.g. "8.9" for RTX 4090, "12.0" for RTX 5090) */
+  computeCapability?: string;
 }
 
 export interface HardwareInfo {
@@ -82,7 +84,8 @@ async function detectNvidiaGpus(): Promise<{
             "/opt/cuda/bin/nvidia-smi",
           ];
 
-    const queryArgs = "--query-gpu=index,name,memory.total --format=csv,noheader,nounits";
+    const queryArgs =
+      "--query-gpu=index,name,memory.total,compute_cap --format=csv,noheader,nounits";
     let output = "";
 
     // Try execSync first (more reliable in standalone binaries)
@@ -107,7 +110,11 @@ async function detectNvidiaGpus(): Promise<{
       };
       for (const smiPath of nvidiaSmiPaths) {
         const attempt = Bun.spawnSync(
-          [smiPath, "--query-gpu=index,name,memory.total", "--format=csv,noheader,nounits"],
+          [
+            smiPath,
+            "--query-gpu=index,name,memory.total,compute_cap",
+            "--format=csv,noheader,nounits",
+          ],
           { stdout: "pipe", stderr: "pipe", env },
         );
         if (attempt.exitCode === 0) {
@@ -130,6 +137,7 @@ async function detectNvidiaGpus(): Promise<{
           index: parseInt(parts[0]!, 10),
           name: parts[1]!,
           vramMB: parseInt(parts[2]!, 10),
+          computeCapability: parts[3] || undefined,
         });
       }
     }
@@ -197,7 +205,8 @@ export function formatHardware(hw: HardwareInfo): string {
     lines.push("GPU: None detected (CPU mode)");
   } else {
     for (const gpu of hw.gpus) {
-      lines.push(`GPU ${gpu.index}: ${gpu.name} (${(gpu.vramMB / 1024).toFixed(0)} GB VRAM)`);
+      const cc = gpu.computeCapability ? `, sm_${gpu.computeCapability.replace(".", "")}` : "";
+      lines.push(`GPU ${gpu.index}: ${gpu.name} (${(gpu.vramMB / 1024).toFixed(0)} GB VRAM${cc})`);
     }
     lines.push(`Total VRAM: ${(hw.totalVramMB / 1024).toFixed(0)} GB`);
   }

@@ -15,23 +15,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { GpuInfo } from "./hardware";
 import { log } from "./logger";
-import {
-  type CatalogEntry,
-  findCatalogEntry,
-  getAvailableModels,
-  getModelPath,
-  isModelDownloaded,
-  MODEL_CDN,
-  MODELS_DIR_PATH,
-  recommendModel,
-} from "./model-catalog";
+import { findCatalogEntry, MODEL_CDN, MODELS_DIR_PATH } from "./model-catalog";
 import { kcodeHome, kcodePath } from "./paths";
-
-// ─── Re-exports from sub-modules (backward compatibility) ──────
-export { ensureDir, downloadFile, extractArchive, findBinaryInDir, findLibraryFiles, createLibSymlinks, installToPath, ensureInPath } from "./model-file-utils";
-export { installMlxEngine, downloadMlxModel } from "./model-mlx";
-export { downloadEngine } from "./model-engine";
-export { runSetup } from "./setup-wizard";
 
 // ─── Re-exports from model-catalog (backward compatibility) ────
 export type { CatalogEntry } from "./model-catalog";
@@ -42,10 +27,23 @@ export {
   isModelDownloaded,
   recommendModel,
 } from "./model-catalog";
+export { downloadEngine } from "./model-engine";
+// ─── Re-exports from sub-modules (backward compatibility) ──────
+export {
+  createLibSymlinks,
+  downloadFile,
+  ensureDir,
+  ensureInPath,
+  extractArchive,
+  findBinaryInDir,
+  findLibraryFiles,
+  installToPath,
+} from "./model-file-utils";
+export { downloadMlxModel, installMlxEngine } from "./model-mlx";
+export { runSetup } from "./setup-wizard";
 
 // ─── Re-export from model-file-utils used by downloadModel ─────
-import { ensureDir } from "./model-file-utils";
-import { downloadFile } from "./model-file-utils";
+import { downloadFile, ensureDir } from "./model-file-utils";
 
 // ─── Paths & Config ─────────────────────────────────────────────
 
@@ -77,7 +75,6 @@ export function isMlxInstalled(): boolean {
 
 /** Get the mlx_lm.server command path (inside the venv) */
 export function getMlxServerPath(): string | null {
-  const mlxServer = join(MLX_VENV, "bin", "mlx_lm.server");
   // Check if the venv python and mlx-lm are installed
   const python = join(MLX_VENV, "bin", "python3");
   if (existsSync(python) && existsSync(MLX_MARKER)) return python;
@@ -181,6 +178,8 @@ export async function getServerConfig(): Promise<{
   codename: string;
   port: number;
   contextSize: number;
+  contextPerSlot?: number;
+  parallelSlots?: number;
   gpuLayers: number;
   gpus: GpuInfo[];
   engine?: "mlx" | "llama.cpp";

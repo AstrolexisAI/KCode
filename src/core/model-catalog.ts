@@ -132,7 +132,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 65536,
     localFile: "deepseek-coder-v2-lite.gguf",
     description: "DeepSeek Coder V2 Lite 16B MoE — excellent for coding tasks",
-    cdnUrl: "https://huggingface.co/TheBloke/deepseek-coder-v2-lite-instruct-GGUF/resolve/main/deepseek-coder-v2-lite-instruct.Q4_K_M.gguf",
+    cdnUrl:
+      "https://huggingface.co/TheBloke/deepseek-coder-v2-lite-instruct-GGUF/resolve/main/deepseek-coder-v2-lite-instruct.Q4_K_M.gguf",
   },
   {
     codename: "mnemo:codellama-34b",
@@ -143,7 +144,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 16384,
     localFile: "codellama-34b.gguf",
     description: "CodeLlama 34B — Meta's dedicated coding model",
-    cdnUrl: "https://huggingface.co/TheBloke/CodeLlama-34B-Instruct-GGUF/resolve/main/codellama-34b-instruct.Q4_K_M.gguf",
+    cdnUrl:
+      "https://huggingface.co/TheBloke/CodeLlama-34B-Instruct-GGUF/resolve/main/codellama-34b-instruct.Q4_K_M.gguf",
   },
   {
     codename: "mnemo:phi3-medium",
@@ -154,7 +156,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 131072,
     localFile: "phi3-medium.gguf",
     description: "Phi-3 Medium 14B — Microsoft, compact but highly capable",
-    cdnUrl: "https://huggingface.co/bartowski/Phi-3-medium-128k-instruct-GGUF/resolve/main/Phi-3-medium-128k-instruct-Q5_K_M.gguf",
+    cdnUrl:
+      "https://huggingface.co/bartowski/Phi-3-medium-128k-instruct-GGUF/resolve/main/Phi-3-medium-128k-instruct-Q5_K_M.gguf",
   },
   {
     codename: "mnemo:phi3-mini",
@@ -165,7 +168,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 131072,
     localFile: "phi3-mini.gguf",
     description: "Phi-3 Mini 3.8B — ultra lightweight, runs on 4GB GPUs or CPU",
-    cdnUrl: "https://huggingface.co/bartowski/Phi-3-mini-128k-instruct-GGUF/resolve/main/Phi-3-mini-128k-instruct-Q5_K_M.gguf",
+    cdnUrl:
+      "https://huggingface.co/bartowski/Phi-3-mini-128k-instruct-GGUF/resolve/main/Phi-3-mini-128k-instruct-Q5_K_M.gguf",
   },
   {
     codename: "mnemo:mistral-nemo",
@@ -176,7 +180,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 131072,
     localFile: "mistral-nemo.gguf",
     description: "Mistral Nemo 12B — good general purpose model",
-    cdnUrl: "https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF/resolve/main/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf",
+    cdnUrl:
+      "https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF/resolve/main/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf",
   },
   {
     codename: "mnemo:llama31-8b",
@@ -187,7 +192,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     contextSize: 131072,
     localFile: "llama31-8b.gguf",
     description: "Llama 3.1 8B — Meta's popular general-purpose model",
-    cdnUrl: "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf",
+    cdnUrl:
+      "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q5_K_M.gguf",
   },
 ];
 
@@ -315,6 +321,79 @@ export function calculateGpuLayers(hw: HardwareInfo, entry: CatalogEntry): numbe
   const fittableLayers = Math.floor(vramForLayers / mbPerLayer);
 
   return Math.max(1, Math.min(fittableLayers, estimatedLayers));
+}
+
+/**
+ * Calculate optimal concurrency (parallel slots) and per-slot context size
+ * based on available VRAM/RAM and model size.
+ *
+ * KV cache memory per token ≈ 2 * n_layers * n_kv_heads * head_dim * bytes_per_element
+ * With q4_0 cache quantization, this is roughly halved.
+ *
+ * Strategy:
+ *   1. Estimate VRAM used by model weights
+ *   2. Calculate free VRAM after weights + OS overhead
+ *   3. Estimate KV cache cost per token (based on model size heuristic)
+ *   4. Find max slots where each slot gets the full model contextSize
+ *   5. If only 1 slot fits, return 1 slot with full context
+ */
+export function calculateConcurrency(
+  hw: HardwareInfo,
+  entry: CatalogEntry,
+  options?: { cacheQuant?: "f16" | "q8_0" | "q4_0" },
+): { parallelSlots: number; contextPerSlot: number; totalContext: number } {
+  const cacheQuant = options?.cacheQuant ?? "q4_0";
+
+  // Available memory: VRAM for GPU systems, RAM for CPU-only
+  const availableMB = hw.totalVramMB > 0 ? hw.totalVramMB : hw.ramMB;
+  if (availableMB === 0) {
+    return { parallelSlots: 1, contextPerSlot: entry.contextSize, totalContext: entry.contextSize };
+  }
+
+  // OS/display overhead
+  const osOverheadMB = hw.platform === "win32" ? 500 : 300;
+
+  // Model weights in VRAM
+  const modelWeightsMB = entry.sizeGB * 1024;
+
+  // Free memory after model + overhead
+  const freeMB = availableMB - modelWeightsMB - osOverheadMB;
+  if (freeMB <= 0) {
+    // Barely fits the model, 1 slot with minimal context
+    return { parallelSlots: 1, contextPerSlot: entry.contextSize, totalContext: entry.contextSize };
+  }
+
+  // Estimate KV cache bytes per token based on model parameters.
+  // Approximate formula: 2 (K+V) * n_layers * hidden_dim * bytes_per_element
+  // Simplified heuristic per billion params:
+  //   - ~4B model: ~32 layers, 2560 hidden → ~0.15 MB/1K tokens (f16)
+  //   - ~8B model: ~32 layers, 4096 hidden → ~0.25 MB/1K tokens (f16)
+  //   - ~14B model: ~40 layers, 5120 hidden → ~0.40 MB/1K tokens (f16)
+  //   - ~30B model: ~64 layers, 5120 hidden → ~0.60 MB/1K tokens (f16)
+  //   - ~70B+ model: ~80 layers, 8192 hidden → ~1.25 MB/1K tokens (f16)
+  let kvBytesPerTokenF16: number;
+  if (entry.paramBillions <= 4) kvBytesPerTokenF16 = 160;
+  else if (entry.paramBillions <= 8) kvBytesPerTokenF16 = 256;
+  else if (entry.paramBillions <= 14) kvBytesPerTokenF16 = 410;
+  else if (entry.paramBillions <= 34) kvBytesPerTokenF16 = 620;
+  else kvBytesPerTokenF16 = 1280;
+
+  // Apply cache quantization multiplier
+  const quantMultiplier = cacheQuant === "f16" ? 1.0 : cacheQuant === "q8_0" ? 0.5 : 0.25;
+  const kvBytesPerToken = kvBytesPerTokenF16 * quantMultiplier;
+
+  // KV cache for one full-context slot (in MB)
+  const kvPerSlotMB = (entry.contextSize * kvBytesPerToken) / (1024 * 1024);
+
+  // How many full-context slots fit?
+  const maxSlots = Math.max(1, Math.floor(freeMB / kvPerSlotMB));
+
+  // Cap at a sensible max (diminishing returns beyond 8 for local inference)
+  const parallelSlots = Math.min(maxSlots, 8);
+  const contextPerSlot = entry.contextSize;
+  const totalContext = parallelSlots * contextPerSlot;
+
+  return { parallelSlots, contextPerSlot, totalContext };
 }
 
 /** Get the models directory path */
