@@ -287,15 +287,21 @@ export async function buildRequestForModel(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
 
   if (provider === "anthropic") {
-    // Anthropic API: /v1/messages with x-api-key header
+    // Anthropic API: /v1/messages
     const url = `${apiBase}/v1/messages`;
     // Priority: OAuth/Claude Code token (subscription) → config key → env var
-    const apiKey =
+    const resolvedKey =
       (await resolveApiKeyWithOAuth(modelName, apiBase, config)) ??
       config.anthropicApiKey ??
       config.apiKey;
-    if (apiKey) {
-      headers["x-api-key"] = apiKey;
+    if (resolvedKey) {
+      // OAuth tokens (sk-ant-oat01-*) use Bearer auth → subscription billing
+      // API keys (sk-ant-api03-*) use x-api-key → per-token billing
+      if (resolvedKey.startsWith("sk-ant-oat01-")) {
+        headers["Authorization"] = `Bearer ${resolvedKey}`;
+      } else {
+        headers["x-api-key"] = resolvedKey;
+      }
     }
     headers["anthropic-version"] = "2023-06-01";
 
