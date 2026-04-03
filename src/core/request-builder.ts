@@ -468,10 +468,27 @@ export async function executeModelRequest(
     if (response.status === 429) {
       const retryAfter = response.headers.get("retry-after");
       const retrySeconds = retryAfter ? parseInt(retryAfter) || 30 : 30;
-      hint = ` (retry in ${retrySeconds}s)`;
+      const resetHeader = response.headers.get("anthropic-ratelimit-unified-reset");
+      let resetInfo = "";
+      if (resetHeader) {
+        const resetMs = Number(resetHeader) * 1000 - Date.now();
+        if (resetMs > 0) {
+          const mins = Math.ceil(resetMs / 60_000);
+          resetInfo = mins > 1 ? ` Resets in ~${mins} minutes.` : " Resets in ~1 minute.";
+        }
+      }
 
-      // Attach retry delay to the error so the retry logic can use it
-      const err = new Error(`429:${retrySeconds}`);
+      // For OAuth tokens (subscription users): don't auto-retry, show clear message
+      // For API keys: auto-retry with backoff
+      const isSubscription = req.headers["Authorization"]?.includes("sk-ant-oat01-");
+      if (isSubscription) {
+        throw new Error(
+          `Rate limit reached (429). You've hit your subscription usage limit.${resetInfo} Try again shortly, or switch to a smaller model with /model.`,
+        );
+      }
+
+      // API key users: create retryable error
+      const err = new Error(`Rate limit reached (429). Retrying in ${retrySeconds}s...`);
       (err as RateLimitError).retryAfterMs = retrySeconds * 1000;
       (err as RateLimitError).isRateLimit = true;
       throw err;
