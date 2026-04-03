@@ -10,6 +10,7 @@ interface InteractiveQuestionProps {
   question: string;
   options: string[];
   onSelect: (answer: string) => void;
+  onCancel: () => void;
   isActive: boolean;
 }
 
@@ -17,6 +18,7 @@ export default function InteractiveQuestion({
   question,
   options,
   onSelect,
+  onCancel,
   isActive,
 }: InteractiveQuestionProps) {
   const { theme } = useTheme();
@@ -26,7 +28,9 @@ export default function InteractiveQuestion({
     (input, key) => {
       if (!isActive) return;
 
-      if (key.upArrow || input === "k") {
+      if (key.escape) {
+        onCancel();
+      } else if (key.upArrow || input === "k") {
         setSelectedIndex((i) => (i > 0 ? i - 1 : options.length - 1));
       } else if (key.downArrow || input === "j") {
         setSelectedIndex((i) => (i < options.length - 1 ? i + 1 : 0));
@@ -70,7 +74,7 @@ export default function InteractiveQuestion({
         })}
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>↑↓ or 1-{options.length} to select, Enter to confirm</Text>
+        <Text dimColor>↑↓ or 1-{options.length} to select, Enter to confirm, Esc to dismiss</Text>
       </Box>
     </Box>
   );
