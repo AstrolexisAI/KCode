@@ -409,22 +409,22 @@ export async function processStreamEvents(
 
             if (trimmed.endsWith("?")) {
               const lines = trimmed.split("\n");
+              // Collect the entire trailing paragraph (everything after the last blank line)
               const questionLineIndices: number[] = [];
               for (let i = lines.length - 1; i >= 0; i--) {
                 const line = lines[i]!.trim();
                 if (!line) break;
                 questionLineIndices.unshift(i);
-                if (line.endsWith("?")) break;
               }
               const questionText = questionLineIndices
                 .map((i) => lines[i]!.trim())
                 .join(" ")
                 .replace(/^[*_\-•>]+\s*/, "");
 
-              if (questionText.length > 5 && questionText.length < 300) {
+              if (questionText.length > 5 && questionText.length < 500) {
                 question = questionText;
-                // Remove the question lines from the display text to avoid duplication
-                const remaining = lines.filter((_, i) => !questionLineIndices.includes(i));
+                // Remove the entire question paragraph from the display text
+                const remaining = lines.slice(0, questionLineIndices[0] ?? 0);
                 displayText = remaining.join("\n").trimEnd();
               }
             }
