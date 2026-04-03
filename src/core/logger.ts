@@ -117,12 +117,27 @@ class Logger {
   private static readonly KEY_VALUE_RE =
     /(["']?(?:api[_-]?key|secret|token|password|authorization|bearer|credential|private[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?)([^\s"',}{[\]]{8,})/gi;
 
+  /** API keys embedded in URLs (e.g., ?key=xxx or &token=xxx) */
+  private static readonly URL_KEY_RE =
+    /([?&](?:key|token|api_key|apikey|access_token|secret|password)=)([^\s&"']{8,})/gi;
+
+  /** Bearer tokens in headers */
+  private static readonly BEARER_RE = /(Bearer\s+)([a-zA-Z0-9._-]{8,})/gi;
+
   /** Redact values that look like API keys or tokens in log output */
   private sanitize(text: string): string {
     text = text.replace(Logger.KEY_PREFIX_RE, (m) => m.slice(0, 8) + "****");
     text = text.replace(
       Logger.KEY_VALUE_RE,
       (_, prefix: string, value: string) => prefix + value.slice(0, 4) + "****",
+    );
+    text = text.replace(
+      Logger.URL_KEY_RE,
+      (_, prefix: string, value: string) => prefix + value.slice(0, 4) + "****",
+    );
+    text = text.replace(
+      Logger.BEARER_RE,
+      (_, prefix: string, token: string) => prefix + token.slice(0, 4) + "****",
     );
     return text;
   }
@@ -176,7 +191,14 @@ class Logger {
     const path = this.getLogFilePath();
 
     try {
-      appendFile(path, content).catch(() => { /* intentionally swallowed — logging failures must not recurse */ });
+      appendFile(path, content).catch(() => {
+        // Fallback to sync write; disable logging on repeated failure
+        try {
+          appendFileSync(path, content);
+        } catch {
+          this.enabled = false;
+        }
+      });
     } catch {
       // Never crash the app due to logging
     }

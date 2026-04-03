@@ -15,6 +15,27 @@ import type { BashInput, ToolDefinition, ToolResult } from "../core/types";
 const MAX_TIMEOUT = 600_000; // 10 minutes
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
 
+/**
+ * Strip dangerous ANSI escape sequences from command output.
+ * Preserves basic SGR color codes (ESC[...m) but removes:
+ * - OSC (title bar injection): ESC]...ST
+ * - CSI cursor/screen manipulation: ESC[...H, ESC[...J, ESC[...K, etc.
+ * - DCS, PM, APC sequences
+ */
+function stripDangerousEscapes(text: string): string {
+  // Remove OSC sequences: ESC ] ... (BEL or ST)
+  text = text.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "");
+  // Remove DCS: ESC P ... ST
+  text = text.replace(/\x1bP[^\x1b]*\x1b\\/g, "");
+  // Remove APC: ESC _ ... ST
+  text = text.replace(/\x1b_[^\x1b]*\x1b\\/g, "");
+  // Remove PM: ESC ^ ... ST
+  text = text.replace(/\x1b\^[^\x1b]*\x1b\\/g, "");
+  // Remove dangerous CSI (cursor movement, screen clearing) but preserve SGR (colors: ESC[...m)
+  text = text.replace(/\x1b\[[0-9;]*[ABCDEFGHJKLMPSTXZfhlnsu]/g, "");
+  return text;
+}
+
 export const bashDefinition: ToolDefinition = {
   name: "Bash",
   description:
@@ -576,7 +597,9 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
           .trim();
       }
 
-      const output = stdout + (stderr ? `\n${stderr}` : "");
+      const rawOutput = stdout + (stderr ? `\n${stderr}` : "");
+      // Strip dangerous terminal escape sequences (title bar injection, cursor manipulation)
+      const output = stripDangerousEscapes(rawOutput);
 
       // Auto-detect project creation: if a scaffold command succeeded and
       // we're still in ~, update the workspace to the new project directory.

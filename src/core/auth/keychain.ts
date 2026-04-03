@@ -4,13 +4,14 @@
 // Windows: cmdkey (Credential Manager)
 // Fallback: encrypted file in ~/.kcode/credentials.enc
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 const SERVICE = "kcode";
 const FALLBACK_DIR = join(homedir(), ".kcode");
 const FALLBACK_FILE = join(FALLBACK_DIR, "credentials.enc");
+const SALT_FILE = join(FALLBACK_DIR, "credentials.salt");
 
 // ── Platform-specific implementations ──
 
@@ -137,19 +138,47 @@ async function win32Delete(account: string): Promise<boolean> {
 
 // ── Fallback: encrypted file ──
 
+/**
+ * Get or create a random per-installation salt for key derivation.
+ * On first use, generates 32 random bytes and saves to ~/.kcode/credentials.salt.
+ * This avoids using predictable values like /etc/machine-id as salt.
+ */
+async function getOrCreateSalt(): Promise<Uint8Array> {
+  try {
+    const saltFile = Bun.file(SALT_FILE);
+    if (await saltFile.exists()) {
+      const existing = new Uint8Array(await saltFile.arrayBuffer());
+      if (existing.length >= 32) return existing.slice(0, 32);
+    }
+  } catch {
+    // Fall through to generate new salt
+  }
+
+  const salt = crypto.getRandomValues(new Uint8Array(32));
+  try {
+    mkdirSync(FALLBACK_DIR, { recursive: true });
+    await Bun.write(SALT_FILE, salt);
+  } catch {
+    // If we can't persist, still use it for this session
+  }
+  return salt;
+}
+
 async function deriveKey(): Promise<CryptoKey> {
-  // Use machine-specific salt
-  let salt: Uint8Array;
+  const salt = await getOrCreateSalt();
+
+  // Use machine-id as key material (not as salt) — provides machine binding
+  let keyData: Uint8Array;
   try {
     const machineId = existsSync("/etc/machine-id")
       ? await Bun.file("/etc/machine-id").text()
       : `${homedir()}-${process.env.USER ?? "kcode"}`;
-    salt = new TextEncoder().encode(machineId.trim().slice(0, 32).padEnd(32, "0"));
+    keyData = new TextEncoder().encode(machineId.trim().slice(0, 64).padEnd(64, "0"));
   } catch {
-    salt = new TextEncoder().encode(homedir().padEnd(32, "0").slice(0, 32));
+    keyData = new TextEncoder().encode(homedir().padEnd(64, "0").slice(0, 64));
   }
 
-  const keyMaterial = await crypto.subtle.importKey("raw", salt, "PBKDF2", false, ["deriveKey"]);
+  const keyMaterial = await crypto.subtle.importKey("raw", keyData, "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
     { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
     keyMaterial,

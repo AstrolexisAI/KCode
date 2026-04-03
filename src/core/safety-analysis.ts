@@ -79,9 +79,14 @@ export function detectCommandInjection(command: string): string | null {
   return null;
 }
 
-/** Detect $() command substitution — moderate risk, not injection */
+/** Detect $() command substitution — dangerous when containing network/shell commands */
 export function detectCommandSubstitution(command: string): string | null {
   if (/\$\(/.test(command)) {
+    // Check for dangerous patterns inside $()
+    const inner = command.match(/\$\(([^)]*)\)/)?.[1] ?? "";
+    if (/\b(curl|wget|bash|sh|zsh|eval|nc|ncat|python|perl|ruby)\b/.test(inner)) {
+      return "Command contains dangerous $() substitution with shell/network command";
+    }
     return "Command contains $() substitution";
   }
   return null;
@@ -396,7 +401,8 @@ export function analyzeBashCommand(command: string): {
               i.includes("shell invocation") ||
               i.includes("sensitive system path") ||
               i.includes("pipes to shell") ||
-              i.includes("destructive removal"),
+              i.includes("destructive removal") ||
+              i.includes("dangerous $() substitution"),
           )
         ? "dangerous"
         : "moderate";

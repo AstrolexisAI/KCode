@@ -42,6 +42,41 @@ interface SessionMeta {
 const TRANSCRIPTS_DIR = kcodePath("transcripts");
 const MAX_SESSIONS = 100;
 
+// ─── Credential Sanitization ────────────────────────────────────
+
+/** Known API key prefixes — redact all but the first 8 chars */
+const KEY_PREFIX_RE =
+  /\b(sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_-]{8,}/g;
+
+/** Key=value pairs where the key name suggests a secret */
+const KEY_VALUE_RE =
+  /(["']?(?:api[_-]?key|secret|token|password|authorization|bearer|credential|private[_-]?key|access[_-]?key)["']?\s*[:=]\s*["']?)([^\s"',}{[\]]{8,})/gi;
+
+/** API keys embedded in URLs */
+const URL_KEY_RE =
+  /([?&](?:key|token|api_key|apikey|access_token|secret|password)=)([^\s&"']{8,})/gi;
+
+/** Bearer tokens */
+const BEARER_RE = /(Bearer\s+)([a-zA-Z0-9._-]{8,})/gi;
+
+/** Sanitize sensitive data from transcript content before saving */
+function sanitizeTranscriptContent(text: string): string {
+  text = text.replace(KEY_PREFIX_RE, (m) => m.slice(0, 8) + "****");
+  text = text.replace(
+    KEY_VALUE_RE,
+    (_, prefix: string, value: string) => prefix + value.slice(0, 4) + "****",
+  );
+  text = text.replace(
+    URL_KEY_RE,
+    (_, prefix: string, value: string) => prefix + value.slice(0, 4) + "****",
+  );
+  text = text.replace(
+    BEARER_RE,
+    (_, prefix: string, token: string) => prefix + token.slice(0, 4) + "****",
+  );
+  return text;
+}
+
 // ─── TranscriptManager ──────────────────────────────────────────
 
 export class TranscriptManager {
@@ -93,7 +128,9 @@ export class TranscriptManager {
     if (!this.sessionFile) return;
 
     try {
-      appendFileSync(this.sessionFile, JSON.stringify(entry) + "\n", "utf-8");
+      // Sanitize credentials from content before persisting
+      const sanitized = { ...entry, content: sanitizeTranscriptContent(entry.content) };
+      appendFileSync(this.sessionFile, JSON.stringify(sanitized) + "\n", "utf-8");
     } catch (err) {
       log.debug("transcript", `Failed to append transcript entry: ${err}`);
     }
