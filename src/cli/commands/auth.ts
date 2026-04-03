@@ -97,13 +97,15 @@ export function registerAuthCommand(program: Command): void {
         const status = await getProviderAuthStatus(name);
         const icon = status.authenticated ? "\u2713" : "\u2717";
         const methodLabel =
-          status.method === "oauth"
-            ? "OAuth"
-            : status.method === "api_key"
-              ? "API Key (keychain)"
-              : status.method === "env"
-                ? "Env var"
-                : "not configured";
+          status.method === "claude-code"
+            ? `Claude Code${status.detail ? ` (${status.detail})` : ""}`
+            : status.method === "oauth"
+              ? "OAuth"
+              : status.method === "api_key"
+                ? "API Key (keychain)"
+                : status.method === "env"
+                  ? "Env var"
+                  : "not configured";
 
         let expiry = "";
         if (status.method === "oauth" && status.expiresAt) {
