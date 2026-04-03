@@ -25,13 +25,6 @@ async function sendAndCollect(
   return { events, text: textParts.join("") };
 }
 
-function eventsOfType<T extends StreamEvent["type"]>(
-  events: StreamEvent[],
-  type: T,
-): Extract<StreamEvent, { type: T }>[] {
-  return events.filter((e) => e.type === type) as Extract<StreamEvent, { type: T }>[];
-}
-
 // ─── Session Data Collection ────────────────────────────────────
 
 describe("Session E2E: data collection", () => {

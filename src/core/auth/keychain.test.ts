@@ -1,24 +1,10 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, unlinkSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
 import { isKeychainAvailable, listAccounts } from "./keychain";
 
 // We test the fallback mechanism (encrypted file) since native keychain
 // may or may not be available in CI/test environments.
 
-const FALLBACK_FILE = join(homedir(), ".kcode", "credentials.enc");
-let originalExists = false;
-let originalContent: Buffer | null = null;
-
 describe("keychain", () => {
-  // Save and restore fallback file state
-  const saveState = () => {
-    originalExists = existsSync(FALLBACK_FILE);
-    if (originalExists) {
-      originalContent = Buffer.from(Bun.file(FALLBACK_FILE).stream() as any);
-    }
-  };
 
   describe("isKeychainAvailable", () => {
     test("returns boolean", async () => {

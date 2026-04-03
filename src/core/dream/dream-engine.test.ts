@@ -107,20 +107,12 @@ describe("DreamEngine", () => {
   });
 
   test("wake aborts running tasks", async () => {
-    let resolveTask: (() => void) | undefined;
-
     engine.register(
       makeMockTask({
         id: "slow",
         name: "Slow Task",
         execute: async (ctx: DreamContext): Promise<DreamResult> => {
-          return new Promise((resolve, reject) => {
-            resolveTask = () =>
-              resolve({
-                taskName: "Slow Task",
-                status: "completed",
-                durationMs: 1,
-              });
+          return new Promise((_resolve, reject) => {
             ctx.signal.addEventListener("abort", () => reject(new Error("aborted")), {
               once: true,
             });

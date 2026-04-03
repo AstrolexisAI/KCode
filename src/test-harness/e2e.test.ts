@@ -646,7 +646,7 @@ describe("E2E: Recovery summary on empty response after tools", () => {
       env.provider.addResponse("");
 
       const cm = new ConversationManager(env.config, env.registry);
-      const { events, text } = await sendAndCollect(cm, "Create the project structure");
+      const { events } = await sendAndCollect(cm, "Create the project structure");
 
       // Tool should have executed
       const toolExecs = eventsOfType(events, "tool_executing");
@@ -718,7 +718,7 @@ describe("E2E: Long scaffold flows", () => {
       const cm = new ConversationManager(env.config, env.registry);
 
       // Prompt with checkpoint language
-      const { events, text } = await sendAndCollect(
+      const { events } = await sendAndCollect(
         cm,
         "Crea un sitio web completo sobre Bitcoin. Empieza con la estructura inicial y muéstrame el primer paso cuando termines.",
       );

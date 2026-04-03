@@ -1059,7 +1059,7 @@ export class McpHttpConnection {
       this.sessionId = (result as Record<string, unknown>).sessionId as string;
     }
     // Send initialized notification
-    await this.sendHttp("notifications/initialized", {}).catch(() => {});
+    await this.sendHttp("notifications/initialized", {}).catch((e) => { log.debug("mcp", `Failed to send initialized notification to "${this.name}": ${e}`); });
   }
 
   async discoverTools(): Promise<McpToolSchema[]> {

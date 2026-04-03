@@ -246,9 +246,9 @@ process.on("unhandledRejection", (reason) => {
 // Graceful cleanup on signals
 function cleanupAndExit() {
   clearSudoPasswordCache();
-  lazyShutdownLsp().catch(() => {});
-  lazyShutdownMcpManager().catch(() => {});
-  lazyCloseDb().catch(() => {});
+  lazyShutdownLsp().catch((e) => { log.debug("shutdown", `LSP shutdown error: ${e}`); });
+  lazyShutdownMcpManager().catch((e) => { log.debug("shutdown", `MCP manager shutdown error: ${e}`); });
+  lazyCloseDb().catch((e) => { log.debug("shutdown", `DB close error: ${e}`); });
   log.shutdown();
   process.exit(0);
 }
@@ -264,7 +264,7 @@ profileCheckpoint("process_start");
 startPrefetch();
 
 // Non-blocking background update check (prints one-line notice if new version available)
-import("./core/update-notifier").then((m) => m.maybeNotifyUpdate(VERSION)).catch(() => {});
+import("./core/update-notifier").then((m) => m.maybeNotifyUpdate(VERSION)).catch((e) => { log.debug("update", `Update notifier failed: ${e}`); });
 
 const program = new Command()
   .name("kcode")
@@ -663,7 +663,7 @@ async function runMain(
 
   // Auto-start LSP language servers (non-blocking, lazy)
   const lsp = await lazyGetLspManager(cwd);
-  if (lsp) lsp.autoStart().catch(() => {});
+  if (lsp) lsp.autoStart().catch((e) => { log.debug("lsp", `LSP auto-start error: ${e}`); });
 
   // Apply execution profile (before CLI overrides, so flags can override profile settings)
   if (opts.profile) {

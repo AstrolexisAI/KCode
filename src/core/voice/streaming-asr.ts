@@ -49,7 +49,7 @@ export class StreamingASR {
         const writer = this.process.stdin as unknown as WritableStream;
         const writable = writer.getWriter?.();
         if (writable) {
-          writable.write(new Uint8Array(int16.buffer)).catch(() => {});
+          writable.write(new Uint8Array(int16.buffer)).catch((e) => { log.debug("asr", `Audio stream write error: ${e}`); });
           writable.releaseLock();
         }
       } catch (err) {

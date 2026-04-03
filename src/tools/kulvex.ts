@@ -128,7 +128,7 @@ const actionHandlers: Record<string, (params: ActionParams) => Promise<string>> 
     const data = await kulvexFetch("POST", "/api/memory/search", { query });
     if (Array.isArray(data.results)) {
       return data.results
-        .map((r: any) => `- ${r.content ?? r.text ?? JSON.stringify(r)}`)
+        .map((r: Record<string, unknown>) => `- ${r.content ?? r.text ?? JSON.stringify(r)}`)
         .join("\n");
     }
     return JSON.stringify(data, null, 2);

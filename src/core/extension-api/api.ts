@@ -15,17 +15,24 @@ import { DEFAULT_EXTENSION_API_CONFIG } from "./types";
 
 // ─── Helpers ───────────────────────────────────────────────────
 
+const SECURITY_HEADERS: Record<string, string> = {
+  "X-Frame-Options": "DENY",
+  "X-Content-Type-Options": "nosniff",
+  "Content-Security-Policy": "default-src 'self'",
+  "X-XSS-Protection": "0",
+};
+
 function json(data: unknown, status: number = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...SECURITY_HEADERS },
   });
 }
 
 function jsonWithHeaders(data: unknown, status: number, headers: Record<string, string>): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", ...SECURITY_HEADERS, ...headers },
   });
 }
 

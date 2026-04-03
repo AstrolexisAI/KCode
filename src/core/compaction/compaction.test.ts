@@ -217,7 +217,7 @@ describe("CompactionCircuitBreaker", () => {
     expect(cb.canAttempt()).toBe(false);
 
     // Simulate time passing by manipulating lastFailure
-    const state = cb.getState();
+    cb.getState();
     // We can't easily mock Date.now(), but we can test the reset() path
     cb.reset();
     expect(cb.canAttempt()).toBe(true);

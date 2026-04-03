@@ -70,7 +70,7 @@ describe("emergencyPrune", () => {
   describe("remove-old-turns strategy", () => {
     test("removes old messages keeping last 20%", () => {
       const msgs = makeMessages(10); // 31 messages (1 system + 30)
-      const { messages, result } = emergencyPrune(msgs, {
+      const { messages } = emergencyPrune(msgs, {
         pinnedIndices: new Set(),
         currentTokens: 20000,
         targetTokens: 2000,

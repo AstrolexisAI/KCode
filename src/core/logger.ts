@@ -176,7 +176,7 @@ class Logger {
     const path = this.getLogFilePath();
 
     try {
-      appendFile(path, content).catch(() => {});
+      appendFile(path, content).catch(() => { /* intentionally swallowed — logging failures must not recurse */ });
     } catch {
       // Never crash the app due to logging
     }

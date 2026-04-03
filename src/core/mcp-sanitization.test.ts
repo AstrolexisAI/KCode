@@ -206,7 +206,7 @@ describe("validateStdioCommand", () => {
 describe("Plugin manifest validation", () => {
   test("rejects plugin names with path traversal", async () => {
     const { PluginManager } = await import("./plugin-manager");
-    const pm = new PluginManager();
+    new PluginManager();
 
     // We can't directly test readManifest (private), but we can verify
     // the name regex pattern catches dangerous names

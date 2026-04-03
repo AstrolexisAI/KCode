@@ -886,7 +886,7 @@ export class ConversationManager {
         continue;
       }
       if (planResult.blockedResults.length > 0) {
-        const blockedBlocks: any[] = planResult.blockedResults.map((r) => ({
+        const blockedBlocks: Array<{ type: string; tool_use_id: string; content: string; is_error: boolean }> = planResult.blockedResults.map((r) => ({
           type: "tool_result",
           tool_use_id: r.tool_use_id,
           content: r.content,

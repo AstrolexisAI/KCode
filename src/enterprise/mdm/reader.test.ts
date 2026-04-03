@@ -124,7 +124,7 @@ describe("mdm/reader", () => {
     });
 
     test("clearMdmCache allows re-reading", async () => {
-      const first = await loadMdmSettings();
+      await loadMdmSettings();
       clearMdmCache();
       const second = await loadMdmSettings();
       // After clearing cache, a fresh read happens

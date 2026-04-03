@@ -202,7 +202,7 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
 
     if (action === "hover") {
       const result = (await lsp.query(filePath, "textDocument/hover", position)) as {
-        contents: any;
+        contents: string | { value: string } | Array<string | { value?: string }>;
       } | null;
       if (!result?.contents) {
         return { tool_use_id: "", content: `No hover info at ${filePath}:${line}:${column}.` };
@@ -215,7 +215,7 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
         text = result.contents.value;
       } else if (Array.isArray(result.contents)) {
         text = result.contents
-          .map((c: any) => (typeof c === "string" ? c : (c.value ?? "")))
+          .map((c: string | { value?: string }) => (typeof c === "string" ? c : (c.value ?? "")))
           .join("\n");
       } else {
         text = JSON.stringify(result.contents);
