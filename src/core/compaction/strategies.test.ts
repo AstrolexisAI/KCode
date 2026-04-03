@@ -40,31 +40,6 @@ function makeDocMsg(text: string): Message {
   };
 }
 
-function makeToolUseMsg(
-  toolName: string,
-  input: Record<string, unknown>,
-  resultContent: string,
-  isError = false,
-): Message {
-  return {
-    role: "assistant" as const,
-    content: [
-      {
-        type: "tool_use" as const,
-        id: "tu_" + Math.random().toString(36).slice(2),
-        name: toolName,
-        input,
-      } as ToolUseBlock,
-      {
-        type: "tool_result" as const,
-        tool_use_id: "tu_" + Math.random().toString(36).slice(2),
-        content: resultContent,
-        is_error: isError,
-      } as ToolResultBlock,
-    ],
-  };
-}
-
 function fillerMessages(n: number, charsPerMsg = 100): Message[] {
   return Array.from({ length: n }, (_, i) =>
     makeMsg(i % 2 === 0 ? "user" : "assistant", "x".repeat(charsPerMsg)),

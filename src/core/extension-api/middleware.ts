@@ -112,6 +112,10 @@ export function createCorsMiddleware(origins: string[]): Middleware {
           "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
           "Access-Control-Max-Age": "86400",
+          "X-Frame-Options": "DENY",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Security-Policy": "default-src 'self'",
+          "X-XSS-Protection": "0",
         },
       });
     }
@@ -144,6 +148,10 @@ export function getCorsHeaders(
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'self'",
+    "X-XSS-Protection": "0",
   };
 }
 

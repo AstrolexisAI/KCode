@@ -207,7 +207,7 @@ describe("SessionSync", () => {
         { role: "assistant", content: "msg 4" },
       ];
 
-      const result = await sync.syncDelta("sess-004", messages, 2);
+      await sync.syncDelta("sess-004", messages, 2);
 
       const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(opts.body as string);

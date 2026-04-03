@@ -72,7 +72,6 @@ describe("LocalTTS", () => {
   test("speakStream processes async iterable", async () => {
     // Mock speak to track calls
     const spoken: string[] = [];
-    const originalSpeak = tts.speak.bind(tts);
     tts.speak = async (text: string) => {
       spoken.push(text);
     };

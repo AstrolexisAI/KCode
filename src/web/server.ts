@@ -248,13 +248,26 @@ export class WebServer {
     }
   }
 
-  /** Generate CORS headers */
-  private corsHeaders(): Record<string, string> {
+  /** Generate CORS and security headers */
+  private corsHeaders(req?: Request): Record<string, string> {
+    let allowedOrigin = "*";
+    if (req) {
+      const origin = req.headers.get("Origin");
+      if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(origin)) {
+        allowedOrigin = origin;
+      } else if (origin) {
+        allowedOrigin = "";
+      }
+    }
     return {
-      "Access-Control-Allow-Origin": "*",
+      ...(allowedOrigin ? { "Access-Control-Allow-Origin": allowedOrigin } : {}),
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Auth-Token",
       "Access-Control-Max-Age": "86400",
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'self'",
+      "X-XSS-Protection": "0",
     };
   }
 }

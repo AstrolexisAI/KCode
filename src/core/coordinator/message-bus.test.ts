@@ -31,7 +31,7 @@ describe("MessageBus", () => {
   // ─── Constructor ─────────────────────────────────────────────
 
   test("creates .messages directory on construction", () => {
-    const bus = new MessageBus(tempDir);
+    new MessageBus(tempDir);
     expect(existsSync(join(tempDir, ".messages"))).toBe(true);
   });
 

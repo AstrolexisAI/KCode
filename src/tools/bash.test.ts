@@ -116,7 +116,6 @@ try {
   test("echo with serve keyword DOES get auto-backgrounded", async () => {
     // The isServerCommand regex matches \bserve\b anywhere in the command
     // so even `echo "serve"` triggers auto-backgrounding — this is by design
-    const start = Date.now();
     const result = await executeBash({ command: "echo 'serve test'" });
     // It still completes (auto-backgrounded echo finishes fast)
     expect(result.content).toBeTruthy();
@@ -180,7 +179,7 @@ try {
   test("isServerCommand matches uvicorn", async () => {
     // uvicorn would block forever; auto-background should kick in
     const start = Date.now();
-    const result = await executeBash({
+    await executeBash({
       command: "echo 'would run uvicorn' && exit 0",
     });
     // "uvicorn" appears in the command, so it gets auto-backgrounded
@@ -191,7 +190,7 @@ try {
 
   test("isServerCommand matches flask run", async () => {
     const start = Date.now();
-    const result = await executeBash({
+    await executeBash({
       command: "echo 'flask run test' && exit 0",
     });
     const elapsed = Date.now() - start;

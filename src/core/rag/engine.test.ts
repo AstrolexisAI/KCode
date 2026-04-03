@@ -186,7 +186,7 @@ export function add(a: number, b: number): number {
     const engine = new RAGEngine(projectDir);
     await engine.indexProject();
 
-    const stats1 = engine.stats();
+    engine.stats();
 
     // Modify the file (with slight delay to ensure mtime changes)
     await new Promise((r) => setTimeout(r, 50));

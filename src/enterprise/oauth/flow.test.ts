@@ -139,8 +139,6 @@ describe("oauth/flow", () => {
       // 2. Simulating the browser callback
       // 3. Having a mock token server respond
 
-      const state = { capturedAuthUrl: "" };
-
       // Mock token server
       const tokenServer = Bun.serve({
         port: 19521,
@@ -172,7 +170,6 @@ describe("oauth/flow", () => {
         await new Promise((r) => setTimeout(r, 500));
 
         // Find the callback server port by trying ports in range
-        let callbackPort: number | null = null;
         for (let port = 19000; port <= 19999; port++) {
           try {
             const resp = await fetch(
@@ -183,7 +180,6 @@ describe("oauth/flow", () => {
             );
             // If we get a response (even error), the server is there
             if (resp.status !== 0) {
-              callbackPort = port;
               break;
             }
           } catch {

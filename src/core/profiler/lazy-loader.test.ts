@@ -76,7 +76,7 @@ describe("lazy-loader", () => {
   describe("_resetLazyCache", () => {
     test("clears cache so next call reloads", () => {
       const getPath = lazyRequire<typeof import("node:path")>("node:path");
-      const a = getPath();
+      getPath();
       _resetLazyCache();
       // After reset, the getter still works but will re-require
       const b = getPath();

@@ -414,6 +414,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               formatRuleList,
               formatRuleDetail,
             } = await import("../../core/hookify.js");
+            type HookifyRule = Awaited<ReturnType<typeof loadHookifyRules>>[number];
             const args = userInput.slice("/hookify".length).trim();
             const parts = args.split(/\s+/);
             const subcmd = parts[0]?.toLowerCase() || "list";
@@ -437,7 +438,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 ]);
                 return;
               }
-              const rule: any = {
+              const rule: HookifyRule = {
                 name,
                 enabled: true,
                 event: "all" as const,

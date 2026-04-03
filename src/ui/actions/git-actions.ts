@@ -3,6 +3,15 @@
 
 import type { ActionContext } from "./action-helpers.js";
 
+function formatGitError(err: unknown): string {
+  if (err instanceof Error) {
+    const execErr = err as { stderr?: Buffer | string };
+    const stderr = execErr.stderr?.toString()?.trim();
+    return `  Git error: ${stderr || err.message}`;
+  }
+  return `  Git error: ${String(err)}`;
+}
+
 export async function handleGitAction(action: string, ctx: ActionContext): Promise<string | null> {
   const { conversationManager, setCompleted, appConfig, args, switchTheme } = ctx;
 
@@ -39,8 +48,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return lines.join("\n");
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "tags": {
@@ -118,8 +127,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return "  Usage: /tags [list | create <name> [message] | log <tag1>..<tag2>]";
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "file_history": {
@@ -154,8 +163,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return lines.join("\n");
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "diff_branch": {
@@ -262,8 +271,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return lines.join("\n");
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "diff_stats": {
@@ -373,8 +382,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
             }
           }
         }
-      } catch (err: any) {
-        lines.push(`  Error: ${err.message}`);
+      } catch (err) {
+        lines.push(formatGitError(err).replace("Git error", "Error"));
       }
 
       return lines.join("\n");
@@ -416,8 +425,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return lines.join("\n");
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "mirrors": {
@@ -501,8 +510,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return "  Usage: /mirrors [list | add <name> <url> | remove <name>]";
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "stashes": {
@@ -587,8 +596,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         return "  Usage: /stashes [list | show <n> | apply <n> | pop | drop <n>]";
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "contributors": {
@@ -636,8 +645,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         lines.push(`\n  Total: ${totalCommits} commits by ${contributors.length} contributor(s)`);
 
         return lines.join("\n");
-      } catch (err: any) {
-        return `  Git error: ${err.stderr?.toString()?.trim() || err.message}`;
+      } catch (err) {
+        return formatGitError(err);
       }
     }
     case "gitignore": {

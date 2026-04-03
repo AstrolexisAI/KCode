@@ -2,6 +2,7 @@
 // Structured audit trail for enterprise compliance.
 // Logs tool executions, permission decisions, and security events to SQLite.
 
+import type { Database, Statement } from "bun:sqlite";
 import { log } from "./logger";
 
 interface AuditEntry {
@@ -30,8 +31,8 @@ interface AuditEntry {
 
 let _auditEnabled = false;
 let _orgId: string | undefined;
-let _db: any = null;
-let _insertStmt: any = null;
+let _db: Database | null = null;
+let _insertStmt: Statement | null = null;
 
 /**
  * Initialize audit logging. Must be called once before logging events.
@@ -44,10 +45,11 @@ export function initAuditLogger(options: { enabled: boolean; orgId?: string }): 
 
   try {
     const { getDb } = require("./db.js");
-    _db = getDb();
+    const db: Database = getDb();
+    _db = db;
 
     // Create audit table
-    _db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
+    db.exec(`CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL DEFAULT (datetime('now')),
       event_type TEXT NOT NULL,
@@ -65,11 +67,11 @@ export function initAuditLogger(options: { enabled: boolean; orgId?: string }): 
     )`);
 
     // Index for common queries
-    _db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)`);
-    _db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type)`);
-    _db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id)`);
 
-    _insertStmt = _db.prepare(`INSERT INTO audit_log
+    _insertStmt = db.prepare(`INSERT INTO audit_log
       (event_type, tool_name, action, status, reason, model, session_id, org_id, input_summary, cost_usd, token_count, duration_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
@@ -223,7 +225,7 @@ export function getAuditEntries(opts?: {
     query += " ORDER BY id DESC LIMIT ?";
     params.push(limit);
 
-    return _db.prepare(query).all(...params);
+    return _db.prepare(query).all(...params) as Array<Record<string, unknown>>;
   } catch {
     return [];
   }

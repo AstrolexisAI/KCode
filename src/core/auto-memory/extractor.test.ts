@@ -264,9 +264,6 @@ describe("saveExtractedMemories", () => {
     expect(result.saved).toBe(1);
     expect(result.errors).toHaveLength(0);
 
-    // Verify file was written
-    const expectedPath = join(tempDir, ".kcode", "memory", "user_test_memory.md");
-
     // The getMemoryDir uses a hash of projectPath, so let's check the db instead
     const rows = db.prepare("SELECT * FROM memory_store").all() as any[];
     expect(rows).toHaveLength(1);

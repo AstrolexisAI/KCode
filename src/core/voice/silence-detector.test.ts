@@ -18,7 +18,6 @@ describe("SilenceDetector", () => {
 
   test("detects silence after threshold duration", () => {
     // Feed silence, then advance time past threshold
-    const start = Date.now();
     detector.feed(0.0); // Start silence timer
 
     // We need to simulate time passing — use a detector with very short threshold

@@ -144,7 +144,7 @@ export function updateMemory(
 ): boolean {
   const d = resolveDb(db);
   const sets: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | null)[] = [];
 
   if (updates.category !== undefined) {
     sets.push("category = ?");
@@ -206,7 +206,7 @@ export function getMemories(
 ): MemoryEntry[] {
   const d = resolveDb(db);
   const wheres: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | null)[] = [];
 
   if (opts?.project !== undefined) {
     wheres.push("project = ?");

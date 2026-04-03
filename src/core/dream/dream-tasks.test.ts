@@ -28,18 +28,6 @@ function makeCtx(aborted = false): DreamContext {
   };
 }
 
-function makeAbortableCtx(): { ctx: DreamContext; abort: () => void } {
-  const controller = new AbortController();
-  return {
-    ctx: {
-      cwd: "/tmp",
-      signal: controller.signal,
-      log: mock(() => {}),
-    },
-    abort: () => controller.abort(),
-  };
-}
-
 // ─── reindexTask ───────────────────────────────────────────────────
 
 describe("reindexTask", () => {

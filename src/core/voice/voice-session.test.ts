@@ -34,10 +34,7 @@ describe("VoiceSession", () => {
   });
 
   test("onTranscript callback can be set", () => {
-    let received = "";
-    session.onTranscript = (text) => {
-      received = text;
-    };
+    session.onTranscript = () => {};
     expect(session.onTranscript).toBeDefined();
   });
 

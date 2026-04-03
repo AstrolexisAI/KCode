@@ -6,6 +6,38 @@ import { log } from "../logger";
 import type { CloudClient } from "./client";
 import type { SyncResult } from "./types";
 
+/** A message part within a multi-part content array */
+interface SyncMessagePart {
+  type?: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
+/** A tool call reference attached to a message */
+interface SyncToolCall {
+  id?: string;
+  type?: string;
+  name?: string;
+  function?: { name?: string };
+  [key: string]: unknown;
+}
+
+/** A conversation message to sync to the cloud */
+interface SyncMessage {
+  role?: string;
+  content?: string | SyncMessagePart[];
+  tool_calls?: SyncToolCall[];
+  [key: string]: unknown;
+}
+
+/** Session statistics for cloud sync */
+interface SyncSessionStats {
+  tokenCount?: number;
+  costUsd?: number;
+  duration?: number;
+  [key: string]: unknown;
+}
+
 /** Maximum content length before truncation during sanitization */
 const MAX_CONTENT_LENGTH = 2048;
 
@@ -25,7 +57,7 @@ export class SessionSync {
    * Full sync: uploads all messages and stats for a session.
    * Replaces any previously synced data on the server.
    */
-  async syncSession(sessionId: string, messages: any[], stats: any): Promise<SyncResult> {
+  async syncSession(sessionId: string, messages: SyncMessage[], stats: SyncSessionStats | null): Promise<SyncResult> {
     const sanitized = messages.map((msg) => this.sanitizeMessage(msg));
 
     const result = await this.client.request<SyncResult>(
@@ -48,7 +80,7 @@ export class SessionSync {
    * Incremental sync: only uploads messages added since the last sync.
    * Falls back to full sync if lastSyncIndex is 0 or missing.
    */
-  async syncDelta(sessionId: string, messages: any[], lastSyncIndex: number): Promise<SyncResult> {
+  async syncDelta(sessionId: string, messages: SyncMessage[], lastSyncIndex: number): Promise<SyncResult> {
     // If no previous sync, do a full sync of all messages
     if (lastSyncIndex <= 0 || lastSyncIndex >= messages.length) {
       return this.syncSession(sessionId, messages, null);
@@ -82,10 +114,10 @@ export class SessionSync {
    * - Strips tool call input/output/result fields (keeps metadata only)
    * - Preserves role, timestamp, and message ID
    */
-  sanitizeMessage(msg: any): any {
+  sanitizeMessage(msg: SyncMessage): SyncMessage {
     if (!msg || typeof msg !== "object") return msg;
 
-    const sanitized: any = { ...msg };
+    const sanitized: SyncMessage = { ...msg };
 
     // Truncate string content
     if (typeof sanitized.content === "string") {
@@ -96,7 +128,7 @@ export class SessionSync {
 
     // Handle array content (multi-part messages)
     if (Array.isArray(sanitized.content)) {
-      sanitized.content = sanitized.content.map((part: any) => {
+      sanitized.content = sanitized.content.map((part: SyncMessagePart) => {
         if (!part || typeof part !== "object") return part;
         const sanitizedPart = { ...part };
         if (
@@ -111,8 +143,8 @@ export class SessionSync {
 
     // Strip tool call details, keep only metadata
     if (sanitized.tool_calls && Array.isArray(sanitized.tool_calls)) {
-      sanitized.tool_calls = sanitized.tool_calls.map((tc: any) => {
-        const cleaned: any = {
+      sanitized.tool_calls = sanitized.tool_calls.map((tc: SyncToolCall) => {
+        const cleaned: SyncToolCall = {
           id: tc.id,
           type: tc.type,
           name: tc.name ?? tc.function?.name,

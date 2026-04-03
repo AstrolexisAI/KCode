@@ -22,10 +22,12 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
 
-    // Some stricter flags (disabled by default)
+    // Unused locals/params — enforced via biome lint (noUnusedImports, noUnusedVariables)
+    // rather than tsc to allow _-prefixed intentional ignores
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "exclude": ["vscode-extension", "node_modules", "dist"]
+  "include": ["src"],
+  "exclude": ["vscode-extension", "node_modules", "dist", "archived", "mobile", "ide", "sdk", "backend", "benchmarks"]
 }

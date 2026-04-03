@@ -48,21 +48,6 @@ function makeMockExecutor(responses: Record<string, string> = {}): ModelExecutor
   };
 }
 
-function makeSlowExecutor(slowModel: string, delayMs: number): ModelExecutor {
-  return {
-    execute: async (model) => {
-      if (model === slowModel) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-      return {
-        content: `Response from ${model}`,
-        tokensUsed: 20,
-        durationMs: model === slowModel ? delayMs : 50,
-      };
-    },
-  };
-}
-
 function makeFailingExecutor(failingModels: string[]): ModelExecutor {
   return {
     execute: async (model) => {

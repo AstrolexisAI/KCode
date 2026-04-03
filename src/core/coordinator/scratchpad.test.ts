@@ -19,13 +19,13 @@ describe("Scratchpad", () => {
   // ─── Constructor ─────────────────────────────────────────────
 
   test("creates scratchpad directory on construction", () => {
-    const sp = new Scratchpad("test-session-1", tempDir);
+    new Scratchpad("test-session-1", tempDir);
     expect(existsSync(join(tempDir, "test-session-1"))).toBe(true);
   });
 
   test("does not fail if directory already exists", () => {
-    const sp1 = new Scratchpad("test-session-2", tempDir);
-    const sp2 = new Scratchpad("test-session-2", tempDir);
+    new Scratchpad("test-session-2", tempDir);
+    new Scratchpad("test-session-2", tempDir);
     expect(existsSync(join(tempDir, "test-session-2"))).toBe(true);
   });
 

@@ -52,7 +52,7 @@ describe("ConversationManager: state management", () => {
 
   test("constructor does not mutate original config", () => {
     const original = { ...env.config, maxTokens: 1000 };
-    const cm = new ConversationManager(original, env.registry);
+    new ConversationManager(original, env.registry);
     // Model profile adjustments may change maxTokens on the internal copy
     // but should not affect the original
     expect(original.maxTokens).toBe(1000);
@@ -581,7 +581,6 @@ describe("ConversationManager: fork", () => {
     env.provider.addResponse("Msg 2.");
     await sendAndCollect(cm, "Hello 2");
 
-    const totalBefore = cm.getState().messages.length;
     const fork = cm.forkConversation(2);
 
     expect(cm.getState().messages.length).toBeLessThanOrEqual(2);
@@ -603,7 +602,6 @@ describe("ConversationManager: abort during tool execution", () => {
 
   test("abort mid-tool-execution terminates generator cleanly", async () => {
     // Register a tool that we can abort during
-    let handlerCalled = false;
     env.registry.register(
       "SlowTool",
       {
@@ -612,7 +610,6 @@ describe("ConversationManager: abort during tool execution", () => {
         input_schema: { type: "object" as const, properties: {}, required: [] },
       },
       async () => {
-        handlerCalled = true;
         await new Promise((r) => setTimeout(r, 50));
         return { tool_use_id: "", content: "done", is_error: false };
       },
@@ -691,7 +688,7 @@ describe("ConversationManager: burnedFingerprints", () => {
     env.provider.addResponse("OK, I will try something else.");
 
     const cm = new ConversationManager(env.config, env.registry);
-    const { events } = await sendAndCollect(cm, "Use the tool");
+    await sendAndCollect(cm, "Use the tool");
 
     // Handler called exactly once (second call blocked)
     expect(callCount).toBe(1);
@@ -772,7 +769,7 @@ describe("ConversationManager: error fingerprint dedup", () => {
     env.provider.addResponse("Both tools failed with different errors.");
 
     const cm = new ConversationManager(env.config, env.registry);
-    const { events } = await sendAndCollect(cm, "Try both tools");
+    await sendAndCollect(cm, "Try both tools");
 
     // Both tools should have been called (Glob's burn doesn't affect Grep)
     expect(globCalls).toBe(1);
