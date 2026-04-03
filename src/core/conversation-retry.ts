@@ -18,6 +18,7 @@ const MIN_RATE_LIMIT_DELAY_MS = 15_000; // Min 15s for rate limits
 // ─── Helpers ─────────────────────────────────────────────────────
 
 export function isRetryableError(error: unknown): boolean {
+  if (isRateLimitError(error)) return true;
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     // Retry on network errors and common HTTP errors
@@ -75,8 +76,9 @@ export async function createStreamWithRetry(
   ctx: CreateStreamContext,
 ): Promise<AsyncGenerator<SSEChunk>> {
   let lastError: Error | undefined;
+  const maxAttempts = Math.max(ctx.maxRetries, 5); // Allow up to 5 for rate limits
 
-  for (let attempt = 0; attempt <= ctx.maxRetries; attempt++) {
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     let effectiveModel = ctx.config.model;
     try {
       if (ctx.config.autoRoute !== false && !ctx.config.modelExplicitlySet) {
@@ -133,7 +135,12 @@ export async function createStreamWithRetry(
         }
       }
 
-      if (attempt < ctx.maxRetries && isRetryableError(error)) {
+      // Rate limits get more retries (up to 5) since each wait is 15-60s
+      const effectiveMaxRetries = isRateLimitError(error)
+        ? Math.max(ctx.maxRetries, 5)
+        : ctx.maxRetries;
+
+      if (attempt < effectiveMaxRetries && isRetryableError(error)) {
         let delay: number;
         if (isRateLimitError(error)) {
           // Use server-provided Retry-After, with a minimum floor
