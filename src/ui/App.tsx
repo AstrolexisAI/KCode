@@ -65,6 +65,7 @@ export default function App({ config, conversationManager, tools, initialSession
     names.add("/exit");
     names.add("/quit");
     names.add("/status");
+    names.add("/auth");
     names.add("/cloud");
     names.add("/api-key");
     names.add("/provider");
@@ -89,6 +90,7 @@ export default function App({ config, conversationManager, tools, initialSession
     descs["/exit"] = "Exit KCode";
     descs["/quit"] = "Exit KCode";
     descs["/status"] = "Show session status";
+    descs["/auth"] = "OAuth login/status/logout for cloud AI providers (Anthropic, OpenAI, Gemini)";
     descs["/cloud"] = "Configure cloud API providers (Anthropic, OpenAI, Gemini, etc.)";
     descs["/api-key"] = "Configure cloud API providers";
     descs["/provider"] = "Configure cloud API providers";

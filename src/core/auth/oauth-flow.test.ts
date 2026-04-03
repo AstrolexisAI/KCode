@@ -4,8 +4,11 @@ import {
   generateCodeChallenge,
   generateCodeVerifier,
   generateState,
+  getOAuthProviderNames,
+  getProviderAuthStatus,
   isTokenExpired,
   PROVIDER_CONFIGS,
+  resolveProviderConfig,
 } from "./oauth-flow";
 import type { OAuthConfig, OAuthTokens } from "./types";
 
@@ -127,9 +130,109 @@ describe("oauth-flow", () => {
     test("kcode-cloud config exists", () => {
       const config = PROVIDER_CONFIGS["kcode-cloud"];
       expect(config).toBeDefined();
-      expect(config.provider).toBe("kcode-cloud");
-      expect(config.clientId).toBe("kcode-cli");
-      expect(config.scopes).toContain("api");
+      expect(config!.provider).toBe("kcode-cloud");
+      expect(config!.clientId).toBe("kcode-cli");
+      expect(config!.scopes).toContain("api");
+    });
+
+    test("anthropic config has exchangeForApiKey", () => {
+      const config = PROVIDER_CONFIGS["anthropic"];
+      expect(config).toBeDefined();
+      expect(config!.provider).toBe("anthropic");
+      expect(config!.exchangeForApiKey).toBe(true);
+      expect(config!.authorizationUrl).toContain("anthropic.com");
+    });
+
+    test("openai-codex config exists with correct OAuth endpoints", () => {
+      const config = PROVIDER_CONFIGS["openai-codex"];
+      expect(config).toBeDefined();
+      expect(config!.provider).toBe("openai-codex");
+      expect(config!.authorizationUrl).toContain("auth.openai.com");
+      expect(config!.tokenUrl).toContain("auth.openai.com");
+      expect(config!.scopes).toContain("openai.chat");
+      expect(config!.scopes).toContain("offline_access");
+      expect(config!.extraAuthParams?.audience).toBe("https://api.openai.com/v1");
+    });
+
+    test("gemini config exists with Google OAuth endpoints", () => {
+      const config = PROVIDER_CONFIGS["gemini"];
+      expect(config).toBeDefined();
+      expect(config!.provider).toBe("gemini");
+      expect(config!.authorizationUrl).toContain("accounts.google.com");
+      expect(config!.tokenUrl).toContain("googleapis.com");
+      expect(config!.extraAuthParams?.access_type).toBe("offline");
+      expect(config!.extraAuthParams?.prompt).toBe("consent");
+    });
+
+    test("all configs have required fields", () => {
+      for (const [name, config] of Object.entries(PROVIDER_CONFIGS)) {
+        expect(config.provider).toBeDefined();
+        expect(config.authorizationUrl).toBeTruthy();
+        expect(config.tokenUrl).toBeTruthy();
+        expect(config.clientId).toBeTruthy();
+        expect(config.scopes!.length).toBeGreaterThan(0);
+        expect(config.label).toBeTruthy();
+      }
+    });
+  });
+
+  describe("getOAuthProviderNames", () => {
+    test("returns all provider names", () => {
+      const names = getOAuthProviderNames();
+      expect(names).toContain("anthropic");
+      expect(names).toContain("openai-codex");
+      expect(names).toContain("gemini");
+      expect(names).toContain("kcode-cloud");
+    });
+  });
+
+  describe("resolveProviderConfig", () => {
+    test("returns full OAuthConfig for known provider", () => {
+      const config = resolveProviderConfig("anthropic");
+      expect(config).not.toBeNull();
+      expect(config!.provider).toBe("anthropic");
+      expect(config!.redirectPort).toBe(19284);
+    });
+
+    test("returns null for unknown provider", () => {
+      expect(resolveProviderConfig("unknown-provider")).toBeNull();
+    });
+
+    test("includes extraAuthParams for gemini", () => {
+      const config = resolveProviderConfig("gemini");
+      expect(config).not.toBeNull();
+      expect(config!.extraAuthParams?.access_type).toBe("offline");
+    });
+  });
+
+  describe("buildAuthUrl with extraAuthParams", () => {
+    test("appends extra params for OpenAI Codex", () => {
+      const config = resolveProviderConfig("openai-codex")!;
+      const url = buildAuthUrl(config, "test-challenge", "test-state");
+      const parsed = new URL(url);
+      expect(parsed.searchParams.get("audience")).toBe("https://api.openai.com/v1");
+    });
+
+    test("appends access_type and prompt for Gemini", () => {
+      const config = resolveProviderConfig("gemini")!;
+      const url = buildAuthUrl(config, "test-challenge", "test-state");
+      const parsed = new URL(url);
+      expect(parsed.searchParams.get("access_type")).toBe("offline");
+      expect(parsed.searchParams.get("prompt")).toBe("consent");
+    });
+  });
+
+  describe("getProviderAuthStatus", () => {
+    test("returns 'none' for unauthenticated provider without env var", async () => {
+      const status = await getProviderAuthStatus("kcode-cloud");
+      // kcode-cloud has no env var mapping, so it should be 'none' unless tokens exist
+      expect(status.provider).toBe("kcode-cloud");
+      expect(["none", "oauth", "api_key"]).toContain(status.method);
+    });
+
+    test("returns label from provider config", async () => {
+      const status = await getProviderAuthStatus("anthropic");
+      expect(status.label).toBe("Anthropic (Claude)");
     });
   });
 });

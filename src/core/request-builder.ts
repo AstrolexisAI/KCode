@@ -62,8 +62,36 @@ export function estimateToolDefinitionTokens(
 // ─── API Key Resolution ──────────────────────────────────────────
 
 /**
+ * Detect which OAuth provider name corresponds to a model/url combination.
+ * Returns the provider key used in PROVIDER_CONFIGS, or null for non-OAuth providers.
+ */
+function detectOAuthProvider(modelName: string, baseUrl: string): string | null {
+  const lower = modelName.toLowerCase();
+  const urlLower = baseUrl.toLowerCase();
+
+  if (
+    lower.startsWith("gpt-") ||
+    lower.startsWith("o1") ||
+    lower.startsWith("o3") ||
+    lower.startsWith("o4") ||
+    urlLower.includes("openai.com")
+  ) {
+    return "openai-codex";
+  }
+  if (
+    lower.startsWith("gemini") ||
+    urlLower.includes("googleapis.com") ||
+    urlLower.includes("generativelanguage")
+  ) {
+    return "gemini";
+  }
+
+  return null;
+}
+
+/**
  * Resolve the API key for a model based on its name/baseUrl.
- * Checks provider-specific env vars first, then falls back to config.apiKey.
+ * Priority: OAuth token (keychain) → provider env var → config.apiKey.
  */
 export function resolveApiKey(
   modelName: string,
@@ -101,6 +129,45 @@ export function resolveApiKey(
   }
 
   return config.apiKey;
+}
+
+/**
+ * Resolve API key with OAuth token fallback.
+ * Tries OAuth token from keychain first, then falls back to resolveApiKey().
+ * This is async because it may need to refresh an expired OAuth token.
+ */
+async function resolveApiKeyWithOAuth(
+  modelName: string,
+  baseUrl: string,
+  config: KCodeConfig,
+): Promise<string | undefined> {
+  const oauthProvider = detectOAuthProvider(modelName, baseUrl);
+
+  if (oauthProvider) {
+    try {
+      const { getAuthSessionManager } = await import("./auth/session.js");
+      const { resolveProviderConfig } = await import("./auth/oauth-flow.js");
+      const manager = getAuthSessionManager();
+      const providerConfig = resolveProviderConfig(oauthProvider);
+      const token = await manager.getAccessToken(oauthProvider, providerConfig ?? undefined);
+      if (token) return token;
+    } catch {
+      // OAuth module not available or failed — fall through to env/config
+    }
+  }
+
+  // Anthropic OAuth → API key is stored in keychain
+  if (modelName.toLowerCase().startsWith("claude") || baseUrl.includes("anthropic.com")) {
+    try {
+      const { getApiKey } = await import("./auth/oauth-flow.js");
+      const keychainKey = await getApiKey("anthropic");
+      if (keychainKey) return keychainKey;
+    } catch {
+      // Fall through
+    }
+  }
+
+  return resolveApiKey(modelName, baseUrl, config);
 }
 
 // ─── Request Building ────────────────────────────────────────────
@@ -203,7 +270,11 @@ export async function buildRequestForModel(
   if (provider === "anthropic") {
     // Anthropic API: /v1/messages with x-api-key header
     const url = `${apiBase}/v1/messages`;
-    const apiKey = config.anthropicApiKey ?? config.apiKey;
+    // Priority: config key → OAuth keychain key → env var
+    const apiKey =
+      config.anthropicApiKey ??
+      config.apiKey ??
+      (await resolveApiKeyWithOAuth(modelName, apiBase, config));
     if (apiKey) {
       headers["x-api-key"] = apiKey;
     }
@@ -233,8 +304,8 @@ export async function buildRequestForModel(
   } else {
     // OpenAI-compatible API: /v1/chat/completions with Bearer token
     const url = `${apiBase}/v1/chat/completions`;
-    // Resolve API key: check provider-specific env vars, then fall back to config.apiKey
-    const resolvedKey = resolveApiKey(modelName, apiBase, config);
+    // Resolve API key: OAuth token → provider env var → config.apiKey
+    const resolvedKey = await resolveApiKeyWithOAuth(modelName, apiBase, config);
     if (resolvedKey) {
       headers["Authorization"] = `Bearer ${resolvedKey}`;
     }

@@ -1,13 +1,19 @@
 // Auth type definitions
 
 export interface OAuthConfig {
-  provider: "anthropic" | "openai" | "kcode-cloud" | "custom";
+  provider: "anthropic" | "openai" | "openai-codex" | "gemini" | "kcode-cloud" | "custom";
   authorizationUrl: string;
   tokenUrl: string;
   clientId: string;
   scopes: string[];
   /** Local port for OAuth callback server */
   redirectPort: number;
+  /** Optional: extra params appended to the authorization URL */
+  extraAuthParams?: Record<string, string>;
+  /** If true, the OAuth token is exchanged for a permanent API key (e.g., Anthropic) */
+  exchangeForApiKey?: boolean;
+  /** Human-readable label shown in UI */
+  label?: string;
 }
 
 export interface OAuthTokens {

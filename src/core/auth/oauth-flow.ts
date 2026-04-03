@@ -16,6 +16,7 @@ export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
     tokenUrl: "https://cloud.kcode.dev/oauth/token",
     clientId: "kcode-cli",
     scopes: ["api", "sync"],
+    label: "KCode Cloud",
   },
   anthropic: {
     provider: "anthropic",
@@ -23,8 +24,53 @@ export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
     tokenUrl: "https://console.anthropic.com/v1/oauth/token",
     clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
     scopes: ["org:create_api_key"],
+    exchangeForApiKey: true,
+    label: "Anthropic (Claude)",
+  },
+  "openai-codex": {
+    provider: "openai-codex",
+    authorizationUrl: "https://auth.openai.com/authorize",
+    tokenUrl: "https://auth.openai.com/oauth/token",
+    clientId: "app_scp_oBpBLzrq1HEMbGwMtasMuKGz",
+    scopes: ["openai.chat", "openai.responses", "offline_access"],
+    extraAuthParams: { audience: "https://api.openai.com/v1" },
+    label: "OpenAI (Codex)",
+  },
+  gemini: {
+    provider: "gemini",
+    authorizationUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+    clientId: "236695937910-gk2b1hkqshrfr0l2dp9ih3n8t0mnoeqg.apps.googleusercontent.com",
+    scopes: [
+      "https://www.googleapis.com/auth/generative-language",
+      "https://www.googleapis.com/auth/cloud-platform",
+    ],
+    extraAuthParams: { access_type: "offline", prompt: "consent" },
+    label: "Google Gemini",
   },
 };
+
+/** Get all supported OAuth provider names */
+export function getOAuthProviderNames(): string[] {
+  return Object.keys(PROVIDER_CONFIGS);
+}
+
+/** Resolve provider config to a full OAuthConfig */
+export function resolveProviderConfig(provider: string): OAuthConfig | null {
+  const partial = PROVIDER_CONFIGS[provider];
+  if (!partial) return null;
+  return {
+    provider: partial.provider ?? "custom",
+    authorizationUrl: partial.authorizationUrl ?? "",
+    tokenUrl: partial.tokenUrl ?? "",
+    clientId: partial.clientId ?? "",
+    scopes: partial.scopes ?? [],
+    redirectPort: partial.redirectPort ?? DEFAULT_REDIRECT_PORT,
+    extraAuthParams: partial.extraAuthParams,
+    exchangeForApiKey: partial.exchangeForApiKey,
+    label: partial.label,
+  } as OAuthConfig;
+}
 
 // ── PKCE utilities ──
 
@@ -82,6 +128,13 @@ export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthFlowResu
   authUrl.searchParams.set("code_challenge", codeChallenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
 
+  // Append provider-specific extra params (e.g., access_type=offline for Google)
+  if (config.extraAuthParams) {
+    for (const [key, value] of Object.entries(config.extraAuthParams)) {
+      authUrl.searchParams.set(key, value);
+    }
+  }
+
   // Wait for the callback
   const code = await waitForCallback(redirectPort, state);
 
@@ -105,6 +158,13 @@ export function buildAuthUrl(config: OAuthConfig, codeChallenge: string, state: 
   authUrl.searchParams.set("state", state);
   authUrl.searchParams.set("code_challenge", codeChallenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
+
+  if (config.extraAuthParams) {
+    for (const [key, value] of Object.entries(config.extraAuthParams)) {
+      authUrl.searchParams.set(key, value);
+    }
+  }
+
   return authUrl.toString();
 }
 
@@ -340,6 +400,83 @@ async function createAnthropicApiKey(accessToken: string): Promise<string> {
     throw new Error("Anthropic OAuth response did not contain an API key");
   }
   return apiKey;
+}
+
+// ── Generic provider login ──
+
+/**
+ * Login to any supported OAuth provider.
+ * - For Anthropic: runs OAuth → creates permanent API key → stores in keychain
+ * - For OpenAI Codex / Gemini: runs OAuth → stores access + refresh tokens
+ * Returns { provider, method: "oauth" | "api_key", key?: string }
+ */
+export async function loginProvider(providerName: string): Promise<{
+  provider: string;
+  method: "oauth" | "api_key";
+  key?: string;
+}> {
+  const config = resolveProviderConfig(providerName);
+  if (!config) {
+    throw new Error(
+      `Unknown OAuth provider: "${providerName}". Supported: ${getOAuthProviderNames().join(", ")}`,
+    );
+  }
+
+  if (config.exchangeForApiKey) {
+    // Anthropic flow: OAuth → permanent API key
+    const apiKey = await anthropicOAuthLogin();
+    await migrateApiKey(providerName, apiKey);
+    return { provider: providerName, method: "api_key", key: apiKey };
+  }
+
+  // Standard OAuth flow: store access + refresh tokens
+  const result = await startOAuthFlow(config);
+  return { provider: providerName, method: "oauth" };
+}
+
+/**
+ * Get provider auth status: checks OAuth tokens first, then API key.
+ */
+export async function getProviderAuthStatus(providerName: string): Promise<{
+  provider: string;
+  label: string;
+  authenticated: boolean;
+  method: "oauth" | "api_key" | "env" | "none";
+  expiresAt?: number;
+}> {
+  const partial = PROVIDER_CONFIGS[providerName];
+  const label = partial?.label ?? providerName;
+
+  // Check OAuth tokens
+  const tokens = await getStoredTokens(providerName);
+  if (tokens) {
+    return {
+      provider: providerName,
+      label,
+      authenticated: !isTokenExpired(tokens),
+      method: "oauth",
+      expiresAt: tokens.expiresAt,
+    };
+  }
+
+  // Check keychain API key
+  const apiKey = await getApiKey(providerName);
+  if (apiKey) {
+    return { provider: providerName, label, authenticated: true, method: "api_key" };
+  }
+
+  // Check env var
+  const envMap: Record<string, string> = {
+    anthropic: "ANTHROPIC_API_KEY",
+    "openai-codex": "OPENAI_API_KEY",
+    gemini: "GEMINI_API_KEY",
+  };
+  const envVar = envMap[providerName];
+  if (envVar && process.env[envVar]) {
+    return { provider: providerName, label, authenticated: true, method: "env" };
+  }
+
+  return { provider: providerName, label, authenticated: false, method: "none" };
 }
 
 // ── API key migration ──
