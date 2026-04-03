@@ -81,6 +81,7 @@ export interface IncompleteResponseEntry {
 export interface QuestionHighlightEntry {
   kind: "question_highlight";
   question: string;
+  options?: string[];
 }
 
 export type MessageEntry =

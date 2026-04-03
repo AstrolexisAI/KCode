@@ -289,11 +289,11 @@ export async function buildRequestForModel(
   if (provider === "anthropic") {
     // Anthropic API: /v1/messages with x-api-key header
     const url = `${apiBase}/v1/messages`;
-    // Priority: config key → OAuth keychain key → env var
+    // Priority: OAuth/Claude Code token (subscription) → config key → env var
     const apiKey =
+      (await resolveApiKeyWithOAuth(modelName, apiBase, config)) ??
       config.anthropicApiKey ??
-      config.apiKey ??
-      (await resolveApiKeyWithOAuth(modelName, apiBase, config));
+      config.apiKey;
     if (apiKey) {
       headers["x-api-key"] = apiKey;
     }
