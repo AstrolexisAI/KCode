@@ -1,3 +1,4 @@
+export { registerAuthCommand } from "./auth";
 export { registerBenchmarkCommands } from "./benchmark";
 export { registerCloudCommand } from "./cloud";
 export { registerCompletionsCommand } from "./completions";

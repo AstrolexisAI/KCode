@@ -394,6 +394,105 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         return;
       }
 
+      // /auth — OAuth login/status/logout for cloud providers
+      if (lower.startsWith("/auth")) {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        const parts = userInput.trim().split(/\s+/);
+        const subcmd = parts[1]?.toLowerCase() || "status";
+
+        try {
+          const {
+            getOAuthProviderNames,
+            getProviderAuthStatus,
+            loginProvider,
+            clearTokens,
+            PROVIDER_CONFIGS,
+          } = await import("../../core/auth/oauth-flow.js");
+
+          if (subcmd === "status" || subcmd === "list") {
+            const providers = getOAuthProviderNames();
+            const lines = ["  OAuth Authentication Status\n"];
+            for (const name of providers) {
+              const status = await getProviderAuthStatus(name);
+              const icon = status.authenticated ? "\u2713" : "\u2717";
+              const methodLabel =
+                status.method === "oauth"
+                  ? "OAuth"
+                  : status.method === "api_key"
+                    ? "API Key"
+                    : status.method === "env"
+                      ? "Env var"
+                      : "not configured";
+              let expiry = "";
+              if (status.method === "oauth" && status.expiresAt) {
+                const remaining = status.expiresAt - Date.now();
+                if (remaining > 0) {
+                  const mins = Math.floor(remaining / 60_000);
+                  expiry = mins > 60 ? ` (${Math.floor(mins / 60)}h)` : ` (${mins}m)`;
+                } else {
+                  expiry = " (expired)";
+                }
+              }
+              lines.push(`  ${icon} ${status.label.padEnd(22)} ${methodLabel}${expiry}`);
+            }
+            lines.push("\n  Use: /auth login <provider> | /auth logout <provider>");
+            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+          } else if (subcmd === "login") {
+            const provider = parts[2];
+            if (!provider) {
+              const providers = getOAuthProviderNames().filter((p) => p !== "kcode-cloud");
+              const lines = ["  Usage: /auth login <provider>\n\n  Available providers:"];
+              for (const p of providers) {
+                const label = PROVIDER_CONFIGS[p]?.label ?? p;
+                lines.push(`    - ${p} (${label})`);
+              }
+              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+            } else {
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: `  Starting OAuth login for ${provider}...\n  A browser window will open.` },
+              ]);
+              const result = await loginProvider(provider);
+              const method = result.method === "api_key" ? "API key stored in keychain" : "OAuth tokens stored";
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: `  \u2713 Authenticated with ${provider} (${method})` },
+              ]);
+            }
+          } else if (subcmd === "logout") {
+            const provider = parts[2];
+            if (!provider) {
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: "  Usage: /auth logout <provider>" },
+              ]);
+            } else {
+              await clearTokens(provider);
+              try {
+                const { deleteSecret } = await import("../../core/auth/keychain.js");
+                await deleteSecret(`apikey-${provider}`);
+              } catch { /* ok */ }
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: `  \u2713 Logged out from ${provider}` },
+              ]);
+            }
+          } else {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "assistant", text: "  Usage: /auth [status | login <provider> | logout <provider>]" },
+            ]);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: `  Auth error: ${msg}` },
+          ]);
+        }
+        return;
+      }
+
       // /toggle — switch between local and cloud models
       if (lower === "/toggle" || lower === "/model" || lower === "/switch") {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
@@ -415,6 +514,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               formatRuleDetail,
             } = await import("../../core/hookify.js");
             type HookifyRule = Awaited<ReturnType<typeof loadHookifyRules>>[number];
+            type HookifyCondition = HookifyRule["conditions"][number];
             const args = userInput.slice("/hookify".length).trim();
             const parts = args.split(/\s+/);
             const subcmd = parts[0]?.toLowerCase() || "list";
@@ -448,14 +548,14 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               };
               for (let i = 2; i < parts.length; i++) {
                 const part = parts[i]!;
-                if (part.startsWith("event=")) rule.event = part.slice(6);
-                else if (part.startsWith("action=")) rule.action = part.slice(7);
+                if (part.startsWith("event=")) rule.event = part.slice(6) as HookifyRule["event"];
+                else if (part.startsWith("action=")) rule.action = part.slice(7) as HookifyRule["action"];
                 else if (part.startsWith("tool=")) rule.toolMatcher = part.slice(5);
                 else if (part.startsWith("msg=")) rule.message = part.slice(4).replace(/_/g, " ");
                 else if (part.includes(":")) {
                   const [field, operator, ...rest] = part.split(":");
                   if (field && operator) {
-                    rule.conditions.push({ field, operator, pattern: rest.join(":") });
+                    rule.conditions.push({ field, operator: operator as HookifyCondition["operator"], pattern: rest.join(":") });
                   }
                 }
               }
