@@ -29,6 +29,10 @@ interface KodiProps {
   contextWindowSize?: number;
   sessionName?: string;
   sessionStartTime?: number;
+  /** Subscription rate limit usage (0.0-1.0) for 5-hour window */
+  subscriptionUsage5h?: number;
+  /** Subscription rate limit usage (0.0-1.0) for 7-day window */
+  subscriptionUsage7d?: number;
 }
 
 // ─── LLM Reaction Generator ────────────────────────────────────
@@ -182,6 +186,8 @@ export default function KodiCompanion({
   contextWindowSize,
   sessionName,
   sessionStartTime,
+  subscriptionUsage5h,
+  subscriptionUsage7d,
 }: KodiProps) {
   const { theme } = useTheme();
   const engineRef = useRef<KodiAnimEngine | null>(null);
@@ -414,6 +420,19 @@ export default function KodiCompanion({
               </Text>
             </>
           )}
+          {subscriptionUsage5h != null && subscriptionUsage5h > 0 && (() => {
+            const pct = Math.min(Math.round(subscriptionUsage5h * 100), 100);
+            const barW = 6;
+            const filled = Math.round((pct / 100) * barW);
+            const bar = "\u2588".repeat(filled) + "\u2591".repeat(barW - filled);
+            const color = pct >= 90 ? theme.error : pct >= 70 ? theme.warning : theme.success;
+            return (
+              <>
+                <Text color={theme.dimmed}>•</Text>
+                <Text color={color}>5h:[{bar}]{pct}%</Text>
+              </>
+            );
+          })()}
           {sessionName && (
             <>
               <Text color={theme.dimmed}>•</Text>

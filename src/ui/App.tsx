@@ -7,6 +7,7 @@ import type { ConversationManager } from "../core/conversation.js";
 import { SkillManager } from "../core/skills.js";
 import { CHARS_PER_TOKEN } from "../core/token-budget.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
+import { getRateLimitUsage } from "../core/request-builder.js";
 import type { KCodeConfig } from "../core/types.js";
 import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 import ActivePlanPanel from "./components/ActivePlanPanel.js";
@@ -593,6 +594,8 @@ export default function App({ config, conversationManager, tools, initialSession
           contextWindowSize={config.contextWindowSize}
           sessionName={sessionName}
           sessionStartTime={sessionStart}
+          subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
+          subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
         />
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
