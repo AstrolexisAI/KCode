@@ -610,6 +610,7 @@ export default function App({ config, conversationManager, tools, initialSession
           onSubmit={handleSubmit}
           isActive={
             !pendingLastModel &&
+            !interactiveQuestion &&
             mode !== "permission" &&
             mode !== "sudo-password" &&
             mode !== "cloud" &&
