@@ -16,8 +16,8 @@ import {
 // ─── Model Catalog Validation ──────────────────────────────────────────
 
 describe("model-catalog", () => {
-  test("catalog has at least 13 models (7 original + 6 community)", () => {
-    expect(MODEL_CATALOG.length).toBeGreaterThanOrEqual(13);
+  test("catalog has at least 12 models (6 original + 6 community)", () => {
+    expect(MODEL_CATALOG.length).toBeGreaterThanOrEqual(12);
   });
 
   test("all entries have required fields", () => {
@@ -117,7 +117,6 @@ describe("model-catalog", () => {
       "mnemo:mark5-mid",
       "mnemo:mark5-max",
       "mnemo:mark5-80b",
-      "mnemo:mark5-titan",
     ];
     for (const name of mark5Names) {
       expect(findCatalogEntry(name)).toBeDefined();

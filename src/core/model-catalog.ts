@@ -120,17 +120,6 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     mlxRepo: "mlx-community/Qwen3-Coder-Next-4bit",
     mlxQuant: "4bit",
   },
-  {
-    codename: "mnemo:mark5-titan",
-    paramBillions: 235,
-    quant: "Q3_K_M",
-    sizeGB: 105,
-    minVramMB: 57344,
-    contextSize: 40960,
-    localFile: "mark5-titan.gguf",
-    description: "MoE 235B abliterated — 22B active per token, massive reasoning, uncensored",
-  },
-
   // ── Community Models ───────────────────────────────────────────────────
   // Open-source models from external teams, served as GGUF via HuggingFace.
 
