@@ -295,10 +295,11 @@ export async function buildRequestForModel(
       config.anthropicApiKey ??
       config.apiKey;
     if (resolvedKey) {
-      // OAuth tokens (sk-ant-oat01-*) use Bearer auth → subscription billing
+      // OAuth tokens (sk-ant-oat01-*) use Bearer auth + beta header → subscription billing
       // API keys (sk-ant-api03-*) use x-api-key → per-token billing
       if (resolvedKey.startsWith("sk-ant-oat01-")) {
         headers["Authorization"] = `Bearer ${resolvedKey}`;
+        headers["anthropic-beta"] = "oauth-2025-04-20";
       } else {
         headers["x-api-key"] = resolvedKey;
       }
