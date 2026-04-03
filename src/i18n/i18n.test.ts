@@ -2,6 +2,7 @@
 // Tests translation lookup, fallback, language switching, and auto-detection
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { detectLocale, isSupportedLocale, normalizeLocale, SUPPORTED_LOCALES } from "./detector";
 import {
   getAvailableLocales,
   getLocale,
@@ -11,7 +12,6 @@ import {
   t,
   tp,
 } from "./index";
-import { detectLocale, isSupportedLocale, normalizeLocale, SUPPORTED_LOCALES } from "./detector";
 
 // ─── Translation Lookup ─────────────────────────────────────────
 

@@ -5,7 +5,6 @@ import { isKeychainAvailable, listAccounts } from "./keychain";
 // may or may not be available in CI/test environments.
 
 describe("keychain", () => {
-
   describe("isKeychainAvailable", () => {
     test("returns boolean", async () => {
       const result = await isKeychainAvailable();

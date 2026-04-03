@@ -127,8 +127,7 @@ export async function processStreamEvents(
             const streamLines = currentText.split("\n");
             if (streamLines.length > 30) {
               setStreamingText(
-                streamLines.slice(0, 6).join("\n") +
-                `\n... writing (${streamLines.length} lines)`,
+                streamLines.slice(0, 6).join("\n") + `\n... writing (${streamLines.length} lines)`,
               );
             } else {
               setStreamingText(currentText);
@@ -168,7 +167,8 @@ export async function processStreamEvents(
             const fenceIdx = text.indexOf("```");
             if (fenceIdx >= 0) {
               const preamble = text.slice(0, fenceIdx).trim();
-              text = preamble || text.split("\n").slice(0, 3).join("\n") + `\n... (${lineCount} lines)`;
+              text =
+                preamble || text.split("\n").slice(0, 3).join("\n") + `\n... (${lineCount} lines)`;
             } else {
               text = text.split("\n").slice(0, 3).join("\n") + `\n... (${lineCount} lines)`;
             }
@@ -414,8 +414,14 @@ export async function processStreamEvents(
           currentThinking = "";
         }
         // Cancel throttle timers and flush pending updates
-        if (textStreamThrottleTimer) { clearTimeout(textStreamThrottleTimer); textStreamThrottleTimer = null; }
-        if (bashStreamThrottleTimer) { clearTimeout(bashStreamThrottleTimer); bashStreamThrottleTimer = null; }
+        if (textStreamThrottleTimer) {
+          clearTimeout(textStreamThrottleTimer);
+          textStreamThrottleTimer = null;
+        }
+        if (bashStreamThrottleTimer) {
+          clearTimeout(bashStreamThrottleTimer);
+          bashStreamThrottleTimer = null;
+        }
         if (bashStreamBuffer) {
           setBashStreamOutput((prev: string) => prev + bashStreamBuffer);
           bashStreamBuffer = "";
@@ -476,8 +482,8 @@ export async function processStreamEvents(
                   if (optLines.length > 0) break; // blank line after options block
                   continue;
                 }
-                if (/^[\u2022•\-\*]\s+/.test(l) || /^\d+[\.\)]\s+/.test(l)) {
-                  optLines.unshift(l.replace(/^[\u2022•\-\*]\s+/, "").replace(/^\d+[\.\)]\s+/, ""));
+                if (/^[\u2022•\-*]\s+/.test(l) || /^\d+[.)]\s+/.test(l)) {
+                  optLines.unshift(l.replace(/^[\u2022•\-*]\s+/, "").replace(/^\d+[.)]\s+/, ""));
                 } else if (optLines.length > 0) {
                   break; // non-option line above the option block
                 }
@@ -490,7 +496,7 @@ export async function processStreamEvents(
                 let foundOpts = 0;
                 for (let i = dtLines.length - 1; i >= 0 && foundOpts < optLines.length; i--) {
                   const l = dtLines[i]!.trim();
-                  if (/^[\u2022•\-\*]\s+/.test(l) || /^\d+[\.\)]\s+/.test(l)) {
+                  if (/^[\u2022•\-*]\s+/.test(l) || /^\d+[.)]\s+/.test(l)) {
                     cutFrom = i;
                     foundOpts++;
                   }
@@ -501,7 +507,9 @@ export async function processStreamEvents(
 
             const entries: typeof prev = [
               ...prev,
-              ...(displayText ? [{ kind: "text" as const, role: "assistant" as const, text: displayText }] : []),
+              ...(displayText
+                ? [{ kind: "text" as const, role: "assistant" as const, text: displayText }]
+                : []),
             ];
             if (question) {
               entries.push({ kind: "question_highlight", question, options });

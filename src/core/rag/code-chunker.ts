@@ -98,12 +98,8 @@ const JAVA_PATTERNS: LanguagePatterns = {
 };
 
 const C_CPP_PATTERNS: LanguagePatterns = {
-  functionDecl: [
-    /^(?:static\s+)?(?:inline\s+)?(?:const\s+)?(?:\w+(?:\s*\*)?)\s+(\w+)\s*\(/,
-  ],
-  classDecl: [
-    /^(?:class|struct)\s+(\w+)/,
-  ],
+  functionDecl: [/^(?:static\s+)?(?:inline\s+)?(?:const\s+)?(?:\w+(?:\s*\*)?)\s+(\w+)\s*\(/],
+  classDecl: [/^(?:class|struct)\s+(\w+)/],
   importBlock: [/^#include\s+/],
 };
 
@@ -181,11 +177,7 @@ function findBlockEnd(lines: string[], startIdx: number, language: string): numb
 /**
  * Find the end of a contiguous import block.
  */
-function findImportBlockEnd(
-  lines: string[],
-  startIdx: number,
-  importPattern: RegExp[],
-): number {
+function findImportBlockEnd(lines: string[], startIdx: number, importPattern: RegExp[]): number {
   let end = startIdx;
   while (end + 1 < lines.length) {
     const nextLine = lines[end + 1].trim();
@@ -325,13 +317,7 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
     for (let r = 1; r <= remaining.length; r++) {
       if (r === remaining.length || remaining[r] - remaining[r - 1] > 3) {
         const blockEnd = remaining[r - 1];
-        const fallbackChunks = chunkLineRange(
-          filepath,
-          lines,
-          blockStart,
-          blockEnd,
-          language,
-        );
+        const fallbackChunks = chunkLineRange(filepath, lines, blockStart, blockEnd, language);
         chunks.push(...fallbackChunks);
         if (r < remaining.length) blockStart = remaining[r];
       }
@@ -381,10 +367,6 @@ function chunkLineRange(
 /**
  * Fallback chunking for files with no recognized language patterns.
  */
-function fallbackChunk(
-  filepath: string,
-  lines: string[],
-  language: string,
-): CodeChunk[] {
+function fallbackChunk(filepath: string, lines: string[], language: string): CodeChunk[] {
   return chunkLineRange(filepath, lines, 0, lines.length - 1, language);
 }

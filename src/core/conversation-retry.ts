@@ -122,10 +122,7 @@ export async function createStreamWithRetry(
             ctx.tools,
             ctx.abortController,
           );
-          log.info(
-            "llm",
-            `Primary model ${ctx.config.model} connected after routed model failure`,
-          );
+          log.info("llm", `Primary model ${ctx.config.model} connected after routed model failure`);
           return stream;
         } catch (primaryErr) {
           log.error(
@@ -146,7 +143,10 @@ export async function createStreamWithRetry(
           // Use server-provided Retry-After, with a minimum floor
           delay = Math.max(error.retryAfterMs, MIN_RATE_LIMIT_DELAY_MS);
           const secs = Math.ceil(delay / 1000);
-          log.warn("llm", `Rate limited — retrying in ${secs}s (attempt ${attempt + 1}/${ctx.maxRetries})`);
+          log.warn(
+            "llm",
+            `Rate limited — retrying in ${secs}s (attempt ${attempt + 1}/${ctx.maxRetries})`,
+          );
           // Notify UI with countdown if callback provided
           if (ctx.onRetryWait) {
             for (let s = secs; s > 0; s--) {
@@ -170,10 +170,7 @@ export async function createStreamWithRetry(
 
       // Fallback model
       if (ctx.config.fallbackModel && ctx.config.fallbackModel !== ctx.config.model) {
-        log.warn(
-          "llm",
-          `Primary model failed, switching to fallback: ${ctx.config.fallbackModel}`,
-        );
+        log.warn("llm", `Primary model failed, switching to fallback: ${ctx.config.fallbackModel}`);
         if (ctx.debugTracer?.isEnabled()) {
           ctx.debugTracer.traceModelSwitch(
             ctx.config.model,

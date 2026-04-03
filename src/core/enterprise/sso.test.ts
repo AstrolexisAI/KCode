@@ -1,18 +1,18 @@
-import { describe, expect, it, beforeEach, afterEach, spyOn, mock } from "bun:test";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  decodeJWTPayload,
+  exchangeOIDCCode,
+  initiateOIDCFlow,
+  isSSOEnabled,
+  loadSSOConfig,
+  refreshSSOSession,
   type SSOConfig,
   type SSOSession,
-  loadSSOConfig,
-  isSSOEnabled,
   validateSAMLResponse,
-  initiateOIDCFlow,
-  exchangeOIDCCode,
   validateSSOSession,
-  refreshSSOSession,
-  decodeJWTPayload,
 } from "./sso";
 
 // ─── Test Helpers ───────────────────────────────────────────────
@@ -222,10 +222,7 @@ describe("SSO Config Loading", () => {
   it("loadSSOConfig rejects invalid provider", async () => {
     const kcodeDir = join(tmpDir, "workspace", ".kcode");
     mkdirSync(kcodeDir, { recursive: true });
-    writeFileSync(
-      join(kcodeDir, "enterprise.json"),
-      JSON.stringify({ sso: { provider: "ldap" } }),
-    );
+    writeFileSync(join(kcodeDir, "enterprise.json"), JSON.stringify({ sso: { provider: "ldap" } }));
 
     const origCwd = process.cwd;
     const origEnv = process.env.KCODE_HOME;

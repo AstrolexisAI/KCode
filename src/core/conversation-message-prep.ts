@@ -3,11 +3,7 @@
 // Handles pre-processing before the agent loop: context injection, RAG, skills, etc.
 
 import { log } from "./logger";
-import {
-  detectLanguage,
-  looksCheckpointed,
-  looksTheoretical,
-} from "./prompt-analysis";
+import { detectLanguage, looksCheckpointed, looksTheoretical } from "./prompt-analysis";
 import type { ConversationState, KCodeConfig, Message, StreamEvent, TokenUsage } from "./types";
 
 // ─── Budget Check ─────────────────────────────────────────────
@@ -21,7 +17,11 @@ export async function* checkBudgetLimit(
     const { getModelPricing, calculateCost } = await import("./pricing.js");
     const pricing = await getModelPricing(config.model);
     if (pricing) {
-      const cost = calculateCost(pricing, cumulativeUsage.inputTokens, cumulativeUsage.outputTokens);
+      const cost = calculateCost(
+        pricing,
+        cumulativeUsage.inputTokens,
+        cumulativeUsage.outputTokens,
+      );
       if (cost >= config.maxBudgetUsd) {
         yield {
           type: "error",
@@ -130,8 +130,7 @@ export async function evaluateOutputBudgetHint(
 ): Promise<Message | null> {
   try {
     const { evaluateOutputBudget } = await import("./output-budget.js");
-    const contextPct =
-      tokenCount > 0 ? Math.round((tokenCount / contextWindowSize) * 100) : 0;
+    const contextPct = tokenCount > 0 ? Math.round((tokenCount / contextWindowSize) * 100) : 0;
     const budget = evaluateOutputBudget(userMessage, maxTokens, contextPct);
     if (budget.strategy !== "normal" && budget.systemHint) {
       log.info(

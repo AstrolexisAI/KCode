@@ -1,7 +1,7 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Point KCODE_HOME to a temp directory so we don't pollute the real config
 const TEST_HOME = join(tmpdir(), `kcode-marketplace-test-${Date.now()}`);
@@ -43,8 +43,7 @@ describe("plugin-marketplace", () => {
     expect(results.length).toBeGreaterThan(0);
     const hasDocker = results.some(
       (p) =>
-        p.name.toLowerCase().includes("docker") ||
-        p.description.toLowerCase().includes("docker"),
+        p.name.toLowerCase().includes("docker") || p.description.toLowerCase().includes("docker"),
     );
     expect(hasDocker).toBe(true);
   });

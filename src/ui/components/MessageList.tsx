@@ -335,9 +335,7 @@ function ToolResultMessage({
   const bodyLines = lines.slice(1);
 
   // Determine if this is a diff result (Edit/Write with + or - prefixed lines)
-  const hasDiffLines = bodyLines.some(
-    (l) => l.startsWith("  + ") || l.startsWith("  - "),
-  );
+  const hasDiffLines = bodyLines.some((l) => l.startsWith("  + ") || l.startsWith("  - "));
 
   return (
     <Box flexDirection="column" paddingLeft={2}>
@@ -372,7 +370,10 @@ function ToolResultMessage({
           return null;
         })}
       {!hasDiffLines && bodyLines.length > 0 && bodyLines.length <= 3 && (
-        <Text dimColor>{"    "}{bodyLines.join("\n    ")}</Text>
+        <Text dimColor>
+          {"    "}
+          {bodyLines.join("\n    ")}
+        </Text>
       )}
     </Box>
   );

@@ -62,12 +62,8 @@ describe("network policy enforcement", () => {
         network: { allowedHosts: ["*.internal.acme.com", "registry.acme.com"] },
       };
       // Allowed
-      expect(
-        enforceNetworkPolicy("https://api.internal.acme.com/v1", config).allowed,
-      ).toBe(true);
-      expect(
-        enforceNetworkPolicy("https://registry.acme.com/plugins", config).allowed,
-      ).toBe(true);
+      expect(enforceNetworkPolicy("https://api.internal.acme.com/v1", config).allowed).toBe(true);
+      expect(enforceNetworkPolicy("https://registry.acme.com/plugins", config).allowed).toBe(true);
       // Not in allowlist
       const blocked = enforceNetworkPolicy("https://api.openai.com/v1/chat", config);
       expect(blocked.allowed).toBe(false);
@@ -81,12 +77,8 @@ describe("network policy enforcement", () => {
           blockedHosts: ["evil.acme.com"],
         },
       };
-      expect(
-        enforceNetworkPolicy("https://api.acme.com/v1", config).allowed,
-      ).toBe(true);
-      expect(
-        enforceNetworkPolicy("https://evil.acme.com/exfil", config).allowed,
-      ).toBe(false);
+      expect(enforceNetworkPolicy("https://api.acme.com/v1", config).allowed).toBe(true);
+      expect(enforceNetworkPolicy("https://evil.acme.com/exfil", config).allowed).toBe(false);
     });
 
     test("rejects invalid URLs", () => {
@@ -100,15 +92,11 @@ describe("network policy enforcement", () => {
       const config: PolicyConfig = {
         network: { allowedHosts: ["*.kulvex.ai"] },
       };
-      expect(
-        enforceNetworkPolicy("https://api.kulvex.ai/validate", config).allowed,
-      ).toBe(true);
-      expect(
-        enforceNetworkPolicy("https://marketplace.kulvex.ai/plugins", config).allowed,
-      ).toBe(true);
-      expect(
-        enforceNetworkPolicy("https://kulvex.ai/home", config).allowed,
-      ).toBe(false); // *.kulvex.ai requires a subdomain
+      expect(enforceNetworkPolicy("https://api.kulvex.ai/validate", config).allowed).toBe(true);
+      expect(enforceNetworkPolicy("https://marketplace.kulvex.ai/plugins", config).allowed).toBe(
+        true,
+      );
+      expect(enforceNetworkPolicy("https://kulvex.ai/home", config).allowed).toBe(false); // *.kulvex.ai requires a subdomain
     });
   });
 
@@ -137,12 +125,12 @@ describe("network policy enforcement", () => {
           allowedHosts: ["*.internal.acme.com"],
         },
       };
-      expect(
-        enforceWebhookPolicy("https://hooks.internal.acme.com/notify", config).allowed,
-      ).toBe(true);
-      expect(
-        enforceWebhookPolicy("https://hooks.slack.com/services/xxx", config).allowed,
-      ).toBe(false);
+      expect(enforceWebhookPolicy("https://hooks.internal.acme.com/notify", config).allowed).toBe(
+        true,
+      );
+      expect(enforceWebhookPolicy("https://hooks.slack.com/services/xxx", config).allowed).toBe(
+        false,
+      );
     });
   });
 
@@ -171,19 +159,11 @@ describe("network policy enforcement", () => {
     test("air-gap policy blocks external URLs via enforceNetworkPolicy", () => {
       const config: PolicyConfig = { network: getAirGapNetworkPolicy() };
       // External blocked
-      expect(
-        enforceNetworkPolicy("https://api.openai.com/v1/chat", config).allowed,
-      ).toBe(false);
-      expect(
-        enforceNetworkPolicy("https://github.com/repo", config).allowed,
-      ).toBe(false);
+      expect(enforceNetworkPolicy("https://api.openai.com/v1/chat", config).allowed).toBe(false);
+      expect(enforceNetworkPolicy("https://github.com/repo", config).allowed).toBe(false);
       // Local allowed
-      expect(
-        enforceNetworkPolicy("http://localhost:11434/api", config).allowed,
-      ).toBe(true);
-      expect(
-        enforceNetworkPolicy("http://192.168.1.100:8080", config).allowed,
-      ).toBe(true);
+      expect(enforceNetworkPolicy("http://localhost:11434/api", config).allowed).toBe(true);
+      expect(enforceNetworkPolicy("http://192.168.1.100:8080", config).allowed).toBe(true);
     });
   });
 });

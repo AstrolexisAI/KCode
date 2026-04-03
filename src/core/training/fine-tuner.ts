@@ -2,7 +2,7 @@
 // Orchestrates fine-tuning of local models using LoRA/QLoRA via Unsloth or llama.cpp
 
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
-import { join, basename } from "node:path";
+import { basename, join } from "node:path";
 import { log } from "../logger";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -69,7 +69,12 @@ export class FineTuner {
     }
 
     // Check base model path if it looks like a local path (starts with / or ./)
-    if ((config.baseModel.startsWith("/") || config.baseModel.startsWith("./") || config.baseModel.startsWith("../")) && !config.baseModel.startsWith("http")) {
+    if (
+      (config.baseModel.startsWith("/") ||
+        config.baseModel.startsWith("./") ||
+        config.baseModel.startsWith("../")) &&
+      !config.baseModel.startsWith("http")
+    ) {
       if (!existsSync(config.baseModel)) {
         issues.push(`Base model not found: ${config.baseModel}`);
       }
@@ -109,10 +114,7 @@ export class FineTuner {
    * Execute the fine-tuning process as a subprocess.
    * Generates the training script, writes it to outputDir, then runs it with Python.
    */
-  async run(
-    config: FineTuneConfig,
-    onProgress?: (msg: string) => void,
-  ): Promise<FineTuneResult> {
+  async run(config: FineTuneConfig, onProgress?: (msg: string) => void): Promise<FineTuneResult> {
     const startTime = Date.now();
 
     // Validate first

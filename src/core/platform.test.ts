@@ -20,7 +20,11 @@ describe("platform utilities", () => {
     // On any given host, exactly one should be true (or zero on exotic platforms)
     expect(trueCount).toBeLessThanOrEqual(1);
     // On CI (Linux/macOS) at least one should match
-    if (process.platform === "linux" || process.platform === "darwin" || process.platform === "win32") {
+    if (
+      process.platform === "linux" ||
+      process.platform === "darwin" ||
+      process.platform === "win32"
+    ) {
       expect(trueCount).toBe(1);
     }
   });

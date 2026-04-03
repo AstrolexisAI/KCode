@@ -5,14 +5,14 @@ import { join } from "node:path";
 
 import {
   applyAirGapOverrides,
+  type EffortLevel,
   isModelAllowedByPolicy,
   loadInstructionFiles,
   loadRules,
   loadSettings,
-  saveProjectSettings,
-  type EffortLevel,
   type ManagedPolicy,
   type Settings,
+  saveProjectSettings,
 } from "./config.ts";
 import { trustWorkspace } from "./hook-trust";
 

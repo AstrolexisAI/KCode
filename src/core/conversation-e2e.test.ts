@@ -3,9 +3,9 @@
 // tool calls, max turns, abort, and multi-turn history
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createTestEnv, type TestEnv } from "../test-harness/test-env";
 import { ConversationManager } from "./conversation";
 import type { StreamEvent } from "./types";
-import { createTestEnv, type TestEnv } from "../test-harness/test-env";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 

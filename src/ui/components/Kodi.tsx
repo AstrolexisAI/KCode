@@ -359,7 +359,13 @@ export default function KodiCompanion({
   const bubble = frame?.bubble ?? "";
 
   return (
-    <Box flexDirection="row" borderStyle="round" borderColor={theme.dimmed} paddingX={1} width={process.stdout.columns || 80}>
+    <Box
+      flexDirection="row"
+      borderStyle="round"
+      borderColor={theme.dimmed}
+      paddingX={1}
+      width={process.stdout.columns || 80}
+    >
       {/* Kodi sprite — pre-composed, fixed-width lines */}
       <Box flexDirection="column" width={15}>
         {lines.map((line, i) => (
@@ -420,19 +426,23 @@ export default function KodiCompanion({
               </Text>
             </>
           )}
-          {subscriptionUsage5h != null && subscriptionUsage5h > 0 && (() => {
-            const pct = Math.min(Math.round(subscriptionUsage5h * 100), 100);
-            const barW = 6;
-            const filled = Math.round((pct / 100) * barW);
-            const bar = "\u2588".repeat(filled) + "\u2591".repeat(barW - filled);
-            const color = pct >= 90 ? theme.error : pct >= 70 ? theme.warning : theme.success;
-            return (
-              <>
-                <Text color={theme.dimmed}>•</Text>
-                <Text color={color}>5h:[{bar}]{pct}%</Text>
-              </>
-            );
-          })()}
+          {subscriptionUsage5h != null &&
+            subscriptionUsage5h > 0 &&
+            (() => {
+              const pct = Math.min(Math.round(subscriptionUsage5h * 100), 100);
+              const barW = 6;
+              const filled = Math.round((pct / 100) * barW);
+              const bar = "\u2588".repeat(filled) + "\u2591".repeat(barW - filled);
+              const color = pct >= 90 ? theme.error : pct >= 70 ? theme.warning : theme.success;
+              return (
+                <>
+                  <Text color={theme.dimmed}>•</Text>
+                  <Text color={color}>
+                    5h:[{bar}]{pct}%
+                  </Text>
+                </>
+              );
+            })()}
           {sessionName && (
             <>
               <Text color={theme.dimmed}>•</Text>

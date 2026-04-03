@@ -3,8 +3,6 @@
 // Redacts secrets. Fetches from /api/v1/config endpoint.
 
 (() => {
-  "use strict";
-
   function ConfigPanel(containerEl, authToken) {
     this.container = containerEl;
     this.authToken = authToken;
@@ -26,22 +24,19 @@
   };
 
   ConfigPanel.prototype.fetchData = function () {
-    var self = this;
     var headers = {};
     if (this.authToken) {
       headers["Authorization"] = "Bearer " + this.authToken;
     }
 
     fetch("/api/v1/config", { headers: headers })
-      .then(function (res) {
-        return res.json();
+      .then((res) => res.json())
+      .then((data) => {
+        this.config = data;
+        this.renderContent();
       })
-      .then(function (data) {
-        self.config = data;
-        self.renderContent();
-      })
-      .catch(function (err) {
-        self.renderError("Failed to load config: " + err.message);
+      .catch((err) => {
+        this.renderError("Failed to load config: " + err.message);
       });
   };
 

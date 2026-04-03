@@ -253,7 +253,10 @@ export class WebServer {
     let allowedOrigin = "*";
     if (req) {
       const origin = req.headers.get("Origin");
-      if (origin && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(origin)) {
+      if (
+        origin &&
+        /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/.test(origin)
+      ) {
         allowedOrigin = origin;
       } else if (origin) {
         allowedOrigin = "";

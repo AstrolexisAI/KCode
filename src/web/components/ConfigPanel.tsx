@@ -92,9 +92,7 @@ export function ConfigPanel({ authToken }: { authToken: string }) {
   return (
     <div style={styles.panel}>
       <h2 style={styles.title}>Configuration</h2>
-      <div style={styles.note}>
-        Read-only view. Edit settings via kcode setup or settings.json.
-      </div>
+      <div style={styles.note}>Read-only view. Edit settings via kcode setup or settings.json.</div>
       <table style={styles.table}>
         <tbody>
           {CONFIG_FIELDS.map((field) => {
@@ -105,10 +103,7 @@ export function ConfigPanel({ authToken }: { authToken: string }) {
               <tr key={field.key} style={styles.row}>
                 <td style={styles.label}>{field.label}</td>
                 <td style={styles.value}>
-                  <ConfigValue
-                    value={value}
-                    sensitive={field.sensitive}
-                  />
+                  <ConfigValue value={value} sensitive={field.sensitive} />
                 </td>
               </tr>
             );
@@ -119,32 +114,20 @@ export function ConfigPanel({ authToken }: { authToken: string }) {
   );
 }
 
-function ConfigValue({
-  value,
-  sensitive,
-}: {
-  value: unknown;
-  sensitive: boolean;
-}) {
+function ConfigValue({ value, sensitive }: { value: unknown; sensitive: boolean }) {
   if (sensitive && value) {
     return <span style={styles.redacted}>***</span>;
   }
   if (typeof value === "boolean") {
     return (
-      <span
-        style={value ? styles.badgeOn : styles.badgeOff}
-      >
-        {value ? "Enabled" : "Disabled"}
-      </span>
+      <span style={value ? styles.badgeOn : styles.badgeOff}>{value ? "Enabled" : "Disabled"}</span>
     );
   }
   if (value === null) {
     return <span style={styles.null}>Not set</span>;
   }
   if (typeof value === "number") {
-    return (
-      <span style={styles.number}>{formatConfigNumber(value)}</span>
-    );
+    return <span style={styles.number}>{formatConfigNumber(value)}</span>;
   }
   return <span>{String(value)}</span>;
 }

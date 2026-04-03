@@ -57,7 +57,10 @@ export default function InteractiveQuestion({
       marginTop={0}
       width={(process.stdout.columns || 80) - 4}
     >
-      <Text color={theme.info ?? theme.accent}>{"?  "}<Text bold>{question}</Text></Text>
+      <Text color={theme.info ?? theme.accent}>
+        {"?  "}
+        <Text bold>{question}</Text>
+      </Text>
       <Box marginTop={1} flexDirection="column">
         {options.map((opt, i) => {
           const isSelected = i === selectedIndex;
@@ -65,9 +68,7 @@ export default function InteractiveQuestion({
             <Box key={i} gap={1}>
               <Text color={isSelected ? theme.primary : theme.dimmed} bold={isSelected}>
                 {isSelected ? "▸ " : "  "}
-                <Text color={theme.dimmed}>{i + 1}.</Text>
-                {" "}
-                {opt}
+                <Text color={theme.dimmed}>{i + 1}.</Text> {opt}
               </Text>
             </Box>
           );

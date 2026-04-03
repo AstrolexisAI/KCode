@@ -17,6 +17,22 @@ import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extracto
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
 import { emergencyPrune, estimateContextTokens, pruneMessagesIfNeeded } from "./context-manager";
+import {
+  checkBudgetLimit,
+  detectCheckpointMode,
+  detectTheoreticalMode,
+  evaluateOutputBudgetHint,
+  injectSmartContext,
+} from "./conversation-message-prep";
+import { handlePostTurn, type PostTurnContext } from "./conversation-post-turn";
+// routeToModel moved to conversation-retry.ts
+import {
+  accumulateUsage as _accumulateUsage,
+  getModifiedFiles as _getModifiedFiles,
+  getRecentMessageText as _getRecentMessageText,
+  hashString as _hashString,
+} from "./conversation-state";
+import { processSSEStream, type StreamAccumulator } from "./conversation-streaming";
 import type { DebugTracer } from "./debug-tracer";
 import { HookManager } from "./hooks";
 import { getIntentionEngine } from "./intentions";
@@ -40,23 +56,7 @@ import {
   handlePostTurnNotifications,
   handleTruncationRetry,
 } from "./response-handlers";
-// routeToModel moved to conversation-retry.ts
-import {
-  accumulateUsage as _accumulateUsage,
-  getModifiedFiles as _getModifiedFiles,
-  getRecentMessageText as _getRecentMessageText,
-  hashString as _hashString,
-} from "./conversation-state";
-import {
-  checkBudgetLimit,
-  detectCheckpointMode,
-  detectTheoreticalMode,
-  evaluateOutputBudgetHint,
-  injectSmartContext,
-} from "./conversation-message-prep";
 import type { SSEChunk } from "./sse-parser";
-import { processSSEStream, type StreamAccumulator } from "./conversation-streaming";
-import { handlePostTurn, type PostTurnContext } from "./conversation-post-turn";
 import {
   handleCheckpointMode,
   handleForceStop,
@@ -105,30 +105,30 @@ export { dedupContinuation, detectLanguage, looksCheckpointed, looksIncomplete, 
 // ─── Retry Logic (extracted to conversation-retry.ts) ────────────
 import {
   createStreamWithRetry as _createStreamWithRetry,
-  isRetryableError,
   computeRetryDelay,
+  isRetryableError,
   sleep,
 } from "./conversation-retry";
 
 // Re-export for any consumers that may have imported these
-export { isRetryableError, computeRetryDelay, sleep };
+export { computeRetryDelay, isRetryableError, sleep };
 
 // ─── Checkpoint Logic (extracted to conversation-checkpoint.ts) ──
 import {
+  getCheckpointCount as _getCheckpointCount,
+  listCheckpoints as _listCheckpoints,
+  rewindToCheckpoint as _rewindToCheckpoint,
+  saveCheckpoint as _saveCheckpoint,
   type Checkpoint,
   MAX_CHECKPOINTS,
-  saveCheckpoint as _saveCheckpoint,
-  rewindToCheckpoint as _rewindToCheckpoint,
-  listCheckpoints as _listCheckpoints,
-  getCheckpointCount as _getCheckpointCount,
 } from "./conversation-checkpoint";
 
 // ─── Session Logic (extracted to conversation-session.ts) ────────
 import {
-  forkConversation as _forkConversation,
-  restoreMessages as _restoreMessages,
   collectSessionData as _collectSessionData,
+  forkConversation as _forkConversation,
   formatCostBreakdown as _formatCostBreakdown,
+  restoreMessages as _restoreMessages,
   createFreshState,
 } from "./conversation-session";
 
@@ -434,7 +434,10 @@ export class ConversationManager {
 
     // Output budget hint (delegated to conversation-message-prep)
     const budgetHint = await evaluateOutputBudgetHint(
-      userMessage, this.config.maxTokens, this.state.tokenCount, this.contextWindowSize,
+      userMessage,
+      this.config.maxTokens,
+      this.state.tokenCount,
+      this.contextWindowSize,
     );
     if (budgetHint) this.state.messages.push(budgetHint);
 
@@ -464,7 +467,9 @@ export class ConversationManager {
 
     // Smart context + RAG + skills injection (delegated to conversation-message-prep)
     const contextMessages = await injectSmartContext(
-      userMessage, this.state.messages, this.config.workingDirectory,
+      userMessage,
+      this.state.messages,
+      this.config.workingDirectory,
     );
     for (const msg of contextMessages) this.state.messages.push(msg);
 
@@ -790,7 +795,8 @@ export class ConversationManager {
       }
 
       // Destructure accumulated stream state
-      ({ assistantContent, toolCalls, stopReason, textChunks, turnInputTokens, turnOutputTokens } = streamResult);
+      ({ assistantContent, toolCalls, stopReason, textChunks, turnInputTokens, turnOutputTokens } =
+        streamResult);
       const fullText = textChunks.join("");
 
       // Store assistant message in conversation history
@@ -888,7 +894,12 @@ export class ConversationManager {
         continue;
       }
       if (planResult.blockedResults.length > 0) {
-        const blockedBlocks: Array<{ type: string; tool_use_id: string; content: string; is_error: boolean }> = planResult.blockedResults.map((r) => ({
+        const blockedBlocks: Array<{
+          type: string;
+          tool_use_id: string;
+          content: string;
+          is_error: boolean;
+        }> = planResult.blockedResults.map((r) => ({
           type: "tool_result",
           tool_use_id: r.tool_use_id,
           content: r.content,
@@ -1338,7 +1349,12 @@ export class ConversationManager {
    * Returns a description of what was rewound, or null if no checkpoints.
    */
   rewindToCheckpoint(index?: number): string | null {
-    const result = _rewindToCheckpoint(this.checkpoints, this.state.messages, this.undoManager, index);
+    const result = _rewindToCheckpoint(
+      this.checkpoints,
+      this.state.messages,
+      this.undoManager,
+      index,
+    );
     this.checkpoints = result.updatedCheckpoints;
     this.state.messages = result.updatedMessages as Message[];
     return result.description;
@@ -1403,7 +1419,11 @@ export class ConversationManager {
     errorsEncountered: number;
     filesModified: string[];
   } {
-    return _collectSessionData(this.state.messages, this.config.workingDirectory, this.state.toolUseCount);
+    return _collectSessionData(
+      this.state.messages,
+      this.config.workingDirectory,
+      this.state.toolUseCount,
+    );
   }
 
   /**

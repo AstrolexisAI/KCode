@@ -3,8 +3,6 @@
 // Fetches from /api/v1/models endpoint.
 
 (() => {
-  "use strict";
-
   function ModelDashboard(containerEl, authToken) {
     this.container = containerEl;
     this.authToken = authToken;
@@ -27,23 +25,20 @@
   };
 
   ModelDashboard.prototype.fetchData = function () {
-    var self = this;
     var headers = {};
     if (this.authToken) {
       headers["Authorization"] = "Bearer " + this.authToken;
     }
 
     fetch("/api/v1/models", { headers: headers })
-      .then(function (res) {
-        return res.json();
+      .then((res) => res.json())
+      .then((data) => {
+        this.models = data.models || [];
+        this.activeModel = data.active || "--";
+        this.renderContent();
       })
-      .then(function (data) {
-        self.models = data.models || [];
-        self.activeModel = data.active || "--";
-        self.renderContent();
-      })
-      .catch(function (err) {
-        self.renderError("Failed to load models: " + err.message);
+      .catch((err) => {
+        this.renderError("Failed to load models: " + err.message);
       });
   };
 
@@ -96,7 +91,8 @@
 
     if (activeEntry) {
       var providerBadge = document.createElement("span");
-      providerBadge.className = "model-provider-badge provider-" + (activeEntry.provider || "openai");
+      providerBadge.className =
+        "model-provider-badge provider-" + (activeEntry.provider || "openai");
       providerBadge.textContent = activeEntry.provider || "openai";
       activeCard.appendChild(providerBadge);
 

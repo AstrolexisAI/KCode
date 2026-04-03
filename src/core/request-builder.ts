@@ -153,8 +153,11 @@ async function resolveApiKeyWithOAuth(
   const lower = modelName.toLowerCase();
   const isAnthropic = lower.startsWith("claude") || baseUrl.includes("anthropic.com");
   const isOpenAI =
-    lower.startsWith("gpt-") || lower.startsWith("o1") || lower.startsWith("o3") ||
-    lower.startsWith("o4") || baseUrl.includes("openai.com");
+    lower.startsWith("gpt-") ||
+    lower.startsWith("o1") ||
+    lower.startsWith("o3") ||
+    lower.startsWith("o4") ||
+    baseUrl.includes("openai.com");
 
   // 1. CLI bridges: reuse existing Claude Code / OpenAI Codex authentication
   if (isAnthropic) {
@@ -162,7 +165,9 @@ async function resolveApiKeyWithOAuth(
       const { getClaudeCodeToken } = await import("./auth/claude-code-bridge.js");
       const token = await getClaudeCodeToken();
       if (token) return token;
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
   }
 
   if (isOpenAI) {
@@ -170,7 +175,9 @@ async function resolveApiKeyWithOAuth(
       const { getCodexToken } = await import("./auth/claude-code-bridge.js");
       const token = await getCodexToken();
       if (token) return token;
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
   }
 
   // 2. KCode's own OAuth sessions (keychain)
@@ -183,7 +190,9 @@ async function resolveApiKeyWithOAuth(
       const providerConfig = resolveProviderConfig(oauthProvider);
       const token = await manager.getAccessToken(oauthProvider, providerConfig ?? undefined);
       if (token) return token;
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
   }
 
   // 3. KCode keychain API key
@@ -192,7 +201,9 @@ async function resolveApiKeyWithOAuth(
       const { getApiKey } = await import("./auth/oauth-flow.js");
       const keychainKey = await getApiKey("anthropic");
       if (keychainKey) return keychainKey;
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
   }
 
   return resolveApiKey(modelName, baseUrl, config);
@@ -564,12 +575,14 @@ export function formatRateLimitBar(usage: RateLimitUsage): string {
   const bar7d = "\u2588".repeat(filled7d) + "\u2591".repeat(barWidth - filled7d);
 
   const now = Date.now();
-  const reset5h = usage.fiveHourReset > now
-    ? `resets in ${Math.ceil((usage.fiveHourReset - now) / 60_000)}m`
-    : "";
-  const reset7d = usage.sevenDayReset > now
-    ? `resets in ${Math.ceil((usage.sevenDayReset - now) / 3_600_000)}h`
-    : "";
+  const reset5h =
+    usage.fiveHourReset > now
+      ? `resets in ${Math.ceil((usage.fiveHourReset - now) / 60_000)}m`
+      : "";
+  const reset7d =
+    usage.sevenDayReset > now
+      ? `resets in ${Math.ceil((usage.sevenDayReset - now) / 3_600_000)}h`
+      : "";
 
   return [
     `  Subscription Usage`,

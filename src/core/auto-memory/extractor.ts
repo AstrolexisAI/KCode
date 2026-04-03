@@ -11,7 +11,11 @@ import {
   writeMemoryFile,
   writeMemoryIndex,
 } from "../memory";
-import { addMemory as addMemoryToStore, type MemoryCategory, type MemorySource } from "../memory-store";
+import {
+  addMemory as addMemoryToStore,
+  type MemoryCategory,
+  type MemorySource,
+} from "../memory-store";
 import type { Message } from "../types";
 import { extractTitlesFromIndex, filterMemories } from "./relevance-filter";
 import type { AutoMemoryConfig, ExtractedMemory, ExtractionResult } from "./types";

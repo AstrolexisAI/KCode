@@ -21,7 +21,9 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
         return;
       }
 
-      console.log(`  \x1b[33mUpdate available: v${info.currentVersion} → v${info.latestVersion}\x1b[0m`);
+      console.log(
+        `  \x1b[33mUpdate available: v${info.currentVersion} → v${info.latestVersion}\x1b[0m`,
+      );
       if (info.publishedAt) {
         console.log(`  Published: ${info.publishedAt.split("T")[0]}`);
       }

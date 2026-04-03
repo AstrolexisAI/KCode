@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -77,17 +76,20 @@ describe("GitHub API response parsing", () => {
       assets: [
         {
           name: "kcode-linux-x64",
-          browser_download_url: "https://github.com/astrolexis/kcode/releases/download/v2.0.0/kcode-linux-x64",
+          browser_download_url:
+            "https://github.com/astrolexis/kcode/releases/download/v2.0.0/kcode-linux-x64",
           size: 50_000_000,
         },
       ],
     };
 
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify(mockRelease), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })),
+      Promise.resolve(
+        new Response(JSON.stringify(mockRelease), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     const { checkForUpdate } = await import("./auto-update");
@@ -110,10 +112,12 @@ describe("GitHub API response parsing", () => {
     };
 
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify(mockRelease), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })),
+      Promise.resolve(
+        new Response(JSON.stringify(mockRelease), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     const { checkForUpdate } = await import("./auto-update");
@@ -124,9 +128,7 @@ describe("GitHub API response parsing", () => {
   });
 
   test("handles GitHub API errors gracefully", async () => {
-    globalThis.fetch = mock(() =>
-      Promise.resolve(new Response("Rate limited", { status: 403 })),
-    );
+    globalThis.fetch = mock(() => Promise.resolve(new Response("Rate limited", { status: 403 })));
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -137,9 +139,7 @@ describe("GitHub API response parsing", () => {
   });
 
   test("handles network failure gracefully", async () => {
-    globalThis.fetch = mock(() =>
-      Promise.reject(new Error("Network unreachable")),
-    );
+    globalThis.fetch = mock(() => Promise.reject(new Error("Network unreachable")));
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -157,10 +157,12 @@ describe("GitHub API response parsing", () => {
     };
 
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify(mockRelease), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })),
+      Promise.resolve(
+        new Response(JSON.stringify(mockRelease), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     const { checkForUpdate } = await import("./auto-update");
@@ -179,10 +181,12 @@ describe("GitHub API response parsing", () => {
     };
 
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify(mockRelease), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })),
+      Promise.resolve(
+        new Response(JSON.stringify(mockRelease), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     const { checkForUpdate } = await import("./auto-update");
@@ -225,10 +229,12 @@ describe("update check caching", () => {
 
     const origFetch = globalThis.fetch;
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify(mockRelease), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })),
+      Promise.resolve(
+        new Response(JSON.stringify(mockRelease), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     try {
@@ -295,10 +301,12 @@ describe("update check caching", () => {
 
     const origFetch = globalThis.fetch;
     globalThis.fetch = mock(() =>
-      Promise.resolve(new Response(JSON.stringify(mockRelease), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })),
+      Promise.resolve(
+        new Response(JSON.stringify(mockRelease), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
     );
 
     try {
@@ -321,9 +329,7 @@ describe("update check caching", () => {
     await writeFile(cachePath, JSON.stringify(cacheData));
 
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() =>
-      Promise.resolve(new Response("{}", { status: 200 })),
-    );
+    globalThis.fetch = mock(() => Promise.resolve(new Response("{}", { status: 200 })));
 
     try {
       const { getUpdateNotification } = await import("./auto-update");
@@ -359,11 +365,14 @@ describe("update notification formatting", () => {
 
   test("notification includes version transition arrow", async () => {
     const cachePath = join(tempDir, "update-check.json");
-    await writeFile(cachePath, JSON.stringify({
-      lastCheck: Date.now(),
-      lastVersion: "2.0.0",
-      releaseUrl: "https://github.com/astrolexis/kcode/releases/tag/v2.0.0",
-    }));
+    await writeFile(
+      cachePath,
+      JSON.stringify({
+        lastCheck: Date.now(),
+        lastVersion: "2.0.0",
+        releaseUrl: "https://github.com/astrolexis/kcode/releases/tag/v2.0.0",
+      }),
+    );
 
     const { getUpdateNotification } = await import("./auto-update");
     const notification = await getUpdateNotification("1.8.0");
@@ -376,10 +385,13 @@ describe("update notification formatting", () => {
 
   test("notification includes update command", async () => {
     const cachePath = join(tempDir, "update-check.json");
-    await writeFile(cachePath, JSON.stringify({
-      lastCheck: Date.now(),
-      lastVersion: "2.0.0",
-    }));
+    await writeFile(
+      cachePath,
+      JSON.stringify({
+        lastCheck: Date.now(),
+        lastVersion: "2.0.0",
+      }),
+    );
 
     const { getUpdateNotification } = await import("./auto-update");
     const notification = await getUpdateNotification("1.8.0");
@@ -391,11 +403,14 @@ describe("update notification formatting", () => {
   test("notification includes release URL when available", async () => {
     const releaseUrl = "https://github.com/astrolexis/kcode/releases/tag/v2.0.0";
     const cachePath = join(tempDir, "update-check.json");
-    await writeFile(cachePath, JSON.stringify({
-      lastCheck: Date.now(),
-      lastVersion: "2.0.0",
-      releaseUrl,
-    }));
+    await writeFile(
+      cachePath,
+      JSON.stringify({
+        lastCheck: Date.now(),
+        lastVersion: "2.0.0",
+        releaseUrl,
+      }),
+    );
 
     const { getUpdateNotification } = await import("./auto-update");
     const notification = await getUpdateNotification("1.8.0");
@@ -406,11 +421,14 @@ describe("update notification formatting", () => {
 
   test("notification omits release URL when not available", async () => {
     const cachePath = join(tempDir, "update-check.json");
-    await writeFile(cachePath, JSON.stringify({
-      lastCheck: Date.now(),
-      lastVersion: "2.0.0",
-      // no releaseUrl
-    }));
+    await writeFile(
+      cachePath,
+      JSON.stringify({
+        lastCheck: Date.now(),
+        lastVersion: "2.0.0",
+        // no releaseUrl
+      }),
+    );
 
     const { getUpdateNotification } = await import("./auto-update");
     const notification = await getUpdateNotification("1.8.0");
@@ -447,10 +465,7 @@ describe("shouldCheckForUpdate", () => {
   });
 
   test("returns false when autoUpdate is disabled", async () => {
-    await writeFile(
-      join(tempDir, "settings.json"),
-      JSON.stringify({ autoUpdate: false }),
-    );
+    await writeFile(join(tempDir, "settings.json"), JSON.stringify({ autoUpdate: false }));
     const { isAutoUpdateEnabled } = await import("./auto-update");
     expect(isAutoUpdateEnabled()).toBe(false);
   });

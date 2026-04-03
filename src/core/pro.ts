@@ -265,7 +265,12 @@ export function loadProCache(): ProCache | null {
     if (raw.hwFingerprint && raw.hwFingerprint !== currentFp) return null;
 
     // Verify HMAC integrity (#9)
-    const expectedHmac = computeHmac(raw.key, raw.validatedAt, raw.valid, raw.hwFingerprint ?? currentFp);
+    const expectedHmac = computeHmac(
+      raw.key,
+      raw.validatedAt,
+      raw.valid,
+      raw.hwFingerprint ?? currentFp,
+    );
     // Also accept legacy HMAC (without hwFingerprint) for migration
     const legacyHmac = createHmac("sha256", getCacheHmacKey())
       .update(`${raw.key}|${raw.validatedAt}|${raw.valid}`)
@@ -422,7 +427,11 @@ export async function requirePro(feature: ProFeature): Promise<void> {
   }
 
   // Validate key format before saving — reject non-key inputs like "quit", "exit", etc.
-  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_") && !answer.startsWith("kcode_trial_")) {
+  if (
+    !answer.startsWith("kcode_pro_") &&
+    !answer.startsWith("klx_lic_") &&
+    !answer.startsWith("kcode_trial_")
+  ) {
     throw new Error(
       `${C.red}✗${C.reset} Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".\n` +
         `  Get a key: ${C.cyan}https://kulvex.ai/pro${C.reset}\n`,
@@ -581,8 +590,14 @@ export async function checkSessionLimit(): Promise<void> {
   }
 
   // Validate key format before saving
-  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_") && !answer.startsWith("kcode_trial_")) {
-    throw new Error('Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".');
+  if (
+    !answer.startsWith("kcode_pro_") &&
+    !answer.startsWith("klx_lic_") &&
+    !answer.startsWith("kcode_trial_")
+  ) {
+    throw new Error(
+      'Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".',
+    );
   }
 
   const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("./config.js");
@@ -645,7 +660,11 @@ export async function softRequireSwarm(requestedAgents: number): Promise<number>
   if (!answer) return max; // Continue with free limit
 
   // Validate key format before saving
-  if (!answer.startsWith("kcode_pro_") && !answer.startsWith("klx_lic_") && !answer.startsWith("kcode_trial_")) {
+  if (
+    !answer.startsWith("kcode_pro_") &&
+    !answer.startsWith("klx_lic_") &&
+    !answer.startsWith("kcode_trial_")
+  ) {
     console.log(
       `\n  \x1b[31m✗\x1b[0m Invalid key format. Keys start with "kcode_pro_", "klx_lic_", or "kcode_trial_".\n`,
     );

@@ -1,9 +1,9 @@
 // KCode - Web UI REST API Tests
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { clearActivePlan } from "../tools/plan";
 import { handleApiRequest } from "./api";
 import * as bridge from "./session-bridge";
-import { clearActivePlan } from "../tools/plan";
 
 // ─── Mock Setup ─────────────────────────────────────────────────
 

@@ -3,8 +3,6 @@
 // Fetches from /api/v1/stats and /api/v1/tools endpoints.
 
 (() => {
-  "use strict";
-
   function AnalyticsDashboard(containerEl, authToken) {
     this.container = containerEl;
     this.authToken = authToken;
@@ -27,7 +25,6 @@
   };
 
   AnalyticsDashboard.prototype.fetchData = function () {
-    var self = this;
     var headers = {};
     if (this.authToken) {
       headers["Authorization"] = "Bearer " + this.authToken;
@@ -35,27 +32,23 @@
 
     // Fetch stats
     fetch("/api/v1/stats", { headers: headers })
-      .then(function (res) {
-        return res.json();
+      .then((res) => res.json())
+      .then((data) => {
+        this.stats = data;
+        this.renderContent();
       })
-      .then(function (data) {
-        self.stats = data;
-        self.renderContent();
-      })
-      .catch(function (err) {
-        self.renderError("Failed to load stats: " + err.message);
+      .catch((err) => {
+        this.renderError("Failed to load stats: " + err.message);
       });
 
     // Fetch messages to compute tool usage breakdown
     fetch("/api/v1/messages?limit=500", { headers: headers })
-      .then(function (res) {
-        return res.json();
+      .then((res) => res.json())
+      .then((data) => {
+        this.computeToolUsage(data.messages || []);
+        this.renderContent();
       })
-      .then(function (data) {
-        self.computeToolUsage(data.messages || []);
-        self.renderContent();
-      })
-      .catch(function () {
+      .catch(() => {
         // Non-critical, ignore
       });
   };
@@ -111,36 +104,18 @@
     var cardsRow = document.createElement("div");
     cardsRow.className = "analytics-cards";
 
+    cardsRow.appendChild(createStatCard("Model", this.stats.model || "--", "model"));
     cardsRow.appendChild(
-      createStatCard("Model", this.stats.model || "--", "model"),
+      createStatCard("Total Tokens", formatNumber(this.stats.totalTokens || 0), "tokens"),
     );
     cardsRow.appendChild(
-      createStatCard(
-        "Total Tokens",
-        formatNumber(this.stats.totalTokens || 0),
-        "tokens",
-      ),
+      createStatCard("Input Tokens", formatNumber(this.stats.inputTokens || 0), "input"),
     );
     cardsRow.appendChild(
-      createStatCard(
-        "Input Tokens",
-        formatNumber(this.stats.inputTokens || 0),
-        "input",
-      ),
+      createStatCard("Output Tokens", formatNumber(this.stats.outputTokens || 0), "output"),
     );
     cardsRow.appendChild(
-      createStatCard(
-        "Output Tokens",
-        formatNumber(this.stats.outputTokens || 0),
-        "output",
-      ),
-    );
-    cardsRow.appendChild(
-      createStatCard(
-        "Cost",
-        "$" + (this.stats.costUsd || 0).toFixed(4),
-        "cost",
-      ),
+      createStatCard("Cost", "$" + (this.stats.costUsd || 0).toFixed(4), "cost"),
     );
 
     this.contentEl.appendChild(cardsRow);
@@ -186,7 +161,8 @@
 
         var valLabel = document.createElement("span");
         valLabel.className = "analytics-bar-value";
-        valLabel.textContent = typeof val2 === "number" && val2 < 1 ? val2.toFixed(4) : formatNumber(val2);
+        valLabel.textContent =
+          typeof val2 === "number" && val2 < 1 ? val2.toFixed(4) : formatNumber(val2);
         bar.appendChild(valLabel);
 
         turnChart.appendChild(bar);
@@ -204,9 +180,11 @@
       this.contentEl.appendChild(toolTitle);
 
       // Sort by count descending
-      toolKeys.sort(function (a, b) {
-        return this.toolUsage[b] - this.toolUsage[a];
-      }.bind(this));
+      toolKeys.sort(
+        function (a, b) {
+          return this.toolUsage[b] - this.toolUsage[a];
+        }.bind(this),
+      );
 
       var maxCount = this.toolUsage[toolKeys[0]] || 1;
 

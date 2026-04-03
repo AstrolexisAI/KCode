@@ -7,14 +7,9 @@ export function registerAuthCommand(program: Command): void {
 
   authCmd
     .command("login [provider]")
-    .description(
-      "Login to an AI provider via OAuth. Providers: anthropic, openai-codex, gemini",
-    )
+    .description("Login to an AI provider via OAuth. Providers: anthropic, openai-codex, gemini")
     .action(async (provider?: string) => {
-      const {
-        getOAuthProviderNames,
-        loginProvider,
-      } = await import("../../core/auth/oauth-flow");
+      const { getOAuthProviderNames, loginProvider } = await import("../../core/auth/oauth-flow");
       const { openBrowser } = await import("../../core/auth/oauth-flow");
 
       const providers = getOAuthProviderNames();
@@ -49,9 +44,7 @@ export function registerAuthCommand(program: Command): void {
       }
 
       if (!provider || !providers.includes(provider)) {
-        console.error(
-          `Unknown provider: "${provider ?? ""}". Supported: ${providers.join(", ")}`,
-        );
+        console.error(`Unknown provider: "${provider ?? ""}". Supported: ${providers.join(", ")}`);
         process.exit(1);
       }
 
@@ -66,7 +59,9 @@ export function registerAuthCommand(program: Command): void {
         });
 
         if (result.method === "api_key") {
-          console.log(`\u2713 Authenticated with ${provider} (API key created and stored securely)`);
+          console.log(
+            `\u2713 Authenticated with ${provider} (API key created and stored securely)`,
+          );
           console.log("  The key is stored in your system keychain.");
         } else {
           console.log(`\u2713 Authenticated with ${provider} (OAuth tokens stored securely)`);
@@ -85,10 +80,9 @@ export function registerAuthCommand(program: Command): void {
     .command("status")
     .description("Show authentication status for all providers")
     .action(async () => {
-      const {
-        getOAuthProviderNames,
-        getProviderAuthStatus,
-      } = await import("../../core/auth/oauth-flow");
+      const { getOAuthProviderNames, getProviderAuthStatus } = await import(
+        "../../core/auth/oauth-flow"
+      );
 
       const providers = getOAuthProviderNames();
       console.log("\n  Authentication Status\n");
@@ -112,15 +106,14 @@ export function registerAuthCommand(program: Command): void {
           const remaining = status.expiresAt - Date.now();
           if (remaining > 0) {
             const mins = Math.floor(remaining / 60_000);
-            expiry = mins > 60 ? ` (expires in ${Math.floor(mins / 60)}h)` : ` (expires in ${mins}m)`;
+            expiry =
+              mins > 60 ? ` (expires in ${Math.floor(mins / 60)}h)` : ` (expires in ${mins}m)`;
           } else {
             expiry = " (expired — will auto-refresh)";
           }
         }
 
-        console.log(
-          `  ${icon} ${status.label.padEnd(22)} ${methodLabel}${expiry}`,
-        );
+        console.log(`  ${icon} ${status.label.padEnd(22)} ${methodLabel}${expiry}`);
       }
       console.log();
     });
@@ -130,10 +123,7 @@ export function registerAuthCommand(program: Command): void {
     .description("Logout from a provider (clear stored tokens and API keys)")
     .option("--all", "Logout from all providers")
     .action(async (provider?: string, opts?: { all?: boolean }) => {
-      const {
-        getOAuthProviderNames,
-        clearTokens,
-      } = await import("../../core/auth/oauth-flow");
+      const { getOAuthProviderNames, clearTokens } = await import("../../core/auth/oauth-flow");
       const { deleteSecret } = await import("../../core/auth/keychain");
 
       if (opts?.all) {

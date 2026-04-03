@@ -151,10 +151,7 @@ export async function isSSOEnabled(): Promise<boolean> {
  *
  * Returns a validation result with the extracted session on success.
  */
-export function validateSAMLResponse(
-  samlResponse: string,
-  config: SSOConfig,
-): SSOValidationResult {
+export function validateSAMLResponse(samlResponse: string, config: SSOConfig): SSOValidationResult {
   if (config.provider !== "saml") {
     return { valid: false, error: "SSO provider is not SAML" };
   }
@@ -188,17 +185,13 @@ export function validateSAMLResponse(
 
   // Verify signature digest (simplified — checks that a signature block exists
   // and the digest value is a valid Base64 hash)
-  const digestMatch = xml.match(
-    /<(?:ds:)?DigestValue>([A-Za-z0-9+/=]+)<\/(?:ds:)?DigestValue>/,
-  );
+  const digestMatch = xml.match(/<(?:ds:)?DigestValue>([A-Za-z0-9+/=]+)<\/(?:ds:)?DigestValue>/);
   if (!digestMatch) {
     return { valid: false, error: "SAML response missing signature digest" };
   }
 
   // Verify certificate matches configured certificate (fingerprint comparison)
-  const certMatch = xml.match(
-    /<(?:ds:)?X509Certificate>([^<]+)<\/(?:ds:)?X509Certificate>/,
-  );
+  const certMatch = xml.match(/<(?:ds:)?X509Certificate>([^<]+)<\/(?:ds:)?X509Certificate>/);
   if (certMatch && config.certificate) {
     const responseCertFingerprint = createHash("sha256")
       .update(certMatch[1].replace(/\s/g, ""))
@@ -234,8 +227,7 @@ export function validateSAMLResponse(
 
   // Extract optional groups
   const groups: string[] = [];
-  const groupRegex =
-    /Name="(?:.*?)(?:memberOf|groups?)"[^>]*>([\s\S]*?)<\/(?:saml2?:)?Attribute>/g;
+  const groupRegex = /Name="(?:.*?)(?:memberOf|groups?)"[^>]*>([\s\S]*?)<\/(?:saml2?:)?Attribute>/g;
   let groupBlock: RegExpExecArray | null;
   while ((groupBlock = groupRegex.exec(xml)) !== null) {
     const valueRegex = /<(?:saml2?:)?AttributeValue[^>]*>([^<]+)/g;
@@ -321,7 +313,8 @@ export async function exchangeOIDCCode(
   if (!config.tokenEndpoint || !config.clientId || !config.clientSecret || !config.callbackUrl) {
     return {
       valid: false,
-      error: "OIDC config missing required fields: tokenEndpoint, clientId, clientSecret, callbackUrl",
+      error:
+        "OIDC config missing required fields: tokenEndpoint, clientId, clientSecret, callbackUrl",
     };
   }
 
@@ -340,7 +333,10 @@ export async function exchangeOIDCCode(
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      return { valid: false, error: `Token exchange failed (${tokenResponse.status}): ${errorText}` };
+      return {
+        valid: false,
+        error: `Token exchange failed (${tokenResponse.status}): ${errorText}`,
+      };
     }
 
     const tokenData = (await tokenResponse.json()) as Record<string, unknown>;
@@ -497,7 +493,10 @@ export async function refreshSSOSession(session: SSOSession): Promise<SSOValidat
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      return { valid: false, error: `Token refresh failed (${tokenResponse.status}): ${errorText}` };
+      return {
+        valid: false,
+        error: `Token refresh failed (${tokenResponse.status}): ${errorText}`,
+      };
     }
 
     const tokenData = (await tokenResponse.json()) as Record<string, unknown>;

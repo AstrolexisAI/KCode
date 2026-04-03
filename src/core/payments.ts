@@ -198,7 +198,7 @@ export async function getSubscriptionStatus(customerId: string): Promise<Subscri
     | Array<Record<string, unknown>>
     | undefined;
   const planName = items?.[0]
-    ? ((items[0].price as Record<string, unknown>)?.nickname as string) ?? "Pro"
+    ? (((items[0].price as Record<string, unknown>)?.nickname as string) ?? "Pro")
     : "Pro";
 
   return {
@@ -217,9 +217,7 @@ export async function getSubscriptionStatus(customerId: string): Promise<Subscri
  * Create a Stripe Billing Portal session so the customer can manage
  * their subscription (cancel, update payment method, etc.).
  */
-export async function createPortalSession(
-  customerId: string,
-): Promise<{ url: string }> {
+export async function createPortalSession(customerId: string): Promise<{ url: string }> {
   const config = await loadPaymentConfig();
 
   if (!config.stripeSecretKey) {
@@ -362,10 +360,7 @@ export async function handleWebhookEvent(event: WebhookEvent): Promise<void> {
  * The key format is: kcode_pro_<customerId_hash><random><checksum>
  * This ties the key to the Stripe customer for server-side validation.
  */
-export async function activateProFromPayment(
-  email: string,
-  customerId: string,
-): Promise<string> {
+export async function activateProFromPayment(email: string, customerId: string): Promise<string> {
   const { randomBytes, createHash } = await import("node:crypto");
 
   // Generate a deterministic prefix from customer ID (for server-side lookup)

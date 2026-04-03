@@ -3,8 +3,6 @@
 // Fetches from /api/v1/messages endpoint.
 
 (() => {
-  "use strict";
-
   function SessionViewer(containerEl, authToken) {
     this.container = containerEl;
     this.authToken = authToken;
@@ -29,26 +27,20 @@
   };
 
   SessionViewer.prototype.fetchData = function () {
-    var self = this;
     var headers = {};
     if (this.authToken) {
       headers["Authorization"] = "Bearer " + this.authToken;
     }
 
-    fetch(
-      "/api/v1/messages?limit=" + this.limit + "&offset=" + this.offset,
-      { headers: headers },
-    )
-      .then(function (res) {
-        return res.json();
+    fetch("/api/v1/messages?limit=" + this.limit + "&offset=" + this.offset, { headers: headers })
+      .then((res) => res.json())
+      .then((data) => {
+        this.messages = data.messages || [];
+        this.total = data.total || 0;
+        this.renderContent();
       })
-      .then(function (data) {
-        self.messages = data.messages || [];
-        self.total = data.total || 0;
-        self.renderContent();
-      })
-      .catch(function (err) {
-        self.renderError("Failed to load messages: " + err.message);
+      .catch((err) => {
+        this.renderError("Failed to load messages: " + err.message);
       });
   };
 
@@ -211,7 +203,9 @@
 
       // Find the result for this tool
       var afterTool = remaining.slice(match.index + match[0].length);
-      var resultMatch = afterTool.match(/^\s*\[result(\s*\(error\))?\]\s*([\s\S]*?)(?=\[tool:|\[result|$)/);
+      var resultMatch = afterTool.match(
+        /^\s*\[result(\s*\(error\))?\]\s*([\s\S]*?)(?=\[tool:|\[result|$)/,
+      );
 
       if (resultMatch) {
         var isError = !!resultMatch[1];

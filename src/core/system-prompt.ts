@@ -10,6 +10,15 @@ import { getNarrativeManager } from "./narrative";
 import { getCurrentStyle, getStyleInstructions } from "./output-styles";
 import { getRulesManager } from "./rules";
 import {
+  buildEnvironment,
+  buildSituationalAwareness,
+  extractContextKeywords,
+  loadAwarenessModules,
+  loadExtensibleIdentity,
+  loadMemoryInstructions,
+  loadProjectInstructions,
+} from "./system-prompt-context";
+import {
   buildAutoMemoryInstructions,
   buildCodeGuidelines,
   buildCoordinatorInstructions,
@@ -19,15 +28,6 @@ import {
   buildToneAndOutput,
   buildToolInstructions,
 } from "./system-prompt-layers";
-import {
-  buildEnvironment,
-  buildSituationalAwareness,
-  extractContextKeywords,
-  loadAwarenessModules,
-  loadExtensibleIdentity,
-  loadMemoryInstructions,
-  loadProjectInstructions,
-} from "./system-prompt-context";
 import { type PromptSection, SectionPriority, TokenBudgetManager } from "./token-budget";
 import type { KCodeConfig } from "./types";
 import { getUserModel } from "./user-model";
@@ -218,9 +218,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
     }
 
     // Project-specific instructions
-    const projectInstructions = loadProjectInstructions(
-      config.workingDirectory,
-    );
+    const projectInstructions = loadProjectInstructions(config.workingDirectory);
     if (projectInstructions) {
       sections.push({
         content: projectInstructions,

@@ -191,9 +191,9 @@ export async function getCodexToken(): Promise<string | null> {
 
   // Check if JWT is expired by decoding the payload
   try {
-    const payload = JSON.parse(
-      Buffer.from(access_token.split(".")[1]!, "base64").toString(),
-    ) as { exp?: number };
+    const payload = JSON.parse(Buffer.from(access_token.split(".")[1]!, "base64").toString()) as {
+      exp?: number;
+    };
     if (payload.exp && Date.now() < payload.exp * 1000 - 60_000) {
       return access_token;
     }

@@ -20,7 +20,9 @@ export function registerTeachCommand(program: Command): void {
       if (existsSync(settingsPath)) {
         try {
           settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-        } catch { /* fresh settings */ }
+        } catch {
+          /* fresh settings */
+        }
       }
 
       settings.trainingDataCollection = true;
@@ -50,11 +52,17 @@ export function registerTeachCommand(program: Command): void {
       console.log(`  Size on disk:   ${(stats.sizeBytes / 1024).toFixed(1)} KB`);
 
       if (stats.total === 0) {
-        console.log("\n  No data collected yet. Enable collection with: \x1b[1mkcode teach collect\x1b[0m");
+        console.log(
+          "\n  No data collected yet. Enable collection with: \x1b[1mkcode teach collect\x1b[0m",
+        );
       } else if (stats.total < 100) {
-        console.log(`\n  \x1b[33m!\x1b[0m Need at least 100 pairs for fine-tuning (${100 - stats.total} more needed).`);
+        console.log(
+          `\n  \x1b[33m!\x1b[0m Need at least 100 pairs for fine-tuning (${100 - stats.total} more needed).`,
+        );
       } else {
-        console.log(`\n  \x1b[32m*\x1b[0m Ready for fine-tuning! Run: \x1b[1mkcode teach train\x1b[0m`);
+        console.log(
+          `\n  \x1b[32m*\x1b[0m Ready for fine-tuning! Run: \x1b[1mkcode teach train\x1b[0m`,
+        );
       }
     });
 
@@ -71,7 +79,9 @@ export function registerTeachCommand(program: Command): void {
       const count = await collector.exportJSONL(outputPath);
 
       if (count === 0) {
-        console.log("\x1b[33m!\x1b[0m No exportable data (only accepted/edited pairs are exported).");
+        console.log(
+          "\x1b[33m!\x1b[0m No exportable data (only accepted/edited pairs are exported).",
+        );
         return;
       }
 
@@ -89,76 +99,87 @@ export function registerTeachCommand(program: Command): void {
     .option("--lr <rate>", "Learning rate", "2e-4")
     .option("--lora-rank <n>", "LoRA rank", "16")
     .option("-o, --output <dir>", "Output directory", "./kcode-finetune-output")
-    .action(async (opts: { model: string; method: string; epochs: string; lr: string; loraRank: string; output: string }) => {
-      const { resolve, join } = await import("node:path");
-      const { DataCollector } = await import("../../core/training/data-collector");
-      const { FineTuner } = await import("../../core/training/fine-tuner");
+    .action(
+      async (opts: {
+        model: string;
+        method: string;
+        epochs: string;
+        lr: string;
+        loraRank: string;
+        output: string;
+      }) => {
+        const { resolve, join } = await import("node:path");
+        const { DataCollector } = await import("../../core/training/data-collector");
+        const { FineTuner } = await import("../../core/training/fine-tuner");
 
-      // First export the data
-      const collector = new DataCollector();
-      const stats = collector.getStats();
+        // First export the data
+        const collector = new DataCollector();
+        const stats = collector.getStats();
 
-      if (stats.total < 100) {
-        console.log(`\x1b[31m!\x1b[0m Insufficient training data: ${stats.total} pairs (need 100+).`);
-        console.log("  Continue collecting data with normal KCode usage.");
-        return;
-      }
-
-      const outputDir = resolve(opts.output);
-      const exportPath = join(outputDir, "training-data.jsonl");
-      const count = await collector.exportJSONL(exportPath);
-
-      if (count < 100) {
-        console.log(`\x1b[31m!\x1b[0m Only ${count} usable pairs after filtering (need 100+).`);
-        return;
-      }
-
-      const config: FineTuneConfig = {
-        baseModel: opts.model,
-        trainingDataPath: exportPath,
-        outputDir,
-        method: opts.method as "lora" | "qlora" | "full",
-        epochs: parseInt(opts.epochs, 10),
-        learningRate: parseFloat(opts.lr),
-        loraRank: parseInt(opts.loraRank, 10),
-      };
-
-      console.log("\n\x1b[1mFine-tuning Configuration\x1b[0m\n");
-      console.log(`  Base model:   ${config.baseModel}`);
-      console.log(`  Method:       ${config.method}`);
-      console.log(`  Epochs:       ${config.epochs}`);
-      console.log(`  Learning rate: ${config.learningRate}`);
-      console.log(`  LoRA rank:    ${config.loraRank}`);
-      console.log(`  Training data: ${count} pairs`);
-      console.log(`  Output:       ${config.outputDir}`);
-
-      const tuner = new FineTuner();
-      const validation = await tuner.validate(config);
-
-      if (!validation.ready) {
-        console.log("\n\x1b[31m!\x1b[0m Validation failed:\n");
-        for (const issue of validation.issues) {
-          console.log(`  - ${issue}`);
+        if (stats.total < 100) {
+          console.log(
+            `\x1b[31m!\x1b[0m Insufficient training data: ${stats.total} pairs (need 100+).`,
+          );
+          console.log("  Continue collecting data with normal KCode usage.");
+          return;
         }
-        return;
-      }
 
-      console.log("\n\x1b[32m*\x1b[0m Validation passed. Starting training...\n");
+        const outputDir = resolve(opts.output);
+        const exportPath = join(outputDir, "training-data.jsonl");
+        const count = await collector.exportJSONL(exportPath);
 
-      const result = await tuner.run(config, (msg) => {
-        console.log(`  ${msg}`);
-      });
-
-      if (result.success) {
-        console.log(`\n\x1b[32m+\x1b[0m Fine-tuning complete!`);
-        console.log(`  Duration: ${(result.duration / 1000).toFixed(1)}s`);
-        if (result.adapterPath) {
-          console.log(`  Adapter:  ${result.adapterPath}`);
+        if (count < 100) {
+          console.log(`\x1b[31m!\x1b[0m Only ${count} usable pairs after filtering (need 100+).`);
+          return;
         }
-      } else {
-        console.log(`\n\x1b[31m!\x1b[0m Fine-tuning failed: ${result.error}`);
-      }
-    });
+
+        const config: FineTuneConfig = {
+          baseModel: opts.model,
+          trainingDataPath: exportPath,
+          outputDir,
+          method: opts.method as "lora" | "qlora" | "full",
+          epochs: parseInt(opts.epochs, 10),
+          learningRate: parseFloat(opts.lr),
+          loraRank: parseInt(opts.loraRank, 10),
+        };
+
+        console.log("\n\x1b[1mFine-tuning Configuration\x1b[0m\n");
+        console.log(`  Base model:   ${config.baseModel}`);
+        console.log(`  Method:       ${config.method}`);
+        console.log(`  Epochs:       ${config.epochs}`);
+        console.log(`  Learning rate: ${config.learningRate}`);
+        console.log(`  LoRA rank:    ${config.loraRank}`);
+        console.log(`  Training data: ${count} pairs`);
+        console.log(`  Output:       ${config.outputDir}`);
+
+        const tuner = new FineTuner();
+        const validation = await tuner.validate(config);
+
+        if (!validation.ready) {
+          console.log("\n\x1b[31m!\x1b[0m Validation failed:\n");
+          for (const issue of validation.issues) {
+            console.log(`  - ${issue}`);
+          }
+          return;
+        }
+
+        console.log("\n\x1b[32m*\x1b[0m Validation passed. Starting training...\n");
+
+        const result = await tuner.run(config, (msg) => {
+          console.log(`  ${msg}`);
+        });
+
+        if (result.success) {
+          console.log(`\n\x1b[32m+\x1b[0m Fine-tuning complete!`);
+          console.log(`  Duration: ${(result.duration / 1000).toFixed(1)}s`);
+          if (result.adapterPath) {
+            console.log(`  Adapter:  ${result.adapterPath}`);
+          }
+        } else {
+          console.log(`\n\x1b[31m!\x1b[0m Fine-tuning failed: ${result.error}`);
+        }
+      },
+    );
 
   teachCmd
     .command("review")
@@ -182,11 +203,17 @@ export function registerTeachCommand(program: Command): void {
       console.log(`\n\x1b[1mRecent Training Pairs\x1b[0m (${count} of ${pairs.length} total)\n`);
 
       for (const pair of recent) {
-        const status = pair.editedResponse ? "\x1b[33mEdited\x1b[0m" : pair.accepted ? "\x1b[32mAccepted\x1b[0m" : "\x1b[31mRejected\x1b[0m";
+        const status = pair.editedResponse
+          ? "\x1b[33mEdited\x1b[0m"
+          : pair.accepted
+            ? "\x1b[32mAccepted\x1b[0m"
+            : "\x1b[31mRejected\x1b[0m";
         const date = new Date(pair.timestamp).toLocaleString();
-        const promptPreview = pair.prompt.length > 80 ? pair.prompt.slice(0, 77) + "..." : pair.prompt;
-        const responsePreview = (pair.editedResponse ?? pair.response);
-        const respShort = responsePreview.length > 80 ? responsePreview.slice(0, 77) + "..." : responsePreview;
+        const promptPreview =
+          pair.prompt.length > 80 ? pair.prompt.slice(0, 77) + "..." : pair.prompt;
+        const responsePreview = pair.editedResponse ?? pair.response;
+        const respShort =
+          responsePreview.length > 80 ? responsePreview.slice(0, 77) + "..." : responsePreview;
 
         console.log(`  [${status}] ${date} (${pair.model})`);
         console.log(`  \x1b[2mPrompt:\x1b[0m ${promptPreview}`);

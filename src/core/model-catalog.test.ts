@@ -1,17 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type CatalogEntry,
-  MODEL_CATALOG,
-  findCatalogEntry,
-  getAvailableModels,
-  recommendModel,
-} from "./model-catalog";
 import type { HardwareInfo } from "./hardware";
 import {
-  calculateOptimalTensorSplit,
-  formatTensorSplit,
-  modelFitsMultiGpu,
-} from "./multi-gpu";
+  type CatalogEntry,
+  findCatalogEntry,
+  getAvailableModels,
+  MODEL_CATALOG,
+  recommendModel,
+} from "./model-catalog";
+import { calculateOptimalTensorSplit, formatTensorSplit, modelFitsMultiGpu } from "./multi-gpu";
 
 // ─── Model Catalog Validation ──────────────────────────────────────────
 

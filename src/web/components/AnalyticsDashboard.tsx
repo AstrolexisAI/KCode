@@ -81,9 +81,7 @@ export function AnalyticsDashboard({ authToken }: { authToken: string }) {
   );
   const maxTurn = Math.max(...turnValues, 1);
 
-  const toolKeys = Object.keys(toolUsage).sort(
-    (a, b) => toolUsage[b] - toolUsage[a],
-  );
+  const toolKeys = Object.keys(toolUsage).sort((a, b) => toolUsage[b] - toolUsage[a]);
   const maxTool = toolKeys.length > 0 ? toolUsage[toolKeys[0]] : 1;
 
   return (

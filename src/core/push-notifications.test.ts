@@ -8,10 +8,10 @@ import {
   generateVAPIDKeys,
   getSubscriptions,
   loadOrCreateVAPIDKeys,
-  removeSubscription,
-  saveSubscription,
   type PushPayload,
   type PushSubscription,
+  removeSubscription,
+  saveSubscription,
   type VAPIDKeys,
 } from "./push-notifications";
 

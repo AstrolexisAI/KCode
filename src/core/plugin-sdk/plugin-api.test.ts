@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { rmSync } from "node:fs";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import type { PluginContext } from "./plugin-api";
 import { createPluginAPI, PluginAPI } from "./plugin-api";
 
@@ -21,7 +21,9 @@ describe("PluginAPI", () => {
         recursive: true,
         force: true,
       });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     api = createPluginAPI(TEST_CTX);
   });
 

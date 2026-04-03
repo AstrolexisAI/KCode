@@ -436,7 +436,10 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               lines.push(`  ${icon} ${status.label.padEnd(22)} ${methodLabel}${expiry}`);
             }
             lines.push("\n  Use: /auth login <provider> | /auth logout <provider>");
-            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "assistant", text: lines.join("\n") },
+            ]);
           } else if (subcmd === "login") {
             const provider = parts[2];
             if (!provider) {
@@ -446,24 +449,40 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 const label = PROVIDER_CONFIGS[p]?.label ?? p;
                 lines.push(`    - ${p} (${label})`);
               }
-              setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: lines.join("\n") }]);
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "assistant", text: lines.join("\n") },
+              ]);
             } else {
               setCompleted((prev) => [
                 ...prev,
-                { kind: "text", role: "assistant", text: `  Starting OAuth login for ${provider}...` },
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  Starting OAuth login for ${provider}...`,
+                },
               ]);
               const result = await loginProvider(provider, {
                 onAuthUrl: (url) => {
                   setCompleted((prev) => [
                     ...prev,
-                    { kind: "text", role: "assistant", text: `  Open this URL if the browser didn't open:\n  ${url}` },
+                    {
+                      kind: "text",
+                      role: "assistant",
+                      text: `  Open this URL if the browser didn't open:\n  ${url}`,
+                    },
                   ]);
                 },
               });
-              const method = result.method === "api_key" ? "API key stored in keychain" : "OAuth tokens stored";
+              const method =
+                result.method === "api_key" ? "API key stored in keychain" : "OAuth tokens stored";
               setCompleted((prev) => [
                 ...prev,
-                { kind: "text", role: "assistant", text: `  \u2713 Authenticated with ${provider} (${method})` },
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  \u2713 Authenticated with ${provider} (${method})`,
+                },
               ]);
             }
           } else if (subcmd === "logout") {
@@ -478,7 +497,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               try {
                 const { deleteSecret } = await import("../../core/auth/keychain.js");
                 await deleteSecret(`apikey-${provider}`);
-              } catch { /* ok */ }
+              } catch {
+                /* ok */
+              }
               setCompleted((prev) => [
                 ...prev,
                 { kind: "text", role: "assistant", text: `  \u2713 Logged out from ${provider}` },
@@ -487,7 +508,11 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           } else {
             setCompleted((prev) => [
               ...prev,
-              { kind: "text", role: "assistant", text: "  Usage: /auth [status | login <provider> | logout <provider>]" },
+              {
+                kind: "text",
+                role: "assistant",
+                text: "  Usage: /auth [status | login <provider> | logout <provider>]",
+              },
             ]);
           }
         } catch (err) {
@@ -556,13 +581,18 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               for (let i = 2; i < parts.length; i++) {
                 const part = parts[i]!;
                 if (part.startsWith("event=")) rule.event = part.slice(6) as HookifyRule["event"];
-                else if (part.startsWith("action=")) rule.action = part.slice(7) as HookifyRule["action"];
+                else if (part.startsWith("action="))
+                  rule.action = part.slice(7) as HookifyRule["action"];
                 else if (part.startsWith("tool=")) rule.toolMatcher = part.slice(5);
                 else if (part.startsWith("msg=")) rule.message = part.slice(4).replace(/_/g, " ");
                 else if (part.includes(":")) {
                   const [field, operator, ...rest] = part.split(":");
                   if (field && operator) {
-                    rule.conditions.push({ field, operator: operator as HookifyCondition["operator"], pattern: rest.join(":") });
+                    rule.conditions.push({
+                      field,
+                      operator: operator as HookifyCondition["operator"],
+                      pattern: rest.join(":"),
+                    });
                   }
                 }
               }

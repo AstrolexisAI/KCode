@@ -73,14 +73,26 @@ export class KulvexSink implements TelemetrySink {
 
   private sanitizeAttributes(attrs: Record<string, unknown>): Record<string, unknown> {
     const SAFE_KEYS = new Set([
-      "tool", "model", "duration_ms", "is_error", "event_type",
-      "input_tokens", "output_tokens", "session_count", "os",
-      "hardware_tier", "gpu_count", "command",
+      "tool",
+      "model",
+      "duration_ms",
+      "is_error",
+      "event_type",
+      "input_tokens",
+      "output_tokens",
+      "session_count",
+      "os",
+      "hardware_tier",
+      "gpu_count",
+      "command",
     ]);
 
     const safe: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(attrs)) {
-      if (SAFE_KEYS.has(k) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean")) {
+      if (
+        SAFE_KEYS.has(k) &&
+        (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+      ) {
         safe[k] = v;
       }
     }

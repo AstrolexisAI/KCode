@@ -62,12 +62,7 @@ function makeContentChunk(content: string, finishReason: string | null = null) {
   };
 }
 
-function makeToolCallChunk(
-  callId: string,
-  name: string,
-  args: string,
-  index: number,
-) {
+function makeToolCallChunk(callId: string, name: string, args: string, index: number) {
   return {
     id: `chatcmpl-mock-${Date.now()}`,
     object: "chat.completion.chunk",
@@ -141,7 +136,9 @@ function buildSSEBody(config: MockResponseConfig): string {
       for (let i = 0; i < toolCalls.length; i++) {
         const tc = toolCalls[i]!;
         const callId = `call_mock_${Date.now()}_${i}`;
-        chunks.push(sseDataLine(makeToolCallChunk(callId, tc.name, JSON.stringify(tc.arguments), i)));
+        chunks.push(
+          sseDataLine(makeToolCallChunk(callId, tc.name, JSON.stringify(tc.arguments), i)),
+        );
       }
       chunks.push(sseDataLine(makeFinishChunk("tool_calls")));
       chunks.push(sseDataLine(makeUsageChunk(usage.promptTokens, usage.completionTokens)));
@@ -192,10 +189,10 @@ export async function createMockLLMServer(): Promise<MockLLMServer> {
       // Get next response config
       const config = responses[responseIndex];
       if (!config) {
-        return new Response(
-          JSON.stringify({ error: { message: "No more scripted responses" } }),
-          { status: 500, headers: { "Content-Type": "application/json" } },
-        );
+        return new Response(JSON.stringify({ error: { message: "No more scripted responses" } }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
       }
       responseIndex++;
 

@@ -1,17 +1,17 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createSign, generateKeyPairSync } from "node:crypto";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  verifyLicenseJwt,
-  loadLicenseFile,
   checkOfflineLicense,
-  hasLicenseFeature,
-  getLicenseTier,
-  getLicenseDaysRemaining,
   clearLicenseCache,
   formatLicenseStatus,
+  getLicenseDaysRemaining,
+  getLicenseTier,
+  hasLicenseFeature,
+  loadLicenseFile,
+  verifyLicenseJwt,
 } from "./license";
 
 const TEST_HOME = join(tmpdir(), `kcode-license-test-${Date.now()}`);
@@ -107,9 +107,7 @@ describe("license", () => {
     });
 
     test("rejects expired JWT", () => {
-      const jwt = createTestJwt(
-        validPayload({ exp: Math.floor(Date.now() / 1000) - 3600 }),
-      );
+      const jwt = createTestJwt(validPayload({ exp: Math.floor(Date.now() / 1000) - 3600 }));
       const result = verifyLicenseJwt(jwt);
       expect(result.valid).toBe(false);
       expect(result.error).toContain("expired");
@@ -128,7 +126,12 @@ describe("license", () => {
       const jwt = createTestJwt(validPayload());
       const parts = jwt.split(".");
       // Tamper with payload
-      const tampered = parts[0] + "." + base64UrlEncode(JSON.stringify(validPayload({ seats: 999 }))) + "." + parts[2];
+      const tampered =
+        parts[0] +
+        "." +
+        base64UrlEncode(JSON.stringify(validPayload({ seats: 999 }))) +
+        "." +
+        parts[2];
       const result = verifyLicenseJwt(tampered);
       expect(result.valid).toBe(false);
       expect(result.error).toContain("Invalid signature");
@@ -168,9 +171,7 @@ describe("license", () => {
     });
 
     test("handles not-before (nbf) claim", () => {
-      const jwt = createTestJwt(
-        validPayload({ nbf: Math.floor(Date.now() / 1000) + 3600 }),
-      );
+      const jwt = createTestJwt(validPayload({ nbf: Math.floor(Date.now() / 1000) + 3600 }));
       const result = verifyLicenseJwt(jwt);
       expect(result.valid).toBe(false);
       expect(result.error).toContain("not yet valid");

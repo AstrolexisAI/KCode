@@ -120,10 +120,11 @@ async function queryNvidiaGpus(): Promise<GpuStatus[]> {
   };
   for (const smiPath of NVIDIA_SMI_PATHS) {
     try {
-      const result = Bun.spawnSync(
-        [smiPath, NVIDIA_QUERY, NVIDIA_FORMAT],
-        { stdout: "pipe", stderr: "pipe", env },
-      );
+      const result = Bun.spawnSync([smiPath, NVIDIA_QUERY, NVIDIA_FORMAT], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env,
+      });
       if (result.exitCode === 0) {
         const output = result.stdout.toString().trim();
         if (output) return parseNvidiaSmiOutput(output);
@@ -246,7 +247,9 @@ export function formatGpuStatusTable(statuses: GpuStatus[]): string {
 
   for (const s of statuses) {
     const name = s.name.length > 27 ? s.name.slice(0, 24) + "..." : s.name.padEnd(27);
-    const vram = `${(s.vramUsed / 1024).toFixed(1)}/${(s.vramTotal / 1024).toFixed(1)} GB`.padEnd(16);
+    const vram = `${(s.vramUsed / 1024).toFixed(1)}/${(s.vramTotal / 1024).toFixed(1)} GB`.padEnd(
+      16,
+    );
     const temp = s.temperature > 0 ? `${s.temperature}C`.padEnd(5) : "N/A  ";
     const util = `${s.utilization}%`.padEnd(5);
     const power = s.powerDraw > 0 ? `${s.powerDraw.toFixed(0)}W` : "N/A";

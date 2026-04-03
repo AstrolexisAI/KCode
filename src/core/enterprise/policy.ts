@@ -134,19 +134,14 @@ export function enforcePolicy(toolName: string, config: PolicyConfig): PolicyEnf
     return { allowed: true };
   }
 
-  const blocked = config.blockedTools.some(
-    (pattern) => {
-      // Support glob-style wildcards
-      if (pattern.includes("*")) {
-        const regex = new RegExp(
-          "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
-          "i",
-        );
-        return regex.test(toolName);
-      }
-      return pattern.toLowerCase() === toolName.toLowerCase();
-    },
-  );
+  const blocked = config.blockedTools.some((pattern) => {
+    // Support glob-style wildcards
+    if (pattern.includes("*")) {
+      const regex = new RegExp("^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$", "i");
+      return regex.test(toolName);
+    }
+    return pattern.toLowerCase() === toolName.toLowerCase();
+  });
 
   if (blocked) {
     return {
@@ -169,18 +164,13 @@ export function enforceModelPolicy(
     return { allowed: true };
   }
 
-  const blocked = config.blockedCloudModels.some(
-    (pattern) => {
-      if (pattern.includes("*")) {
-        const regex = new RegExp(
-          "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$",
-          "i",
-        );
-        return regex.test(modelName);
-      }
-      return pattern.toLowerCase() === modelName.toLowerCase();
-    },
-  );
+  const blocked = config.blockedCloudModels.some((pattern) => {
+    if (pattern.includes("*")) {
+      const regex = new RegExp("^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$", "i");
+      return regex.test(modelName);
+    }
+    return pattern.toLowerCase() === modelName.toLowerCase();
+  });
 
   if (blocked) {
     return {
@@ -221,10 +211,7 @@ function hostGlobMatch(pattern: string, hostname: string): boolean {
  *   3. If allowedHosts is set and non-empty, only those hosts are permitted (allowlist mode)
  *   4. If neither is set, all hosts are allowed (no restriction)
  */
-export function enforceNetworkPolicy(
-  url: string,
-  config: PolicyConfig,
-): PolicyEnforcementResult {
+export function enforceNetworkPolicy(url: string, config: PolicyConfig): PolicyEnforcementResult {
   if (!config.network) return { allowed: true };
 
   let hostname: string;
@@ -268,10 +255,7 @@ export function enforceNetworkPolicy(
  * Check if a webhook URL is allowed by network policy.
  * Webhooks can be entirely disabled via allowWebhooks: false.
  */
-export function enforceWebhookPolicy(
-  url: string,
-  config: PolicyConfig,
-): PolicyEnforcementResult {
+export function enforceWebhookPolicy(url: string, config: PolicyConfig): PolicyEnforcementResult {
   if (config.network?.allowWebhooks === false) {
     return {
       allowed: false,
@@ -298,7 +282,20 @@ function isLocalOrLan(hostname: string): boolean {
  */
 export function getAirGapNetworkPolicy(): NetworkPolicy {
   return {
-    allowedHosts: ["localhost", "127.0.0.1", "::1", "10.*", "192.168.*", "172.16.*", "172.17.*", "172.18.*", "172.19.*", "172.2?.*", "172.30.*", "172.31.*"],
+    allowedHosts: [
+      "localhost",
+      "127.0.0.1",
+      "::1",
+      "10.*",
+      "192.168.*",
+      "172.16.*",
+      "172.17.*",
+      "172.18.*",
+      "172.19.*",
+      "172.2?.*",
+      "172.30.*",
+      "172.31.*",
+    ],
     blockedHosts: ["*"],
     allowWebhooks: false,
     allowPluginNetwork: false,

@@ -390,8 +390,7 @@ export function installToPath(): string | null {
 export function ensureInPath(dir: string): void {
   const resolvedDir = resolve(dir);
   const sep = process.platform === "win32" ? ";" : ":";
-  if (process.env.PATH?.split(sep).some((p) => resolve(p) === resolvedDir))
-    return;
+  if (process.env.PATH?.split(sep).some((p) => resolve(p) === resolvedDir)) return;
 
   if (process.platform === "win32") {
     // Windows: add to user PATH via reg.exe (persistent, no admin required)
