@@ -402,22 +402,39 @@ export async function processStreamEvents(
             /* module not loaded */
           }
           setCompleted((prev) => {
-            const entries: typeof prev = [...prev, { kind: "text", role: "assistant", text }];
-            // Detect question at end of response — show highlighted prompt
+            // Detect question at end of response — extract and show in highlight box
             const trimmed = text.trimEnd();
+            let displayText = text;
+            let question: string | null = null;
+
             if (trimmed.endsWith("?")) {
               const lines = trimmed.split("\n");
-              const questionLines: string[] = [];
+              const questionLineIndices: number[] = [];
               for (let i = lines.length - 1; i >= 0; i--) {
                 const line = lines[i]!.trim();
                 if (!line) break;
-                questionLines.unshift(line);
+                questionLineIndices.unshift(i);
                 if (line.endsWith("?")) break;
               }
-              const question = questionLines.join(" ").replace(/^[*_\-•>]+\s*/, "");
-              if (question.length > 5 && question.length < 300) {
-                entries.push({ kind: "question_highlight", question });
+              const questionText = questionLineIndices
+                .map((i) => lines[i]!.trim())
+                .join(" ")
+                .replace(/^[*_\-•>]+\s*/, "");
+
+              if (questionText.length > 5 && questionText.length < 300) {
+                question = questionText;
+                // Remove the question lines from the display text to avoid duplication
+                const remaining = lines.filter((_, i) => !questionLineIndices.includes(i));
+                displayText = remaining.join("\n").trimEnd();
               }
+            }
+
+            const entries: typeof prev = [
+              ...prev,
+              ...(displayText ? [{ kind: "text" as const, role: "assistant" as const, text: displayText }] : []),
+            ];
+            if (question) {
+              entries.push({ kind: "question_highlight", question });
             }
             return entries;
           });
