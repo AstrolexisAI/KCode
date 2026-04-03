@@ -35,6 +35,7 @@ const PROVIDERS: CloudProvider[] = [
     baseUrl: "https://api.openai.com",
     hint: "sk-proj-...",
     models: "gpt-4o, gpt-4o-mini, o3, o4-mini",
+    supportsOAuth: true,
   },
   {
     id: "gemini",
@@ -44,6 +45,7 @@ const PROVIDERS: CloudProvider[] = [
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     hint: "AIza...",
     models: "gemini-2.5-pro, gemini-2.5-flash",
+    supportsOAuth: true,
   },
   {
     id: "groq",
@@ -97,13 +99,26 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
   const [selectedProvider, setSelectedProvider] = useState<CloudProvider | null>(null);
   const [oauthError, setOauthError] = useState<string | null>(null);
 
+  // Map CloudMenu provider IDs to OAuth provider names
+  const OAUTH_PROVIDER_MAP: Record<string, string> = {
+    anthropic: "anthropic",
+    openai: "openai-codex",
+    gemini: "gemini",
+  };
+
   const startOAuthFlow = async (provider: CloudProvider) => {
     setStage("oauth-pending");
     setOauthError(null);
     try {
-      const { anthropicOAuthLogin } = await import("../../core/auth/oauth-flow.js");
-      const key = await anthropicOAuthLogin();
-      onDone({ provider, apiKey: key, viaOAuth: true });
+      const { loginProvider } = await import("../../core/auth/oauth-flow.js");
+      const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
+      const result = await loginProvider(oauthName);
+      if (result.method === "api_key" && result.key) {
+        onDone({ provider, apiKey: result.key, viaOAuth: true });
+      } else {
+        // OAuth tokens stored — signal success with empty key (tokens in keychain)
+        onDone({ provider, apiKey: "", viaOAuth: true });
+      }
     } catch (err) {
       setOauthError(err instanceof Error ? err.message : String(err));
       setStage("auth-method");
@@ -245,7 +260,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
                 {authMethodIndex === 0 ? "▸ " : "  "}
                 Login with browser (OAuth)
               </Text>
-              <Text dimColor>— sign in via Anthropic Console</Text>
+              <Text dimColor>— sign in via browser</Text>
             </Box>
             <Box gap={1}>
               <Text
@@ -284,7 +299,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           </Box>
           <Box>
             <Text dimColor>
-              A browser window should have opened. Sign in to your Anthropic account to continue.
+              A browser window should have opened. Sign in to your {selectedProvider.name} account to continue.
             </Text>
           </Box>
           <Box marginTop={1}>
