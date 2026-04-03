@@ -115,7 +115,24 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
       const { loginProvider } = await import("../../core/auth/oauth-flow.js");
       const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
       const result = await loginProvider(oauthName, {
-        onAuthUrl: (url) => setOauthUrl(url),
+        onAuthUrl: (url) => {
+          setOauthUrl(url);
+          // Copy to clipboard for easy pasting
+          try {
+            const { execSync } = require("node:child_process");
+            if (process.platform === "darwin") {
+              execSync("pbcopy", { input: url, timeout: 3000 });
+            } else if (process.platform === "linux") {
+              try {
+                execSync("xclip -selection clipboard", { input: url, timeout: 3000 });
+              } catch {
+                execSync("xsel --clipboard --input", { input: url, timeout: 3000 });
+              }
+            }
+          } catch {
+            // Clipboard not available — URL is still displayed
+          }
+        },
       });
       if (result.method === "api_key" && result.key) {
         onDone({ provider, apiKey: result.key, viaOAuth: true });
@@ -304,9 +321,10 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           {oauthUrl && (
             <Box marginTop={1} flexDirection="column">
               <Text dimColor>Open this URL if the browser didn't open automatically:</Text>
-              <Box marginTop={0}>
-                <Text color={theme.info ?? theme.accent} wrap="truncate-end">{oauthUrl}</Text>
-              </Box>
+              <Text> </Text>
+              <Text color={theme.info ?? theme.accent} wrap="wrap">{oauthUrl}</Text>
+              <Text> </Text>
+              <Text dimColor>(URL copied to clipboard)</Text>
             </Box>
           )}
           {!oauthUrl && (
