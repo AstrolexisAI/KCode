@@ -483,7 +483,7 @@ async function runMain(
     // Auto-start llama-server and wait for model to be fully loaded
     profileCheckpoint("server_check");
     if (isSetupComplete()) {
-      // Check if the selected model has a registered baseUrl (external server like MnemoCUDA)
+      // Check if the selected model has a registered baseUrl (external server)
       let externalServerUrl: string | null = null;
       try {
         const { getModelBaseUrl, getModelProvider } = await import("./core/models");
@@ -492,7 +492,6 @@ async function runMain(
         const provider = await getModelProvider(modelName);
         // If the model has a non-default baseUrl or a non-openai provider, it's external
         if (
-          provider === "mnemocuda" ||
           provider === "anthropic" ||
           (modelBase && !modelBase.includes("localhost:10091"))
         ) {

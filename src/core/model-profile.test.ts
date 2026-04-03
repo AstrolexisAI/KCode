@@ -22,10 +22,6 @@ describe("detectModelSize", () => {
     expect(detectModelSize("mnemo:mark5-80b")).toBe("large");
   });
 
-  test("mark5-titan is large", () => {
-    expect(detectModelSize("mnemo:mark5-titan")).toBe("large");
-  });
-
   test("claude models are large", () => {
     expect(detectModelSize("claude-sonnet-4-6")).toBe("large");
   });

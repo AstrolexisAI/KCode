@@ -81,7 +81,7 @@ export function detectModelSize(modelName: string): ModelSize {
   const lower = modelName.toLowerCase();
   if (/pico|tiny|1b|2b|3b|4b/.test(lower)) return "tiny";
   if (/nano|small|7b|8b/.test(lower)) return "small";
-  if (/mini|mid|14b|27b|30b|32b|titan/.test(lower)) return "medium"; // titan = MoE served via MnemoCUDA, limited context
+  if (/mini|mid|14b|27b|30b|32b/.test(lower)) return "medium";
   if (/max|80b|70b|235b|claude|gpt-4|opus|sonnet/.test(lower)) return "large";
 
   // Cloud models are always "large"
@@ -97,17 +97,6 @@ export function detectModelSize(modelName: string): ModelSize {
 export function getModelProfile(modelName: string): ModelProfile {
   const size = detectModelSize(modelName);
   const profile = { ...PROFILES[size] };
-
-  // MnemoCUDA models have limited context (8K) — force lite prompt
-  // and reduced tools regardless of model size classification.
-  const lower = modelName.toLowerCase();
-  if (lower.includes("titan") || lower.includes("mnemocuda")) {
-    profile.promptMode = "lite";
-    profile.maxTokens = Math.min(profile.maxTokens, 4096);
-    if (profile.tools === "all") {
-      profile.tools = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"];
-    }
-  }
 
   return profile;
 }
