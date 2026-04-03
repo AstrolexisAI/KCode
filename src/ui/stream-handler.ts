@@ -69,6 +69,9 @@ export async function processStreamEvents(
   let currentText = "";
   let hadPartialProgress = false;
   let currentThinking = "";
+  let bashStreamBuffer = "";
+  let bashStreamThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  let textStreamThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 
   for await (const event of events) {
     switch (event.type) {
@@ -102,16 +105,20 @@ export async function processStreamEvents(
           currentThinking = "";
         }
         currentText += event.text;
-        // Cap the visible streaming text to avoid flooding the terminal
-        // with hundreds of lines of code. Show first lines + a counter.
-        const streamLines = currentText.split("\n");
-        if (streamLines.length > 30) {
-          const truncated =
-            streamLines.slice(0, 6).join("\n") +
-            `\n... writing (${streamLines.length} lines)`;
-          setStreamingText(truncated);
-        } else {
-          setStreamingText(currentText);
+        // Throttle streaming text updates to ~15fps to reduce render thrashing
+        if (!textStreamThrottleTimer) {
+          textStreamThrottleTimer = setTimeout(() => {
+            textStreamThrottleTimer = null;
+            const streamLines = currentText.split("\n");
+            if (streamLines.length > 30) {
+              setStreamingText(
+                streamLines.slice(0, 6).join("\n") +
+                `\n... writing (${streamLines.length} lines)`,
+              );
+            } else {
+              setStreamingText(currentText);
+            }
+          }, 66);
         }
         break;
 
@@ -186,16 +193,22 @@ export async function processStreamEvents(
       }
 
       case "tool_stream":
-        // Live streaming output from Bash commands
-        setBashStreamOutput((prev: string) => {
-          const updated = prev + event.chunk;
-          // Keep only the last 200 lines to avoid memory bloat
-          const lines = updated.split("\n");
-          if (lines.length > 200) {
-            return lines.slice(-200).join("\n");
-          }
-          return updated;
-        });
+        // Live streaming output from Bash commands — throttled to ~10fps
+        bashStreamBuffer += event.chunk;
+        if (!bashStreamThrottleTimer) {
+          bashStreamThrottleTimer = setTimeout(() => {
+            bashStreamThrottleTimer = null;
+            setBashStreamOutput((prev: string) => {
+              const updated = prev + bashStreamBuffer;
+              bashStreamBuffer = "";
+              const lines = updated.split("\n");
+              if (lines.length > 200) {
+                return lines.slice(-200).join("\n");
+              }
+              return updated;
+            });
+          }, 100);
+        }
         break;
 
       case "tool_result":
@@ -384,6 +397,13 @@ export async function processStreamEvents(
           setStreamingThinking("");
           setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
           currentThinking = "";
+        }
+        // Cancel throttle timers and flush pending updates
+        if (textStreamThrottleTimer) { clearTimeout(textStreamThrottleTimer); textStreamThrottleTimer = null; }
+        if (bashStreamThrottleTimer) { clearTimeout(bashStreamThrottleTimer); bashStreamThrottleTimer = null; }
+        if (bashStreamBuffer) {
+          setBashStreamOutput((prev: string) => prev + bashStreamBuffer);
+          bashStreamBuffer = "";
         }
         // Finalize any remaining streamed text
         if (currentText.length > 0) {
