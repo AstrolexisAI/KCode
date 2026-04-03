@@ -456,6 +456,10 @@ export default function App({ config, conversationManager, tools, initialSession
         question={lastEntry.question}
         options={lastEntry.options}
         onSelect={(answer) => handleSubmit(answer)}
+        onCancel={() => {
+          // Remove the question_highlight entry to dismiss the selector
+          setCompleted((prev) => prev.filter((e) => e !== lastEntry));
+        }}
         isActive={mode === "input" && !pendingLastModel}
       />
     ) : null;
