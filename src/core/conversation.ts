@@ -151,6 +151,8 @@ export class ConversationManager {
   private compactThreshold: number;
   private checkpoints: Checkpoint[] = [];
   private abortController: AbortController | null = null;
+  /** Countdown seconds when waiting for rate limit retry (0 = not waiting) */
+  rateLimitCountdown = 0;
   private _theoreticalMode = false;
   private _theoreticalRetries = 0;
   private _checkpointMode = false;
@@ -1268,6 +1270,9 @@ export class ConversationManager {
       abortController: this.abortController,
       debugTracer: this.debugTracer,
       getRecentMessageText: () => this.getRecentMessageText(),
+      onRetryWait: (seconds) => {
+        this.rateLimitCountdown = seconds;
+      },
     });
   }
 

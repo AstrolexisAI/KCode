@@ -32,6 +32,15 @@ export interface BuildRequestOptions {
   effortLevel?: string;
 }
 
+export interface RateLimitError extends Error {
+  retryAfterMs: number;
+  isRateLimit: true;
+}
+
+export function isRateLimitError(err: unknown): err is RateLimitError {
+  return err instanceof Error && (err as RateLimitError).isRateLimit === true;
+}
+
 // ─── Tool Token Estimation ───────────────────────────────────────
 
 import { CHARS_PER_TOKEN } from "./token-budget";
@@ -457,17 +466,18 @@ export async function executeModelRequest(
     // Provide actionable hint for common errors
     let hint = "";
     if (response.status === 429) {
-      hint =
-        " (rate limit reached — waiting before retry. If this persists, try /compact to reduce context or switch to a smaller model)";
+      const retryAfter = response.headers.get("retry-after");
+      const retrySeconds = retryAfter ? parseInt(retryAfter) || 30 : 30;
+      hint = ` (retry in ${retrySeconds}s)`;
+
+      // Attach retry delay to the error so the retry logic can use it
+      const err = new Error(`429:${retrySeconds}`);
+      (err as RateLimitError).retryAfterMs = retrySeconds * 1000;
+      (err as RateLimitError).isRateLimit = true;
+      throw err;
     } else if (response.status === 400 && estimatedTokens > 8000) {
       hint =
         " (hint: request may exceed model context window — try /compact or reduce conversation length)";
-    }
-    // For rate limits, show a clean message instead of dumping the raw API JSON
-    if (response.status === 429) {
-      throw new Error(
-        `Rate limit reached (429)${hint}`,
-      );
     }
     throw new Error(
       `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}${hint}`,

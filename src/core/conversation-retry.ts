@@ -3,7 +3,7 @@
 
 import type { DebugTracer } from "./debug-tracer";
 import { log } from "./logger";
-import { executeModelRequest } from "./request-builder";
+import { executeModelRequest, isRateLimitError } from "./request-builder";
 import { routeToModel } from "./router";
 import type { SSEChunk } from "./sse-parser";
 import type { ToolRegistry } from "./tool-registry";
@@ -13,6 +13,7 @@ import type { KCodeConfig, Message } from "./types";
 
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
+const MIN_RATE_LIMIT_DELAY_MS = 15_000; // Min 15s for rate limits
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -61,6 +62,8 @@ export interface CreateStreamContext {
   abortController: AbortController | null;
   debugTracer: DebugTracer | null;
   getRecentMessageText: () => string;
+  /** Optional: called when waiting for rate limit retry (UI can show countdown) */
+  onRetryWait?: (secondsRemaining: number) => void;
 }
 
 /**
@@ -131,12 +134,29 @@ export async function createStreamWithRetry(
       }
 
       if (attempt < ctx.maxRetries && isRetryableError(error)) {
-        const delay = computeRetryDelay(attempt);
-        log.warn(
-          "llm",
-          `Retryable error (attempt ${attempt + 1}/${ctx.maxRetries}), retrying in ${delay}ms`,
-          lastError,
-        );
+        let delay: number;
+        if (isRateLimitError(error)) {
+          // Use server-provided Retry-After, with a minimum floor
+          delay = Math.max(error.retryAfterMs, MIN_RATE_LIMIT_DELAY_MS);
+          const secs = Math.ceil(delay / 1000);
+          log.warn("llm", `Rate limited — retrying in ${secs}s (attempt ${attempt + 1}/${ctx.maxRetries})`);
+          // Notify UI with countdown if callback provided
+          if (ctx.onRetryWait) {
+            for (let s = secs; s > 0; s--) {
+              ctx.onRetryWait(s);
+              await sleep(1000);
+            }
+            ctx.onRetryWait(0);
+            continue;
+          }
+        } else {
+          delay = computeRetryDelay(attempt);
+          log.warn(
+            "llm",
+            `Retryable error (attempt ${attempt + 1}/${ctx.maxRetries}), retrying in ${delay}ms`,
+            lastError,
+          );
+        }
         await sleep(delay);
         continue;
       }
