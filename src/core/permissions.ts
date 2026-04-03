@@ -60,7 +60,7 @@ export type PermissionPromptFn = (
 // ─── Tool Classification ────────────────────────────────────────
 
 /** Tools that only read data and don't modify anything */
-const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep"]);
+const READ_ONLY_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "GitStatus", "GitLog", "DiffView"]);
 
 /**
  * SAFE_TOOLS — Tools that never need confirmation in auto mode.
