@@ -29,7 +29,13 @@ export function buildEnvironment(config: KCodeConfig): string {
   const gitInfo = getGitInfo(config.workingDirectory);
   const today = new Date().toISOString().split("T")[0];
 
-  const lines = ["# Environment", `- Working directory: ${config.workingDirectory}`];
+  const home = process.env.HOME ?? "";
+  const lines = [
+    "# Environment",
+    `- Working directory: ${config.workingDirectory}`,
+    `- Home directory: ${home}`,
+    `- IMPORTANT: Always use the working directory above for file operations. NEVER guess paths like /home/user — use the actual working directory.`,
+  ];
 
   if (config.additionalDirs && config.additionalDirs.length > 0) {
     lines.push(`- Additional directories: ${config.additionalDirs.join(", ")}`);
