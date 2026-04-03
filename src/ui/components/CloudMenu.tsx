@@ -98,6 +98,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
   const [apiKey, setApiKey] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<CloudProvider | null>(null);
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
 
   // Map CloudMenu provider IDs to OAuth provider names
   const OAUTH_PROVIDER_MAP: Record<string, string> = {
@@ -109,10 +110,13 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
   const startOAuthFlow = async (provider: CloudProvider) => {
     setStage("oauth-pending");
     setOauthError(null);
+    setOauthUrl(null);
     try {
       const { loginProvider } = await import("../../core/auth/oauth-flow.js");
       const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
-      const result = await loginProvider(oauthName);
+      const result = await loginProvider(oauthName, {
+        onAuthUrl: (url) => setOauthUrl(url),
+      });
       if (result.method === "api_key" && result.key) {
         onDone({ provider, apiKey: result.key, viaOAuth: true });
       } else {
@@ -297,11 +301,21 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
               Waiting for browser authentication...
             </Text>
           </Box>
-          <Box>
-            <Text dimColor>
-              A browser window should have opened. Sign in to your {selectedProvider.name} account to continue.
-            </Text>
-          </Box>
+          {oauthUrl && (
+            <Box marginTop={1} flexDirection="column">
+              <Text dimColor>Open this URL if the browser didn't open automatically:</Text>
+              <Box marginTop={0}>
+                <Text color={theme.info ?? theme.accent} wrap="truncate-end">{oauthUrl}</Text>
+              </Box>
+            </Box>
+          )}
+          {!oauthUrl && (
+            <Box>
+              <Text dimColor>
+                Opening browser for {selectedProvider.name} login...
+              </Text>
+            </Box>
+          )}
           <Box marginTop={1}>
             <Text dimColor>Esc to cancel</Text>
           </Box>

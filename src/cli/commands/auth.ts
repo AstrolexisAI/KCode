@@ -56,10 +56,14 @@ export function registerAuthCommand(program: Command): void {
       }
 
       console.log(`\nStarting OAuth login for ${provider}...`);
-      console.log("A browser window will open. Complete the authorization there.\n");
 
       try {
-        const result = await loginProvider(provider);
+        const result = await loginProvider(provider, {
+          onAuthUrl: (url) => {
+            console.log("\nIf the browser didn't open automatically, visit this URL:\n");
+            console.log(`  ${url}\n`);
+          },
+        });
 
         if (result.method === "api_key") {
           console.log(`\u2713 Authenticated with ${provider} (API key created and stored securely)`);

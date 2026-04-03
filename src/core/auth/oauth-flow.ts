@@ -111,7 +111,10 @@ export interface OAuthFlowResult {
  * 5. Exchange code for tokens
  * 6. Store tokens in keychain
  */
-export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthFlowResult> {
+export async function startOAuthFlow(
+  config: OAuthConfig,
+  opts?: { onAuthUrl?: (url: string) => void },
+): Promise<OAuthFlowResult> {
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const state = generateState();
@@ -119,21 +122,29 @@ export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthFlowResu
   const redirectUri = `http://127.0.0.1:${redirectPort}/callback`;
 
   // Build authorization URL
-  const authUrl = new URL(config.authorizationUrl);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", config.clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("scope", config.scopes.join(" "));
-  authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("code_challenge", codeChallenge);
-  authUrl.searchParams.set("code_challenge_method", "S256");
+  const authUrlObj = new URL(config.authorizationUrl);
+  authUrlObj.searchParams.set("response_type", "code");
+  authUrlObj.searchParams.set("client_id", config.clientId);
+  authUrlObj.searchParams.set("redirect_uri", redirectUri);
+  authUrlObj.searchParams.set("scope", config.scopes.join(" "));
+  authUrlObj.searchParams.set("state", state);
+  authUrlObj.searchParams.set("code_challenge", codeChallenge);
+  authUrlObj.searchParams.set("code_challenge_method", "S256");
 
   // Append provider-specific extra params (e.g., access_type=offline for Google)
   if (config.extraAuthParams) {
     for (const [key, value] of Object.entries(config.extraAuthParams)) {
-      authUrl.searchParams.set(key, value);
+      authUrlObj.searchParams.set(key, value);
     }
   }
+
+  const authUrl = authUrlObj.toString();
+
+  // Notify caller with the URL (for display in UI) before opening browser
+  opts?.onAuthUrl?.(authUrl);
+
+  // Try to open browser automatically
+  await openBrowser(authUrl);
 
   // Wait for the callback
   const code = await waitForCallback(redirectPort, state);
@@ -344,7 +355,9 @@ export async function clearTokens(provider: string): Promise<void> {
  * 2. Use the obtained token to create a permanent API key
  * Returns the permanent API key string.
  */
-export async function anthropicOAuthLogin(): Promise<string> {
+export async function anthropicOAuthLogin(opts?: {
+  onAuthUrl?: (url: string) => void;
+}): Promise<string> {
   const providerConfig = PROVIDER_CONFIGS.anthropic!;
   const config: OAuthConfig = {
     provider: "anthropic",
@@ -362,6 +375,7 @@ export async function anthropicOAuthLogin(): Promise<string> {
   const redirectUri = `http://127.0.0.1:${config.redirectPort}/callback`;
 
   const authUrl = buildAuthUrl(config, codeChallenge, state);
+  opts?.onAuthUrl?.(authUrl);
   await openBrowser(authUrl);
 
   // Wait for callback
@@ -410,7 +424,10 @@ async function createAnthropicApiKey(accessToken: string): Promise<string> {
  * - For OpenAI Codex / Gemini: runs OAuth → stores access + refresh tokens
  * Returns { provider, method: "oauth" | "api_key", key?: string }
  */
-export async function loginProvider(providerName: string): Promise<{
+export async function loginProvider(
+  providerName: string,
+  opts?: { onAuthUrl?: (url: string) => void },
+): Promise<{
   provider: string;
   method: "oauth" | "api_key";
   key?: string;
@@ -424,13 +441,13 @@ export async function loginProvider(providerName: string): Promise<{
 
   if (config.exchangeForApiKey) {
     // Anthropic flow: OAuth → permanent API key
-    const apiKey = await anthropicOAuthLogin();
+    const apiKey = await anthropicOAuthLogin({ onAuthUrl: opts?.onAuthUrl });
     await migrateApiKey(providerName, apiKey);
     return { provider: providerName, method: "api_key", key: apiKey };
   }
 
   // Standard OAuth flow: store access + refresh tokens
-  const result = await startOAuthFlow(config);
+  const result = await startOAuthFlow(config, { onAuthUrl: opts?.onAuthUrl });
   return { provider: providerName, method: "oauth" };
 }
 

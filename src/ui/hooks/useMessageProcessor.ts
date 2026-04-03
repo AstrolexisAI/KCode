@@ -450,9 +450,16 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             } else {
               setCompleted((prev) => [
                 ...prev,
-                { kind: "text", role: "assistant", text: `  Starting OAuth login for ${provider}...\n  A browser window will open.` },
+                { kind: "text", role: "assistant", text: `  Starting OAuth login for ${provider}...` },
               ]);
-              const result = await loginProvider(provider);
+              const result = await loginProvider(provider, {
+                onAuthUrl: (url) => {
+                  setCompleted((prev) => [
+                    ...prev,
+                    { kind: "text", role: "assistant", text: `  Open this URL if the browser didn't open:\n  ${url}` },
+                  ]);
+                },
+              });
               const method = result.method === "api_key" ? "API key stored in keychain" : "OAuth tokens stored";
               setCompleted((prev) => [
                 ...prev,
