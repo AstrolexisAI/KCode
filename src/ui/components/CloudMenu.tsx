@@ -117,7 +117,9 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
       const result = await loginProvider(oauthName, {
         onAuthUrl: (url) => {
           setOauthUrl(url);
-          // Copy to clipboard for easy pasting
+          // Print URL outside Ink's box so it's fully selectable in terminal (SSH-friendly)
+          console.error(`\n  OAuth URL (copy this):\n\n  ${url}\n`);
+          // Also try clipboard
           try {
             const { execSync } = require("node:child_process");
             if (process.platform === "darwin") {
@@ -130,7 +132,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
               }
             }
           } catch {
-            // Clipboard not available — URL is still displayed
+            // Clipboard not available — URL is printed above
           }
         },
       });
@@ -320,11 +322,8 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           </Box>
           {oauthUrl && (
             <Box marginTop={1} flexDirection="column">
-              <Text dimColor>Open this URL if the browser didn't open automatically:</Text>
-              <Text> </Text>
-              <Text color={theme.info ?? theme.accent} wrap="wrap">{oauthUrl}</Text>
-              <Text> </Text>
-              <Text dimColor>(URL copied to clipboard)</Text>
+              <Text dimColor>The OAuth URL has been printed above this box and copied to clipboard.</Text>
+              <Text dimColor>Open it in your browser to authenticate.</Text>
             </Box>
           )}
           {!oauthUrl && (
