@@ -76,7 +76,7 @@ const PROVIDERS: CloudProvider[] = [
   },
 ];
 
-type Stage = "select" | "auth-method" | "input" | "confirm" | "oauth-pending";
+type Stage = "select" | "auth-method" | "input" | "confirm" | "oauth-pending" | "cli-detected";
 
 export interface CloudResult {
   provider: CloudProvider;
@@ -99,6 +99,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
   const [selectedProvider, setSelectedProvider] = useState<CloudProvider | null>(null);
   const [oauthError, setOauthError] = useState<string | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [cliDetail, setCliDetail] = useState<string | null>(null);
 
   // Map CloudMenu provider IDs to OAuth provider names
   const OAUTH_PROVIDER_MAP: Record<string, string> = {
@@ -125,14 +126,34 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
   };
 
   const startOAuthFlow = async (provider: CloudProvider) => {
+    // Set stage immediately (sync) to prevent Ink rendering a stale frame
     setStage("oauth-pending");
     setOauthError(null);
     setOauthUrl(null);
+    setCliDetail(null);
 
     const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
 
-    // For Anthropic: OAuth requires manual code paste which doesn't work in Ink.
-    // Open the API key creation page directly instead.
+    // Check if user already has CLI auth (Claude Code / Codex)
+    try {
+      const bridge = await import("../../core/auth/claude-code-bridge.js");
+      if (oauthName === "anthropic" && bridge.isClaudeCodeAuthenticated()) {
+        const info = bridge.getClaudeCodeAuthInfo();
+        setCliDetail(`Claude Code (${info.subscriptionType ?? "active"} plan)`);
+        setStage("cli-detected");
+        return;
+      }
+      if (oauthName === "openai-codex" && bridge.isCodexAuthenticated()) {
+        const info = bridge.getCodexAuthInfo();
+        setCliDetail(`OpenAI Codex CLI (${info.authMode === "chatgpt" ? "ChatGPT subscription" : "authenticated"})`);
+        setStage("cli-detected");
+        return;
+      }
+    } catch { /* bridge not available */ }
+
+    setStage("oauth-pending");
+
+    // For Anthropic without CLI: open API key page
     if (oauthName === "anthropic") {
       const url = "https://console.anthropic.com/settings/keys";
       copyToClipboard(url);
@@ -141,7 +162,6 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         await openBrowser(url);
       } catch { /* ok */ }
       setOauthUrl(url);
-      // Switch to manual key input after showing the URL
       setStage("input");
       return;
     }
@@ -229,7 +249,13 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         }
       } else if (stage === "oauth-pending") {
         if (key.escape) {
-          // Can't cancel the OAuth flow mid-flight, but go back to auth-method
+          setStage("auth-method");
+        }
+      } else if (stage === "cli-detected") {
+        if (input.toLowerCase() === "y" || key.return) {
+          // Use existing CLI tokens — signal success with empty key
+          onDone({ provider: selectedProvider!, apiKey: "", viaOAuth: true });
+        } else if (input.toLowerCase() === "n" || key.escape) {
           setStage("auth-method");
         }
       }
@@ -353,6 +379,37 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           )}
           <Box marginTop={1}>
             <Text dimColor>Esc to cancel</Text>
+          </Box>
+        </>
+      )}
+
+      {stage === "cli-detected" && selectedProvider && (
+        <>
+          <Box marginTop={1} gap={1}>
+            <Text>Provider:</Text>
+            <Text bold color={theme.primary}>
+              {selectedProvider.name}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text color={theme.success}>
+              Existing authentication detected: {cliDetail}
+            </Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text>
+              KCode will reuse this login automatically. No API key needed.
+            </Text>
+          </Box>
+          <Box marginTop={1} gap={2}>
+            <Text>
+              <Text bold color={theme.success}>[y]</Text>
+              <Text> Use existing login</Text>
+            </Text>
+            <Text>
+              <Text bold color={theme.error}>[n]</Text>
+              <Text> Configure manually</Text>
+            </Text>
           </Box>
         </>
       )}
