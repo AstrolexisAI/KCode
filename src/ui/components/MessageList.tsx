@@ -220,6 +220,8 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
         />
       );
     case "question_highlight":
+      // If options exist, InteractiveQuestion renders this — skip static render
+      if (entry.options && entry.options.length >= 2) return null;
       return <QuestionHighlightMessage question={entry.question} />;
   }
 }

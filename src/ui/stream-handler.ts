@@ -18,7 +18,7 @@ export interface TabInfo {
 }
 
 export interface StreamHandlerDeps {
-  config: { workingDirectory: string };
+  config: { workingDirectory: string; model?: string; _activeFallback?: string };
   conversationManager: ConversationManager;
   tabRemovalTimers: { current: Set<ReturnType<typeof setTimeout>> };
 
@@ -95,7 +95,22 @@ export async function processStreamEvents(
         break;
 
       case "text_delta":
-        if (currentText.length === 0) setLastKodiEvent({ type: "streaming" });
+        if (currentText.length === 0) {
+          setLastKodiEvent({ type: "streaming" });
+          // Show fallback warning if a different model is responding
+          if (config._activeFallback) {
+            const fallback = config._activeFallback;
+            config._activeFallback = undefined;
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "banner",
+                title: `Fallback: ${fallback}`,
+                subtitle: `${config.model} rate limited — using fallback model`,
+              },
+            ]);
+          }
+        }
         // Finalize any accumulated thinking when text starts
         if (currentThinking.length > 0) {
           const thinking = currentThinking;

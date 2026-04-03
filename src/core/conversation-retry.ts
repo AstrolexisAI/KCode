@@ -191,6 +191,8 @@ export async function createStreamWithRetry(
             ctx.abortController,
           );
           log.info("llm", `Fallback model ${ctx.config.fallbackModel} connected`);
+          // Notify that fallback was used (stream handler can show a banner)
+          ctx.config._activeFallback = ctx.config.fallbackModel;
           return stream;
         } catch (fallbackErr) {
           log.error(
