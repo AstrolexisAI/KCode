@@ -18,6 +18,7 @@ import { KeybindingProvider } from "./components/KeybindingContext.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
 import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
+import InteractiveQuestion from "./components/InteractiveQuestion.js";
 import QuestionDialog from "./components/QuestionDialog.js";
 import PermissionDialog, {
   type PermissionChoice,
@@ -444,6 +445,21 @@ export default function App({ config, conversationManager, tools, initialSession
     [config],
   );
 
+  // Interactive question selector — computed once before render
+  const lastEntry = completed[completed.length - 1];
+  const interactiveQuestion =
+    lastEntry?.kind === "question_highlight" &&
+    lastEntry.options &&
+    lastEntry.options.length >= 2 &&
+    mode === "input" ? (
+      <InteractiveQuestion
+        question={lastEntry.question}
+        options={lastEntry.options}
+        onSelect={(answer) => handleSubmit(answer)}
+        isActive={mode === "input" && !pendingLastModel}
+      />
+    ) : null;
+
   return (
     <KeybindingProvider>
       <Box flexDirection="column">
@@ -588,6 +604,8 @@ export default function App({ config, conversationManager, tools, initialSession
             isActive={!!pendingLastModel}
           />
         )}
+        {interactiveQuestion}
+
         <InputPrompt
           onSubmit={handleSubmit}
           isActive={

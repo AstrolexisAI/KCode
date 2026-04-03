@@ -429,12 +429,47 @@ export async function processStreamEvents(
               }
             }
 
+            // Extract selectable options from the text preceding the question
+            let options: string[] | undefined;
+            if (question && displayText) {
+              const dtLines = displayText.split("\n");
+              const optLines: string[] = [];
+              // Walk backwards from end to collect bullet/number lines
+              for (let i = dtLines.length - 1; i >= 0; i--) {
+                const l = dtLines[i]!.trim();
+                if (!l) {
+                  if (optLines.length > 0) break; // blank line after options block
+                  continue;
+                }
+                if (/^[\u2022•\-\*]\s+/.test(l) || /^\d+[\.\)]\s+/.test(l)) {
+                  optLines.unshift(l.replace(/^[\u2022•\-\*]\s+/, "").replace(/^\d+[\.\)]\s+/, ""));
+                } else if (optLines.length > 0) {
+                  break; // non-option line above the option block
+                }
+              }
+              if (optLines.length >= 2 && optLines.length <= 10) {
+                options = optLines;
+                // Remove the option lines from display text too — they'll be in the interactive widget
+                const optStartIdx = dtLines.length - 1;
+                let cutFrom = dtLines.length;
+                let foundOpts = 0;
+                for (let i = dtLines.length - 1; i >= 0 && foundOpts < optLines.length; i--) {
+                  const l = dtLines[i]!.trim();
+                  if (/^[\u2022•\-\*]\s+/.test(l) || /^\d+[\.\)]\s+/.test(l)) {
+                    cutFrom = i;
+                    foundOpts++;
+                  }
+                }
+                displayText = dtLines.slice(0, cutFrom).join("\n").trimEnd();
+              }
+            }
+
             const entries: typeof prev = [
               ...prev,
               ...(displayText ? [{ kind: "text" as const, role: "assistant" as const, text: displayText }] : []),
             ];
             if (question) {
-              entries.push({ kind: "question_highlight", question });
+              entries.push({ kind: "question_highlight", question, options });
             }
             return entries;
           });
