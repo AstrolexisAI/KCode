@@ -23,9 +23,13 @@ export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
     authorizationUrl: "https://console.anthropic.com/oauth/authorize",
     tokenUrl: "https://console.anthropic.com/v1/oauth/token",
     clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-    scopes: ["org:create_api_key"],
+    scopes: ["org:create_api_key", "user:profile", "user:inference"],
     exchangeForApiKey: true,
     label: "Anthropic (Claude)",
+    // Anthropic uses their own console callback — not a local server.
+    // The user must copy the code from the browser and paste it back.
+    extraAuthParams: { code: "true" },
+    redirectUri: "https://console.anthropic.com/oauth/code/callback",
   },
   "openai-codex": {
     provider: "openai-codex",
@@ -69,6 +73,7 @@ export function resolveProviderConfig(provider: string): OAuthConfig | null {
     extraAuthParams: partial.extraAuthParams,
     exchangeForApiKey: partial.exchangeForApiKey,
     label: partial.label,
+    redirectUri: partial.redirectUri,
   } as OAuthConfig;
 }
 
@@ -119,7 +124,7 @@ export async function startOAuthFlow(
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const state = generateState();
   const redirectPort = config.redirectPort || DEFAULT_REDIRECT_PORT;
-  const redirectUri = `http://127.0.0.1:${redirectPort}/callback`;
+  const redirectUri = config.redirectUri ?? `http://127.0.0.1:${redirectPort}/callback`;
 
   // Build authorization URL
   const authUrlObj = new URL(config.authorizationUrl);
@@ -160,7 +165,7 @@ export async function startOAuthFlow(
 
 /** Build the authorization URL without starting the flow */
 export function buildAuthUrl(config: OAuthConfig, codeChallenge: string, state: string): string {
-  const redirectUri = `http://127.0.0.1:${config.redirectPort || DEFAULT_REDIRECT_PORT}/callback`;
+  const redirectUri = config.redirectUri ?? `http://127.0.0.1:${config.redirectPort || DEFAULT_REDIRECT_PORT}/callback`;
   const authUrl = new URL(config.authorizationUrl);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("client_id", config.clientId);
@@ -357,29 +362,33 @@ export async function clearTokens(provider: string): Promise<void> {
  */
 export async function anthropicOAuthLogin(opts?: {
   onAuthUrl?: (url: string) => void;
+  onWaitingForCode?: () => void;
 }): Promise<string> {
   const providerConfig = PROVIDER_CONFIGS.anthropic!;
-  const config: OAuthConfig = {
-    provider: "anthropic",
-    authorizationUrl: providerConfig.authorizationUrl!,
-    tokenUrl: providerConfig.tokenUrl!,
-    clientId: providerConfig.clientId!,
-    scopes: providerConfig.scopes!,
-    redirectPort: DEFAULT_REDIRECT_PORT,
-  };
+  const config = resolveProviderConfig("anthropic")!;
 
-  // Open browser for OAuth
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = await generateCodeChallenge(codeVerifier);
   const state = generateState();
-  const redirectUri = `http://127.0.0.1:${config.redirectPort}/callback`;
+
+  // Anthropic uses their own console callback — not a local server
+  const redirectUri = config.redirectUri ?? `http://127.0.0.1:${config.redirectPort}/callback`;
 
   const authUrl = buildAuthUrl(config, codeChallenge, state);
   opts?.onAuthUrl?.(authUrl);
   await openBrowser(authUrl);
 
-  // Wait for callback
-  const code = await waitForCallback(config.redirectPort, state);
+  let code: string;
+
+  if (config.redirectUri) {
+    // Manual code paste flow: Anthropic redirects to their console page
+    // which displays the authorization code for the user to copy
+    opts?.onWaitingForCode?.();
+    code = await waitForManualCode();
+  } else {
+    // Local callback server flow
+    code = await waitForCallback(config.redirectPort, state);
+  }
 
   // Exchange code for token
   const tokens = await exchangeCode(config, code, codeVerifier, redirectUri);
@@ -387,6 +396,32 @@ export async function anthropicOAuthLogin(opts?: {
   // Use the token to create a permanent API key
   const apiKey = await createAnthropicApiKey(tokens.accessToken);
   return apiKey;
+}
+
+/** Wait for the user to paste the authorization code from the browser */
+async function waitForManualCode(): Promise<string> {
+  const { createInterface } = await import("node:readline");
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => {
+        rl.close();
+        reject(new Error("Timed out waiting for authorization code (5 minutes)"));
+      },
+      5 * 60 * 1000,
+    );
+
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    rl.question("\n  Paste the authorization code from the browser: ", (answer) => {
+      clearTimeout(timeout);
+      rl.close();
+      const code = answer.trim();
+      if (!code) {
+        reject(new Error("No authorization code provided"));
+      } else {
+        resolve(code);
+      }
+    });
+  });
 }
 
 /** Use Anthropic OAuth token to create a permanent API key */

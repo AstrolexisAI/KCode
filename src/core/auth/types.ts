@@ -14,6 +14,8 @@ export interface OAuthConfig {
   exchangeForApiKey?: boolean;
   /** Human-readable label shown in UI */
   label?: string;
+  /** Override redirect URI (e.g., Anthropic uses their own console callback, not localhost) */
+  redirectUri?: string;
 }
 
 export interface OAuthTokens {

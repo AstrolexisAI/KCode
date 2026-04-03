@@ -107,39 +107,58 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
     gemini: "gemini",
   };
 
+  const copyToClipboard = (text: string) => {
+    try {
+      const { execSync } = require("node:child_process");
+      if (process.platform === "darwin") {
+        execSync("pbcopy", { input: text, timeout: 3000 });
+      } else if (process.platform === "linux") {
+        try {
+          execSync("xclip -selection clipboard", { input: text, timeout: 3000 });
+        } catch {
+          execSync("xsel --clipboard --input", { input: text, timeout: 3000 });
+        }
+      }
+    } catch {
+      // Clipboard not available
+    }
+  };
+
   const startOAuthFlow = async (provider: CloudProvider) => {
     setStage("oauth-pending");
     setOauthError(null);
     setOauthUrl(null);
+
+    const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
+
+    // For Anthropic: OAuth requires manual code paste which doesn't work in Ink.
+    // Open the API key creation page directly instead.
+    if (oauthName === "anthropic") {
+      const url = "https://console.anthropic.com/settings/keys";
+      console.error(`\n  Open this URL to create an Anthropic API key:\n\n  ${url}\n`);
+      copyToClipboard(url);
+      try {
+        const { openBrowser } = await import("../../core/auth/oauth-flow.js");
+        await openBrowser(url);
+      } catch { /* ok */ }
+      setOauthUrl(url);
+      // Switch to manual key input after showing the URL
+      setStage("input");
+      return;
+    }
+
     try {
       const { loginProvider } = await import("../../core/auth/oauth-flow.js");
-      const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
       const result = await loginProvider(oauthName, {
         onAuthUrl: (url) => {
           setOauthUrl(url);
-          // Print URL outside Ink's box so it's fully selectable in terminal (SSH-friendly)
           console.error(`\n  OAuth URL (copy this):\n\n  ${url}\n`);
-          // Also try clipboard
-          try {
-            const { execSync } = require("node:child_process");
-            if (process.platform === "darwin") {
-              execSync("pbcopy", { input: url, timeout: 3000 });
-            } else if (process.platform === "linux") {
-              try {
-                execSync("xclip -selection clipboard", { input: url, timeout: 3000 });
-              } catch {
-                execSync("xsel --clipboard --input", { input: url, timeout: 3000 });
-              }
-            }
-          } catch {
-            // Clipboard not available — URL is printed above
-          }
+          copyToClipboard(url);
         },
       });
       if (result.method === "api_key" && result.key) {
         onDone({ provider, apiKey: result.key, viaOAuth: true });
       } else {
-        // OAuth tokens stored — signal success with empty key (tokens in keychain)
         onDone({ provider, apiKey: "", viaOAuth: true });
       }
     } catch (err) {
