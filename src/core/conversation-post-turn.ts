@@ -41,7 +41,10 @@ export interface PostTurnContext {
   lastEmptyType: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" | undefined;
 
   /** Debug tracer (optional) */
-  debugTracer?: { isEnabled(): boolean; trace(category: string, event: string, detail: string, meta?: Record<string, unknown>): void } | null;
+  debugTracer?: {
+    isEnabled(): boolean;
+    trace(category: string, event: string, detail: string, meta?: Record<string, unknown>): void;
+  } | null;
 
   /** Callback to collect session data for partial progress */
   collectSessionData: () => {
@@ -246,9 +249,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         fullText = mergeResult.merged;
         const lastMsg = ctx.messages[ctx.messages.length - 1];
         if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
-          const textBlocks = (lastMsg.content as ContentBlock[]).filter(
-            (b) => b.type === "text",
-          );
+          const textBlocks = (lastMsg.content as ContentBlock[]).filter((b) => b.type === "text");
           if (textBlocks.length > 0) {
             (textBlocks[0]! as { type: string; text: string }).text = fullText;
           }
@@ -396,13 +397,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             config: autoMemConfig,
             projectPath: ctx.config.workingDirectory,
             model: ctx.config.tertiaryModel,
-          }).catch((err) =>
-            log.debug("auto-memory", `extraction failed: ${err?.message ?? err}`),
-          );
+          }).catch((err) => log.debug("auto-memory", `extraction failed: ${err?.message ?? err}`));
         })
-        .catch((err) =>
-          log.debug("auto-memory", `title fetch failed: ${err?.message ?? err}`),
-        );
+        .catch((err) => log.debug("auto-memory", `title fetch failed: ${err?.message ?? err}`));
     }
   } catch (err) {
     log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);

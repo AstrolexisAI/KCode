@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DataCollector, sanitizeForTraining } from "./data-collector";
 
@@ -53,7 +53,12 @@ describe("DataCollector", () => {
 
   it("records edited pairs", () => {
     const collector = createTestCollector();
-    collector.recordEdited("Write a function", "function foo() {}", "function bar() {}", "test-model");
+    collector.recordEdited(
+      "Write a function",
+      "function foo() {}",
+      "function bar() {}",
+      "test-model",
+    );
 
     const stats = collector.getStats();
     expect(stats.total).toBe(1);

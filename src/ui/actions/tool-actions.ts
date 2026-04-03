@@ -1097,7 +1097,10 @@ INSTRUCTIONS:
             `  RAG index rebuilt.`,
             `  Files: ${report.filesProcessed}, Chunks: ${report.chunksCreated}, Duration: ${report.durationMs}ms`,
             report.errors.length > 0
-              ? `  Errors: ${report.errors.length} (${report.errors.slice(0, 3).map((e) => e.file).join(", ")}${report.errors.length > 3 ? "..." : ""})`
+              ? `  Errors: ${report.errors.length} (${report.errors
+                  .slice(0, 3)
+                  .map((e) => e.file)
+                  .join(", ")}${report.errors.length > 3 ? "..." : ""})`
               : "",
           ]
             .filter(Boolean)
@@ -1149,7 +1152,8 @@ INSTRUCTIONS:
 
       if (subCmd === "search") {
         const query = parts.slice(1).join(" ").trim();
-        if (!query) return "  Usage: /rag search <query>\n  Performs semantic search over the indexed codebase.";
+        if (!query)
+          return "  Usage: /rag search <query>\n  Performs semantic search over the indexed codebase.";
 
         const engine = getRAGEngine(cwd);
         try {

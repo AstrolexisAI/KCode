@@ -31,7 +31,10 @@ function levelToBar(level: number): string {
   for (let i = 0; i < barLength; i++) {
     if (i < filled) {
       // Use progressively taller blocks for filled segments
-      const charIdx = Math.min(LEVEL_CHARS.length - 1, Math.round((i / barLength) * (LEVEL_CHARS.length - 1)));
+      const charIdx = Math.min(
+        LEVEL_CHARS.length - 1,
+        Math.round((i / barLength) * (LEVEL_CHARS.length - 1)),
+      );
       bar += LEVEL_CHARS[charIdx];
     } else {
       bar += LEVEL_CHARS[0];
@@ -81,9 +84,7 @@ export default function VoiceIndicator({ state, level, partialText }: VoiceIndic
     <Box flexDirection="row" gap={1}>
       <Text color={stateColor}>{icon}</Text>
       <Text color={stateColor}>{label}</Text>
-      {state === "listening" && (
-        <Text color={theme.accent}>{levelToBar(level)}</Text>
-      )}
+      {state === "listening" && <Text color={theme.accent}>{levelToBar(level)}</Text>}
       {partialText && (
         <Text color={theme.dimmed} italic>
           {partialText.length > 60 ? "..." + partialText.slice(-57) : partialText}

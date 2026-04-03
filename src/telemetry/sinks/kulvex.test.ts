@@ -1,8 +1,8 @@
 // KCode - Kulvex Telemetry Sink Tests
 
-import { describe, test, expect, beforeEach } from "bun:test";
-import { KulvexSink } from "./kulvex";
+import { beforeEach, describe, expect, test } from "bun:test";
 import type { TelemetryEvent } from "../types";
+import { KulvexSink } from "./kulvex";
 
 function makeEvent(name: string, attrs: Record<string, unknown> = {}): TelemetryEvent {
   return {

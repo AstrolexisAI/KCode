@@ -2,10 +2,10 @@
 // Checks GitHub Releases API for newer versions, downloads with SHA256 verification,
 // and replaces the running binary. Respects user settings (autoUpdate: false).
 
+import { execSync } from "node:child_process";
 import { chmodSync, existsSync, renameSync, unlinkSync } from "node:fs";
 import { arch, homedir, platform } from "node:os";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
 
@@ -122,7 +122,10 @@ export function getUpdateCheckInterval(): number {
     const settingsPath = kcodePath("settings.json");
     if (!existsSync(settingsPath)) return DEFAULT_CHECK_INTERVAL_MS;
     const settings = JSON.parse(require("node:fs").readFileSync(settingsPath, "utf-8"));
-    if (typeof settings.updateCheckIntervalDays === "number" && settings.updateCheckIntervalDays > 0) {
+    if (
+      typeof settings.updateCheckIntervalDays === "number" &&
+      settings.updateCheckIntervalDays > 0
+    ) {
       return settings.updateCheckIntervalDays * 24 * 60 * 60 * 1000;
     }
   } catch {
@@ -337,7 +340,11 @@ export async function downloadAndInstall(
       await writer.end();
     } catch (err) {
       // Clean up on error
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
       result.error = err instanceof Error ? err.message : "Download stream failed";
       return result;
     }
@@ -351,7 +358,11 @@ export async function downloadAndInstall(
       if (expected) {
         const actual = await computeSha256(tmpPath);
         if (actual !== expected) {
-          try { unlinkSync(tmpPath); } catch { /* ignore */ }
+          try {
+            unlinkSync(tmpPath);
+          } catch {
+            /* ignore */
+          }
           result.error = `Checksum verification failed. Expected: ${expected}, Got: ${actual}`;
           return result;
         }
@@ -365,7 +376,11 @@ export async function downloadAndInstall(
     // Find and replace binary
     const binaryPaths = findBinaryPaths();
     if (binaryPaths.length === 0) {
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
       result.error = "Could not find KCode binary path to replace.";
       return result;
     }
@@ -380,15 +395,25 @@ export async function downloadAndInstall(
       }
       renameSync(tmpPath, destPath);
       // Clean up backup
-      try { unlinkSync(backupPath); } catch { /* may be in use */ }
+      try {
+        unlinkSync(backupPath);
+      } catch {
+        /* may be in use */
+      }
     } catch (err) {
       // Restore backup if rename failed
       try {
         if (existsSync(backupPath)) {
           renameSync(backupPath, destPath);
         }
-      } catch { /* best effort */ }
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      } catch {
+        /* best effort */
+      }
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
       result.error = err instanceof Error ? err.message : "Binary replacement failed";
       return result;
     }
@@ -422,9 +447,7 @@ const NOTIFICATION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * Checks at most once every 24 hours, using a cached result otherwise.
  * Returns null if no update is available or check was done recently with no update.
  */
-export async function getUpdateNotification(
-  currentVersion: string,
-): Promise<string | null> {
+export async function getUpdateNotification(currentVersion: string): Promise<string | null> {
   const state = readCheckState();
 
   // If we have a recent check, use cached result
@@ -472,7 +495,9 @@ function findBinaryPaths(): string[] {
     if (which && !candidates.includes(which)) {
       candidates.unshift(which);
     }
-  } catch { /* not in PATH */ }
+  } catch {
+    /* not in PATH */
+  }
 
   for (const p of candidates) {
     if (existsSync(p)) {

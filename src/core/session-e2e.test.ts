@@ -3,10 +3,10 @@
 // rewind, forking, message restore, plan mode, and compaction
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ConversationManager } from "./conversation";
-import type { StreamEvent } from "./types";
 import { createTestEnv, type TestEnv } from "../test-harness/test-env";
 import { clearActivePlan, getActivePlan, type Plan } from "../tools/plan";
+import { ConversationManager } from "./conversation";
+import type { StreamEvent } from "./types";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -211,7 +211,10 @@ describe("Session E2E: message restore", () => {
     // Restore previous history
     cm.restoreMessages([
       { role: "user", content: "Previous question about TypeScript" },
-      { role: "assistant", content: [{ type: "text", text: "TypeScript is a typed superset of JavaScript." }] },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "TypeScript is a typed superset of JavaScript." }],
+      },
     ]);
 
     expect(cm.getState().messages).toHaveLength(2);

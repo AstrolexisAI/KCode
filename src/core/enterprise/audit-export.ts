@@ -4,8 +4,8 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { log } from "../logger";
 import { getDb } from "../db";
+import { log } from "../logger";
 
 // ─── Types ──────────────────────────────────────────────────────
 

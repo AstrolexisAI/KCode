@@ -39,7 +39,10 @@ export function installSignalHandlers(cleanup: () => void | Promise<void>): void
  */
 export function chmodCompat(filePath: string, mode: number): void {
   if (isWindows()) {
-    log.debug("windows-compat", `chmod is a no-op on Windows: ${filePath} (mode ${mode.toString(8)})`);
+    log.debug(
+      "windows-compat",
+      `chmod is a no-op on Windows: ${filePath} (mode ${mode.toString(8)})`,
+    );
     return;
   }
   const { chmodSync } = require("node:fs");
@@ -72,7 +75,10 @@ export function symlinkCompat(target: string, linkPath: string): void {
         } catch {
           // Fallback: copy the file if hard link fails (e.g., cross-device)
           fs.copyFileSync(resolvedTarget, linkPath);
-          log.debug("windows-compat", `Copied file (hard link failed): ${linkPath} <- ${resolvedTarget}`);
+          log.debug(
+            "windows-compat",
+            `Copied file (hard link failed): ${linkPath} <- ${resolvedTarget}`,
+          );
         }
       }
     } catch (err) {

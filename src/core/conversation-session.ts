@@ -5,13 +5,7 @@ import { getBranchManager } from "./branch-manager";
 import { log } from "./logger";
 import { CHARS_PER_TOKEN } from "./token-budget";
 import { TranscriptManager } from "./transcript";
-import type {
-  ConversationState,
-  KCodeConfig,
-  Message,
-  TokenUsage,
-  TurnCostEntry,
-} from "./types";
+import type { ConversationState, KCodeConfig, Message, TokenUsage, TurnCostEntry } from "./types";
 
 // ─── Functions ───────────────────────────────────────────────────
 

@@ -22,9 +22,7 @@ const STATIC_ASSETS = [
 // ─── Install: pre-cache static assets ──────────────────────────
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
   // Activate immediately without waiting for existing clients to close
   self.skipWaiting();
 });
@@ -33,13 +31,11 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
+      ),
   );
   // Take control of all open clients immediately
   self.clients.claim();
@@ -117,22 +113,20 @@ self.addEventListener("notificationclick", (event) => {
         body: JSON.stringify({ action: action === "allow" ? "allow" : "deny" }),
       }).catch(() => {
         // If the API call fails, just focus the window
-      })
+      }),
     );
   }
 
   // Focus the KCode window or open a new one
   event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clients) => {
-        for (const client of clients) {
-          if (client.url.includes(self.location.origin) && "focus" in client) {
-            return client.focus();
-          }
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          return client.focus();
         }
-        return self.clients.openWindow("/");
-      })
+      }
+      return self.clients.openWindow("/");
+    }),
   );
 });
 
@@ -174,12 +168,9 @@ async function networkFirst(request) {
     const cached = await caches.match(request);
     if (cached) return cached;
 
-    return new Response(
-      JSON.stringify({ error: "Offline", offline: true }),
-      {
-        status: 503,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return new Response(JSON.stringify({ error: "Offline", offline: true }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }

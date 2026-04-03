@@ -3,8 +3,8 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createHmac } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // Set up isolated KCODE_HOME before importing modules
 const TEST_HOME = join(tmpdir(), `kcode-payments-test-${Date.now()}`);

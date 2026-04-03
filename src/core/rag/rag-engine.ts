@@ -2,7 +2,7 @@
 // Orchestrates the chunk → embed → store → search pipeline
 // Uses code-chunker for splitting, pluggable embedder, and SQLite vector store.
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
@@ -38,13 +38,35 @@ export interface IndexDirectoryOptions {
 // ─── Constants ──────────────────────────────────────────────────
 
 const DEFAULT_EXTENSIONS = [
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".go", ".rs", ".java", ".c", ".cpp", ".cc", ".h", ".hpp",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".c",
+  ".cpp",
+  ".cc",
+  ".h",
+  ".hpp",
 ];
 
 const DEFAULT_IGNORE = [
-  "node_modules", ".git", "dist", "build", "out", ".next",
-  "vendor", "target", "__pycache__", ".venv", "coverage",
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  "vendor",
+  "target",
+  "__pycache__",
+  ".venv",
+  "coverage",
 ];
 
 // ─── RagEngine ──────────────────────────────────────────────────
@@ -100,10 +122,7 @@ export class RagEngine {
   /**
    * Index an entire directory recursively.
    */
-  async indexDirectory(
-    dir: string,
-    options?: IndexDirectoryOptions,
-  ): Promise<IndexStats> {
+  async indexDirectory(dir: string, options?: IndexDirectoryOptions): Promise<IndexStats> {
     const start = Date.now();
     const extensions = new Set(options?.extensions ?? DEFAULT_EXTENSIONS);
     const ignore = new Set(options?.ignore ?? DEFAULT_IGNORE);
@@ -151,10 +170,7 @@ export class RagEngine {
     await walk(dir);
 
     const duration = Date.now() - start;
-    log.info(
-      "rag",
-      `Indexed ${filesProcessed} files, ${chunksCreated} chunks in ${duration}ms`,
-    );
+    log.info("rag", `Indexed ${filesProcessed} files, ${chunksCreated} chunks in ${duration}ms`);
 
     return { filesProcessed, chunksCreated, duration, errors };
   }

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FineTuner, type FineTuneConfig } from "./fine-tuner";
+import { type FineTuneConfig, FineTuner } from "./fine-tuner";
 
 const TEST_DIR = join(import.meta.dir, ".test-fine-tuner");
 

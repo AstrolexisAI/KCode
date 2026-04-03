@@ -1,10 +1,19 @@
 // KCode - Training Data Collector
 // Collects accepted/rejected/edited interaction pairs for fine-tuning
 
-import { mkdirSync, existsSync, renameSync, statSync, appendFileSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { kcodePath } from "../paths";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { log } from "../logger";
+import { kcodePath } from "../paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -116,7 +125,13 @@ export class DataCollector {
 
   /** Get statistics about collected training data. */
   getStats(): DataCollectorStats {
-    const stats: DataCollectorStats = { total: 0, accepted: 0, rejected: 0, edited: 0, sizeBytes: 0 };
+    const stats: DataCollectorStats = {
+      total: 0,
+      accepted: 0,
+      rejected: 0,
+      edited: 0,
+      sizeBytes: 0,
+    };
 
     if (!existsSync(this.filePath)) return stats;
 
@@ -230,7 +245,10 @@ export class DataCollector {
       if (size >= MAX_SIZE_BYTES) {
         const archivePath = join(this.dataDir, `pairs-${Date.now()}.jsonl.archive`);
         renameSync(this.filePath, archivePath);
-        log.info("training", `Rotated training data to ${archivePath} (${(size / 1024 / 1024).toFixed(1)} MB)`);
+        log.info(
+          "training",
+          `Rotated training data to ${archivePath} (${(size / 1024 / 1024).toFixed(1)} MB)`,
+        );
       }
     } catch (err) {
       log.error("training", `Failed to rotate training data: ${err}`);

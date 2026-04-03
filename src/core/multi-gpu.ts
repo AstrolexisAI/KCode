@@ -16,10 +16,7 @@ import type { GpuInfo } from "./hardware";
  * @param modelSizeGB - Total model size in GB (used for validation, not ratios)
  * @returns Array of split ratios (one per GPU), or empty array if no GPUs
  */
-export function calculateOptimalTensorSplit(
-  gpus: GpuInfo[],
-  modelSizeGB: number,
-): number[] {
+export function calculateOptimalTensorSplit(gpus: GpuInfo[], modelSizeGB: number): number[] {
   if (!gpus || gpus.length === 0) return [];
   if (gpus.length === 1) return [1.0];
 
@@ -54,10 +51,7 @@ export function formatTensorSplit(ratios: number[]): string {
  * Check if the model fits across all GPUs combined.
  * Reserves ~20% headroom for KV cache and runtime overhead.
  */
-export function modelFitsMultiGpu(
-  gpus: GpuInfo[],
-  modelSizeGB: number,
-): boolean {
+export function modelFitsMultiGpu(gpus: GpuInfo[], modelSizeGB: number): boolean {
   if (!gpus || gpus.length === 0) return false;
   const totalVramGB = gpus.reduce((sum, g) => sum + g.vramMB, 0) / 1024;
   // Need at least model size + 20% headroom for KV cache

@@ -2,12 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import {
-  getTrialDaysRemaining,
-  isTrialExpired,
-  isTrialKey,
-  validateKeyChecksum,
-} from "./pro";
+import { getTrialDaysRemaining, isTrialExpired, isTrialKey, validateKeyChecksum } from "./pro";
 
 // ── Helper: build a trial key with valid checksum ──────────────
 function buildTrialKey(expiryTimestamp: number): string {

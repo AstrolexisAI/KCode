@@ -49,7 +49,9 @@ export class StreamingASR {
         const writer = this.process.stdin as unknown as WritableStream;
         const writable = writer.getWriter?.();
         if (writable) {
-          writable.write(new Uint8Array(int16.buffer)).catch((e) => { log.debug("asr", `Audio stream write error: ${e}`); });
+          writable.write(new Uint8Array(int16.buffer)).catch((e) => {
+            log.debug("asr", `Audio stream write error: ${e}`);
+          });
           writable.releaseLock();
         }
       } catch (err) {
@@ -68,7 +70,9 @@ export class StreamingASR {
     if (this.process) {
       try {
         this.process.kill();
-      } catch { /* cleanup — ignore failures */ }
+      } catch {
+        /* cleanup — ignore failures */
+      }
       this.process = null;
     }
     this.chunkBuffer = [];
@@ -193,10 +197,14 @@ export class StreamingASR {
     } finally {
       try {
         unlinkSync(tempPath);
-      } catch { /* cleanup — ignore failures */ }
+      } catch {
+        /* cleanup — ignore failures */
+      }
       try {
         unlinkSync(tempPath.replace(".wav", ".txt"));
-      } catch { /* cleanup — ignore failures */ }
+      } catch {
+        /* cleanup — ignore failures */
+      }
     }
   }
 

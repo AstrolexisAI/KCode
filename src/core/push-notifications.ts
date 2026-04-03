@@ -178,12 +178,7 @@ function buildInfo(
 /**
  * HKDF-SHA-256 extract + expand (RFC 5869), single-block only (output <= 32 bytes).
  */
-function hkdf(
-  salt: Buffer,
-  ikm: Buffer,
-  info: Buffer,
-  length: number,
-): Buffer {
+function hkdf(salt: Buffer, ikm: Buffer, info: Buffer, length: number): Buffer {
   const prk = createHmac("sha256", salt).update(ikm).digest();
   const infoHash = createHmac("sha256", prk)
     .update(Buffer.concat([info, Buffer.from([1])]))
@@ -212,9 +207,7 @@ export function encryptPayload(
   const sharedSecret = serverECDH.computeSecret(clientPublicKey);
 
   // Derive auth info
-  const authInfo = Buffer.concat([
-    Buffer.from("Content-Encoding: auth\0"),
-  ]);
+  const authInfo = Buffer.concat([Buffer.from("Content-Encoding: auth\0")]);
 
   // IKM from auth secret
   const ikm = hkdf(clientAuth, sharedSecret, authInfo, 32);
@@ -223,18 +216,8 @@ export function encryptPayload(
   const salt = randomBytes(16);
 
   // Derive content encryption key and nonce
-  const contentKey = hkdf(
-    salt,
-    ikm,
-    buildInfo("aesgcm", clientPublicKey, serverPublicKey),
-    16,
-  );
-  const nonce = hkdf(
-    salt,
-    ikm,
-    buildInfo("nonce", clientPublicKey, serverPublicKey),
-    12,
-  );
+  const contentKey = hkdf(salt, ikm, buildInfo("aesgcm", clientPublicKey, serverPublicKey), 16);
+  const nonce = hkdf(salt, ikm, buildInfo("nonce", clientPublicKey, serverPublicKey), 12);
 
   // Pad payload with 2-byte padding length prefix (0 padding)
   const padding = Buffer.alloc(2, 0);
@@ -469,8 +452,5 @@ export async function notifyTaskComplete(summary: string): Promise<void> {
   };
 
   const result = await broadcastPush(payload, vapidKeys);
-  log.info(
-    "push",
-    `Task complete notification: ${result.sent} sent, ${result.failed} failed`,
-  );
+  log.info("push", `Task complete notification: ${result.sent} sent, ${result.failed} failed`);
 }

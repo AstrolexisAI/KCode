@@ -70,8 +70,7 @@ export function SessionViewer({ authToken }: { authToken: string }) {
 
           <div style={styles.pagination}>
             <span style={styles.paginationInfo}>
-              Showing {offset + 1}-
-              {Math.min(offset + data.messages.length, data.total)} of{" "}
+              Showing {offset + 1}-{Math.min(offset + data.messages.length, data.total)} of{" "}
               {data.total}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
@@ -84,10 +83,7 @@ export function SessionViewer({ authToken }: { authToken: string }) {
                 </button>
               )}
               {offset + limit < data.total && (
-                <button
-                  style={styles.pageBtn}
-                  onClick={() => setOffset(offset + limit)}
-                >
+                <button style={styles.pageBtn} onClick={() => setOffset(offset + limit)}>
                   Next
                 </button>
               )}
@@ -126,7 +122,13 @@ function MessageContent({ content }: { content: string }) {
   }
 
   // Split on code blocks and tool patterns
-  const parts: Array<{ type: "text" | "code" | "tool"; value: string; lang?: string; result?: string; isError?: boolean }> = [];
+  const parts: Array<{
+    type: "text" | "code" | "tool";
+    value: string;
+    lang?: string;
+    result?: string;
+    isError?: boolean;
+  }> = [];
   const codeBlockRe = /```(\w*)\n?([\s\S]*?)```/g;
   const toolRe = /\[tool:\s*(\w+)\]/g;
 
@@ -136,7 +138,7 @@ function MessageContent({ content }: { content: string }) {
   // First pass: extract code blocks
   const withCodePlaceholders: string[] = [];
   const codeBlocks: Array<{ lang: string; code: string }> = [];
-  let tempContent = content;
+  const tempContent = content;
   while ((match = codeBlockRe.exec(content)) !== null) {
     if (match.index > lastIdx) {
       withCodePlaceholders.push(content.slice(lastIdx, match.index));

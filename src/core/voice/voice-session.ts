@@ -30,7 +30,9 @@ export class AudioRecorder {
     if (this.process) {
       try {
         this.process.kill();
-      } catch { /* cleanup — ignore failures */ }
+      } catch {
+        /* cleanup — ignore failures */
+      }
       this.process = null;
     }
   }

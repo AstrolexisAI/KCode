@@ -8,14 +8,13 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { executeRead } from "../tools/read";
-import { executeWrite } from "../tools/write";
-import { executeEdit } from "../tools/edit";
 import { executeBash } from "../tools/bash";
+import { executeEdit } from "../tools/edit";
 import { executeGlob } from "../tools/glob";
 import { executeGrep } from "../tools/grep";
+import { executeRead } from "../tools/read";
 import { setToolWorkspace } from "../tools/workspace";
+import { executeWrite } from "../tools/write";
 import { ToolRegistry } from "./tool-registry";
 
 // ─── Shared State ────────────────────────────────────────────────

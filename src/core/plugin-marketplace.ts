@@ -193,9 +193,7 @@ export async function installPlugin(name: string, version?: string): Promise<voi
   }
 
   if (version && version !== plugin.version) {
-    throw new Error(
-      `Version "${version}" not available for "${name}". Latest: ${plugin.version}`,
-    );
+    throw new Error(`Version "${version}" not available for "${name}". Latest: ${plugin.version}`);
   }
 
   const pluginDir = join(PLUGINS_DIR, name);

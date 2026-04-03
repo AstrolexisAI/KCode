@@ -165,7 +165,9 @@ export async function startOAuthFlow(
 
 /** Build the authorization URL without starting the flow */
 export function buildAuthUrl(config: OAuthConfig, codeChallenge: string, state: string): string {
-  const redirectUri = config.redirectUri ?? `http://127.0.0.1:${config.redirectPort || DEFAULT_REDIRECT_PORT}/callback`;
+  const redirectUri =
+    config.redirectUri ??
+    `http://127.0.0.1:${config.redirectPort || DEFAULT_REDIRECT_PORT}/callback`;
   const authUrl = new URL(config.authorizationUrl);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("client_id", config.clientId);
@@ -426,17 +428,14 @@ async function waitForManualCode(): Promise<string> {
 
 /** Use Anthropic OAuth token to create a permanent API key */
 async function createAnthropicApiKey(accessToken: string): Promise<string> {
-  const response = await fetch(
-    "https://api.anthropic.com/api/oauth/claude_cli/create_api_key",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name: "KCode CLI" }),
+  const response = await fetch("https://api.anthropic.com/api/oauth/claude_cli/create_api_key", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({ name: "KCode CLI" }),
+  });
 
   if (!response.ok) {
     const text = await response.text();
@@ -503,8 +502,9 @@ export async function getProviderAuthStatus(providerName: string): Promise<{
   // Check CLI bridges first (Claude Code for Anthropic, Codex for OpenAI)
   if (providerName === "anthropic") {
     try {
-      const { isClaudeCodeAuthenticated, getClaudeCodeAuthInfo } =
-        await import("./claude-code-bridge.js");
+      const { isClaudeCodeAuthenticated, getClaudeCodeAuthInfo } = await import(
+        "./claude-code-bridge.js"
+      );
       if (isClaudeCodeAuthenticated()) {
         const info = getClaudeCodeAuthInfo();
         return {
@@ -516,13 +516,14 @@ export async function getProviderAuthStatus(providerName: string): Promise<{
           detail: info.subscriptionType ? `${info.subscriptionType} plan` : undefined,
         };
       }
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
   }
 
   if (providerName === "openai-codex") {
     try {
-      const { isCodexAuthenticated, getCodexAuthInfo } =
-        await import("./claude-code-bridge.js");
+      const { isCodexAuthenticated, getCodexAuthInfo } = await import("./claude-code-bridge.js");
       if (isCodexAuthenticated()) {
         const info = getCodexAuthInfo();
         return {
@@ -533,7 +534,9 @@ export async function getProviderAuthStatus(providerName: string): Promise<{
           detail: info.authMode === "chatgpt" ? "ChatGPT subscription" : info.authMode,
         };
       }
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
   }
 
   // Check OAuth tokens

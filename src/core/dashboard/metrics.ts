@@ -219,7 +219,9 @@ export async function getProjectName(dir: string): Promise<string> {
       const json = await pkg.json();
       if (json?.name) return json.name;
     }
-  } catch { /* cleanup — ignore failures */ }
+  } catch {
+    /* cleanup — ignore failures */
+  }
   // Try Cargo.toml
   try {
     const cargo = Bun.file(`${dir}/Cargo.toml`);
@@ -228,7 +230,9 @@ export async function getProjectName(dir: string): Promise<string> {
       const match = text.match(/^name\s*=\s*"([^"]+)"/m);
       if (match) return match[1]!;
     }
-  } catch { /* cleanup — ignore failures */ }
+  } catch {
+    /* cleanup — ignore failures */
+  }
   // Fallback to directory name
   return dir.split("/").pop() ?? "unknown";
 }
@@ -271,7 +275,9 @@ export async function countDependencies(
         );
       outdated = lines.length;
     }
-  } catch { /* cleanup — ignore failures */ }
+  } catch {
+    /* cleanup — ignore failures */
+  }
 
   return { total, outdated, vulnerable };
 }

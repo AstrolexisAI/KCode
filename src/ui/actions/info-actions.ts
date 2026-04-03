@@ -58,12 +58,16 @@ export async function handleInfoAction(action: string, ctx: ActionContext): Prom
 
       // Show subscription rate limit usage if available
       try {
-        const { getRateLimitUsage, formatRateLimitBar } = await import("../../core/request-builder.js");
+        const { getRateLimitUsage, formatRateLimitBar } = await import(
+          "../../core/request-builder.js"
+        );
         const rlUsage = getRateLimitUsage();
         if (rlUsage) {
           lines.push("", formatRateLimitBar(rlUsage));
         }
-      } catch { /* not available */ }
+      } catch {
+        /* not available */
+      }
 
       return lines.join("\n");
     }

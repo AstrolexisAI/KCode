@@ -4,10 +4,10 @@
 import { Box, Text, useApp } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
+import { getRateLimitUsage } from "../core/request-builder.js";
 import { SkillManager } from "../core/skills.js";
 import { CHARS_PER_TOKEN } from "../core/token-budget.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
-import { getRateLimitUsage } from "../core/request-builder.js";
 import type { KCodeConfig } from "../core/types.js";
 import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 import ActivePlanPanel from "./components/ActivePlanPanel.js";
@@ -15,16 +15,16 @@ import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
 import ContextGrid from "./components/ContextGrid.js";
 import Header from "./components/Header.js";
 import InputPrompt from "./components/InputPrompt.js";
+import InteractiveQuestion from "./components/InteractiveQuestion.js";
 import { KeybindingProvider } from "./components/KeybindingContext.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
 import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
-import InteractiveQuestion from "./components/InteractiveQuestion.js";
-import QuestionDialog from "./components/QuestionDialog.js";
 import PermissionDialog, {
   type PermissionChoice,
   type PermissionRequest,
 } from "./components/PermissionDialog.js";
+import QuestionDialog from "./components/QuestionDialog.js";
 import SudoPasswordPrompt from "./components/SudoPasswordPrompt.js";
 import ToolTabs from "./components/ToolTabs.js";
 import VirtualMessageList from "./components/VirtualMessageList.js";
@@ -210,7 +210,11 @@ export default function App({ config, conversationManager, tools, initialSession
           }
           setCompleted((prev) => [
             ...prev,
-            { kind: "text", role: "assistant", text: `  Switched to ${lastModel} from previous session.` },
+            {
+              kind: "text",
+              role: "assistant",
+              text: `  Switched to ${lastModel} from previous session.`,
+            },
           ]);
         })();
       } else {

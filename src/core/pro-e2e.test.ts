@@ -15,13 +15,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { kcodePath } from "./paths";
-import {
-  clearProCache,
-  FREE_LIMITS,
-  loadProCache,
-  PRO_FEATURES,
-  validateKeyChecksum,
-} from "./pro";
+import { clearProCache, FREE_LIMITS, loadProCache, PRO_FEATURES, validateKeyChecksum } from "./pro";
 
 const PRO_CACHE_FILE = kcodePath("pro-cache.json");
 const PRO_CACHE_SALT_FILE = kcodePath(".pro-cache-salt");

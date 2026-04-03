@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
-  sanitizeMcpInput,
-  validateStdioCommand,
-  McpServerConnection,
-  McpHttpConnection,
-  type McpServerConfig,
-  type McpToolSchema,
-  type JsonRpcRequest,
-  type JsonRpcResponse,
   type ElicitationCallback,
   type ElicitationResponse,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  McpHttpConnection,
+  type McpServerConfig,
+  McpServerConnection,
   type McpServersConfig,
+  type McpToolSchema,
+  sanitizeMcpInput,
+  validateStdioCommand,
 } from "./mcp-client.ts";
 
 import { isToolAllowedByConfig, mcpToolGlobMatch } from "./mcp-tools.ts";
@@ -306,7 +306,19 @@ describe("validateStdioCommand", () => {
 
   // ─── All dangerous shells enumeration ────────────────────────
 
-  const allShells = ["sh", "bash", "zsh", "fish", "csh", "tcsh", "dash", "ksh", "cmd", "powershell", "pwsh"];
+  const allShells = [
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "csh",
+    "tcsh",
+    "dash",
+    "ksh",
+    "cmd",
+    "powershell",
+    "pwsh",
+  ];
 
   for (const shell of allShells) {
     test(`blocks "${shell}" via absolute path /usr/bin/${shell}`, () => {
@@ -316,7 +328,21 @@ describe("validateStdioCommand", () => {
 
   // ─── Allowlist commands enumeration ──────────────────────────
 
-  const allowlisted = ["npx", "node", "bun", "bunx", "deno", "python", "python3", "pip", "pipx", "uvx", "docker", "podman", "mcp-server"];
+  const allowlisted = [
+    "npx",
+    "node",
+    "bun",
+    "bunx",
+    "deno",
+    "python",
+    "python3",
+    "pip",
+    "pipx",
+    "uvx",
+    "docker",
+    "podman",
+    "mcp-server",
+  ];
 
   for (const cmd of allowlisted) {
     test(`allows allowlisted command "${cmd}" in safe-plugins mode`, () => {
@@ -563,11 +589,31 @@ describe("JSON-RPC message format", () => {
   });
 
   test("standard JSON-RPC error codes", () => {
-    const parseError: JsonRpcResponse = { jsonrpc: "2.0", id: 1, error: { code: -32700, message: "Parse error" } };
-    const invalidReq: JsonRpcResponse = { jsonrpc: "2.0", id: 2, error: { code: -32600, message: "Invalid Request" } };
-    const notFound: JsonRpcResponse = { jsonrpc: "2.0", id: 3, error: { code: -32601, message: "Method not found" } };
-    const invalidParams: JsonRpcResponse = { jsonrpc: "2.0", id: 4, error: { code: -32602, message: "Invalid params" } };
-    const internalErr: JsonRpcResponse = { jsonrpc: "2.0", id: 5, error: { code: -32603, message: "Internal error" } };
+    const parseError: JsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: 1,
+      error: { code: -32700, message: "Parse error" },
+    };
+    const invalidReq: JsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: 2,
+      error: { code: -32600, message: "Invalid Request" },
+    };
+    const notFound: JsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: 3,
+      error: { code: -32601, message: "Method not found" },
+    };
+    const invalidParams: JsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: 4,
+      error: { code: -32602, message: "Invalid params" },
+    };
+    const internalErr: JsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: 5,
+      error: { code: -32603, message: "Internal error" },
+    };
     expect(parseError.error!.code).toBe(-32700);
     expect(invalidReq.error!.code).toBe(-32600);
     expect(notFound.error!.code).toBe(-32601);
@@ -603,7 +649,7 @@ describe("McpToolSchema", () => {
     expect(schema.description).toContain("Read");
     const props = schema.inputSchema!.properties as Record<string, unknown>;
     expect(props.path).toEqual({ type: "string", description: "File path" });
-    expect((schema.inputSchema!.required as string[])).toContain("path");
+    expect(schema.inputSchema!.required as string[]).toContain("path");
   });
 
   test("tool schema with no input params", () => {
@@ -892,10 +938,7 @@ describe("sanitizeMcpInput: edge cases", () => {
 
   test("deeply nested arrays with objects", () => {
     const input = {
-      list: [
-        { nested: { value: 1 } },
-        { nested: { value: 2 } },
-      ],
+      list: [{ nested: { value: 1 } }, { nested: { value: 2 } }],
     };
     const result = sanitizeMcpInput(input);
     const list = result.list as Array<{ nested: { value: number } }>;

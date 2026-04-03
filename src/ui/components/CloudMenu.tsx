@@ -145,11 +145,15 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
       }
       if (oauthName === "openai-codex" && bridge.isCodexAuthenticated()) {
         const info = bridge.getCodexAuthInfo();
-        setCliDetail(`OpenAI Codex CLI (${info.authMode === "chatgpt" ? "ChatGPT subscription" : "authenticated"})`);
+        setCliDetail(
+          `OpenAI Codex CLI (${info.authMode === "chatgpt" ? "ChatGPT subscription" : "authenticated"})`,
+        );
         setStage("cli-detected");
         return;
       }
-    } catch { /* bridge not available */ }
+    } catch {
+      /* bridge not available */
+    }
 
     setStage("oauth-pending");
 
@@ -160,7 +164,9 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
       try {
         const { openBrowser } = await import("../../core/auth/oauth-flow.js");
         await openBrowser(url);
-      } catch { /* ok */ }
+      } catch {
+        /* ok */
+      }
       setOauthUrl(url);
       setStage("input");
       return;
@@ -359,22 +365,20 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
             </Text>
           </Box>
           <Box marginTop={1}>
-            <Text color={theme.warning}>
-              Waiting for browser authentication...
-            </Text>
+            <Text color={theme.warning}>Waiting for browser authentication...</Text>
           </Box>
           {oauthUrl && (
             <Box marginTop={1} flexDirection="column">
               <Text dimColor>Open this URL in your browser (copied to clipboard):</Text>
               <Text> </Text>
-              <Text color={theme.info ?? theme.accent} wrap="wrap">{oauthUrl}</Text>
+              <Text color={theme.info ?? theme.accent} wrap="wrap">
+                {oauthUrl}
+              </Text>
             </Box>
           )}
           {!oauthUrl && (
             <Box>
-              <Text dimColor>
-                Opening browser for {selectedProvider.name} login...
-              </Text>
+              <Text dimColor>Opening browser for {selectedProvider.name} login...</Text>
             </Box>
           )}
           <Box marginTop={1}>
@@ -392,22 +396,22 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
             </Text>
           </Box>
           <Box marginTop={1}>
-            <Text color={theme.success}>
-              Existing authentication detected: {cliDetail}
-            </Text>
+            <Text color={theme.success}>Existing authentication detected: {cliDetail}</Text>
           </Box>
           <Box marginTop={1}>
-            <Text>
-              KCode will reuse this login automatically. No API key needed.
-            </Text>
+            <Text>KCode will reuse this login automatically. No API key needed.</Text>
           </Box>
           <Box marginTop={1} gap={2}>
             <Text>
-              <Text bold color={theme.success}>[y]</Text>
+              <Text bold color={theme.success}>
+                [y]
+              </Text>
               <Text> Use existing login</Text>
             </Text>
             <Text>
-              <Text bold color={theme.error}>[n]</Text>
+              <Text bold color={theme.error}>
+                [n]
+              </Text>
               <Text> Configure manually</Text>
             </Text>
           </Box>

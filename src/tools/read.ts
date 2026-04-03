@@ -3,7 +3,7 @@
 // Supports images (PNG, JPG, GIF, WEBP), PDFs, Office documents, and Jupyter notebooks
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative, resolve } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
@@ -16,7 +16,17 @@ const MAX_PDF_PAGES = 20;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
 const PDF_EXTENSION = ".pdf";
 const NOTEBOOK_EXTENSION = ".ipynb";
-const OFFICE_EXTENSIONS = new Set([".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp"]);
+const OFFICE_EXTENSIONS = new Set([
+  ".docx",
+  ".doc",
+  ".xlsx",
+  ".xls",
+  ".pptx",
+  ".ppt",
+  ".odt",
+  ".ods",
+  ".odp",
+]);
 
 export const readDefinition: ToolDefinition = {
   name: "Read",
@@ -408,9 +418,7 @@ function readOfficeDocument(filePath: string): ToolResult {
 
     // Find the output file (libreoffice names it based on input filename)
     const outputFiles = readdirSync(tmpDir);
-    const outputFile = outputFiles.find(
-      (f) => f.endsWith(".txt") || f.endsWith(".csv"),
-    );
+    const outputFile = outputFiles.find((f) => f.endsWith(".txt") || f.endsWith(".csv"));
 
     if (!outputFile) {
       return {
@@ -444,7 +452,9 @@ function readOfficeDocument(filePath: string): ToolResult {
       .join("\n");
 
     const overflow =
-      lineCount > MAX_LINES ? `\n\n[Showing ${MAX_LINES} of ${lineCount} lines. Use offset/limit to read more.]` : "";
+      lineCount > MAX_LINES
+        ? `\n\n[Showing ${MAX_LINES} of ${lineCount} lines. Use offset/limit to read more.]`
+        : "";
 
     return {
       tool_use_id: "",

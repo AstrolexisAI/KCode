@@ -485,9 +485,7 @@ export async function runSetup(options?: {
   const memLabel = hw.totalVramMB > 0 ? "VRAM" : "RAM";
 
   console.log();
-  console.log(
-    `    ${C.dim}┌──────────────────────────────────────────────┐${C.reset}`,
-  );
+  console.log(`    ${C.dim}┌──────────────────────────────────────────────┐${C.reset}`);
   console.log(
     `    ${C.dim}│${C.reset}  ${C.bold}Parallel Sessions${C.reset}  ${C.cyan}${C.bold}${concurrency.parallelSlots}${C.reset} simultaneous users     ${C.dim}│${C.reset}`,
   );
@@ -503,9 +501,7 @@ export async function runSetup(options?: {
   console.log(
     `    ${C.dim}│${C.reset}  ${C.bold}KV Cache${C.reset}           ${C.dim}q4_0 quantized (4x smaller)${C.reset}  ${C.dim}│${C.reset}`,
   );
-  console.log(
-    `    ${C.dim}└──────────────────────────────────────────────┘${C.reset}`,
-  );
+  console.log(`    ${C.dim}└──────────────────────────────────────────────┘${C.reset}`);
 
   if (concurrency.parallelSlots > 1) {
     console.log(
@@ -634,9 +630,10 @@ export async function runSetup(options?: {
   //  Complete!
   // ═══════════════════════════════════════════════════════════════
 
-  const slotsLabel = concurrency.parallelSlots > 1
-    ? `${concurrency.parallelSlots} slots × ${(concurrency.contextPerSlot / 1024).toFixed(0)}K ctx`
-    : `1 slot × ${(concurrency.contextPerSlot / 1024).toFixed(0)}K ctx`;
+  const slotsLabel =
+    concurrency.parallelSlots > 1
+      ? `${concurrency.parallelSlots} slots × ${(concurrency.contextPerSlot / 1024).toFixed(0)}K ctx`
+      : `1 slot × ${(concurrency.contextPerSlot / 1024).toFixed(0)}K ctx`;
   const successBox = [
     `    ${C.green}╔══════════════════════════════════════════════╗${C.reset}`,
     `    ${C.green}║${C.reset}                                              ${C.green}║${C.reset}`,

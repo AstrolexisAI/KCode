@@ -41,7 +41,14 @@ const ACTION_MAPPINGS: ActionMapping[] = [
   },
   {
     action: "clear",
-    patterns: [/^borrar$/i, /^delete$/i, /^clear$/i, /^limpiar$/i, /^borrar todo$/i, /^clear all$/i],
+    patterns: [
+      /^borrar$/i,
+      /^delete$/i,
+      /^clear$/i,
+      /^limpiar$/i,
+      /^borrar todo$/i,
+      /^clear all$/i,
+    ],
   },
 ];
 

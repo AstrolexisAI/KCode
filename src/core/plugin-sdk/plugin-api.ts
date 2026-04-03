@@ -143,9 +143,7 @@ export class PluginAPI {
     try {
       const tools = await import("../../tools/index");
       const allTools = tools.getRegisteredTools?.() ?? tools.default ?? [];
-      const tool = Array.isArray(allTools)
-        ? allTools.find((t: any) => t.name === name)
-        : null;
+      const tool = Array.isArray(allTools) ? allTools.find((t: any) => t.name === name) : null;
       if (!tool) {
         return {
           success: false,

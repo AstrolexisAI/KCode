@@ -1,12 +1,12 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import {
-  parseNvidiaSmiOutput,
-  formatGpuStatusTable,
-  checkGpuAlerts,
   calculateTensorSplit,
-  getRecommendedLlamaArgs,
+  checkGpuAlerts,
+  formatGpuStatusTable,
   formatStatusBarGpu,
   type GpuStatus,
+  getRecommendedLlamaArgs,
+  parseNvidiaSmiOutput,
 } from "./gpu-orchestrator";
 
 // ─── parseNvidiaSmiOutput ───────────────────────────────────────
@@ -425,16 +425,37 @@ describe("calculateTensorSplit", () => {
   it("handles three GPUs", () => {
     const gpus: GpuStatus[] = [
       {
-        index: 0, name: "GPU A", vramTotal: 16384, vramFree: 10000,
-        vramUsed: 6384, temperature: 50, utilization: 40, powerDraw: 100, driverVersion: "550",
+        index: 0,
+        name: "GPU A",
+        vramTotal: 16384,
+        vramFree: 10000,
+        vramUsed: 6384,
+        temperature: 50,
+        utilization: 40,
+        powerDraw: 100,
+        driverVersion: "550",
       },
       {
-        index: 1, name: "GPU B", vramTotal: 24576, vramFree: 20000,
-        vramUsed: 4576, temperature: 45, utilization: 20, powerDraw: 120, driverVersion: "550",
+        index: 1,
+        name: "GPU B",
+        vramTotal: 24576,
+        vramFree: 20000,
+        vramUsed: 4576,
+        temperature: 45,
+        utilization: 20,
+        powerDraw: 120,
+        driverVersion: "550",
       },
       {
-        index: 2, name: "GPU C", vramTotal: 32768, vramFree: 30000,
-        vramUsed: 2768, temperature: 40, utilization: 10, powerDraw: 80, driverVersion: "550",
+        index: 2,
+        name: "GPU C",
+        vramTotal: 32768,
+        vramFree: 30000,
+        vramUsed: 2768,
+        temperature: 40,
+        utilization: 10,
+        powerDraw: 80,
+        driverVersion: "550",
       },
     ];
 

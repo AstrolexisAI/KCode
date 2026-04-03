@@ -4,9 +4,9 @@
 // Also exports RagVectorStore: a simplified vector store using JSON-encoded embeddings
 // in a TEXT column, used by the code-chunker → rag-engine pipeline.
 
-import { Database } from "bun:sqlite";
-import type { CodeChunk, SearchFilters, SearchResult, VectorStoreStats } from "./types";
+import type { Database } from "bun:sqlite";
 import type { CodeChunk as SimpleCodeChunk } from "./code-chunker";
+import type { CodeChunk, SearchFilters, SearchResult, VectorStoreStats } from "./types";
 
 // ─── Cosine Similarity ─────────────────────────────────────────
 
@@ -260,9 +260,7 @@ export class RagVectorStore {
         indexed_at TEXT NOT NULL
       )
     `);
-    this.db.exec(
-      "CREATE INDEX IF NOT EXISTS idx_rag_vectors_filepath ON rag_vectors(filepath)",
-    );
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_rag_vectors_filepath ON rag_vectors(filepath)");
   }
 
   /** Insert a chunk with its embedding. */
@@ -352,9 +350,7 @@ export class RagVectorStore {
 
   /** Total number of vectors in the store. */
   get count(): number {
-    const row = this.db
-      .prepare("SELECT COUNT(*) as cnt FROM rag_vectors")
-      .get() as { cnt: number };
+    const row = this.db.prepare("SELECT COUNT(*) as cnt FROM rag_vectors").get() as { cnt: number };
     return row.cnt;
   }
 }

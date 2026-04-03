@@ -948,7 +948,9 @@ export async function handleRoute(
 
   if (pathname === "/api/webhook/stripe" && method === "POST") {
     try {
-      const { loadPaymentConfig, verifyWebhookSignature, handleWebhookEvent } = await import("./payments.js");
+      const { loadPaymentConfig, verifyWebhookSignature, handleWebhookEvent } = await import(
+        "./payments.js"
+      );
       const config = await loadPaymentConfig();
       if (!config.stripeWebhookSecret) {
         return jsonError("Webhook not configured", 503, corsHeaders);

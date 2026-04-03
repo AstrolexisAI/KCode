@@ -5,9 +5,9 @@ import type { Command } from "commander";
 import { detectHardware, formatHardware } from "../../core/hardware";
 import {
   type CatalogEntry,
+  findCatalogEntry,
   MODEL_CATALOG,
   MODELS_DIR_PATH,
-  findCatalogEntry,
   recommendModel,
 } from "../../core/model-catalog";
 import {
@@ -177,7 +177,9 @@ export function registerModelsCommand(program: Command): void {
       }
 
       const stat = statSync(filePath);
-      console.log(`Verifying ${entry.codename} (${(stat.size / (1024 * 1024 * 1024)).toFixed(2)} GB)...`);
+      console.log(
+        `Verifying ${entry.codename} (${(stat.size / (1024 * 1024 * 1024)).toFixed(2)} GB)...`,
+      );
 
       const hash = createHash("sha256");
       const stream = createReadStream(filePath);

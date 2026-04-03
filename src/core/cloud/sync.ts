@@ -57,7 +57,11 @@ export class SessionSync {
    * Full sync: uploads all messages and stats for a session.
    * Replaces any previously synced data on the server.
    */
-  async syncSession(sessionId: string, messages: SyncMessage[], stats: SyncSessionStats | null): Promise<SyncResult> {
+  async syncSession(
+    sessionId: string,
+    messages: SyncMessage[],
+    stats: SyncSessionStats | null,
+  ): Promise<SyncResult> {
     const sanitized = messages.map((msg) => this.sanitizeMessage(msg));
 
     const result = await this.client.request<SyncResult>(
@@ -80,7 +84,11 @@ export class SessionSync {
    * Incremental sync: only uploads messages added since the last sync.
    * Falls back to full sync if lastSyncIndex is 0 or missing.
    */
-  async syncDelta(sessionId: string, messages: SyncMessage[], lastSyncIndex: number): Promise<SyncResult> {
+  async syncDelta(
+    sessionId: string,
+    messages: SyncMessage[],
+    lastSyncIndex: number,
+  ): Promise<SyncResult> {
     // If no previous sync, do a full sync of all messages
     if (lastSyncIndex <= 0 || lastSyncIndex >= messages.length) {
       return this.syncSession(sessionId, messages, null);

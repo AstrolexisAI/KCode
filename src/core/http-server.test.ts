@@ -372,7 +372,7 @@ describe("POST /api/prompt — input validation", () => {
     const url = new URL("http://localhost:10101/api/prompt");
     const res = await handleRoute(badReq, url, CORS);
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toContain("Invalid JSON body");
   });
 
@@ -403,7 +403,7 @@ describe("GET /api/session/:filename — validation", () => {
     const { req, url } = makeReq("GET", "/api/session/..%2F..%2Fetc%2Fpasswd");
     const res = await handleRoute(req, url, CORS);
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("Invalid filename");
   });
 
@@ -411,7 +411,7 @@ describe("GET /api/session/:filename — validation", () => {
     const { req, url } = makeReq("GET", "/api/session/foo%2Fbar");
     const res = await handleRoute(req, url, CORS);
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("Invalid filename");
   });
 
@@ -419,7 +419,7 @@ describe("GET /api/session/:filename — validation", () => {
     const { req, url } = makeReq("GET", "/api/session/test%00file");
     const res = await handleRoute(req, url, CORS);
     expect(res.status).toBe(400);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("Invalid filename");
   });
 
@@ -659,7 +659,7 @@ describe("buildFetchHandler — authentication", () => {
     const req = new Request("http://localhost:10101/api/health", { method: "GET" });
     const res = await handler(req);
     expect(res.status).toBe(401);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect(body.error).toBe("Unauthorized");
   });
 
@@ -681,7 +681,7 @@ describe("buildFetchHandler — authentication", () => {
     });
     const res = await handler(req);
     expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
+    const body = (await res.json()) as Record<string, unknown>;
     expect((body as any).ok).toBe(true);
   });
 

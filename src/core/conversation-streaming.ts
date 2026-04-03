@@ -2,23 +2,23 @@
 // Extracted from conversation.ts runAgentLoop — processes the SSE stream from the LLM,
 // accumulating assistant content, tool calls, and usage data.
 
+import { log } from "./logger";
+import type { SSEChunk } from "./sse-parser";
 import { CHARS_PER_TOKEN } from "./token-budget";
 import { extractToolCallsFromText } from "./tool-call-extractor";
 import type { ToolRegistry } from "./tool-registry";
 import type { ContentBlock, StreamEvent, TokenUsage, ToolUseBlock } from "./types";
-import type { SSEChunk } from "./sse-parser";
-import { log } from "./logger";
 
 // ─── Repetition Detection ──────────────────────────────────────
 // Detects when a model enters a generation loop (repeating the same
 // phrase/pattern). Common with local quantized models.
 
 const REPETITION_CHECK_INTERVAL = 500; // check every N chars of new content
-const MAX_OUTPUT_CHARS = 200_000;      // hard cap: 200K chars (~50K tokens)
-const REPETITION_MIN_PERIOD = 15;      // shortest repeating unit to detect
-const REPETITION_MAX_PERIOD = 500;     // longest repeating unit to detect
-const REPETITION_MIN_TEXT = 200;       // minimum text length before checking
-const REPETITION_CONSECUTIVE = 3;      // require 3 consecutive identical blocks
+const MAX_OUTPUT_CHARS = 200_000; // hard cap: 200K chars (~50K tokens)
+const REPETITION_MIN_PERIOD = 15; // shortest repeating unit to detect
+const REPETITION_MAX_PERIOD = 500; // longest repeating unit to detect
+const REPETITION_MIN_TEXT = 200; // minimum text length before checking
+const REPETITION_CONSECUTIVE = 3; // require 3 consecutive identical blocks
 
 /**
  * Detect repeating patterns in generated text by checking if the tail
@@ -32,7 +32,10 @@ const REPETITION_CONSECUTIVE = 3;      // require 3 consecutive identical blocks
 export function detectRepetitionLoop(text: string): string | null {
   if (text.length < REPETITION_MIN_TEXT) return null;
 
-  const maxPeriod = Math.min(REPETITION_MAX_PERIOD, Math.floor(text.length / REPETITION_CONSECUTIVE));
+  const maxPeriod = Math.min(
+    REPETITION_MAX_PERIOD,
+    Math.floor(text.length / REPETITION_CONSECUTIVE),
+  );
 
   for (let pLen = REPETITION_MIN_PERIOD; pLen <= maxPeriod; pLen++) {
     // Check if the last REPETITION_CONSECUTIVE blocks of length pLen are all identical
@@ -84,7 +87,7 @@ export async function* processSSEStream(
   cfg: ProcessSSEStreamConfig,
 ): AsyncGenerator<StreamEvent, StreamAccumulator> {
   const assistantContent: ContentBlock[] = [];
-  let toolCalls: ToolUseBlock[] = [];
+  const toolCalls: ToolUseBlock[] = [];
   let stopReason = "end_turn";
   let turnInputTokens = 0;
   let turnOutputTokens = 0;
@@ -147,7 +150,10 @@ export async function* processSSEStream(
               log.warn("llm", `Repetition loop detected: "${repeated}" — aborting generation`);
               repetitionAborted = true;
               stopReason = "end_turn";
-              yield { type: "text_delta", text: `\n\n[Generation stopped: repetition loop detected]` };
+              yield {
+                type: "text_delta",
+                text: `\n\n[Generation stopped: repetition loop detected]`,
+              };
               textChunks.push(`\n\n[Generation stopped: repetition loop detected]`);
               break;
             }

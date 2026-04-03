@@ -17,7 +17,13 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 // ── Resolve the REAL paths pro.ts uses ──────────────────────────
 import { kcodePath } from "./paths";
-import { clearProCache, FREE_LIMITS, loadProCache, PRO_FEATURES, validateKeyChecksum } from "./pro.ts";
+import {
+  clearProCache,
+  FREE_LIMITS,
+  loadProCache,
+  PRO_FEATURES,
+  validateKeyChecksum,
+} from "./pro.ts";
 
 const PRO_CACHE_FILE = kcodePath("pro-cache.json");
 const PRO_CACHE_SALT_FILE = kcodePath(".pro-cache-salt");

@@ -336,8 +336,7 @@ export function extractContextKeywords(config: KCodeConfig): string[] {
       keywords.push("docker", "container");
     if (files.includes("Makefile")) keywords.push("make");
     if (files.includes("bun.lockb") || files.includes("bunfig.toml")) keywords.push("bun");
-    if (files.includes("vite.config.ts") || files.includes("vite.config.js"))
-      keywords.push("vite");
+    if (files.includes("vite.config.ts") || files.includes("vite.config.js")) keywords.push("vite");
     if (files.includes("tailwind.config.ts") || files.includes("tailwind.config.js"))
       keywords.push("tailwind");
     if (

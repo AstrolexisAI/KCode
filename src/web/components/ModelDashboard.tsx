@@ -62,9 +62,7 @@ export function ModelDashboard({ authToken }: { authToken: string }) {
     );
   }
 
-  const activeEntry = data.models.find(
-    (m) => m.id === data.active || m.name === data.active,
-  );
+  const activeEntry = data.models.find((m) => m.id === data.active || m.name === data.active);
 
   return (
     <div style={styles.panel}>
@@ -78,9 +76,7 @@ export function ModelDashboard({ authToken }: { authToken: string }) {
           <>
             <span style={styles.providerBadge}>{activeEntry.provider}</span>
             {activeEntry.contextWindow && (
-              <span style={styles.contextSize}>
-                {formatNumber(activeEntry.contextWindow)} ctx
-              </span>
+              <span style={styles.contextSize}>{formatNumber(activeEntry.contextWindow)} ctx</span>
             )}
           </>
         )}
@@ -89,13 +85,10 @@ export function ModelDashboard({ authToken }: { authToken: string }) {
       {/* Model list */}
       {data.models.length > 0 ? (
         <>
-          <h3 style={styles.listTitle}>
-            Registered Models ({data.models.length})
-          </h3>
+          <h3 style={styles.listTitle}>Registered Models ({data.models.length})</h3>
           <div style={styles.list}>
             {data.models.map((m) => {
-              const isActive =
-                m.id === data.active || m.name === data.active;
+              const isActive = m.id === data.active || m.name === data.active;
               return (
                 <div
                   key={m.id}
@@ -106,17 +99,11 @@ export function ModelDashboard({ authToken }: { authToken: string }) {
                 >
                   <span style={styles.rowName}>{m.name || m.id}</span>
                   <span style={styles.providerBadge}>{m.provider}</span>
-                  <span
-                    style={
-                      isActive ? styles.statusActive : styles.statusAvailable
-                    }
-                  >
+                  <span style={isActive ? styles.statusActive : styles.statusAvailable}>
                     {isActive ? "active" : "available"}
                   </span>
                   {m.contextWindow && (
-                    <span style={styles.rowCtx}>
-                      {formatNumber(m.contextWindow)}
-                    </span>
+                    <span style={styles.rowCtx}>{formatNumber(m.contextWindow)}</span>
                   )}
                 </div>
               );
@@ -124,9 +111,7 @@ export function ModelDashboard({ authToken }: { authToken: string }) {
           </div>
         </>
       ) : (
-        <div style={styles.empty}>
-          No models registered. Use kcode models to configure.
-        </div>
+        <div style={styles.empty}>No models registered. Use kcode models to configure.</div>
       )}
     </div>
   );

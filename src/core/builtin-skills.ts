@@ -15,12 +15,12 @@ export interface SkillDefinition {
   sourceDir?: string;
 }
 
-import { gitSkills } from "./skills/git-skills";
 import { codeSkills } from "./skills/code-skills";
-import { testingSkills } from "./skills/testing-skills";
-import { sessionSkills } from "./skills/session-skills";
 import { configSkills } from "./skills/config-skills";
 import { devSkills } from "./skills/dev-skills";
+import { gitSkills } from "./skills/git-skills";
+import { sessionSkills } from "./skills/session-skills";
+import { testingSkills } from "./skills/testing-skills";
 import { utilitySkills } from "./skills/utility-skills";
 
 export const builtinSkills: SkillDefinition[] = [
