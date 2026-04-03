@@ -316,19 +316,26 @@ export default function App({ config, conversationManager, tools, initialSession
         const { addModel } = await import("../core/models.js");
         const provider = result.provider;
 
-        // Save API key to settings (raw to preserve extra fields)
-        const settings = await loadUserSettingsRaw();
-        settings[provider.settingsKey] = result.apiKey;
-        await saveUserSettingsRaw(settings);
+        if (result.viaOAuth && !result.apiKey) {
+          // OAuth tokens-only flow (OpenAI Codex, Gemini) — tokens stored in keychain,
+          // no API key to save in settings. The request-builder resolves tokens at runtime.
+        } else {
+          // Save API key to settings (raw to preserve extra fields)
+          const settings = await loadUserSettingsRaw();
+          settings[provider.settingsKey] = result.apiKey;
+          await saveUserSettingsRaw(settings);
 
-        // Set env var for current session
-        process.env[provider.envVar] = result.apiKey;
+          // Set env var for current session
+          process.env[provider.envVar] = result.apiKey;
+        }
 
         // Update current config
-        if (provider.id === "anthropic") {
-          config.anthropicApiKey = result.apiKey;
-        } else {
-          config.apiKey = result.apiKey;
+        if (result.apiKey) {
+          if (provider.id === "anthropic") {
+            config.anthropicApiKey = result.apiKey;
+          } else {
+            config.apiKey = result.apiKey;
+          }
         }
 
         // Register default models for this provider
@@ -367,7 +374,7 @@ export default function App({ config, conversationManager, tools, initialSession
           {
             kind: "text",
             role: "assistant",
-            text: `  ☁  ${provider.name} configured!${result.viaOAuth ? " (via OAuth)" : ""}\n  API key saved to ~/.kcode/settings.json\n  Registered models: ${provider.models}\n  Active model switched to: ${newModel}`,
+            text: `  ☁  ${provider.name} configured!${result.viaOAuth ? " (via OAuth)" : ""}\n  ${result.viaOAuth && !result.apiKey ? "OAuth tokens stored in system keychain" : "API key saved to ~/.kcode/settings.json"}\n  Registered models: ${provider.models}\n  Active model switched to: ${newModel}`,
           },
         ]);
       } catch (err) {
