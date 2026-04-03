@@ -4,7 +4,7 @@
 //   - llama.cpp (llama-server) on Linux/Windows
 //   - MLX (mlx_lm.server) on macOS Apple Silicon
 
-import { type ChildProcess, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
@@ -15,8 +15,6 @@ const KCODE_HOME = kcodeHome();
 const PID_FILE = kcodePath("server.pid");
 const PORT_FILE = kcodePath("server.port");
 const LOG_FILE = kcodePath("server.log");
-
-let serverProcess: ChildProcess | null = null;
 
 /** Check if the inference server is running (by PID or port) */
 export async function isServerRunning(): Promise<boolean> {
@@ -169,7 +167,7 @@ main()`;
       "--n-gpu-layers",
       config.gpuLayers.toString(),
       "--parallel",
-      "1",
+      (config.parallelSlots ?? 1).toString(),
       "--metrics",
       "--mmap", // Enable mmap for SSD-backed weight streaming (flash-moe principle)
     ];
@@ -223,8 +221,6 @@ main()`;
       detached: process.platform !== "win32",
     });
 
-    serverProcess = proc;
-
     // PID/PORT files are written AFTER the health check succeeds (in poll())
     // to prevent isServerRunning() from returning true before the server is ready.
 
@@ -257,7 +253,6 @@ main()`;
         /* ignore — file may already be closed */
       }
       cleanupPidFile();
-      serverProcess = null;
     });
 
     // Detach: allow server to keep running after KCode exits
@@ -355,13 +350,12 @@ export async function stopServer(): Promise<void> {
         log.debug("llama-server", `Force-kill failed (process already dead): ${err}`);
       }
     }
-  } catch (err) {
+  } catch (_err) {
     // Process doesn't exist — clean up stale files
     log.debug("server", `Server PID ${pid} not found (already stopped)`);
   }
 
   cleanupPidFile();
-  serverProcess = null;
 }
 
 /** Ensure the server is running, start if needed. Returns the base URL. */
