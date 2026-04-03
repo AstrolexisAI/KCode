@@ -135,7 +135,6 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
     // Open the API key creation page directly instead.
     if (oauthName === "anthropic") {
       const url = "https://console.anthropic.com/settings/keys";
-      console.error(`\n  Open this URL to create an Anthropic API key:\n\n  ${url}\n`);
       copyToClipboard(url);
       try {
         const { openBrowser } = await import("../../core/auth/oauth-flow.js");
@@ -152,7 +151,6 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
       const result = await loginProvider(oauthName, {
         onAuthUrl: (url) => {
           setOauthUrl(url);
-          console.error(`\n  OAuth URL (copy this):\n\n  ${url}\n`);
           copyToClipboard(url);
         },
       });
@@ -341,8 +339,9 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           </Box>
           {oauthUrl && (
             <Box marginTop={1} flexDirection="column">
-              <Text dimColor>The OAuth URL has been printed above this box and copied to clipboard.</Text>
-              <Text dimColor>Open it in your browser to authenticate.</Text>
+              <Text dimColor>Open this URL in your browser (copied to clipboard):</Text>
+              <Text> </Text>
+              <Text color={theme.info ?? theme.accent} wrap="wrap">{oauthUrl}</Text>
             </Box>
           )}
           {!oauthUrl && (
