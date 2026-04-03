@@ -244,3 +244,69 @@ describe("Read — HOME workspace guard", () => {
     }
   });
 });
+
+// ─── Office document reading ──────────────────────────────────
+
+describe("Read — Office documents", () => {
+  let officeDir: string;
+
+  beforeEach(async () => {
+    officeDir = await mkdtemp(join(tmpdir(), "kcode-office-test-"));
+  });
+
+  afterEach(async () => {
+    await rm(officeDir, { recursive: true, force: true });
+  });
+
+  test("reads a .docx file converted from txt", async () => {
+    const { execSync } = await import("node:child_process");
+    const txtPath = join(officeDir, "sample.txt");
+    await Bun.write(txtPath, "Hello from KCode.\nThis is a test document.\nThird line.");
+
+    try {
+      execSync(`libreoffice --headless --convert-to docx --outdir "${officeDir}" "${txtPath}"`, {
+        timeout: 30000,
+        stdio: "pipe",
+      });
+    } catch {
+      // LibreOffice not available — skip test
+      return;
+    }
+
+    const docxPath = join(officeDir, "sample.docx");
+    const result = await executeRead({ file_path: docxPath });
+
+    expect(result.is_error).toBeUndefined();
+    expect(result.content).toContain("Word Document");
+    expect(result.content).toContain("Hello from KCode");
+    expect(result.content).toContain("test document");
+  });
+
+  test("reads a .xlsx file converted from csv", async () => {
+    const { execSync } = await import("node:child_process");
+    const csvPath = join(officeDir, "data.csv");
+    await Bun.write(csvPath, "Name,Score\nAlice,95\nBob,87\nCharlie,92");
+
+    try {
+      execSync(`libreoffice --headless --convert-to xlsx --outdir "${officeDir}" "${csvPath}"`, {
+        timeout: 30000,
+        stdio: "pipe",
+      });
+    } catch {
+      return;
+    }
+
+    const xlsxPath = join(officeDir, "data.xlsx");
+    const result = await executeRead({ file_path: xlsxPath });
+
+    expect(result.is_error).toBeUndefined();
+    expect(result.content).toContain("Excel Spreadsheet");
+    expect(result.content).toContain("Alice");
+    expect(result.content).toContain("Bob");
+  });
+
+  test("returns error for nonexistent office file", async () => {
+    const result = await executeRead({ file_path: join(officeDir, "nonexistent.docx") });
+    expect(result.is_error).toBe(true);
+  });
+});

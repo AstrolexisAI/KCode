@@ -1,10 +1,11 @@
 // KCode - Read Tool
 // Reads file contents with line numbers, offset, and limit support
-// Supports images (PNG, JPG, GIF, WEBP), PDFs, and Jupyter notebooks
+// Supports images (PNG, JPG, GIF, WEBP), PDFs, Office documents, and Jupyter notebooks
 
 import { execFileSync, execSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
-import { extname, relative, resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, extname, join, relative, resolve } from "node:path";
 import type { ToolDefinition, ToolResult } from "../core/types";
 import { getToolWorkspace } from "./workspace";
 
@@ -15,11 +16,12 @@ const MAX_PDF_PAGES = 20;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
 const PDF_EXTENSION = ".pdf";
 const NOTEBOOK_EXTENSION = ".ipynb";
+const OFFICE_EXTENSIONS = new Set([".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp"]);
 
 export const readDefinition: ToolDefinition = {
   name: "Read",
   description:
-    "Read a file from the filesystem. Returns content with line numbers. Supports images (PNG, JPG, GIF, WEBP), PDFs (.pdf with optional page range), and Jupyter notebooks (.ipynb).",
+    "Read a file from the filesystem. Returns content with line numbers. Supports images (PNG, JPG, GIF, WEBP), PDFs (.pdf with optional page range), Office documents (.docx, .doc, .xlsx, .xls, .pptx, .ppt, .odt, .ods, .odp), and Jupyter notebooks (.ipynb).",
   input_schema: {
     type: "object",
     properties: {
@@ -361,6 +363,110 @@ function readNotebook(filePath: string): ToolResult {
   };
 }
 
+// ─── Office Document Reading ────────────────────────────────────
+
+const OFFICE_FORMAT_LABELS: Record<string, string> = {
+  ".docx": "Word Document",
+  ".doc": "Word Document (Legacy)",
+  ".xlsx": "Excel Spreadsheet",
+  ".xls": "Excel Spreadsheet (Legacy)",
+  ".pptx": "PowerPoint Presentation",
+  ".ppt": "PowerPoint Presentation (Legacy)",
+  ".odt": "OpenDocument Text",
+  ".ods": "OpenDocument Spreadsheet",
+  ".odp": "OpenDocument Presentation",
+};
+
+function readOfficeDocument(filePath: string): ToolResult {
+  const stat = statSync(filePath);
+  const ext = extname(filePath).toLowerCase();
+  const label = OFFICE_FORMAT_LABELS[ext] ?? "Office Document";
+
+  // Check if libreoffice is available
+  try {
+    execFileSync("which", ["libreoffice"], { timeout: 3000 });
+  } catch {
+    return {
+      tool_use_id: "",
+      content: `Error: LibreOffice is not installed. Install it to read ${label} files:\n  sudo dnf install libreoffice  # Fedora\n  sudo apt install libreoffice  # Ubuntu/Debian`,
+      is_error: true,
+    };
+  }
+
+  // Convert to plain text in a temp directory
+  const tmpDir = mkdtempSync(join(tmpdir(), "kcode-office-"));
+
+  try {
+    // For spreadsheets, convert to CSV; for everything else, convert to txt
+    const isSpreadsheet = [".xlsx", ".xls", ".ods"].includes(ext);
+    const convertFormat = isSpreadsheet ? "csv:Text - txt - csv (StarCalc)" : "txt:Text";
+
+    execSync(
+      `libreoffice --headless --convert-to "${convertFormat}" --outdir "${tmpDir}" "${filePath}"`,
+      { timeout: 30000, stdio: "pipe" },
+    );
+
+    // Find the output file (libreoffice names it based on input filename)
+    const outputFiles = readdirSync(tmpDir);
+    const outputFile = outputFiles.find(
+      (f) => f.endsWith(".txt") || f.endsWith(".csv"),
+    );
+
+    if (!outputFile) {
+      return {
+        tool_use_id: "",
+        content: `Error: LibreOffice conversion produced no output for "${filePath}".`,
+        is_error: true,
+      };
+    }
+
+    const text = readFileSync(join(tmpDir, outputFile), "utf-8").trim();
+
+    if (!text) {
+      return {
+        tool_use_id: "",
+        content: `[${label}: ${filePath}, ${stat.size} bytes]\n\n(Document is empty)`,
+      };
+    }
+
+    const lines = text.split("\n");
+    const lineCount = lines.length;
+
+    // Format with line numbers like text files
+    const maxLines = Math.min(lineCount, MAX_LINES);
+    const formatted = lines
+      .slice(0, maxLines)
+      .map((line, i) => {
+        const truncated =
+          line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + "..." : line;
+        return `${String(i + 1).padStart(6)}\t${truncated}`;
+      })
+      .join("\n");
+
+    const overflow =
+      lineCount > MAX_LINES ? `\n\n[Showing ${MAX_LINES} of ${lineCount} lines. Use offset/limit to read more.]` : "";
+
+    return {
+      tool_use_id: "",
+      content: `[${label}: ${filePath}, ${stat.size} bytes, ${lineCount} lines]\n\n${formatted}${overflow}`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      tool_use_id: "",
+      content: `Error converting "${filePath}" with LibreOffice: ${msg}`,
+      is_error: true,
+    };
+  } finally {
+    // Clean up temp directory
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* cleanup not critical */
+    }
+  }
+}
+
 // ─── Text File Reading (original) ───────────────────────────────
 
 interface TextFileResult extends ToolResult {
@@ -520,6 +626,11 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
     // Jupyter notebooks
     if (ext === NOTEBOOK_EXTENSION) {
       return readNotebook(file_path);
+    }
+
+    // Office documents (Word, Excel, PowerPoint, OpenDocument)
+    if (OFFICE_EXTENSIONS.has(ext)) {
+      return readOfficeDocument(file_path);
     }
 
     // Default: text file — check cache first
