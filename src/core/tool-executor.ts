@@ -391,6 +391,7 @@ export async function* executeToolsSequential(
         ._autoAdvancedInput ??
       permResult.updatedInput ??
       call.input;
+    try {
     if (ctx.hooks.hasHooks("PreToolUse")) {
       const hookResult = await ctx.hooks.runPreToolUse(call);
       if (!hookResult.allowed) {
@@ -690,6 +691,27 @@ export async function* executeToolsSequential(
       } catch (err) {
         log.debug("auto-test", "Failed to detect related tests: " + err);
       }
+    }
+    } catch (execError) {
+      // SAFETY NET: If ANY exception occurs during tool execution, we MUST still
+      // produce a tool_result block. Without it, the conversation messages will have
+      // a tool_use without a matching tool_result, causing the next API call to fail
+      // with "tool_use ids were found without tool_result blocks".
+      const errorMsg = execError instanceof Error ? execError.message : String(execError);
+      log.error("tool", `Unhandled error executing ${call.name}: ${errorMsg}`);
+      yield {
+        type: "tool_result",
+        name: call.name,
+        toolUseId: call.id,
+        result: `Error: ${errorMsg}`,
+        isError: true,
+      };
+      toolResultBlocks.push({
+        type: "tool_result",
+        tool_use_id: call.id,
+        content: `Error: ${errorMsg}`,
+        is_error: true,
+      });
     }
   }
 

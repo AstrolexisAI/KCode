@@ -16,6 +16,8 @@ import { executeRead } from "../tools/read";
 import { setToolWorkspace } from "../tools/workspace";
 import { executeWrite } from "../tools/write";
 import { ToolRegistry } from "./tool-registry";
+import { executeToolsSequential } from "./tool-executor";
+import type { ToolUseBlock, ContentBlock } from "./types";
 
 // ─── Shared State ────────────────────────────────────────────────
 
@@ -270,5 +272,77 @@ describe("Tool E2E: permission denied", () => {
 
     expect(result.is_error).toBe(true);
     expect(result.content).toContain("Permission denied");
+  });
+});
+
+// ─── Safety Net: tool_result always produced even on unhandled errors ────
+
+describe("Tool E2E: Safety net for thrown errors", () => {
+  test("executeToolsSequential produces tool_result even when tool handler throws", async () => {
+    const registry = new ToolRegistry();
+
+    registry.register(
+      "ThrowingTool",
+      {
+        name: "ThrowingTool",
+        description: "A tool that throws an unhandled error",
+        input_schema: { type: "object", properties: {}, required: [] },
+      },
+      async () => {
+        throw new Error("Pro feature: Invalid key format");
+      },
+    );
+
+    const toolCalls: ToolUseBlock[] = [
+      { type: "tool_use", id: "call_throwing_1", name: "ThrowingTool", input: {} },
+    ];
+
+    const ctx = {
+      config: { model: "test", workingDirectory: "/tmp" } as any,
+      tools: registry,
+      permissions: { checkPermission: async () => ({ allowed: true }) } as any,
+      hooks: { hasHooks: () => false, runPreToolUse: async () => ({ allowed: true }), runPostToolUse: async () => {} } as any,
+      undoManager: { captureSnapshot: () => null, pushAction: () => {} } as any,
+      sessionId: "test-session",
+      contextWindowSize: 128000,
+      abortController: undefined,
+      toolUseCount: 0,
+      debugTracer: undefined,
+    };
+
+    const guardState = {
+      recordToolError: () => {},
+      checkDedup: () => null,
+      resetAfterFileEdit: () => {},
+      trackCrossTurnSig: () => 0,
+      trackLoopPattern: () => ({ count: 0 }),
+      managedDisallowedSet: new Set<string>(),
+      allowedToolsSet: null,
+      disallowedToolsSet: null,
+    } as any;
+
+    const events: any[] = [];
+    const gen = executeToolsSequential(toolCalls, ctx, guardState);
+    let result = await gen.next();
+    while (!result.done) {
+      events.push(result.value);
+      result = await gen.next();
+    }
+
+    // The generator must complete (not throw) and produce a tool_result
+    const toolResultEvent = events.find(
+      (e: any) => e.type === "tool_result" && e.toolUseId === "call_throwing_1",
+    );
+    expect(toolResultEvent).toBeDefined();
+    expect(toolResultEvent.isError).toBe(true);
+    expect(toolResultEvent.result).toContain("Pro feature: Invalid key format");
+
+    // The returned toolResultBlocks must also include a block
+    const { toolResultBlocks } = result.value;
+    const block = toolResultBlocks.find(
+      (b: any) => b.tool_use_id === "call_throwing_1",
+    );
+    expect(block).toBeDefined();
+    expect(block.is_error).toBe(true);
   });
 });
