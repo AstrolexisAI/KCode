@@ -55,6 +55,16 @@ export async function handleInfoAction(action: string, ctx: ActionContext): Prom
       if (pricing) {
         lines.push(`  Rate:   $${pricing.inputPer1M}/M in, $${pricing.outputPer1M}/M out`);
       }
+
+      // Show subscription rate limit usage if available
+      try {
+        const { getRateLimitUsage, formatRateLimitBar } = await import("../../core/request-builder.js");
+        const rlUsage = getRateLimitUsage();
+        if (rlUsage) {
+          lines.push("", formatRateLimitBar(rlUsage));
+        }
+      } catch { /* not available */ }
+
       return lines.join("\n");
     }
     case "analytics": {

@@ -505,5 +505,76 @@ export async function executeModelRequest(
     throw new Error("Response body is null - streaming not supported");
   }
 
+  // Track subscription rate limit utilization from response headers
+  updateRateLimitUsage(response.headers);
+
   return req.parser(response);
+}
+
+// ─── Subscription Rate Limit Usage Tracking ──────────────────────
+
+export interface RateLimitUsage {
+  /** 5-hour window utilization (0.0-1.0) */
+  fiveHour: number;
+  /** 7-day window utilization (0.0-1.0) */
+  sevenDay: number;
+  /** Unix timestamp (ms) when 5h window resets */
+  fiveHourReset: number;
+  /** Unix timestamp (ms) when 7d window resets */
+  sevenDayReset: number;
+  /** Overall status: allowed, allowed_warning, rejected */
+  status: string;
+  /** Which limit is most relevant */
+  representative: string;
+  /** Last updated timestamp */
+  updatedAt: number;
+}
+
+let _rateLimitUsage: RateLimitUsage | null = null;
+
+function updateRateLimitUsage(headers: Headers): void {
+  const fiveH = headers.get("anthropic-ratelimit-unified-5h-utilization");
+  const sevenD = headers.get("anthropic-ratelimit-unified-7d-utilization");
+  if (!fiveH && !sevenD) return; // Not a subscription response
+
+  _rateLimitUsage = {
+    fiveHour: fiveH ? Number(fiveH) : (_rateLimitUsage?.fiveHour ?? 0),
+    sevenDay: sevenD ? Number(sevenD) : (_rateLimitUsage?.sevenDay ?? 0),
+    fiveHourReset: Number(headers.get("anthropic-ratelimit-unified-5h-reset") ?? "0") * 1000,
+    sevenDayReset: Number(headers.get("anthropic-ratelimit-unified-7d-reset") ?? "0") * 1000,
+    status: headers.get("anthropic-ratelimit-unified-status") ?? "unknown",
+    representative: headers.get("anthropic-ratelimit-unified-representative-claim") ?? "",
+    updatedAt: Date.now(),
+  };
+}
+
+/** Get current rate limit usage (null if no subscription data yet) */
+export function getRateLimitUsage(): RateLimitUsage | null {
+  return _rateLimitUsage;
+}
+
+/** Format rate limit usage as a visual bar for display */
+export function formatRateLimitBar(usage: RateLimitUsage): string {
+  const barWidth = 20;
+  const pct5h = Math.min(Math.round(usage.fiveHour * 100), 100);
+  const pct7d = Math.min(Math.round(usage.sevenDay * 100), 100);
+  const filled5h = Math.round((pct5h / 100) * barWidth);
+  const filled7d = Math.round((pct7d / 100) * barWidth);
+  const bar5h = "\u2588".repeat(filled5h) + "\u2591".repeat(barWidth - filled5h);
+  const bar7d = "\u2588".repeat(filled7d) + "\u2591".repeat(barWidth - filled7d);
+
+  const now = Date.now();
+  const reset5h = usage.fiveHourReset > now
+    ? `resets in ${Math.ceil((usage.fiveHourReset - now) / 60_000)}m`
+    : "";
+  const reset7d = usage.sevenDayReset > now
+    ? `resets in ${Math.ceil((usage.sevenDayReset - now) / 3_600_000)}h`
+    : "";
+
+  return [
+    `  Subscription Usage`,
+    ``,
+    `  5-hour  ${bar5h}  ${pct5h}%${reset5h ? `  (${reset5h})` : ""}`,
+    `  7-day   ${bar7d}  ${pct7d}%${reset7d ? `  (${reset7d})` : ""}`,
+  ].join("\n");
 }

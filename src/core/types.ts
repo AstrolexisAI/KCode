@@ -108,6 +108,7 @@ export interface KCodeConfig {
   fallbackModel?: string; // Auto-switch to this model if primary fails
   tertiaryModel?: string; // Ultra-lightweight fallback if both primary and fallback fail
   fallbackModels?: string[]; // Ordered fallback chain — tried sequentially after primary + retries fail
+  _activeFallback?: string; // Set at runtime when fallback is active (for UI notification)
   maxBudgetUsd?: number; // Max spend per session in USD
   outputFormat?: "text" | "json" | "stream-json"; // Output format for print mode
   telemetry?: boolean; // Opt-in/out for local analytics tracking
