@@ -493,11 +493,48 @@ export async function getProviderAuthStatus(providerName: string): Promise<{
   provider: string;
   label: string;
   authenticated: boolean;
-  method: "oauth" | "api_key" | "env" | "none";
+  method: "oauth" | "api_key" | "env" | "claude-code" | "none";
   expiresAt?: number;
+  detail?: string;
 }> {
   const partial = PROVIDER_CONFIGS[providerName];
   const label = partial?.label ?? providerName;
+
+  // Check CLI bridges first (Claude Code for Anthropic, Codex for OpenAI)
+  if (providerName === "anthropic") {
+    try {
+      const { isClaudeCodeAuthenticated, getClaudeCodeAuthInfo } =
+        await import("./claude-code-bridge.js");
+      if (isClaudeCodeAuthenticated()) {
+        const info = getClaudeCodeAuthInfo();
+        return {
+          provider: providerName,
+          label,
+          authenticated: true,
+          method: "claude-code",
+          expiresAt: info.expiresAt,
+          detail: info.subscriptionType ? `${info.subscriptionType} plan` : undefined,
+        };
+      }
+    } catch { /* not available */ }
+  }
+
+  if (providerName === "openai-codex") {
+    try {
+      const { isCodexAuthenticated, getCodexAuthInfo } =
+        await import("./claude-code-bridge.js");
+      if (isCodexAuthenticated()) {
+        const info = getCodexAuthInfo();
+        return {
+          provider: providerName,
+          label,
+          authenticated: true,
+          method: "claude-code" as const,
+          detail: info.authMode === "chatgpt" ? "ChatGPT subscription" : info.authMode,
+        };
+      }
+    } catch { /* not available */ }
+  }
 
   // Check OAuth tokens
   const tokens = await getStoredTokens(providerName);
