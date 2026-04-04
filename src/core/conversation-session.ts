@@ -15,6 +15,21 @@ import type { ConversationState, KCodeConfig, Message, TokenUsage, TurnCostEntry
  * and strips tool_use blocks from assistant messages that have no tool_result in the next message.
  * This prevents 400 errors from Anthropic when restoring sessions with corrupted history.
  */
+/**
+ * Strip stale [SYSTEM CONTEXT] messages from restored sessions.
+ * These messages contain file snippets/references that may point to files
+ * that no longer exist or are from a different project than the current cwd.
+ */
+function stripStaleSystemContext(messages: Message[]): Message[] {
+  return messages.filter((msg) => {
+    if (msg.role !== "user") return true;
+    const content = typeof msg.content === "string" ? msg.content : "";
+    // Strip auto-injected context messages from previous sessions
+    if (content.startsWith("[SYSTEM CONTEXT]")) return false;
+    return true;
+  });
+}
+
 function sanitizeToolPairing(messages: Message[]): Message[] {
   // Collect all tool_use IDs from assistant messages, paired with their position
   const toolUseIds = new Map<string, number>(); // id → message index
@@ -148,8 +163,9 @@ export function restoreMessages(messages: Message[]): {
   restoredMessages: Message[];
   estimatedTokenCount: number;
 } {
-  // Sanitize tool_use/tool_result pairing to prevent 400 errors on restored sessions
-  const restoredMessages = sanitizeToolPairing([...messages]);
+  // Strip stale [SYSTEM CONTEXT] messages from previous sessions first,
+  // then sanitize tool_use/tool_result pairing
+  const restoredMessages = sanitizeToolPairing(stripStaleSystemContext([...messages]));
   // Estimate token count from content length
   let totalChars = 0;
   for (const msg of messages) {
