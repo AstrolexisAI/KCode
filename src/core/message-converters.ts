@@ -192,9 +192,23 @@ export function convertToAnthropicMessages(messages: Message[]): AnthropicMessag
 
     if (blocks.length === 0) continue; // Skip empty content
 
-    // Merge consecutive same-role messages
+    // Merge consecutive same-role messages — BUT never merge tool_result blocks
+    // into a message that doesn't already have tool_result blocks (or vice versa).
+    // Anthropic requires tool_result blocks to be in the message immediately after
+    // the assistant message containing the corresponding tool_use blocks.
+    const hasToolResult = blocks.some((b) => b.type === "tool_result");
+    const hasToolUse = blocks.some((b) => b.type === "tool_use");
     const last = result[result.length - 1];
-    if (last && last.role === msg.role) {
+    const lastHasToolResult = last && Array.isArray(last.content) &&
+      last.content.some((b: { type: string }) => b.type === "tool_result");
+    const lastHasToolUse = last && Array.isArray(last.content) &&
+      last.content.some((b: { type: string }) => b.type === "tool_use");
+
+    // Only merge if neither side has tool blocks (safe text-only merge)
+    const canMerge = last && last.role === msg.role &&
+      !hasToolResult && !hasToolUse && !lastHasToolResult && !lastHasToolUse;
+
+    if (canMerge) {
       if (typeof last.content === "string") {
         last.content = [{ type: "text", text: last.content }, ...blocks];
       } else {
