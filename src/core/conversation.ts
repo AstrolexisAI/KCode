@@ -16,7 +16,7 @@ import {
 import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extractor";
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
-import { emergencyPrune, estimateContextTokens, pruneMessagesIfNeeded } from "./context-manager";
+import { emergencyPrune, estimateContextTokens, microcompactToolResults, pruneMessagesIfNeeded } from "./context-manager";
 import {
   checkBudgetLimit,
   detectCheckpointMode,
@@ -643,6 +643,9 @@ export class ConversationManager {
       if (this.config.contextWindowSize && this.config.contextWindowSize !== this.contextWindowSize) {
         this.contextWindowSize = this.config.contextWindowSize;
       }
+
+      // Microcompact: proactively clear old tool results every turn (zero LLM cost)
+      microcompactToolResults(this.state.messages);
 
       // Prune context if approaching the limit (auto-compacts via LLM when possible)
       if (this.debugTracer?.isEnabled()) {

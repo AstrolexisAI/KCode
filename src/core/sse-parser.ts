@@ -27,6 +27,8 @@ export interface SSEChunk {
   // usage
   promptTokens?: number;
   completionTokens?: number;
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
 }
 
 /**
@@ -228,13 +230,15 @@ export async function* parseAnthropicSSEStream(response: Response): AsyncGenerat
 
         switch (currentEventType) {
           case "message_start": {
-            // Contains usage.input_tokens
+            // Contains usage.input_tokens + cache metrics
             const usage = parsed.message?.usage;
             if (usage) {
               yield {
                 type: "usage",
                 promptTokens: usage.input_tokens ?? 0,
                 completionTokens: usage.output_tokens ?? 0,
+                cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+                cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
               };
             }
             break;
