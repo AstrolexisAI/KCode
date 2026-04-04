@@ -98,6 +98,7 @@ export async function* processSSEStream(
   let streamedOutputChars = 0;
   let charsSinceRepCheck = 0;
   let repetitionAborted = false;
+  const streamStartMs = Date.now();
 
   for await (const chunk of cfg.sseStream) {
     // Hard abort if repetition was already detected (drain remaining chunks)
