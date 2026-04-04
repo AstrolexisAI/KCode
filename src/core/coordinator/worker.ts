@@ -96,10 +96,38 @@ export function buildWorkerPrompt(config: WorkerSpawnConfig): string {
 /**
  * Build CLI arguments for spawning a worker subprocess.
  */
-export function buildWorkerArgs(config: WorkerSpawnConfig): string[] {
+/**
+ * Find the kcode binary for subprocess spawning.
+ * Must work both in dev (bun run src/index.ts) and production (compiled binary).
+ */
+function findEntryPoint(): { cmd: string; preArgs: string[] } {
+  const { existsSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  const home = process.env.HOME ?? "/home";
+
+  // Production: compiled binary
+  const binaryPaths = [
+    join(home, ".local", "bin", "kcode"),
+    join(home, ".bun", "bin", "kcode"),
+    join(home, "KCode", "dist", "kcode"),
+    "/usr/local/bin/kcode",
+  ];
+  for (const p of binaryPaths) {
+    if (existsSync(p)) return { cmd: p, preArgs: [] };
+  }
+
+  // Dev: bun run src/index.ts (only works from KCode repo root)
+  const devEntry = join(home, "KCode", "src", "index.ts");
+  if (existsSync(devEntry)) return { cmd: "bun", preArgs: ["run", devEntry] };
+
+  // Fallback: assume kcode is on PATH
+  return { cmd: "kcode", preArgs: [] };
+}
+
+export function buildWorkerArgs(config: WorkerSpawnConfig): { cmd: string; args: string[] } {
+  const entry = findEntryPoint();
   const args: string[] = [
-    "run",
-    "src/index.ts",
+    ...entry.preArgs,
     "--print",
     "--permission",
     "deny",
@@ -111,7 +139,7 @@ export function buildWorkerArgs(config: WorkerSpawnConfig): string[] {
     args.push("-m", config.model);
   }
 
-  return args;
+  return { cmd: entry.cmd, args };
 }
 
 /**

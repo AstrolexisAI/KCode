@@ -113,12 +113,12 @@ export class Coordinator {
       coordinatorId: "coordinator",
     };
 
-    const args = buildWorkerArgs(spawnConfig);
+    const { cmd, args } = buildWorkerArgs(spawnConfig);
     const env = buildWorkerEnv(spawnConfig);
     const prompt = buildWorkerPrompt(spawnConfig);
 
     try {
-      const proc = spawn("bun", args, {
+      const proc = spawn(cmd, args, {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
         env,
