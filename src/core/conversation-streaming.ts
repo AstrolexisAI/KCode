@@ -73,6 +73,8 @@ export interface ProcessSSEStreamConfig {
   tools: ToolRegistry;
   accumulateUsage: (usage: TokenUsage) => void;
   cumulativeUsage: TokenUsage;
+  /** Abort signal — checked every chunk to allow immediate Esc interruption */
+  abortSignal?: AbortSignal;
 }
 
 // ─── SSE Stream Processing ──────────────────────────────────────
@@ -101,6 +103,8 @@ export async function* processSSEStream(
   const streamStartMs = Date.now();
 
   for await (const chunk of cfg.sseStream) {
+    // Immediate abort on Esc — don't process buffered chunks
+    if (cfg.abortSignal?.aborted) break;
     // Hard abort if repetition was already detected (drain remaining chunks)
     if (repetitionAborted) continue;
 

@@ -794,10 +794,13 @@ export class ConversationManager {
           tools: this.tools,
           accumulateUsage: (usage) => this.accumulateUsage(usage),
           cumulativeUsage: this.cumulativeUsage,
+          abortSignal: this.abortController?.signal,
         });
         // Forward all events from the stream processor
         let genResult = await streamGen.next();
         while (!genResult.done) {
+          // Check abort between yields — allows Esc to interrupt immediately
+          if (this.abortController?.signal.aborted) break;
           yield genResult.value;
           genResult = await streamGen.next();
         }
