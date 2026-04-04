@@ -37,6 +37,12 @@ export interface RateLimitError extends Error {
   isRateLimit: true;
   /** Last known 5-hour utilization (0.0-1.0), if available */
   fiveHourUtilization?: number;
+  /** Server says don't retry (subscription hard limit) */
+  shouldNotRetry?: boolean;
+  /** Which limit was hit: "five_hour" | "seven_day" | "seven_day_opus" */
+  representativeClaim?: string;
+  /** Unix ms when the rate limit resets */
+  resetAtMs?: number;
 }
 
 export function isRateLimitError(err: unknown): err is RateLimitError {
@@ -491,14 +497,47 @@ export async function executeModelRequest(
         }
       }
 
-      // Both subscription and API key users get auto-retry with backoff.
-      // Subscription users may hit burst limits even with low overall utilization,
-      // so retrying after a brief wait usually succeeds.
+      // Check x-should-retry header — Anthropic tells us if retrying will help
+      const shouldRetryHeader = response.headers.get("x-should-retry");
+      const shouldNotRetry = shouldRetryHeader === "false";
+      const representativeClaim = response.headers.get("anthropic-ratelimit-unified-representative-claim") ?? undefined;
+
+      // Calculate exact reset time from Anthropic's unified reset header
+      let resetAtMs: number | undefined;
+      if (resetHeader) {
+        const ts = Number(resetHeader) * 1000;
+        if (ts > Date.now()) resetAtMs = ts;
+      }
+
+      // If server says don't retry (subscription hard limit), fail fast with clear message
+      if (shouldNotRetry) {
+        const resetMsg = resetAtMs
+          ? ` Resets in ~${Math.ceil((resetAtMs - Date.now()) / 60_000)} minutes.`
+          : resetInfo;
+        const limitType = representativeClaim === "seven_day" ? " (7-day limit)" :
+          representativeClaim === "five_hour" ? " (5-hour limit)" :
+          representativeClaim === "seven_day_opus" ? " (7-day Opus limit)" : "";
+        const err = new Error(
+          `Rate limit reached${limitType}.${resetMsg} Switch to a smaller model with /model.`,
+        );
+        (err as RateLimitError).retryAfterMs = retrySeconds * 1000;
+        (err as RateLimitError).isRateLimit = true;
+        (err as RateLimitError).shouldNotRetry = true;
+        (err as RateLimitError).representativeClaim = representativeClaim;
+        (err as RateLimitError).resetAtMs = resetAtMs;
+        updateRateLimitUsage(response.headers);
+        throw err;
+      }
+
+      // Retryable 429: create error with backoff info
       const err = new Error(
         `Rate limit reached (429). Retrying in ${retrySeconds}s...${resetInfo}`,
       );
       (err as RateLimitError).retryAfterMs = retrySeconds * 1000;
       (err as RateLimitError).isRateLimit = true;
+      (err as RateLimitError).shouldNotRetry = false;
+      (err as RateLimitError).representativeClaim = representativeClaim;
+      (err as RateLimitError).resetAtMs = resetAtMs;
       // Capture utilization: prefer 429 response headers, fall back to last known
       const utilHeader = response.headers.get("anthropic-ratelimit-unified-5h-utilization");
       (err as RateLimitError).fiveHourUtilization = utilHeader
