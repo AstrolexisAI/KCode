@@ -499,6 +499,14 @@ export async function executeModelRequest(
     }
   }
 
+  // Debug: log RAW messages before conversion (to find where text+tool_result comes from)
+  log.warn("llm", `RAW_MSGS(${messages.length}): ${messages.map((m, i) => {
+    const c = m.content;
+    if (typeof c === "string") return `${i}:${m.role}("${c.slice(0, 40)}...")`;
+    if (Array.isArray(c)) return `${i}:${m.role}[${c.map(b => b.type + (b.type === "tool_use" ? `(${(b as any).id?.slice(-6)})` : b.type === "tool_result" ? `(${(b as any).tool_use_id?.slice(-6)})` : "")).join(",")}]`;
+    return `${i}:${m.role}(?)`;
+  }).join(" | ")}`);
+
   // Debug: log message structure and validate tool_use/tool_result pairing
   if (Array.isArray(req.body.messages)) {
     const msgs = req.body.messages as Array<{role: string; content: unknown}>;
