@@ -7,6 +7,72 @@ import { CHARS_PER_TOKEN } from "./token-budget";
 import { TranscriptManager } from "./transcript";
 import type { ConversationState, KCodeConfig, Message, TokenUsage, TurnCostEntry } from "./types";
 
+// ─── Message Sanitization ────────────────────────────────────────
+
+/**
+ * Sanitize tool_use/tool_result pairing in restored messages.
+ * Removes orphaned tool_result blocks (no matching tool_use in previous assistant message)
+ * and strips tool_use blocks from assistant messages that have no tool_result in the next message.
+ * This prevents 400 errors from Anthropic when restoring sessions with corrupted history.
+ */
+function sanitizeToolPairing(messages: Message[]): Message[] {
+  // Collect all tool_use IDs from assistant messages, paired with their position
+  const toolUseIds = new Map<string, number>(); // id → message index
+  const toolResultIds = new Set<string>();
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    if (!Array.isArray(msg.content)) continue;
+    for (const block of msg.content) {
+      if (block.type === "tool_use" && msg.role === "assistant") {
+        toolUseIds.set(block.id, i);
+      }
+      if (block.type === "tool_result" && msg.role === "user") {
+        toolResultIds.add(block.tool_use_id);
+      }
+    }
+  }
+
+  // Find orphaned tool_use (no matching tool_result) and orphaned tool_result (no matching tool_use)
+  const orphanedToolUseIds = new Set<string>();
+  const orphanedToolResultIds = new Set<string>();
+
+  for (const [id] of toolUseIds) {
+    if (!toolResultIds.has(id)) orphanedToolUseIds.add(id);
+  }
+  for (const id of toolResultIds) {
+    if (!toolUseIds.has(id)) orphanedToolResultIds.add(id);
+  }
+
+  if (orphanedToolUseIds.size === 0 && orphanedToolResultIds.size === 0) {
+    return messages; // No orphans — messages are clean
+  }
+
+  log.warn(
+    "session",
+    `Sanitizing restored messages: ${orphanedToolUseIds.size} orphaned tool_use, ${orphanedToolResultIds.size} orphaned tool_result`,
+  );
+
+  // Filter out orphaned blocks
+  return messages.map((msg) => {
+    if (!Array.isArray(msg.content)) return msg;
+    const filtered = msg.content.filter((block) => {
+      if (block.type === "tool_use" && orphanedToolUseIds.has(block.id)) return false;
+      if (block.type === "tool_result" && orphanedToolResultIds.has(block.tool_use_id)) return false;
+      return true;
+    });
+    // If all blocks were removed, replace with a placeholder text
+    if (filtered.length === 0) {
+      return { ...msg, content: "[Session restored — some tool data was cleaned up]" };
+    }
+    return { ...msg, content: filtered };
+  }).filter((msg) => {
+    // Remove completely empty messages
+    if (typeof msg.content === "string") return msg.content.length > 0;
+    return Array.isArray(msg.content) && msg.content.length > 0;
+  });
+}
+
 // ─── Functions ───────────────────────────────────────────────────
 
 /**
@@ -82,7 +148,8 @@ export function restoreMessages(messages: Message[]): {
   restoredMessages: Message[];
   estimatedTokenCount: number;
 } {
-  const restoredMessages = [...messages];
+  // Sanitize tool_use/tool_result pairing to prevent 400 errors on restored sessions
+  const restoredMessages = sanitizeToolPairing([...messages]);
   // Estimate token count from content length
   let totalChars = 0;
   for (const msg of messages) {
