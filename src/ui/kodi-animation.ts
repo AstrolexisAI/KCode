@@ -36,11 +36,21 @@ export interface KodiEvent {
     | "turn_end"
     | "compaction"
     | "agent_spawn"
+    | "agent_progress"
+    | "agent_done"
+    | "agent_failed"
     | "test_pass"
     | "test_fail"
     | "commit"
     | "error";
   detail?: string;
+  /** Live agent statuses for the Kodi panel */
+  agentStatuses?: Array<{
+    name: string;
+    stepTitle: string;
+    status: "spawning" | "running" | "done" | "failed";
+    durationMs?: number;
+  }>;
 }
 
 /** Full animation state — updated every tick, consumed by the renderer. */
