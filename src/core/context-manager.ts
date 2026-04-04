@@ -50,6 +50,57 @@ export function estimateContextTokens(systemPrompt: string, messages: Message[])
   return Math.ceil(chars / CHARS_PER_TOKEN);
 }
 
+// ─── Microcompact (proactive tool result clearing) ──────────────
+
+/** Number of recent tool results to keep intact during microcompact. */
+const MICROCOMPACT_KEEP_RECENT = 5;
+/** Minimum tool results before microcompact triggers. */
+const MICROCOMPACT_MIN_RESULTS = 8;
+/** Sentinel string for cleared tool results. */
+const CLEARED_SENTINEL = "[Old tool result cleared to save context]";
+
+/**
+ * Proactively clear old tool_result content before hitting the context limit.
+ * Unlike full compaction, this is zero-cost (no LLM call) — just replaces old
+ * tool result strings with a sentinel. Keeps the N most recent tool results intact.
+ * Returns number of results cleared.
+ */
+export function microcompactToolResults(messages: Message[]): number {
+  // Collect indices of all tool_result blocks (message index, block index)
+  const toolResults: Array<{ mi: number; bi: number; chars: number }> = [];
+  for (let mi = 0; mi < messages.length; mi++) {
+    const msg = messages[mi]!;
+    if (!Array.isArray(msg.content)) continue;
+    for (let bi = 0; bi < msg.content.length; bi++) {
+      const block = msg.content[bi]!;
+      if (
+        block.type === "tool_result" &&
+        typeof block.content === "string" &&
+        block.content !== CLEARED_SENTINEL &&
+        block.content.length > 100 // only clear substantial results
+      ) {
+        toolResults.push({ mi, bi, chars: block.content.length });
+      }
+    }
+  }
+
+  if (toolResults.length < MICROCOMPACT_MIN_RESULTS) return 0;
+
+  // Clear all but the N most recent
+  const toClear = toolResults.slice(0, -MICROCOMPACT_KEEP_RECENT);
+  let cleared = 0;
+  for (const { mi, bi } of toClear) {
+    const block = (messages[mi]!.content as Array<Record<string, unknown>>)[bi]!;
+    block.content = CLEARED_SENTINEL;
+    cleared++;
+  }
+
+  if (cleared > 0) {
+    log.info("session", `Microcompact: cleared ${cleared} old tool results (kept last ${MICROCOMPACT_KEEP_RECENT})`);
+  }
+  return cleared;
+}
+
 // ─── Context Pruning ─────────────────────────────────────────────
 
 /**

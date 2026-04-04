@@ -333,12 +333,36 @@ export async function buildRequestForModel(
       }
     }
     headers["anthropic-version"] = "2023-06-01";
+    // Enable prompt caching beta (cache_control on system/message blocks)
+    const betaParts = [headers["anthropic-beta"], "prompt-caching-2024-07-31"].filter(Boolean);
+    headers["anthropic-beta"] = betaParts.join(",");
 
     const convertedMessages = convertToAnthropicMessages(messages);
+
+    // Prompt caching: wrap system prompt in a block with cache_control
+    // so Anthropic reuses cached tokenization across turns (~15-20K tokens saved)
+    const systemBlocks = [
+      { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
+    ];
+
+    // Add cache_control to the last message's last content block
+    // so the conversation prefix is cached across turns
+    if (convertedMessages.length > 0) {
+      const lastMsg = convertedMessages[convertedMessages.length - 1]!;
+      if (Array.isArray(lastMsg.content) && lastMsg.content.length > 0) {
+        const lastBlock = lastMsg.content[lastMsg.content.length - 1]!;
+        lastBlock.cache_control = { type: "ephemeral" };
+      } else if (typeof lastMsg.content === "string") {
+        lastMsg.content = [
+          { type: "text", text: lastMsg.content, cache_control: { type: "ephemeral" } },
+        ];
+      }
+    }
+
     const body: Record<string, unknown> = {
       model: modelName,
       messages: convertedMessages,
-      system: systemPrompt,
+      system: systemBlocks,
       max_tokens: effortMaxTokens,
       stream: true,
     };

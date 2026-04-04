@@ -221,8 +221,8 @@ export async function* processSSEStream(
         const usage: TokenUsage = {
           inputTokens: chunk.promptTokens ?? 0,
           outputTokens: chunk.completionTokens ?? 0,
-          cacheCreationInputTokens: 0,
-          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: chunk.cacheCreationInputTokens ?? 0,
+          cacheReadInputTokens: chunk.cacheReadInputTokens ?? 0,
         };
         turnInputTokens += usage.inputTokens;
         turnOutputTokens += usage.outputTokens;
