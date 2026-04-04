@@ -398,7 +398,7 @@ export class ConversationManager {
         toolOverhead,
         userMessage,
       );
-      log.info("perf", `SystemPromptBuilder.build: ${Date.now() - _t1}ms`);
+      log.debug("perf", `SystemPromptBuilder.build: ${Date.now() - _t1}ms`);
       this.systemPrompt = candidate;
       this.systemPromptHash = this.hashString(candidate);
     }
@@ -408,7 +408,7 @@ export class ConversationManager {
       const _t2 = Date.now();
       const { checkSessionLimit } = await import("./pro.js");
       await checkSessionLimit();
-      log.info("perf", `checkSessionLimit: ${Date.now() - _t2}ms`);
+      log.debug("perf", `checkSessionLimit: ${Date.now() - _t2}ms`);
     }
 
     // Budget guard: check if session has exceeded max budget (delegated to conversation-message-prep)
@@ -478,9 +478,9 @@ export class ConversationManager {
       this.state.messages,
       this.config.workingDirectory,
     );
-    log.info("perf", `injectSmartContext: ${Date.now() - _t3}ms`);
+    log.debug("perf", `injectSmartContext: ${Date.now() - _t3}ms`);
     for (const msg of contextMessages) this.state.messages.push(msg);
-    log.info("perf", `sendMessage pre-loop total: ${Date.now() - _t0}ms`);
+    log.debug("perf", `sendMessage pre-loop total: ${Date.now() - _t0}ms`);
 
     // Auto-save checkpoint before each agent loop starts
     try {
@@ -773,10 +773,10 @@ export class ConversationManager {
       try {
         const _tStream = Date.now();
         await this.rateLimiter.acquire();
-        log.info("perf", `rateLimiter.acquire: ${Date.now() - _tStream}ms`);
+        log.debug("perf", `rateLimiter.acquire: ${Date.now() - _tStream}ms`);
         const _tFetch = Date.now();
         sseStream = await this.createStreamWithRetry();
-        log.info("perf", `createStreamWithRetry (fetch+connect): ${Date.now() - _tFetch}ms`);
+        log.debug("perf", `createStreamWithRetry (fetch+connect): ${Date.now() - _tFetch}ms`);
       } catch (error) {
         this.rateLimiter.release();
         yield {
