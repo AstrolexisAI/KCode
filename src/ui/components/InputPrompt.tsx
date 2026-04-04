@@ -571,6 +571,26 @@ export default function InputPrompt({
         return;
       }
 
+      // Home key: move cursor to beginning
+      // Terminal sends \x1b[H, \x1b[1~, or \x1bOH depending on terminal
+      if (
+        input === "\x1b[H" || input === "\x1b[1~" || input === "\x1bOH" ||
+        input === "\x1b[7~" || input === "\x1b[1;5H"
+      ) {
+        setCursor(0);
+        return;
+      }
+
+      // End key: move cursor to end
+      // Terminal sends \x1b[F, \x1b[4~, or \x1bOF depending on terminal
+      if (
+        input === "\x1b[F" || input === "\x1b[4~" || input === "\x1bOF" ||
+        input === "\x1b[8~" || input === "\x1b[1;5F"
+      ) {
+        setCursor(value.length);
+        return;
+      }
+
       // ─── Readline shortcuts ───────────────────────────────
       // Ctrl+A: Move cursor to beginning
       if (key.ctrl && input === "a") {
