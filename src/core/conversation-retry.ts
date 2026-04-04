@@ -15,6 +15,21 @@ const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
 const MIN_RATE_LIMIT_DELAY_MS = 15_000; // Min 15s for rate limits
 
+// Anthropic cloud model cascade for 429 rate limit fallback (largest → smallest)
+const ANTHROPIC_RATE_LIMIT_CASCADE: string[] = [
+  "claude-opus-4-6",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+];
+
+function getAnthropicRateLimitFallbacks(currentModel: string): string[] {
+  const lower = currentModel.toLowerCase();
+  const idx = ANTHROPIC_RATE_LIMIT_CASCADE.findIndex((m) => lower.includes(m) || m.includes(lower));
+  if (idx < 0) return [];
+  // Return models smaller than current (further down the cascade)
+  return ANTHROPIC_RATE_LIMIT_CASCADE.slice(idx + 1);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────
 
 export function isRetryableError(error: unknown): boolean {
@@ -257,6 +272,59 @@ export async function createStreamWithRetry(
               "llm",
               `Fallback chain model ${chainModel} failed: ${chainErr instanceof Error ? chainErr.message : chainErr}`,
             );
+          }
+        }
+      }
+
+      // Auto-cascade to smaller Anthropic models on rate limit exhaustion
+      if (isRateLimitError(error)) {
+        const isAnthropicCloud =
+          ctx.config.model.toLowerCase().startsWith("claude-") ||
+          ctx.config.apiBase?.includes("anthropic.com");
+        if (isAnthropicCloud) {
+          const cascadeFallbacks = getAnthropicRateLimitFallbacks(ctx.config.model);
+          const triedModels = new Set(
+            [
+              ctx.config.model,
+              ctx.config.fallbackModel,
+              ctx.config.tertiaryModel,
+              ...(ctx.config.fallbackModels ?? []),
+            ].filter(Boolean),
+          );
+          for (const cascadeModel of cascadeFallbacks) {
+            if (triedModels.has(cascadeModel)) continue;
+            triedModels.add(cascadeModel);
+            log.warn(
+              "llm",
+              `Rate limit exhausted on ${ctx.config.model} — auto-cascading to ${cascadeModel}`,
+            );
+            if (ctx.debugTracer?.isEnabled()) {
+              ctx.debugTracer.traceModelSwitch(
+                ctx.config.model,
+                cascadeModel,
+                `Rate limit exhausted after ${attempt + 1} attempts, auto-cascading to smaller model`,
+              );
+            }
+            try {
+              // Wait a bit before trying the smaller model
+              await sleep(MIN_RATE_LIMIT_DELAY_MS);
+              const stream = await executeModelRequest(
+                cascadeModel,
+                ctx.config,
+                ctx.systemPrompt,
+                ctx.messages,
+                ctx.tools,
+                ctx.abortController,
+              );
+              log.info("llm", `Rate-limit cascade model ${cascadeModel} connected`);
+              ctx.config._activeFallback = cascadeModel;
+              return stream;
+            } catch (cascadeErr) {
+              log.error(
+                "llm",
+                `Cascade model ${cascadeModel} also failed: ${cascadeErr instanceof Error ? cascadeErr.message : cascadeErr}`,
+              );
+            }
           }
         }
       }
