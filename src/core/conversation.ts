@@ -920,6 +920,8 @@ export class ConversationManager {
       }
 
       // Plan coherence: validate execution against active plan step (delegated to stop-conditions.ts)
+      // IMPORTANT: injectMessages are deferred until AFTER tool_result to preserve the
+      // assistant[tool_use] → user[tool_result] sequence that Anthropic requires.
       const planResult = await handlePlanCoherence(toolCalls, assistantContent);
       if (planResult.setForceStop) {
         guardState.forceStopLoop = true;
@@ -929,10 +931,13 @@ export class ConversationManager {
           content: textOnly.length > 0 ? textOnly : [{ type: "text" as const, text: "" }],
         };
       }
-      for (const msg of planResult.injectMessages) {
-        this.state.messages.push({ role: "user", content: msg });
-      }
+      // Defer plan inject messages — pushed after tool_result below
+      const deferredPlanMessages = planResult.injectMessages;
       if (planResult.stopReason) {
+        // If stopping, inject now (no tool_result will follow)
+        for (const msg of deferredPlanMessages) {
+          this.state.messages.push({ role: "user", content: msg });
+        }
         yield { type: "turn_end", stopReason: planResult.stopReason };
         continue;
       }
@@ -1109,6 +1114,7 @@ export class ConversationManager {
 
       if (filteredToolCalls.length === 0) {
         this.state.messages.push({ role: "user", content: toolResultBlocks });
+        for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
         continue;
       }
       toolCalls = filteredToolCalls;
@@ -1144,6 +1150,7 @@ export class ConversationManager {
         this.state.toolUseCount = toolExecCtx.toolUseCount;
         toolResultBlocks.push(...parallelResults);
         this.state.messages.push({ role: "user", content: toolResultBlocks });
+        for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
         continue;
       }
 
@@ -1188,6 +1195,7 @@ export class ConversationManager {
       toolResultBlocks.push(...seqToolResults);
 
       this.state.messages.push({ role: "user", content: toolResultBlocks });
+      for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
 
       // Semantic loop redirect: check if any pattern has crossed the threshold
       for (const [pattern, entry] of guardState.loopPatterns) {
