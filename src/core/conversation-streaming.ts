@@ -75,6 +75,8 @@ export interface ProcessSSEStreamConfig {
   cumulativeUsage: TokenUsage;
   /** Abort signal — checked every chunk to allow immediate Esc interruption */
   abortSignal?: AbortSignal;
+  /** Callback when a complete tool_use block is ready (for early execution) */
+  onToolReady?: (tool: ToolUseBlock) => void;
 }
 
 // ─── SSE Stream Processing ──────────────────────────────────────
@@ -305,6 +307,8 @@ export async function* processSSEStream(
     };
     assistantContent.push(toolBlock);
     toolCalls.push(toolBlock);
+    // Notify streaming tool executor that a complete tool call is ready
+    if (cfg.onToolReady) cfg.onToolReady(toolBlock);
   }
 
   return {
