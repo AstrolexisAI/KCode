@@ -76,7 +76,8 @@ export async function processStreamEvents(
   for await (const event of events) {
     switch (event.type) {
       case "turn_start":
-        setLoadingMessage("");
+        setLoadingMessage("Connecting to model...");
+        setSpinnerPhase("thinking");
         // Show any pending file change suggestions
         {
           const suggester = getFileChangeSuggester(config.workingDirectory);
@@ -97,6 +98,8 @@ export async function processStreamEvents(
       case "text_delta":
         if (currentText.length === 0) {
           setLastKodiEvent({ type: "streaming" });
+          setSpinnerPhase("streaming");
+          setLoadingMessage("Responding...");
           // Show fallback warning if a different model is responding
           if (config._activeFallback) {
             const fallback = config._activeFallback;
@@ -109,6 +112,16 @@ export async function processStreamEvents(
                 subtitle: `${config.model} rate limited — using fallback model`,
               },
             ]);
+          }
+        }
+        // Live activity: show what the model is writing about
+        if (currentText.length > 0 && currentText.length % 200 < event.text.length) {
+          // Extract a brief activity hint from the last line being written
+          const lastLines = currentText.split("\n").filter(l => l.trim());
+          const lastLine = lastLines[lastLines.length - 1] ?? "";
+          if (lastLine.length > 10) {
+            const hint = lastLine.slice(0, 50).trim();
+            setLoadingMessage(`Writing: ${hint}${lastLine.length > 50 ? "..." : ""}`);
           }
         }
         // Finalize any accumulated thinking when text starts
