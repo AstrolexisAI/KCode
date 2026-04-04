@@ -338,6 +338,10 @@ export async function buildRequestForModel(
       if (resolvedKey.startsWith("sk-ant-oat01-")) {
         headers["Authorization"] = `Bearer ${resolvedKey}`;
         headers["anthropic-beta"] = "oauth-2025-04-20";
+        // Subscriber context headers — matches what Claude Code CLI sends
+        // so Anthropic backend applies subscriber-tier rate limits
+        headers["x-app"] = "cli";
+        headers["User-Agent"] = `kcode-cli/${config.version ?? "0.0.0"}`;
       } else {
         headers["x-api-key"] = resolvedKey;
       }
