@@ -35,6 +35,7 @@ import {
 import { processSSEStream, type StreamAccumulator } from "./conversation-streaming";
 import type { DebugTracer } from "./debug-tracer";
 import { HookManager } from "./hooks";
+import { AutoAgentManager, type AgentStatus } from "./auto-agents";
 import { StreamingToolExecutor } from "./streaming-tool-executor";
 import { getIntentionEngine } from "./intentions";
 import { log } from "./logger";
@@ -152,6 +153,9 @@ export class ConversationManager {
   private compactThreshold: number;
   private checkpoints: Checkpoint[] = [];
   private abortController: AbortController | null = null;
+  private autoAgentManager: AutoAgentManager | null = null;
+  /** Callback for Kodi panel agent status updates */
+  onAgentProgress: ((statuses: AgentStatus[]) => void) | null = null;
   /** Countdown seconds when waiting for rate limit retry (0 = not waiting) */
   rateLimitCountdown = 0;
   private _theoreticalMode = false;
@@ -1203,6 +1207,52 @@ export class ConversationManager {
 
       this.state.messages.push({ role: "user", content: toolResultBlocks });
       for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
+
+      // Auto-agent evaluation: if a Plan was just created/updated with many pending steps,
+      // spawn background agents to work on them in parallel
+      if (toolCalls.some((tc) => tc.name === "Plan") && !this.autoAgentManager?.isActive()) {
+        try {
+          const mgr = new AutoAgentManager(
+            {
+              cwd: this.config.workingDirectory,
+              model: this.config.model,
+              config: this.config,
+            },
+            (statuses) => {
+              // Forward agent statuses to Kodi panel via callback
+              if (this.onAgentProgress) this.onAgentProgress(statuses);
+            },
+          );
+          const { shouldSpawn, steps } = await mgr.evaluate();
+          if (shouldSpawn) {
+            this.autoAgentManager = mgr;
+            const contextSummary = this.state.messages
+              .filter((m) => m.role === "user" && typeof m.content === "string")
+              .map((m) => (m.content as string).slice(0, 200))
+              .join("\n");
+            // Fire and forget — agents run in background
+            mgr.spawn(steps, contextSummary).then(() => {
+              // When agents complete, inject results into next turn
+              const results = mgr.getResults();
+              if (results.length > 0) {
+                const summary = results
+                  .map((r) => `[Agent result for step "${r.stepTitle}"]:\n${r.output.slice(0, 1000)}`)
+                  .join("\n\n");
+                this.state.messages.push({
+                  role: "user",
+                  content: `[SYSTEM] ${results.length} background agents completed:\n\n${summary}\n\nUpdate the plan to mark these steps as done.`,
+                });
+                log.info("auto-agents", `Injected ${results.length} agent results into conversation`);
+              }
+            }).catch((err) => {
+              log.warn("auto-agents", `Auto-agent spawn failed: ${err}`);
+            });
+            log.info("auto-agents", `Auto-spawned ${steps.length} agents for plan steps`);
+          }
+        } catch (err) {
+          log.debug("auto-agents", `Auto-agent evaluation failed: ${err}`);
+        }
+      }
 
       // Semantic loop redirect: check if any pattern has crossed the threshold
       for (const [pattern, entry] of guardState.loopPatterns) {

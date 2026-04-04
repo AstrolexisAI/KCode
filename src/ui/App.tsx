@@ -132,6 +132,23 @@ export default function App({ config, conversationManager, tools, initialSession
   // Plan panel: starts null, only set by onPlanChange (not from DB restore)
   const [activePlan, setActivePlan] = useState<Plan | null>(null);
 
+  // Wire auto-agent progress to Kodi panel
+  useEffect(() => {
+    conversationManager.onAgentProgress = (statuses) => {
+      setLastKodiEvent({
+        type: statuses.some((a) => a.status === "running") ? "agent_progress" : "agent_done",
+        detail: `${statuses.filter((a) => a.status === "done").length}/${statuses.length} done`,
+        agentStatuses: statuses.map((a) => ({
+          name: a.name,
+          stepTitle: a.stepTitle,
+          status: a.status,
+          durationMs: a.durationMs,
+        })),
+      });
+    };
+    return () => { conversationManager.onAgentProgress = null; };
+  }, [conversationManager]);
+
   // Virtual scroll feature flag — set via KCODE_VIRTUAL_SCROLL=1 env var
   const [useVirtualScrollEnabled] = useState(() => process.env.KCODE_VIRTUAL_SCROLL === "1");
 

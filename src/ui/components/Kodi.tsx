@@ -456,7 +456,31 @@ export default function KodiCompanion({
             </>
           )}
         </Box>
-        {/* Line 4: Speech chip */}
+        {/* Line 4: Live agent panel (when agents are running) */}
+        {lastEvent?.agentStatuses && lastEvent.agentStatuses.length > 0 && (
+          <Box flexDirection="column">
+            <Text color={theme.warning} bold>
+              {"⚡ Agents (" + lastEvent.agentStatuses.filter(a => a.status === "running").length + " running)"}
+            </Text>
+            {lastEvent.agentStatuses.map((agent, i) => {
+              const icon = agent.status === "running" ? "⣾⣽⣻⢿⡿⣟⣯⣷"[Math.floor(Date.now() / 100) % 8]
+                : agent.status === "done" ? "✓"
+                : agent.status === "failed" ? "✗"
+                : "○";
+              const color = agent.status === "running" ? theme.warning
+                : agent.status === "done" ? theme.success
+                : agent.status === "failed" ? theme.error
+                : theme.dimmed;
+              const elapsed = agent.durationMs ? ` ${Math.round(agent.durationMs / 1000)}s` : "";
+              return (
+                <Text key={i} color={color}>
+                  {"  "}{icon} {agent.name}: {agent.stepTitle.slice(0, 50)}{elapsed}
+                </Text>
+              );
+            })}
+          </Box>
+        )}
+        {/* Line 5: Speech chip */}
         <Box>
           {bubble ? (
             <>
@@ -469,7 +493,7 @@ export default function KodiCompanion({
             <Text color={theme.dimmed}> </Text>
           )}
         </Box>
-        {/* Line 5: spacer */}
+        {/* Line 6: spacer */}
         <Text> </Text>
       </Box>
     </Box>
