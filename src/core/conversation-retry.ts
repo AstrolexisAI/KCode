@@ -134,6 +134,11 @@ export async function createStreamWithRetry(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      // If the abort signal fired, stop immediately — don't retry or fallback
+      if (ctx.abortController?.signal.aborted) {
+        throw new Error("The operation was aborted.");
+      }
+
       // If the router sent us to a different model and it failed, fall back to primary
       if (effectiveModel !== ctx.config.model) {
         log.warn(
