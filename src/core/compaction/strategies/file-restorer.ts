@@ -75,7 +75,7 @@ export async function restoreRecentFiles(
         content: [
           {
             type: "text",
-            text: `[Contexto restaurado] Contenido actual de ${filePath}:\n\`\`\`\n${content}\n\`\`\``,
+            text: `[Restored context] Current content of ${filePath}:\n\`\`\`\n${content}\n\`\`\``,
           } as TextBlock,
         ],
       },
@@ -84,7 +84,7 @@ export async function restoreRecentFiles(
         content: [
           {
             type: "text",
-            text: "Entendido, tengo el contexto actualizado.",
+            text: "Understood, I have the updated context.",
           } as TextBlock,
         ],
       },

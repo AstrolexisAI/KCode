@@ -678,7 +678,7 @@ describe("File Restorer", () => {
       (m) =>
         Array.isArray(m.content) &&
         m.content.some(
-          (b) => b.type === "text" && (b as TextBlock).text.includes("Contexto restaurado"),
+          (b) => b.type === "text" && (b as TextBlock).text.includes("Restored context"),
         ),
     );
     expect(restored).toBeDefined();
@@ -717,7 +717,7 @@ describe("File Restorer", () => {
       (m) =>
         Array.isArray(m.content) &&
         m.content.some(
-          (b) => b.type === "text" && (b as TextBlock).text.includes("Contexto restaurado"),
+          (b) => b.type === "text" && (b as TextBlock).text.includes("Restored context"),
         ),
     ).length;
     expect(restoredPairs).toBeLessThanOrEqual(3);
@@ -798,7 +798,7 @@ describe("File Restorer", () => {
       (m) =>
         Array.isArray(m.content) &&
         m.content.some(
-          (b) => b.type === "text" && (b as TextBlock).text.includes("Contexto restaurado"),
+          (b) => b.type === "text" && (b as TextBlock).text.includes("Restored context"),
         ),
     );
     // Only the small file should be restored (it comes after big in the list,
