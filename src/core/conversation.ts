@@ -631,6 +631,11 @@ export class ConversationManager {
         return;
       }
 
+      // Sync contextWindowSize from config in case model was switched mid-session (e.g. /model)
+      if (this.config.contextWindowSize && this.config.contextWindowSize !== this.contextWindowSize) {
+        this.contextWindowSize = this.config.contextWindowSize;
+      }
+
       // Prune context if approaching the limit (auto-compacts via LLM when possible)
       if (this.debugTracer?.isEnabled()) {
         const preTokens = estimateContextTokens(this.systemPrompt, this.state.messages);

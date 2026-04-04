@@ -489,17 +489,12 @@ export async function executeModelRequest(
         }
       }
 
-      // For OAuth tokens (subscription users): don't auto-retry, show clear message
-      // For API keys: auto-retry with backoff
-      const isSubscription = req.headers["Authorization"]?.includes("sk-ant-oat01-");
-      if (isSubscription) {
-        throw new Error(
-          `Rate limit reached (429). You've hit your subscription usage limit.${resetInfo} Try again shortly, or switch to a smaller model with /model.`,
-        );
-      }
-
-      // API key users: create retryable error
-      const err = new Error(`Rate limit reached (429). Retrying in ${retrySeconds}s...`);
+      // Both subscription and API key users get auto-retry with backoff.
+      // Subscription users may hit burst limits even with low overall utilization,
+      // so retrying after a brief wait usually succeeds.
+      const err = new Error(
+        `Rate limit reached (429). Retrying in ${retrySeconds}s...${resetInfo}`,
+      );
       (err as RateLimitError).retryAfterMs = retrySeconds * 1000;
       (err as RateLimitError).isRateLimit = true;
       throw err;
