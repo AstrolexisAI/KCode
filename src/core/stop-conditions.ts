@@ -157,11 +157,15 @@ export async function handlePlanCoherence(
 
   try {
     const {
+      getActivePlan,
       countInProgressSteps,
       getActiveStep,
       shouldStopAfterCurrentStep,
       classifyToolCoherence,
     } = await import("../tools/plan.js");
+
+    // Skip all plan coherence checks if there's no active plan
+    if (!getActivePlan()) return result;
 
     // Check if stopAfterStep was reached
     if (shouldStopAfterCurrentStep()) {
