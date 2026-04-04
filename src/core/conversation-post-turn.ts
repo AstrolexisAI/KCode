@@ -174,6 +174,25 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     ctx.tokenCount,
   );
 
+  // Plan step update reminder: if there's an active plan and the model used tools
+  // but didn't call the Plan tool to update progress, inject a reminder
+  if (ctx.toolCalls.length > 0 && ctx.turnCount > 0 && ctx.turnCount % 3 === 0) {
+    try {
+      const { getActivePlan } = await import("../tools/plan.js");
+      const plan = getActivePlan();
+      if (plan) {
+        const usedPlanTool = ctx.toolCalls.some((tc) => tc.name === "Plan" || tc.name === "PlanMode");
+        const inProgressSteps = plan.steps.filter((s: { status: string }) => s.status === "in_progress");
+        if (!usedPlanTool && inProgressSteps.length > 0) {
+          injectMessages.push({
+            role: "user",
+            content: `[SYSTEM] Reminder: you have ${inProgressSteps.length} plan step(s) in_progress. If you completed work for any of them, update the plan NOW using Plan(mode='update') before continuing.`,
+          });
+        }
+      }
+    } catch { /* plan module not loaded */ }
+  }
+
   // Safety net: classify empty responses and retry with context-aware prompts
   const hasTextOutput = ctx.textChunks.join("").trim().length > 0;
   const hasThinkingOutput =

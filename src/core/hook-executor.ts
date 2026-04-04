@@ -361,13 +361,15 @@ async function executeHookAgent(
   const background = config.background !== false; // default true
   const timeout = config.timeout ?? AGENT_HOOK_TIMEOUT;
 
-  // Build subagent command args
-  const args: string[] = ["run", "src/index.ts", "--agent"];
+  // Build subagent command using the installed binary
+  const { findKCodeBinary } = require("./swarm") as typeof import("./swarm");
+  const kcodeBin = findKCodeBinary();
+  const args: string[] = ["--agent"];
   if (config.model) {
     args.push("-m", config.model);
   }
 
-  const proc = spawn("bun", args, {
+  const proc = spawn(kcodeBin, args, {
     cwd,
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env },
