@@ -29,6 +29,11 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
   const handler = (chunk: Buffer | string) => {
     const str = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8");
 
+    // Detect bracketed paste: \x1b[200~ ... \x1b[201~
+    // Some terminals send brackets with \x1b prefix, some without
+    const hasBracketStart = str.includes("\x1b[200~") || str.includes("[200~");
+    const hasBracketEnd = str.includes("\x1b[201~") || str.includes("[201~");
+
     // Strip bracketed paste sequences (with or without \x1b prefix)
     const cleaned = str
       .replace(/\x1b\[200~/g, "")
@@ -46,14 +51,14 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
       return;
     }
 
-    // Detect multiline paste: data chunk with both printable chars and newlines.
-    // Single keystrokes in raw mode never produce this pattern:
-    // - Enter sends just \r (no printable chars)
-    // - Regular keys send 1-8 bytes (no newlines)
+    // If bracket paste markers were present, this is ALWAYS a paste — even single line
+    const isBracketedPaste = hasBracketStart || hasBracketEnd;
+
+    // Detect multiline paste: data chunk with both printable chars and newlines
     const hasNewline = cleaned.includes("\n") || cleaned.includes("\r");
     const printable = cleaned.replace(/[\r\n\x1b\x00-\x1f]/g, "");
 
-    if (hasNewline && printable.length > 0) {
+    if (isBracketedPaste || (hasNewline && printable.length > 0)) {
       const normalized = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
       isPasting = true;
       if (pasteTimer) clearTimeout(pasteTimer);
@@ -65,8 +70,6 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
       }
 
       // Keep isPasting true long enough for Ink's handlers to be skipped.
-      // All chars from this chunk will hit useInput in the same event loop
-      // tick; the timer fires after they've all been ignored.
       pasteTimer = setTimeout(() => {
         isPasting = false;
       }, 100);
