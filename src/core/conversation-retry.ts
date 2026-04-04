@@ -95,7 +95,7 @@ export async function createStreamWithRetry(
   let burstRetries = 0; // Extra retries for low-utilization burst limits
   const MAX_BURST_RETRIES = 3;
 
-  for (let attempt = 0; attempt <= maxAttempts + MAX_BURST_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     let effectiveModel = ctx.config.model;
     try {
       if (ctx.config.autoRoute !== false && !ctx.config.modelExplicitlySet) {
@@ -290,7 +290,9 @@ export async function createStreamWithRetry(
 
         if (isAnthropicCloud && !isHighUtilization && burstRetries < MAX_BURST_RETRIES) {
           // Low utilization burst limit — keep retrying the same model with longer waits
+          // Don't consume an attempt slot: decrement so the for-loop increment nets to zero
           burstRetries++;
+          attempt--;
           log.warn(
             "llm",
             `Rate limit on ${ctx.config.model} but utilization is only ${Math.round((utilization ?? 0) * 100)}% — likely burst limit, retrying same model (burst retry ${burstRetries}/${MAX_BURST_RETRIES})`,
