@@ -149,12 +149,17 @@ export async function createStreamWithRetry(
         }
       }
 
-      // Rate limits: 3 retries max before cascading to smaller models
-      const effectiveMaxRetries = isRateLimitError(error)
-        ? Math.max(ctx.maxRetries, 3)
-        : ctx.maxRetries;
+      // If server explicitly says don't retry (subscription hard limit), skip to cascade
+      if (isRateLimitError(error) && error.shouldNotRetry) {
+        log.warn(
+          "llm",
+          `Rate limit with x-should-retry:false — skipping retries, going to cascade`,
+        );
+        // Fall through to fallback/cascade logic below
+      } else
 
-      if (attempt < effectiveMaxRetries && isRetryableError(error)) {
+      // Rate limits: 3 retries max before cascading to smaller models
+      if (attempt < (isRateLimitError(error) ? Math.max(ctx.maxRetries, 3) : ctx.maxRetries) && isRetryableError(error)) {
         let delay: number;
         if (isRateLimitError(error)) {
           // Use server-provided Retry-After, with a minimum floor
