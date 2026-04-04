@@ -420,6 +420,54 @@ export default function App({ config, conversationManager, tools, initialSession
         conversationManager.getConfig().contextWindowSize = ctxSize;
       }
 
+      // Auto-compact if current context exceeds new model's window
+      if (ctxSize) {
+        const { estimateContextTokens } = await import("../core/context-manager.js");
+        const state = conversationManager.getState();
+        const currentTokens = estimateContextTokens("", state.messages);
+        const threshold = ctxSize * 0.9; // 90% — must fit, not just be near threshold
+        if (currentTokens >= threshold && state.messages.length > 4) {
+          setCompleted((prev) => [
+            ...prev,
+            {
+              kind: "text",
+              role: "assistant",
+              text: `  ⚠ Context (${Math.round(currentTokens / 1000)}K tokens) exceeds ${newModel} window (${Math.round(ctxSize / 1000)}K). Auto-compacting...`,
+            },
+          ]);
+          const { CompactionManager } = await import("../core/compaction.js");
+          const compactor = new CompactionManager(
+            config.apiKey,
+            config.model,
+            config.apiBase,
+          );
+          const keepLast = 4;
+          const toPrune = state.messages.slice(0, -keepLast);
+          const kept = state.messages.slice(-keepLast);
+          const summary = await compactor.compact(toPrune);
+          if (summary) {
+            conversationManager.restoreMessages([summary, ...kept]);
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  ✓ Compacted ${toPrune.length} messages into summary. Ready for ${newModel}.`,
+              },
+            ]);
+          } else {
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  ⚠ Auto-compaction failed. Run /compact manually before sending a message.`,
+              },
+            ]);
+          }
+        }
+      }
+
       // Update API key if switching to a cloud provider
       const { getModelProvider } = await import("../core/models.js");
       const provider = await getModelProvider(newModel);
