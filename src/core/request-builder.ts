@@ -354,17 +354,26 @@ export async function buildRequestForModel(
       { type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } },
     ];
 
-    // Add cache_control to the last message's last content block
-    // so the conversation prefix is cached across turns
-    if (convertedMessages.length > 0) {
-      const lastMsg = convertedMessages[convertedMessages.length - 1]!;
-      if (Array.isArray(lastMsg.content) && lastMsg.content.length > 0) {
-        const lastBlock = lastMsg.content[lastMsg.content.length - 1]!;
-        lastBlock.cache_control = { type: "ephemeral" };
-      } else if (typeof lastMsg.content === "string") {
-        lastMsg.content = [
-          { type: "text", text: lastMsg.content, cache_control: { type: "ephemeral" } },
+    // Add cache_control to the last user text message for conversation prefix caching.
+    // Only applies to text blocks — tool_result blocks don't support cache_control.
+    for (let i = convertedMessages.length - 1; i >= 0; i--) {
+      const msg = convertedMessages[i]!;
+      if (msg.role !== "user") continue;
+      if (typeof msg.content === "string") {
+        msg.content = [
+          { type: "text", text: msg.content, cache_control: { type: "ephemeral" } },
         ];
+        break;
+      }
+      if (Array.isArray(msg.content)) {
+        // Find the last text block in this message
+        for (let j = msg.content.length - 1; j >= 0; j--) {
+          if (msg.content[j]!.type === "text") {
+            msg.content[j]!.cache_control = { type: "ephemeral" };
+            break;
+          }
+        }
+        break;
       }
     }
 

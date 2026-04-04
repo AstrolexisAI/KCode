@@ -788,13 +788,19 @@ export class ConversationManager {
         return;
       }
 
-      // Create streaming tool executor: starts read-only tools while model streams
-      const streamingExecutor = new StreamingToolExecutor({
-        tools: this.tools,
-        permissions: this.permissions,
-        config: this.config,
-        abortSignal: this.abortController?.signal,
-      });
+      // Streaming tool executor: starts read-only tools while model streams.
+      // Only enabled for OpenAI-format providers where tool blocks arrive during
+      // streaming. For Anthropic, tools finalize post-stream so no early benefit.
+      const isOpenAIFormat = !this.config.apiBase?.includes("anthropic.com") &&
+        !this.config.model.toLowerCase().startsWith("claude");
+      const streamingExecutor = isOpenAIFormat
+        ? new StreamingToolExecutor({
+            tools: this.tools,
+            permissions: this.permissions,
+            config: this.config,
+            abortSignal: this.abortController?.signal,
+          })
+        : null;
 
       let streamResult: StreamAccumulator;
       try {
@@ -804,7 +810,7 @@ export class ConversationManager {
           accumulateUsage: (usage) => this.accumulateUsage(usage),
           cumulativeUsage: this.cumulativeUsage,
           abortSignal: this.abortController?.signal,
-          onToolReady: (tool) => streamingExecutor.addTool(tool),
+          onToolReady: streamingExecutor ? (tool) => streamingExecutor.addTool(tool) : undefined,
         });
         // Forward all events from the stream processor
         let genResult = await streamGen.next();
@@ -813,7 +819,9 @@ export class ConversationManager {
           if (this.abortController?.signal.aborted) break;
           yield genResult.value;
           // Drain any events from tools that completed during streaming
-          for (const evt of streamingExecutor.drainEvents()) yield evt;
+          if (streamingExecutor) {
+            for (const evt of streamingExecutor.drainEvents()) yield evt;
+          }
           genResult = await streamGen.next();
         }
         streamResult = genResult.value;
@@ -1076,29 +1084,27 @@ export class ConversationManager {
         filteredToolCalls = notBurned;
       }
 
-      // Collect results from tools that were executed during streaming
-      const earlyResults = await streamingExecutor.waitForAll();
-      if (earlyResults.length > 0) {
-        log.info(
-          "perf",
-          `StreamingToolExecutor: ${earlyResults.length} tools pre-executed during streaming`,
-        );
-        // Build result blocks for tools that completed early
-        const earlyIds = new Set(earlyResults.map((r) => r.toolUseId));
-        for (const r of earlyResults) {
-          toolResultBlocks.push({
-            type: "tool_result",
-            tool_use_id: r.toolUseId,
-            content: r.result,
-            is_error: r.isError,
-          } satisfies ToolResultBlock);
-          // Record error fingerprints for burned detection
-          if (r.isError) guardState.recordToolError(r.name, r.result);
+      // Collect results from tools that were executed during streaming (OpenAI format only)
+      if (streamingExecutor) {
+        const earlyResults = await streamingExecutor.waitForAll();
+        if (earlyResults.length > 0) {
+          log.info(
+            "perf",
+            `StreamingToolExecutor: ${earlyResults.length} tools pre-executed during streaming`,
+          );
+          const earlyIds = new Set(earlyResults.map((r) => r.toolUseId));
+          for (const r of earlyResults) {
+            toolResultBlocks.push({
+              type: "tool_result",
+              tool_use_id: r.toolUseId,
+              content: r.result,
+              is_error: r.isError,
+            } satisfies ToolResultBlock);
+            if (r.isError) guardState.recordToolError(r.name, r.result);
+          }
+          filteredToolCalls = filteredToolCalls.filter((tc) => !earlyIds.has(tc.id));
+          for (const evt of streamingExecutor.drainEvents()) yield evt;
         }
-        // Remove early-completed tools from the filtered list
-        filteredToolCalls = filteredToolCalls.filter((tc) => !earlyIds.has(tc.id));
-        // Drain remaining UI events
-        for (const evt of streamingExecutor.drainEvents()) yield evt;
       }
 
       if (filteredToolCalls.length === 0) {
