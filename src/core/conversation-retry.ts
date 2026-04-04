@@ -13,7 +13,7 @@ import type { KCodeConfig, Message } from "./types";
 
 const BASE_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 8000;
-const MIN_RATE_LIMIT_DELAY_MS = 15_000; // Min 15s for rate limits
+const MIN_RATE_LIMIT_DELAY_MS = 5_000; // Min 5s for rate limits (server Retry-After takes priority)
 
 // Anthropic cloud model cascade for 429 rate limit fallback (largest → smallest)
 const ANTHROPIC_RATE_LIMIT_CASCADE: string[] = [
@@ -289,16 +289,26 @@ export async function createStreamWithRetry(
           ctx.config.apiBase?.includes("anthropic.com");
 
         if (isAnthropicCloud && !isHighUtilization && burstRetries < MAX_BURST_RETRIES) {
-          // Low utilization burst limit — keep retrying the same model with longer waits
+          // Low utilization burst limit — honor server's Retry-After (typically 1-5s)
           // Don't consume an attempt slot: decrement so the for-loop increment nets to zero
           burstRetries++;
           attempt--;
+          const burstDelay = Math.max(error.retryAfterMs, MIN_RATE_LIMIT_DELAY_MS);
+          const burstSecs = Math.ceil(burstDelay / 1000);
           log.warn(
             "llm",
-            `Rate limit on ${ctx.config.model} but utilization is only ${Math.round((utilization ?? 0) * 100)}% — likely burst limit, retrying same model (burst retry ${burstRetries}/${MAX_BURST_RETRIES})`,
+            `Rate limit on ${ctx.config.model} but utilization is only ${Math.round((utilization ?? 0) * 100)}% — burst retry ${burstRetries}/${MAX_BURST_RETRIES} in ${burstSecs}s`,
           );
-          await sleep(MIN_RATE_LIMIT_DELAY_MS * 2); // Wait 30s instead of 15s
-          continue; // Go back to retry loop
+          if (ctx.onRetryWait) {
+            for (let s = burstSecs; s > 0; s--) {
+              ctx.onRetryWait(s);
+              await sleep(1000);
+            }
+            ctx.onRetryWait(0);
+          } else {
+            await sleep(burstDelay);
+          }
+          continue;
         }
 
         if (isAnthropicCloud && isHighUtilization) {
