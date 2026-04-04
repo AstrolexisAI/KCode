@@ -779,6 +779,13 @@ export class ConversationManager {
         log.debug("perf", `createStreamWithRetry (fetch+connect): ${Date.now() - _tFetch}ms`);
       } catch (error) {
         this.rateLimiter.release();
+        // If aborted by user (Esc), exit silently — don't show error
+        const errMsg = error instanceof Error ? error.message : String(error);
+        if (errMsg.includes("aborted") || this.abortController?.signal.aborted) {
+          yield { type: "turn_end", stopReason: "aborted" };
+          this.abortController = null;
+          return;
+        }
         yield {
           type: "error",
           error: error instanceof Error ? error : new Error(String(error)),
