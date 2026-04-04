@@ -91,9 +91,9 @@ export async function createStreamWithRetry(
   ctx: CreateStreamContext,
 ): Promise<AsyncGenerator<SSEChunk>> {
   let lastError: Error | undefined;
-  const maxAttempts = Math.max(ctx.maxRetries, 5); // Allow up to 5 for rate limits
+  const maxAttempts = Math.max(ctx.maxRetries, 3); // 3 retries for rate limits — cascade sooner
   let burstRetries = 0; // Extra retries for low-utilization burst limits
-  const MAX_BURST_RETRIES = 3;
+  const MAX_BURST_RETRIES = 2; // 2 extra burst retries max
 
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     let effectiveModel = ctx.config.model;
@@ -149,9 +149,9 @@ export async function createStreamWithRetry(
         }
       }
 
-      // Rate limits get more retries (up to 5) since each wait is 15-60s
+      // Rate limits: 3 retries max before cascading to smaller models
       const effectiveMaxRetries = isRateLimitError(error)
-        ? Math.max(ctx.maxRetries, 5)
+        ? Math.max(ctx.maxRetries, 3)
         : ctx.maxRetries;
 
       if (attempt < effectiveMaxRetries && isRetryableError(error)) {
