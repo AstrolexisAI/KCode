@@ -167,12 +167,10 @@ async function resolveApiKeyWithOAuth(
     lower.startsWith("o4") ||
     baseUrl.includes("openai.com");
 
-  // 1. CLI bridges: reuse existing Claude Code / OpenAI Codex authentication
-  // But prefer direct API key if available — bridge tokens may have restricted scopes
+  // 1. CLI bridges: reuse existing authentication
+  // For Anthropic: prefer bridge token (subscription) over API key (pay-per-token, may run out)
+  // For OpenAI: prefer direct API key over Codex bridge (restricted scopes)
   if (isAnthropic) {
-    const directKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
-    if (directKey) return directKey;
-
     try {
       const { getClaudeCodeToken } = await import("./auth/claude-code-bridge.js");
       const token = await getClaudeCodeToken();
@@ -180,6 +178,9 @@ async function resolveApiKeyWithOAuth(
     } catch {
       /* not available */
     }
+
+    const directKey = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
+    if (directKey) return directKey;
   }
 
   if (isOpenAI) {
