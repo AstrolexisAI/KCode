@@ -53,9 +53,9 @@ export function estimateContextTokens(systemPrompt: string, messages: Message[])
 // ─── Microcompact (proactive tool result clearing) ──────────────
 
 /** Number of recent tool results to keep intact during microcompact. */
-const MICROCOMPACT_KEEP_RECENT = 5;
+const MICROCOMPACT_KEEP_RECENT = 3;
 /** Minimum tool results before microcompact triggers. */
-const MICROCOMPACT_MIN_RESULTS = 8;
+const MICROCOMPACT_MIN_RESULTS = 5;
 /** Sentinel string for cleared tool results. */
 const CLEARED_SENTINEL = "[Old tool result cleared to save context]";
 
@@ -169,10 +169,46 @@ export async function* pruneMessagesIfNeeded(
   }
 
   // Re-check after compression
-  const postCompressTokens = estimateContextTokens(systemPrompt, state.messages);
+  let postCompressTokens = estimateContextTokens(systemPrompt, state.messages);
   if (postCompressTokens < threshold) {
     state.tokenCount = postCompressTokens;
     return;
+  }
+
+  // Phase 1.5: Aggressive tool_result clearing when above 85% — clear ALL old results
+  // This is critical for long tool-heavy sessions (100+ tool calls) where microcompact
+  // only keeps the last 3 but there are many tool_results > 100 chars remaining.
+  const aggressiveThreshold = contextWindowSize * 0.85;
+  if (postCompressTokens >= aggressiveThreshold) {
+    let aggressiveCleared = 0;
+    const protectLast = 2; // only keep 2 most recent messages intact
+    const aggressiveEnd = Math.max(0, messages.length - protectLast);
+    for (let i = 0; i < aggressiveEnd; i++) {
+      const msg = messages[i]!;
+      if (!Array.isArray(msg.content)) continue;
+      for (let j = 0; j < msg.content.length; j++) {
+        const block = msg.content[j]!;
+        if (
+          block.type === "tool_result" &&
+          typeof block.content === "string" &&
+          block.content !== CLEARED_SENTINEL &&
+          block.content.length > 50
+        ) {
+          msg.content[j] = { ...block, content: CLEARED_SENTINEL };
+          aggressiveCleared++;
+        }
+      }
+    }
+    if (aggressiveCleared > 0) {
+      log.info("session", `Aggressive tool_result clearing: ${aggressiveCleared} results cleared (context at ${Math.round(postCompressTokens / contextWindowSize * 100)}%)`);
+      postCompressTokens = estimateContextTokens(systemPrompt, state.messages);
+      yield { type: "compaction_start", messageCount: aggressiveCleared, tokensBefore: postCompressTokens };
+      yield { type: "compaction_end", tokensAfter: postCompressTokens, method: "compressed" };
+      if (postCompressTokens < threshold) {
+        state.tokenCount = postCompressTokens;
+        return;
+      }
+    }
   }
 
   // Phase 2: Auto-compact via LLM summary instead of blind pruning

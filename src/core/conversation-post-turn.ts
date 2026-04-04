@@ -198,6 +198,25 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   if (!hasTextOutput && ctx.stopReason === "end_turn" && emptyEndTurnCount < 2) {
     emptyEndTurnCount++;
 
+    // If context is near full, emergency compact before retrying — otherwise the retry
+    // will also fail with an empty response (model can't fit output in remaining context)
+    if (ctx.tokenCount > 0 && ctx.config?.contextWindowSize) {
+      const pct = ctx.tokenCount / ctx.config.contextWindowSize;
+      if (pct > 0.85) {
+        log.warn(
+          "session",
+          `Empty response at ${Math.round(pct * 100)}% context — triggering emergency prune before retry`,
+        );
+        // Aggressive: drop half the old messages to make room
+        const keepLast = 6;
+        const dropCount = Math.max(2, Math.floor((ctx.messages.length - keepLast) / 2));
+        if (dropCount > 0 && ctx.messages.length > keepLast + 2) {
+          ctx.messages.splice(1, dropCount); // keep first message + recent
+          log.info("session", `Emergency pruned ${dropCount} messages before empty-response retry`);
+        }
+      }
+    }
+
     log.info(
       "session",
       `Empty response (${lastEmptyType}) on turn ${ctx.turnCount} — retry ${emptyEndTurnCount}/2`,
