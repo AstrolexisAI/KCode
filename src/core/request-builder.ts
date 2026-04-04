@@ -35,6 +35,8 @@ export interface BuildRequestOptions {
 export interface RateLimitError extends Error {
   retryAfterMs: number;
   isRateLimit: true;
+  /** Last known 5-hour utilization (0.0-1.0), if available */
+  fiveHourUtilization?: number;
 }
 
 export function isRateLimitError(err: unknown): err is RateLimitError {
@@ -497,6 +499,13 @@ export async function executeModelRequest(
       );
       (err as RateLimitError).retryAfterMs = retrySeconds * 1000;
       (err as RateLimitError).isRateLimit = true;
+      // Capture utilization: prefer 429 response headers, fall back to last known
+      const utilHeader = response.headers.get("anthropic-ratelimit-unified-5h-utilization");
+      (err as RateLimitError).fiveHourUtilization = utilHeader
+        ? Number(utilHeader)
+        : (_rateLimitUsage?.fiveHour ?? undefined);
+      // Also update tracking from 429 headers (Anthropic sends them on 429 too)
+      updateRateLimitUsage(response.headers);
       throw err;
     } else if (response.status === 400 && estimatedTokens > 8000) {
       hint =

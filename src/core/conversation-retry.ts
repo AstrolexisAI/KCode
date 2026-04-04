@@ -92,8 +92,10 @@ export async function createStreamWithRetry(
 ): Promise<AsyncGenerator<SSEChunk>> {
   let lastError: Error | undefined;
   const maxAttempts = Math.max(ctx.maxRetries, 5); // Allow up to 5 for rate limits
+  let burstRetries = 0; // Extra retries for low-utilization burst limits
+  const MAX_BURST_RETRIES = 3;
 
-  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 0; attempt <= maxAttempts + MAX_BURST_RETRIES; attempt++) {
     let effectiveModel = ctx.config.model;
     try {
       if (ctx.config.autoRoute !== false && !ctx.config.modelExplicitlySet) {
@@ -277,11 +279,27 @@ export async function createStreamWithRetry(
       }
 
       // Auto-cascade to smaller Anthropic models on rate limit exhaustion
+      // Only cascade if utilization is high (>80%) — low utilization means it's a
+      // temporary burst limit that will resolve with more retries on the same model
       if (isRateLimitError(error)) {
+        const utilization = error.fiveHourUtilization;
+        const isHighUtilization = utilization === undefined || utilization > 0.8;
         const isAnthropicCloud =
           ctx.config.model.toLowerCase().startsWith("claude-") ||
           ctx.config.apiBase?.includes("anthropic.com");
-        if (isAnthropicCloud) {
+
+        if (isAnthropicCloud && !isHighUtilization && burstRetries < MAX_BURST_RETRIES) {
+          // Low utilization burst limit — keep retrying the same model with longer waits
+          burstRetries++;
+          log.warn(
+            "llm",
+            `Rate limit on ${ctx.config.model} but utilization is only ${Math.round((utilization ?? 0) * 100)}% — likely burst limit, retrying same model (burst retry ${burstRetries}/${MAX_BURST_RETRIES})`,
+          );
+          await sleep(MIN_RATE_LIMIT_DELAY_MS * 2); // Wait 30s instead of 15s
+          continue; // Go back to retry loop
+        }
+
+        if (isAnthropicCloud && isHighUtilization) {
           const cascadeFallbacks = getAnthropicRateLimitFallbacks(ctx.config.model);
           const triedModels = new Set(
             [
@@ -294,15 +312,16 @@ export async function createStreamWithRetry(
           for (const cascadeModel of cascadeFallbacks) {
             if (triedModels.has(cascadeModel)) continue;
             triedModels.add(cascadeModel);
+            const pct = utilization !== undefined ? ` (${Math.round(utilization * 100)}% used)` : "";
             log.warn(
               "llm",
-              `Rate limit exhausted on ${ctx.config.model} — auto-cascading to ${cascadeModel}`,
+              `Rate limit exhausted on ${ctx.config.model}${pct} — auto-cascading to ${cascadeModel}`,
             );
             if (ctx.debugTracer?.isEnabled()) {
               ctx.debugTracer.traceModelSwitch(
                 ctx.config.model,
                 cascadeModel,
-                `Rate limit exhausted after ${attempt + 1} attempts, auto-cascading to smaller model`,
+                `Rate limit exhausted after ${attempt + 1} attempts${pct}, auto-cascading to smaller model`,
               );
             }
             try {
