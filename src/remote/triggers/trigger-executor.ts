@@ -4,7 +4,7 @@
 import type { RemoteTrigger, TriggerRunResult } from "./types";
 
 export interface TriggerExecutorConfig {
-  /** Path to the KCode entry point. Defaults to "src/index.ts". */
+  /** @deprecated Binary is now auto-detected. This field is ignored. */
   entryPoint?: string;
   /** Timeout in milliseconds for each trigger run. Defaults to 300000 (5 min). */
   timeoutMs?: number;
@@ -24,14 +24,29 @@ export interface SpawnResult {
   stderr: string;
 }
 
-const DEFAULT_ENTRY_POINT = "src/index.ts";
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
+
+function findBinary(): string {
+  const { existsSync } = require("node:fs") as typeof import("node:fs");
+  const { join } = require("node:path") as typeof import("node:path");
+  const home = process.env.HOME ?? "/home";
+  for (const p of [
+    join(home, ".local", "bin", "kcode"),
+    join(home, ".bun", "bin", "kcode"),
+    join(home, "KCode", "dist", "kcode"),
+    "/usr/local/bin/kcode",
+  ]) {
+    if (existsSync(p)) return p;
+  }
+  return "kcode";
+}
 
 /**
  * Default spawn function using Bun.spawn.
  */
 async function defaultSpawn(args: string[], options: SpawnOptions): Promise<SpawnResult> {
-  const proc = Bun.spawn(["bun", "run", ...args], {
+  const kcodeBin = findBinary();
+  const proc = Bun.spawn([kcodeBin, ...args], {
     cwd: options.cwd,
     env: { ...process.env, ...options.env },
     stdout: "pipe",
@@ -77,7 +92,7 @@ export class TriggerExecutor {
   private spawnFn: (args: string[], options: SpawnOptions) => Promise<SpawnResult>;
 
   constructor(config?: TriggerExecutorConfig) {
-    this.entryPoint = config?.entryPoint ?? DEFAULT_ENTRY_POINT;
+    this.entryPoint = ""; // deprecated — binary auto-detected by findBinary()
     this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.spawnFn = config?.spawnFn ?? defaultSpawn;
   }
@@ -88,7 +103,7 @@ export class TriggerExecutor {
   async execute(trigger: RemoteTrigger, cwd: string): Promise<TriggerRunResult> {
     const startTime = Date.now();
 
-    const args: string[] = [this.entryPoint, "--print"];
+    const args: string[] = ["--print"];
 
     if (trigger.maxTurns) {
       args.push("--max-turns", String(trigger.maxTurns));

@@ -120,10 +120,16 @@ function runAgent(
 /**
  * Find the kcode binary path.
  */
-function findKCodeBinary(): string {
+/**
+ * Find the kcode binary for subprocess spawning.
+ * Works from any CWD — checks standard install locations then falls back to PATH.
+ */
+export function findKCodeBinary(): string {
+  const home = process.env.HOME ?? "/home";
   const candidates = [
-    join(process.env.HOME ?? "/home", ".local", "bin", "kcode"),
-    join(process.env.HOME ?? "/home", "KCode", "dist", "kcode"),
+    join(home, ".local", "bin", "kcode"),
+    join(home, ".bun", "bin", "kcode"),
+    join(home, "KCode", "dist", "kcode"),
     "/usr/local/bin/kcode",
   ];
   for (const p of candidates) {

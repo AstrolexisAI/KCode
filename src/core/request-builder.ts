@@ -613,9 +613,16 @@ export async function executeModelRequest(
       // Also update tracking from 429 headers (Anthropic sends them on 429 too)
       updateRateLimitUsage(response.headers);
       throw err;
-    } else if (response.status === 400 && estimatedTokens > 8000) {
-      hint =
-        " (hint: request may exceed model context window — try /compact or reduce conversation length)";
+    } else {
+      // Classify error and provide actionable hint
+      const errLower = errorText.toLowerCase();
+      if (errLower.includes("credit") || errLower.includes("balance") || errLower.includes("billing") || errLower.includes("payment") || response.status === 402) {
+        hint = " (hint: check your API billing/credits at the provider's dashboard)";
+      } else if (response.status === 401 || response.status === 403 || errLower.includes("missing_scope") || errLower.includes("unauthorized")) {
+        hint = " (hint: check API key permissions — ensure it has the required scopes)";
+      } else if (response.status === 400 && (errLower.includes("too long") || errLower.includes("too many tokens") || errLower.includes("context") || errLower.includes("maximum"))) {
+        hint = " (hint: request may exceed model context window — try /compact or reduce conversation length)";
+      }
     }
     throw new Error(
       `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}${hint}`,

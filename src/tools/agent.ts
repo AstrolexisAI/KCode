@@ -291,9 +291,10 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
     customAgent = findCustomAgent(agentType, process.cwd());
   }
 
-  // Build the subagent command
-  // The subagent runs the same CLI with a special flag
-  const args: string[] = ["run", "src/index.ts", "--agent"];
+  // Build the subagent command using the installed binary (not src/index.ts)
+  const { findKCodeBinary } = require("../core/swarm") as typeof import("../core/swarm");
+  const kcodeBin = findKCodeBinary();
+  const args: string[] = ["--agent"];
 
   if (customAgent) {
     // Apply custom agent config — CLI flags
@@ -404,7 +405,7 @@ export async function executeAgent(input: Record<string, unknown>): Promise<Tool
 
   let proc: ChildProcess;
   try {
-    proc = spawn("bun", args, {
+    proc = spawn(kcodeBin, args, {
       cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: agentEnv,
