@@ -13,17 +13,17 @@ const FULL_COMPACT_SYSTEM_PROMPT =
   "Produce a concise summary preserving the essential context.";
 
 const FULL_COMPACT_USER_PROMPT_TEMPLATE =
-  "Resume esta conversacion preservando:\n" +
-  "- Decisiones tomadas y su razon\n" +
-  "- Archivos creados o modificados (paths exactos)\n" +
-  "- Errores encontrados y como se resolvieron\n" +
-  "- Estado actual del trabajo (que falta por hacer)\n" +
-  "- Preferencias del usuario expresadas\n\n" +
-  "NO incluyas:\n" +
-  "- Contenido literal de archivos (se restaurara por separado)\n" +
-  "- Outputs completos de herramientas\n" +
-  "- Detalles de implementacion que estan en el codigo\n\n" +
-  "Formato: Narrativa concisa en primera persona, max 2000 tokens.\n\n" +
+  "Summarize this conversation preserving:\n" +
+  "- Decisions made and their reasoning\n" +
+  "- Files created or modified (exact paths)\n" +
+  "- Errors encountered and how they were resolved\n" +
+  "- Current state of work (what remains to be done)\n" +
+  "- User preferences expressed\n\n" +
+  "DO NOT include:\n" +
+  "- Literal file contents (will be restored separately)\n" +
+  "- Full tool outputs\n" +
+  "- Implementation details that are in the code\n\n" +
+  "Format: Concise first-person narrative, max 2000 tokens.\n\n" +
   "---\n\n";
 
 // ─── Full Compact ───────────────────────────────────────────────
@@ -138,7 +138,7 @@ function groupMessagesIntoRounds(messages: Message[]): string {
 
   for (const msg of messages) {
     if (msg.role === "user" && currentRound.length > 0) {
-      rounds.push(`[Ronda ${roundIndex}]\n${currentRound.join("\n")}`);
+      rounds.push(`[Round ${roundIndex}]\n${currentRound.join("\n")}`);
       roundIndex++;
       currentRound = [];
     }
@@ -146,7 +146,7 @@ function groupMessagesIntoRounds(messages: Message[]): string {
   }
 
   if (currentRound.length > 0) {
-    rounds.push(`[Ronda ${roundIndex}]\n${currentRound.join("\n")}`);
+    rounds.push(`[Round ${roundIndex}]\n${currentRound.join("\n")}`);
   }
 
   return rounds.join("\n\n");
