@@ -499,6 +499,23 @@ export async function executeModelRequest(
     }
   }
 
+  // Debug: log message structure and validate tool_use/tool_result pairing
+  if (Array.isArray(req.body.messages)) {
+    const msgs = req.body.messages as Array<{role: string; content: unknown}>;
+    const msgSummary = msgs.map((m, i) => {
+      if (typeof m.content === "string") return `${i}:${m.role}(text)`;
+      if (Array.isArray(m.content)) {
+        const types = (m.content as Array<{type: string; id?: string; tool_use_id?: string}>).map(b => {
+          if (b.type === "tool_use") return `tool_use(${b.id?.slice(-6)})`;
+          if (b.type === "tool_result") return `tool_result(${b.tool_use_id?.slice(-6)})`;
+          return b.type;
+        });
+        return `${i}:${m.role}[${types.join(",")}]`;
+      }
+      return `${i}:${m.role}(?)`;
+    });
+    log.warn("llm", `MSG_DEBUG: ${msgSummary.join(" | ")}`);
+  }
   log.info("llm", `Request to ${modelName} (${req.provider}) at ${req.url}`);
 
   // Use a long timeout for large prompts (local models can take minutes to process 40K+ tokens)
