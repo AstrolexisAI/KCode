@@ -109,6 +109,8 @@ export interface KCodeConfig {
   tertiaryModel?: string; // Ultra-lightweight fallback if both primary and fallback fail
   fallbackModels?: string[]; // Ordered fallback chain — tried sequentially after primary + retries fail
   _activeFallback?: string; // Set at runtime when fallback is active (for UI notification)
+  _rateLimitedModel?: string; // Original model parked due to rate limit
+  _rateLimitedUntil?: number; // Unix ms when rate limit cooldown expires
   maxBudgetUsd?: number; // Max spend per session in USD
   outputFormat?: "text" | "json" | "stream-json"; // Output format for print mode
   telemetry?: boolean; // Opt-in/out for local analytics tracking

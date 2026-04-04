@@ -95,6 +95,16 @@ export async function createStreamWithRetry(
   let burstRetries = 0; // Extra retries for low-utilization burst limits
   const MAX_BURST_RETRIES = 2; // 2 extra burst retries max
 
+  // Restore original model if rate-limit cooldown has expired
+  if (ctx.config._rateLimitedModel && ctx.config._rateLimitedUntil) {
+    if (Date.now() >= ctx.config._rateLimitedUntil) {
+      log.info("llm", `Rate-limit cooldown expired — restoring ${ctx.config._rateLimitedModel}`);
+      ctx.config.model = ctx.config._rateLimitedModel;
+      ctx.config._rateLimitedModel = undefined;
+      ctx.config._rateLimitedUntil = undefined;
+    }
+  }
+
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     let effectiveModel = ctx.config.model;
     try {
@@ -210,8 +220,15 @@ export async function createStreamWithRetry(
             ctx.abortController,
           );
           log.info("llm", `Fallback model ${ctx.config.fallbackModel} connected`);
-          // Notify that fallback was used (stream handler can show a banner)
           ctx.config._activeFallback = ctx.config.fallbackModel;
+          // If fallback was triggered by rate limit, switch the active model for the
+          // rest of the session to avoid re-hitting the rate limit on every turn
+          if (isRateLimitError(error)) {
+            ctx.config._rateLimitedModel = ctx.config.model;
+            ctx.config._rateLimitedUntil = Date.now() + 5 * 60 * 1000; // 5 min cooldown
+            ctx.config.model = ctx.config.fallbackModel;
+            log.warn("llm", `Rate-limited model ${ctx.config._rateLimitedModel} parked for 5 min — using ${ctx.config.model}`);
+          }
           return stream;
         } catch (fallbackErr) {
           log.error(
