@@ -38,8 +38,11 @@ export function isLegacyHookConfig(entry: HookConfig | HookEntry): entry is Hook
  */
 export function safeRegexTest(pattern: string, target: string): boolean {
   try {
-    // Reject patterns longer than 200 chars (reduces attack surface)
-    if (pattern.length > 200) return false;
+    // Reject patterns longer than 100 chars (tightened from 200 for ReDoS defense)
+    if (pattern.length > 100) return false;
+
+    // Reject large quantifiers that enable slow backtracking
+    if (/\{\s*\d{4,}\s*,?\s*\d*\s*\}/.test(pattern)) return false;
 
     // Reject obviously dangerous patterns (nested quantifiers)
     if (/([+*])\)?[+*{]|(\{[^}]*\})\)?[+*{]/.test(pattern)) {
@@ -59,8 +62,8 @@ export function safeRegexTest(pattern: string, target: string): boolean {
     }
 
     // Execute with a timeout guard using a simple length check heuristic
-    if (target.length > 10_000) {
-      return false; // Don't run regex against very long strings
+    if (target.length > 5_000) {
+      return false; // Don't run regex against very long strings (tightened from 10K)
     }
 
     const regex = new RegExp(pattern);
