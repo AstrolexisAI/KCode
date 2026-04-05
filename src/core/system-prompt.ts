@@ -179,17 +179,27 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       label: "environment",
     });
 
+    // Lean prompt mode: skip descriptive layers that add noise without
+    // operational value. Moves KCode closer to Claude Code's tight,
+    // operational prompt structure. Toggle with KCODE_LEAN_PROMPT=1.
+    // Default: off (existing behavior preserved).
+    const leanPrompt = process.env.KCODE_LEAN_PROMPT === "1";
+
     // ─── Medium priority ───────────────────────────────────────
-    sections.push({
-      content: buildSituationalAwareness(config),
-      priority: SectionPriority.MEDIUM,
-      label: "situational",
-    });
-    sections.push({
-      content: buildMetacognition(config),
-      priority: SectionPriority.MEDIUM,
-      label: "metacognition",
-    });
+    if (!leanPrompt) {
+      sections.push({
+        content: buildSituationalAwareness(config),
+        priority: SectionPriority.MEDIUM,
+        label: "situational",
+      });
+      sections.push({
+        content: buildMetacognition(config),
+        priority: SectionPriority.MEDIUM,
+        label: "metacognition",
+      });
+    }
+    // Auto-memory is functional (tells the model how to persist memory).
+    // Keep even in lean mode.
     sections.push({
       content: buildAutoMemoryInstructions(),
       priority: SectionPriority.MEDIUM,
@@ -261,63 +271,76 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
     }
 
     // ─── Low priority (first to be dropped) ────────────────────
-    const keywords = extractContextKeywords(config);
-    const learnings = loadLearnings(config.workingDirectory, keywords);
-    if (learnings) {
-      sections.push({ content: learnings, priority: SectionPriority.LOW, label: "learnings" });
-    }
-
-    // Knowledge distillation
-    try {
-      const distilled = await loadDistilledExamples(undefined, keywords, config.workingDirectory);
-      if (distilled) {
-        sections.push({ content: distilled, priority: SectionPriority.LOW, label: "distillation" });
+    // In lean mode, skip all descriptive background layers:
+    // learnings, distillation, world model, narrative, user model.
+    // These are useful over long sessions but add noise for focused tasks.
+    if (!leanPrompt) {
+      const keywords = extractContextKeywords(config);
+      const learnings = loadLearnings(config.workingDirectory, keywords);
+      if (learnings) {
+        sections.push({ content: learnings, priority: SectionPriority.LOW, label: "learnings" });
       }
-    } catch (err) {
-      log.debug("distillation", "Failed to load distilled examples: " + err);
-    }
 
-    // World Model — recent discrepancies
-    try {
-      const discrepancies = getWorldModel().loadRecentDiscrepancies(3);
-      if (discrepancies.length > 0) {
-        const lines = ["# Recent Prediction Errors", "", "Learn from these past mistakes:"];
-        for (const d of discrepancies) {
-          lines.push(`- **${d.action}**: expected "${d.expected}" but got different result`);
+      // Knowledge distillation
+      try {
+        const distilled = await loadDistilledExamples(
+          undefined,
+          keywords,
+          config.workingDirectory,
+        );
+        if (distilled) {
+          sections.push({
+            content: distilled,
+            priority: SectionPriority.LOW,
+            label: "distillation",
+          });
         }
-        sections.push({
-          content: lines.join("\n"),
-          priority: SectionPriority.LOW,
-          label: "world-model",
-        });
+      } catch (err) {
+        log.debug("distillation", "Failed to load distilled examples: " + err);
       }
-    } catch (err) {
-      log.debug("world-model", "Failed to load recent discrepancies: " + err);
-    }
 
-    // Inner Narrative — session continuity
-    try {
-      const narrative = getNarrativeManager().loadNarrative(3);
-      if (narrative) {
-        sections.push({ content: narrative, priority: SectionPriority.LOW, label: "narrative" });
+      // World Model — recent discrepancies
+      try {
+        const discrepancies = getWorldModel().loadRecentDiscrepancies(3);
+        if (discrepancies.length > 0) {
+          const lines = ["# Recent Prediction Errors", "", "Learn from these past mistakes:"];
+          for (const d of discrepancies) {
+            lines.push(`- **${d.action}**: expected "${d.expected}" but got different result`);
+          }
+          sections.push({
+            content: lines.join("\n"),
+            priority: SectionPriority.LOW,
+            label: "world-model",
+          });
+        }
+      } catch (err) {
+        log.debug("world-model", "Failed to load recent discrepancies: " + err);
       }
-    } catch (err) {
-      log.debug("narrative", "Failed to load session narrative: " + err);
-    }
 
-    // ─── Optional (dropped first) ──────────────────────────────
-    // User Model — dynamic profiling
-    try {
-      const userPrompt = getUserModel().formatForPrompt();
-      if (userPrompt) {
-        sections.push({
-          content: userPrompt,
-          priority: SectionPriority.OPTIONAL,
-          label: "user-model",
-        });
+      // Inner Narrative — session continuity
+      try {
+        const narrative = getNarrativeManager().loadNarrative(3);
+        if (narrative) {
+          sections.push({ content: narrative, priority: SectionPriority.LOW, label: "narrative" });
+        }
+      } catch (err) {
+        log.debug("narrative", "Failed to load session narrative: " + err);
       }
-    } catch (err) {
-      log.debug("user-model", "Failed to load user model for prompt: " + err);
+
+      // ─── Optional (dropped first) ──────────────────────────────
+      // User Model — dynamic profiling
+      try {
+        const userPrompt = getUserModel().formatForPrompt();
+        if (userPrompt) {
+          sections.push({
+            content: userPrompt,
+            priority: SectionPriority.OPTIONAL,
+            label: "user-model",
+          });
+        }
+      } catch (err) {
+        log.debug("user-model", "Failed to load user model for prompt: " + err);
+      }
     }
 
     // Path-specific rules
