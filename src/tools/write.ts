@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { AUDIT_FILENAME_PATTERN, isAuditFilename } from "../core/audit-guards";
+import { AUDIT_FILENAME_PATTERN, auditGuardsEnabled, isAuditFilename } from "../core/audit-guards";
 import {
   getGrepHitFiles,
   grepCount,
@@ -205,7 +205,7 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
   // an AUDIT_REPORT.md (or similar) already exists in the same directory.
   // The goal is to force ONE authoritative report instead of a pile of
   // AUDIT_REPORT.md + FIXES_SUMMARY.txt + FINAL_AUDIT_REPORT.md companions.
-  if (isAuditFilename(file_path)) {
+  if (auditGuardsEnabled() && isAuditFilename(file_path)) {
     const dir = dirname(file_path);
     const existing = findExistingCanonicalAuditReport(dir);
     const fileBase = basename(file_path);
@@ -228,7 +228,7 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
   // (a) at least one Grep call to locate bug patterns across the tree,
   // (b) at least 8 distinct SOURCE files Read in this session, and
   // (c) coverage of grep-hit files — you can't leave high-risk files unread.
-  if (isAuditFilename(file_path)) {
+  if (auditGuardsEnabled() && isAuditFilename(file_path)) {
     const greps = grepCount();
     const sourceReads = sourceReadCount();
     const problems: string[] = [];
@@ -316,7 +316,7 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
   // Citation validation: every file:line citation in the audit body must
   // refer to a file actually Read in this session. Catches hallucinated
   // line numbers and fabricated findings on unread files.
-  if (isAuditFilename(file_path)) {
+  if (auditGuardsEnabled() && isAuditFilename(file_path)) {
     const citedFiles = extractCitedFiles(content);
     const uncitedUnread = citedFiles.filter((f) => !wasRead(f));
     if (uncitedUnread.length > 0) {

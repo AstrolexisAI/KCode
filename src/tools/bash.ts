@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import {
+  auditGuardsEnabled,
   extractBashGrepPattern,
   extractBashReadTargets,
   extractRedirectionTargets,
@@ -217,8 +218,8 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   // Guard: block shell-redirection writes to audit report filenames.
   // Prevents the model from bypassing the Write tool's audit guards by
   // using `cat > AUDIT_REPORT.md << EOF`, `echo ... > FIXES_SUMMARY.txt`,
-  // or `tee FINAL_AUDIT.md`.
-  try {
+  // or `tee FINAL_AUDIT.md`. Skip when audit guards are globally disabled.
+  if (auditGuardsEnabled()) try {
     const redirTargets = extractRedirectionTargets(command);
     const auditTargets = redirTargets.filter((t) => isAuditFilename(t));
     if (auditTargets.length > 0) {
