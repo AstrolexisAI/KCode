@@ -25,21 +25,6 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         "../../core/audit-engine/report-generator.js"
       );
 
-      // Progress is written to STDERR (not stdout) because Ink owns
-      // stdout for its React render tree. Writing to stdout causes
-      // duplicate footer rendering. stderr goes directly to the
-      // terminal without conflicting with Ink's layout.
-      const W = process.stderr.write.bind(process.stderr);
-      const CLR = "\x1B[2K\r";
-
-      W(`\n  KCode Audit Engine\n`);
-      W(`    Project:  ${projectRoot}\n`);
-      if (skipVerify) {
-        W(`    Mode:     static-only (--skip-verify)\n`);
-      } else {
-        W(`    Model:    ${appConfig.model ?? "default"}\n`);
-      }
-
       const { buildAuditLlmCallbackFromConfig } = await import(
         "../../core/audit-engine/llm-callback.js"
       );
@@ -47,45 +32,17 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
         : buildAuditLlmCallbackFromConfig(appConfig);
 
-      let totalCandidates = 0;
-      let verifiedCount = 0;
-      let confirmedCount = 0;
-      const startTime = Date.now();
-
       const result = await runAudit({
         projectRoot,
         llmCallback,
         maxFiles: 500,
         skipVerification: skipVerify,
-        onPhase: (phase, detail) => {
-          W(`    ◆ ${phase}${detail ? ": " + detail : ""}\n`);
-          if (phase === "verifying" && detail) {
-            const m = detail.match(/(\d+) candidate/);
-            if (m) totalCandidates = parseInt(m[1]!, 10);
-          }
-        },
-        onCandidate: (_cand, verification) => {
-          verifiedCount++;
-          if (verification.verdict === "confirmed") confirmedCount++;
-          if (totalCandidates > 0) {
-            const pct = Math.round((verifiedCount / totalCandidates) * 100);
-            const barLen = 20;
-            const filled = Math.round((verifiedCount / totalCandidates) * barLen);
-            const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
-            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-            W(`${CLR}    [${bar}] ${verifiedCount}/${totalCandidates} (${pct}%) — ${confirmedCount} confirmed — ${elapsed}s`);
-          }
-        },
       });
-
-      // Final newline after progress bar
-      W("\n");
 
       const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
       writeFileSync(outputPath, generateMarkdownReport(result));
 
-      // Build final summary for the conversation history
-      const finalLines = [
+      const lines: string[] = [
         `  KCode Audit Engine`,
         `    Project:  ${projectRoot}`,
         skipVerify ? `    Mode:     static-only` : `    Model:    ${appConfig.model ?? "default"}`,
@@ -99,29 +56,18 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
       ];
       if (result.findings.length > 0) {
-        finalLines.push("", `  Top findings:`);
+        lines.push("", `  Top findings:`);
         for (const f of result.findings.slice(0, 5)) {
           const rel = f.file.replace(projectRoot + "/", "");
           const icon =
             f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
-          finalLines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
+          lines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
         }
         if (result.findings.length > 5) {
-          finalLines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
+          lines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
         }
       }
-
-      // Print final summary to stderr
-      W(`\n    ✓ Report written: ${outputPath}\n`);
-      W(`    Files: ${result.files_scanned} | Findings: ${result.confirmed_findings} | FP: ${result.false_positives} | ${(result.elapsed_ms / 1000).toFixed(1)}s\n\n`);
-
-      // Push to conversation history so it persists in the session
-      setCompleted((prev) => [
-        ...prev,
-        { kind: "text", role: "user", text: `/scan ${args ?? ""}`.trim() },
-        { kind: "text", role: "assistant", text: finalLines.join("\n") },
-      ]);
-      return "__INLINE_DONE__";
+      return lines.join("\n");
     }
 
     case "depgraph": {
