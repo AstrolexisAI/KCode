@@ -17,8 +17,15 @@ import { getPatternById } from "./patterns";
 import type { Candidate, Verification, VerifyVerdict } from "./types";
 
 export interface VerifyOptions {
-  /** Callback that invokes the configured LLM and returns its response text. */
+  /** Primary LLM callback (typically local, cheap). */
   llmCallback: (prompt: string) => Promise<string>;
+  /**
+   * Optional fallback LLM callback (typically cloud, accurate). When set,
+   * candidates that the primary model marks as NEEDS_CONTEXT (ambiguous)
+   * are re-verified with this callback. Keeps token cost down: only hard
+   * cases escalate to the expensive model.
+   */
+  fallbackCallback?: (prompt: string) => Promise<string>;
   /** Max lines of file content to include as context (default 200). */
   contextLines?: number;
   /** Optional progress callback. */
@@ -116,14 +123,29 @@ function parseVerdict(response: string): Verification {
 
 /**
  * Verify a single candidate by calling the LLM.
+ *
+ * If a fallbackCallback is provided and the primary returns
+ * NEEDS_CONTEXT, escalate to the fallback. The returned verification
+ * is annotated with the model used (via `reasoning` suffix) so users
+ * can see how many candidates escalated.
  */
 export async function verifyCandidate(
   candidate: Candidate,
   opts: VerifyOptions,
 ): Promise<Verification> {
   const prompt = buildVerifyPrompt(candidate);
-  const response = await opts.llmCallback(prompt);
-  return parseVerdict(response);
+  const primary = await opts.llmCallback(prompt);
+  const primaryVerdict = parseVerdict(primary);
+
+  // Escalate to fallback only if primary was ambiguous
+  if (primaryVerdict.verdict === "needs_context" && opts.fallbackCallback) {
+    const escalated = await opts.fallbackCallback(prompt);
+    const escalatedVerdict = parseVerdict(escalated);
+    escalatedVerdict.reasoning = `[escalated] ${escalatedVerdict.reasoning}`;
+    return escalatedVerdict;
+  }
+
+  return primaryVerdict;
 }
 
 /**

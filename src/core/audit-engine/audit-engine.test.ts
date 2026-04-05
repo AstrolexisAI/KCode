@@ -232,6 +232,54 @@ describe("audit-engine orchestrator", () => {
     expect(result.findings.length).toBe(0);
   });
 
+  test("runAudit in hybrid mode escalates NEEDS_CONTEXT to fallback", async () => {
+    writeFileSync(join(tmp, "ambig.cpp"), `void f() { strcpy(a, b); }\n`);
+
+    let primaryCalls = 0;
+    let fallbackCalls = 0;
+    const primary = async (): Promise<string> => {
+      primaryCalls++;
+      return "VERDICT: NEEDS_CONTEXT\nREASONING: can't tell without more info\n";
+    };
+    const fallback = async (): Promise<string> => {
+      fallbackCalls++;
+      return "VERDICT: CONFIRMED\nREASONING: cloud model confirms real bug\nFIX: use strncpy\n";
+    };
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: primary,
+      fallbackCallback: fallback,
+    });
+
+    expect(primaryCalls).toBeGreaterThanOrEqual(1);
+    expect(fallbackCalls).toBeGreaterThanOrEqual(1);
+    // Escalation should have resolved the ambiguous case to confirmed
+    expect(result.confirmed_findings).toBeGreaterThanOrEqual(1);
+    expect(result.findings[0]!.verification.reasoning).toContain("[escalated]");
+  });
+
+  test("runAudit in hybrid mode does NOT call fallback when primary is definitive", async () => {
+    writeFileSync(join(tmp, "clear.cpp"), `void f() { strcpy(a, b); }\n`);
+
+    let fallbackCalls = 0;
+    const primary = async (): Promise<string> =>
+      "VERDICT: CONFIRMED\nREASONING: clear case\nFIX: use strncpy\n";
+    const fallback = async (): Promise<string> => {
+      fallbackCalls++;
+      return "VERDICT: CONFIRMED\nREASONING: cloud\n";
+    };
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: primary,
+      fallbackCallback: fallback,
+    });
+
+    expect(fallbackCalls).toBe(0); // primary was definitive, no escalation
+    expect(result.confirmed_findings).toBeGreaterThanOrEqual(1);
+  });
+
   test("runAudit with skipVerification returns all candidates", async () => {
     writeFileSync(join(tmp, "code.cpp"), `void f() { gets(buf); }\n`);
 
