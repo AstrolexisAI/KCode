@@ -25,13 +25,14 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         "../../core/audit-engine/report-generator.js"
       );
 
-      // Progress is written directly to stdout (bypassing Ink/React)
-      // because Ink doesn't re-render setCompleted updates during an
-      // async handler. stdout.write works immediately.
-      const W = process.stdout.write.bind(process.stdout);
-      const CLR = "\x1B[2K\r"; // clear line + carriage return
+      // Progress is written to STDERR (not stdout) because Ink owns
+      // stdout for its React render tree. Writing to stdout causes
+      // duplicate footer rendering. stderr goes directly to the
+      // terminal without conflicting with Ink's layout.
+      const W = process.stderr.write.bind(process.stderr);
+      const CLR = "\x1B[2K\r";
 
-      W(`  KCode Audit Engine\n`);
+      W(`\n  KCode Audit Engine\n`);
       W(`    Project:  ${projectRoot}\n`);
       if (skipVerify) {
         W(`    Mode:     static-only (--skip-verify)\n`);
@@ -110,9 +111,9 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         }
       }
 
-      // Print final summary to stdout too
-      W(`    ✓ Report written: ${outputPath}\n`);
-      W(`    Files: ${result.files_scanned} | Findings: ${result.confirmed_findings} | FP: ${result.false_positives} | ${(result.elapsed_ms / 1000).toFixed(1)}s\n`);
+      // Print final summary to stderr
+      W(`\n    ✓ Report written: ${outputPath}\n`);
+      W(`    Files: ${result.files_scanned} | Findings: ${result.confirmed_findings} | FP: ${result.false_positives} | ${(result.elapsed_ms / 1000).toFixed(1)}s\n\n`);
 
       // Push to conversation history so it persists in the session
       setCompleted((prev) => [
