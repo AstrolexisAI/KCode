@@ -4,7 +4,12 @@
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { extractRedirectionTargets, isAuditFilename } from "../core/audit-guards";
+import {
+  extractBashGrepPattern,
+  extractBashReadTargets,
+  extractRedirectionTargets,
+  isAuditFilename,
+} from "../core/audit-guards";
 import { log } from "../core/logger";
 import {
   getDefaultSandboxConfig,
@@ -169,6 +174,28 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
+
+  // Record Bash-as-Read and Bash-as-Grep so they count toward the audit
+  // reconnaissance minimums. Without this, `cat foo.cpp` via Bash would
+  // bypass recordRead() (which is only called from the Read tool) and the
+  // model could pile up reads via Bash that never count toward the
+  // source-read minimum.
+  try {
+    const readTargets = extractBashReadTargets(command);
+    if (readTargets.length > 0) {
+      import("../core/session-tracker.js").then((m) => {
+        for (const t of readTargets) m.recordRead(t);
+      });
+    }
+    const grepPattern = extractBashGrepPattern(command);
+    if (grepPattern) {
+      import("../core/session-tracker.js").then((m) => {
+        m.recordGrep();
+      });
+    }
+  } catch {
+    /* best-effort tracking */
+  }
 
   // Guard: block shell-redirection writes to audit report filenames.
   // Prevents the model from bypassing the Write tool's audit guards by
