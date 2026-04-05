@@ -8,26 +8,69 @@ import { getToolWorkspace } from "./workspace";
 
 export const grepDefinition: ToolDefinition = {
   name: "Grep",
-  description: "Search file contents using regex patterns (powered by ripgrep).",
+  description:
+    "A powerful search tool built on ripgrep\n\n" +
+    "  Usage:\n" +
+    "  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command. The Grep tool has been optimized for correct permissions and access.\n" +
+    '  - Supports full regex syntax (e.g., "log.*Error", "function\\s+\\w+")\n' +
+    '  - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")\n' +
+    '  - Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts\n' +
+    "  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n" +
+    "  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`",
   input_schema: {
     type: "object",
     properties: {
-      pattern: { type: "string", description: "Regex pattern to search for" },
-      path: { type: "string", description: "File or directory to search" },
-      glob: { type: "string", description: 'Glob filter (e.g. "*.ts")' },
+      pattern: { type: "string", description: "The regular expression pattern to search for in file contents" },
+      path: {
+        type: "string",
+        description: "File or directory to search in (rg PATH). Defaults to current working directory.",
+      },
+      glob: {
+        type: "string",
+        description: 'Glob pattern to filter files (e.g. "*.js", "*.{ts,tsx}") - maps to rg --glob',
+      },
       output_mode: {
         type: "string",
         enum: ["content", "files_with_matches", "count"],
-        description: "Output mode (default: files_with_matches)",
+        description:
+          'Output mode: "content" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), "files_with_matches" shows file paths (supports head_limit), "count" shows match counts (supports head_limit). Defaults to "files_with_matches".',
       },
-      "-i": { type: "boolean", description: "Case insensitive" },
-      "-n": { type: "boolean", description: "Show line numbers" },
-      "-A": { type: "number", description: "Lines after match" },
-      "-B": { type: "number", description: "Lines before match" },
-      "-C": { type: "number", description: "Context lines" },
-      type: { type: "string", description: "File type filter (e.g. js, py, ts)" },
-      head_limit: { type: "number", description: "Limit output entries" },
-      multiline: { type: "boolean", description: "Enable multiline matching" },
+      "-i": { type: "boolean", description: "Case insensitive search (rg -i)" },
+      "-n": {
+        type: "boolean",
+        description:
+          'Show line numbers in output (rg -n). Requires output_mode: "content", ignored otherwise. Defaults to true.',
+      },
+      "-A": {
+        type: "number",
+        description:
+          'Number of lines to show after each match (rg -A). Requires output_mode: "content", ignored otherwise.',
+      },
+      "-B": {
+        type: "number",
+        description:
+          'Number of lines to show before each match (rg -B). Requires output_mode: "content", ignored otherwise.',
+      },
+      "-C": {
+        type: "number",
+        description:
+          'Number of lines to show before and after each match (rg -C). Requires output_mode: "content", ignored otherwise.',
+      },
+      type: {
+        type: "string",
+        description:
+          "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types.",
+      },
+      head_limit: {
+        type: "number",
+        description:
+          'Limit output to first N lines/entries, equivalent to "| head -N". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries).',
+      },
+      multiline: {
+        type: "boolean",
+        description:
+          "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false.",
+      },
     },
     required: ["pattern"],
   },

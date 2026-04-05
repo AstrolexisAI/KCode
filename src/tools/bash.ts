@@ -46,7 +46,24 @@ function stripDangerousEscapes(text: string): string {
 export const bashDefinition: ToolDefinition = {
   name: "Bash",
   description:
-    "Execute a shell command and return its output. IMPORTANT: This is a non-interactive shell — there is no TTY. Always use non-interactive flags (--yes, -y, --no-input, --default, etc.) for commands that prompt for input (e.g. npx create-next-app --yes, npm init -y). If a command has no non-interactive flag, pipe defaults via echo or use heredocs. SUDO: For commands requiring elevated privileges, use 'sudo <command>' normally WITHOUT the -S flag — the system will automatically prompt the user for their password via a secure masked dialog. NEVER pipe passwords, use here-strings, or pass passwords via variables to sudo. SECURITY TOOLS: msfconsole must use -r (resource script) or -x (inline commands) for non-interactive execution.",
+    "Executes a given bash command and returns its output.\n\n" +
+    "The working directory persists between commands, but shell state does not. The shell environment is initialized from the user's profile (bash or zsh).\n\n" +
+    "IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or after you have verified that a dedicated tool cannot accomplish your task. Instead, use the appropriate dedicated tool as this will provide a much better experience for the user:\n\n" +
+    " - File search: Use Glob (NOT find or ls)\n" +
+    " - Content search: Use Grep (NOT grep or rg)\n" +
+    " - Read files: Use Read (NOT cat/head/tail)\n" +
+    " - Edit files: Use Edit (NOT sed/awk)\n" +
+    " - Write files: Use Write (NOT echo >/cat <<EOF)\n" +
+    " - Communication: Output text directly (NOT echo/printf)\n\n" +
+    "While the Bash tool can do similar things, it's better to use the built-in tools as they provide a better user experience and make it easier to review tool calls and give permission.\n\n" +
+    "# Instructions\n" +
+    " - If your command will create new directories or files, first use this tool to run `ls` to verify the parent directory exists and is the correct location.\n" +
+    " - Always quote file paths that contain spaces with double quotes in your command (e.g., cd \"path with spaces/file.txt\")\n" +
+    " - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of `cd`. You may use `cd` if the User explicitly requests it.\n" +
+    " - This is a non-interactive shell — there is no TTY. Always use non-interactive flags (--yes, -y, --no-input, etc.) for commands that would otherwise prompt for input.\n" +
+    " - For commands requiring elevated privileges, use 'sudo <command>' WITHOUT the -S flag — the system will prompt the user securely. NEVER pipe passwords, use here-strings, or pass passwords via variables to sudo.\n" +
+    " - You may specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). By default, your command will timeout after 120000ms (2 minutes).\n" +
+    " - You can use the `run_in_background` parameter to run the command in the background. Only use this if you don't need the result immediately.",
   input_schema: {
     type: "object",
     properties: {
