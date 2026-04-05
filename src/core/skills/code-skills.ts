@@ -26,6 +26,11 @@ export const codeSkills: SkillDefinition[] = [
 
 **Target**: {{#if args}}{{args}}{{/if}}{{^if args}}the current working directory{{/if}}
 
+**HARD RULES:**
+- DO NOT call EnterPlanMode. Just read files and write the report.
+- Create exactly ONE file: \`AUDIT_REPORT.md\`. Not five. Not an index, not a README, not a remediation companion. ONE.
+- Every line number you cite MUST come from a file you actually Read in this session. Fabricated line numbers are worse than no audit.
+
 **Mandatory methodology:**
 
 1. **Map the project** (LS, find): entry points, main modules, external interfaces
@@ -107,7 +112,7 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   {
     name: "security",
     description: "Security audit",
-    aliases: ["audit"],
+    aliases: ["sec-audit"],
     args: ["file or scope"],
     template: `Perform a security audit. {{#if args}}Focus on: {{args}}{{/if}}{{^if args}}Scan the project for common security vulnerabilities.{{/if}} Check for: injection vulnerabilities, hardcoded secrets, insecure dependencies, missing input validation, authentication issues.`,
   },
