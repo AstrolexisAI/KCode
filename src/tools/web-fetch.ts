@@ -49,7 +49,9 @@ function isPrivateIP(hostname: string): boolean {
           if (a === 172 && b! >= 16 && b! <= 31) return true;
           if (a === 192 && b === 168) return true;
         }
-      } catch {}
+      } catch {
+        // Not a valid octal IP — fall through to dword check. Intentionally silent.
+      }
     } else if (/^\d+$/.test(hostname) && hostname.length > 3) {
       const num = parseInt(hostname, 10);
       if (num > 0 && num <= 0xffffffff) {
@@ -60,7 +62,9 @@ function isPrivateIP(hostname: string): boolean {
         if (octet1 === 192 && ((num >>> 16) & 0xff) === 168) return true;
       }
     }
-  } catch {}
+  } catch {
+    // Malformed hostname — fall through to IPv6 checks. Intentionally silent.
+  }
   // IPv6
   if (hostname === "::1" || hostname === "[::1]") return true;
   if (hostname === "::" || hostname === "[::]") return true; // Unspecified IPv6 (binds all)

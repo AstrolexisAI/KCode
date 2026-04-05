@@ -117,15 +117,32 @@ export function validateHookCommand(command: string): boolean {
   const trimmed = command.trim();
   // Block empty commands
   if (!trimmed) return false;
-  // Block commands that attempt to download and pipe to shell
-  if (/curl\s.*\|\s*(sh|bash|zsh)/.test(trimmed)) return false;
-  if (/wget\s.*\|\s*(sh|bash|zsh)/.test(trimmed)) return false;
-  // Block reverse shells
-  if (/\/dev\/(tcp|udp)\//.test(trimmed)) return false;
-  // Block base64-encoded execution (common obfuscation)
-  if (/base64\s.*-d\s*\|\s*(sh|bash|zsh)/.test(trimmed)) return false;
-  // Block backgrounded network exfiltration
-  if (/nc\s+-[^l]*\s+\d+/.test(trimmed) && /\|/.test(trimmed)) return false;
+
+  // Block pipe-to-shell (curl/wget/fetch piped to any shell, including via $SHELL/bash path/eval)
+  // Matches: curl ... | sh, curl ... | /bin/bash, curl ... | $SHELL, curl ... | eval, etc.
+  if (/\b(curl|wget|fetch|http)\b[^|]*\|[^|]*?(sh\b|bash\b|zsh\b|ksh\b|dash\b|csh\b|tcsh\b|fish\b|eval\b|source\b|\$SHELL|\$\{SHELL\}|exec\b|\/bin\/[^\s]*sh\b|python[23]?\b|perl\b|ruby\b|node\b)/i.test(trimmed)) return false;
+
+  // Block reverse shells via /dev/tcp or /dev/udp
+  if (/\/dev\/(tcp|udp)\//i.test(trimmed)) return false;
+
+  // Block base64-encoded execution (piped to any interpreter)
+  if (/base64\s.*-d\s*\|[^|]*?(sh\b|bash\b|zsh\b|eval\b|python\b|perl\b|node\b)/i.test(trimmed)) return false;
+
+  // Block netcat reverse shells
+  if (/\bnc\s+-[^l]*\s+\d+/i.test(trimmed) && /\|/.test(trimmed)) return false;
+
+  // Block writing to SSH authorized_keys (common persistence vector)
+  if (/authorized_keys/i.test(trimmed) && /(>>|>|tee)/.test(trimmed)) return false;
+
+  // Block adding new cron jobs (persistence)
+  if (/\bcrontab\b.*-[el]/i.test(trimmed)) return false;
+
+  // Block writing to shell rc files
+  if (/\.(bashrc|zshrc|profile|bash_profile|bash_login)/i.test(trimmed) && /(>>|>|tee|sed\s+-i)/.test(trimmed)) return false;
+
+  // Block wget/curl to non-standard ports (common C2)
+  if (/\b(curl|wget)\b.*:\d{4,5}\//i.test(trimmed)) return false;
+
   return true;
 }
 
