@@ -54,10 +54,12 @@ export const PLAN_MODE_ALLOWED_TOOLS = new Set([
 export const enterPlanModeDefinition: ToolDefinition = {
   name: "EnterPlanMode",
   description:
-    "Enter plan mode. In plan mode, only read-only tools (Read, Glob, Grep, LS, WebFetch, WebSearch) " +
-    "and planning tools (Plan, TaskCreate, TaskUpdate) are available. " +
-    "Write operations (Bash, Write, Edit, MultiEdit) are blocked. " +
-    "Use this to research and plan before making changes. Call ExitPlanMode to return to normal mode.",
+    "Enter plan mode. Use this ONLY when you need to research/investigate before making code changes. " +
+    "Only read-only tools (Read, Glob, Grep, LS, WebFetch, WebSearch) and planning tools (Plan, TaskCreate, " +
+    "TaskUpdate) are available. Write operations (Bash, Write, Edit, MultiEdit) are blocked. " +
+    "DO NOT use plan mode for audits/reviews/reports — those need Write to produce the report file. " +
+    "For audits, just work directly in normal mode (the user can use /audit or /profile audit for strict read-only). " +
+    "Call ExitPlanMode to return to normal mode.",
   input_schema: {
     type: "object",
     properties: {
