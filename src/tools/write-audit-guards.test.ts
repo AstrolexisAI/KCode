@@ -341,6 +341,68 @@ See also UsbXBox.cpp:35 for buffer indexing
     expect(result.content).toContain("star ratings");
   });
 
+  test("blocks audit with backtick-filename + inline-code content claim (no :line)", async () => {
+    // This is the bypass pattern observed in v2.6.34:
+    //   `HidGenericJoystick.cpp`: `buttons.push_back(new SingleInput(0,1));`
+    // The model attaches code it claims is in the file without a :line.
+    const content = `# Audit
+
+## Findings
+Raw allocations scattered across:
+- \`HidGenericJoystick.cpp\`: \`buttons.push_back(new SingleInput(0,1));\`
+- \`SingleCameraController.cpp\`: \`CompositeInput* zoom = new CompositeInput();\`
+`;
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content,
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+    expect(result.content).toContain("HidGenericJoystick.cpp");
+    expect(result.content).toContain("SingleCameraController.cpp");
+  });
+
+  test("blocks audit with **File:** header + code block for unread file", async () => {
+    const content = `# Audit
+
+### Issue 1
+**File:** \`UnreadFile.cpp\`
+**Severity:** HIGH
+
+\`\`\`cpp
+int x = 1;
+\`\`\`
+
+Buggy code here.
+`;
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content,
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+    expect(result.content).toContain("UnreadFile.cpp");
+  });
+
+  test("allows backtick-filename claim when file was Read", async () => {
+    recordRead("/p/HidDevice.cpp");
+    const content = `# Audit
+
+Found: \`HidDevice.cpp\`: \`int x = buggy_code();\`
+`;
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content,
+    });
+
+    expect(result.is_error).toBeUndefined();
+  });
+
   test("non-audit files bypass audit guards entirely", async () => {
     // Recording no reads, creating a normal file with fake checklist-like content
     const result = await executeWrite({
