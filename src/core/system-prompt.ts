@@ -218,13 +218,30 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
 
     // User-defined awareness modules (~/.kcode/awareness/*.md)
     // MEDIUM priority — droppable when token budget is tight (e.g., small context windows)
-    for (const mod of loadAwarenessModules()) {
-      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-global" });
-    }
+    //
+    // Skipped when:
+    //   - The active profile is "audit" (during code audits you want focus
+    //     on the codebase, not pentesting playbooks / generic awareness)
+    //   - KCODE_LEAN_PROMPT=1 AND KCODE_SKIP_AWARENESS=1
+    const skipAwareness =
+      config.activeProfile === "audit" || process.env.KCODE_SKIP_AWARENESS === "1";
+    if (!skipAwareness) {
+      for (const mod of loadAwarenessModules()) {
+        sections.push({
+          content: mod,
+          priority: SectionPriority.MEDIUM,
+          label: "awareness-global",
+        });
+      }
 
-    // Project-level awareness (.kcode/awareness/*.md in project)
-    for (const mod of loadAwarenessModules(config.workingDirectory)) {
-      sections.push({ content: mod, priority: SectionPriority.MEDIUM, label: "awareness-project" });
+      // Project-level awareness (.kcode/awareness/*.md in project)
+      for (const mod of loadAwarenessModules(config.workingDirectory)) {
+        sections.push({
+          content: mod,
+          priority: SectionPriority.MEDIUM,
+          label: "awareness-project",
+        });
+      }
     }
 
     // Project-specific instructions
