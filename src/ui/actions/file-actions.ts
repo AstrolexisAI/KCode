@@ -25,52 +25,20 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         "../../core/audit-engine/report-generator.js"
       );
 
-      // Streaming progress: push a live-updating message to the UI that
-      // replaces itself as phases/candidates advance. This avoids the
-      // "appears frozen" UX when verification takes 2-5 minutes.
-      const headerLines: string[] = [
-        `  KCode Audit Engine`,
-        `    Project:  ${projectRoot}`,
-      ];
+      // Progress is written directly to stdout (bypassing Ink/React)
+      // because Ink doesn't re-render setCompleted updates during an
+      // async handler. stdout.write works immediately.
+      const W = process.stdout.write.bind(process.stdout);
+      const CLR = "\x1B[2K\r"; // clear line + carriage return
+
+      W(`  KCode Audit Engine\n`);
+      W(`    Project:  ${projectRoot}\n`);
       if (skipVerify) {
-        headerLines.push(`    Mode:     static-only (--skip-verify)`);
+        W(`    Mode:     static-only (--skip-verify)\n`);
       } else {
-        headerLines.push(`    Model:    ${appConfig.model ?? "default"}`);
+        W(`    Model:    ${appConfig.model ?? "default"}\n`);
       }
-      headerLines.push("");
 
-      // Push the user's slash-command echo + initial progress message.
-      // Remember the progress message index so we can keep updating it.
-      // Use a ref-like mutable object so the async callbacks can read it
-      // even if the setCompleted updater runs asynchronously.
-      const userEcho = `/scan ${args ?? ""}`.trim();
-      const state = { progressIdx: -1 };
-      setCompleted((prev) => {
-        state.progressIdx = prev.length + 1; // after the user echo
-        return [
-          ...prev,
-          { kind: "text", role: "user", text: userEcho },
-          { kind: "text", role: "assistant", text: headerLines.join("\n") + "\n    Starting..." },
-        ];
-      });
-      // Yield to let Ink process the initial state update before audit starts
-      await new Promise((r) => setTimeout(r, 50));
-
-      const updateProgress = (statusLine: string) => {
-        setCompleted((prev) => {
-          const idx = state.progressIdx;
-          if (idx < 0 || idx >= prev.length) return prev;
-          const next = [...prev];
-          next[idx] = {
-            kind: "text",
-            role: "assistant",
-            text: headerLines.join("\n") + "\n" + statusLine,
-          };
-          return next;
-        });
-      };
-
-      // Build LLM callback using the existing conversation model config
       const { buildAuditLlmCallbackFromConfig } = await import(
         "../../core/audit-engine/llm-callback.js"
       );
@@ -78,28 +46,10 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
         : buildAuditLlmCallbackFromConfig(appConfig);
 
-      let currentPhase = "";
+      let totalCandidates = 0;
       let verifiedCount = 0;
       let confirmedCount = 0;
-      let totalCandidates = 0;
       const startTime = Date.now();
-
-      const renderProgress = () => {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        const parts = [`    ◆ ${currentPhase}`];
-        if (totalCandidates > 0) {
-          const pct = Math.round((verifiedCount / totalCandidates) * 100);
-          const barLen = 20;
-          const filled = Math.round((verifiedCount / totalCandidates) * barLen);
-          const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
-          parts.push(
-            `    [${bar}] ${verifiedCount}/${totalCandidates} (${pct}%) — ${confirmedCount} confirmed — ${elapsed}s`,
-          );
-        } else {
-          parts.push(`    elapsed: ${elapsed}s`);
-        }
-        updateProgress(parts.join("\n"));
-      };
 
       const result = await runAudit({
         projectRoot,
@@ -107,27 +57,38 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         maxFiles: 500,
         skipVerification: skipVerify,
         onPhase: (phase, detail) => {
-          currentPhase = detail ? `${phase}: ${detail}` : phase;
+          W(`    ◆ ${phase}${detail ? ": " + detail : ""}\n`);
           if (phase === "verifying" && detail) {
-            // detail is like "32 candidates"
             const m = detail.match(/(\d+) candidate/);
             if (m) totalCandidates = parseInt(m[1]!, 10);
           }
-          renderProgress();
         },
-        onCandidate: (_cand, verification, _i, _total) => {
+        onCandidate: (_cand, verification) => {
           verifiedCount++;
           if (verification.verdict === "confirmed") confirmedCount++;
-          renderProgress();
+          if (totalCandidates > 0) {
+            const pct = Math.round((verifiedCount / totalCandidates) * 100);
+            const barLen = 20;
+            const filled = Math.round((verifiedCount / totalCandidates) * barLen);
+            const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+            W(`${CLR}    [${bar}] ${verifiedCount}/${totalCandidates} (${pct}%) — ${confirmedCount} confirmed — ${elapsed}s`);
+          }
         },
       });
+
+      // Final newline after progress bar
+      W("\n");
 
       const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
       writeFileSync(outputPath, generateMarkdownReport(result));
 
-      // Final summary replaces the progress line
+      // Build final summary for the conversation history
       const finalLines = [
-        ...headerLines,
+        `  KCode Audit Engine`,
+        `    Project:  ${projectRoot}`,
+        skipVerify ? `    Mode:     static-only` : `    Model:    ${appConfig.model ?? "default"}`,
+        "",
         `    ✓ Report written: ${outputPath}`,
         "",
         `    Files scanned:      ${result.files_scanned}`,
@@ -141,28 +102,24 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         for (const f of result.findings.slice(0, 5)) {
           const rel = f.file.replace(projectRoot + "/", "");
           const icon =
-            f.severity === "critical"
-              ? "🔴"
-              : f.severity === "high"
-                ? "🟠"
-                : f.severity === "medium"
-                  ? "🟡"
-                  : "🟢";
+            f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
           finalLines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
         }
         if (result.findings.length > 5) {
           finalLines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
         }
       }
-      // Replace the progress entry with the final summary
-      setCompleted((prev) => {
-        const idx = state.progressIdx;
-        if (idx < 0 || idx >= prev.length) return prev;
-        const next = [...prev];
-        next[idx] = { kind: "text", role: "assistant", text: finalLines.join("\n") };
-        return next;
-      });
-      // Sentinel: tells the caller we already pushed our own messages.
+
+      // Print final summary to stdout too
+      W(`    ✓ Report written: ${outputPath}\n`);
+      W(`    Files: ${result.files_scanned} | Findings: ${result.confirmed_findings} | FP: ${result.false_positives} | ${(result.elapsed_ms / 1000).toFixed(1)}s\n`);
+
+      // Push to conversation history so it persists in the session
+      setCompleted((prev) => [
+        ...prev,
+        { kind: "text", role: "user", text: `/scan ${args ?? ""}`.trim() },
+        { kind: "text", role: "assistant", text: finalLines.join("\n") },
+      ]);
       return "__INLINE_DONE__";
     }
 
