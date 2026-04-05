@@ -68,19 +68,15 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const verifyOpts: VerifyOptions = {
       llmCallback: opts.llmCallback,
       fallbackCallback: opts.fallbackCallback,
-      onProgress: opts.onCandidate
-        ? (i, total, cand) => {
-            // progress shown after verdict is known; shim here
+      // Fire live progress on each verified candidate so the UI can
+      // update its progress bar in real time.
+      onVerified: opts.onCandidate
+        ? (cand, ver, i, total) => {
+            opts.onCandidate?.(cand, ver, i, total);
           }
         : undefined,
     };
     verified = await verifyAllCandidates(candidates, verifyOpts);
-    // Propagate post-verdict progress to the caller
-    if (opts.onCandidate) {
-      verified.forEach((r, i) => {
-        opts.onCandidate?.(r.candidate, r.verification, i, verified.length);
-      });
-    }
   }
 
   // Filter to confirmed findings
