@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 
 // Module-level state — reset per CLI process (= per session)
 const _readFiles = new Set<string>();
+let _grepCount = 0;
 
 /**
  * Record that a file was Read in this session. Called from executeRead().
@@ -59,8 +60,24 @@ export function listReads(): string[] {
 }
 
 /**
+ * Record that a Grep call was made in this session.
+ * Used to enforce grep-first reconnaissance before audits.
+ */
+export function recordGrep(): void {
+  _grepCount += 1;
+}
+
+/**
+ * Number of Grep calls made in this session.
+ */
+export function grepCount(): number {
+  return _grepCount;
+}
+
+/**
  * Reset the tracker. Used by tests and session restarts.
  */
 export function resetReads(): void {
   _readFiles.clear();
+  _grepCount = 0;
 }

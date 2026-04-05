@@ -35,6 +35,15 @@ export const grepDefinition: ToolDefinition = {
 
 export async function executeGrep(input: Record<string, unknown>): Promise<ToolResult> {
   const opts = input as unknown as GrepInput;
+
+  // Record grep usage for audit reconnaissance enforcement
+  try {
+    const { recordGrep } = await import("../core/session-tracker.js");
+    recordGrep();
+  } catch {
+    /* tracker optional */
+  }
+
   const args: string[] = [];
 
   // Output mode

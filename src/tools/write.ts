@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { wasRead } from "../core/session-tracker";
+import { grepCount, readCount, wasRead } from "../core/session-tracker";
 import type { FileWriteInput, ToolDefinition, ToolResult } from "../core/types";
 
 export const writeDefinition: ToolDefinition = {
@@ -143,6 +143,45 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
           `UPDATE the existing AUDIT_REPORT.md instead — a single authoritative ` +
           `report is the required deliverable. If you need to add more findings, ` +
           `use the Edit tool on "${existing}".`,
+        is_error: true,
+      };
+    }
+  }
+
+  // Reconnaissance enforcement: writing an audit report requires both
+  // (a) at least one Grep call to locate bug patterns across the tree, and
+  // (b) at least 5 distinct files Read in this session.
+  // These are hard technical minimums — an audit built on <5 reads and zero
+  // greps is a marketing document, not an audit.
+  if (isAuditFilename(file_path)) {
+    const greps = grepCount();
+    const reads = readCount();
+    const problems: string[] = [];
+    if (greps === 0) {
+      problems.push(
+        "you have not called the Grep tool ONCE in this session. " +
+          "Audits require grep-first reconnaissance to locate bug patterns " +
+          "(recv|parse|decode|data\\[|buffer\\[|open\\(|malloc|\\(&[a-z]).",
+      );
+    }
+    if (reads < 5) {
+      problems.push(
+        `you have Read only ${reads} file(s). ` +
+          "An audit requires reading the hot files (protocol decoders, network I/O, " +
+          "resource lifecycle) in full — minimum 5, ideally 10+.",
+      );
+    }
+    if (problems.length > 0) {
+      return {
+        tool_use_id: "",
+        content:
+          `BLOCKED: Cannot write audit report "${basename(file_path)}" because:\n` +
+          problems.map((p, i) => `  ${i + 1}. ${p}`).join("\n") +
+          `\n\nBefore writing this report, you MUST:\n` +
+          `  1. Run Grep for dangerous patterns across the source tree\n` +
+          `  2. Read AT LEAST 5 hot files in full (protocol decoders, parsers, I/O)\n` +
+          `  3. Then re-submit the audit report.\n` +
+          `This is a hard minimum, not advice. Session state: ${reads} reads, ${greps} greps.`,
         is_error: true,
       };
     }
