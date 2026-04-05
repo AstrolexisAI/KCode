@@ -131,7 +131,12 @@ export class IntentionEngine {
     const written = new Set<string>();
     const verified = new Set<string>();
     for (const a of this.actions) {
-      if (a.name === "Write") written.add(String(a.input.file_path ?? ""));
+      // Only count Writes that actually SUCCEEDED — a blocked/failed Write
+      // is not a created file, and reporting it as "created but unverified"
+      // misleads the user into thinking the file exists.
+      if (a.name === "Write" && !a.isError) {
+        written.add(String(a.input.file_path ?? ""));
+      }
       if (
         a.name === "Read" ||
         (a.name === "Bash" && String(a.input.command ?? "").includes("curl"))

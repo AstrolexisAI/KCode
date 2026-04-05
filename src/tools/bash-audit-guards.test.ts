@@ -78,7 +78,7 @@ describe("audit-guards: Bash tool integration", () => {
     expect(result.is_error).toBe(true);
     expect(result.content).toContain("BLOCKED");
     expect(result.content).toContain("AUDIT_REPORT.md");
-    expect(result.content).toContain("shell redirection");
+    expect(result.content).toContain("Shell redirection");
   });
 
   test("blocks echo > FIXES_SUMMARY.txt", async () => {

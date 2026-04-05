@@ -188,12 +188,12 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
           "(recv|parse|decode|data\\[|buffer\\[|open\\(|malloc|\\(&[a-z]).",
       );
     }
-    if (sourceReads < 8) {
+    if (sourceReads < 6) {
       problems.push(
         `you have Read only ${sourceReads} SOURCE file(s) (.cpp/.h/.ts/.py/etc — ` +
           `README.md and CMakeLists.txt don't count). ` +
           "An audit requires reading the hot files (network I/O, protocol " +
-          "decoders, resource lifecycle) in full — minimum 8 source files.",
+          "decoders, resource lifecycle) in full — minimum 6 source files.",
       );
     }
     // Grep-hit coverage: if dangerous-pattern greps surfaced high-risk files
@@ -214,10 +214,14 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
       return {
         tool_use_id: "",
         content:
-          `BLOCKED: Cannot write audit report "${basename(file_path)}" because:\n` +
+          `BLOCKED — FILE NOT CREATED: "${basename(file_path)}" was NOT written. Reasons:\n` +
           problems.map((p, i) => `  ${i + 1}. ${p}`).join("\n") +
           `\n\nSession state: ${sourceReads} source reads, ${greps} greps, ` +
-          `${totalHits} grep-hit files (${unread.length} unread).`,
+          `${totalHits} grep-hit files (${unread.length} unread).\n\n` +
+          `IMPORTANT: The file does NOT exist. Do NOT tell the user that you ` +
+          `"created" or "generated" the audit report. Do NOT summarize findings ` +
+          `as if the report were written. First fix the reasons above, retry ` +
+          `Write, and only claim success AFTER this tool returns without error.`,
         is_error: true,
       };
     }
@@ -234,13 +238,15 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
       return {
         tool_use_id: "",
         content:
-          `BLOCKED: Your audit cites ${uncitedUnread.length} file(s) you ` +
-          `never opened with the Read tool in this session:\n${listed}` +
+          `BLOCKED — FILE NOT CREATED: Your audit cites ${uncitedUnread.length} ` +
+          `file(s) you never opened with the Read tool in this session:\n${listed}` +
           (uncitedUnread.length > 8 ? `\n    ... and ${uncitedUnread.length - 8} more` : "") +
           `\n\nEvery "file.cpp:line" citation must point to a file you ` +
           `actually Read. Either:\n  (a) Read the cited files, then re-submit, OR\n` +
           `  (b) remove the unverified citations from the report.\n\n` +
-          `Inventing file:line references is fabricating evidence.`,
+          `IMPORTANT: The audit file does NOT exist. Do NOT tell the user that ` +
+          `the report was created. Inventing file:line references is fabricating ` +
+          `evidence — fix it before the next Write.`,
         is_error: true,
       };
     }
