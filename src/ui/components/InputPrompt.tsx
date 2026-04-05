@@ -77,14 +77,24 @@ interface InputPromptProps {
 /**
  * Try to complete a file path. Returns matching entries with `/` appended for directories.
  */
-function getFileCompletions(partial: string): string[] {
+function getFileCompletions(partial: string, dirsOnly = false): string[] {
   try {
     const expanded = partial.startsWith("~")
       ? (process.env.HOME ?? "") + partial.slice(1)
       : partial;
 
-    const dir = partial.endsWith("/") ? expanded : dirname(expanded);
-    const prefix = partial.endsWith("/") ? "" : basename(expanded);
+    // If partial is empty or just a bare word, complete from cwd
+    const hasPath = partial.includes("/") || partial.startsWith("~") || partial.startsWith(".");
+    const dir = hasPath
+      ? partial.endsWith("/")
+        ? expanded
+        : dirname(expanded)
+      : ".";
+    const prefix = hasPath
+      ? partial.endsWith("/")
+        ? ""
+        : basename(expanded)
+      : partial;
     const resolvedDir = resolve(dir);
 
     const entries = readdirSync(resolvedDir, { withFileTypes: true });
@@ -92,13 +102,17 @@ function getFileCompletions(partial: string): string[] {
 
     for (const entry of entries) {
       if (entry.name.startsWith(".") && !prefix.startsWith(".")) continue;
-      if (entry.name.startsWith(prefix)) {
+      if (dirsOnly && !entry.isDirectory()) continue;
+      if (entry.name.toLowerCase().startsWith(prefix.toLowerCase())) {
         const suffix = entry.isDirectory() ? "/" : "";
-        // Reconstruct the path with the original prefix style
-        const dirPart = partial.endsWith("/")
-          ? partial
-          : partial.slice(0, partial.length - prefix.length);
-        matches.push(dirPart + entry.name + suffix);
+        if (hasPath) {
+          const dirPart = partial.endsWith("/")
+            ? partial
+            : partial.slice(0, partial.length - prefix.length);
+          matches.push(dirPart + entry.name + suffix);
+        } else {
+          matches.push(entry.name + suffix);
+        }
       }
     }
 
@@ -107,6 +121,9 @@ function getFileCompletions(partial: string): string[] {
     return [];
   }
 }
+
+/** Slash commands that take a directory path as first argument. */
+const DIR_ARG_COMMANDS = new Set(["scan", "audit-scan", "static-audit"]);
 
 /**
  * Find the longest common prefix among an array of strings.
@@ -326,15 +343,23 @@ export default function InputPrompt({
       return;
     }
 
-    // File path completion — extract last word
+    // File/directory path completion — extract last word.
+    // For slash commands that take a directory argument (e.g. /scan),
+    // also match bare words (no / or ~ prefix) as paths from cwd and
+    // restrict to directories only.
     const words = currentValue.split(/\s+/);
     const lastWord = words[words.length - 1] ?? "";
     const isPathLike =
       lastWord.includes("/") || lastWord.startsWith("~") || lastWord.startsWith(".");
 
-    if (!isPathLike || lastWord.length === 0) return;
+    // Detect if this is a dir-arg slash command (e.g., /scan <dir>)
+    const slashCmd = currentValue.match(/^\/(\S+)/)?.[1]?.toLowerCase() ?? "";
+    const isDirArgCmd = DIR_ARG_COMMANDS.has(slashCmd) && words.length >= 2;
 
-    const fileMatches = getFileCompletions(lastWord);
+    if (!isDirArgCmd && !isPathLike) return;
+    if (isDirArgCmd && lastWord.startsWith("-")) return; // skip flags like --skip-verify
+
+    const fileMatches = getFileCompletions(lastWord, isDirArgCmd);
     if (fileMatches.length === 0) return;
 
     const prefixPart = currentValue.slice(0, currentValue.length - lastWord.length);
@@ -347,9 +372,10 @@ export default function InputPrompt({
       return;
     }
 
-    // Multiple file matches
+    // Multiple file matches — set up arrow/tab cycling with the prefix preserved
     const cp = commonPrefix(fileMatches);
-    const fullMatches = fileMatches.map((m) => prefixPart + m);
+    // Store the command prefix so arrows can reconstruct "/scan <selected>"
+    const fullMatches = fileMatches;
 
     if (cp.length > lastWord.length) {
       const completed = prefixPart + cp;
@@ -357,13 +383,14 @@ export default function InputPrompt({
       setCursor(completed.length);
       setTabMatches(fullMatches);
       setTabIndex(-1);
-      setTabOriginal(currentValue);
+      setTabOriginal(prefixPart);
     } else {
       setTabMatches(fullMatches);
       setTabIndex(0);
-      setTabOriginal(currentValue);
-      setValue(fullMatches[0]!);
-      setCursor(fullMatches[0]!.length);
+      setTabOriginal(prefixPart);
+      const selected = prefixPart + fullMatches[0]!;
+      setValue(selected);
+      setCursor(selected.length);
     }
   }, [value, tabMatches, tabIndex, tabOriginal, completions, resetTabState]);
 
@@ -519,6 +546,27 @@ export default function InputPrompt({
         if (cursor < value.length) {
           setValue(value.slice(0, cursor) + value.slice(cursor + 1));
         }
+        return;
+      }
+
+      // Tab-completion list navigation (e.g. /scan dir picker)
+      // tabOriginal stores the command prefix (e.g. "/scan ") so we
+      // reconstruct the input as "prefix + selected_match" on each move.
+      if (key.upArrow && tabMatches.length > 1) {
+        const newIdx = tabIndex <= 0 ? tabMatches.length - 1 : tabIndex - 1;
+        setTabIndex(newIdx);
+        const full = tabOriginal + tabMatches[newIdx]!;
+        setValue(full);
+        setCursor(full.length);
+        return;
+      }
+
+      if (key.downArrow && tabMatches.length > 1) {
+        const newIdx = tabIndex >= tabMatches.length - 1 ? 0 : tabIndex + 1;
+        setTabIndex(newIdx);
+        const full = tabOriginal + tabMatches[newIdx]!;
+        setValue(full);
+        setCursor(full.length);
         return;
       }
 
@@ -774,6 +822,29 @@ export default function InputPrompt({
           </Text>
         )}
       </Box>
+
+      {/* ─── Tab completion list (for /scan dir picker) ────── */}
+      {tabMatches.length > 1 && (
+        <Box flexDirection="column" marginLeft={2} marginTop={0}>
+          {tabMatches.slice(0, 12).map((match, i) => {
+            const isSelected = i === tabIndex;
+            const displayName = match.endsWith("/") ? `📁 ${match}` : `   ${match}`;
+            return (
+              <Text
+                key={match}
+                color={isSelected ? theme.accent : theme.dimmed}
+                bold={isSelected}
+              >
+                {isSelected ? "▸ " : "  "}
+                {displayName}
+              </Text>
+            );
+          })}
+          {tabMatches.length > 12 && (
+            <Text color={theme.dimmed}>  ... +{tabMatches.length - 12} more</Text>
+          )}
+        </Box>
+      )}
 
       {/* ─── Paste preview (compact) ──────────────────────── */}
       {isMultiline && (
