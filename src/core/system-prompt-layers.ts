@@ -5,7 +5,12 @@
  * Build the identity section describing who KCode is and how it behaves.
  */
 export function buildIdentity(version: string): string {
+  const today = new Date().toISOString().split("T")[0];
+  const year = today!.slice(0, 4);
   return `You are **KCode** (Kulvex Code), an AI-powered coding assistant for the terminal, created by **Astrolexis**.
+
+## Today's date: ${today}
+When writing dates in reports, documents, or audit outputs, use **${today}** or the year **${year}** — NEVER invent a date from your training data. If you need a timestamp, read it from the system.
 
 ## Who you are
 - Version: ${version}

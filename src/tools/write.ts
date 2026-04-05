@@ -4,13 +4,15 @@
 import {
   closeSync,
   constants as fsConstants,
+  existsSync,
   lstatSync,
   mkdirSync,
   openSync,
   realpathSync,
   writeFileSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { wasRead } from "../core/session-tracker";
 import type { FileWriteInput, ToolDefinition, ToolResult } from "../core/types";
 
 export const writeDefinition: ToolDefinition = {
@@ -26,6 +28,84 @@ export const writeDefinition: ToolDefinition = {
     required: ["file_path", "content"],
   },
 };
+
+// ─── Audit report guards ────────────────────────────────────────
+// Detect filenames that look like audit/review reports or their companions.
+// The goal is to force the model to update ONE report instead of creating
+// FIXES_SUMMARY.txt, FINAL_AUDIT_REPORT.md, AUDIT_INDEX.md, etc. alongside it.
+const AUDIT_FILENAME_PATTERN =
+  /(^|[_-])(audit|review|security[_-]?audit|remediation|fixes?[_-]summary|audit[_-]index|audit[_-]summary|final[_-]audit|audit[_-]report|audit[_-]certificate)([_-]|\.|$)/i;
+
+const CANONICAL_AUDIT_NAMES = new Set([
+  "audit_report.md",
+  "audit-report.md",
+  "auditreport.md",
+  "audit.md",
+]);
+
+function isAuditFilename(file_path: string): boolean {
+  return AUDIT_FILENAME_PATTERN.test(basename(file_path));
+}
+
+function findExistingCanonicalAuditReport(dir: string): string | null {
+  try {
+    for (const candidate of CANONICAL_AUDIT_NAMES) {
+      const full = join(dir, candidate);
+      if (existsSync(full)) return full;
+      // Also check capitalized variants
+      const cap = join(dir, candidate.toUpperCase());
+      if (existsSync(cap)) return cap;
+      const title = join(dir, candidate.charAt(0).toUpperCase() + candidate.slice(1));
+      if (existsSync(title)) return title;
+    }
+    // Fallback: scan directory for any file matching the audit pattern
+    const fs = require("node:fs") as typeof import("node:fs");
+    const entries = fs.readdirSync(dir);
+    for (const entry of entries) {
+      if (AUDIT_FILENAME_PATTERN.test(entry)) {
+        return join(dir, entry);
+      }
+    }
+  } catch {
+    /* dir doesn't exist yet or not readable */
+  }
+  return null;
+}
+
+/**
+ * Extract file paths listed in an audit "proof of work" checklist section.
+ * Matches lines like:
+ *   1. path/to/file.cpp — 120 lines — checked for: ...
+ *   2. `src/foo.ts` - N lines
+ *   3. **source/idf/UsbDevice.hh** — Header declarations
+ */
+function extractProofOfWorkFiles(content: string): string[] | null {
+  // Find the "Files read" / "Proof of work" section header
+  const headerMatch = content.match(
+    /^#{1,6}\s*Files\s*(read|analyzed|examined).*?(proof of work)?.*$/im,
+  );
+  if (!headerMatch) return null;
+  const start = headerMatch.index! + headerMatch[0].length;
+  // Take at most the next 80 lines (section should be short)
+  const section = content.slice(start, start + 6000);
+  const lines = section.split("\n").slice(0, 60);
+
+  const files: string[] = [];
+  for (const line of lines) {
+    // Stop at next top-level header
+    if (/^#{1,3}\s+\S/.test(line) && !/files\s*(read|analyzed|examined)/i.test(line)) break;
+    // Match numbered entries with a file path (must contain a slash or a file extension)
+    const m = line.match(
+      /^\s*\d+\.\s*[`*_]*([A-Za-z0-9._/\\-]+\.(?:cpp|hh|h|c|ts|tsx|js|jsx|py|go|rs|java|rb|md|txt|cmake|CMakeLists\.txt))[`*_]*/,
+    );
+    if (m?.[1]) {
+      files.push(m[1]);
+    }
+  }
+  return files.length > 0 ? files : null;
+}
+
+// ─── Sensitive file patterns ────────────────────────────────────
 
 const SENSITIVE_PATTERNS = [
   /\.(env|env\.\w+)$/,
@@ -44,6 +124,55 @@ const SENSITIVE_PATTERNS = [
 
 export async function executeWrite(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, content } = input as unknown as FileWriteInput;
+
+  // Audit report discipline: block creating a SECOND audit-named file when
+  // an AUDIT_REPORT.md (or similar) already exists in the same directory.
+  // The goal is to force ONE authoritative report instead of a pile of
+  // AUDIT_REPORT.md + FIXES_SUMMARY.txt + FINAL_AUDIT_REPORT.md companions.
+  if (isAuditFilename(file_path)) {
+    const dir = dirname(file_path);
+    const existing = findExistingCanonicalAuditReport(dir);
+    const fileBase = basename(file_path);
+    const existingBase = existing ? basename(existing) : null;
+    if (existing && existingBase && existingBase.toLowerCase() !== fileBase.toLowerCase()) {
+      return {
+        tool_use_id: "",
+        content:
+          `BLOCKED: An audit report already exists at "${existing}". ` +
+          `Do NOT create companion files like "${fileBase}". ` +
+          `UPDATE the existing AUDIT_REPORT.md instead — a single authoritative ` +
+          `report is the required deliverable. If you need to add more findings, ` +
+          `use the Edit tool on "${existing}".`,
+        is_error: true,
+      };
+    }
+  }
+
+  // Proof-of-work validation: if the file being written contains an audit
+  // "Files read in full" / "Proof of work" checklist, verify every listed
+  // file was actually Read by the Read tool in this session. Fabricated
+  // checklists void the audit.
+  if (isAuditFilename(file_path)) {
+    const listedFiles = extractProofOfWorkFiles(content);
+    if (listedFiles && listedFiles.length > 0) {
+      const fabricated = listedFiles.filter((f) => !wasRead(f));
+      if (fabricated.length > 0) {
+        return {
+          tool_use_id: "",
+          content:
+            `BLOCKED: The audit report lists ${listedFiles.length} file(s) as "read in full", ` +
+            `but ${fabricated.length} of them were NEVER opened with the Read tool in this session:\n` +
+            fabricated.map((f) => `  - ${f}`).join("\n") +
+            `\n\nFabricating the proof-of-work checklist voids the audit. You must either:\n` +
+            `  (a) actually Read those files now, then re-submit, OR\n` +
+            `  (b) remove them from the checklist and honestly write ` +
+            `"Audit incomplete — only read N files" at the top of the report.\n\n` +
+            `Listing files you didn't Read is worse than admitting a short audit.`,
+          is_error: true,
+        };
+      }
+    }
+  }
 
   // Block writes to sensitive files
   const isSensitive = SENSITIVE_PATTERNS.some((p) => p.test(file_path));
