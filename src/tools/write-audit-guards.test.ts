@@ -300,6 +300,47 @@ See also UsbXBox.cpp:35 for buffer indexing
     expect(result.is_error).toBeUndefined();
   });
 
+  test("BLOCKED error includes next-step file reads when grep hits exist", async () => {
+    resetReads();
+    recordGrep();
+    recordRead("/p/already.cpp");
+    // Record grep hits on dangerous pattern
+    const { recordGrepHits } = await import("../core/session-tracker");
+    recordGrepHits("data\\[", [
+      "/p/UsbXBox.cpp",
+      "/p/EthernetDevice.cpp",
+      "/p/HidDecoder.cpp",
+    ]);
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("NEXT STEP");
+    expect(result.content).toContain('Read("');
+    expect(result.content).toContain("UsbXBox.cpp");
+  });
+
+  test("BLOCKED error includes honest-summary template forbidding marketing", async () => {
+    resetReads();
+    recordGrep();
+    recordRead("/p/only1.cpp");
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("AUDIT INCOMPLETE");
+    expect(result.content).toContain("MUST begin with");
+    expect(result.content).toContain("production-ready");
+    expect(result.content).toContain("professional-grade");
+    expect(result.content).toContain("star ratings");
+  });
+
   test("non-audit files bypass audit guards entirely", async () => {
     // Recording no reads, creating a normal file with fake checklist-like content
     const result = await executeWrite({
