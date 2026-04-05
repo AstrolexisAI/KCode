@@ -23,7 +23,7 @@ interface SpinnerProps {
   phase?: SpinnerPhase;
 }
 
-function formatElapsed(ms: number): string {
+export function formatElapsed(ms: number): string {
   const secs = Math.floor(ms / 1000);
   if (secs < 60) return `${secs}s`;
   const mins = Math.floor(secs / 60);
@@ -31,13 +31,13 @@ function formatElapsed(ms: number): string {
   return `${mins}m${rem.toString().padStart(2, "0")}s`;
 }
 
-function formatTokens(n: number): string {
+export function formatTokens(n: number): string {
   if (n < 1000) return `${n} tok`;
   if (n < 10_000) return (n / 1000).toFixed(1) + "K tok";
   return Math.round(n / 1000) + "K tok";
 }
 
-function formatSpeed(tokPerSec: number): string {
+export function formatSpeed(tokPerSec: number): string {
   if (tokPerSec < 1) return "<1 t/s";
   if (tokPerSec < 10) return tokPerSec.toFixed(1) + " t/s";
   return Math.round(tokPerSec) + " t/s";
