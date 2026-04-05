@@ -25,49 +25,102 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         "../../core/audit-engine/report-generator.js"
       );
 
+      // Fire-and-forget: start the audit in the background, update global
+      // scanState, and return immediately so Ink regains control of the
+      // render loop. App.tsx polls scanState via setInterval to show progress.
+      const { scanState, resetScanState } = await import(
+        "../../core/audit-engine/scan-state.js"
+      );
       const { buildAuditLlmCallbackFromConfig } = await import(
         "../../core/audit-engine/llm-callback.js"
       );
+
+      resetScanState();
+      scanState.active = true;
+      scanState.startTime = Date.now();
+      scanState.phase = "discovery";
+
       const llmCallback = skipVerify
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
         : buildAuditLlmCallbackFromConfig(appConfig);
 
-      const result = await runAudit({
-        projectRoot,
-        llmCallback,
-        maxFiles: 500,
-        skipVerification: skipVerify,
-      });
+      // Background async — NOT awaited
+      (async () => {
+        try {
+          const result = await runAudit({
+            projectRoot,
+            llmCallback,
+            maxFiles: 500,
+            skipVerification: skipVerify,
+            onPhase: (phase, detail) => {
+              scanState.phase = detail ? `${phase}: ${detail}` : phase;
+              if (phase === "verifying" && detail) {
+                const m = detail.match(/(\d+) candidate/);
+                if (m) scanState.total = parseInt(m[1]!, 10);
+              }
+            },
+            onCandidate: (_cand, verification) => {
+              scanState.verified++;
+              if (verification.verdict === "confirmed") scanState.confirmed++;
+              if (verification.verdict === "false_positive") scanState.falsePositives++;
+            },
+          });
 
-      const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
-      writeFileSync(outputPath, generateMarkdownReport(result));
+          const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
+          writeFileSync(outputPath, generateMarkdownReport(result));
 
-      const lines: string[] = [
-        `  KCode Audit Engine`,
-        `    Project:  ${projectRoot}`,
-        skipVerify ? `    Mode:     static-only` : `    Model:    ${appConfig.model ?? "default"}`,
-        "",
-        `    ✓ Report written: ${outputPath}`,
-        "",
-        `    Files scanned:      ${result.files_scanned}`,
-        `    Candidates found:   ${result.candidates_found}`,
-        `    Confirmed findings: ${result.confirmed_findings}`,
-        `    False positives:    ${result.false_positives}`,
-        `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
-      ];
-      if (result.findings.length > 0) {
-        lines.push("", `  Top findings:`);
-        for (const f of result.findings.slice(0, 5)) {
-          const rel = f.file.replace(projectRoot + "/", "");
-          const icon =
-            f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
-          lines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
+          const topFindings = result.findings.slice(0, 5).map((f) => ({
+            severity: f.severity,
+            file: f.file.replace(projectRoot + "/", ""),
+            line: f.line,
+            patternId: f.pattern_id,
+          }));
+
+          // Build the report text for conversation history
+          const reportLines: string[] = [
+            `  KCode Audit Engine`,
+            `    Project:  ${projectRoot}`,
+            skipVerify ? `    Mode:     static-only` : `    Model:    ${appConfig.model ?? "default"}`,
+            "",
+            `    ✓ Report written: ${outputPath}`,
+            "",
+            `    Files scanned:      ${result.files_scanned}`,
+            `    Candidates found:   ${result.candidates_found}`,
+            `    Confirmed findings: ${result.confirmed_findings}`,
+            `    False positives:    ${result.false_positives}`,
+            `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
+          ];
+          if (topFindings.length > 0) {
+            reportLines.push("", `  Top findings:`);
+            for (const f of topFindings) {
+              const icon =
+                f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
+              reportLines.push(`    ${icon} ${f.file}:${f.line}  ${f.patternId}`);
+            }
+            if (result.findings.length > 5) {
+              reportLines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
+            }
+          }
+
+          scanState.result = {
+            outputPath,
+            filesScanned: result.files_scanned,
+            candidates: result.candidates_found,
+            findings: result.confirmed_findings,
+            falsePositives: result.false_positives,
+            elapsedMs: result.elapsed_ms,
+            topFindings,
+            reportText: reportLines.join("\n"),
+          };
+        } catch (err) {
+          scanState.error = err instanceof Error ? err.message : String(err);
+        } finally {
+          scanState.active = false;
         }
-        if (result.findings.length > 5) {
-          lines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
-        }
-      }
-      return lines.join("\n");
+      })();
+
+      // Return immediately — progress renders via polling in App.tsx
+      return `  ◆ Scanning ${projectRoot.split("/").pop()}/ in background...`;
     }
 
     case "depgraph": {
