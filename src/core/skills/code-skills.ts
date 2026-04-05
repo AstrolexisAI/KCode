@@ -18,6 +18,65 @@ export const codeSkills: SkillDefinition[] = [
     template: `Analyze the following for potential bugs, edge cases, and issues: {{args}}. Look for: null/undefined errors, off-by-one errors, race conditions, resource leaks, missing error handling, security issues.`,
   },
   {
+    name: "audit",
+    description: "Forensic code audit — read files deeply, find real bugs with line numbers",
+    aliases: ["review", "security-audit"],
+    args: ["project path or specific files (optional)"],
+    template: `You are now in FORENSIC AUDIT MODE. Your reputation depends on finding REAL bugs, not generating pretty reports.
+
+**Target**: {{#if args}}{{args}}{{/if}}{{^if args}}the current working directory{{/if}}
+
+**Mandatory methodology:**
+
+1. **Map the project** (LS, find): entry points, main modules, external interfaces
+2. **Read key files in full** — minimum 10 files covering:
+   - Network I/O (sockets, HTTP, parsing)
+   - Input parsing (HID, protocol decoders, deserializers)
+   - Resource lifecycle (open/close, alloc/free)
+   - Error handling paths
+   - Authentication/authorization boundaries
+3. **For EACH file read, check systematically:**
+   - **Pointer arithmetic**: \`(&ptr)[n]\` vs \`ptr[n]\` vs \`ptr+n\` — verify intent
+   - **Buffer indexing**: every \`buf[N]\` must have validated \`buf.size() >= N+1\`
+   - **Integer signedness**: \`int\` returned where \`size_t\` used → potential exploit
+   - **Unreachable code**: statements after \`return\` / \`throw\` / \`continue\`
+   - **Resource leaks**: open() / socket() / malloc() without matching cleanup on ALL exit paths (error + happy path)
+   - **TOCTOU**: check-then-use patterns with file paths, symlinks, FDs
+   - **Integer overflow**: size calculations, loop bounds, allocations
+   - **Signed comparison pitfalls**: \`size_t - size_t < 0\` always false
+4. **Trace data flow**: external input → parse → consumption. Where are boundaries checked?
+5. **Inspect compiler flags**: are warnings suppressed? which?
+
+**Output format (mandatory)**:
+
+For every finding:
+\`\`\`
+## 🔴/🟠/🟡 [SEVERITY] Short title — file:line
+[Code snippet 3-8 lines]
+**Why**: semantic explanation of the bug
+**Fix**: minimal correct version
+**Exploitability**: LOCAL/REMOTE/NONE, conditions required
+\`\`\`
+
+Group by severity: CRITICAL → HIGH → MEDIUM → LOW.
+
+**Banned phrases** (these destroy audit credibility):
+- "production-ready ★★★★★" without proving each star
+- "no bugs found" after only running grep
+- "strong security practices" without specific file:line evidence
+- "RAII-compliant" without checking every open/close pair
+
+**Minimum deliverables before concluding:**
+- [ ] Read at least 10 source files in their entirety
+- [ ] Examined every I/O parsing function in the project
+- [ ] Checked every manual resource open/close pair
+- [ ] Verified every claim of "safe" with specific file:line citation
+
+If you couldn't find bugs after deep reading, say exactly which files you read and what you checked. Silence is better than a false clean bill of health.
+
+**Your audit will be read by security-conscious engineers. Earn their trust with precision.**`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
