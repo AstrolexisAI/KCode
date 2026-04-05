@@ -85,24 +85,66 @@ function findExistingCanonicalAuditReport(dir: string): string | null {
 }
 
 /**
- * Extract "file:line" citations from audit content. Matches paths followed
- * by a line number (e.g. "EthernetDevice.cpp:160" or "src/foo/bar.hh:42").
- * Returns unique file paths (without the :line suffix).
+ * Extract file citations from audit content. Matches two patterns:
+ *
+ * 1. "file.cpp:NNN" — classic file:line reference
+ *
+ * 2. Content claims where the model attaches a code snippet to a
+ *    filename, e.g.:
+ *       `HidDevice.cpp`: `buttons.push_back(new SingleInput(0,1))`
+ *       **File:** `Utils.cpp`\n```cpp\ncode\n```
+ *    These are specific claims about file contents — the model can only
+ *    know the contents if it Read the file.
+ *
+ * Returns unique file paths (deduplicated).
  */
 function extractCitedFiles(content: string): string[] {
-  // Match: (optional path prefix)filename.ext:number
-  // File must have a recognizable source extension to avoid false positives
-  // on things like "IDF/README.md:12" or version strings.
-  const re =
-    /\b([\w./\\-]*[\w-]+\.(?:cpp|cc|cxx|c|hh|hpp|hxx|h|ts|tsx|js|jsx|py|go|rs|java|kt|swift|rb|php|cs|scala|m|mm|zig))[:#]\s*\d+/g;
+  const SOURCE_EXT =
+    "cpp|cc|cxx|c|hh|hpp|hxx|h|ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|rb|php|cs|scala|m|mm|zig";
   const seen = new Set<string>();
+
+  // Pattern 1: "file.ext:NNN" or "file.ext#NNN"
+  const reLine = new RegExp(
+    `\\b([\\w./\\\\-]*[\\w-]+\\.(?:${SOURCE_EXT}))[:#]\\s*\\d+`,
+    "g",
+  );
   let m: RegExpExecArray | null;
-  m = re.exec(content);
+  m = reLine.exec(content);
   while (m !== null) {
-    const path = m[1]!;
-    seen.add(path);
-    m = re.exec(content);
+    seen.add(m[1]!);
+    m = reLine.exec(content);
   }
+
+  // Pattern 2: \`file.ext\` followed by colon and inline-code content claim
+  //   matches: \`HidDevice.cpp\`: \`code...\`  OR  \`HidDevice.cpp\` — \`code...\`
+  const reBacktickClaim = new RegExp(
+    "`([\\w./\\\\-]*[\\w-]+\\.(?:" +
+      SOURCE_EXT +
+      "))`\\s*[:\\-—–]\\s*`[^`]+`",
+    "g",
+  );
+  m = reBacktickClaim.exec(content);
+  while (m !== null) {
+    seen.add(m[1]!);
+    m = reBacktickClaim.exec(content);
+  }
+
+  // Pattern 3: filename referenced in "**File:** \`name.ext\`" or
+  // "File: \`name.ext\`" followed by a code fence within 300 chars.
+  // This catches markdown-style finding headers where the model then
+  // shows a code block pretending to be from that file.
+  const reFileLabel = new RegExp(
+    "\\*{0,2}File\\*{0,2}\\s*:\\s*\\*{0,2}\\s*`?([\\w./\\\\-]*[\\w-]+\\.(?:" +
+      SOURCE_EXT +
+      "))`?[\\s\\S]{0,300}?```",
+    "g",
+  );
+  m = reFileLabel.exec(content);
+  while (m !== null) {
+    seen.add(m[1]!);
+    m = reFileLabel.exec(content);
+  }
+
   return Array.from(seen);
 }
 
