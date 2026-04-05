@@ -211,7 +211,7 @@ describe("audit-report discipline guards", () => {
       "/p/BtXBox.cpp",
       "/p/HidDecoder.cpp",
     ]);
-    // Mark only one as Read
+    // Mark only one as Read (need min(3, 5) = 3 for 6 hits)
     recordRead("/p/HidDecoder.cpp");
 
     const result = await executeWrite({
@@ -223,6 +223,36 @@ describe("audit-report discipline guards", () => {
     expect(result.content).toContain("BLOCKED");
     expect(result.content).toContain("flagged");
     expect(result.content).toContain("UsbXBox.cpp");
+  });
+
+  test("caps grep-hit requirement at 5 absolute (not 50% of many hits)", async () => {
+    // Simulate 22 grep hits (realistic for broad patterns on large projects)
+    const hits = Array.from({ length: 22 }, (_, i) => `/p/file${i}.cpp`);
+    recordGrepHits("data\\[", hits);
+    // Read 5 of them — should be enough (cap at 5)
+    for (let i = 0; i < 5; i++) recordRead(`/p/file${i}.cpp`);
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    // Should NOT be blocked by grep-hit coverage (5 read >= min(11, 5) = 5)
+    expect(result.is_error).toBeUndefined();
+  });
+
+  test("still blocks if grep-hit read count below cap (22 hits, 3 read)", async () => {
+    const hits = Array.from({ length: 22 }, (_, i) => `/p/file${i}.cpp`);
+    recordGrepHits("data\\[", hits);
+    for (let i = 0; i < 3; i++) recordRead(`/p/file${i}.cpp`);
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("need to Read at least 5");
   });
 
   test("allows audit when grep-hit files are mostly Read", async () => {
