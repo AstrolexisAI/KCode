@@ -89,7 +89,7 @@ export type SudoPasswordPromptFn = () => Promise<string | null>;
 let _sudoPasswordPromptFn: SudoPasswordPromptFn | undefined;
 let _cachedSudoPassword: Buffer | null = null;
 let _sudoPasswordCacheTime = 0;
-const SUDO_PASSWORD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (reduced from 15 for security)
+const SUDO_PASSWORD_CACHE_TTL = 60 * 1000; // 1 minute (reduced from 5 for security)
 let _sudoPromptInFlight: Promise<string | null> | null = null; // mutex for concurrent prompts
 
 export function setSudoPasswordPromptFn(fn: SudoPasswordPromptFn | undefined): void {

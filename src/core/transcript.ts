@@ -46,7 +46,14 @@ const MAX_SESSIONS = 100;
 
 /** Known API key prefixes — redact all but the first 8 chars */
 const KEY_PREFIX_RE =
-  /\b(sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_-]{8,}/g;
+  /\b(sk-ant-api\d+-|sk-ant-oat\d+-|sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_-]{8,}/g;
+
+/** ANSI escape sequences (color codes, cursor movement, etc.) */
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()#]./g;
+
+/** Maximum length for a single transcript entry content field */
+const MAX_ENTRY_CONTENT_CHARS = 50_000;
 
 /** Key=value pairs where the key name suggests a secret */
 const KEY_VALUE_RE =
@@ -61,6 +68,9 @@ const BEARER_RE = /(Bearer\s+)([a-zA-Z0-9._-]{8,})/gi;
 
 /** Sanitize sensitive data from transcript content before saving */
 function sanitizeTranscriptContent(text: string): string {
+  // Strip ANSI escape sequences — prevents log injection / terminal exploits
+  text = text.replace(ANSI_RE, "");
+  // Redact credentials
   text = text.replace(KEY_PREFIX_RE, (m) => m.slice(0, 8) + "****");
   text = text.replace(
     KEY_VALUE_RE,
@@ -74,6 +84,10 @@ function sanitizeTranscriptContent(text: string): string {
     BEARER_RE,
     (_, prefix: string, token: string) => prefix + token.slice(0, 4) + "****",
   );
+  // Truncate oversized content to prevent replay-based prompt injection
+  if (text.length > MAX_ENTRY_CONTENT_CHARS) {
+    text = text.slice(0, MAX_ENTRY_CONTENT_CHARS) + `\n... [truncated: ${text.length - MAX_ENTRY_CONTENT_CHARS} chars]`;
+  }
   return text;
 }
 
