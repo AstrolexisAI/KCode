@@ -4,15 +4,22 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordRead, resetReads } from "../core/session-tracker";
+import { recordGrep, recordRead, resetReads } from "../core/session-tracker";
 import { executeWrite } from "./write";
 
 describe("audit-report discipline guards", () => {
   let tmp: string;
 
   beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), "kcode-audit-test-"));
+    tmp = mkdtempSync(join(tmpdir(), "kcode-guard-test-"));
     resetReads();
+    // Minimum reconnaissance so existing tests can create audit files
+    recordGrep();
+    recordRead("/p/f1.cpp");
+    recordRead("/p/f2.cpp");
+    recordRead("/p/f3.cpp");
+    recordRead("/p/f4.cpp");
+    recordRead("/p/f5.cpp");
   });
 
   afterEach(() => {
@@ -129,6 +136,41 @@ describe("audit-report discipline guards", () => {
     });
 
     expect(result.is_error).toBeUndefined();
+  });
+
+  test("blocks audit write when no Grep was called in session", async () => {
+    resetReads(); // wipe the 5 reads + 1 grep from beforeEach
+    // Record 5 reads but NO grep
+    recordRead("/p/a.cpp");
+    recordRead("/p/b.cpp");
+    recordRead("/p/c.cpp");
+    recordRead("/p/d.cpp");
+    recordRead("/p/e.cpp");
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+    expect(result.content).toContain("Grep tool ONCE");
+  });
+
+  test("blocks audit write when fewer than 5 files were Read", async () => {
+    resetReads();
+    recordGrep();
+    recordRead("/p/only1.cpp");
+    recordRead("/p/only2.cpp");
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+    expect(result.content).toContain("Read only 2 file");
   });
 
   test("non-audit files bypass audit guards entirely", async () => {

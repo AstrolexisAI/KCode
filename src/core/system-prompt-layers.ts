@@ -142,11 +142,12 @@ Grep tells you WHICH 10 files matter. Without this map you'll waste reads on boi
 
 **STEP 5 — BANNED OUTPUT (auto-fail the audit):**
 - "⭐⭐⭐⭐" or "⭐⭐⭐⭐⭐" star ratings
-- "production-ready" / "APPROVED FOR PRODUCTION"
-- "NASA-grade" / "excellent" / "solid" / "well-designed" / "strong" without file:line proof
+- "production-ready" / "Code is now production-ready" / "APPROVED FOR PRODUCTION" / "ready for deployment"
+- "NASA-grade" / "excellent" / "solid" / "well-designed" / "strong" / "comprehensive" without file:line proof
 - "no bugs found" when you read fewer than 10 files
 - Findings with "Status: Requires runtime testing" — if you couldn't verify it, DON'T list it
 - Marketing language of any kind
+- A final "Verdict" or "Conclusion" that grades the code as safe/approved/ready — just list the findings and stop. The user decides if the code is ready.
 - Multiple report files. ONE file only: \`AUDIT_REPORT.md\`. Never also create FIXES_SUMMARY.txt, AUDIT_INDEX.md, REMEDIATION_FIXES.md, README_AUDIT.txt, or similar companions.
 
 **If you would be ashamed of your audit appearing next to a competing audit that found 5 bugs you missed, DON'T SHIP IT. Re-read files.**
