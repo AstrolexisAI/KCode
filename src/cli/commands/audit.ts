@@ -10,6 +10,7 @@ import { writeFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import type { Command } from "commander";
 import { runAudit } from "../../core/audit-engine/audit-engine";
+import { makeAuditLlmCallback } from "../../core/audit-engine/llm-callback";
 import { generateMarkdownReport } from "../../core/audit-engine/report-generator";
 import { loadSettings } from "../../core/config";
 
@@ -19,70 +20,6 @@ const ICONS = {
   false_positive: "\x1b[90m○\x1b[0m",
   needs_context: "\x1b[33m◐\x1b[0m",
 };
-
-/**
- * Call the configured LLM (local or cloud) with a single prompt and
- * return its response text. Minimal interface — no tools, no streaming.
- */
-async function makeLlmCallback(opts: {
-  model?: string;
-  apiBase?: string;
-  apiKey?: string;
-  maxTokens?: number;
-}): Promise<(prompt: string) => Promise<string>> {
-  const model = opts.model ?? "claude-opus-4-6";
-  const apiBase = opts.apiBase ?? "https://api.anthropic.com/v1";
-  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_API_KEY ?? "";
-  const maxTokens = opts.maxTokens ?? 1024;
-
-  // Detect API style: Anthropic-native or OpenAI-compatible
-  const isAnthropic = apiBase.includes("anthropic.com") || model.includes("claude");
-
-  return async (prompt: string): Promise<string> => {
-    if (isAnthropic) {
-      const res = await fetch(`${apiBase.replace(/\/$/, "")}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
-      }
-      const data = (await res.json()) as { content: Array<{ type: string; text?: string }> };
-      const textBlocks = data.content.filter((b) => b.type === "text");
-      return textBlocks.map((b) => b.text ?? "").join("");
-    }
-    // OpenAI-compatible (llama.cpp/Ollama/vLLM/OpenAI)
-    const res = await fetch(`${apiBase.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.1,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`LLM API ${res.status}: ${await res.text()}`);
-    }
-    const data = (await res.json()) as {
-      choices: Array<{ message: { content: string } }>;
-    };
-    return data.choices[0]?.message.content ?? "";
-  };
-}
 
 export function registerAuditCommand(program: Command): void {
   program
@@ -124,9 +61,9 @@ export function registerAuditCommand(program: Command): void {
         llmCallback = async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n";
       } else {
         const settings = await loadSettings(projectRoot);
-        llmCallback = await makeLlmCallback({
-          model: opts.model ?? settings.model,
-          apiBase: opts.apiBase ?? settings.apiBase,
+        llmCallback = makeAuditLlmCallback({
+          model: opts.model ?? settings.model ?? "claude-opus-4-6",
+          apiBase: opts.apiBase ?? settings.apiBase ?? "https://api.anthropic.com/v1",
           apiKey: opts.apiKey ?? settings.apiKey,
         });
       }

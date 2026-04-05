@@ -7,6 +7,81 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
   const { appConfig, args } = ctx;
 
   switch (action) {
+    case "scan": {
+      // Parse args: first token = path, optional flags
+      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      const skipVerify = tokens.includes("--skip-verify");
+      const pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
+      const { resolve: resolvePath } = await import("node:path");
+      const { writeFileSync, existsSync, statSync } = await import("node:fs");
+      const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
+
+      if (!existsSync(projectRoot) || !statSync(projectRoot).isDirectory()) {
+        return `  Path not found or not a directory: ${pathToken}`;
+      }
+
+      const { runAudit } = await import("../../core/audit-engine/audit-engine.js");
+      const { generateMarkdownReport } = await import(
+        "../../core/audit-engine/report-generator.js"
+      );
+
+      const lines: string[] = [];
+      lines.push(`  KCode Audit Engine`);
+      lines.push(`    Project:  ${projectRoot}`);
+      if (skipVerify) {
+        lines.push(`    Mode:     static-only (--skip-verify)`);
+      } else {
+        lines.push(`    Model:    ${appConfig.model ?? "default"}`);
+      }
+      lines.push("");
+
+      // Build LLM callback using the existing conversation model config
+      const { buildAuditLlmCallbackFromConfig } = await import(
+        "../../core/audit-engine/llm-callback.js"
+      );
+      const llmCallback = skipVerify
+        ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
+        : buildAuditLlmCallbackFromConfig(appConfig);
+
+      const phases: string[] = [];
+      const result = await runAudit({
+        projectRoot,
+        llmCallback,
+        maxFiles: 500,
+        skipVerification: skipVerify,
+        onPhase: (phase, detail) => {
+          phases.push(`    ◆ ${phase}${detail ? ": " + detail : ""}`);
+        },
+      });
+
+      const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
+      writeFileSync(outputPath, generateMarkdownReport(result));
+
+      lines.push(...phases);
+      lines.push("");
+      lines.push(`    Report written: ${outputPath}`);
+      lines.push("");
+      lines.push(`    Files scanned:      ${result.files_scanned}`);
+      lines.push(`    Candidates found:   ${result.candidates_found}`);
+      lines.push(`    Confirmed findings: ${result.confirmed_findings}`);
+      lines.push(`    False positives:    ${result.false_positives}`);
+      lines.push(`    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`);
+      if (result.findings.length > 0) {
+        lines.push("");
+        lines.push(`  Top findings:`);
+        for (const f of result.findings.slice(0, 5)) {
+          const rel = f.file.replace(projectRoot + "/", "");
+          const icon =
+            f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
+          lines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
+        }
+        if (result.findings.length > 5) {
+          lines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
+        }
+      }
+      return lines.join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 

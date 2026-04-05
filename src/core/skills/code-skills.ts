@@ -82,6 +82,14 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
 **Your audit will be read by security-conscious engineers. Earn their trust with precision.**`,
   },
   {
+    name: "scan",
+    description:
+      "Run the deterministic audit engine (pattern library + model verification). Produces AUDIT_REPORT.md.",
+    aliases: ["audit-scan", "static-audit"],
+    args: ["project path (default: cwd) [--skip-verify]"],
+    template: `__builtin_scan__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
