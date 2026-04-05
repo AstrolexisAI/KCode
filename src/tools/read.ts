@@ -31,24 +31,37 @@ const OFFICE_EXTENSIONS = new Set([
 export const readDefinition: ToolDefinition = {
   name: "Read",
   description:
-    "Read a file from the filesystem. Returns content with line numbers. Supports images (PNG, JPG, GIF, WEBP), PDFs (.pdf with optional page range), Office documents (.docx, .doc, .xlsx, .xls, .pptx, .ppt, .odt, .ods, .odp), and Jupyter notebooks (.ipynb).",
+    "Reads a file from the local filesystem. You can access any file directly by using this tool.\n" +
+    "Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.\n\n" +
+    "Usage:\n" +
+    "- The file_path parameter must be an absolute path, not a relative path\n" +
+    "- By default, it reads up to 2000 lines starting from the beginning of the file\n" +
+    "- When you already know which part of the file you need, only read that part. This can be important for larger files.\n" +
+    "- Results are returned using cat -n format, with line numbers starting at 1\n" +
+    "- This tool allows you to read images (eg PNG, JPG, etc). When reading an image file the contents are presented visually.\n" +
+    "- This tool can read PDF files (.pdf). For large PDFs (more than 10 pages), you MUST provide the pages parameter to read specific page ranges (e.g., pages: \"1-5\"). Reading a large PDF without the pages parameter will fail. Maximum 20 pages per request.\n" +
+    "- This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.\n" +
+    "- This tool can read Office documents (.docx, .xlsx, .pptx, .odt, .ods, .odp) and returns extracted text.\n" +
+    "- This tool can only read files, not directories. To read a directory, use an ls command via the Bash tool.\n" +
+    "- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.",
   input_schema: {
     type: "object",
     properties: {
-      file_path: { type: "string", description: "Absolute path to the file" },
+      file_path: { type: "string", description: "The absolute path to the file to read" },
       offset: {
         type: "number",
-        description: "Starting line number (1-indexed). Omit to start from the beginning.",
+        description:
+          "The line number to start reading from. Only provide if the file is too large to read at once",
       },
       limit: {
         type: "number",
         description:
-          "Number of lines to read (default: up to 2000). Only set this if you need a specific smaller range. Do NOT read files in small chunks of 100 lines — read large sections at once.",
+          "The number of lines to read. Only provide if the file is too large to read at once.",
       },
       pages: {
         type: "string",
         description:
-          'Page range for PDF files (e.g., "1-5", "3", "10-20"). Required for PDFs with more than 10 pages. Max 20 pages per request.',
+          'Page range for PDF files (e.g., "1-5", "3", "10-20"). Only applicable to PDF files. Maximum 20 pages per request.',
       },
     },
     required: ["file_path"],
