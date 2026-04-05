@@ -228,12 +228,16 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       return {
         tool_use_id: "",
         content:
-          `BLOCKED: Cannot use shell redirection to write audit-report file "${basename(target)}". ` +
-          `${bullet}\n\nAudit reports must go through the Write tool, which enforces:\n` +
+          `BLOCKED — FILE NOT CREATED: Shell redirection to audit-report file ` +
+          `"${basename(target)}" is refused. ${bullet}\n\nAudit reports must go ` +
+          `through the Write tool, which enforces:\n` +
           `  - at least one Grep reconnaissance pass before the report\n` +
-          `  - at least 5 source files Read in full\n` +
+          `  - at least 8 source files Read in full\n` +
           `  - no fabricated "proof of work" checklists\n` +
-          `  - one authoritative AUDIT_REPORT.md per directory`,
+          `  - no uncited file:line references\n` +
+          `  - one authoritative AUDIT_REPORT.md per directory\n\n` +
+          `IMPORTANT: The file does NOT exist. Do NOT tell the user that the ` +
+          `audit was "created" or "generated" — retry with the Write tool first.`,
         is_error: true,
       };
     }

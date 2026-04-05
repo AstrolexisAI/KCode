@@ -19,7 +19,7 @@ describe("audit-report discipline guards", () => {
     tmp = mkdtempSync(join(tmpdir(), "kcode-guard-test-"));
     resetReads();
     // Minimum reconnaissance so existing tests can create audit files.
-    // Need 8 SOURCE files now (raised from 5).
+    // Need 6 SOURCE files.
     recordGrep();
     recordRead("/p/f1.cpp");
     recordRead("/p/f2.cpp");
@@ -27,8 +27,6 @@ describe("audit-report discipline guards", () => {
     recordRead("/p/f4.cpp");
     recordRead("/p/f5.cpp");
     recordRead("/p/f6.cpp");
-    recordRead("/p/f7.cpp");
-    recordRead("/p/f8.cpp");
   });
 
   afterEach(() => {
@@ -166,7 +164,7 @@ describe("audit-report discipline guards", () => {
     expect(result.content).toContain("Grep tool ONCE");
   });
 
-  test("blocks audit write when fewer than 8 source files were Read", async () => {
+  test("blocks audit write when fewer than 6 source files were Read", async () => {
     resetReads();
     recordGrep();
     recordRead("/p/only1.cpp");
