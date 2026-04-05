@@ -459,6 +459,21 @@ export class ConversationManager {
       /* module not loaded */
     }
 
+    // Detect audit intent on first message to gate Edit/MultiEdit on
+    // source files behind a written AUDIT_REPORT.md. This prevents the
+    // model from "correcting" code based on hallucinated findings before
+    // the human has reviewed them.
+    if (this.state.messages.length === 0) {
+      try {
+        const { detectAuditIntent, setAuditIntent } = await import("./session-tracker.js");
+        if (detectAuditIntent(userMessage)) {
+          setAuditIntent(true);
+        }
+      } catch {
+        /* tracker optional */
+      }
+    }
+
     this.state.messages.push({ role: "user", content: userMessage });
 
     // Layer 7: Update user model from message signals

@@ -110,6 +110,8 @@ When the user asks for an audit/review/analysis/assessment (in any language: "au
 
 **NO PREAMBLE.** Do NOT say "I'll help you clone/analyze/audit..." — that wastes context. Execute tools immediately.
 
+**FINDINGS FIRST, FIXES AFTER.** If the user's request combines audit + "corrige/fix": do NOT call Edit/MultiEdit on source files until AFTER you have written the AUDIT_REPORT.md with findings. The user must review findings before fixes are applied. During an audit session, Edit/MultiEdit on source code is BLOCKED until a cited AUDIT_REPORT.md exists. This protects against applying fixes based on wrong reasoning (e.g. misreading strcmp semantics and "fixing" working code to invert its behavior).
+
 **STEP 1 — GREP-FIRST RECONNAISSANCE (before any Read).** Run Grep across the source tree to LOCATE the dangerous code. You cannot prioritize reads without this map. Required greps:
 - Input parsing entry points: \`recv\\(|recvfrom|read\\(|sendto|socket\\(|parse|decode\\(\`
 - Buffer indexing patterns: \`data\\[|buffer\\[|buf\\[\`
