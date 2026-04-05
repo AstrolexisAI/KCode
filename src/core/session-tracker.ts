@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 // Module-level state — reset per CLI process (= per session)
 const _readFiles = new Set<string>();
 let _grepCount = 0;
+let _auditIntent = false;
 // Files that appeared in Grep results for DANGEROUS-pattern queries
 // (buffer indexing, network I/O, resource lifecycle). These are high-risk
 // files the model found but may not have opened.
@@ -123,6 +124,45 @@ export function recordGrep(): void {
   _grepCount += 1;
 }
 
+// Keywords (English + Spanish) that flag a user's first message as an
+// audit request. When set, Edit/MultiEdit on source files will be gated
+// behind an existing AUDIT_REPORT.md that cites the file being modified.
+const AUDIT_INTENT_KEYWORDS = [
+  /\baudit\b/i,
+  /\bauditalo\b/i,
+  /\bauditar\b/i,
+  /\bauditoria\b/i,
+  /\baudit[ée]e?(?:d|z)?\b/i,
+  /\bsecurity[- ]?review\b/i,
+  /\bcode[- ]?review\b/i,
+  /\brevisa\b/i,
+  /\brevisar\b/i,
+  /\banaliza(?:lo|r|)\b/i,
+];
+
+/**
+ * Detect whether a user message looks like an audit request.
+ * Used in the conversation loop to set audit intent on first message.
+ */
+export function detectAuditIntent(userMessage: string): boolean {
+  return AUDIT_INTENT_KEYWORDS.some((re) => re.test(userMessage));
+}
+
+/**
+ * Mark the current session as an audit session. Called from the
+ * conversation loop when the user's first message matches audit keywords.
+ */
+export function setAuditIntent(value: boolean): void {
+  _auditIntent = value;
+}
+
+/**
+ * Whether the current session is an audit session.
+ */
+export function isAuditSession(): boolean {
+  return _auditIntent;
+}
+
 /**
  * Number of Grep calls made in this session.
  */
@@ -211,4 +251,5 @@ export function resetReads(): void {
   _readFiles.clear();
   _grepCount = 0;
   _grepHitFiles.clear();
+  _auditIntent = false;
 }

@@ -4,6 +4,7 @@
 // no files are modified (atomic all-or-nothing).
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { checkAuditEditGuard } from "../core/audit-guards";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const multiEditDefinition: ToolDefinition = {
@@ -75,6 +76,30 @@ export async function executeMultiEdit(input: Record<string, unknown>): Promise<
     return {
       tool_use_id: "",
       content: "Error: Maximum 50 edits per MultiEdit call.",
+      is_error: true,
+    };
+  }
+
+  // Audit-session guard: check every target file. If any is blocked,
+  // refuse the entire MultiEdit (atomic all-or-nothing).
+  const blockedFiles: string[] = [];
+  let firstBlockReason: string | null = null;
+  for (const edit of edits) {
+    if (!edit?.file_path) continue;
+    const guard = checkAuditEditGuard(edit.file_path);
+    if (guard.blocked) {
+      blockedFiles.push(edit.file_path);
+      if (!firstBlockReason) firstBlockReason = guard.reason!;
+    }
+  }
+  if (blockedFiles.length > 0) {
+    return {
+      tool_use_id: "",
+      content:
+        firstBlockReason! +
+        (blockedFiles.length > 1
+          ? `\n\nAdditional blocked files in this MultiEdit: ${blockedFiles.slice(1).join(", ")}`
+          : ""),
       is_error: true,
     };
   }

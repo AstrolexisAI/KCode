@@ -2,6 +2,7 @@
 // Performs exact string replacements in files with visual diff output
 
 import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { checkAuditEditGuard } from "../core/audit-guards";
 import type { FileEditInput, ToolDefinition, ToolResult } from "../core/types";
 
 const SENSITIVE_PATTERNS = [
@@ -144,6 +145,13 @@ function findClosestMatch(
 
 export async function executeEdit(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, old_string, new_string, replace_all } = input as unknown as FileEditInput;
+
+  // Audit-session guard: when the user asked for an audit, source files
+  // can only be edited AFTER an AUDIT_REPORT.md exists and cites the file.
+  const auditGuard = checkAuditEditGuard(file_path);
+  if (auditGuard.blocked) {
+    return { tool_use_id: "", content: auditGuard.reason!, is_error: true };
+  }
 
   // Block edits to sensitive files (parity with Write tool)
   const isSensitive = SENSITIVE_PATTERNS.some((p) => p.test(file_path));
