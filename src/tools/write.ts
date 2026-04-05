@@ -211,17 +211,44 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
       );
     }
     if (problems.length > 0) {
+      // Actionable next-step: list specific unread grep-hit files so the
+      // model knows EXACTLY which Reads to call before retrying.
+      let nextSteps = "";
+      const filesToRead = unread.slice(0, 6);
+      if (filesToRead.length > 0) {
+        nextSteps =
+          `\n\nNEXT STEP — call Read on these unread high-risk files:\n` +
+          filesToRead.map((f, i) => `  ${i + 1}. Read("${f}")`).join("\n");
+      } else if (sourceReads < 6) {
+        // No grep hits yet — give generic guidance
+        nextSteps =
+          `\n\nNEXT STEP — run more Greps to locate hot files (e.g. for data[, ` +
+          `buffer[, recv(, open(), then Read at least ${6 - sourceReads} more ` +
+          `source files (.cpp/.hh/.ts, NOT README.md or CMakeLists.txt).`;
+      }
+
+      // Honest-summary template the model must use if it gives up.
+      const neededMore = Math.max(0, 6 - sourceReads);
+      const honestSummary =
+        `\n\nIF YOU STOP HERE: your response to the user MUST begin with ` +
+        `"AUDIT INCOMPLETE" and state exactly: ` +
+        `"I could not write the audit report. I only Read ${sourceReads} of ` +
+        `6 required source files${neededMore > 0 ? ` (needed ${neededMore} more)` : ""}${
+          unread.length > 0 ? `, leaving ${unread.length} high-risk file(s) unopened` : ""
+        }." ` +
+        `Do NOT describe the codebase as "production-ready", "excellent", ` +
+        `"professional-grade", or give star ratings — you did not read enough ` +
+        `code to make that claim.`;
+
       return {
         tool_use_id: "",
         content:
           `BLOCKED — FILE NOT CREATED: "${basename(file_path)}" was NOT written. Reasons:\n` +
           problems.map((p, i) => `  ${i + 1}. ${p}`).join("\n") +
           `\n\nSession state: ${sourceReads} source reads, ${greps} greps, ` +
-          `${totalHits} grep-hit files (${unread.length} unread).\n\n` +
-          `IMPORTANT: The file does NOT exist. Do NOT tell the user that you ` +
-          `"created" or "generated" the audit report. Do NOT summarize findings ` +
-          `as if the report were written. First fix the reasons above, retry ` +
-          `Write, and only claim success AFTER this tool returns without error.`,
+          `${totalHits} grep-hit files (${unread.length} unread).` +
+          nextSteps +
+          honestSummary,
         is_error: true,
       };
     }
