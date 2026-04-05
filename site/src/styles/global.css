@@ -358,3 +358,34 @@ footer .footer-links {
     grid-template-columns: 1fr;
   }
 }
+
+/* Differentiator cards (index page) */
+.diff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+.diff-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+.diff-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+.diff-card h3 {
+  margin: 0.5rem 0;
+  font-size: 1.15rem;
+}
+.diff-card p {
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+.section-desc.center {
+  text-align: center;
+  margin-top: 1.5rem;
+}

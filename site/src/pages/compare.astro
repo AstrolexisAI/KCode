@@ -1,0 +1,496 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="KCode vs Claude Code, Cursor, Codex — Compare AI Coding Assistants">
+  <!-- Hero -->
+  <section class="hero container">
+    <h1>The only AI coding assistant<br />that runs on your hardware.</h1>
+    <p class="subtitle">
+      Compare KCode with Claude Code, Cursor, Codex CLI, Aider, and Continue.
+      Local LLMs first. Multi-provider second. Cloud optional.
+    </p>
+  </section>
+
+  <!-- Unique Differentiators -->
+  <section class="container">
+    <h2>What only KCode has</h2>
+    <p class="section-desc">Three features no other AI coding assistant offers.</p>
+
+    <div class="unique-grid">
+      <div class="unique-card">
+        <div class="unique-icon">⚡</div>
+        <h3>Auto-spawn background agents</h3>
+        <p>
+          When you create a plan with 3+ independent steps, KCode automatically
+          spawns parallel agents to work on them. Results are consolidated back
+          into your conversation. Nothing else does this.
+        </p>
+      </div>
+
+      <div class="unique-card">
+        <div class="unique-icon">🧠</div>
+        <h3>Live agent panel with Kodi</h3>
+        <p>
+          A companion ASCII character (Kodi) shows real-time agent status,
+          progress, and mood reactions in your terminal header. See exactly
+          what your agents are doing — as they do it.
+        </p>
+      </div>
+
+      <div class="unique-card">
+        <div class="unique-icon">📱</div>
+        <h3>Native iOS companion app</h3>
+        <p>
+          Chat with KCode from your iPhone over local network or Tailscale.
+          Monitor long-running tasks, approve permissions, send quick commands —
+          without opening your laptop.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Full Comparison Table -->
+  <section class="container">
+    <h2>Full feature comparison</h2>
+    <p class="section-desc">All major AI coding assistants side by side.</p>
+
+    <div class="compare-table-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th class="feature-col">Feature</th>
+            <th class="kcode-col">KCode</th>
+            <th>Claude Code</th>
+            <th>Cursor</th>
+            <th>Codex CLI</th>
+            <th>Aider</th>
+            <th>Continue</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="section-row"><td colspan="7">Pricing</td></tr>
+          <tr>
+            <td>Base price</td>
+            <td class="kcode-col"><strong>Free</strong> (AGPL)</td>
+            <td>$20–$200/mo</td>
+            <td>$20/mo</td>
+            <td>$20/mo (ChatGPT Plus)</td>
+            <td>Free</td>
+            <td>Free</td>
+          </tr>
+          <tr>
+            <td>License</td>
+            <td class="kcode-col">AGPL-3.0</td>
+            <td>Proprietary</td>
+            <td>Proprietary</td>
+            <td>Proprietary</td>
+            <td>Apache 2.0</td>
+            <td>Apache 2.0</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="7">Models & providers</td></tr>
+          <tr>
+            <td>Local LLMs (llama.cpp, Ollama, vLLM, MLX)</td>
+            <td class="kcode-col">✓</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>Limited</td>
+          </tr>
+          <tr>
+            <td>Multi-provider (6+ cloud APIs)</td>
+            <td class="kcode-col">✓ Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together</td>
+            <td>Anthropic only</td>
+            <td>Cursor only</td>
+            <td>OpenAI only</td>
+            <td>✓</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>100% self-hostable</td>
+            <td class="kcode-col">✓</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>✓</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Privacy (data never leaves machine)</td>
+            <td class="kcode-col">✓ with local model</td>
+            <td>— (Anthropic cloud)</td>
+            <td>— (OpenAI cloud)</td>
+            <td>— (OpenAI cloud)</td>
+            <td>— (API key)</td>
+            <td>✓ local option</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="7">Interface</td></tr>
+          <tr>
+            <td>Terminal-native UI</td>
+            <td class="kcode-col">✓ Ink + Kodi companion</td>
+            <td>✓</td>
+            <td>— (IDE)</td>
+            <td>✓</td>
+            <td>✓</td>
+            <td>— (IDE)</td>
+          </tr>
+          <tr>
+            <td>IDE integration (VS Code, JetBrains)</td>
+            <td class="kcode-col">✓</td>
+            <td>Web + CLI</td>
+            <td>✓ native</td>
+            <td>—</td>
+            <td>✓ plugin</td>
+            <td>✓ native</td>
+          </tr>
+          <tr>
+            <td>Mobile app (iOS)</td>
+            <td class="kcode-col">✓ SwiftUI</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Voice input</td>
+            <td class="kcode-col">✓ (via Mnemo)</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="7">Tools & agents</td></tr>
+          <tr>
+            <td>Built-in tools</td>
+            <td class="kcode-col"><strong>46</strong></td>
+            <td>~25</td>
+            <td>~15</td>
+            <td>~10</td>
+            <td>~10</td>
+            <td>Custom</td>
+          </tr>
+          <tr>
+            <td>MCP server support</td>
+            <td class="kcode-col">✓</td>
+            <td>✓</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Plugin marketplace</td>
+            <td class="kcode-col">✓ + 8 bundled</td>
+            <td>✓ skills</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Auto-spawn background agents</td>
+            <td class="kcode-col"><strong>✓ unique</strong></td>
+            <td>Manual only</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Live agent status panel</td>
+            <td class="kcode-col"><strong>✓ unique</strong></td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Swarm mode (parallel agents)</td>
+            <td class="kcode-col">✓</td>
+            <td>✓</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="7">Performance & context</td></tr>
+          <tr>
+            <td>Codebase RAG indexing</td>
+            <td class="kcode-col">✓ local SQLite</td>
+            <td>—</td>
+            <td>✓</td>
+            <td>—</td>
+            <td>✓</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Prompt caching</td>
+            <td class="kcode-col">✓ ported from Claude Code</td>
+            <td>✓</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Session persistence + resume</td>
+            <td class="kcode-col">✓</td>
+            <td>✓</td>
+            <td>✓</td>
+            <td>Partial</td>
+            <td>✓</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Microcompact (auto context mgmt)</td>
+            <td class="kcode-col">✓</td>
+            <td>✓</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+
+          <tr class="section-row"><td colspan="7">Reliability</td></tr>
+          <tr>
+            <td>Test coverage</td>
+            <td class="kcode-col">✓ 5,555 tests</td>
+            <td>?</td>
+            <td>?</td>
+            <td>?</td>
+            <td>✓</td>
+            <td>✓</td>
+          </tr>
+          <tr>
+            <td>Security audit score</td>
+            <td class="kcode-col">9.7/10 (public)</td>
+            <td>?</td>
+            <td>?</td>
+            <td>?</td>
+            <td>?</td>
+            <td>?</td>
+          </tr>
+          <tr>
+            <td>Open source</td>
+            <td class="kcode-col">✓ AGPL</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>✓ Apache</td>
+            <td>✓ Apache</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- When to choose what -->
+  <section class="container">
+    <h2>When to choose KCode</h2>
+    <p class="section-desc">Not every tool fits every workflow. Here's the honest breakdown.</p>
+
+    <div class="scenario-grid">
+      <div class="scenario-card">
+        <h3>vs Claude Code</h3>
+        <p><strong>Choose KCode if:</strong></p>
+        <ul>
+          <li>You want local LLM support (no Anthropic lock-in)</li>
+          <li>You need multi-provider flexibility</li>
+          <li>You want self-hosted + mobile remote control</li>
+          <li>You need auto-spawning background agents</li>
+        </ul>
+        <p><strong>Stick with Claude Code if:</strong></p>
+        <ul>
+          <li>You want Anthropic's official tooling</li>
+          <li>You need Max subscription tier</li>
+          <li>You value polished docs + enterprise support</li>
+        </ul>
+      </div>
+
+      <div class="scenario-card">
+        <h3>vs Cursor</h3>
+        <p><strong>Choose KCode if:</strong></p>
+        <ul>
+          <li>You work primarily in the terminal</li>
+          <li>You want multi-provider (not just Cursor's models)</li>
+          <li>You need background agents + voice input</li>
+          <li>You care about privacy (local LLMs)</li>
+        </ul>
+        <p><strong>Stick with Cursor if:</strong></p>
+        <ul>
+          <li>You want a polished visual IDE experience</li>
+          <li>You like inline diff editing</li>
+          <li>You value Cursor's large user community</li>
+        </ul>
+      </div>
+
+      <div class="scenario-card">
+        <h3>vs Codex CLI</h3>
+        <p><strong>Choose KCode if:</strong></p>
+        <ul>
+          <li>You want more than just OpenAI models</li>
+          <li>You need 46 tools instead of ~10</li>
+          <li>You want MCP + plugins</li>
+          <li>You care about audit + testing</li>
+        </ul>
+        <p><strong>Stick with Codex CLI if:</strong></p>
+        <ul>
+          <li>You're already paying for ChatGPT Plus</li>
+          <li>You only use OpenAI models</li>
+          <li>Simple is all you need</li>
+        </ul>
+      </div>
+
+      <div class="scenario-card">
+        <h3>vs Aider / Continue</h3>
+        <p><strong>Choose KCode if:</strong></p>
+        <ul>
+          <li>You want modern UI (Ink + Kodi companion)</li>
+          <li>You need background agents + swarm mode</li>
+          <li>You want mobile app integration</li>
+          <li>You value plugin ecosystem + MCP</li>
+        </ul>
+        <p><strong>Stick with Aider/Continue if:</strong></p>
+        <ul>
+          <li>You prefer their established communities</li>
+          <li>You need specific integrations they have</li>
+          <li>Minimalism over features</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="container cta-section">
+    <h2>Ready to try KCode?</h2>
+    <p class="section-desc">Install in 30 seconds. Works with your existing API keys or runs 100% local.</p>
+    <div class="ctas">
+      <a href="/download" class="btn btn-primary">Install KCode</a>
+      <a href="https://docs.kulvex.ai" class="btn btn-secondary">Read Docs</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .unique-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0 3rem;
+  }
+  .unique-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .unique-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  .unique-card h3 {
+    margin: 0.5rem 0;
+    font-size: 1.15rem;
+  }
+  .unique-card p {
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+
+  .compare-table-wrap {
+    overflow-x: auto;
+    margin: 2rem 0 3rem;
+  }
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .compare-table th,
+  .compare-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .compare-table th {
+    background: rgba(255, 255, 255, 0.03);
+    font-weight: 600;
+    color: #cbd5e1;
+  }
+  .compare-table .feature-col {
+    min-width: 240px;
+  }
+  .compare-table .kcode-col {
+    background: rgba(14, 165, 233, 0.08);
+    color: #fff;
+  }
+  .compare-table th.kcode-col {
+    background: rgba(14, 165, 233, 0.15);
+    color: #38bdf8;
+  }
+  .compare-table .section-row td {
+    background: rgba(255, 255, 255, 0.02);
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1rem 0.75rem 0.5rem;
+  }
+
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0 3rem;
+  }
+  .scenario-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 1.5rem;
+  }
+  .scenario-card h3 {
+    margin: 0 0 1rem;
+    color: #38bdf8;
+  }
+  .scenario-card p {
+    margin: 1rem 0 0.5rem;
+    color: #cbd5e1;
+  }
+  .scenario-card ul {
+    margin: 0 0 0.5rem;
+    padding-left: 1.25rem;
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+  .scenario-card strong {
+    color: #fff;
+  }
+
+  .cta-section {
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+  .cta-section .ctas {
+    justify-content: center;
+  }
+
+  @media (max-width: 768px) {
+    .compare-table {
+      font-size: 0.8rem;
+    }
+    .compare-table th,
+    .compare-table td {
+      padding: 0.5rem;
+    }
+  }
+</style>
