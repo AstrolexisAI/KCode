@@ -299,7 +299,9 @@ export function detectDestructiveRemoval(command: string): string | null {
   const match = command.match(/\brm\s+(?:--?[a-zA-Z][\w-]*(?:=[^\s]*)?\s+)+(.+)/);
   if (!match) return null;
 
-  const targets = match[1]!.trim();
+  // Truncate at shell separators — only consider the rm target itself, not chained commands
+  const rawTarget = match[1]!;
+  const targets = rawTarget.split(/\s*(?:&&|\|\||;|\||>|<)\s*/)[0]!.trim();
 
   // Allow removal of clearly safe targets
   const safePatterns = [
@@ -312,6 +314,12 @@ export function detectDestructiveRemoval(command: string): string | null {
     /^\.turbo\/?$/, // Turborepo cache
     /^coverage\/?$/, // test coverage
     /^tmp\/?$|^\/tmp\//, // temp directories
+    /^out\/?$/, // generic output
+    /^target\/?$/, // Rust/Maven build output
+    /^\.pytest_cache\/?$/, // pytest cache
+    /^\.mypy_cache\/?$/, // mypy cache
+    /^\.ruff_cache\/?$/, // ruff cache
+    /^\.venv\/?$|^venv\/?$/, // Python venv
   ];
 
   if (safePatterns.some((p) => p.test(targets))) return null;
