@@ -32,12 +32,13 @@ describe("getProfile", () => {
     expect(p!.settings.maxTokens).toBe(4096);
   });
 
-  test("returns review profile", () => {
-    const p = getProfile("review");
+  test("returns audit profile", () => {
+    const p = getProfile("audit");
     expect(p).toBeDefined();
     expect(p!.settings.thinking).toBe(true);
-    expect(p!.settings.effortLevel).toBe("high");
-    expect(p!.settings.disallowedTools).toContain("Bash");
+    expect(p!.settings.effortLevel).toBe("max");
+    expect(p!.settings.disallowedTools).toContain("Edit");
+    expect(p!.settings.disallowedTools).toContain("EnterPlanMode");
   });
 
   test("returns implement profile", () => {
@@ -58,7 +59,7 @@ describe("getProfile", () => {
   test("is case-insensitive", () => {
     expect(getProfile("SAFE")).toBeDefined();
     expect(getProfile("Fast")).toBeDefined();
-    expect(getProfile("REVIEW")).toBeDefined();
+    expect(getProfile("AUDIT")).toBeDefined();
   });
 
   test("returns undefined for unknown profile", () => {
@@ -74,7 +75,7 @@ describe("listProfiles", () => {
     const names = profiles.map((p) => p.name);
     expect(names).toContain("safe");
     expect(names).toContain("fast");
-    expect(names).toContain("review");
+    expect(names).toContain("audit");
     expect(names).toContain("implement");
     expect(names).toContain("ops");
   });
@@ -133,8 +134,8 @@ describe("applyProfile", () => {
 
   test("sets systemPromptAppend when none exists", () => {
     const config = makeConfig();
-    applyProfile(config, getProfile("review")!);
-    expect(config.systemPromptAppend).toContain("REVIEW mode");
+    applyProfile(config, getProfile("audit")!);
+    expect(config.systemPromptAppend).toContain("AUDIT mode");
   });
 });
 

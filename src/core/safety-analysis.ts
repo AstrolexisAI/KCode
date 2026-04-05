@@ -53,7 +53,10 @@ export function extractCommandPrefix(command: string): string {
 /** Detect command injection patterns */
 export function detectCommandInjection(command: string): string | null {
   // Backtick substitution — always dangerous (injection vector)
-  if (/`[^`]+`/.test(command)) {
+  // EXCEPT inside a single-quoted heredoc body (<<'EOF' ... EOF), where
+  // bash performs no expansion. Strip those regions before testing.
+  const withoutQuotedHeredocs = stripSingleQuotedHeredocs(command);
+  if (/`[^`]+`/.test(withoutQuotedHeredocs)) {
     return "Command contains backtick injection";
   }
 
@@ -229,6 +232,23 @@ function stripQuotedStrings(command: string): string {
   // Replace double-quoted strings (handle escaped quotes via backslash)
   result = result.replace(/"(?:[^"\\]|\\.)*"/g, '""');
   return result;
+}
+
+/**
+ * Remove single-quoted heredoc bodies (<<'EOF' ... EOF and <<-'EOF' ... EOF).
+ * Inside such heredocs, bash performs no expansion: backticks, $vars, and $()
+ * are literal text. Stripping these regions prevents false positives when the
+ * heredoc body contains markdown code fences or example shell snippets.
+ *
+ * Only matches SINGLE-quoted delimiters. Unquoted or double-quoted heredocs
+ * DO expand, so we leave those intact for the injection detectors.
+ */
+function stripSingleQuotedHeredocs(command: string): string {
+  // Match <<'DELIM' or <<-'DELIM' up to a line containing just DELIM
+  return command.replace(
+    /<<-?\s*'([A-Za-z_][A-Za-z0-9_]*)'[\s\S]*?^\s*\1\s*$/gm,
+    "<<''",
+  );
 }
 
 /**
