@@ -2,7 +2,9 @@
 // Executes shell commands with timeout and sandboxing
 
 import { spawn } from "node:child_process";
-import { readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { extractRedirectionTargets, isAuditFilename } from "../core/audit-guards";
 import { log } from "../core/logger";
 import {
   getDefaultSandboxConfig,
@@ -167,6 +169,50 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
+
+  // Guard: block shell-redirection writes to audit report filenames.
+  // Prevents the model from bypassing the Write tool's audit guards by
+  // using `cat > AUDIT_REPORT.md << EOF`, `echo ... > FIXES_SUMMARY.txt`,
+  // or `tee FINAL_AUDIT.md`.
+  try {
+    const redirTargets = extractRedirectionTargets(command);
+    const auditTargets = redirTargets.filter((t) => isAuditFilename(t));
+    if (auditTargets.length > 0) {
+      const target = auditTargets[0]!;
+      const absTarget = resolve(target);
+      const dir = dirname(absTarget);
+      // Scan dir for existing audit-named files
+      let existing: string | null = null;
+      if (existsSync(dir)) {
+        try {
+          for (const entry of readdirSync(dir)) {
+            if (isAuditFilename(entry) && entry !== basename(absTarget)) {
+              existing = join(dir, entry);
+              break;
+            }
+          }
+        } catch {
+          /* dir not readable */
+        }
+      }
+      const bullet = existing
+        ? `An audit report already exists at "${existing}". UPDATE it with Edit, don't create companions.`
+        : `Use the Write tool to create "${target}" — not Bash redirection. The Write tool enforces audit discipline.`;
+      return {
+        tool_use_id: "",
+        content:
+          `BLOCKED: Cannot use shell redirection to write audit-report file "${basename(target)}". ` +
+          `${bullet}\n\nAudit reports must go through the Write tool, which enforces:\n` +
+          `  - at least one Grep reconnaissance pass before the report\n` +
+          `  - at least 5 source files Read in full\n` +
+          `  - no fabricated "proof of work" checklists\n` +
+          `  - one authoritative AUDIT_REPORT.md per directory`,
+        is_error: true,
+      };
+    }
+  } catch {
+    /* redirection analysis is best-effort */
+  }
 
   // Guard: block dangerous pkill/killall with broad patterns that could kill system services
   // Matches: pkill -f "serve", pkill serve, killall node, etc. anywhere in the command

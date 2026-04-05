@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { AUDIT_FILENAME_PATTERN, isAuditFilename } from "../core/audit-guards";
 import { grepCount, readCount, wasRead } from "../core/session-tracker";
 import type { FileWriteInput, ToolDefinition, ToolResult } from "../core/types";
 
@@ -33,8 +34,8 @@ export const writeDefinition: ToolDefinition = {
 // Detect filenames that look like audit/review reports or their companions.
 // The goal is to force the model to update ONE report instead of creating
 // FIXES_SUMMARY.txt, FINAL_AUDIT_REPORT.md, AUDIT_INDEX.md, etc. alongside it.
-const AUDIT_FILENAME_PATTERN =
-  /(^|[_-])(audit|review|security[_-]?audit|remediation|fixes?[_-]summary|audit[_-]index|audit[_-]summary|final[_-]audit|audit[_-]report|audit[_-]certificate)([_-]|\.|$)/i;
+// The AUDIT_FILENAME_PATTERN and isAuditFilename are imported from
+// core/audit-guards so Bash and Write use the same detection.
 
 const CANONICAL_AUDIT_NAMES = new Set([
   "audit_report.md",
@@ -42,10 +43,6 @@ const CANONICAL_AUDIT_NAMES = new Set([
   "auditreport.md",
   "audit.md",
 ]);
-
-function isAuditFilename(file_path: string): boolean {
-  return AUDIT_FILENAME_PATTERN.test(basename(file_path));
-}
 
 function findExistingCanonicalAuditReport(dir: string): string | null {
   try {
