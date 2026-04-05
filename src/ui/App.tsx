@@ -127,6 +127,16 @@ export default function App({ config, conversationManager, tools, initialSession
   const [watcherSuggestions, setWatcherSuggestions] = useState<string[]>([]);
   const [sessionName, setSessionName] = useState<string>(initialSessionName ?? "");
   const [sessionTags, setSessionTags] = useState<string[]>([]);
+
+  // Background scan progress (polled from global scanState)
+  const [scanProgress, setScanProgress] = useState<{
+    active: boolean;
+    phase: string;
+    verified: number;
+    total: number;
+    confirmed: number;
+    elapsed: number;
+  } | null>(null);
   const [showContextGrid, setShowContextGrid] = useState(false);
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
   // Plan panel: starts null, only set by onPlanChange (not from DB restore)
@@ -189,6 +199,49 @@ export default function App({ config, conversationManager, tools, initialSession
       setActivePlan(plan);
     });
   }, []);
+
+  // Poll background scan progress (scanState is mutated by the /scan handler)
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const { scanState } = await import("../core/audit-engine/scan-state.js");
+        if (scanState.active || scanState.result || scanState.error) {
+          setScanProgress({
+            active: scanState.active,
+            phase: scanState.phase,
+            verified: scanState.verified,
+            total: scanState.total,
+            confirmed: scanState.confirmed,
+            elapsed: (Date.now() - scanState.startTime) / 1000,
+          });
+
+          // When done, push result to conversation and clear
+          if (!scanState.active && scanState.result) {
+            const reportText = scanState.result.reportText;
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "assistant", text: reportText },
+            ]);
+            scanState.result = undefined;
+            setScanProgress(null);
+          }
+          if (!scanState.active && scanState.error) {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "assistant", text: `  ✗ Scan error: ${scanState.error}` },
+            ]);
+            scanState.error = undefined;
+            setScanProgress(null);
+          }
+        } else if (scanProgress !== null) {
+          setScanProgress(null);
+        }
+      } catch {
+        /* scan-state module not loaded */
+      }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [scanProgress]);
 
   // Ask user if they want to resume the previous session's model
   const [pendingLastModel, setPendingLastModel] = useState<string | null>(null);
@@ -597,6 +650,29 @@ export default function App({ config, conversationManager, tools, initialSession
             currentModel={config.model}
             onDone={handleToggleDone}
           />
+        )}
+
+        {/* Background scan progress bar */}
+        {scanProgress && scanProgress.active && (
+          <Box marginLeft={2} marginBottom={0} flexDirection="column">
+            <Text color="cyan">
+              {"  ◆ "}
+              {scanProgress.phase}
+            </Text>
+            {scanProgress.total > 0 && (
+              <Text color="cyan">
+                {"    ["}
+                {"█".repeat(Math.round((scanProgress.verified / scanProgress.total) * 20))}
+                {"░".repeat(20 - Math.round((scanProgress.verified / scanProgress.total) * 20))}
+                {"] "}
+                {scanProgress.verified}/{scanProgress.total}
+                {" ("}
+                {Math.round((scanProgress.verified / scanProgress.total) * 100)}
+                {"%) — "}
+                {scanProgress.confirmed} confirmed — {scanProgress.elapsed.toFixed(1)}s
+              </Text>
+            )}
+          </Box>
         )}
 
         {activeTabs.length > 0 && <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />}
