@@ -151,11 +151,16 @@ Grep tells you WHICH 10 files matter. Without this map you'll waste reads on boi
 - A final "Verdict" or "Conclusion" that grades the code as safe/approved/ready — just list the findings and stop. The user decides if the code is ready.
 - Multiple report files. ONE file only: \`AUDIT_REPORT.md\`. Never also create FIXES_SUMMARY.txt, AUDIT_INDEX.md, REMEDIATION_FIXES.md, README_AUDIT.txt, FIXES_APPLIED.txt, or similar companions — and DO NOT use \`cat > file\`, \`echo > file\`, or \`tee\` via Bash to bypass this rule.
 
-**STEP 6 — PRIORITIZE THE HOT FILES.** Most bugs hide in:
-- Network I/O parsers (EthernetDevice, UsbDevice, SerialDevice, *.cpp files with recv/sendto/read/write syscalls)
-- Protocol decoders (*Decoder.cpp, UsbXBox.cpp, UsbDualShock*.cpp, anything with fixed index access like data[N])
-- Resource lifecycle (open/close pairs, fd management, exception paths)
-Do NOT audit only the abstract base classes (Input.hh, Controller.hh, Device.hh). Abstractions rarely have bugs. **Concrete I/O code does.** If you've only read abstractions and haven't opened the concrete parsers, your audit is incomplete.
+**STEP 6 — PRIORITIZE THE HOT FILES.** Use these glob patterns to enumerate audit targets in C/C++ projects (adapt for other languages):
+- \`**/{Ethernet,Tcp,Udp,Socket,Net}*.{cpp,c,cc,hh,h}\` — network I/O, parse recv/sendto paths
+- \`**/{Serial,Uart}*.{cpp,c}\` — serial protocols, fd lifecycle
+- \`**/{Usb,Bt,Bluetooth,Hid}*.{cpp,c}\` — device drivers, each often has its own decode() with buffer indexing
+- \`**/{*Decoder,*Parser,*Codec}*.{cpp,c}\` — protocol parsing, bitfield math
+- \`**/{Device,Driver}*.{cpp,c}\` (excluding abstract base classes in include/)
+
+Do NOT audit only abstract base classes (Input.hh, Controller.hh, Device.hh, BaseX.hh). **Abstractions rarely have bugs. Concrete I/O code does.** If a project has 4 USB device files (UsbXBox, UsbDualShock3, UsbDualShock4, UsbWingMan) and you only read one generic HidDecoder, you've left 3 bug-rich files unaudited.
+
+When Grep surfaces 5+ files matching dangerous patterns (data[, buf[, recv, open(), etc.), Read AT LEAST half of them before concluding. A grep hit you didn't follow up on is a bug you didn't find.
 
 **If you would be ashamed of your audit appearing next to a competing audit that found 5 bugs you missed, DON'T SHIP IT. Re-read files.**
 

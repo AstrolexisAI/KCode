@@ -33,6 +33,43 @@ export const grepDefinition: ToolDefinition = {
   },
 };
 
+/**
+ * Extract hit file paths from ripgrep output. rg prints in several formats:
+ *   - files_with_matches: one path per line
+ *   - content (with -n): "path:line:content" or "path:content"
+ *   - count: "path:N"
+ * Returns absolute paths, de-duplicated.
+ */
+function extractHitFiles(
+  output: string,
+  mode: string,
+  inputPath: string | undefined,
+  cwd: string,
+): string[] {
+  if (!output || output === "No matches found.") return [];
+  const seen = new Set<string>();
+  const files: string[] = [];
+  for (const line of output.split("\n")) {
+    if (!line.trim()) continue;
+    let path: string | null = null;
+    if (mode === "files_with_matches") {
+      path = line.trim();
+    } else {
+      // "path:line:..." or "path:count"
+      const m = line.match(/^([^:]+):/);
+      if (m) path = m[1]!;
+    }
+    if (!path) continue;
+    // rg prints paths relative to cwd — join with searchCwd
+    const abs = resolve(cwd, path);
+    if (!seen.has(abs)) {
+      seen.add(abs);
+      files.push(abs);
+    }
+  }
+  return files;
+}
+
 export async function executeGrep(input: Record<string, unknown>): Promise<ToolResult> {
   const opts = input as unknown as GrepInput;
 
@@ -114,6 +151,19 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
       if (!output) {
         const stderr = Buffer.concat(stderrChunks).toString("utf-8").trim();
         output = stderr || "No matches found.";
+      }
+
+      // Extract hit file paths from rg output and record them in the
+      // session tracker if the pattern is audit-relevant.
+      try {
+        const hitFiles = extractHitFiles(output, mode, opts.path, searchCwd);
+        if (hitFiles.length > 0) {
+          import("../core/session-tracker.js").then((m) => {
+            m.recordGrepHits(opts.pattern, hitFiles);
+          });
+        }
+      } catch {
+        /* best-effort */
       }
 
       resolveResult({
