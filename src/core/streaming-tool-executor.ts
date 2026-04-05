@@ -183,19 +183,18 @@ export class StreamingToolExecutor {
   private async executeTool(toolCall: ToolUseBlock): Promise<ToolExecResult> {
     const start = Date.now();
     try {
-      const tool = this.cfg.tools.get(toolCall.name);
-      if (!tool) {
-        return {
-          toolUseId: toolCall.id,
-          name: toolCall.name,
-          result: `Tool "${toolCall.name}" not found`,
-          isError: true,
-          durationMs: Date.now() - start,
-        };
-      }
-
-      const result = await tool.execute(toolCall.input as Record<string, unknown>);
-      const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+      // ToolRegistry.execute handles the tool lookup + handler invocation;
+      // it returns a ToolResult (content + is_error). Older code here
+      // incorrectly called `this.cfg.tools.get(name)` which doesn't exist
+      // on ToolRegistry, crashing the executor for local models.
+      const result = await this.cfg.tools.execute(
+        toolCall.name,
+        (toolCall.input as Record<string, unknown>) ?? {},
+      );
+      const resultStr =
+        typeof result === "string" ? result : (result.content ?? JSON.stringify(result));
+      const isError =
+        typeof result === "string" ? false : (result.is_error ?? false);
 
       log.info("tool", `[streaming] ${toolCall.name} completed in ${Date.now() - start}ms`);
 
@@ -203,7 +202,7 @@ export class StreamingToolExecutor {
         toolUseId: toolCall.id,
         name: toolCall.name,
         result: resultStr,
-        isError: false,
+        isError,
         durationMs: Date.now() - start,
       };
     } catch (err) {
