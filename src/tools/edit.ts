@@ -3,6 +3,7 @@
 
 import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { checkAuditEditGuard } from "../core/audit-guards";
+import { detectStrcmpInversion } from "../core/semantic-guards";
 import type { FileEditInput, ToolDefinition, ToolResult } from "../core/types";
 
 const SENSITIVE_PATTERNS = [
@@ -165,6 +166,14 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
   const auditGuard = checkAuditEditGuard(file_path);
   if (auditGuard.blocked) {
     return { tool_use_id: "", content: auditGuard.reason!, is_error: true };
+  }
+
+  // Semantic inversion guard: catches hallucinated "fixes" that invert
+  // strcmp-family comparison semantics. Protects against a known LLM
+  // failure mode even when the user approves the tool call.
+  const inversionError = detectStrcmpInversion(old_string, new_string);
+  if (inversionError) {
+    return { tool_use_id: "", content: inversionError, is_error: true };
   }
 
   // Block edits to sensitive files (parity with Write tool)
