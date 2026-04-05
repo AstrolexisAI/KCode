@@ -178,6 +178,10 @@ export async function verifyAllCandidates(
     results.push({ candidate: c, verification });
     // Fire post-verification callback for live progress bars
     opts.onVerified?.(c, verification, i, candidates.length);
+    // Yield to event loop so Ink/React can re-render the progress bar.
+    // Without this, the UI update batches all setCompleted calls and
+    // only renders after the entire loop finishes.
+    await new Promise((r) => setTimeout(r, 10));
   }
   return results;
 }
