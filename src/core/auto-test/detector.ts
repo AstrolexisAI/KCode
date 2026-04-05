@@ -105,7 +105,10 @@ export async function detectFramework(cwd: string): Promise<TestFramework> {
       if (devDeps["vitest"]) return "vitest";
       if (devDeps["jest"]) return "jest";
     }
-  } catch {}
+  } catch (err) {
+    // package.json read/parse failed — fall through to bun.lockb check
+    log.debug("auto-test", `Failed to parse package.json: ${err}`);
+  }
 
   // Check for bun.lockb (strong signal for bun:test)
   if (existsSync(join(cwd, "bun.lockb"))) return "bun";

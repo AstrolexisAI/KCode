@@ -73,7 +73,9 @@ async function findAvailablePort(): Promise<number> {
       });
       server.stop(true);
       return port;
-    } catch {}
+    } catch {
+      // Port already in use — try next port. Intentionally silent, expected during scan.
+    }
   }
   throw new Error(`No available port found in range ${PORT_RANGE_START}-${PORT_RANGE_END}`);
 }
