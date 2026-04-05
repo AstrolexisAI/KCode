@@ -219,6 +219,19 @@ export function extractBashGrepPattern(command: string): string | null {
   return null;
 }
 
+/**
+ * Master switch for all audit-specific guards. When KCODE_AUDIT_GUARDS=off,
+ * every audit guard becomes a no-op. Use for:
+ *   - debugging guard interactions
+ *   - power users who don't want the friction
+ *   - A/B testing guard effectiveness
+ *
+ * Default: guards enabled (existing defensive behavior preserved).
+ */
+export function auditGuardsEnabled(): boolean {
+  return process.env.KCODE_AUDIT_GUARDS !== "off";
+}
+
 export interface AuditEditGuardResult {
   blocked: boolean;
   reason?: string;
@@ -236,6 +249,7 @@ export interface AuditEditGuardResult {
  *     the existing report does not cite this file
  */
 export function checkAuditEditGuard(filePath: string): AuditEditGuardResult {
+  if (!auditGuardsEnabled()) return { blocked: false };
   if (!isAuditSession()) return { blocked: false };
   if (!isSourceFile(filePath)) return { blocked: false };
 

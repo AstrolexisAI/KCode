@@ -433,6 +433,32 @@ Found: \`HidDevice.cpp\`: \`int x = buggy_code();\`
     expect(result.is_error).toBeUndefined();
   });
 
+  test("KCODE_AUDIT_GUARDS=off disables all audit guards globally", async () => {
+    const original = process.env.KCODE_AUDIT_GUARDS;
+    process.env.KCODE_AUDIT_GUARDS = "off";
+    try {
+      // Reset so we have zero reads/greps — would normally block hard
+      resetReads();
+
+      const result = await executeWrite({
+        file_path: join(tmp, "AUDIT_REPORT.md"),
+        content:
+          "# Audit\n\n## Findings\nBug in UnreadFile.cpp:42 — issue\n" +
+          "`AnotherUnread.cpp`: `code here`\n",
+      });
+
+      // With guards disabled: write succeeds even with fabricated citations
+      // and zero reconnaissance
+      expect(result.is_error).toBeUndefined();
+    } finally {
+      if (original === undefined) {
+        delete process.env.KCODE_AUDIT_GUARDS;
+      } else {
+        process.env.KCODE_AUDIT_GUARDS = original;
+      }
+    }
+  });
+
   test("non-audit files bypass audit guards entirely", async () => {
     // Recording no reads, creating a normal file with fake checklist-like content
     const result = await executeWrite({
