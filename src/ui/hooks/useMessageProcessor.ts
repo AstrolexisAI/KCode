@@ -1151,6 +1151,13 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               return;
             }
 
+            // Sentinel: __INLINE_DONE__ means the handler already pushed
+            // its own messages to setCompleted (e.g. streaming actions
+            // like /scan). Skip the default user+assistant push.
+            if (result === "__INLINE_DONE__") {
+              return;
+            }
+
             setCompleted((prev) => [
               ...prev,
               { kind: "text", role: "user", text: userInput },

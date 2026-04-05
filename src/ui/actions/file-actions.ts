@@ -4,7 +4,7 @@
 import type { ActionContext } from "./action-helpers.js";
 
 export async function handleFileAction(action: string, ctx: ActionContext): Promise<string | null> {
-  const { appConfig, args } = ctx;
+  const { appConfig, args, setCompleted } = ctx;
 
   switch (action) {
     case "scan": {
@@ -25,15 +25,45 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         "../../core/audit-engine/report-generator.js"
       );
 
-      const lines: string[] = [];
-      lines.push(`  KCode Audit Engine`);
-      lines.push(`    Project:  ${projectRoot}`);
+      // Streaming progress: push a live-updating message to the UI that
+      // replaces itself as phases/candidates advance. This avoids the
+      // "appears frozen" UX when verification takes 2-5 minutes.
+      const headerLines: string[] = [
+        `  KCode Audit Engine`,
+        `    Project:  ${projectRoot}`,
+      ];
       if (skipVerify) {
-        lines.push(`    Mode:     static-only (--skip-verify)`);
+        headerLines.push(`    Mode:     static-only (--skip-verify)`);
       } else {
-        lines.push(`    Model:    ${appConfig.model ?? "default"}`);
+        headerLines.push(`    Model:    ${appConfig.model ?? "default"}`);
       }
-      lines.push("");
+      headerLines.push("");
+
+      // Push the user's slash-command echo + initial progress message.
+      // Remember the progress message index so we can keep updating it.
+      const userEcho = `/scan ${args ?? ""}`.trim();
+      let progressIdx = -1;
+      setCompleted((prev) => {
+        progressIdx = prev.length + 1; // after the user echo
+        return [
+          ...prev,
+          { kind: "text", role: "user", text: userEcho },
+          { kind: "text", role: "assistant", text: headerLines.join("\n") + "\n    Starting..." },
+        ];
+      });
+
+      const updateProgress = (statusLine: string) => {
+        setCompleted((prev) => {
+          if (progressIdx < 0 || progressIdx >= prev.length) return prev;
+          const next = [...prev];
+          next[progressIdx] = {
+            kind: "text",
+            role: "assistant",
+            text: headerLines.join("\n") + "\n" + statusLine,
+          };
+          return next;
+        });
+      };
 
       // Build LLM callback using the existing conversation model config
       const { buildAuditLlmCallbackFromConfig } = await import(
@@ -43,43 +73,91 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
         : buildAuditLlmCallbackFromConfig(appConfig);
 
-      const phases: string[] = [];
+      let currentPhase = "";
+      let verifiedCount = 0;
+      let confirmedCount = 0;
+      let totalCandidates = 0;
+      const startTime = Date.now();
+
+      const renderProgress = () => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        const parts = [`    ◆ ${currentPhase}`];
+        if (totalCandidates > 0) {
+          const pct = Math.round((verifiedCount / totalCandidates) * 100);
+          const barLen = 20;
+          const filled = Math.round((verifiedCount / totalCandidates) * barLen);
+          const bar = "█".repeat(filled) + "░".repeat(barLen - filled);
+          parts.push(
+            `    [${bar}] ${verifiedCount}/${totalCandidates} (${pct}%) — ${confirmedCount} confirmed — ${elapsed}s`,
+          );
+        } else {
+          parts.push(`    elapsed: ${elapsed}s`);
+        }
+        updateProgress(parts.join("\n"));
+      };
+
       const result = await runAudit({
         projectRoot,
         llmCallback,
         maxFiles: 500,
         skipVerification: skipVerify,
         onPhase: (phase, detail) => {
-          phases.push(`    ◆ ${phase}${detail ? ": " + detail : ""}`);
+          currentPhase = detail ? `${phase}: ${detail}` : phase;
+          if (phase === "verifying" && detail) {
+            // detail is like "32 candidates"
+            const m = detail.match(/(\d+) candidate/);
+            if (m) totalCandidates = parseInt(m[1]!, 10);
+          }
+          renderProgress();
+        },
+        onCandidate: (_cand, verification, _i, _total) => {
+          verifiedCount++;
+          if (verification.verdict === "confirmed") confirmedCount++;
+          renderProgress();
         },
       });
 
       const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
       writeFileSync(outputPath, generateMarkdownReport(result));
 
-      lines.push(...phases);
-      lines.push("");
-      lines.push(`    Report written: ${outputPath}`);
-      lines.push("");
-      lines.push(`    Files scanned:      ${result.files_scanned}`);
-      lines.push(`    Candidates found:   ${result.candidates_found}`);
-      lines.push(`    Confirmed findings: ${result.confirmed_findings}`);
-      lines.push(`    False positives:    ${result.false_positives}`);
-      lines.push(`    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`);
+      // Final summary replaces the progress line
+      const finalLines = [
+        ...headerLines,
+        `    ✓ Report written: ${outputPath}`,
+        "",
+        `    Files scanned:      ${result.files_scanned}`,
+        `    Candidates found:   ${result.candidates_found}`,
+        `    Confirmed findings: ${result.confirmed_findings}`,
+        `    False positives:    ${result.false_positives}`,
+        `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
+      ];
       if (result.findings.length > 0) {
-        lines.push("");
-        lines.push(`  Top findings:`);
+        finalLines.push("", `  Top findings:`);
         for (const f of result.findings.slice(0, 5)) {
           const rel = f.file.replace(projectRoot + "/", "");
           const icon =
-            f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
-          lines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
+            f.severity === "critical"
+              ? "🔴"
+              : f.severity === "high"
+                ? "🟠"
+                : f.severity === "medium"
+                  ? "🟡"
+                  : "🟢";
+          finalLines.push(`    ${icon} ${rel}:${f.line}  ${f.pattern_id}`);
         }
         if (result.findings.length > 5) {
-          lines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
+          finalLines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
         }
       }
-      return lines.join("\n");
+      // Replace the progress entry with the final summary
+      setCompleted((prev) => {
+        if (progressIdx < 0 || progressIdx >= prev.length) return prev;
+        const next = [...prev];
+        next[progressIdx] = { kind: "text", role: "assistant", text: finalLines.join("\n") };
+        return next;
+      });
+      // Sentinel: tells the caller we already pushed our own messages.
+      return "__INLINE_DONE__";
     }
 
     case "depgraph": {
