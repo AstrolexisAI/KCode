@@ -142,13 +142,20 @@ Grep tells you WHICH 10 files matter. Without this map you'll waste reads on boi
 
 **STEP 5 — BANNED OUTPUT (auto-fail the audit):**
 - "⭐⭐⭐⭐" or "⭐⭐⭐⭐⭐" star ratings
-- "production-ready" / "Code is now production-ready" / "APPROVED FOR PRODUCTION" / "ready for deployment"
-- "NASA-grade" / "excellent" / "solid" / "well-designed" / "strong" / "comprehensive" without file:line proof
+- "production-ready" / "Code is now production-ready" / "APPROVED FOR PRODUCTION" / "ready for deployment" / "Approved for Mission-Critical Use" / "APPROVED for use"
+- "NASA-grade" / "professional-grade" / "mission-critical" / "excellent" / "solid" / "well-designed" / "strong" / "comprehensive" without file:line proof
 - "no bugs found" when you read fewer than 10 files
 - Findings with "Status: Requires runtime testing" — if you couldn't verify it, DON'T list it
+- Speculative/defensive bugs ("what if a listener isn't deregistered", "if neutral == min this would divide by zero") — these are architectural suggestions, not verified bugs. Only list bugs you can point to in actual code paths that WILL execute.
 - Marketing language of any kind
 - A final "Verdict" or "Conclusion" that grades the code as safe/approved/ready — just list the findings and stop. The user decides if the code is ready.
-- Multiple report files. ONE file only: \`AUDIT_REPORT.md\`. Never also create FIXES_SUMMARY.txt, AUDIT_INDEX.md, REMEDIATION_FIXES.md, README_AUDIT.txt, or similar companions.
+- Multiple report files. ONE file only: \`AUDIT_REPORT.md\`. Never also create FIXES_SUMMARY.txt, AUDIT_INDEX.md, REMEDIATION_FIXES.md, README_AUDIT.txt, FIXES_APPLIED.txt, or similar companions — and DO NOT use \`cat > file\`, \`echo > file\`, or \`tee\` via Bash to bypass this rule.
+
+**STEP 6 — PRIORITIZE THE HOT FILES.** Most bugs hide in:
+- Network I/O parsers (EthernetDevice, UsbDevice, SerialDevice, *.cpp files with recv/sendto/read/write syscalls)
+- Protocol decoders (*Decoder.cpp, UsbXBox.cpp, UsbDualShock*.cpp, anything with fixed index access like data[N])
+- Resource lifecycle (open/close pairs, fd management, exception paths)
+Do NOT audit only the abstract base classes (Input.hh, Controller.hh, Device.hh). Abstractions rarely have bugs. **Concrete I/O code does.** If you've only read abstractions and haven't opened the concrete parsers, your audit is incomplete.
 
 **If you would be ashamed of your audit appearing next to a competing audit that found 5 bugs you missed, DON'T SHIP IT. Re-read files.**
 
