@@ -1,0 +1,261 @@
+// KCode - Bug Pattern Library
+//
+// Curated patterns for common dangerous code in C/C++. These are the patterns
+// that catch real bugs in production code — NOT the patterns LLMs hallucinate.
+//
+// Each pattern was derived from either:
+//   - Bugs found by Claude Code in NASA IDF (network I/O, USB decoders)
+//   - CWE/OWASP classics that keep appearing in C code
+//   - Language-specific footguns the compiler doesn't catch
+//
+// When adding a new pattern: write a test case showing what it catches AND
+// what it doesn't (false positive guard).
+
+import type { BugPattern } from "./types";
+
+export const CPP_PATTERNS: BugPattern[] = [
+  // ── Pointer arithmetic errors ───────────────────────────────────
+  {
+    id: "cpp-001-ptr-address-index",
+    title: "Suspicious pointer arithmetic: (&var)[N]",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex: /\(\s*&\s*([a-zA-Z_][\w]*)\s*\)\s*\[\s*([a-zA-Z_][\w]*|\d+)\s*\]/g,
+    explanation:
+      "(&var)[n] treats the address of `var` as the base of an array. For primitive pointers this is the NASA IDF EthernetDevice bug — (&buffer)[bytesTotal] reads memory AFTER the pointer variable on the stack when n > 0. The likely intent is `(char*)buffer + n` or `buffer + n`.",
+    verify_prompt:
+      "Look at this `(&VAR)[IDX]` expression. Is VAR a pointer or a variable? " +
+      "If VAR is a pointer (e.g. `const void *buffer`), then (&buffer)[1] reads " +
+      "stack memory after the pointer variable — that's a bug. If VAR is an " +
+      "array or the intent is genuinely to index into an array-of-that-thing, " +
+      "respond FALSE_POSITIVE. Otherwise show the stack layout and confirm CONFIRMED.",
+    cwe: "CWE-125",
+    fix_template: "Replace `(&VAR)[IDX]` with `(char*)VAR + IDX` (for pointers) or verify VAR is an array.",
+  },
+
+  // ── Unreachable code ────────────────────────────────────────────
+  {
+    id: "cpp-002-unreachable-after-return",
+    title: "Statement after return/throw/continue (unreachable code)",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    // Match `return X;` / `throw X;` followed by an assignment or function
+    // call on the NEXT line. Constrain to one-line tokens (no * or @ which
+    // indicate doxygen comments).
+    regex:
+      /(?:^|\n)\s+(?:return\s+[^;\n]+;|throw\s+[^;\n]+;|continue\s*;|break\s*;)\s*\n\s+([a-zA-Z_]\w*\s*(?:=|->|\.|\())/g,
+    explanation:
+      "Code after `return`, `throw`, `continue`, or `break` is unreachable. This is the NASA IDF EthernetDevice bug — `lastPacketArrived = std::time(nullptr);` after a return, so the timeout timestamp never updates.",
+    verify_prompt:
+      "Is the statement after `return`/`throw`/etc. actually unreachable? " +
+      "If the surrounding context has a loop/switch/goto that could make it " +
+      "reachable, respond FALSE_POSITIVE. Otherwise confirm and explain the " +
+      "side effect being lost.",
+    cwe: "CWE-561",
+    fix_template: "Move the statement BEFORE the return/throw, or delete if truly dead.",
+  },
+
+  // ── Unchecked buffer indexing ───────────────────────────────────
+  {
+    id: "cpp-003-unchecked-data-index",
+    title: "Buffer access with fixed index, no size validation",
+    severity: "high",
+    languages: ["c", "cpp"],
+    // Match READ ACCESSES to data[N]/buffer[N]/buf[N]/packet[N]/msg[N]/
+    // payload[N] with fixed index 2-99. Exclude:
+    //   - declarations: `char buf[1024]`, `uint8_t data[16]`, std::array<...>, etc.
+    //   - indices 0 and 1 (often first-byte protocol IDs, typically validated)
+    //   - indices >= 100 (usually declarations of large buffers)
+    // Uses negative lookbehind to skip type-qualifier preceded matches.
+    regex:
+      /(?<!\b(?:char|unsigned|signed|int|short|long|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|size_t|float|double|bool|void|std::\w+|u_char|u_int8_t|u_int16_t|u_int32_t)\s)(?<!\w)(data|buffer|buf|packet|msg|payload)\s*\[\s*([2-9]|[1-9]\d)\s*\]/g,
+    explanation:
+      "Accessing `data[N]` with a hardcoded index without first validating size. NASA IDF USB decoders (UsbXBox.cpp, UsbDualShock3/4, UsbWingMan) all access fixed offsets into HID packets without checking packet length. Malformed packet → out-of-bounds read.",
+    verify_prompt:
+      "Is there a size check in the SAME function before this `[N]` access? " +
+      "Look for `if (size < N+1) return`, `if (data.size() <= N) throw`, etc. " +
+      "If a size check exists upstream (in caller, in parser), respond NEEDS_CONTEXT " +
+      "and describe what check would be needed. If this index runs unconditionally " +
+      "on attacker-controlled input, confirm CONFIRMED.",
+    cwe: "CWE-125",
+    fix_template: "Add `if (container.size() <= N) return;` before the access.",
+  },
+
+  // ── Resource leak on error path ─────────────────────────────────
+  {
+    id: "cpp-004-fd-leak-throw",
+    title: "File descriptor opened without closing on error path",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    // Require ASSIGNMENT (= open/socket/fopen) — just a call isn't enough
+    // to indicate an owned resource. Then look for throw within ~400 chars
+    // WITHOUT a corresponding close/closesocket.
+    regex:
+      /\b\w+\s*=\s*(?:open|socket|fopen)\s*\([^)]*\)\s*;(?![\s\S]{0,400}?\bclose(?:socket)?\s*\()[\s\S]{0,400}?\bthrow\b/g,
+    explanation:
+      "An fd/socket opened successfully but thrown-from before close() is called. NASA IDF EthernetDevice::open() and SerialDevice::open() both have this pattern in error paths.",
+    verify_prompt:
+      "Between the open()/socket()/fopen() and the throw, is the fd closed? " +
+      "Also check: is there a RAII wrapper (std::fstream, unique_ptr with deleter)? " +
+      "If RAII cleans up, respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-772",
+    fix_template: "Either add `close(fd);` before the throw, or wrap in RAII.",
+  },
+
+  // ── Integer signedness ──────────────────────────────────────────
+  {
+    id: "cpp-005-int-returned-as-size",
+    title: "Signed int used as size_t (possible signedness bug)",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    regex: /\bint\s+(\w+)\s*=\s*\w+\([^)]*\)\s*;[\s\S]{0,200}?\b(std::vector|std::string|std::array)\s*<[^>]+>\s*\w+\s*\(\s*\1/g,
+    explanation:
+      "An int (which can be negative) is used as the size argument to a container constructor that expects size_t. If the function returned -1 on error, the cast to size_t produces a huge number → DoS via gigantic allocation.",
+    verify_prompt:
+      "Does the function returning this int check for < 0 BEFORE the cast to size_t? " +
+      "If there's a `if (n < 0) return error` before the container construction, " +
+      "respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-195",
+    fix_template: "Check `if (n < 0) return error;` before using n as a size.",
+  },
+
+  // ── Unsafe string functions ─────────────────────────────────────
+  {
+    id: "cpp-006-strcpy-family",
+    title: "Use of unbounded string function (strcpy/strcat/sprintf/gets)",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex: /\b(strcpy|strcat|sprintf|gets)\s*\(/g,
+    explanation:
+      "strcpy/strcat/sprintf/gets have no bounds checking. If the source can exceed the destination size, heap/stack buffer overflow. Use the `_s` or `n` variants.",
+    verify_prompt:
+      "Is the source length validated before this call? If a guaranteed-short " +
+      "literal or validated length exists, respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-120",
+    fix_template: "strcpy→strncpy, strcat→strncat, sprintf→snprintf, gets→fgets.",
+  },
+
+  // ── Null dereference before check ───────────────────────────────
+  {
+    id: "cpp-007-deref-before-null-check",
+    title: "Pointer dereferenced before null check",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex: /\b(\w+)\s*->\s*\w+[\s\S]{0,100}?\bif\s*\(\s*\1\s*(?:==|!=)\s*(?:NULL|nullptr|0)\s*\)/g,
+    explanation:
+      "A pointer is dereferenced with `->` and THEN checked for null. If it's ever null, the deref already crashed before the check could help.",
+    verify_prompt:
+      "Is the null check actually AFTER the deref on the same code path? " +
+      "Check for branches, early returns, guarantees the pointer is non-null. " +
+      "If check was wrong but deref is guaranteed safe, respond FALSE_POSITIVE. " +
+      "Otherwise CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Move the null check BEFORE the dereference.",
+  },
+
+  // ── Memcpy with untrusted size ──────────────────────────────────
+  {
+    id: "cpp-008-memcpy-untrusted-len",
+    title: "memcpy with potentially attacker-controlled length",
+    severity: "critical",
+    languages: ["c", "cpp"],
+    regex: /\bmemcpy\s*\(\s*[^,]+,\s*[^,]+,\s*(\w+->[\w.]+|\w+\.[\w.]+)\s*\)/g,
+    explanation:
+      "memcpy length from struct field accessed via pointer is often from untrusted network/file input. If length is unbounded, heap buffer overflow.",
+    verify_prompt:
+      "Is the length field validated against the DESTINATION buffer size before " +
+      "this memcpy? If there's a bounds check that ensures len <= dest_size, " +
+      "respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-120",
+    fix_template: "Add `if (len > dest_size) return error;` before memcpy.",
+  },
+
+  // ── TOCTOU file operations ──────────────────────────────────────
+  {
+    id: "cpp-009-toctou-stat-open",
+    title: "TOCTOU: stat/access followed by open (race window)",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    regex: /\b(stat|access|lstat)\s*\([^)]*\)[\s\S]{0,200}?\b(open|fopen)\s*\(/g,
+    explanation:
+      "Checking file properties with stat()/access() then opening the file separately. An attacker can replace the file between the check and the open (symlink swap) to bypass security.",
+    verify_prompt:
+      "Does the code use the fd from open() to re-verify properties (fstat), " +
+      "or does it rely on the stat() result? If fstat is used after open, " +
+      "respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-367",
+    fix_template: "Open first, then use fstat() on the fd to check properties.",
+  },
+
+  // ── Integer overflow in allocation ──────────────────────────────
+  {
+    id: "cpp-010-malloc-mul-overflow",
+    title: "malloc/new size calculated by multiplication (overflow risk)",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex: /\b(malloc|calloc|realloc|new)\s*(?:\[?)\s*\(?([a-zA-Z_]\w*)\s*\*\s*sizeof/g,
+    explanation:
+      "Computing allocation size as `count * sizeof(T)` can overflow if count is untrusted, producing a small allocation followed by large writes → heap overflow.",
+    verify_prompt:
+      "Is `count` bounded to prevent overflow (e.g. `count < SIZE_MAX/sizeof(T)`)? " +
+      "If there's such a check, respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-190",
+    fix_template: "Use calloc(count, sizeof(T)) which handles overflow, or add explicit bounds check.",
+  },
+
+  // ── Signed/unsigned comparison ──────────────────────────────────
+  {
+    id: "cpp-011-signed-unsigned-cmp",
+    title: "Comparison between signed int and unsigned (size_t) value",
+    severity: "low",
+    languages: ["c", "cpp"],
+    regex: /\b(int|short|char|long)\s+(\w+)\s*=[^;]+;[\s\S]{0,100}?\b\2\s*[<>]=?\s*\w+\.size\(\)/g,
+    explanation:
+      "Comparing signed int to vec.size() (size_t/unsigned). Compiler converts int to size_t, so -1 becomes a huge number and the comparison misbehaves.",
+    verify_prompt:
+      "Is the signed variable guaranteed non-negative before this comparison? " +
+      "If yes, respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+    cwe: "CWE-195",
+    fix_template: "Use size_t for the counter, or cast vec.size() to (int) with bounds check.",
+  },
+
+  // ── Unvalidated loop bound ──────────────────────────────────────
+  {
+    id: "cpp-012-loop-unvalidated-bound",
+    title: "Loop bound from external input without validation",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex: /\bfor\s*\(\s*[^;]*;\s*\w+\s*<\s*(\w+->[\w.]+|\w+\.[\w.]+)\s*;/g,
+    explanation:
+      "Loop bound `i < msg->count` derived from untrusted input. If count is attacker-controlled and unbounded, infinite loop or excessive work.",
+    verify_prompt:
+      "Is the loop bound validated against a sane maximum before this loop? " +
+      "If there's a check like `if (count > MAX) return`, respond FALSE_POSITIVE. " +
+      "Otherwise CONFIRMED.",
+    cwe: "CWE-606",
+    fix_template: "Add `if (bound > MAX_ALLOWED) return error;` before the loop.",
+  },
+];
+
+/**
+ * Return all patterns applicable to the given language.
+ */
+export function getPatternsForLanguage(lang: string): BugPattern[] {
+  const all: BugPattern[] = [...CPP_PATTERNS];
+  return all.filter((p) => p.languages.includes(lang as never));
+}
+
+/**
+ * Look up a pattern by ID.
+ */
+export function getPatternById(id: string): BugPattern | undefined {
+  const all: BugPattern[] = [...CPP_PATTERNS];
+  return all.find((p) => p.id === id);
+}
+
+/**
+ * All patterns across all languages.
+ */
+export function getAllPatterns(): BugPattern[] {
+  return [...CPP_PATTERNS];
+}
