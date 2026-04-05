@@ -151,6 +151,74 @@ function reportCitesFile(reportPath: string, targetFile: string): boolean {
   return false;
 }
 
+/**
+ * Scan a Bash command for file-reading patterns (`cat`, `head`, `tail`,
+ * `less`, `more`, `view`) and return the list of file paths being read.
+ * This lets us record those as "read" in the session tracker even when
+ * the model bypasses the Read tool.
+ *
+ * Returns an array of absolute paths (best-effort, may include false
+ * positives for things like `cat file.gguf` - those are harmless).
+ */
+export function extractBashReadTargets(command: string): string[] {
+  const targets: string[] = [];
+  // Match cat/head/tail/less/more/view followed by file arg(s).
+  // Flags (-n, -50, --lines=10) are skipped. Path can be unquoted, single
+  // or double quoted. Stop at shell separators (|, &&, ||, ;, >, <).
+  const re =
+    /\b(?:cat|head|tail|less|more|view)\b((?:\s+-[\w-]+(?:=\S+)?|\s+\d+|\s+'[^']+'|\s+"[^"]+"|\s+[^\s|;&<>`$()]+)+)/g;
+  let m: RegExpExecArray | null;
+  m = re.exec(command);
+  while (m !== null) {
+    const argsPart = m[1]!;
+    // Split on whitespace, keeping quoted segments
+    const tokens = argsPart.match(/'[^']+'|"[^"]+"|\S+/g) ?? [];
+    for (const tok of tokens) {
+      // Skip flags and numeric args
+      if (tok.startsWith("-")) continue;
+      if (/^\d+$/.test(tok)) continue;
+      // Strip quotes
+      let path = tok;
+      if ((path.startsWith("'") && path.endsWith("'")) ||
+          (path.startsWith('"') && path.endsWith('"'))) {
+        path = path.slice(1, -1);
+      }
+      // Only accept things that look like file paths (contain . or /)
+      if (path.includes("/") || path.includes(".")) {
+        targets.push(path);
+      }
+    }
+    m = re.exec(command);
+  }
+  return targets;
+}
+
+/**
+ * Detect if a Bash command is a grep-equivalent (grep, rg, ag, ack).
+ * Returns the search pattern (first non-flag arg) if found.
+ */
+export function extractBashGrepPattern(command: string): string | null {
+  // Match grep/rg/ag/ack at the start of a command (possibly after cd && etc)
+  // We only care about the pattern for dangerous-pattern detection.
+  const re = /(?:^|[|&;]\s*)\b(?:grep|rg|ag|ack)\b([^|&;]*)/i;
+  const m = command.match(re);
+  if (!m) return null;
+  // Parse args, skip flags, return first non-flag token
+  const args = m[1]!.trim();
+  const tokens = args.match(/'[^']+'|"[^"]+"|\S+/g) ?? [];
+  for (const tok of tokens) {
+    if (tok.startsWith("-")) continue;
+    // Strip quotes
+    let pattern = tok;
+    if ((pattern.startsWith("'") && pattern.endsWith("'")) ||
+        (pattern.startsWith('"') && pattern.endsWith('"'))) {
+      pattern = pattern.slice(1, -1);
+    }
+    return pattern;
+  }
+  return null;
+}
+
 export interface AuditEditGuardResult {
   blocked: boolean;
   reason?: string;

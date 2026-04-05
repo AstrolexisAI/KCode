@@ -105,3 +105,34 @@ describe("audit-guards: Bash tool integration", () => {
     expect(result.content).not.toContain("audit-report file");
   });
 });
+
+describe("audit-guards: Bash records reads and greps", () => {
+  test("cat foo.cpp records the file as Read in session tracker", async () => {
+    const { resetReads, wasRead, readCount } = await import("../core/session-tracker");
+    resetReads();
+    // Create a file to cat
+    const { writeFileSync, mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const tmp = mkdtempSync(join(tmpdir(), "kcode-bash-record-"));
+    const file = join(tmp, "test.cpp");
+    writeFileSync(file, "int x = 1;\n");
+
+    await executeBash({ command: `cat ${file}` });
+    // Give the async import in bash.ts time to complete
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(wasRead(file)).toBe(true);
+    expect(readCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  test("grep via bash increments grepCount", async () => {
+    const { resetReads, grepCount } = await import("../core/session-tracker");
+    resetReads();
+
+    await executeBash({ command: "grep -r data /tmp/nonexistent-path-kcode" });
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(grepCount()).toBeGreaterThanOrEqual(1);
+  });
+});
