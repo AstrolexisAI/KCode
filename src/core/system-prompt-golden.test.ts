@@ -152,7 +152,7 @@ describe("System Prompt Golden: profile systemPromptAppend", () => {
     const profiles = [
       { name: "safe", keyword: "SAFE mode" },
       { name: "fast", keyword: "concise" },
-      { name: "review", keyword: "REVIEW mode" },
+      { name: "audit", keyword: "AUDIT mode" },
       { name: "implement", keyword: "IMPLEMENT mode" },
       { name: "ops", keyword: "OPS mode" },
     ];
