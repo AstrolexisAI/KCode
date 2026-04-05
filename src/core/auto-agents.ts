@@ -127,8 +127,24 @@ export class AutoAgentManager {
 
       const args = ["--print", "--permission", "auto", "--max-turns", "15", prompt];
 
-      // Inherit API keys from parent
-      const env: Record<string, string | undefined> = { ...process.env };
+      // SECURITY: whitelist env vars to avoid leaking AWS/GCP/SSH credentials
+      // to spawned agents. Only pass what's needed for the subprocess to run.
+      const AGENT_ENV_ALLOWLIST = new Set([
+        "PATH", "HOME", "USER", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM",
+        "TMPDIR", "TMP", "TEMP", "SHELL", "PWD", "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME", "XDG_CACHE_HOME", "NODE_ENV",
+        // KCode-specific config inheritance
+        "KCODE_API_BASE", "KCODE_MODEL", "KCODE_LOG_LEVEL",
+        // Let parent's Anthropic config flow through (agents need it)
+        "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
+      ]);
+      const env: Record<string, string | undefined> = {};
+      for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined && AGENT_ENV_ALLOWLIST.has(key)) {
+          env[key] = value;
+        }
+      }
+      // Inject credentials from the parent session's config
       if (this.cfg.config.apiKey) env.KCODE_API_KEY = this.cfg.config.apiKey;
       if (this.cfg.config.anthropicApiKey) env.ANTHROPIC_API_KEY = this.cfg.config.anthropicApiKey;
 
