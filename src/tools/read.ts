@@ -621,6 +621,14 @@ export async function executeRead(input: Record<string, unknown>): Promise<ToolR
       };
     }
 
+    // Record this file as Read in the session tracker (used by audit validation)
+    try {
+      const { recordRead } = await import("../core/session-tracker.js");
+      recordRead(file_path);
+    } catch {
+      /* tracker is optional */
+    }
+
     const ext = extname(file_path).toLowerCase();
 
     // Image files
