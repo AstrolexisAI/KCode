@@ -28,8 +28,15 @@ export interface VerifyOptions {
   fallbackCallback?: (prompt: string) => Promise<string>;
   /** Max lines of file content to include as context (default 200). */
   contextLines?: number;
-  /** Optional progress callback. */
+  /** Called BEFORE each verification starts (for "verifying X..." messages). */
   onProgress?: (index: number, total: number, candidate: Candidate) => void;
+  /** Called AFTER each verification completes (for live progress bar updates). */
+  onVerified?: (
+    candidate: Candidate,
+    verification: Verification,
+    index: number,
+    total: number,
+  ) => void;
 }
 
 /**
@@ -159,18 +166,18 @@ export async function verifyAllCandidates(
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i]!;
     opts.onProgress?.(i, candidates.length, c);
+    let verification: Verification;
     try {
-      const verification = await verifyCandidate(c, opts);
-      results.push({ candidate: c, verification });
+      verification = await verifyCandidate(c, opts);
     } catch (err) {
-      results.push({
-        candidate: c,
-        verification: {
-          verdict: "needs_context",
-          reasoning: `Verification failed: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      });
+      verification = {
+        verdict: "needs_context",
+        reasoning: `Verification failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
+    results.push({ candidate: c, verification });
+    // Fire post-verification callback for live progress bars
+    opts.onVerified?.(c, verification, i, candidates.length);
   }
   return results;
 }
