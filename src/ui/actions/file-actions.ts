@@ -41,22 +41,27 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
 
       // Push the user's slash-command echo + initial progress message.
       // Remember the progress message index so we can keep updating it.
+      // Use a ref-like mutable object so the async callbacks can read it
+      // even if the setCompleted updater runs asynchronously.
       const userEcho = `/scan ${args ?? ""}`.trim();
-      let progressIdx = -1;
+      const state = { progressIdx: -1 };
       setCompleted((prev) => {
-        progressIdx = prev.length + 1; // after the user echo
+        state.progressIdx = prev.length + 1; // after the user echo
         return [
           ...prev,
           { kind: "text", role: "user", text: userEcho },
           { kind: "text", role: "assistant", text: headerLines.join("\n") + "\n    Starting..." },
         ];
       });
+      // Yield to let Ink process the initial state update before audit starts
+      await new Promise((r) => setTimeout(r, 50));
 
       const updateProgress = (statusLine: string) => {
         setCompleted((prev) => {
-          if (progressIdx < 0 || progressIdx >= prev.length) return prev;
+          const idx = state.progressIdx;
+          if (idx < 0 || idx >= prev.length) return prev;
           const next = [...prev];
-          next[progressIdx] = {
+          next[idx] = {
             kind: "text",
             role: "assistant",
             text: headerLines.join("\n") + "\n" + statusLine,
@@ -151,9 +156,10 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       }
       // Replace the progress entry with the final summary
       setCompleted((prev) => {
-        if (progressIdx < 0 || progressIdx >= prev.length) return prev;
+        const idx = state.progressIdx;
+        if (idx < 0 || idx >= prev.length) return prev;
         const next = [...prev];
-        next[progressIdx] = { kind: "text", role: "assistant", text: finalLines.join("\n") };
+        next[idx] = { kind: "text", role: "assistant", text: finalLines.join("\n") };
         return next;
       });
       // Sentinel: tells the caller we already pushed our own messages.
