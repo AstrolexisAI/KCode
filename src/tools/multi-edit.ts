@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { checkAuditEditGuard } from "../core/audit-guards";
+import { detectStrcmpInversion } from "../core/semantic-guards";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const multiEditDefinition: ToolDefinition = {
@@ -102,6 +103,19 @@ export async function executeMultiEdit(input: Record<string, unknown>): Promise<
           : ""),
       is_error: true,
     };
+  }
+
+  // Semantic inversion guard — applied to every edit in the batch.
+  for (const edit of edits) {
+    if (!edit?.old_string || !edit?.new_string) continue;
+    const inversionError = detectStrcmpInversion(edit.old_string, edit.new_string);
+    if (inversionError) {
+      return {
+        tool_use_id: "",
+        content: `${inversionError}\n\nFile: ${edit.file_path ?? "(unknown)"}`,
+        is_error: true,
+      };
+    }
   }
 
   // ── Phase 1: Read all files and validate every edit ───────────────
