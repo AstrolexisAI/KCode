@@ -11,8 +11,10 @@ import { verifyAllCandidates, type VerifyOptions } from "./verifier";
 export interface AuditEngineOptions {
   /** Project root to audit */
   projectRoot: string;
-  /** LLM verification callback */
+  /** Primary LLM verification callback (typically local model) */
   llmCallback: (prompt: string) => Promise<string>;
+  /** Optional cloud-model fallback for ambiguous candidates */
+  fallbackCallback?: (prompt: string) => Promise<string>;
   /** Max files to scan (default 500) */
   maxFiles?: number;
   /** Skip verification phase (return candidates as findings without model check) */
@@ -59,9 +61,13 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       },
     }));
   } else {
-    opts.onPhase?.("verifying", `Verifying ${candidates.length} candidates`);
+    const verifyHint = opts.fallbackCallback
+      ? `${candidates.length} candidates (primary + fallback on ambiguity)`
+      : `${candidates.length} candidates`;
+    opts.onPhase?.("verifying", verifyHint);
     const verifyOpts: VerifyOptions = {
       llmCallback: opts.llmCallback,
+      fallbackCallback: opts.fallbackCallback,
       onProgress: opts.onCandidate
         ? (i, total, cand) => {
             // progress shown after verdict is known; shim here

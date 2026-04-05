@@ -31,6 +31,12 @@ export function registerAuditCommand(program: Command): void {
     .option("-m, --model <name>", "Override model for verification")
     .option("--api-base <url>", "Override API base URL (for local models)")
     .option("--api-key <key>", "Override API key")
+    .option(
+      "--fallback-model <name>",
+      "Cloud model to escalate to when primary is ambiguous (hybrid mode)",
+    )
+    .option("--fallback-api-base <url>", "API base for fallback model")
+    .option("--fallback-api-key <key>", "API key for fallback model")
     .option("--max-files <n>", "Max files to scan (default 500)", "500")
     .option("--skip-verify", "Skip model verification (static-only output)", false)
     .option("--json", "Also write AUDIT_REPORT.json alongside the markdown", false)
@@ -39,6 +45,9 @@ export function registerAuditCommand(program: Command): void {
       model?: string;
       apiBase?: string;
       apiKey?: string;
+      fallbackModel?: string;
+      fallbackApiBase?: string;
+      fallbackApiKey?: string;
       maxFiles: string;
       skipVerify: boolean;
       json: boolean;
@@ -55,6 +64,7 @@ export function registerAuditCommand(program: Command): void {
 
       // Resolve LLM config from settings (unless --skip-verify)
       let llmCallback: (prompt: string) => Promise<string>;
+      let fallbackCallback: ((prompt: string) => Promise<string>) | undefined;
       if (opts.skipVerify) {
         console.log("  \x1b[33m--skip-verify: model verification disabled\x1b[0m");
         console.log("");
@@ -66,6 +76,17 @@ export function registerAuditCommand(program: Command): void {
           apiBase: opts.apiBase ?? settings.apiBase ?? "https://api.anthropic.com/v1",
           apiKey: opts.apiKey ?? settings.apiKey,
         });
+        if (opts.fallbackModel) {
+          fallbackCallback = makeAuditLlmCallback({
+            model: opts.fallbackModel,
+            apiBase: opts.fallbackApiBase ?? "https://api.anthropic.com/v1",
+            apiKey: opts.fallbackApiKey,
+          });
+          console.log(
+            `  \x1b[36mHybrid mode: primary ${opts.model ?? settings.model}, fallback ${opts.fallbackModel}\x1b[0m`,
+          );
+          console.log("");
+        }
       }
 
       // Run pipeline with progress output
@@ -74,6 +95,7 @@ export function registerAuditCommand(program: Command): void {
       const result = await runAudit({
         projectRoot,
         llmCallback,
+        fallbackCallback,
         maxFiles,
         skipVerification: opts.skipVerify,
         onPhase: (phase, detail) => {
