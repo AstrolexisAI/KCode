@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { recordGrep, recordRead, resetReads } from "../core/session-tracker";
+import {
+  recordGrep,
+  recordGrepHits,
+  recordRead,
+  resetReads,
+} from "../core/session-tracker";
 import { executeWrite } from "./write";
 
 describe("audit-report discipline guards", () => {
@@ -13,13 +18,17 @@ describe("audit-report discipline guards", () => {
   beforeEach(() => {
     tmp = mkdtempSync(join(tmpdir(), "kcode-guard-test-"));
     resetReads();
-    // Minimum reconnaissance so existing tests can create audit files
+    // Minimum reconnaissance so existing tests can create audit files.
+    // Need 8 SOURCE files now (raised from 5).
     recordGrep();
     recordRead("/p/f1.cpp");
     recordRead("/p/f2.cpp");
     recordRead("/p/f3.cpp");
     recordRead("/p/f4.cpp");
     recordRead("/p/f5.cpp");
+    recordRead("/p/f6.cpp");
+    recordRead("/p/f7.cpp");
+    recordRead("/p/f8.cpp");
   });
 
   afterEach(() => {
@@ -157,7 +166,7 @@ describe("audit-report discipline guards", () => {
     expect(result.content).toContain("Grep tool ONCE");
   });
 
-  test("blocks audit write when fewer than 5 files were Read", async () => {
+  test("blocks audit write when fewer than 8 source files were Read", async () => {
     resetReads();
     recordGrep();
     recordRead("/p/only1.cpp");
@@ -170,7 +179,127 @@ describe("audit-report discipline guards", () => {
 
     expect(result.is_error).toBe(true);
     expect(result.content).toContain("BLOCKED");
-    expect(result.content).toContain("Read only 2 file");
+    expect(result.content).toContain("Read only 2 SOURCE file");
+  });
+
+  test("README.md and CMakeLists.txt do NOT count toward source-read minimum", async () => {
+    resetReads();
+    recordGrep();
+    // Non-source files
+    recordRead("/p/README.md");
+    recordRead("/p/CMakeLists.txt");
+    recordRead("/p/LICENSE");
+    recordRead("/p/docs/guide.md");
+    // Only 2 actual source files
+    recordRead("/p/src/a.cpp");
+    recordRead("/p/src/b.cpp");
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("Read only 2 SOURCE file");
+  });
+
+  test("blocks audit when grep flagged many files but most were unread", async () => {
+    // Simulate: grep for "data[" matched 6 files, model only Read 1 of them
+    recordGrepHits("data\\[", [
+      "/p/UsbXBox.cpp",
+      "/p/UsbDualShock3.cpp",
+      "/p/UsbDualShock4.cpp",
+      "/p/UsbWingMan.cpp",
+      "/p/BtXBox.cpp",
+      "/p/HidDecoder.cpp",
+    ]);
+    // Mark only one as Read
+    recordRead("/p/HidDecoder.cpp");
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+    expect(result.content).toContain("flagged");
+    expect(result.content).toContain("UsbXBox.cpp");
+  });
+
+  test("allows audit when grep-hit files are mostly Read", async () => {
+    recordGrepHits("data\\[", [
+      "/p/UsbXBox.cpp",
+      "/p/UsbDualShock4.cpp",
+      "/p/HidDecoder.cpp",
+    ]);
+    // Read all three
+    recordRead("/p/UsbXBox.cpp");
+    recordRead("/p/UsbDualShock4.cpp");
+    recordRead("/p/HidDecoder.cpp");
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBeUndefined();
+  });
+
+  test("ignores grep hits from NON-dangerous patterns", async () => {
+    // "TODO" is not in the dangerous patterns list, so hits shouldn't be recorded
+    recordGrepHits("TODO", [
+      "/p/a.cpp",
+      "/p/b.cpp",
+      "/p/c.cpp",
+      "/p/d.cpp",
+    ]);
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content: "# Audit\n",
+    });
+
+    expect(result.is_error).toBeUndefined();
+  });
+
+  test("blocks audit citing file:line for a file never Read", async () => {
+    const content = `# Audit
+
+## Findings
+Bug in EthernetDevice.cpp:160 — pointer arithmetic error
+Also see UsbXBox.cpp:35 for buffer indexing issue
+`;
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content,
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("BLOCKED");
+    expect(result.content).toContain("never opened");
+    expect(result.content).toContain("EthernetDevice.cpp");
+    expect(result.content).toContain("UsbXBox.cpp");
+  });
+
+  test("allows audit with citations to Read files", async () => {
+    recordRead("/p/EthernetDevice.cpp");
+    recordRead("/p/UsbXBox.cpp");
+
+    const content = `# Audit
+
+## Findings
+Bug in EthernetDevice.cpp:160 — pointer arithmetic error
+See also UsbXBox.cpp:35 for buffer indexing
+`;
+
+    const result = await executeWrite({
+      file_path: join(tmp, "AUDIT_REPORT.md"),
+      content,
+    });
+
+    expect(result.is_error).toBeUndefined();
   });
 
   test("non-audit files bypass audit guards entirely", async () => {

@@ -13,7 +13,13 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { AUDIT_FILENAME_PATTERN, isAuditFilename } from "../core/audit-guards";
-import { grepCount, readCount, wasRead } from "../core/session-tracker";
+import {
+  getGrepHitFiles,
+  grepCount,
+  sourceReadCount,
+  unreadGrepHits,
+  wasRead,
+} from "../core/session-tracker";
 import type { FileWriteInput, ToolDefinition, ToolResult } from "../core/types";
 
 export const writeDefinition: ToolDefinition = {
@@ -67,6 +73,28 @@ function findExistingCanonicalAuditReport(dir: string): string | null {
     /* dir doesn't exist yet or not readable */
   }
   return null;
+}
+
+/**
+ * Extract "file:line" citations from audit content. Matches paths followed
+ * by a line number (e.g. "EthernetDevice.cpp:160" or "src/foo/bar.hh:42").
+ * Returns unique file paths (without the :line suffix).
+ */
+function extractCitedFiles(content: string): string[] {
+  // Match: (optional path prefix)filename.ext:number
+  // File must have a recognizable source extension to avoid false positives
+  // on things like "IDF/README.md:12" or version strings.
+  const re =
+    /\b([\w./\\-]*[\w-]+\.(?:cpp|cc|cxx|c|hh|hpp|hxx|h|ts|tsx|js|jsx|py|go|rs|java|kt|swift|rb|php|cs|scala|m|mm|zig))[:#]\s*\d+/g;
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+  m = re.exec(content);
+  while (m !== null) {
+    const path = m[1]!;
+    seen.add(path);
+    m = re.exec(content);
+  }
+  return Array.from(seen);
 }
 
 /**
@@ -145,14 +173,13 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
     }
   }
 
-  // Reconnaissance enforcement: writing an audit report requires both
-  // (a) at least one Grep call to locate bug patterns across the tree, and
-  // (b) at least 5 distinct files Read in this session.
-  // These are hard technical minimums — an audit built on <5 reads and zero
-  // greps is a marketing document, not an audit.
+  // Reconnaissance enforcement: writing an audit report requires
+  // (a) at least one Grep call to locate bug patterns across the tree,
+  // (b) at least 8 distinct SOURCE files Read in this session, and
+  // (c) coverage of grep-hit files — you can't leave high-risk files unread.
   if (isAuditFilename(file_path)) {
     const greps = grepCount();
-    const reads = readCount();
+    const sourceReads = sourceReadCount();
     const problems: string[] = [];
     if (greps === 0) {
       problems.push(
@@ -161,11 +188,26 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
           "(recv|parse|decode|data\\[|buffer\\[|open\\(|malloc|\\(&[a-z]).",
       );
     }
-    if (reads < 5) {
+    if (sourceReads < 8) {
       problems.push(
-        `you have Read only ${reads} file(s). ` +
-          "An audit requires reading the hot files (protocol decoders, network I/O, " +
-          "resource lifecycle) in full — minimum 5, ideally 10+.",
+        `you have Read only ${sourceReads} SOURCE file(s) (.cpp/.h/.ts/.py/etc — ` +
+          `README.md and CMakeLists.txt don't count). ` +
+          "An audit requires reading the hot files (network I/O, protocol " +
+          "decoders, resource lifecycle) in full — minimum 8 source files.",
+      );
+    }
+    // Grep-hit coverage: if dangerous-pattern greps surfaced high-risk files
+    // that the model never Read, block until it opens them.
+    const unread = unreadGrepHits();
+    const totalHits = getGrepHitFiles().length;
+    if (totalHits >= 3 && unread.length >= Math.ceil(totalHits / 2)) {
+      const examples = unread.slice(0, 6).map((f) => `    - ${f}`).join("\n");
+      problems.push(
+        `your Grep calls flagged ${totalHits} high-risk file(s) for dangerous ` +
+          `patterns (buffer indexing, I/O, resource lifecycle), but you never ` +
+          `opened ${unread.length} of them:\n${examples}` +
+          (unread.length > 6 ? `\n    ... and ${unread.length - 6} more` : "") +
+          `\n  These are the files MOST likely to contain real bugs. Read them before auditing.`,
       );
     }
     if (problems.length > 0) {
@@ -174,11 +216,31 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
         content:
           `BLOCKED: Cannot write audit report "${basename(file_path)}" because:\n` +
           problems.map((p, i) => `  ${i + 1}. ${p}`).join("\n") +
-          `\n\nBefore writing this report, you MUST:\n` +
-          `  1. Run Grep for dangerous patterns across the source tree\n` +
-          `  2. Read AT LEAST 5 hot files in full (protocol decoders, parsers, I/O)\n` +
-          `  3. Then re-submit the audit report.\n` +
-          `This is a hard minimum, not advice. Session state: ${reads} reads, ${greps} greps.`,
+          `\n\nSession state: ${sourceReads} source reads, ${greps} greps, ` +
+          `${totalHits} grep-hit files (${unread.length} unread).`,
+        is_error: true,
+      };
+    }
+  }
+
+  // Citation validation: every file:line citation in the audit body must
+  // refer to a file actually Read in this session. Catches hallucinated
+  // line numbers and fabricated findings on unread files.
+  if (isAuditFilename(file_path)) {
+    const citedFiles = extractCitedFiles(content);
+    const uncitedUnread = citedFiles.filter((f) => !wasRead(f));
+    if (uncitedUnread.length > 0) {
+      const listed = uncitedUnread.slice(0, 8).map((f) => `    - ${f}`).join("\n");
+      return {
+        tool_use_id: "",
+        content:
+          `BLOCKED: Your audit cites ${uncitedUnread.length} file(s) you ` +
+          `never opened with the Read tool in this session:\n${listed}` +
+          (uncitedUnread.length > 8 ? `\n    ... and ${uncitedUnread.length - 8} more` : "") +
+          `\n\nEvery "file.cpp:line" citation must point to a file you ` +
+          `actually Read. Either:\n  (a) Read the cited files, then re-submit, OR\n` +
+          `  (b) remove the unverified citations from the report.\n\n` +
+          `Inventing file:line references is fabricating evidence.`,
         is_error: true,
       };
     }
