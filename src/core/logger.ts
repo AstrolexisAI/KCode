@@ -111,7 +111,7 @@ class Logger {
 
   /** Known API key prefixes — redact all but the first 8 chars */
   private static readonly KEY_PREFIX_RE =
-    /\b(sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_-]{8,}/g;
+    /\b(sk-ant-api\d+-|sk-ant-oat\d+-|sk-|gsk_|xai-|key-|ghp_|gho_|glpat-|AKIA|whsec_|sk_live_|pk_live_|rk_live_)[a-zA-Z0-9_-]{8,}/g;
 
   /** Key=value pairs where the key name suggests a secret */
   private static readonly KEY_VALUE_RE =

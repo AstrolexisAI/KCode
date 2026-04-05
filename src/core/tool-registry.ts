@@ -49,6 +49,20 @@ export class ToolRegistry {
     return this.tools.has(name);
   }
 
+  /**
+   * Create a new registry containing only the tools whose names are in the allowlist.
+   * Used by HTTP server to restrict remote sessions to read-only tools.
+   */
+  filterTo(allowed: Set<string>): ToolRegistry {
+    const filtered = new ToolRegistry();
+    for (const [name, tool] of this.tools) {
+      if (allowed.has(name)) {
+        filtered.register(name, tool.definition, tool.handler);
+      }
+    }
+    return filtered;
+  }
+
   /** Read-only tools that are safe to execute in parallel. */
   static readonly PARALLEL_SAFE = new Set([
     "Read",

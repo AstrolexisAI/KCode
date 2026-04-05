@@ -331,33 +331,33 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       const tmpDir = "/tmp/kcode-bg";
       const tmpLog = `${tmpDir}/bg-${Date.now()}-${require("node:crypto").randomBytes(4).toString("hex")}.log`;
 
-      // For background sudo commands, inject password via stdin pipe or SUDO_ASKPASS
+      // For background sudo commands, inject password via SUDO_ASKPASS
       let bgCommand = command;
       if (sudoPassword && containsSudo) {
-        const bgHasHeredoc = /<<[-~]?\s*['"]?\w+['"]?/.test(command);
-        if (bgHasHeredoc) {
-          // Heredoc consumes stdin — use SUDO_ASKPASS instead
-          const bgAskpass = `/tmp/.kcode-askpass-bg-${require("node:crypto").randomBytes(8).toString("hex")}`;
-          const b64Pw = Buffer.from(sudoPassword).toString("base64");
-          writeFileSync(
+        const crypto = require("node:crypto") as typeof import("node:crypto");
+        const fs = require("node:fs") as typeof import("node:fs");
+        // 128-bit UUID entropy, not bruteforceable
+        const uid = crypto.randomUUID();
+        const bgAskpass = `/tmp/.kcode-askpass-${uid}`;
+        // Atomic creation with O_EXCL prevents symlink attacks
+        try {
+          const fd = fs.openSync(
             bgAskpass,
-            `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`,
-            { mode: 0o700 },
+            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+            0o600,
           );
-          bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
-          bgCommand = `SUDO_ASKPASS=${bgAskpass} ${bgCommand} ; rm -f ${bgAskpass}`;
-        } else {
-          // Use SUDO_ASKPASS for all background sudo — avoids password in process list
-          const bgAskpassStdin = `/tmp/.kcode-askpass-bg2-${require("node:crypto").randomBytes(8).toString("hex")}`;
-          const b64Pw = Buffer.from(sudoPassword).toString("base64");
-          writeFileSync(
-            bgAskpassStdin,
-            `#!/bin/sh\nprintf '%s' "$(printf '%s' '${b64Pw}' | base64 --decode)"\n`,
-            { mode: 0o700 },
-          );
-          bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
-          bgCommand = `SUDO_ASKPASS=${bgAskpassStdin} ${bgCommand} ; rm -f ${bgAskpassStdin}`;
+          try {
+            // Write password directly, no base64 obfuscation
+            const script = `#!/bin/sh\nprintf '%s' '${sudoPassword.replace(/'/g, "'\\''")}'\n`;
+            fs.writeSync(fd, script);
+          } finally {
+            fs.closeSync(fd);
+          }
+        } catch (err) {
+          throw new Error(`Failed to create askpass script: ${(err as Error).message}`);
         }
+        bgCommand = bgCommand.replace(/\bsudo\b(?!\s+-\S*[AS])/g, "sudo -A");
+        bgCommand = `SUDO_ASKPASS=${bgAskpass} ${bgCommand} ; rm -f ${bgAskpass}`;
       }
 
       // Wrapper script:

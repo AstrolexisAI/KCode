@@ -193,7 +193,9 @@ async function getOrCreateSession(
         const { ToolRegistry } = require("./tool-registry.js");
         return new ToolRegistry();
       })()
-    : registerBuiltinTools();
+    : registerBuiltinTools().filterTo(ALLOWED_HTTP_TOOLS);
+  // SECURITY: HTTP-initiated sessions are restricted to read-only tools.
+  // Write/Bash/Edit/Agent require the interactive CLI where the user can approve each action.
 
   const manager = new CM(config, tools);
   const sid = sessionId ?? crypto.randomUUID();
