@@ -247,18 +247,26 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
           "decoders, resource lifecycle) in full — minimum 6 source files.",
       );
     }
-    // Grep-hit coverage: if dangerous-pattern greps surfaced high-risk files
-    // that the model never Read, block until it opens them.
+    // Grep-hit coverage: require the model to Read a reasonable number of
+    // high-risk files flagged by its dangerous-pattern greps. Cap at 5
+    // absolute — if grep returns 22 hits, reading ALL of them is
+    // unreasonable for one session, but reading 5 is fair.
+    // Formula: required = min(ceil(totalHits / 2), 5)
+    //   3 hits  → need 2 read
+    //   10 hits → need 5 read
+    //   22 hits → need 5 read (capped)
     const unread = unreadGrepHits();
     const totalHits = getGrepHitFiles().length;
-    if (totalHits >= 3 && unread.length >= Math.ceil(totalHits / 2)) {
+    const readHits = totalHits - unread.length;
+    const required = Math.min(Math.ceil(totalHits / 2), 5);
+    if (totalHits >= 3 && readHits < required) {
       const examples = unread.slice(0, 6).map((f) => `    - ${f}`).join("\n");
       problems.push(
         `your Grep calls flagged ${totalHits} high-risk file(s) for dangerous ` +
-          `patterns (buffer indexing, I/O, resource lifecycle), but you never ` +
-          `opened ${unread.length} of them:\n${examples}` +
-          (unread.length > 6 ? `\n    ... and ${unread.length - 6} more` : "") +
-          `\n  These are the files MOST likely to contain real bugs. Read them before auditing.`,
+          `patterns (buffer indexing, I/O, resource lifecycle). You have Read ` +
+          `${readHits} of them, but need to Read at least ${required}. ` +
+          `\n  Unread high-risk files (pick ${required - readHits} more to open):\n${examples}` +
+          (unread.length > 6 ? `\n    ... and ${unread.length - 6} more` : ""),
       );
     }
     if (problems.length > 0) {
