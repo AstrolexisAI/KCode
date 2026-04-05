@@ -88,7 +88,7 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
       };
     }
 
-    // Check for symlink BEFORE creating directories to prevent symlink-based traversal
+    // Check for symlink BEFORE creating directories (defense-in-depth)
     try {
       const stat = lstatSync(file_path);
       if (stat.isSymbolicLink()) {
@@ -104,7 +104,32 @@ export async function executeWrite(input: Record<string, unknown>): Promise<Tool
 
     mkdirSync(dirname(file_path), { recursive: true });
 
-    writeFileSync(file_path, content, "utf-8");
+    // Atomic TOCTOU-safe write: O_NOFOLLOW rejects symlinks at kernel level,
+    // so even if an attacker races to create a symlink between lstatSync and
+    // here, the open() will fail instead of following it.
+    const O_NOFOLLOW = fsConstants.O_NOFOLLOW ?? 0;
+    const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_TRUNC | O_NOFOLLOW;
+    try {
+      const fd = openSync(file_path, flags, 0o644);
+      try {
+        const buf = Buffer.from(content, "utf-8");
+        // Write directly to fd — no path re-resolution possible
+        const { writeSync } = require("node:fs") as typeof import("node:fs");
+        writeSync(fd, buf, 0, buf.length, 0);
+      } finally {
+        closeSync(fd);
+      }
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === "ELOOP" || e.code === "EEXIST") {
+        return {
+          tool_use_id: "",
+          content: `BLOCKED: "${file_path}" is a symlink or was replaced with one mid-write. Aborted for security.`,
+          is_error: true,
+        };
+      }
+      throw err;
+    }
 
     const lines = content.split("\n");
     const lineCount = lines.length;
