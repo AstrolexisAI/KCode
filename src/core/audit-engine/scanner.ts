@@ -73,7 +73,21 @@ const SOURCE_EXTENSIONS: Record<string, Language> = {
   ".tsx": "typescript",
   ".swift": "swift",
   ".java": "java",
-  ".kt": "java", // Kotlin shares Java patterns for now
+  ".kt": "kotlin",
+  ".kts": "kotlin",
+  ".cs": "csharp",
+  ".php": "php",
+  ".rb": "ruby",
+  ".dart": "dart",
+  ".scala": "scala",
+  ".sc": "scala",
+  ".pl": "perl",
+  ".pm": "perl",
+  ".r": "r",
+  ".R": "r",
+  ".jl": "julia",
+  ".sql": "sql",
+  ".m": "matlab",
 };
 
 const SKIP_DIRS = new Set([
