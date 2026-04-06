@@ -96,7 +96,9 @@ const SKIP_DIRS = new Set([
   "ut_assert",
   "ut-stubs",
   "ut-stubs-alt",
+  "ut-coverage",
   "unit-test-coverage",
+  "unit-tests",
   "test",
   "tests",
   "__tests__",
@@ -105,6 +107,8 @@ const SKIP_DIRS = new Set([
   "mock",
   "mocks",
   "fixtures",
+  "testcase",
+  "testcases",
 ]);
 
 /**

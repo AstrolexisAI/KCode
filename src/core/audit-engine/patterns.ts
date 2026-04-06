@@ -36,16 +36,17 @@ export const CPP_PATTERNS: BugPattern[] = [
   // ── Unreachable code ────────────────────────────────────────────
   {
     id: "cpp-002-unreachable-after-return",
-    title: "Statement after return/throw/continue (unreachable code)",
+    title: "Statement after return/throw (unreachable code)",
     severity: "medium",
     languages: ["c", "cpp"],
-    // Match `return X;` / `throw X;` followed by an assignment or function
-    // call on the NEXT line. Constrain to one-line tokens (no * or @ which
-    // indicate doxygen comments).
+    // Only match `return X;` and `throw X;` — NOT continue/break.
+    // continue/break are almost always inside single-line if() blocks
+    // where the NEXT line IS reachable (different branch). Only return
+    // and throw reliably indicate the next line is dead code.
     regex:
-      /(?:^|\n)\s+(?:return\s+[^;\n]+;|throw\s+[^;\n]+;|continue\s*;|break\s*;)\s*\n\s+([a-zA-Z_]\w*\s*(?:=|->|\.|\())/g,
+      /(?:^|\n)\s+(?:return\s+[^;\n]+;|throw\s+[^;\n]+;)\s*\n\s+([a-zA-Z_]\w*\s*(?:=|->|\.|\())/g,
     explanation:
-      "Code after `return`, `throw`, `continue`, or `break` is unreachable. This is the NASA IDF EthernetDevice bug — `lastPacketArrived = std::time(nullptr);` after a return, so the timeout timestamp never updates.",
+      "Code after `return` or `throw` is unreachable. This is the NASA IDF EthernetDevice bug — `lastPacketArrived = std::time(nullptr);` after a return, so the timeout timestamp never updates.",
     verify_prompt:
       "Is the statement after `return`/`throw`/etc. actually unreachable? " +
       "If the surrounding context has a loop/switch/goto that could make it " +
@@ -141,7 +142,10 @@ export const CPP_PATTERNS: BugPattern[] = [
     title: "Pointer dereferenced before null check",
     severity: "high",
     languages: ["c", "cpp"],
-    regex: /\b(\w+)\s*->\s*\w+[\s\S]{0,100}?\bif\s*\(\s*\1\s*(?:==|!=)\s*(?:NULL|nullptr|0)\s*\)/g,
+    // Match ptr->field followed by if (ptr == NULL) within 100 chars,
+    // BUT exclude when there's a return/break/goto between them
+    // (those exit the scope, so the null check is for a different path).
+    regex: /\b(\w+)\s*->\s*\w+(?![\s\S]{0,100}?\b(?:return|break|goto)\b)[\s\S]{0,100}?\bif\s*\(\s*\1\s*(?:==|!=)\s*(?:NULL|nullptr|0)\s*\)/g,
     explanation:
       "A pointer is dereferenced with `->` and THEN checked for null. If it's ever null, the deref already crashed before the check could help.",
     verify_prompt:
