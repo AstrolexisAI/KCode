@@ -535,7 +535,18 @@ export class ConversationManager {
 
       if (task.type !== "general" && task.confidence >= 0.8) {
         // Specialized engines for each task type
-        if (task.type === "implement") {
+        // Web creation gets its own engine (higher priority than generic implement)
+        const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce)\b/i.test(userMessage);
+
+        if (task.type === "implement" && isWebRequest) {
+          try {
+            const { buildWebCreationPrompt } = await import("./web-engine/web-engine.js");
+            orchestratedMessage = buildWebCreationPrompt(userMessage, this.config.workingDirectory);
+            log.info("orchestrator", `Web engine activated for: "${userMessage.slice(0, 50)}"`);
+          } catch (err) {
+            log.debug("web-engine", `Web engine skipped: ${err}`);
+          }
+        } else if (task.type === "implement") {
           try {
             const { buildImplementPrompt } = await import("./implement-engine/scaffold.js");
             const result = buildImplementPrompt(userMessage, this.config.workingDirectory);
