@@ -129,12 +129,9 @@ function parseVerdict(response: string): Verification {
 }
 
 /**
- * Verify a single candidate by calling the LLM.
- *
- * If a fallbackCallback is provided and the primary returns
- * NEEDS_CONTEXT, escalate to the fallback. The returned verification
- * is annotated with the model used (via `reasoning` suffix) so users
- * can see how many candidates escalated.
+ * Verify a single candidate by calling the primary LLM only.
+ * Does NOT auto-escalate to fallback — that's handled by the orchestrator
+ * after user confirmation.
  */
 export async function verifyCandidate(
   candidate: Candidate,
@@ -142,17 +139,22 @@ export async function verifyCandidate(
 ): Promise<Verification> {
   const prompt = buildVerifyPrompt(candidate);
   const primary = await opts.llmCallback(prompt);
-  const primaryVerdict = parseVerdict(primary);
+  return parseVerdict(primary);
+}
 
-  // Escalate to fallback only if primary was ambiguous
-  if (primaryVerdict.verdict === "needs_context" && opts.fallbackCallback) {
-    const escalated = await opts.fallbackCallback(prompt);
-    const escalatedVerdict = parseVerdict(escalated);
-    escalatedVerdict.reasoning = `[escalated] ${escalatedVerdict.reasoning}`;
-    return escalatedVerdict;
-  }
-
-  return primaryVerdict;
+/**
+ * Escalate a single candidate to the fallback LLM (cloud).
+ * Called only after user approves escalation.
+ */
+export async function escalateCandidate(
+  candidate: Candidate,
+  fallbackCallback: (prompt: string) => Promise<string>,
+): Promise<Verification> {
+  const prompt = buildVerifyPrompt(candidate);
+  const response = await fallbackCallback(prompt);
+  const verdict = parseVerdict(response);
+  verdict.reasoning = `[☁ escalated] ${verdict.reasoning}`;
+  return verdict;
 }
 
 /**

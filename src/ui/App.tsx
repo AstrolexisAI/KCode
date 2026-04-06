@@ -206,14 +206,22 @@ export default function App({ config, conversationManager, tools, initialSession
       try {
         const { scanState } = await import("../core/audit-engine/scan-state.js");
         if (scanState.active || scanState.result || scanState.error) {
-          setScanProgress({
+          const progress = {
             active: scanState.active,
             phase: scanState.phase,
             verified: scanState.verified,
             total: scanState.total,
             confirmed: scanState.confirmed,
             elapsed: (Date.now() - scanState.startTime) / 1000,
-          });
+            ...(scanState.pendingEscalation ? { pendingEscalation: scanState.pendingEscalation } : {}),
+          };
+          setScanProgress(progress as any);
+          // Kodi event for escalation
+          if (scanState.pendingEscalation) {
+            setLastKodiEvent({ type: "agent_spawn", detail: "☁ cloud escalation?" });
+          } else if (scanState.escalated > 0) {
+            setLastKodiEvent({ type: "agent_progress", detail: `☁ ${scanState.escalated} escalated` });
+          }
 
           if (!scanState.active && scanState.result) {
             const reportText = scanState.result.reportText;
@@ -709,6 +717,20 @@ export default function App({ config, conversationManager, tools, initialSession
                 </Text>
               );
             })()}
+          </Box>
+        )}
+
+        {/* Escalation prompt — shown when local model can't verify and cloud is available */}
+        {scanProgress && (scanProgress as any).pendingEscalation && (
+          <Box marginLeft={2} marginBottom={0} flexDirection="column">
+            <Text color="yellow">
+              {"  ⚠️  "}{(scanProgress as any).pendingEscalation.count}{" finding(s) need deeper analysis."}
+            </Text>
+            <Text color="yellow">
+              {"     Escalate to ☁ "}{(scanProgress as any).pendingEscalation.provider}{"? [Y/n] "}
+              <Text bold inverse>{" Y "}</Text>
+              <Text dimColor>{" — press Y to escalate, N to skip"}</Text>
+            </Text>
           </Box>
         )}
 
