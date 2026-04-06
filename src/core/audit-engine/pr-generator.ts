@@ -121,8 +121,10 @@ Write the PR in this EXACT format:
  */
 export async function createPr(opts: PrOptions): Promise<PrResult> {
   const { projectRoot, llmCallback, dryRun = false } = opts;
-  const today = new Date().toISOString().split("T")[0];
-  const branchName = opts.branchName ?? `fix/kcode-audit-${today}`;
+  // Use timestamp with hour+minute for unique branch names across runs
+  const now = new Date();
+  const ts = now.toISOString().replace(/[T:]/g, "-").slice(0, 16); // 2026-04-06-21-45
+  const branchName = opts.branchName ?? `fix/kcode-audit-${ts}`;
 
   // Read the audit result
   const jsonPath = resolve(projectRoot, "AUDIT_REPORT.json");
