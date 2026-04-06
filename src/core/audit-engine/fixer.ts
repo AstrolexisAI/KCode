@@ -95,6 +95,8 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixFdLeakThrow(lines, finding);
     case "cpp-012-loop-unvalidated-bound":
       return fixLoopBound(lines, finding);
+    case "cpp-006-strcpy-family":
+      return fixStrcpyFamily(lines, finding);
     default:
       return {
         applied: false,
@@ -305,6 +307,62 @@ function fixFdLeakThrow(lines: string[], finding: Finding): OneFixResult {
   }
 
   return { applied: false, lines, description: "Could not find throw without preceding close()" };
+}
+
+/**
+ * cpp-006: Replace strcpy/strcat/sprintf with bounded variants.
+ * Only auto-fixes when the source is a string LITERAL (known size).
+ */
+function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) {
+    return { applied: false, lines, description: "Line out of range" };
+  }
+
+  const line = lines[idx]!;
+  const result = [...lines];
+
+  // strcpy(dst, "literal") → strncpy(dst, "literal", len)
+  const strcpyMatch = line.match(/\bstrcpy\s*\(\s*([^,]+),\s*("(?:[^"\\]|\\.)*")\s*\)/);
+  if (strcpyMatch) {
+    const dst = strcpyMatch[1]!.trim();
+    const src = strcpyMatch[2]!;
+    const len = src.length - 2 + 1; // string chars + null terminator
+    // Replace the entire strcpy(...) call using the exact matched text
+    const fullMatch = strcpyMatch[0];
+    result[idx] = line.replace(fullMatch, `strncpy(${dst}, ${src}, ${len})`);
+    return { applied: true, lines: result, description: `strcpy → strncpy (${src}, ${len} bytes)` };
+  }
+
+  // strcat(dst, "literal") → strncat(dst, "literal", len)
+  const strcatMatch = line.match(/\bstrcat\s*\(\s*([^,]+),\s*("(?:[^"\\]|\\.)*")\s*\)/);
+  if (strcatMatch) {
+    const dst = strcatMatch[1]!.trim();
+    const src = strcatMatch[2]!;
+    const len = src.length - 2;
+    result[idx] = line.replace(
+      /\bstrcat\s*\([^)]+\)/,
+      `strncat(${dst}, ${src}, ${len})`,
+    );
+    return { applied: true, lines: result, description: `strcat → strncat (${src}, ${len} chars)` };
+  }
+
+  // sprintf(dst, "fmt", ...) → snprintf(dst, sizeof(dst), "fmt", ...)
+  const sprintfMatch = line.match(/\bsprintf\s*\(\s*(\w+)\s*,/);
+  if (sprintfMatch) {
+    const dst = sprintfMatch[1]!;
+    result[idx] = line.replace(
+      /\bsprintf\s*\(/,
+      `snprintf(${dst}, sizeof(${dst}), `,
+    ).replace(
+      // Remove duplicate first arg since snprintf already has it
+      new RegExp(`snprintf\\(${dst}, sizeof\\(${dst}\\), ${dst},`),
+      `snprintf(${dst}, sizeof(${dst}),`,
+    );
+    return { applied: true, lines: result, description: `sprintf → snprintf(${dst}, sizeof(${dst}), ...)` };
+  }
+
+  return { applied: false, lines, description: "Non-literal source — manual fix needed" };
 }
 
 /**
