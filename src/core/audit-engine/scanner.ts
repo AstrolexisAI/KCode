@@ -11,40 +11,48 @@ import { getAllPatterns } from "./patterns";
 import type { BugPattern, Candidate, Language } from "./types";
 
 /**
- * Initialize git submodules if the project has any uninitialized ones.
- * Many large projects (NASA cFS, etc.) are meta-repos where all source
- * code lives in submodules. Without init, the scanner finds 0 files.
+ * Check if git submodules need initialization.
  */
-export function initSubmodulesIfNeeded(projectRoot: string): boolean {
+export function needsSubmoduleInit(projectRoot: string): boolean {
   const gitmodulesPath = join(projectRoot, ".gitmodules");
   if (!existsSync(gitmodulesPath)) return false;
 
-  // Check if any submodule directory is empty
   try {
     const content = readFileSync(gitmodulesPath, "utf-8");
-    const paths = content.match(/path\s*=\s*(.+)/g)?.map((m) => m.replace(/path\s*=\s*/, "").trim()) ?? [];
-    const hasEmpty = paths.some((p) => {
+    const paths =
+      content
+        .match(/path\s*=\s*(.+)/g)
+        ?.map((m) => m.replace(/path\s*=\s*/, "").trim()) ?? [];
+    return paths.some((p) => {
       const dir = join(projectRoot, p);
       try {
-        const entries = readdirSync(dir);
-        return entries.length === 0;
+        return readdirSync(dir).length === 0;
       } catch {
-        return true; // dir doesn't exist
+        return true;
       }
     });
-
-    if (hasEmpty) {
-      execSync("git submodule update --init --recursive", {
-        cwd: projectRoot,
-        timeout: 120_000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-      return true;
-    }
   } catch {
-    // git submodule init failed — continue without submodules
+    return false;
   }
-  return false;
+}
+
+/**
+ * Initialize git submodules ASYNC so the event loop isn't blocked.
+ * execSync blocks setInterval polling, freezing the progress bar.
+ */
+export function initSubmodulesAsync(projectRoot: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const { spawn: spawnProc } = require("node:child_process") as typeof import("node:child_process");
+    const proc = spawnProc("git", ["submodule", "update", "--init", "--recursive"], {
+      cwd: projectRoot,
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 120_000,
+    });
+    proc.on("close", (code: number | null) => {
+      resolve(code === 0);
+    });
+    proc.on("error", () => resolve(false));
+  });
 }
 
 const SOURCE_EXTENSIONS: Record<string, Language> = {
