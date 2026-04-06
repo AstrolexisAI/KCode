@@ -332,20 +332,42 @@ Use `/plugins` to list installed plugins.
 
 ## How KCode Compares
 
-| Capability | KCode | Other AI Coding Tools |
-|------------|-------|----------------------|
-| Runs fully local (no internet required) | Yes | Varies |
-| Multi-GPU inference | Yes (llama.cpp RPC) | Rare |
-| Open source (AGPL-3.0) | Yes | Varies |
-| 6 cloud providers | Yes | Typically 1-2 |
-| 46 built-in tools | Yes | Typically 10-20 |
-| Multi-agent swarm | Yes (Pro) | Rare |
-| Plugin system with MCP | Yes | Varies |
-| Long-term memory across sessions | Yes | Rare |
-| 11 color themes + custom | Yes | Limited |
-| Vim keybindings | Yes | Rare |
-| Works without an account | Yes | Usually requires signup |
-| Privacy-first (code stays local) | Yes | Varies |
+> *"No es solo otro wrapper de LLM: es una orquestación inteligente donde la máquina hace el 90% del trabajo y el LLM brilla en el 10% donde realmente aporta valor."*
+
+### Philosophy
+
+| Approach | KCode | Claude Code | Cursor | Aider |
+|----------|-------|-------------|--------|-------|
+| Core philosophy | **Machine-first** (pipelines + LLM) | LLM agent (extreme agentic) | AI-native IDE (vibe coding) | Pair-programming + Git |
+| Where LLM shines | End-stage only (pre-filtered context) | Almost everything | Heavy (editing) | High (direct edits) |
+| Token efficiency | **~10k per audit** | ~300k per audit | Medium-high | Medium |
+| Determinism | **High** (65 patterns, semantic guards) | Model-dependent | Model-dependent | Model-dependent |
+
+### Features
+
+| Feature | KCode | Claude Code | Cursor | Aider |
+|---------|-------|-------------|--------|-------|
+| Deterministic audit engine | **65 patterns, 16 languages** | -- | -- | -- |
+| Auto-fix + Auto-PR pipeline | **/scan /fix /pr** | Manual | Manual | Manual |
+| Runs 100% local (GPU) | **Yes (0 tokens)** | No (cloud-only) | No (cloud) | Yes (BYO keys) |
+| Hybrid local+cloud verification | **Yes (auto-detects)** | No | No | No |
+| NASA-validated findings | **PR #107 on nasa/IDF** | -- | -- | -- |
+| Task orchestrator (intent→pipeline) | **Yes (8 task types)** | No | No | No |
+| Open source | **Yes (AGPL-3.0)** | No (proprietary) | No (proprietary) | Yes |
+| Built-in tools | **48 tools** | ~30 tools | Many (plugins) | Good (Git focus) |
+| Slash commands | **160+** | ~20 | IDE commands | ~10 |
+| Long-term memory (SQLite FTS5) | **Yes** | Session-based | Project-based | Limited |
+| Privacy | **Code stays local** | Cloud-only | Cloud | Local possible |
+| Multi-GPU inference | **Yes (llama.cpp RPC)** | No | No | No |
+| Plugin system + MCP | **Yes** | Yes | Yes (plugins) | No |
+| Cost | **Free (local) + $19/mo Pro** | $20-200/mo | $20-60/mo | Free + API cost |
+
+### When to choose what
+
+- **KCode** -- Audits, debug, scaffolding, privacy-critical projects, cost-sensitive teams, deterministic workflows
+- **Claude Code** -- Maximum reasoning depth, complex multi-file problems, full autonomy
+- **Cursor** -- Daily development, prototyping, visual IDE experience
+- **Aider** -- Simple pair-programming, Git-first workflows
 
 ---
 
