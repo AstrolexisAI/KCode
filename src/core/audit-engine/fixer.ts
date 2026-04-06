@@ -198,11 +198,20 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
     return { applied: false, lines, description: "Line out of range" };
   }
 
-  // Find the function that contains this line by walking backwards to
-  // find "decode(" and the opening "{"
+  // Find the function DEFINITION (not a call) by walking backwards.
+  // A definition has "::decode(" or "void ... decode(" — a call is just "decode(data);"
   let funcStart = -1;
-  for (let i = idx; i >= Math.max(0, idx - 20); i--) {
-    if (lines[i]!.includes("decode(") || lines[i]!.includes("decode (")) {
+  for (let i = idx; i >= Math.max(0, idx - 30); i--) {
+    const line = lines[i]!;
+    if (
+      (line.includes("::decode(") || line.includes("::decode (")) &&
+      !line.trim().endsWith(";") // definitions don't end with ;
+    ) {
+      funcStart = i;
+      break;
+    }
+    // Also match standalone function defs: "void decode(" at start of line
+    if (/^\s*(void|int|size_t|bool)\s+\w*decode\s*\(/.test(line)) {
       funcStart = i;
       break;
     }
