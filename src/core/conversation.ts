@@ -500,8 +500,37 @@ export class ConversationManager {
       const task = classifyTask(userMessage);
 
       if (task.type !== "general" && task.confidence >= 0.8) {
-        // Debug tasks get the specialized debug engine
-        if (task.type === "debug") {
+        // Specialized engines for each task type
+        if (task.type === "implement") {
+          try {
+            const { buildImplementPrompt } = await import("./implement-engine/scaffold.js");
+            const result = buildImplementPrompt(userMessage, this.config.workingDirectory);
+            orchestratedMessage = result.prompt;
+            log.info(
+              "orchestrator",
+              `Implement engine: ${result.project.framework} (${result.project.language}), ` +
+                `${result.patterns.length} patterns found, ${result.estimatedFiles.length} files to create`,
+            );
+          } catch (err) {
+            log.debug("implement-engine", `Implement engine skipped: ${err}`);
+          }
+        } else if (task.type === "test") {
+          try {
+            const { buildTestPrompt } = await import("./test-engine/generator.js");
+            const files = task.entities.files ?? [];
+            if (files.length > 0) {
+              const result = buildTestPrompt(files[0]!, userMessage, this.config.workingDirectory);
+              orchestratedMessage = result.prompt;
+              log.info(
+                "orchestrator",
+                `Test engine: ${result.functions.length} functions, ` +
+                  `${result.edgeCases.length} edge cases, framework: ${result.framework.name}`,
+              );
+            }
+          } catch (err) {
+            log.debug("test-engine", `Test engine skipped: ${err}`);
+          }
+        } else if (task.type === "debug") {
           try {
             const { collectEvidence, buildDebugPrompt } = await import("./debug-engine/evidence-collector.js");
             const evidence = await collectEvidence({
