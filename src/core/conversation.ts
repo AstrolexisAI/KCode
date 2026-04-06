@@ -478,6 +478,40 @@ export class ConversationManager {
     // pipeline to pre-process context. The LLM receives focused context +
     // specific prompt instead of raw "figure it out" requests.
     // This is what makes KCode faster than sending everything to the LLM.
+    // Level 0: detect multi-step workflow chains (0 tokens, auto-chains engines)
+    try {
+      const { detectChain, executeChain } = await import("./task-orchestrator/workflow-chain.js");
+      const chain = detectChain(userMessage);
+      if (chain) {
+        this.state.messages.push({ role: "user", content: userMessage });
+        const lines: string[] = [`  ⛓ Workflow: ${chain}\n`];
+        const result = await executeChain(chain, this.config.workingDirectory, (step, i, total) => {
+          const icon = step.status === "done" ? "✅"
+            : step.status === "failed" ? "❌"
+            : step.status === "skipped" ? "⏭"
+            : step.status === "running" ? "⚡" : "⏳";
+          // Emit progress per step
+          if (step.status !== "pending") {
+            lines.push(
+              `  ${icon} ${step.name}${step.durationMs ? ` (${(step.durationMs / 1000).toFixed(1)}s)` : ""}` +
+              (step.output ? `\n     ${step.output.split("\n")[0]?.slice(0, 80)}` : ""),
+            );
+          }
+        });
+        lines.push("");
+        lines.push(result.success ? "  ✅ Workflow complete" : "  ⚠️ Workflow completed with issues");
+        lines.push(`  Total: ${(result.totalMs / 1000).toFixed(1)}s`);
+        const output = lines.join("\n");
+        this.state.messages.push({ role: "assistant", content: output });
+        yield { type: "text", text: output };
+        yield { type: "turn_end", inputTokens: 0, outputTokens: 0 };
+        log.info("orchestrator", `Chain "${chain}" completed: ${result.steps.length} steps, ${result.totalMs}ms, 0 tokens`);
+        return;
+      }
+    } catch (err) {
+      log.debug("orchestrator", `Chain detection skipped: ${err}`);
+    }
+
     // Level 1: try to handle deterministically without LLM (0 tokens)
     try {
       const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
