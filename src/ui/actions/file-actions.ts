@@ -574,6 +574,46 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return lines.join("\n");
     }
 
+    case "web": {
+      const desc = (args ?? "").trim();
+      if (!desc) {
+        return [
+          "  Usage: /web <description>",
+          "",
+          "  Examples:",
+          "    /web landing page for my AI startup",
+          "    /web SaaS dashboard with auth and payments",
+          "    /web e-commerce store for handmade jewelry",
+          "    /web personal portfolio",
+          "    /web blog with markdown support",
+        ].join("\n");
+      }
+
+      const { createWebProject } = await import("../../core/web-engine/web-engine.js");
+      const result = createWebProject(desc, appConfig.workingDirectory);
+
+      const lines = [
+        "  KCode Web Engine",
+        `    Project:   ${result.intent.name}/`,
+        `    Type:      ${result.intent.siteType}`,
+        `    Stack:     ${result.intent.stack}`,
+        `    Features:  ${result.intent.features.join(", ")}`,
+        "",
+        `    📁 Machine-generated: ${result.machineFiles} files (0 tokens)`,
+        `    ✏️  Needs customization: ${result.llmFiles} files`,
+        "",
+        `    Project created at: ${result.projectPath}`,
+        "",
+        "  Next steps:",
+        `    1. Model will customize ${result.llmFiles} content files`,
+        `    2. cd ${result.intent.name} && npm install && npm run dev`,
+        "",
+        "  Sending to model for content customization...",
+      ];
+
+      return lines.join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 

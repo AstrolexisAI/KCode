@@ -118,6 +118,13 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_debug__`,
   },
   {
+    name: "web",
+    description: "Create a complete website/web app from a description (landing, SaaS, dashboard, blog, e-commerce)",
+    aliases: ["create-site", "website", "webapp"],
+    args: ["description of the site to create"],
+    template: `__builtin_web__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],

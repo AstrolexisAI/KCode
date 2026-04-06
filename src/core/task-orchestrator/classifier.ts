@@ -37,6 +37,15 @@ const RULES: Rule[] = [
     ],
     confidence: 0.9,
   },
+  // ── Web Creation (high confidence — specific keywords) ──
+  {
+    type: "implement" as TaskType,
+    patterns: [
+      /\b(?:create|build|make|crea|construye|haz)\s+(?:a\s+)?(?:\w+\s+)*(?:website|web\s*(?:site|app|page)|landing\s*(?:page)?|dashboard|blog|portfolio|tienda|store|sitio\s*web|p[aá]gina\s*web)\b/i,
+      /\b(?:saas|e-?commerce)\s+(?:app|site|website|platform|plataforma)\b/i,
+    ],
+    confidence: 0.95,
+  },
   // ── Implement ────────────────────────────────────
   {
     type: "implement",
