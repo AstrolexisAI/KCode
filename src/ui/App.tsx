@@ -720,16 +720,17 @@ export default function App({ config, conversationManager, tools, initialSession
           </Box>
         )}
 
-        {/* Escalation prompt — shown when local model can't verify and cloud is available */}
+        {/* Second opinion prompt — shown when FPs or uncertain findings exist */}
         {scanProgress && (scanProgress as any).pendingEscalation && (
           <Box marginLeft={2} marginBottom={0} flexDirection="column">
             <Text color="yellow">
-              {"  ⚠️  "}{(scanProgress as any).pendingEscalation.count}{" finding(s) need deeper analysis."}
+              {"  ⚠️  "}{(scanProgress as any).pendingEscalation.reason}
             </Text>
             <Text color="yellow">
-              {"     Escalate to ☁ "}{(scanProgress as any).pendingEscalation.provider}{"? [Y/n] "}
-              <Text bold inverse>{" Y "}</Text>
-              <Text dimColor>{" — press Y to escalate, N to skip"}</Text>
+              {"     Get second opinion from ☁ "}{(scanProgress as any).pendingEscalation.provider}{"? "}
+              <Text bold color="green">{"Y"}</Text>
+              <Text>{"/"}</Text>
+              <Text bold color="red">{"n"}</Text>
             </Text>
           </Box>
         )}

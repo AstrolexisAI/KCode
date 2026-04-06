@@ -82,18 +82,20 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
             },
           });
 
-          // Phase 2: if there are NEEDS_CONTEXT and cloud is available, ask user
-          const needsContext = result.findings.length === 0
-            ? (result as any)._needsContext ?? []
-            : [];
-          // Count needs_context from the raw verified results
+          // Phase 2: if there are FPs or NEEDS_CONTEXT and cloud is available, offer second opinion
+          const fpCount = result.false_positives;
           const ncCount = result.candidates_found - result.confirmed_findings - result.false_positives;
+          const reviewable = fpCount + ncCount;
 
-          if (ncCount > 0 && fallbackCallback) {
-            scanState.phase = `${ncCount} finding(s) need deeper analysis`;
+          if (reviewable > 0 && fallbackCallback) {
+            const reason = fpCount > 0
+              ? `${fpCount} marked as false positive${ncCount > 0 ? `, ${ncCount} uncertain` : ""}`
+              : `${ncCount} need deeper analysis`;
+            scanState.phase = reason;
             scanState.pendingEscalation = {
-              count: ncCount,
+              count: reviewable,
               provider: scanState.cloudProvider ?? "cloud",
+              reason,
             };
 
             // Wait for user to approve/deny (polled by App.tsx)
