@@ -267,6 +267,66 @@ export async function explainPipeline(task: ClassifiedTask, cwd: string): Promis
   };
 }
 
+// ── Deploy Pipeline ────────────────────────────────────────────
+
+export async function deployPipeline(task: ClassifiedTask, cwd: string): Promise<PipelineResult> {
+  const steps: PipelineResult["steps"] = [];
+  const t0 = Date.now();
+
+  // Detect deployment method
+  const hasDockerfile = existsSync(join(cwd, "Dockerfile"));
+  const hasDockerCompose = existsSync(join(cwd, "docker-compose.yml")) || existsSync(join(cwd, "docker-compose.yaml"));
+  const hasGithubActions = existsSync(join(cwd, ".github/workflows"));
+  const hasVercel = existsSync(join(cwd, "vercel.json"));
+  const hasNetlify = existsSync(join(cwd, "netlify.toml"));
+  const hasFly = existsSync(join(cwd, "fly.toml"));
+  const hasK8s = existsSync(join(cwd, "k8s")) || existsSync(join(cwd, "kubernetes"));
+
+  const methods: string[] = [];
+  if (hasDockerfile) methods.push("Docker");
+  if (hasDockerCompose) methods.push("Docker Compose");
+  if (hasGithubActions) methods.push("GitHub Actions");
+  if (hasVercel) methods.push("Vercel");
+  if (hasNetlify) methods.push("Netlify");
+  if (hasFly) methods.push("Fly.io");
+  if (hasK8s) methods.push("Kubernetes");
+
+  steps.push({ name: "detect_deploy", output: methods.join(", ") || "none detected", durationMs: Date.now() - t0 });
+
+  // Read deploy configs
+  const t1 = Date.now();
+  let configs = "";
+  if (hasDockerfile) configs += `\n--- Dockerfile ---\n${readSafe(join(cwd, "Dockerfile"), 30)}\n`;
+  if (hasDockerCompose) {
+    const f = existsSync(join(cwd, "docker-compose.yml")) ? "docker-compose.yml" : "docker-compose.yaml";
+    configs += `\n--- ${f} ---\n${readSafe(join(cwd, f), 50)}\n`;
+  }
+  if (hasVercel) configs += `\n--- vercel.json ---\n${readSafe(join(cwd, "vercel.json"), 20)}\n`;
+  if (hasFly) configs += `\n--- fly.toml ---\n${readSafe(join(cwd, "fly.toml"), 30)}\n`;
+  steps.push({ name: "read_configs", output: `${methods.length} configs`, durationMs: Date.now() - t1 });
+
+  // Git status
+  const t2 = Date.now();
+  const branch = run("git branch --show-current 2>/dev/null", cwd);
+  const status = run("git status --short 2>/dev/null | head -10", cwd);
+  steps.push({ name: "git_status", output: branch || "(no git)", durationMs: Date.now() - t2 });
+
+  const context = truncate([
+    `## Deployment methods detected: ${methods.join(", ") || "none"}`,
+    "",
+    configs,
+    "",
+    `## Git: branch=${branch}, uncommitted=${status ? "yes" : "no"}`,
+    status ? `\n${status}` : "",
+  ].join("\n"), MAX_CONTEXT);
+
+  return {
+    steps,
+    context,
+    prompt: `The user wants to deploy: "${task.raw}"\n\nDeployment context:\n${context}\n\nProvide step-by-step deployment instructions using the detected method. If there are uncommitted changes, warn first.`,
+  };
+}
+
 // ── Pipeline Router ────────────────────────────────────────────
 
 export async function runPipeline(task: ClassifiedTask, cwd: string): Promise<PipelineResult | null> {
@@ -278,7 +338,7 @@ export async function runPipeline(task: ClassifiedTask, cwd: string): Promise<Pi
     case "test": return testPipeline(task, cwd);
     case "explain": return explainPipeline(task, cwd);
     case "audit": return null; // handled by /scan
-    case "deploy": return null; // too varied for pipeline
+    case "deploy": return deployPipeline(task, cwd);
     case "general": return null; // pass-through to LLM
     default: return null;
   }
