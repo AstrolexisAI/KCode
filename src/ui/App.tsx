@@ -240,36 +240,34 @@ export default function App({ config, conversationManager, tools, initialSession
       // Also poll PR generation state
       try {
         const { prState } = await import("../core/audit-engine/pr-state.js");
-        if (prState.active || prState.result || prState.error) {
-          setScanProgress((prev) =>
-            prState.active
-              ? {
-                  active: true,
-                  phase: `PR: ${prState.step}`,
-                  verified: 0,
-                  total: 0,
-                  confirmed: 0,
-                  elapsed: (Date.now() - prState.startTime) / 1000,
-                }
-              : prev,
-          );
-
-          if (!prState.active && prState.result) {
+        if (prState.active) {
+          setScanProgress({
+            active: true,
+            phase: `PR: ${prState.step}`,
+            verified: 0,
+            total: 0,
+            confirmed: 0,
+            elapsed: (Date.now() - prState.startTime) / 1000,
+          });
+        } else if (prState.result) {
+          // Capture before clearing to avoid race with React render
+          const text = prState.result.prDescription;
+          prState.result = undefined;
+          setScanProgress(null);
+          if (text) {
             setCompleted((prev) => [
               ...prev,
-              { kind: "text", role: "assistant", text: prState.result!.prDescription },
+              { kind: "text", role: "assistant", text },
             ]);
-            prState.result = undefined;
-            setScanProgress(null);
           }
-          if (!prState.active && prState.error) {
-            setCompleted((prev) => [
-              ...prev,
-              { kind: "text", role: "assistant", text: `  ✗ PR error: ${prState.error}` },
-            ]);
-            prState.error = undefined;
-            setScanProgress(null);
-          }
+        } else if (prState.error) {
+          const errMsg = prState.error;
+          prState.error = undefined;
+          setScanProgress(null);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: `  ✗ PR error: ${errMsg}` },
+          ]);
         }
       } catch { /* pr-state module not loaded */ }
     }, 200);
