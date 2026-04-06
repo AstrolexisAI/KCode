@@ -831,6 +831,16 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return [`  KCode Elixir Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  mix run --no-halt / mix test`].join("\n");
     }
 
+    case "css":
+    case "design-system": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /css design system with dark mode\n  /css component library called myui\n  /css Tailwind plugin for animations\n  /css animation library\n  /css Sass framework";
+      const { createCssProject } = await import("../../core/web-engine/stacks/css-engine.js");
+      const r = createCssProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode CSS Engine`, `    ${r.config.name}/ | ${r.config.type} | ${r.files.length} files (${m} machine)`, `    Preprocessor: ${r.config.preprocessor} | Dark mode: ${r.config.darkMode ? "yes" : "no"}`, "", `  npm run dev / npm run build`].join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
