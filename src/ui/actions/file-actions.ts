@@ -659,6 +659,30 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       ].join("\n");
     }
 
+    case "python": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /python FastAPI for task management\n  /python web scraper for news\n  /python ML pipeline for sentiment analysis\n  /py CLI tool for file processing\n  /py Discord bot";
+
+      const { createPyProject } = await import("../../core/web-engine/stacks/python-engine.js");
+      const result = createPyProject(desc, appConfig.workingDirectory);
+      const machine = result.files.filter(f => !f.needsLlm).length;
+      const llm = result.files.filter(f => f.needsLlm).length;
+
+      return [
+        "  KCode Python Engine",
+        `    Project:      ${result.config.name}/`,
+        `    Type:         ${result.config.type}`,
+        `    Python:       ${result.config.pythonVersion}`,
+        result.config.framework ? `    Framework:    ${result.config.framework}` : "",
+        `    Dependencies: ${result.config.dependencies.slice(0, 5).join(", ")}${result.config.dependencies.length > 5 ? " +" + (result.config.dependencies.length - 5) + " more" : ""}`,
+        `    Files:        ${result.files.length} (${machine} machine, ${llm} LLM)`,
+        "",
+        `  Setup: cd ${result.config.name} && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"`,
+        `  Run:   make run`,
+        `  Test:  make test`,
+      ].filter(Boolean).join("\n");
+    }
+
     case "cpp": {
       const desc = (args ?? "").trim();
       if (!desc) return "  Usage: /cpp HTTP server with SQLite\n  /cpp embedded firmware for ESP32\n  /cpp game engine with OpenGL\n  /c library for data compression";
