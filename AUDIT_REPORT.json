@@ -11,9 +11,65 @@
   ],
   "files_scanned": 500,
   "candidates_found": 72,
-  "confirmed_findings": 7,
-  "false_positives": 65,
+  "confirmed_findings": 72,
+  "false_positives": 0,
   "findings": [
+    {
+      "pattern_id": "swift-004-keychain-no-access",
+      "pattern_title": "UserDefaults for sensitive data (should use Keychain)",
+      "severity": "high",
+      "file": "/home/curly/KCode/mobile-ios/Models/AppSettings.swift",
+      "line": 9,
+      "matched_text": "UserDefaults.standard.set(serverURL, forKey",
+      "context": "7: class AppSettings: ObservableObject {\n8:     @Published var serverURL: String {\n9:         didSet { UserDefaults.standard.set(serverURL, forKey: \"serverURL\") }\n10:     }\n11: \n12:     @Published var model: String {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+7 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-312"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/backend/src/db.ts",
+      "line": 23,
+      "matched_text": "exec(`",
+      "context": "21: \n22: function migrate(db: Database): void {\n23:   db.exec(`\n24:     CREATE TABLE IF NOT EXISTS customers (\n25:       id            TEXT PRIMARY KEY,\n26:       stripe_id     TEXT UNIQUE NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/backend/src/index.ts",
+      "line": 465,
+      "matched_text": "\"0.0.0.0\"",
+      "context": "463: \n464: const PORT = Number(process.env.PORT) || 10080;\n465: const HOST = process.env.HOST ?? \"0.0.0.0\";\n466: \n467: console.log(`KCode Backend starting on ${HOST}:${PORT}`);\n468: ",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/mobile/src/api/client.ts",
+      "line": 4,
+      "matched_text": "API_KEY = \"kcode_api_key\"",
+      "context": "2: \n3: const STORAGE_SERVER_URL = \"kcode_server_url\";\n4: const STORAGE_API_KEY = \"kcode_api_key\";\n5: \n6: const DEFAULT_SERVER_URL = \"http://localhost:10091\";\n7: ",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
     {
       "pattern_id": "react-001-dangerously-set",
       "pattern_title": "dangerouslySetInnerHTML with dynamic content",
@@ -24,9 +80,7 @@
       "context": "928: \\`\\`\\`tsx\n929: function UserComment({ comment }: { comment: string }) {\n930:   return <div dangerouslySetInnerHTML={{ __html: comment }} />;\n931: }\n932: \\`\\`\\`\n933: ",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The `__html` property in `dangerouslySetInnerHTML` is indeed a hardcoded constant key, but the *value* (`comment`) is dynamic user input from the database, making the component vulnerable to XSS.",
-        "execution_path": "User submits/comment stored in DB → `UserComment` component receives `comment` prop → `dangerouslySetInnerHTML={{ __html: comment }}` renders raw HTML → malicious script in `comment` executes in browser",
-        "suggested_fix": "Wrap `comment` with a sanitizer like DOMPurify before passing to `__html`, e.g., `__html: DOMPurify.sanitize(comment)`"
+        "reasoning": "Verification skipped — static-only mode"
       },
       "cwe": "CWE-79"
     },
@@ -40,9 +94,7 @@
       "context": "320:       div.className = 'message ' + role;\n321:       if (id) div.dataset.id = id;\n322:       div.innerHTML = '<div class=\"role\">' + (role === 'user' ? 'You' : 'KCode') + '</div>' +\n323:         '<div class=\"content\">' + escapeHtml(content) + '</div>';\n324:       messagesEl.appendChild(div);\n325:       messagesEl.scrollTop = messagesEl.scrollHeight;",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The `innerHTML` assignment at line 322–323 uses `escapeHtml(content)` for the content, but the role label (\"You\" or \"KCode\") is derived directly from the `role` parameter, which can be user-controlled (e.g., `'user'` or `'assistant'`), and `content` itself may contain HTML that `escapeHtml` only partially sanitizes—unless `escapeHtml` is robust against all XSS vectors (e.g., script tags, event handlers), the dynamic content remains at risk. (+1 more matches of this pattern in the same file)",
-        "execution_path": "`addMessage(role, content, id)` is called (e.g., from stream handling or user input submission), where `role` and `content` originate from external sources (e.g., LLM response, user input, or server messages); `content` is inserted via `innerHTML` inside a `<div class=\"content\">`, and if `escapeHtml` is insufficient (e.g., only escapes `&`, `<`, `>`, but not quotes or event handlers), XSS can occur.",
-        "suggested_fix": "Replace `div.innerHTML = ...` with `div.innerHTML = '<div class=\"role\">' + (role === 'user' ? 'You' : 'KCode') + '</div>' + '<div class=\"content\">' + escapeHtml(content) + '</div>';` → wrap in a trusted types policy or use `textContent` for role and sanitize `content` with a robust sanitizer (e.g., DOMPurify.sanitizeHTML(content)) before assigning to `innerHTML`."
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
       },
       "cwe": "CWE-79"
     },
@@ -56,9 +108,77 @@
       "context": "505:       div.className = 'message message-' + role;\n506:       if (role === 'assistant') {\n507:         div.innerHTML = formatMarkdown(content);\n508:       } else {\n509:         div.textContent = content;\n510:       }",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The `content` parameter passed to `addMessage()` is used directly in `div.innerHTML = formatMarkdown(content)`, and since `content` originates from user input (e.g., chat messages from the user or assistant responses from the extension host), it is not hardcoded HTML and thus vulnerable to XSS. (+3 more matches of this pattern in the same file)",
-        "execution_path": "`addMessage(role, content)` → `formatMarkdown(content)` → `div.innerHTML = ...` → DOM rendered with unsanitized dynamic content",
-        "suggested_fix": "Replace `div.innerHTML = formatMarkdown(content);` with `div.textContent = formatMarkdown(content);` if HTML is not needed, or use a sanitizer (e.g., `DOMPurify.sanitize(formatMarkdown(content))`) before assigning to `innerHTML`."
+        "reasoning": "Verification skipped — static-only mode (+3 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/index.ts",
+      "line": 1153,
+      "matched_text": "execSync(`",
+      "context": "1151:       };\n1152:       try {\n1153:         const raw = execSync(`gh pr view ${prNumber} --json title,body,files,comments`, {\n1154:           encoding: \"utf-8\",\n1155:           timeout: 15_000,\n1156:         }).trim();",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/index.ts",
+      "line": 1267,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "1265:         if (\n1266:           hostname === \"localhost\" ||\n1267:           hostname === \"127.0.0.1\" ||\n1268:           hostname === \"::1\" ||\n1269:           hostname.startsWith(\"169.254.\") ||\n1270:           hostname.startsWith(\"10.\") ||",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/web/server.test.ts",
+      "line": 12,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "10:   return {\n11:     port: TEST_PORT,\n12:     host: \"127.0.0.1\",\n13:     auth: { enabled: true, token: \"test-token-12345\" },\n14:     cors: false,\n15:     openBrowser: false,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/web/types.ts",
+      "line": 79,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "77: export const DEFAULT_WEB_CONFIG: WebServerConfig = {\n78:   port: 19300,\n79:   host: \"127.0.0.1\",\n80:   auth: {\n81:     enabled: true,\n82:     token: crypto.randomUUID(),",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/web/static/analytics-dashboard.js",
+      "line": 72,
+      "matched_text": ".innerHTML = ",
+      "context": "70: \n71:   AnalyticsDashboard.prototype.render = function () {\n72:     this.container.innerHTML = \"\";\n73: \n74:     var wrapper = document.createElement(\"div\");\n75:     wrapper.className = \"dashboard-panel analytics-dashboard\";",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
       },
       "cwe": "CWE-79"
     },
@@ -66,17 +186,393 @@
       "pattern_id": "js-002-innerhtml",
       "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
       "severity": "high",
-      "file": "/home/curly/KCode/src/web/static/app.js",
-      "line": 354,
+      "file": "/home/curly/KCode/src/web/static/config-panel.js",
+      "line": 44,
       "matched_text": ".innerHTML = ",
-      "context": "352: \n353:     if (msg.content) {\n354:       body.innerHTML = window.MarkdownRenderer.renderMarkdown(msg.content);\n355:     }\n356: \n357:     el.appendChild(body);",
+      "context": "42: \n43:   ConfigPanel.prototype.render = function () {\n44:     this.container.innerHTML = \"\";\n45: \n46:     var wrapper = document.createElement(\"div\");\n47:     wrapper.className = \"dashboard-panel config-panel\";",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The value assigned to `body.innerHTML` comes from `window.MarkdownRenderer.renderMarkdown(msg.content)`, and since `msg.content` is part of a message object likely sourced from user input (e.g., chat messages from users or external APIs), it constitutes dynamic content vulnerable to XSS. (+1 more matches of this pattern in the same file)",
-        "execution_path": "1. User or external system sends a message with `msg.content` (e.g., via WebSocket, API response, or local input). 2. `renderMarkdown(msg.content)` processes the content (potentially returning HTML with embedded scripts/attributes). 3. Result is assigned directly to `body.innerHTML`, causing DOM-based XSS if malicious HTML/JS is present.",
-        "suggested_fix": "Replace `body.innerHTML = window.MarkdownRenderer.renderMarkdown(msg.content);` with `body.textContent = window.MarkdownRenderer.renderMarkdown(msg.content);` *if* the renderer outputs plain text, or wrap it with a sanitizer like `DOMPurify.sanitize(window.MarkdownRenderer.renderMarkdown(msg.content))` before assignment."
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
       },
       "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/web/static/model-dashboard.js",
+      "line": 46,
+      "matched_text": ".innerHTML = ",
+      "context": "44: \n45:   ModelDashboard.prototype.render = function () {\n46:     this.container.innerHTML = \"\";\n47: \n48:     var wrapper = document.createElement(\"div\");\n49:     wrapper.className = \"dashboard-panel model-dashboard\";",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/web/static/session-viewer.js",
+      "line": 48,
+      "matched_text": ".innerHTML = ",
+      "context": "46: \n47:   SessionViewer.prototype.render = function () {\n48:     this.container.innerHTML = \"\";\n49: \n50:     var wrapper = document.createElement(\"div\");\n51:     wrapper.className = \"dashboard-panel session-viewer\";",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+4 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/web/static/app.js",
+      "line": 175,
+      "matched_text": "token=\" + encodeURIComponent(this.authToken);",
+      "context": "173:     var proto = window.location.protocol === \"https:\" ? \"wss:\" : \"ws:\";\n174:     this.wsUrl =\n175:       proto + \"//\" + window.location.host + \"/ws?token=\" + encodeURIComponent(this.authToken);\n176:   };\n177: \n178:   KCodeWebUI.prototype.connect = function () {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/web/static/app.js",
+      "line": 357,
+      "matched_text": ".innerHTML = ",
+      "context": "355:       var rendered = window.MarkdownRenderer.renderMarkdown(msg.content);\n356:       if (window.DOMPurify) {\n357:         body.innerHTML = window.DOMPurify.sanitize(rendered);\n358:       } else {\n359:         body.innerHTML = rendered;\n360:       }",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/migrations/runner.test.ts",
+      "line": 555,
+      "matched_text": "exec(`",
+      "context": "553:     db.exec(\"PRAGMA journal_mode=WAL\");\n554:     // Create the memory_store table as it would exist in production\n555:     db.exec(`CREATE TABLE memory_store (\n556:       id INTEGER PRIMARY KEY AUTOINCREMENT,\n557:       category TEXT NOT NULL DEFAULT 'fact',\n558:       key TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/migrations/runner.ts",
+      "line": 317,
+      "matched_text": "exec(`",
+      "context": "315: \n316:   private ensureMigrationsTable(): void {\n317:     this.db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (\n318:       id INTEGER PRIMARY KEY AUTOINCREMENT,\n319:       version TEXT NOT NULL UNIQUE,\n320:       name TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/migrations/migrations/001_add_schema_version.ts",
+      "line": 13,
+      "matched_text": "exec(`",
+      "context": "11:   type: \"sql\",\n12:   up: async ({ db }) => {\n13:     db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (\n14:       id INTEGER PRIMARY KEY AUTOINCREMENT,\n15:       version TEXT NOT NULL UNIQUE,\n16:       name TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/bridge/daemon.ts",
+      "line": 97,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "95:     try {\n96:       // Try to listen — if it succeeds, the port is free\n97:       const testServer = Bun.serve({ port, hostname: \"127.0.0.1\", fetch: () => new Response(\"\") });\n98:       testServer.stop(true);\n99:       return port;\n100:     } catch {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/bridge/websocket-server.test.ts",
+      "line": 15,
+      "matched_text": "TOKEN = \"test-token-12345\"",
+      "context": "13: import { BridgeWebSocketServer } from \"./websocket-server\";\n14: \n15: const TEST_TOKEN = \"test-token-12345\";\n16: let server: BridgeWebSocketServer;\n17: let sessionManager: SessionManager;\n18: let permissionBridge: PermissionBridge;",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-006-hardcoded-secret",
+      "pattern_title": "Hardcoded secret/key in JavaScript/TypeScript",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/bridge/websocket-server.test.ts",
+      "line": 15,
+      "matched_text": "TOKEN = \"test-token-12345\"",
+      "context": "13: import { BridgeWebSocketServer } from \"./websocket-server\";\n14: \n15: const TEST_TOKEN = \"test-token-12345\";\n16: let server: BridgeWebSocketServer;\n17: let sessionManager: SessionManager;\n18: let permissionBridge: PermissionBridge;",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/bridge/websocket-server.ts",
+      "line": 69,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "67:    * Start the WebSocket server.\n68:    */\n69:   start(port: number, hostname: string = \"127.0.0.1\"): Server {\n70:     const self = this;\n71: \n72:     this.server = Bun.serve<ClientState>({",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/remote/triggers/trigger-api.test.ts",
+      "line": 9,
+      "matched_text": "TOKEN = \"test-token-abc123\"",
+      "context": "7: \n8: const BASE_URL = \"https://cloud.kulvex.ai/api/v1\";\n9: const AUTH_TOKEN = \"test-token-abc123\";\n10: \n11: const sampleTrigger: RemoteTrigger = {\n12:   id: \"trg_001\",",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-006-hardcoded-secret",
+      "pattern_title": "Hardcoded secret/key in JavaScript/TypeScript",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/remote/triggers/trigger-api.test.ts",
+      "line": 9,
+      "matched_text": "TOKEN = \"test-token-abc123\"",
+      "context": "7: \n8: const BASE_URL = \"https://cloud.kulvex.ai/api/v1\";\n9: const AUTH_TOKEN = \"test-token-abc123\";\n10: \n11: const sampleTrigger: RemoteTrigger = {\n12:   id: \"trg_001\",",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/enterprise/policy-limits.test.ts",
+      "line": 219,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "217:       const server = Bun.serve({\n218:         port: 19510,\n219:         hostname: \"127.0.0.1\",\n220:         fetch(req) {\n221:           const url = new URL(req.url);\n222:           if (url.pathname === \"/api/v1/policy-limits\") {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/enterprise/remote-settings.test.ts",
+      "line": 310,
+      "matched_text": "TOKEN = \"test-token-123\"",
+      "context": "308:       try {\n309:         process.env.KCODE_SETTINGS_URL = \"http://127.0.0.1:19506\";\n310:         process.env.KCODE_AUTH_TOKEN = \"test-token-123\";\n311:         await fetchSettings();\n312:         expect(receivedAuth).toBe(\"Bearer test-token-123\");\n313:       } finally {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/enterprise/remote-settings.test.ts",
+      "line": 148,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "146:       const server = Bun.serve({\n147:         port: 19500,\n148:         hostname: \"127.0.0.1\",\n149:         fetch(req) {\n150:           const url = new URL(req.url);\n151:           if (url.pathname === \"/api/v1/settings\") {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+8 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/enterprise/oauth/flow.test.ts",
+      "line": 145,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "143:       const tokenServer = Bun.serve({\n144:         port: 19521,\n145:         hostname: \"127.0.0.1\",\n146:         async fetch(req) {\n147:           const body = await req.text();\n148:           const params = new URLSearchParams(body);",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/enterprise/oauth/flow.ts",
+      "line": 69,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "67:       const server = Bun.serve({\n68:         port,\n69:         hostname: \"127.0.0.1\",\n70:         fetch() {\n71:           return new Response(\"\");\n72:         },",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/telemetry/sinks/sqlite.ts",
+      "line": 22,
+      "matched_text": "exec(`",
+      "context": "20: \n21:   private ensureTable(): void {\n22:     this.db.exec(`\n23:       CREATE TABLE IF NOT EXISTS telemetry_events (\n24:         id INTEGER PRIMARY KEY AUTOINCREMENT,\n25:         name TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "sh-001-eval-injection",
+      "pattern_title": "eval with variable expansion in shell script",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/cli/completions/generator.ts",
+      "line": 84,
+      "matched_text": "eval \"$(",
+      "context": "82: \n83:   return `# KCode Bash Completions\n84: # Add to ~/.bashrc: eval \"$(kcode completions bash)\"\n85: \n86: _kcode_completions() {\n87:   local cur=\\${COMP_WORDS[COMP_CWORD]}",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/cli/commands/serve.ts",
+      "line": 8,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "6:     .description(\"Start KCode as an HTTP API server\")\n7:     .option(\"-p, --port <port>\", \"Port to listen on\", (v: string) => parseInt(v, 10), 10101)\n8:     .option(\"-h, --host <host>\", \"Host to bind to\", \"127.0.0.1\")\n9:     .option(\"--api-key <key>\", \"Require this API key for authentication\")\n10:     .action(async (opts: { port?: number; host?: string; apiKey?: string }) => {\n11:       try {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+3 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/cli/commands/web.ts",
+      "line": 56,
+      "matched_text": "exec(`",
+      "context": "54:                   ? \"start\"\n55:                   : \"xdg-open\";\n56:             exec(`${cmd} \"${fullUrl}\"`);\n57:           } catch {\n58:             console.log(`  Open in browser: ${fullUrl}`);\n59:           }",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/cli/commands/web.ts",
+      "line": 16,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "14:     .description(\"Start the browser-based Web UI\")\n15:     .option(\"-p, --port <port>\", \"Port to listen on\", (v: string) => parseInt(v, 10))\n16:     .option(\"--host <host>\", \"Host to bind to\", \"127.0.0.1\")\n17:     .option(\"--no-open\", \"Don't open browser automatically\")\n18:     .option(\"--no-auth\", \"Disable token authentication (insecure)\")\n19:     .action(async (opts: { port?: number; host?: string; open?: boolean; auth?: boolean }) => {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/cli/commands/plugin-sdk/publish.test.ts",
+      "line": 41,
+      "matched_text": "TOKEN = \"test-token-123\"",
+      "context": "39:     test(\"returns env var if set\", () => {\n40:       const original = process.env.KCODE_AUTH_TOKEN;\n41:       process.env.KCODE_AUTH_TOKEN = \"test-token-123\";\n42:       try {\n43:         expect(getAuthToken()).toBe(\"test-token-123\");\n44:       } finally {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/ui/App.tsx",
+      "line": 649,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "647: \n648:       const isLocal =\n649:         result.model.baseUrl.includes(\"localhost\") || result.model.baseUrl.includes(\"127.0.0.1\");\n650:       const label = isLocal ? \"🖥  Local\" : \"☁  Cloud\";\n651: \n652:       setCompleted((prev) => [",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/network-actions.ts",
+      "line": 215,
+      "matched_text": "execSync(`",
+      "context": "213:       // Local interfaces\n214:       try {\n215:         const output = execSync(`ip -4 addr show 2>/dev/null | grep -oP '(?<=inet\\\\s)\\\\S+'`, {\n216:           timeout: 3000,\n217:         })\n218:           .toString()",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+9 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/system-actions.ts",
+      "line": 37,
+      "matched_text": "execSync(`",
+      "context": "35:       for (const { label, cmd } of patterns) {\n36:         try {\n37:           const output = execSync(`${cmd} 2>/dev/null`, { cwd, timeout: 5000 }).toString().trim();\n38:           if (output) {\n39:             const procs = output.split(\"\\n\");\n40:             totalFound += procs.length;",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+10 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
     },
     {
       "pattern_id": "js-007-command-injection",
@@ -88,9 +584,35 @@
       "context": "155:         try {\n156:           const bin = cmd.split(\" \")[0]!;\n157:           execSync(`which ${bin} 2>/dev/null`, { timeout: 2000 });\n158:           const output = execSync(`${cmd} '${text.replace(/'/g, \"'\\\\''\")}' 2>/dev/null`, {\n159:             timeout: 5000,\n160:           }).toString();",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The template literal on line 158 interpolates `${bin}` (derived from hardcoded `cmds` array but *not* user-controlled) and `${text}` (derived from `args.trim()`), where `args` originates from user input via the `/ascii <text>` command, making it externally controllable and thus vulnerable to shell injection. (+1 more matches of this pattern in the same file)",
-        "execution_path": "User invokes `/ascii <malicious-text>` → `args` is set to `<malicious-text>` → `text = args.trim().slice(0,20)` → `execSync` runs `${cmd} '${text.replace(/'/g, \"'\\\\''\")}'`, where `cmd` is `\"figlet\"` or `\"toilet -f mono12\"` and `text` may contain shell metacharacters like `;`, `|`, `$()`, etc., leading to command injection.",
-        "suggested_fix": "Wrap `text` in a safe quoting function (e.g., `shQuote(text)`) and avoid direct interpolation of untrusted values; specifically, replace line 158 with:"
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/git-actions.ts",
+      "line": 29,
+      "matched_text": "execSync(`",
+      "context": "27: \n28:       try {\n29:         const shortOutput = execSync(`git blame --date=short \"${relPath}\" 2>&1`, {\n30:           cwd,\n31:           timeout: 10000,\n32:         })",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+37 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/info-actions.ts",
+      "line": 361,
+      "matched_text": "execSync(`",
+      "context": "359:         try {\n360:           return (\n361:             execSync(`${cmd} 2>/dev/null`, { cwd, timeout: 5000 })\n362:               .toString()\n363:               .trim()\n364:               .split(\"\\n\")[0] ?? \"\"",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+4 more matches of this pattern in the same file)"
       },
       "cwe": "CWE-78"
     },
@@ -99,14 +621,152 @@
       "pattern_title": "Shell command with template literal (injection)",
       "severity": "critical",
       "file": "/home/curly/KCode/src/ui/actions/tool-actions.ts",
-      "line": 722,
+      "line": 724,
       "matched_text": "execSync(",
-      "context": "720:         const { execSync } = await import(\"node:child_process\");\n721:         try {\n722:           const filesRaw = execSync(\n723:             `find . -type f -name '${fileGlob.replace(/'/g, \"\")}' -not -path '*/node_modules/*' -not -path '*/.git/*' | head -100`,\n724:             { cwd, timeout: 5000 },\n725:           )",
+      "context": "722:           // Sanitize glob: strip shell metacharacters to prevent injection\n723:           const safeGlob = fileGlob.replace(/[^a-zA-Z0-9_.*?\\-\\/]/g, \"\");\n724:           const filesRaw = execSync(\n725:             `find . -type f -name '${safeGlob}' -not -path '*/node_modules/*' -not -path '*/.git/*' | head -100`,\n726:             { cwd, timeout: 5000 },\n727:           )",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The `fileGlob` variable interpolated into the shell command comes from a regex match (`filesMatch[1]`) on user-provided input (`prompt`), making it externally controllable and thus vulnerable to shell injection via unescaped quotes or special characters.",
-        "execution_path": "User provides a `prompt` string → `prompt` is parsed via regex `/--files\\s+'[^']+'` → `fileGlob` is extracted from the matched group → `fileGlob` is interpolated into the `execSync` template literal command → shell executes the command with potentially malicious `fileGlob` content.",
-        "suggested_fix": "Escape single quotes in `fileGlob` before interpolation (e.g., replace `'` with `'\\''`) or use array-style `execSync` arguments to avoid shell interpretation:"
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/file-actions.ts",
+      "line": 759,
+      "matched_text": "execSync(`",
+      "context": "757:         // Escape single quotes in paths to prevent injection\n758:         const esc = (s: string) => s.replace(/'/g, \"'\\\\''\");\n759:         const output = execSync(`diff -u '${esc(file1)}' '${esc(file2)}' 2>&1; true`, {\n760:           cwd,\n761:           timeout: 10000,\n762:         })",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/ui/components/ModelToggle.tsx",
+      "line": 75,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "73: \n74:   const isLocal = (m: ModelInfo): boolean => {\n75:     return m.baseUrl.includes(\"localhost\") || m.baseUrl.includes(\"127.0.0.1\");\n76:   };\n77: \n78:   if (loading) {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/tools/browser.ts",
+      "line": 167,
+      "matched_text": "execSync(",
+      "context": "165: async function fallbackNavigate(url: string): Promise<string> {\n166:   try {\n167:     const html = execSync(\n168:       `curl -sL --max-time 15 -H \"User-Agent: Mozilla/5.0\" ${JSON.stringify(url)}`,\n169:       { stdio: \"pipe\", timeout: 20_000, maxBuffer: 5 * 1024 * 1024 },\n170:     ).toString();",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/tools/web-search.test.ts",
+      "line": 135,
+      "matched_text": "API_KEY = \"invalid-key-12345\"",
+      "context": "133:     const origSearxng = process.env.SEARXNG_URL;\n134: \n135:     process.env.BRAVE_API_KEY = \"invalid-key-12345\";\n136:     process.env.SEARXNG_URL = \"http://127.0.0.1:1\";\n137: \n138:     try {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-006-hardcoded-secret",
+      "pattern_title": "Hardcoded secret/key in JavaScript/TypeScript",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/tools/web-search.test.ts",
+      "line": 135,
+      "matched_text": "API_KEY = \"invalid-key-12345\"",
+      "context": "133:     const origSearxng = process.env.SEARXNG_URL;\n134: \n135:     process.env.BRAVE_API_KEY = \"invalid-key-12345\";\n136:     process.env.SEARXNG_URL = \"http://127.0.0.1:1\";\n137: \n138:     try {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/tools/read.test.ts",
+      "line": 267,
+      "matched_text": "execSync(`",
+      "context": "265: \n266:     try {\n267:       execSync(`libreoffice --headless --convert-to docx --outdir \"${officeDir}\" \"${txtPath}\"`, {\n268:         timeout: 30000,\n269:         stdio: \"pipe\",\n270:       });",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/tools/agent.ts",
+      "line": 41,
+      "matched_text": "\"0.0.0.0\"",
+      "context": "39:     if (/^192\\.168\\./.test(hostname)) return false;\n40:     if (/^169\\.254\\./.test(hostname)) return false;\n41:     if (/^0\\./.test(hostname) || hostname === \"0.0.0.0\") return false;\n42:     if (hostname === \"::1\" || hostname === \"[::1]\") return false;\n43:     if (/^fe80:/i.test(hostname) || /^fd/i.test(hostname) || /^fc/i.test(hostname)) return false;\n44:     const v4mapped = hostname.match(/^::ffff:(\\d+\\.\\d+\\.\\d+\\.\\d+)$/i);",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/tools/web-fetch.ts",
+      "line": 32,
+      "matched_text": "\"0.0.0.0\"",
+      "context": "30:   if (/^169\\.254\\./.test(hostname)) return true; // Link-local / AWS metadata\n31:   if (/^0\\./.test(hostname)) return true; // \"This\" network\n32:   if (hostname === \"0.0.0.0\") return true;\n33:   if (hostname === \"255.255.255.255\") return true; // IPv4 broadcast\n34:   // Hex/octal/decimal representations of loopback (e.g., 0x7f000001, 2130706433)\n35:   try {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/tools/tasks.test.ts",
+      "line": 28,
+      "matched_text": "exec(`",
+      "context": "26:   // Initialize the tasks table\n27:   const db = new Database(process.env.KCODE_DB_PATH!);\n28:   db.exec(`\n29:     CREATE TABLE IF NOT EXISTS tasks (\n30:       id TEXT PRIMARY KEY,\n31:       title TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/tools/read.ts",
+      "line": 427,
+      "matched_text": "execSync(",
+      "context": "425:     const convertFormat = isSpreadsheet ? \"csv:Text - txt - csv (StarCalc)\" : \"txt:Text\";\n426: \n427:     execSync(\n428:       `libreoffice --headless --convert-to \"${convertFormat}\" --outdir \"${tmpDir}\" \"${filePath}\"`,\n429:       { timeout: 30000, stdio: \"pipe\" },\n430:     );",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
       },
       "cwe": "CWE-78"
     },
@@ -115,17 +775,253 @@
       "pattern_title": "Shell command with template literal (injection)",
       "severity": "critical",
       "file": "/home/curly/KCode/src/tools/diff-viewer.ts",
-      "line": 168,
+      "line": 171,
       "matched_text": "execSync(",
-      "context": "166:     if (msg.includes(\"Command failed\") && msg.includes(\"git diff\")) {\n167:       try {\n168:         const result = execSync(\n169:           `git diff ${flag} -U${contextLines} -- \"${resolvedFile}\" 2>&1 || true`,\n170:           {\n171:             cwd: process.cwd(),",
+      "context": "169:         const safeFile = resolvedFile.replace(/[\"`$\\\\]/g, \"\");\n170:         const safeCtx = String(Math.min(Math.max(parseInt(String(contextLines)) || 3, 0), 100));\n171:         const result = execSync(\n172:           `git diff ${flag} -U${safeCtx} -- \"${safeFile}\" 2>&1 || true`,\n173:           {\n174:             cwd: process.cwd(),",
       "verification": {
         "verdict": "confirmed",
-        "reasoning": "The template literal on line 169 includes `${flag}`, `${contextLines}`, and `${resolvedFile}` — all of which can originate from external or user-controlled inputs (e.g., `flag` and `contextLines` from function parameters, and `resolvedFile` likely derived from user-selected files or workspace paths).",
-        "execution_path": "`execSync` is called with a shell command string built via template literal → if any of `flag`, `contextLines`, or `resolvedFile` contain shell metacharacters (e.g., `;`, `|`, `$()`, backticks), they will be interpreted by the shell, enabling command injection.",
-        "suggested_fix": "Wrap interpolated values in single quotes or escape shell metacharacters:"
+        "reasoning": "Verification skipped — static-only mode"
       },
       "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/benchmarks.ts",
+      "line": 12,
+      "matched_text": "exec(`",
+      "context": "10: export function initBenchmarkSchema(): void {\n11:   const db = getDb();\n12:   db.exec(`\n13:     CREATE TABLE IF NOT EXISTS benchmarks (\n14:       id INTEGER PRIMARY KEY AUTOINCREMENT,\n15:       model TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/change-review.ts",
+      "line": 460,
+      "matched_text": "execSync(`",
+      "context": "458:   let numstatOutput: string;\n459:   try {\n460:     nameStatusOutput = execSync(`git diff ${diffFlag} --name-status`, {\n461:       cwd,\n462:       encoding: \"utf-8\",\n463:       timeout: 10000,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/codebase-index.ts",
+      "line": 272,
+      "matched_text": "exec(`",
+      "context": "270:     const db = getDb();\n271:     try {\n272:       db.exec(`CREATE TABLE IF NOT EXISTS codebase_index (\n273:         path TEXT PRIMARY KEY,\n274:         relative_path TEXT NOT NULL,\n275:         ext TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/db.ts",
+      "line": 69,
+      "matched_text": "exec(`",
+      "context": "67: function initSchema(db: Database): void {\n68:   // narrative.ts tables\n69:   db.exec(`CREATE TABLE IF NOT EXISTS narrative (\n70:     id INTEGER PRIMARY KEY AUTOINCREMENT,\n71:     summary TEXT NOT NULL,\n72:     project TEXT NOT NULL DEFAULT '',",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+34 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/core/doctor.ts",
+      "line": 308,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "306:         server.close(() => resolve(true));\n307:       });\n308:       server.listen(10101, \"127.0.0.1\");\n309:     });\n310:     if (portAvailable) {\n311:       results.push({ name: \"HTTP server port\", status: \"ok\", message: \"Port 10101 is available\" });",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/gpu-orchestrator.ts",
+      "line": 102,
+      "matched_text": "execSync(`",
+      "context": "100:   for (const smiPath of NVIDIA_SMI_PATHS) {\n101:     try {\n102:       const output = execSync(`${smiPath} ${NVIDIA_QUERY} ${NVIDIA_FORMAT}`, {\n103:         encoding: \"utf-8\",\n104:         timeout: 10_000,\n105:         stdio: [\"pipe\", \"pipe\", \"pipe\"],",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/hardware.ts",
+      "line": 94,
+      "matched_text": "execSync(`",
+      "context": "92:     for (const smiPath of nvidiaSmiPaths) {\n93:       try {\n94:         output = execSync(`${smiPath} ${queryArgs}`, {\n95:           encoding: \"utf-8\",\n96:           timeout: 10000,\n97:           stdio: [\"pipe\", \"pipe\", \"pipe\"],",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/core/http-server-e2e.test.ts",
+      "line": 10,
+      "matched_text": "API_KEY = \"e2e-test-key-\"",
+      "context": "8: // ─── Real Server Setup ──────────────────────────────────────────\n9: \n10: const TEST_API_KEY = \"e2e-test-key-\" + Date.now();\n11: let server: ReturnType<typeof Bun.serve> | null = null;\n12: let BASE = \"\";\n13: let serverAvailable = false;",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/core/http-server-e2e.test.ts",
+      "line": 20,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "18:   for (const port of [0, 19900 + (Date.now() % 100), 19950 + (Date.now() % 50)]) {\n19:     try {\n20:       server = Bun.serve({ port, hostname: \"127.0.0.1\", fetch: handler });\n21:       BASE = `http://127.0.0.1:${server.port}`;\n22:       serverAvailable = true;\n23:       break;",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/core/llama-server.ts",
+      "line": 128,
+      "matched_text": "'127.0.0.1'",
+      "context": "126:     mx.set_wired_limit = lambda *a, **kw: _orig(${wiredBytes})\n127: import sys\n128: sys.argv = ['mlx_lm.server', '--model', '${safeModel}', '--port', '${safePort}', '--host', '127.0.0.1']\n129: from mlx_lm.server import main\n130: main()`;\n131:       args = [\"-c\", wrapperScript];",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+2 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/mcp-aliases.ts",
+      "line": 22,
+      "matched_text": "exec(`",
+      "context": "20:   if (schemaInitialized) return;\n21:   const db = getDb();\n22:   db.exec(`\n23:     CREATE TABLE IF NOT EXISTS mcp_tool_aliases (\n24:       alias TEXT PRIMARY KEY,\n25:       target TEXT NOT NULL,",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/core/mcp-oauth.ts",
+      "line": 77,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "75:   if (\n76:     parsed.protocol === \"http:\" &&\n77:     (host === \"localhost\" || host === \"127.0.0.1\" || host === \"::1\")\n78:   )\n79:     return;\n80:   throw new Error(",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "uni-001-hardcoded-ip",
+      "pattern_title": "Hardcoded IP address or internal URL",
+      "severity": "low",
+      "file": "/home/curly/KCode/src/core/mcp.ts",
+      "line": 77,
+      "matched_text": "\"127.0.0.1\"",
+      "context": "75:             parsed.protocol === \"http:\" &&\n76:             (parsed.hostname === \"localhost\" ||\n77:               parsed.hostname === \"127.0.0.1\" ||\n78:               parsed.hostname === \"::1\");\n79:           if (parsed.protocol !== \"https:\" && !isLocalhost) return false;\n80:         } catch {",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-798"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/model-engine.ts",
+      "line": 367,
+      "matched_text": "execSync(`",
+      "context": "365:   for (const cmd of prerequisites) {\n366:     try {\n367:       execSync(`which ${cmd}`, { stdio: \"pipe\", timeout: 5000 });\n368:     } catch {\n369:       log.error(\"setup\", `Build prerequisite missing: ${cmd}`);\n370:       progress(`Cannot build from source: '${cmd}' not found. Install it and retry.\\n`);",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+4 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/narrative.test.ts",
+      "line": 11,
+      "matched_text": "exec(`",
+      "context": "9:   // Isolated in-memory DB for tests\n10:   const testDb = new Database(\":memory:\");\n11:   testDb.exec(`CREATE TABLE IF NOT EXISTS narrative (\n12:     id INTEGER PRIMARY KEY AUTOINCREMENT,\n13:     summary TEXT NOT NULL,\n14:     project TEXT NOT NULL DEFAULT '',",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/core/narrative.ts",
+      "line": 45,
+      "matched_text": "exec(",
+      "context": "43:       ).run(summary, data.project, data.toolsUsed.join(\", \"), data.actionsCount);\n44:       // Prune: keep last 50 or last 30 days\n45:       db.exec(\n46:         `DELETE FROM narrative WHERE id NOT IN (SELECT id FROM narrative ORDER BY created_at DESC LIMIT 50) OR created_at < datetime('now', '-30 days')`,\n47:       );\n48:       log.info(\"narrative\", `Session narrative saved: ${summary.slice(0, 80)}...`);",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "py-006-hardcoded-secret",
+      "pattern_title": "Hardcoded password, secret, or API key",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/core/payments.test.ts",
+      "line": 55,
+      "matched_text": "SECRET = \"whsec_test_xyz\"",
+      "context": "53:   test(\"loads config from env vars\", async () => {\n54:     process.env.STRIPE_SECRET_KEY = \"sk_test_abc123\";\n55:     process.env.STRIPE_WEBHOOK_SECRET = \"whsec_test_xyz\";\n56:     process.env.STRIPE_PRICE_ID = \"price_test_pro\";\n57:     process.env.STRIPE_PORTAL_RETURN_URL = \"https://kulvex.ai/dashboard\";\n58: ",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "Verification skipped — static-only mode (+1 more matches of this pattern in the same file)"
+      },
+      "cwe": "CWE-798"
     }
   ],
-  "elapsed_ms": 82203
+  "elapsed_ms": 79
 }
