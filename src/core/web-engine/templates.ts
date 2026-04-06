@@ -4,6 +4,7 @@
 // The machine generates ALL boilerplate. LLM only customizes content.
 
 import type { DetectedIntent } from "./detector";
+import { CINEMATIC_CSS, REVEAL_SCRIPT, PALETTES, paletteToCSS } from "./effects";
 
 export interface FileTemplate {
   path: string;
@@ -107,34 +108,22 @@ export default config;
       path: "src/app/globals.css",
       content: `@import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+${paletteToCSS(PALETTES.midnight)}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, sans-serif;
-}
+${CINEMATIC_CSS}
 `,
       needsLlm: false,
     },
     {
       path: "src/app/layout.tsx",
       content: `import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "${name}",
   description: "Built with KCode",
+  openGraph: { title: "${name}", description: "Built with KCode" },
 };
 
 export default function RootLayout({
@@ -143,8 +132,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className="dark">
+      <body className="antialiased noise">
+        <div className="aurora-bg" />
+        {children}
+        <Script id="kcode-effects" strategy="afterInteractive">
+          {\`${REVEAL_SCRIPT.replace(/`/g, "\\`")}\`}
+        </Script>
+      </body>
     </html>
   );
 }
@@ -182,21 +177,48 @@ export default function Home() {
       path: "src/components/hero.tsx",
       content: `export default function Hero() {
   return (
-    <section className="min-h-screen flex items-center justify-center px-6">
-      <div className="max-w-4xl text-center">
-        <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-          {/* HEADLINE */}
+    <section className="relative min-h-screen flex items-center justify-center px-6 overflow-hidden">
+      {/* Background mesh gradient */}
+      <div className="absolute inset-0 mesh-gradient" />
+
+      {/* Floating orbs */}
+      <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl float" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl float-delay-1" />
+      <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl float-delay-2" />
+
+      <div className="relative z-10 max-w-4xl text-center reveal">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm text-gray-300 mb-8">
+          <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+          {/* BADGE TEXT */}
+        </div>
+
+        <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight">
+          <span className="gradient-text">{/* HEADLINE LINE 1 */}</span>
+          <br />
+          <span className="text-white">{/* HEADLINE LINE 2 */}</span>
         </h1>
-        <p className="mt-6 text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+
+        <p className="mt-8 text-lg md:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
           {/* SUBHEADLINE */}
         </p>
-        <div className="mt-10 flex gap-4 justify-center">
-          <a href="#" className="px-8 py-3 bg-black text-white rounded-full font-medium hover:bg-gray-800 transition">
-            Get Started
+
+        <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="#" className="magnetic-btn px-8 py-4 bg-white text-black rounded-full font-semibold hover:bg-gray-100 transition-all text-lg">
+            Get Started Free →
           </a>
-          <a href="#" className="px-8 py-3 border border-gray-300 rounded-full font-medium hover:bg-gray-50 transition">
-            Learn More
+          <a href="#" className="px-8 py-4 glass rounded-full font-medium text-white hover:bg-white/10 transition-all text-lg">
+            Watch Demo
           </a>
+        </div>
+
+        {/* Social proof */}
+        <div className="mt-16 flex items-center justify-center gap-8 text-sm text-gray-500">
+          <div className="flex -space-x-2">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 border-2 border-black" />
+            ))}
+          </div>
+          <span>{/* SOCIAL PROOF TEXT */}</span>
         </div>
       </div>
     </section>
@@ -211,19 +233,28 @@ export default function Home() {
   { title: "Feature 1", description: "Description", icon: "⚡" },
   { title: "Feature 2", description: "Description", icon: "🔒" },
   { title: "Feature 3", description: "Description", icon: "🚀" },
+  { title: "Feature 4", description: "Description", icon: "✨" },
+  { title: "Feature 5", description: "Description", icon: "🎯" },
+  { title: "Feature 6", description: "Description", icon: "💎" },
 ];
 
 export default function Features() {
   return (
-    <section className="py-24 px-6">
+    <section className="py-32 px-6 relative">
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-3xl font-bold text-center mb-16">Features</h2>
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="text-center mb-20 reveal">
+          <span className="text-sm font-medium text-indigo-400 tracking-widest uppercase">Features</span>
+          <h2 className="text-4xl md:text-5xl font-bold mt-4">{/* SECTION TITLE */}</h2>
+          <p className="mt-4 text-lg text-gray-400 max-w-xl mx-auto">{/* SECTION SUBTITLE */}</p>
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 stagger">
           {features.map((f, i) => (
-            <div key={i} className="p-6 rounded-2xl border border-gray-200 dark:border-gray-800">
-              <div className="text-4xl mb-4">{f.icon}</div>
-              <h3 className="text-xl font-semibold mb-2">{f.title}</h3>
-              <p className="text-gray-600 dark:text-gray-400">{f.description}</p>
+            <div key={i} className="reveal glass-card p-8 group spotlight">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center text-2xl mb-6 group-hover:scale-110 transition-transform">
+                {f.icon}
+              </div>
+              <h3 className="text-xl font-semibold mb-3 text-white">{f.title}</h3>
+              <p className="text-gray-400 leading-relaxed">{f.description}</p>
             </div>
           ))}
         </div>
@@ -256,6 +287,151 @@ export default function Features() {
 }
 
 // ── Pricing Component ──────────────────────────────────────────
+
+function statsComponent(intent: DetectedIntent): FileTemplate[] {
+  return [{
+    path: "src/components/stats.tsx",
+    content: `const stats = [
+  { value: "10K+", label: "Active Users" },
+  { value: "99.9%", label: "Uptime" },
+  { value: "150+", label: "Countries" },
+  { value: "4.9", label: "Rating" },
+];
+
+export default function Stats() {
+  return (
+    <section className="py-24 px-6 border-y border-white/5">
+      <div className="max-w-6xl mx-auto">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 reveal">
+          {stats.map((s, i) => (
+            <div key={i} className="text-center">
+              <div className="text-4xl md:text-5xl font-bold gradient-text">{s.value}</div>
+              <div className="mt-2 text-sm text-gray-500 uppercase tracking-wider">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+`,
+    needsLlm: true,
+  }];
+}
+
+function testimonialsComponent(intent: DetectedIntent): FileTemplate[] {
+  return [{
+    path: "src/components/testimonials.tsx",
+    content: `const testimonials = [
+  { name: "Name", role: "CEO at Company", text: "Quote here.", avatar: "🧑" },
+  { name: "Name", role: "CTO at Company", text: "Quote here.", avatar: "👩" },
+  { name: "Name", role: "Developer", text: "Quote here.", avatar: "🧑‍💻" },
+];
+
+export default function Testimonials() {
+  return (
+    <section className="py-32 px-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="text-center mb-20 reveal">
+          <span className="text-sm font-medium text-indigo-400 tracking-widest uppercase">Testimonials</span>
+          <h2 className="text-4xl font-bold mt-4">Loved by developers</h2>
+        </div>
+        <div className="grid md:grid-cols-3 gap-6 stagger">
+          {testimonials.map((t, i) => (
+            <div key={i} className="reveal glass-card p-8">
+              <p className="text-gray-300 leading-relaxed mb-6">"{t.text}"</p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-lg">
+                  {t.avatar}
+                </div>
+                <div>
+                  <div className="font-medium text-white">{t.name}</div>
+                  <div className="text-sm text-gray-500">{t.role}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+`,
+    needsLlm: true,
+  }];
+}
+
+function ctaComponent(intent: DetectedIntent): FileTemplate[] {
+  return [{
+    path: "src/components/cta.tsx",
+    content: `export default function CTA() {
+  return (
+    <section className="py-32 px-6">
+      <div className="max-w-4xl mx-auto text-center reveal">
+        <div className="relative p-16 rounded-3xl overflow-hidden border-gradient">
+          <div className="absolute inset-0 mesh-gradient opacity-50" />
+          <div className="relative z-10">
+            <h2 className="text-4xl md:text-5xl font-bold">
+              <span className="gradient-text">{/* CTA HEADLINE */}</span>
+            </h2>
+            <p className="mt-6 text-lg text-gray-400 max-w-xl mx-auto">
+              {/* CTA SUBTEXT */}
+            </p>
+            <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+              <a href="#" className="magnetic-btn px-10 py-4 bg-white text-black rounded-full font-semibold text-lg hover:bg-gray-100 transition-all">
+                Start Building →
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+`,
+    needsLlm: true,
+  }];
+}
+
+function navComponent(intent: DetectedIntent): FileTemplate[] {
+  return [{
+    path: "src/components/nav.tsx",
+    content: `"use client";
+import { useState, useEffect } from "react";
+
+export default function Nav() {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <nav className={\`fixed top-0 left-0 right-0 z-50 transition-all duration-300 \${
+      scrolled ? "glass py-3" : "py-6"
+    }\`}>
+      <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
+        <a href="/" className="text-xl font-bold text-white">${intent.name}</a>
+        <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
+          <a href="#features" className="hover:text-white transition">Features</a>
+          <a href="#pricing" className="hover:text-white transition">Pricing</a>
+          <a href="#" className="px-5 py-2 glass rounded-full text-white hover:bg-white/10 transition">
+            Sign In
+          </a>
+          <a href="#" className="px-5 py-2 bg-white text-black rounded-full font-medium hover:bg-gray-200 transition">
+            Get Started
+          </a>
+        </div>
+      </div>
+    </nav>
+  );
+}
+`,
+    needsLlm: false,
+  }];
+}
 
 function pricingComponent(intent: DetectedIntent): FileTemplate[] {
   if (!intent.features.includes("pricing")) return [];
@@ -441,7 +617,11 @@ export function buildProjectTemplate(intent: DetectedIntent): ProjectTemplate {
 
   if (intent.stack === "nextjs") {
     files.push(...nextjsBase(intent));
+    files.push(...navComponent(intent));
     files.push(...landingComponents(intent));
+    files.push(...statsComponent(intent));
+    files.push(...testimonialsComponent(intent));
+    files.push(...ctaComponent(intent));
     files.push(...pricingComponent(intent));
     files.push(...authComponents(intent));
     files.push(...dashboardComponents(intent));
