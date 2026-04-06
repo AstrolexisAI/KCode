@@ -34,7 +34,11 @@ export interface PrResult {
 }
 
 function git(cwd: string, args: string): string {
-  return execSync(`git ${args}`, { cwd, encoding: "utf-8", timeout: 30_000 }).trim();
+  return execSync(`git ${args}`, { cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+}
+
+function gh(cwd: string, args: string): string {
+  return execSync(`gh ${args}`, { cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
 }
 
 function detectRemoteRepo(cwd: string): string | null {
@@ -208,22 +212,22 @@ Signed-off-by: Astrolexis.space — Kulvex Code
         step("No write access. Forking repo...");
         try {
           // gh repo fork adds a "fork" remote automatically
-          git(projectRoot, `gh repo fork ${upstreamRepo} --remote-name fork`);
+          gh(projectRoot, `repo fork ${upstreamRepo} --remote-name fork`);
         } catch {
           // Fork might already exist — add remote manually
           try {
-            forkUser = git(projectRoot, "gh api user --jq .login");
-            git(projectRoot, `git remote add fork https://github.com/${forkUser}/${upstreamRepo.split("/")[1]}.git`);
+            forkUser = gh(projectRoot, "api user --jq .login");
+            git(projectRoot, `remote add fork https://github.com/${forkUser}/${upstreamRepo.split("/")[1]}.git`);
           } catch { /* ignore if remote already exists */ }
         }
 
         // Detect fork user if not already known
         if (!forkUser) {
           try {
-            forkUser = git(projectRoot, "gh api user --jq .login");
+            forkUser = gh(projectRoot, "api user --jq .login");
           } catch {
             try {
-              const forkUrl = git(projectRoot, "git remote get-url fork");
+              const forkUrl = git(projectRoot, "remote get-url fork");
               const m = forkUrl.match(/github\.com[:/]([^/]+)/);
               if (m) forkUser = m[1]!;
             } catch { /* give up */ }
@@ -252,16 +256,14 @@ Signed-off-by: Astrolexis.space — Kulvex Code
       writeTemp(bodyFile, prDescription);
       try {
         if (pushedToFork && forkUser) {
-          // PR from fork to upstream
-          prUrl = git(
+          prUrl = gh(
             projectRoot,
-            `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo} --head ${forkUser}:${branchName}`,
+            `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo} --head ${forkUser}:${branchName}`,
           );
         } else {
-          // PR from origin branch
-          prUrl = git(
+          prUrl = gh(
             projectRoot,
-            `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo}`,
+            `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo}`,
           );
         }
       } catch { prUrl = undefined; }
