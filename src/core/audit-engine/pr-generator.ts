@@ -209,29 +209,29 @@ Signed-off-by: Astrolexis.space — Kulvex Code
     } catch {
       // Origin push failed (likely 403 — no write access). Try fork workflow.
       if (upstreamRepo) {
-        step("No write access. Forking repo...");
+        // Get current user first
+        step("No write access. Detecting GitHub user...");
         try {
-          // gh repo fork adds a "fork" remote automatically
-          gh(projectRoot, `repo fork ${upstreamRepo} --remote-name fork`);
-        } catch {
-          // Fork might already exist — add remote manually
-          try {
-            forkUser = gh(projectRoot, "api user --jq .login");
-            git(projectRoot, `remote add fork https://github.com/${forkUser}/${upstreamRepo.split("/")[1]}.git`);
-          } catch { /* ignore if remote already exists */ }
-        }
+          forkUser = gh(projectRoot, "api user --jq .login");
+        } catch { /* gh not authenticated */ }
 
-        // Detect fork user if not already known
         if (!forkUser) {
+          pushError = "GitHub not authenticated. Run /github login first.";
+        } else {
+          const repoName = upstreamRepo.split("/")[1] ?? "";
+
+          // Fork the repo (or confirm it exists)
+          step(`Forking ${upstreamRepo}...`);
           try {
-            forkUser = gh(projectRoot, "api user --jq .login");
-          } catch {
-            try {
-              const forkUrl = git(projectRoot, "remote get-url fork");
-              const m = forkUrl.match(/github\.com[:/]([^/]+)/);
-              if (m) forkUser = m[1]!;
-            } catch { /* give up */ }
-          }
+            gh(projectRoot, `repo fork ${upstreamRepo} --clone=false`);
+          } catch { /* fork already exists — OK */ }
+
+          // Always ensure the "fork" remote points to our fork
+          step("Configuring fork remote...");
+          try {
+            git(projectRoot, `remote remove fork`);
+          } catch { /* didn't exist */ }
+          git(projectRoot, `remote add fork https://github.com/${forkUser}/${repoName}.git`);
         }
 
         step("Pushing to fork...");
