@@ -293,6 +293,29 @@ export default function App({ config, conversationManager, tools, initialSession
     return () => clearInterval(timer);
   }, [scanProgress]);
 
+  // Terminal tab title — shows activity status with emojis
+  useEffect(() => {
+    const isWorking =
+      mode === "responding" ||
+      (scanProgress?.active ?? false) ||
+      mode === ("escalation" as any);
+
+    // Animated title when working, static when idle
+    if (isWorking) {
+      const frames = ["⚡ KCode", "🔥 KCode", "⚡ KCode", "💥 KCode"];
+      let frame = 0;
+      const timer = setInterval(() => {
+        process.stdout.write(`\x1b]0;${frames[frame % frames.length]} — working...\x07`);
+        frame++;
+      }, 400);
+      return () => {
+        clearInterval(timer);
+        process.stdout.write(`\x1b]0;✅ KCode\x07`);
+      };
+    }
+    process.stdout.write(`\x1b]0;✅ KCode\x07`);
+  }, [mode, scanProgress?.active]);
+
   // Ask user if they want to resume the previous session's model
   const [pendingLastModel, setPendingLastModel] = useState<string | null>(null);
 
@@ -855,7 +878,8 @@ export default function App({ config, conversationManager, tools, initialSession
             mode !== "permission" &&
             mode !== "sudo-password" &&
             mode !== "cloud" &&
-            mode !== "toggle"
+            mode !== "toggle" &&
+            mode !== ("escalation" as any)
           }
           isQueuing={mode === "responding"}
           queueSize={messageQueue.length}
