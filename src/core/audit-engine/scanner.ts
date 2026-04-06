@@ -86,10 +86,25 @@ const SKIP_DIRS = new Set([
   "3rdParty",
   "third_party",
   "vendor",
-  "hidapi",        // NASA IDF submodule (third-party code)
-  "hidtest",       // hidapi test files
-  "testgui",       // hidapi test GUI
-  "pp_data_dump",  // hidapi Windows test tool
+  "hidapi",
+  "hidtest",
+  "testgui",
+  "pp_data_dump",
+  // Test directories — findings in test code are low-value noise.
+  // Unit test stubs intentionally replicate unsafe patterns (e.g. strcat)
+  // and test harnesses control their own inputs.
+  "ut_assert",
+  "ut-stubs",
+  "ut-stubs-alt",
+  "unit-test-coverage",
+  "test",
+  "tests",
+  "__tests__",
+  "spec",
+  "testing",
+  "mock",
+  "mocks",
+  "fixtures",
 ]);
 
 /**

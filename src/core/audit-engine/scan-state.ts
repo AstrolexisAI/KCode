@@ -12,7 +12,9 @@ export interface ScanProgress {
   total: number;
   confirmed: number;
   falsePositives: number;
+  escalated: number; // candidates sent to cloud fallback
   startTime: number;
+  cloudProvider?: string; // "anthropic" | "openai" | "" if no fallback
   /** Set when audit completes — the handler reads this to push result. */
   result?: {
     outputPath: string;
@@ -35,6 +37,7 @@ export const scanState: ScanProgress = {
   total: 0,
   confirmed: 0,
   falsePositives: 0,
+  escalated: 0,
   startTime: 0,
 };
 
@@ -45,7 +48,9 @@ export function resetScanState(): void {
   scanState.total = 0;
   scanState.confirmed = 0;
   scanState.falsePositives = 0;
+  scanState.escalated = 0;
   scanState.startTime = 0;
+  scanState.cloudProvider = undefined;
   scanState.result = undefined;
   scanState.error = undefined;
 }
