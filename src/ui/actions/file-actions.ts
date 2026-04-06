@@ -767,6 +767,70 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return [`  KCode Docker Engine`, `    ${r.config.name}/ | ${r.services.length} services | ${r.files.length} files (${m} machine)`, "", `  docker compose up / docker compose down`].join("\n");
     }
 
+    case "csharp":
+    case "dotnet":
+    case "cs": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /csharp REST API with Entity Framework\n  /csharp Blazor app\n  /csharp CLI tool\n  /dotnet worker service";
+      const { createCSharpProject } = await import("../../core/web-engine/stacks/csharp-engine.js");
+      const r = createCSharpProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode C#/.NET Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  dotnet run / dotnet test`].join("\n");
+    }
+
+    case "kotlin":
+    case "kt": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /kotlin API with Ktor\n  /kotlin Android app with Compose\n  /kotlin CLI tool\n  /kt library";
+      const { createKotlinProject } = await import("../../core/web-engine/stacks/kotlin-engine.js");
+      const r = createKotlinProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Kotlin Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  ./gradlew run / ./gradlew test`].join("\n");
+    }
+
+    case "php":
+    case "laravel":
+    case "symfony": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /php REST API with Slim\n  /php Laravel web app\n  /php CLI tool\n  /php WordPress plugin";
+      const { createPhpProject } = await import("../../core/web-engine/stacks/php-engine.js");
+      const r = createPhpProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode PHP Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  composer serve / composer test`].join("\n");
+    }
+
+    case "ruby":
+    case "rb":
+    case "rails":
+    case "sinatra": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /ruby Sinatra API\n  /ruby CLI tool with Thor\n  /ruby gem library\n  /ruby Sidekiq worker";
+      const { createRubyProject } = await import("../../core/web-engine/stacks/ruby-engine.js");
+      const r = createRubyProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Ruby Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  bundle exec ruby app.rb / bundle exec rspec`].join("\n");
+    }
+
+    case "zig": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /zig CLI tool\n  /zig HTTP server\n  /zig library\n  /zig embedded firmware\n  /zig WASM module";
+      const { createZigProject } = await import("../../core/web-engine/stacks/zig-engine.js");
+      const r = createZigProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Zig Engine`, `    ${r.config.name}/ | ${r.config.type} | ${r.files.length} files (${m} machine)`, "", `  zig build run / zig build test`].join("\n");
+    }
+
+    case "elixir":
+    case "ex":
+    case "phoenix": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /elixir Phoenix API\n  /elixir LiveView app\n  /elixir CLI escript\n  /elixir GenServer worker";
+      const { createElixirProject } = await import("../../core/web-engine/stacks/elixir-engine.js");
+      const r = createElixirProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Elixir Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  mix run --no-halt / mix test`].join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
