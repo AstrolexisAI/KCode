@@ -237,6 +237,13 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_elixir__`,
   },
   {
+    name: "css",
+    description: "Create a CSS project (design system, component library, Tailwind plugin, animation lib, Sass framework)",
+    aliases: ["design-system", "create-css", "tailwind-plugin"],
+    args: ["description of the project"],
+    template: `__builtin_css__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
