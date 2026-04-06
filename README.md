@@ -1,8 +1,29 @@
 # KCode -- Kulvex Code by Astrolexis
 
-> AI-powered coding assistant for the terminal. Runs 100% local on your GPU.
+> AI-powered coding assistant for the terminal. Local-first, privacy-first, deterministic code auditor.
 
-KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM) and cloud APIs (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI) to read, write, search, and refactor code directly from your terminal. Built with Bun and TypeScript, featuring a React/Ink TUI with 46 built-in tools, 152+ slash commands, multi-agent swarm orchestration, browser automation, and a 10-layer cognitive architecture.
+KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM) and cloud APIs (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI). Built with Bun and TypeScript, featuring a React/Ink TUI with 48 built-in tools, 160+ slash commands, and a **deterministic audit engine** that finds real bugs, fixes them, and opens PRs — all from three commands.
+
+### Audit in 3 Commands
+
+```bash
+kcode
+/scan project/     # 65 patterns, 16 languages, model-verified
+/fix project/      # deterministic auto-fixes
+/pr project/       # branch + commit + PR (auto-forks if needed)
+```
+
+**Validated on NASA projects:** Found and fixed 28 real bugs in [NASA IDF](https://github.com/nasa/IDF) (buffer overflows, pointer arithmetic, resource leaks). PR submitted: [nasa/IDF#107](https://github.com/nasa/IDF/pull/107).
+
+### Task Orchestrator
+
+KCode translates human language → machine pipelines. The LLM receives pre-filtered context, not raw "figure it out" requests:
+
+```
+"fix the login bug" → grep errors → read files → git history → focused LLM prompt
+"add REST endpoint" → detect framework → find patterns → scaffold → LLM review
+"audit this"        → pattern scan → dedup → model verify → report
+```
 
 ---
 
@@ -61,6 +82,16 @@ That's it. The wizard detects your hardware, downloads an optimized model, and l
 - **Session management**: `/compact`, `/rewind`, `/resume`, `/export`, `/stats`
 - **Configuration**: `/cloud`, `/toggle`, `/theme`, `/vim`, `/plugins`
 - **Planning**: `/plan`, `/pin`, `/memory`, `/search`, `/batch`
+
+### Deterministic Audit Engine
+
+- **65 bug patterns** across 16 languages (C, C++, Python, JS, TS, Go, Java, Rust, Swift, Kotlin, C#, PHP, Ruby, Dart, SQL, Scala)
+- **Pattern library** based on real bugs found in NASA codebases (buffer overflow, pointer arithmetic, shell injection, SQL injection, XSS, deserialization, etc.)
+- **Model verification** -- each candidate is verified by the LLM with a focused prompt, not open-ended discovery
+- **Hybrid local+cloud** -- local model handles most verifications, cloud escalates ambiguous cases (with user consent)
+- **Auto-fix** -- deterministic patches for confirmed findings (size guards, bounded copies, RAII wrappers, etc.)
+- **Auto-PR** -- creates branch, generates detailed PR description via LLM, auto-forks if no write access, submits PR
+- **Semantic guards** -- blocks known LLM hallucinations (e.g., strcmp inversion) at the Edit tool level
 
 ### Terminal UI
 
