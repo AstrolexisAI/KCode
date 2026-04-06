@@ -104,6 +104,13 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_pr__`,
   },
   {
+    name: "github",
+    description: "GitHub authentication and status (login, status, whoami)",
+    aliases: ["gh"],
+    args: ["login | status | whoami"],
+    template: `__builtin_github__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],

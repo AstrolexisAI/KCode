@@ -284,6 +284,158 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return `  ◆ Generating PR for ${projectRoot.split("/").pop()}/ in background...`;
     }
 
+    case "github": {
+      const { execSync } = await import("node:child_process");
+      const sub = (args ?? "").trim().toLowerCase() || "status";
+
+      // Check if gh CLI is installed
+      let ghInstalled = false;
+      try {
+        execSync("gh --version", { encoding: "utf-8", timeout: 5000 });
+        ghInstalled = true;
+      } catch { /* not installed */ }
+
+      if (!ghInstalled) {
+        return [
+          "  GitHub CLI (gh) not installed.",
+          "",
+          "  Install it:",
+          "    Fedora:  sudo dnf install gh",
+          "    Ubuntu:  sudo apt install gh",
+          "    macOS:   brew install gh",
+          "    Other:   https://cli.github.com",
+        ].join("\n");
+      }
+
+      if (sub === "login") {
+        // Check if already logged in
+        try {
+          const status = execSync("gh auth status 2>&1", { encoding: "utf-8", timeout: 10000 });
+          if (status.includes("Logged in")) {
+            const user = execSync("gh api user --jq .login 2>/dev/null", {
+              encoding: "utf-8",
+              timeout: 10000,
+            }).trim();
+            return [
+              `  ✅ Already authenticated as: ${user}`,
+              "",
+              "  To re-authenticate: ! gh auth login",
+              "  To logout: ! gh auth logout",
+            ].join("\n");
+          }
+        } catch { /* not logged in */ }
+
+        // Start device flow login
+        try {
+          // gh auth login --web does device flow: shows URL + code
+          const result = execSync(
+            "gh auth login -h github.com -p https --web 2>&1 || true",
+            { encoding: "utf-8", timeout: 60000 },
+          );
+
+          // Parse the one-time code and URL from gh output
+          const codeMatch = result.match(/one-time code[:\s]+([A-Z0-9-]+)/i);
+          const urlMatch = result.match(/(https:\/\/github\.com\/login\/device)/i);
+
+          if (codeMatch) {
+            return [
+              "  GitHub Login — Device Flow",
+              "",
+              `  1. Open: ${urlMatch?.[1] ?? "https://github.com/login/device"}`,
+              `  2. Enter code: ${codeMatch[1]}`,
+              "  3. Authorize KCode",
+              "",
+              "  Waiting for authorization...",
+              "  (If browser didn't open, copy the URL manually)",
+              "",
+              result.includes("Logged in") ? "  ✅ Authenticated!" : "  Run /github status to verify.",
+            ].join("\n");
+          }
+
+          // Fallback: show raw output
+          return "  " + result.split("\n").join("\n  ");
+        } catch (err) {
+          return [
+            "  ⚠️ Interactive login not available from TUI.",
+            "",
+            "  Run this in a separate terminal:",
+            "    gh auth login",
+            "",
+            "  Or use a personal access token:",
+            "    gh auth login --with-token <<< 'ghp_your_token_here'",
+            "",
+            "  Then come back and run /github status",
+          ].join("\n");
+        }
+      }
+
+      if (sub === "whoami" || sub === "status") {
+        try {
+          const status = execSync("gh auth status 2>&1", { encoding: "utf-8", timeout: 10000 });
+          let user = "";
+          let scopes = "";
+          try {
+            user = execSync("gh api user --jq .login 2>/dev/null", {
+              encoding: "utf-8",
+              timeout: 10000,
+            }).trim();
+          } catch { /* ignore */ }
+          try {
+            scopes = execSync("gh auth status 2>&1 | grep -i scope || true", {
+              encoding: "utf-8",
+              timeout: 5000,
+            }).trim();
+          } catch { /* ignore */ }
+
+          const lines = [
+            "  GitHub Status",
+            "  ─".repeat(30),
+          ];
+          if (user) lines.push(`    User:    ${user}`);
+          if (status.includes("Logged in")) {
+            lines.push("    Auth:    ✅ Authenticated");
+          } else {
+            lines.push("    Auth:    ❌ Not authenticated");
+            lines.push("");
+            lines.push("    Run /github login to authenticate.");
+          }
+          if (scopes) lines.push(`    Scopes:  ${scopes.trim()}`);
+          lines.push("  ─".repeat(30));
+
+          // Check if user can fork repos (needed for /pr)
+          if (user && status.includes("Logged in")) {
+            lines.push("");
+            lines.push("    ✅ Ready for /scan → /fix → /pr workflow");
+          }
+
+          return lines.join("\n");
+        } catch {
+          return [
+            "  ❌ Not authenticated with GitHub",
+            "",
+            "  Run /github login to authenticate.",
+          ].join("\n");
+        }
+      }
+
+      if (sub === "logout") {
+        try {
+          execSync("gh auth logout -h github.com 2>&1", { encoding: "utf-8", timeout: 10000 });
+          return "  ✅ Logged out from GitHub.";
+        } catch {
+          return "  Run: ! gh auth logout";
+        }
+      }
+
+      return [
+        "  GitHub Commands:",
+        "    /github status   — check auth status",
+        "    /github login    — authenticate with GitHub",
+        "    /github whoami   — show current user",
+        "    /github logout   — log out",
+      ].join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
