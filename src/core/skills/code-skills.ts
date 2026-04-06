@@ -119,10 +119,24 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "web",
-    description: "Create a complete website/web app from a description (landing, SaaS, dashboard, blog, e-commerce)",
+    description: "Create a complete website/web app (landing, SaaS, dashboard, blog, e-commerce)",
     aliases: ["create-site", "website", "webapp"],
     args: ["description of the site to create"],
     template: `__builtin_web__`,
+  },
+  {
+    name: "api",
+    description: "Create a REST API with CRUD routes, validation, and database",
+    aliases: ["create-api", "backend", "rest-api"],
+    args: ["entities (e.g., 'users, products, orders')"],
+    template: `__builtin_api__`,
+  },
+  {
+    name: "fullstack",
+    description: "Create a full-stack app (frontend + API + database) in one command",
+    aliases: ["create-app", "full-stack", "stack"],
+    args: ["description of the app to create"],
+    template: `__builtin_fullstack__`,
   },
   {
     name: "doc",
