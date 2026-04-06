@@ -25,6 +25,7 @@ import PermissionDialog, {
   type PermissionRequest,
 } from "./components/PermissionDialog.js";
 import QuestionDialog from "./components/QuestionDialog.js";
+import EscalationPrompt from "./components/EscalationPrompt.js";
 import SudoPasswordPrompt from "./components/SudoPasswordPrompt.js";
 import ToolTabs from "./components/ToolTabs.js";
 import VirtualMessageList from "./components/VirtualMessageList.js";
@@ -137,6 +138,11 @@ export default function App({ config, conversationManager, tools, initialSession
     confirmed: number;
     elapsed: number;
   } | null>(null);
+  const [escalationData, setEscalationData] = useState<{
+    count: number;
+    provider: string;
+    reason: string;
+  } | null>(null);
   const [showContextGrid, setShowContextGrid] = useState(false);
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
   // Plan panel: starts null, only set by onPlanChange (not from DB restore)
@@ -206,20 +212,25 @@ export default function App({ config, conversationManager, tools, initialSession
       try {
         const { scanState } = await import("../core/audit-engine/scan-state.js");
         if (scanState.active || scanState.result || scanState.error) {
-          const progress = {
+          setScanProgress({
             active: scanState.active,
             phase: scanState.phase,
             verified: scanState.verified,
             total: scanState.total,
             confirmed: scanState.confirmed,
             elapsed: (Date.now() - scanState.startTime) / 1000,
-            ...(scanState.pendingEscalation ? { pendingEscalation: scanState.pendingEscalation } : {}),
-          };
-          setScanProgress(progress as any);
-          // Kodi event for escalation
-          if (scanState.pendingEscalation) {
-            setLastKodiEvent({ type: "agent_spawn", detail: "☁ cloud escalation?" });
-          } else if (scanState.escalated > 0) {
+          });
+          // Switch to escalation mode when prompt is pending
+          if (scanState.pendingEscalation && !escalationData) {
+            setEscalationData({
+              count: scanState.pendingEscalation.count,
+              provider: scanState.pendingEscalation.provider,
+              reason: scanState.pendingEscalation.reason,
+            });
+            setMode("escalation" as any);
+            setLastKodiEvent({ type: "agent_spawn", detail: "☁ second opinion?" });
+          }
+          if (scanState.escalated > 0) {
             setLastKodiEvent({ type: "agent_progress", detail: `☁ ${scanState.escalated} escalated` });
           }
 
@@ -402,6 +413,28 @@ export default function App({ config, conversationManager, tools, initialSession
       }
     },
     [permissionResolver],
+  );
+
+  const handleEscalationChoice = useCallback(
+    async (approved: boolean) => {
+      try {
+        const { scanState } = await import("../core/audit-engine/scan-state.js");
+        scanState.escalationApproved = approved;
+      } catch { /* ignore */ }
+      setEscalationData(null);
+      setMode("input");
+      setCompleted((prev) => [
+        ...prev,
+        {
+          kind: "text",
+          role: "assistant",
+          text: approved
+            ? "  ☁ Escalating to cloud for second opinion..."
+            : "  ⏭ Skipped cloud verification.",
+        },
+      ]);
+    },
+    [],
   );
 
   const handleSudoPassword = useCallback(
@@ -720,19 +753,15 @@ export default function App({ config, conversationManager, tools, initialSession
           </Box>
         )}
 
-        {/* Second opinion prompt — shown when FPs or uncertain findings exist */}
-        {scanProgress && (scanProgress as any).pendingEscalation && (
-          <Box marginLeft={2} marginBottom={0} flexDirection="column">
-            <Text color="yellow">
-              {"  ⚠️  "}{(scanProgress as any).pendingEscalation.reason}
-            </Text>
-            <Text color="yellow">
-              {"     Get second opinion from ☁ "}{(scanProgress as any).pendingEscalation.provider}{"? "}
-              <Text bold color="green">{"Y"}</Text>
-              <Text>{"/"}</Text>
-              <Text bold color="red">{"n"}</Text>
-            </Text>
-          </Box>
+        {/* Escalation modal — captures keyboard, hides input */}
+        {mode === ("escalation" as any) && escalationData && (
+          <EscalationPrompt
+            count={escalationData.count}
+            provider={escalationData.provider}
+            reason={escalationData.reason}
+            isActive={mode === ("escalation" as any)}
+            onChoice={handleEscalationChoice}
+          />
         )}
 
         {activeTabs.length > 0 && <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />}
