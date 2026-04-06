@@ -71,6 +71,9 @@ const SOURCE_EXTENSIONS: Record<string, Language> = {
   ".mjs": "javascript",
   ".ts": "typescript",
   ".tsx": "typescript",
+  ".swift": "swift",
+  ".java": "java",
+  ".kt": "java", // Kotlin shares Java patterns for now
 };
 
 const SKIP_DIRS = new Set([

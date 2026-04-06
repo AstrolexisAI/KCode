@@ -606,6 +606,79 @@ export const JAVA_PATTERNS: BugPattern[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
+// Swift Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const SWIFT_PATTERNS: BugPattern[] = [
+  {
+    id: "swift-001-force-unwrap",
+    title: "Force unwrap (!) on Optional (crash risk)",
+    severity: "medium",
+    languages: ["swift"],
+    regex: /\w+!\s*\./g,
+    explanation: "Force unwrapping with ! crashes at runtime if the value is nil. Use guard let, if let, or ?? instead.",
+    verify_prompt: "Is this force unwrap in production code where nil is a realistic possibility? If the value is guaranteed non-nil (e.g. IBOutlet after viewDidLoad, known-good constant), respond FALSE_POSITIVE.",
+    cwe: "CWE-476",
+    fix_template: "Replace var! with guard let var = var else { return } or var ?? defaultValue.",
+  },
+  {
+    id: "swift-002-force-try",
+    title: "try! force try (crash on error)",
+    severity: "medium",
+    languages: ["swift"],
+    regex: /\btry!\s/g,
+    explanation: "try! crashes the app if the function throws. Use do/catch or try? for graceful error handling.",
+    verify_prompt: "Is this try! in production code or test code? If the throwing function is guaranteed to succeed (e.g. known-good regex), respond FALSE_POSITIVE. If it could fail at runtime, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Replace try! with do { try ... } catch { handle error } or try? with default.",
+  },
+  {
+    id: "swift-003-insecure-http",
+    title: "HTTP (not HTTPS) URL in production code",
+    severity: "high",
+    languages: ["swift"],
+    regex: /URL\s*\(\s*string:\s*"http:\/\/(?!localhost|127\.0\.0\.1)/g,
+    explanation: "Using HTTP instead of HTTPS exposes data to man-in-the-middle attacks. App Transport Security (ATS) blocks this by default on iOS.",
+    verify_prompt: "Is this URL for a local development server or a production endpoint? If localhost/dev, respond FALSE_POSITIVE. If production, respond CONFIRMED.",
+    cwe: "CWE-319",
+    fix_template: "Change http:// to https://.",
+  },
+  {
+    id: "swift-004-keychain-no-access",
+    title: "UserDefaults for sensitive data (should use Keychain)",
+    severity: "high",
+    languages: ["swift"],
+    regex: /UserDefaults\b.*(?:password|token|secret|key|credential|auth)/gi,
+    explanation: "UserDefaults is stored unencrypted on disk. Sensitive data (passwords, tokens) should use Keychain Services.",
+    verify_prompt: "Is the value being stored actually sensitive (password, auth token, API key)? If it's a non-sensitive preference, respond FALSE_POSITIVE.",
+    cwe: "CWE-312",
+    fix_template: "Use KeychainAccess library or Security framework: SecItemAdd/SecItemCopyMatching.",
+  },
+  {
+    id: "swift-005-hardcoded-secret",
+    title: "Hardcoded secret/API key in Swift",
+    severity: "high",
+    languages: ["swift"],
+    regex: /(?:apiKey|secretKey|password|token|authToken)\s*[:=]\s*"[A-Za-z0-9+/=_-]{16,}"/g,
+    explanation: "Hardcoded secrets in source code are exposed to anyone with app binary access (strings can be extracted from .ipa).",
+    verify_prompt: "Is this a real API key or a placeholder/example? If it looks like a real key (long random string), respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "Load from Info.plist (excluded from repo) or a secrets manager.",
+  },
+  {
+    id: "swift-006-webview-js",
+    title: "WKWebView with JavaScript enabled loading external content",
+    severity: "high",
+    languages: ["swift"],
+    regex: /WKWebViewConfiguration\b[\s\S]{0,200}?javaScriptEnabled\s*=\s*true/g,
+    explanation: "WKWebView with JavaScript enabled loading untrusted content can execute malicious scripts with access to native bridges.",
+    verify_prompt: "Does this WebView load external/untrusted URLs? If it only loads local HTML or trusted internal content, respond FALSE_POSITIVE.",
+    cwe: "CWE-79",
+    fix_template: "Disable JS if not needed, or restrict navigation with WKNavigationDelegate.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
 // Cross-language Patterns (shell, HTML, config, etc.)
 // ═══════════════════════════════════════════════════════════════
 
@@ -657,6 +730,7 @@ const ALL_PATTERNS: BugPattern[] = [
   ...GO_PATTERNS,
   ...RUST_PATTERNS,
   ...JAVA_PATTERNS,
+  ...SWIFT_PATTERNS,
   ...UNIVERSAL_PATTERNS,
 ];
 
