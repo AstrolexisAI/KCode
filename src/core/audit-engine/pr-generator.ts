@@ -194,34 +194,78 @@ Signed-off-by: Astrolexis.space — Kulvex Code
       try { unlinkSync(msgFile); } catch { /* ignore */ }
     }
 
-    // Push (graceful failure — no stacktrace dump)
-    step("Pushing branch...");
+    // Push strategy: try origin → if 403, fork → push to fork → PR from fork
+    const upstreamRepo = opts.repo ?? detectRemoteRepo(projectRoot);
+    let pushedToFork = false;
+    let forkUser = "";
+
+    step("Pushing to origin...");
     try {
       git(projectRoot, `push -u origin ${branchName}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // Extract just the useful error (permission denied, etc)
-      const match = msg.match(/remote: (.+?)\\n|fatal: (.+?)\\n|error: (.+)/);
-      pushError = match ? (match[1] ?? match[2] ?? match[3] ?? msg).trim() : "Push failed";
+    } catch {
+      // Origin push failed (likely 403 — no write access). Try fork workflow.
+      if (upstreamRepo) {
+        step("No write access. Forking repo...");
+        try {
+          // gh repo fork adds a "fork" remote automatically
+          git(projectRoot, `gh repo fork ${upstreamRepo} --remote-name fork`);
+        } catch {
+          // Fork might already exist — add remote manually
+          try {
+            forkUser = git(projectRoot, "gh api user --jq .login");
+            git(projectRoot, `git remote add fork https://github.com/${forkUser}/${upstreamRepo.split("/")[1]}.git`);
+          } catch { /* ignore if remote already exists */ }
+        }
+
+        // Detect fork user if not already known
+        if (!forkUser) {
+          try {
+            forkUser = git(projectRoot, "gh api user --jq .login");
+          } catch {
+            try {
+              const forkUrl = git(projectRoot, "git remote get-url fork");
+              const m = forkUrl.match(/github\.com[:/]([^/]+)/);
+              if (m) forkUser = m[1]!;
+            } catch { /* give up */ }
+          }
+        }
+
+        step("Pushing to fork...");
+        try {
+          git(projectRoot, `push -u fork ${branchName} --force`);
+          pushedToFork = true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          pushError = msg.includes("403") || msg.includes("denied")
+            ? "Permission denied (both origin and fork)"
+            : "Push to fork failed";
+        }
+      } else {
+        pushError = "No write access and no upstream repo detected";
+      }
     }
 
-    // Create PR via gh (only if push succeeded)
-    if (!pushError) {
-      step("Creating PR via gh...");
-      const repo = opts.repo ?? detectRemoteRepo(projectRoot);
-      if (repo) {
-        try {
-          const bodyFile = resolve(projectRoot, ".kcode-pr-body");
-          writeTemp(bodyFile, prDescription);
-          try {
-            prUrl = git(
-              projectRoot,
-              `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${repo}`,
-            );
-          } catch { prUrl = undefined; }
-          finally { try { unlinkSync(bodyFile); } catch { /* ignore */ } }
-        } catch { /* gh pr create failed */ }
-      }
+    // Create PR
+    if (!pushError && upstreamRepo) {
+      step("Creating PR...");
+      const bodyFile = resolve(projectRoot, ".kcode-pr-body");
+      writeTemp(bodyFile, prDescription);
+      try {
+        if (pushedToFork && forkUser) {
+          // PR from fork to upstream
+          prUrl = git(
+            projectRoot,
+            `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo} --head ${forkUser}:${branchName}`,
+          );
+        } else {
+          // PR from origin branch
+          prUrl = git(
+            projectRoot,
+            `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo}`,
+          );
+        }
+      } catch { prUrl = undefined; }
+      finally { try { unlinkSync(bodyFile); } catch { /* ignore */ } }
     }
   }
 
