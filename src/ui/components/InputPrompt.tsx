@@ -123,7 +123,7 @@ function getFileCompletions(partial: string, dirsOnly = false): string[] {
 }
 
 /** Slash commands that take a directory path as first argument. */
-const DIR_ARG_COMMANDS = new Set(["scan", "audit-scan", "static-audit"]);
+const DIR_ARG_COMMANDS = new Set(["scan", "audit-scan", "static-audit", "fix", "autofix", "patch", "pr", "pull-request", "submit"]);
 
 /**
  * Find the longest common prefix among an array of strings.
