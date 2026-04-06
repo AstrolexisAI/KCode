@@ -514,6 +514,66 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       ].join("\n");
     }
 
+    case "debug": {
+      const targetArgs = (args ?? "").trim();
+      if (!targetArgs) {
+        return "  Usage: /debug <file> or /debug <error description>\n  Example: /debug src/auth.ts\n  Example: /debug TypeError: Cannot read property 'id' of null";
+      }
+
+      const { resolve: resolvePath } = await import("node:path");
+      const { existsSync } = await import("node:fs");
+      const { collectEvidence, formatEvidenceForLLM } = await import(
+        "../../core/debug-engine/evidence-collector.js"
+      );
+
+      // Parse: if first arg is a file, treat as target. Otherwise it's an error description.
+      const tokens = targetArgs.split(/\s+/);
+      const firstToken = tokens[0] ?? "";
+      const isFile = existsSync(resolvePath(appConfig.workingDirectory, firstToken));
+
+      const files = isFile ? [firstToken] : [];
+      const errorMessage = isFile ? tokens.slice(1).join(" ") || undefined : targetArgs;
+
+      const evidence = await collectEvidence({
+        files,
+        errorMessage,
+        cwd: appConfig.workingDirectory,
+      });
+
+      const lines: string[] = [
+        "  KCode Debug Engine",
+        `    Target: ${evidence.targetFiles.join(", ") || "(auto-detected)"}`,
+        "",
+        `    📁 Files analyzed:    ${evidence.fileContents.size}`,
+        `    🔍 Error patterns:    ${evidence.errorPatterns.length}`,
+        `    🧪 Test files found:  ${evidence.testFiles.length}`,
+        `    📞 Callers found:     ${evidence.callers.length}`,
+        `    📜 Git changes:       ${evidence.recentChanges ? "yes" : "none"}`,
+        `    🔬 Git blame:         ${evidence.blame ? "yes" : "n/a"}`,
+      ];
+
+      if (evidence.testOutput) {
+        const passed = evidence.testOutput.includes("PASS") || evidence.testOutput.includes("passed");
+        const failed = evidence.testOutput.includes("FAIL") || evidence.testOutput.includes("failed");
+        lines.push(`    ✅ Tests run:          ${passed ? "PASS" : failed ? "FAIL" : "completed"}`);
+      }
+
+      lines.push("");
+      lines.push("  Evidence package ready. Sending to model for diagnosis...");
+      lines.push("");
+      lines.push("  " + "─".repeat(50));
+
+      // Summary of evidence
+      if (evidence.errorPatterns.length > 0) {
+        lines.push("  Error hotspots detected:");
+        for (const ep of evidence.errorPatterns.slice(0, 5)) {
+          lines.push(`    ⚠️ ${ep.type} — ${ep.file}:${ep.line}: ${ep.code.slice(0, 60)}`);
+        }
+      }
+
+      return lines.join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
