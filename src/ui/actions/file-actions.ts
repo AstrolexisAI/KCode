@@ -614,6 +614,51 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return lines.join("\n");
     }
 
+    case "api": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /api users, products, orders\n  Example: /api task management with users and tasks";
+
+      const { createApiProject } = await import("../../core/web-engine/api-engine.js");
+      const result = createApiProject(desc, appConfig.workingDirectory);
+
+      return [
+        "  KCode API Engine",
+        `    Project:    ${result.projectPath}`,
+        `    Framework:  ${result.framework}`,
+        `    Entities:   ${result.entities.map(e => e.name).join(", ")}`,
+        `    Files:      ${result.files.length}`,
+        "",
+        "  Endpoints created:",
+        ...result.entities.map(e =>
+          `    /api/${e.name}s  — GET, POST, GET/:id, PUT/:id, DELETE/:id`
+        ),
+        "",
+        `  Next: cd ${result.projectPath.split("/").pop()} && npm install && npm run dev`,
+      ].join("\n");
+    }
+
+    case "fullstack": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /fullstack task management app with users\n  Creates: frontend + API + database";
+
+      const { createFullstackProject } = await import("../../core/web-engine/fullstack-engine.js");
+      const result = createFullstackProject(desc, appConfig.workingDirectory);
+
+      return [
+        "  KCode Fullstack Engine",
+        `    Project:    ${result.name}/`,
+        "",
+        `    Frontend:   ${result.frontend.files} files (${result.frontend.machineFiles} machine, ${result.frontend.llmFiles} LLM)`,
+        `    Backend:    ${result.backend.files} files`,
+        `    Entities:   ${result.backend.entities.join(", ")}`,
+        `    Total:      ${result.totalFiles} files`,
+        "",
+        `  Next: cd ${result.name} && npm install && npm run dev`,
+        "  Frontend: http://localhost:3000",
+        "  API:      http://localhost:3001",
+      ].join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
