@@ -481,24 +481,46 @@ export class ConversationManager {
     let orchestratedMessage = userMessage;
     try {
       const { classifyTask } = await import("./task-orchestrator/classifier.js");
-      const { runPipeline } = await import("./task-orchestrator/pipelines.js");
       const task = classifyTask(userMessage);
+
       if (task.type !== "general" && task.confidence >= 0.8) {
-        const pipelineResult = await runPipeline(task, this.config.workingDirectory);
-        if (pipelineResult) {
-          // Replace the user message with the enriched prompt
-          orchestratedMessage = pipelineResult.prompt;
-          log.info(
-            "orchestrator",
-            `Classified "${task.type}" (${(task.confidence * 100).toFixed(0)}%) → ` +
-              `${pipelineResult.steps.length} pipeline steps, ` +
-              `${pipelineResult.context.length} chars context`,
-          );
+        // Debug tasks get the specialized debug engine
+        if (task.type === "debug") {
+          try {
+            const { collectEvidence, buildDebugPrompt } = await import("./debug-engine/evidence-collector.js");
+            const evidence = await collectEvidence({
+              files: task.entities.files ?? [],
+              errorMessage: task.entities.error,
+              cwd: this.config.workingDirectory,
+            });
+            orchestratedMessage = buildDebugPrompt(evidence, userMessage);
+            log.info(
+              "orchestrator",
+              `Debug engine: ${evidence.targetFiles.length} files, ` +
+                `${evidence.errorPatterns.length} error patterns, ` +
+                `${evidence.testFiles.length} test files, ` +
+                `${evidence.callers.length} callers`,
+            );
+          } catch (err) {
+            log.debug("debug-engine", `Debug engine skipped: ${err}`);
+          }
+        } else {
+          // Other task types use the generic pipeline
+          const { runPipeline } = await import("./task-orchestrator/pipelines.js");
+          const pipelineResult = await runPipeline(task, this.config.workingDirectory);
+          if (pipelineResult) {
+            orchestratedMessage = pipelineResult.prompt;
+            log.info(
+              "orchestrator",
+              `Classified "${task.type}" (${(task.confidence * 100).toFixed(0)}%) → ` +
+                `${pipelineResult.steps.length} pipeline steps, ` +
+                `${pipelineResult.context.length} chars context`,
+            );
+          }
         }
       }
     } catch (err) {
       log.debug("orchestrator", `Pipeline skipped: ${err}`);
-      // Fall through to raw message
     }
 
     this.state.messages.push({ role: "user", content: orchestratedMessage });

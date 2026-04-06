@@ -111,6 +111,13 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_github__`,
   },
   {
+    name: "debug",
+    description: "Machine-first debugging: gathers evidence (file, errors, git blame, tests) then LLM diagnoses",
+    aliases: ["dbg", "fix-bug"],
+    args: ["file path or error description"],
+    template: `__builtin_debug__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
