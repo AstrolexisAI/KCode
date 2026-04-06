@@ -97,6 +97,16 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixLoopBound(lines, finding);
     case "cpp-006-strcpy-family":
       return fixStrcpyFamily(lines, finding);
+    case "py-002-shell-injection":
+      return fixPyShellInjection(lines, finding);
+    case "py-008-path-traversal":
+      return fixPyPathTraversal(lines, finding);
+    case "py-001-eval-exec":
+      return fixPyEval(lines, finding);
+    case "py-004-sql-injection":
+      return fixPySqlInjection(lines, finding);
+    case "py-005-yaml-unsafe-load":
+      return fixPyYamlLoad(lines, finding);
     default:
       return {
         applied: false,
@@ -363,6 +373,110 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
   }
 
   return { applied: false, lines, description: "Non-literal source — manual fix needed" };
+}
+
+// ── Python auto-fixes ─────────────────────────────────────────
+
+/**
+ * py-002: Replace os.system/subprocess with shell=False variant.
+ */
+function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  const line = lines[idx]!;
+  const result = [...lines];
+
+  // os.system("cmd") → subprocess.run(["cmd"], shell=False)
+  const osSystemMatch = line.match(/\bos\.system\s*\(\s*(.+)\s*\)/);
+  if (osSystemMatch) {
+    const cmd = osSystemMatch[1]!.trim();
+    result[idx] = line.replace(/os\.system\s*\([^)]+\)/, `subprocess.run(${cmd}, shell=False)  # FIXED: was os.system`);
+    return { applied: true, lines: result, description: "os.system → subprocess.run(shell=False)" };
+  }
+
+  // subprocess.call(..., shell=True) → shell=False
+  if (line.includes("shell=True") || line.includes("shell = True")) {
+    result[idx] = line.replace(/shell\s*=\s*True/g, "shell=False  # FIXED: was shell=True");
+    return { applied: true, lines: result, description: "shell=True → shell=False" };
+  }
+
+  // subprocess with f-string → add comment warning
+  if (line.match(/subprocess\.\w+\s*\(\s*f["']/)) {
+    const indent = line.match(/^(\s*)/)?.[1] ?? "";
+    result.splice(idx, 0, `${indent}# SECURITY: Use list args instead of f-string to prevent injection`);
+    return { applied: true, lines: result, description: "Added security warning for f-string in subprocess" };
+  }
+
+  return { applied: false, lines, description: "Complex shell injection — manual fix needed" };
+}
+
+/**
+ * py-008: Add path validation for open() with dynamic paths.
+ */
+function fixPyPathTraversal(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  const line = lines[idx]!;
+  const indent = line.match(/^(\s*)/)?.[1] ?? "";
+  const result = [...lines];
+
+  // Insert os.path validation before the open() call
+  result.splice(idx, 0,
+    `${indent}# SECURITY: Validate path to prevent traversal`,
+    `${indent}import os; _path = os.path.abspath(_path); assert _path.startswith(os.getcwd()), "Path traversal blocked"`,
+  );
+  return { applied: true, lines: result, description: "Added path traversal guard" };
+}
+
+/**
+ * py-001: Replace eval() with ast.literal_eval().
+ */
+function fixPyEval(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  const line = lines[idx]!;
+  const result = [...lines];
+
+  if (line.includes("eval(")) {
+    result[idx] = line.replace(/\beval\s*\(/, "ast.literal_eval(  # FIXED: was eval(");
+    return { applied: true, lines: result, description: "eval() → ast.literal_eval()" };
+  }
+  if (line.includes("exec(")) {
+    const indent = line.match(/^(\s*)/)?.[1] ?? "";
+    result.splice(idx, 0, `${indent}# SECURITY WARNING: exec() executes arbitrary code — remove or sandbox`);
+    return { applied: true, lines: result, description: "Added exec() security warning" };
+  }
+  return { applied: false, lines, description: "Complex eval/exec — manual fix needed" };
+}
+
+/**
+ * py-004: Add parameterized query comment.
+ */
+function fixPySqlInjection(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  const indent = lines[idx]!.match(/^(\s*)/)?.[1] ?? "";
+  const result = [...lines];
+  result.splice(idx, 0,
+    `${indent}# SECURITY: Use parameterized query: cursor.execute("... WHERE id = %s", (id,))`,
+  );
+  return { applied: true, lines: result, description: "Added SQL injection warning + fix template" };
+}
+
+/**
+ * py-005: Replace yaml.load() with yaml.safe_load().
+ */
+function fixPyYamlLoad(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  const line = lines[idx]!;
+  const result = [...lines];
+
+  if (line.includes("yaml.load(")) {
+    result[idx] = line.replace(/yaml\.load\s*\(/, "yaml.safe_load(  # FIXED: was yaml.load(");
+    return { applied: true, lines: result, description: "yaml.load() → yaml.safe_load()" };
+  }
+  return { applied: false, lines, description: "Complex YAML load — manual fix needed" };
 }
 
 /**

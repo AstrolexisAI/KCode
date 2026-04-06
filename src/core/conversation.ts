@@ -474,7 +474,34 @@ export class ConversationManager {
       }
     }
 
-    this.state.messages.push({ role: "user", content: userMessage });
+    // Task orchestrator: classify the user's intent and run a deterministic
+    // pipeline to pre-process context. The LLM receives focused context +
+    // specific prompt instead of raw "figure it out" requests.
+    // This is what makes KCode faster than sending everything to the LLM.
+    let orchestratedMessage = userMessage;
+    try {
+      const { classifyTask } = await import("./task-orchestrator/classifier.js");
+      const { runPipeline } = await import("./task-orchestrator/pipelines.js");
+      const task = classifyTask(userMessage);
+      if (task.type !== "general" && task.confidence >= 0.8) {
+        const pipelineResult = await runPipeline(task, this.config.workingDirectory);
+        if (pipelineResult) {
+          // Replace the user message with the enriched prompt
+          orchestratedMessage = pipelineResult.prompt;
+          log.info(
+            "orchestrator",
+            `Classified "${task.type}" (${(task.confidence * 100).toFixed(0)}%) → ` +
+              `${pipelineResult.steps.length} pipeline steps, ` +
+              `${pipelineResult.context.length} chars context`,
+          );
+        }
+      }
+    } catch (err) {
+      log.debug("orchestrator", `Pipeline skipped: ${err}`);
+      // Fall through to raw message
+    }
+
+    this.state.messages.push({ role: "user", content: orchestratedMessage });
 
     // Layer 7: Update user model from message signals
     try {
