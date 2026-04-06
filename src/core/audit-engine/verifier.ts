@@ -91,6 +91,48 @@ Be strict. If you cannot prove the bug triggers, use FALSE_POSITIVE or NEEDS_CON
 }
 
 /**
+ * Post-verification sanity check: if the model says CONFIRMED but its
+ * own reasoning contains phrases that indicate it's actually safe,
+ * downgrade to FALSE_POSITIVE. This catches the "confirms everything"
+ * failure mode of weaker models.
+ */
+function sanityCheckVerdict(v: Verification): Verification {
+  if (v.verdict !== "confirmed") return v;
+
+  const r = (v.reasoning + " " + (v.execution_path ?? "")).toLowerCase();
+  const safeIndicators = [
+    "allocation accounts for",
+    "allocates.*strlen",
+    "malloc.*strlen.*\\+.*1",
+    "sizeof.*>=",
+    "guaranteed to be.*bytes",
+    "fixed.size.*buffer",
+    "compile.time constant",
+    "mathematically safe",
+    "within bounds",
+    "well within",
+    "is sufficient",
+    "does account for",
+    "properly bounded",
+    "correctly allocat",
+    "safe because",
+    "is safe",
+  ];
+
+  for (const pattern of safeIndicators) {
+    if (new RegExp(pattern, "i").test(r)) {
+      return {
+        ...v,
+        verdict: "false_positive",
+        reasoning: `[auto-downgraded: model said CONFIRMED but reasoning indicates safe] ${v.reasoning}`,
+      };
+    }
+  }
+
+  return v;
+}
+
+/**
  * Parse the model's response into a structured Verification.
  */
 function parseVerdict(response: string): Verification {
@@ -139,7 +181,9 @@ export async function verifyCandidate(
 ): Promise<Verification> {
   const prompt = buildVerifyPrompt(candidate);
   const primary = await opts.llmCallback(prompt);
-  return parseVerdict(primary);
+  const verdict = parseVerdict(primary);
+  // Sanity check: catch model confirming something its own reasoning says is safe
+  return sanityCheckVerdict(verdict);
 }
 
 /**
