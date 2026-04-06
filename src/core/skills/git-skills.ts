@@ -23,7 +23,7 @@ export const gitSkills: SkillDefinition[] = [
   {
     name: "review-pr",
     description: "Review a pull request",
-    aliases: ["pr", "review"],
+    aliases: ["review", "code-review"],
     args: ["PR number or URL"],
     template: `Review the specified pull request thoroughly.
 

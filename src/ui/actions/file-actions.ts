@@ -68,6 +68,9 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
 
           const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
           writeFileSync(outputPath, generateMarkdownReport(result));
+          // Also write JSON for /fix and /pr to consume
+          const jsonPath = outputPath.replace(/\.md$/, ".json");
+          writeFileSync(jsonPath, JSON.stringify(result, null, 2));
 
           const topFindings = result.findings.slice(0, 5).map((f) => ({
             severity: f.severity,
