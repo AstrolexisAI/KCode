@@ -5,6 +5,9 @@
 
 import type { DetectedIntent } from "./detector";
 import { CINEMATIC_CSS, REVEAL_SCRIPT, PALETTES, paletteToCSS } from "./effects";
+import { astroBase, astroBlogPages, astroPortfolioPages } from "./stacks/astro";
+import { svelteBase } from "./stacks/svelte";
+import { htmlBase } from "./stacks/html";
 
 export interface FileTemplate {
   path: string;
@@ -639,12 +642,29 @@ export function buildProjectTemplate(intent: DetectedIntent): ProjectTemplate {
       content: `# ${intent.name}\n\nBuilt with KCode.\n\n## Getting Started\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
       needsLlm: false,
     });
+  } else if (intent.stack === "astro") {
+    files.push(...astroBase(intent));
+    if (intent.siteType === "blog") {
+      files.push(...astroBlogPages(intent));
+    } else if (intent.siteType === "portfolio") {
+      files.push(...astroPortfolioPages(intent));
+    } else {
+      files.push(...astroBlogPages(intent)); // default to blog structure
+    }
+    files.push({ path: ".gitignore", content: "node_modules/\ndist/\n.astro/\n", needsLlm: false });
+    files.push({ path: "README.md", content: `# ${intent.name}\n\nBuilt with Astro + KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`, needsLlm: false });
+  } else if (intent.stack === "svelte") {
+    files.push(...svelteBase(intent));
+    files.push({ path: ".gitignore", content: "node_modules/\n.svelte-kit/\nbuild/\n", needsLlm: false });
+    files.push({ path: "README.md", content: `# ${intent.name}\n\nBuilt with SvelteKit + KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`, needsLlm: false });
+  } else if (intent.stack === "html") {
+    files.push(...htmlBase(intent));
   }
 
   return {
     files,
-    installCmd: "npm install",
-    devCmd: "npm run dev",
-    buildCmd: "npm run build",
+    installCmd: intent.stack === "html" ? "" : "npm install",
+    devCmd: intent.stack === "html" ? "open index.html" : "npm run dev",
+    buildCmd: intent.stack === "html" ? "" : "npm run build",
   };
 }
