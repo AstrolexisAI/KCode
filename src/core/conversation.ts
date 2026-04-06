@@ -478,6 +478,22 @@ export class ConversationManager {
     // pipeline to pre-process context. The LLM receives focused context +
     // specific prompt instead of raw "figure it out" requests.
     // This is what makes KCode faster than sending everything to the LLM.
+    // Level 1: try to handle deterministically without LLM (0 tokens)
+    try {
+      const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
+      const l1 = tryLevel1(userMessage, this.config.workingDirectory);
+      if (l1.handled) {
+        this.state.messages.push({ role: "user", content: userMessage });
+        this.state.messages.push({ role: "assistant", content: l1.output });
+        yield { type: "text", text: l1.output };
+        yield { type: "turn_end", inputTokens: 0, outputTokens: 0 };
+        log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
+        return;
+      }
+    } catch (err) {
+      log.debug("orchestrator", `Level 1 skipped: ${err}`);
+    }
+
     let orchestratedMessage = userMessage;
     try {
       const { classifyTask } = await import("./task-orchestrator/classifier.js");
