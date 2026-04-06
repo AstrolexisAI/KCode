@@ -19,6 +19,8 @@ export interface PrOptions {
   repo?: string;
   /** Don't actually push or create PR — just generate and show what would happen */
   dryRun?: boolean;
+  /** Progress callback for each step */
+  onStep?: (step: string) => void;
 }
 
 export interface PrResult {
@@ -28,6 +30,7 @@ export interface PrResult {
   prDescription: string;
   filesChanged: number;
   dryRun: boolean;
+  pushError?: string;
 }
 
 function git(cwd: string, args: string): string {
@@ -155,20 +158,24 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
 
   let commitHash = "";
   let prUrl: string | undefined;
+  let pushError: string | undefined;
+  const step = opts.onStep ?? (() => {});
 
   if (!dryRun) {
     // Create branch
+    step("Creating branch...");
     try {
       git(projectRoot, `checkout -b ${branchName}`);
     } catch {
-      // Branch might already exist
-      git(projectRoot, `checkout ${branchName}`);
+      try { git(projectRoot, `checkout ${branchName}`); } catch { /* ignore */ }
     }
 
     // Stage all changes
+    step("Staging changes...");
     git(projectRoot, "add -A");
 
     // Commit
+    step("Committing...");
     const commitMsg = `fix: address ${auditResult.confirmed_findings} security/quality findings from KCode audit
 
 Automated fixes applied by KCode Audit Engine:
@@ -176,7 +183,6 @@ Automated fixes applied by KCode Audit Engine:
 
 Signed-off-by: Astrolexis.space — Kulvex Code
 `;
-    // Write commit message to temp file to avoid shell escaping issues
     const { writeFileSync: writeTemp, unlinkSync } = require("node:fs") as typeof import("node:fs");
     const msgFile = resolve(projectRoot, ".kcode-commit-msg");
     writeTemp(msgFile, commitMsg);
@@ -188,36 +194,38 @@ Signed-off-by: Astrolexis.space — Kulvex Code
       try { unlinkSync(msgFile); } catch { /* ignore */ }
     }
 
-    // Push
+    // Push (graceful failure — no stacktrace dump)
+    step("Pushing branch...");
     try {
       git(projectRoot, `push -u origin ${branchName}`);
     } catch (err) {
-      // Push might fail if no remote or auth issues — that's OK, we still have the local branch
-      console.error("Push failed (branch created locally):", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      // Extract just the useful error (permission denied, etc)
+      const match = msg.match(/remote: (.+?)\\n|fatal: (.+?)\\n|error: (.+)/);
+      pushError = match ? (match[1] ?? match[2] ?? match[3] ?? msg).trim() : "Push failed";
     }
 
-    // Create PR via gh
-    const repo = opts.repo ?? detectRemoteRepo(projectRoot);
-    if (repo) {
-      try {
-        const bodyFile = resolve(projectRoot, ".kcode-pr-body");
-        writeTemp(bodyFile, prDescription);
+    // Create PR via gh (only if push succeeded)
+    if (!pushError) {
+      step("Creating PR via gh...");
+      const repo = opts.repo ?? detectRemoteRepo(projectRoot);
+      if (repo) {
         try {
-          prUrl = git(
-            projectRoot,
-            `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${repo}`,
-          );
-        } catch {
-          // gh might not be installed or auth might fail
-          prUrl = undefined;
-        } finally {
-          try { unlinkSync(bodyFile); } catch { /* ignore */ }
-        }
-      } catch {
-        /* gh pr create failed */
+          const bodyFile = resolve(projectRoot, ".kcode-pr-body");
+          writeTemp(bodyFile, prDescription);
+          try {
+            prUrl = git(
+              projectRoot,
+              `gh pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${repo}`,
+            );
+          } catch { prUrl = undefined; }
+          finally { try { unlinkSync(bodyFile); } catch { /* ignore */ } }
+        } catch { /* gh pr create failed */ }
       }
     }
   }
+
+  step("Done");
 
   return {
     branchName,
@@ -226,5 +234,6 @@ Signed-off-by: Astrolexis.space — Kulvex Code
     prDescription,
     filesChanged: changedFiles,
     dryRun,
+    pushError,
   };
 }

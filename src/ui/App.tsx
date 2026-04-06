@@ -215,7 +215,6 @@ export default function App({ config, conversationManager, tools, initialSession
             elapsed: (Date.now() - scanState.startTime) / 1000,
           });
 
-          // When done, push result to conversation and clear
           if (!scanState.active && scanState.result) {
             const reportText = scanState.result.reportText;
             setCompleted((prev) => [
@@ -236,9 +235,43 @@ export default function App({ config, conversationManager, tools, initialSession
         } else if (scanProgress !== null) {
           setScanProgress(null);
         }
-      } catch {
-        /* scan-state module not loaded */
-      }
+      } catch { /* scan-state module not loaded */ }
+
+      // Also poll PR generation state
+      try {
+        const { prState } = await import("../core/audit-engine/pr-state.js");
+        if (prState.active || prState.result || prState.error) {
+          setScanProgress((prev) =>
+            prState.active
+              ? {
+                  active: true,
+                  phase: `PR: ${prState.step}`,
+                  verified: 0,
+                  total: 0,
+                  confirmed: 0,
+                  elapsed: (Date.now() - prState.startTime) / 1000,
+                }
+              : prev,
+          );
+
+          if (!prState.active && prState.result) {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "assistant", text: prState.result!.prDescription },
+            ]);
+            prState.result = undefined;
+            setScanProgress(null);
+          }
+          if (!prState.active && prState.error) {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "assistant", text: `  ✗ PR error: ${prState.error}` },
+            ]);
+            prState.error = undefined;
+            setScanProgress(null);
+          }
+        }
+      } catch { /* pr-state module not loaded */ }
     }, 200);
     return () => clearInterval(timer);
   }, [scanProgress]);

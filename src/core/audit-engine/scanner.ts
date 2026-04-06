@@ -40,7 +40,10 @@ const SKIP_DIRS = new Set([
   "3rdParty",
   "third_party",
   "vendor",
-  "include/hidapi",
+  "hidapi",        // NASA IDF submodule (third-party code)
+  "hidtest",       // hidapi test files
+  "testgui",       // hidapi test GUI
+  "pp_data_dump",  // hidapi Windows test tool
 ]);
 
 /**
