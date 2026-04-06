@@ -740,6 +740,33 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return [`  KCode Swift Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  swift build / swift run / swift test`].join("\n");
     }
 
+    case "java": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /java REST API with Spring\n  /java microservice with Kafka\n  /java CLI tool";
+      const { createJavaProject } = await import("../../core/web-engine/stacks/java-engine.js");
+      const r = createJavaProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Java Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  ./gradlew bootRun / ./gradlew test`].join("\n");
+    }
+
+    case "node": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /node CLI tool called mytool\n  /node Discord bot\n  /node library for data processing\n  /node worker with Redis queue";
+      const { createNodeProject } = await import("../../core/web-engine/stacks/node-engine.js");
+      const r = createNodeProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Node.js Engine`, `    ${r.config.name}/ | ${r.config.type} | ${r.files.length} files (${m} machine)`, "", `  npm run dev / npm test`].join("\n");
+    }
+
+    case "docker": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /docker Node.js API with Redis and Postgres\n  /docker Python ML pipeline with GPU\n  /docker microservices with Nginx reverse proxy";
+      const { createDockerProject } = await import("../../core/web-engine/stacks/docker-engine.js");
+      const r = createDockerProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Docker Engine`, `    ${r.config.name}/ | ${r.services.length} services | ${r.files.length} files (${m} machine)`, "", `  docker compose up / docker compose down`].join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 

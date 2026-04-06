@@ -174,6 +174,27 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_swift__`,
   },
   {
+    name: "java",
+    description: "Create a Java project (API, CLI, microservice, library) with Spring Boot, Gradle, tests, CI",
+    aliases: ["jvm", "create-java", "spring"],
+    args: ["description of the project"],
+    template: `__builtin_java__`,
+  },
+  {
+    name: "node",
+    description: "Create a Node.js/JavaScript project (CLI, library, worker, bot, script, lambda)",
+    aliases: ["js", "create-node", "javascript"],
+    args: ["description of the project"],
+    template: `__builtin_node__`,
+  },
+  {
+    name: "docker",
+    description: "Create a Docker project (Compose stack, multi-service, with networking and volumes)",
+    aliases: ["compose", "create-docker", "container"],
+    args: ["description of the services/stack"],
+    template: `__builtin_docker__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
