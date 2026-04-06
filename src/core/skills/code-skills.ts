@@ -90,6 +90,20 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_scan__`,
   },
   {
+    name: "fix",
+    description: "Auto-fix findings from /scan (deterministic patches, no LLM needed)",
+    aliases: ["autofix", "patch"],
+    args: ["project path (default: cwd)"],
+    template: `__builtin_fix__`,
+  },
+  {
+    name: "pr",
+    description: "Create a PR from /scan + /fix findings (branch, commit, detailed description via LLM)",
+    aliases: ["pull-request", "submit"],
+    args: ["project path (default: cwd) [--repo owner/repo]"],
+    template: `__builtin_pr__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
