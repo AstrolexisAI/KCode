@@ -32,14 +32,25 @@ export function makeAuditLlmCallback(
 
   const isAnthropic =
     apiBase.includes("anthropic.com") || /\bclaude\b/i.test(model);
+  const isOAuthToken = apiKey.startsWith("sk-ant-oat01-");
 
   return async (prompt: string): Promise<string> => {
     if (isAnthropic) {
+      // OAuth tokens (sk-ant-oat01-*) use Bearer auth + beta header
+      // API keys (sk-ant-api03-*) use x-api-key
+      const authHeaders: Record<string, string> = isOAuthToken
+        ? {
+            Authorization: `Bearer ${apiKey}`,
+            "anthropic-beta": "oauth-2025-04-20,prompt-caching-2024-07-31",
+            "x-app": "cli",
+          }
+        : { "x-api-key": apiKey };
+
       const res = await fetch(`${apiBase.replace(/\/$/, "")}/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": apiKey,
+          ...authHeaders,
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({

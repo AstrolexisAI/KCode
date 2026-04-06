@@ -45,14 +45,15 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         : buildAuditLlmCallbackFromConfig(appConfig);
 
       // Auto-detect cloud fallback for hybrid verification
+      // Prefers OAuth bridge (subscription) over API key (per-token)
       let fallbackCallback: ((prompt: string) => Promise<string>) | undefined;
       if (!skipVerify) {
         const { buildCloudFallbackCallback, detectCloudFallback } = await import(
           "../../core/audit-engine/cloud-fallback.js"
         );
-        const cloudConfig = detectCloudFallback(appConfig.apiBase);
+        const cloudConfig = await detectCloudFallback(appConfig.apiBase);
         if (cloudConfig.available) {
-          fallbackCallback = buildCloudFallbackCallback(appConfig.apiBase) ?? undefined;
+          fallbackCallback = (await buildCloudFallbackCallback(appConfig.apiBase)) ?? undefined;
           scanState.cloudProvider = cloudConfig.provider;
         }
       }
