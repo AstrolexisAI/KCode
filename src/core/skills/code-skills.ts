@@ -139,6 +139,13 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_fullstack__`,
   },
   {
+    name: "python",
+    description: "Create a Python project (API, CLI, scraper, ML, data pipeline, bot, automation)",
+    aliases: ["py", "create-python"],
+    args: ["description of the project"],
+    template: `__builtin_python__`,
+  },
+  {
     name: "cpp",
     description: "Create a C/C++ project (library, server, CLI, game, embedded, system) with CMake, tests, CI",
     aliases: ["c", "create-cpp", "create-c"],
