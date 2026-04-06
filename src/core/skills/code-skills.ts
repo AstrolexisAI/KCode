@@ -237,6 +237,13 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_elixir__`,
   },
   {
+    name: "db",
+    description: "Create a database project (Postgres/MySQL/SQLite/Mongo/Redis with Prisma/Drizzle/TypeORM/Knex/Mongoose)",
+    aliases: ["database", "create-db", "schema"],
+    args: ["description with entities (e.g., 'Postgres with users, products, orders')"],
+    template: `__builtin_db__`,
+  },
+  {
     name: "css",
     description: "Create a CSS project (design system, component library, Tailwind plugin, animation lib, Sass framework)",
     aliases: ["design-system", "create-css", "tailwind-plugin"],

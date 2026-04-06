@@ -831,6 +831,17 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return [`  KCode Elixir Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  mix run --no-halt / mix test`].join("\n");
     }
 
+    case "db":
+    case "database":
+    case "schema": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /db Postgres with users, products, orders\n  /db MongoDB with posts and comments\n  /db SQLite with tasks using Drizzle\n  /db MySQL with users and sessions using TypeORM";
+      const { createDbProject } = await import("../../core/web-engine/stacks/db-engine.js");
+      const r = createDbProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Database Engine`, `    ${r.config.name}/ | ${r.config.type} + ${r.config.orm} | ${r.config.entities.length} entities | ${r.files.length} files (${m} machine)`, `    Entities: ${r.config.entities.map(e => e.name).join(", ")}`, `    Docker: ${r.config.hasDocker ? "yes" : "no"} | Backup: ${r.config.hasBackup ? "yes" : "no"}`, "", `  make up / npm run db:init / npm run db:seed`].join("\n");
+    }
+
     case "css":
     case "design-system": {
       const desc = (args ?? "").trim();
