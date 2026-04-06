@@ -232,31 +232,26 @@ describe("audit-engine orchestrator", () => {
     expect(result.findings.length).toBe(0);
   });
 
-  test("runAudit in hybrid mode escalates NEEDS_CONTEXT to fallback", async () => {
+  test("runAudit does NOT auto-escalate to fallback (escalation is user-prompted)", async () => {
     writeFileSync(join(tmp, "ambig.cpp"), `void f() { strcpy(a, b); }\n`);
 
-    let primaryCalls = 0;
     let fallbackCalls = 0;
     const primary = async (): Promise<string> => {
-      primaryCalls++;
-      return "VERDICT: NEEDS_CONTEXT\nREASONING: can't tell without more info\n";
+      return "VERDICT: NEEDS_CONTEXT\nREASONING: can't tell\n";
     };
     const fallback = async (): Promise<string> => {
       fallbackCalls++;
-      return "VERDICT: CONFIRMED\nREASONING: cloud model confirms real bug\nFIX: use strncpy\n";
+      return "VERDICT: CONFIRMED\nREASONING: cloud\n";
     };
 
-    const result = await runAudit({
+    await runAudit({
       projectRoot: tmp,
       llmCallback: primary,
       fallbackCallback: fallback,
     });
 
-    expect(primaryCalls).toBeGreaterThanOrEqual(1);
-    expect(fallbackCalls).toBeGreaterThanOrEqual(1);
-    // Escalation should have resolved the ambiguous case to confirmed
-    expect(result.confirmed_findings).toBeGreaterThanOrEqual(1);
-    expect(result.findings[0]!.verification.reasoning).toContain("[escalated]");
+    // Fallback should NOT be called automatically — escalation is user-prompted via TUI
+    expect(fallbackCalls).toBe(0);
   });
 
   test("runAudit in hybrid mode does NOT call fallback when primary is definitive", async () => {
