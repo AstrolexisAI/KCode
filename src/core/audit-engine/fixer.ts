@@ -407,6 +407,16 @@ function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
     return { applied: true, lines: result, description: "Added security warning for f-string in subprocess" };
   }
 
+  // List args with f-strings/format — add input validation warning
+  if (line.match(/subprocess\.\w+\s*\(\s*\[/) && (line.includes("f'") || line.includes('f"') || line.includes(".format("))) {
+    const indent = line.match(/^(\s*)/)?.[1] ?? "";
+    result.splice(idx, 0,
+      `${indent}# SECURITY: Validate user-controlled args before passing to subprocess`,
+      `${indent}# Sanitize: strip shell metacharacters, validate expected format`,
+    );
+    return { applied: true, lines: result, description: "Added input validation warning for subprocess args" };
+  }
+
   return { applied: false, lines, description: "Complex shell injection — manual fix needed" };
 }
 
