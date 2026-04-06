@@ -4,7 +4,7 @@
 // Each phase is independent and testable. The orchestrator wires them
 // together and handles progress reporting for the CLI.
 
-import { dedupByPatternAndFile, detectLanguages, scanProject } from "./scanner";
+import { dedupByPatternAndFile, detectLanguages, initSubmodulesIfNeeded, scanProject } from "./scanner";
 import type { AuditResult, Candidate, Finding, Verification } from "./types";
 import { verifyAllCandidates, type VerifyOptions } from "./verifier";
 
@@ -31,8 +31,14 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   const startTime = Date.now();
   const timestamp = new Date().toISOString().split("T")[0]!;
 
-  // Phase 1: Discovery + scanning
+  // Phase 0: Init submodules if needed
   opts.onPhase?.("discovery");
+  const didInit = initSubmodulesIfNeeded(opts.projectRoot);
+  if (didInit) {
+    opts.onPhase?.("discovery", "Initialized git submodules");
+  }
+
+  // Phase 1: Discovery + scanning
   const { files, candidates: rawCandidates } = scanProject(opts.projectRoot, {
     maxFiles: opts.maxFiles,
   });

@@ -4,10 +4,48 @@
 // bug pattern library and produces a list of CANDIDATE findings. No model
 // calls yet — candidates are just regex matches in files.
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { getAllPatterns } from "./patterns";
 import type { BugPattern, Candidate, Language } from "./types";
+
+/**
+ * Initialize git submodules if the project has any uninitialized ones.
+ * Many large projects (NASA cFS, etc.) are meta-repos where all source
+ * code lives in submodules. Without init, the scanner finds 0 files.
+ */
+export function initSubmodulesIfNeeded(projectRoot: string): boolean {
+  const gitmodulesPath = join(projectRoot, ".gitmodules");
+  if (!existsSync(gitmodulesPath)) return false;
+
+  // Check if any submodule directory is empty
+  try {
+    const content = readFileSync(gitmodulesPath, "utf-8");
+    const paths = content.match(/path\s*=\s*(.+)/g)?.map((m) => m.replace(/path\s*=\s*/, "").trim()) ?? [];
+    const hasEmpty = paths.some((p) => {
+      const dir = join(projectRoot, p);
+      try {
+        const entries = readdirSync(dir);
+        return entries.length === 0;
+      } catch {
+        return true; // dir doesn't exist
+      }
+    });
+
+    if (hasEmpty) {
+      execSync("git submodule update --init --recursive", {
+        cwd: projectRoot,
+        timeout: 120_000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return true;
+    }
+  } catch {
+    // git submodule init failed — continue without submodules
+  }
+  return false;
+}
 
 const SOURCE_EXTENSIONS: Record<string, Language> = {
   ".c": "c",
