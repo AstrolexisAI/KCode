@@ -679,6 +679,242 @@ export const SWIFT_PATTERNS: BugPattern[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════
+// Kotlin Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const KOTLIN_PATTERNS: BugPattern[] = [
+  {
+    id: "kt-001-force-unwrap",
+    title: "Non-null assertion (!!) on nullable type",
+    severity: "medium",
+    languages: ["kotlin"],
+    regex: /\w+!!\./g,
+    explanation: "!! throws NullPointerException if the value is null. Use safe calls (?.) or elvis (?:) instead.",
+    verify_prompt: "Is this !! in production code where null is possible? If guaranteed non-null by contract, respond FALSE_POSITIVE.",
+    cwe: "CWE-476",
+    fix_template: "Replace val!! with val?.method() ?: fallback, or guard with if (val != null).",
+  },
+  {
+    id: "kt-002-sql-injection",
+    title: "SQL query with string template",
+    severity: "critical",
+    languages: ["kotlin"],
+    regex: /\b(?:rawQuery|execSQL|query)\s*\(\s*["$]/g,
+    explanation: "SQL queries with Kotlin string templates ($var) are vulnerable to injection.",
+    verify_prompt: "Is user input interpolated? If parameterized with ?, respond FALSE_POSITIVE.",
+    cwe: "CWE-89",
+    fix_template: "Use parameterized queries with ? placeholders and selectionArgs array.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// C# Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const CSHARP_PATTERNS: BugPattern[] = [
+  {
+    id: "cs-001-sql-injection",
+    title: "SQL query with string concatenation/interpolation",
+    severity: "critical",
+    languages: ["csharp"],
+    regex: /\b(?:ExecuteNonQuery|ExecuteReader|ExecuteScalar|SqlCommand)\s*\(\s*(?:\$"|".*\+)/g,
+    explanation: "SQL queries with string interpolation ($\"\") or concatenation are vulnerable to injection.",
+    verify_prompt: "Is user input interpolated? If using SqlParameter/@param, respond FALSE_POSITIVE.",
+    cwe: "CWE-89",
+    fix_template: "Use SqlCommand with Parameters.AddWithValue(\"@id\", userId).",
+  },
+  {
+    id: "cs-002-deserialization",
+    title: "Unsafe deserialization (BinaryFormatter)",
+    severity: "critical",
+    languages: ["csharp"],
+    regex: /\bBinaryFormatter\s*\(\s*\)|\.Deserialize\s*\(/g,
+    explanation: "BinaryFormatter deserializes arbitrary .NET objects. Microsoft marks it as dangerous — attackers can execute code via crafted payloads.",
+    verify_prompt: "Is the deserialized data from a trusted source? If from network/user input, respond CONFIRMED.",
+    cwe: "CWE-502",
+    fix_template: "Use System.Text.Json or JsonSerializer instead of BinaryFormatter.",
+  },
+  {
+    id: "cs-003-hardcoded-connection",
+    title: "Hardcoded connection string with credentials",
+    severity: "high",
+    languages: ["csharp"],
+    regex: /(?:connectionString|ConnectionString)\s*=\s*"[^"]*(?:Password|Pwd|password)=[^"]+"/gi,
+    explanation: "Connection strings with embedded passwords are exposed in source code.",
+    verify_prompt: "Is this a real connection string with credentials or a placeholder? If real, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "Use appsettings.json with User Secrets or Azure Key Vault.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// PHP Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const PHP_PATTERNS: BugPattern[] = [
+  {
+    id: "php-001-sql-injection",
+    title: "SQL query with variable interpolation",
+    severity: "critical",
+    languages: ["php"],
+    regex: /\b(?:mysql_query|mysqli_query|->query)\s*\(\s*["'].*\$/g,
+    explanation: "SQL queries with PHP variable interpolation ($var) are vulnerable to injection.",
+    verify_prompt: "Is user input interpolated? If using prepared statements (bind_param), respond FALSE_POSITIVE.",
+    cwe: "CWE-89",
+    fix_template: "Use prepared statements: $stmt = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $stmt->execute([$id]);",
+  },
+  {
+    id: "php-002-eval",
+    title: "eval() with dynamic input",
+    severity: "critical",
+    languages: ["php"],
+    regex: /\beval\s*\(\s*\$/g,
+    explanation: "eval() executes arbitrary PHP code. If input is user-controlled, this is RCE.",
+    verify_prompt: "Is the argument from user input? If hardcoded/internal, respond FALSE_POSITIVE.",
+    cwe: "CWE-95",
+    fix_template: "Remove eval(). Use specific functions for the intended operation.",
+  },
+  {
+    id: "php-003-file-include",
+    title: "Dynamic file include (LFI/RFI)",
+    severity: "critical",
+    languages: ["php"],
+    regex: /\b(?:include|require|include_once|require_once)\s*\(\s*\$/g,
+    explanation: "Including files from user input enables Local/Remote File Inclusion attacks.",
+    verify_prompt: "Is the path from user input? If from internal config/constant, respond FALSE_POSITIVE.",
+    cwe: "CWE-98",
+    fix_template: "Whitelist allowed files: $allowed = ['page1', 'page2']; if (in_array($input, $allowed)) include($input.'.php');",
+  },
+  {
+    id: "php-004-xss",
+    title: "Unescaped output (XSS)",
+    severity: "high",
+    languages: ["php"],
+    regex: /echo\s+\$(?:_GET|_POST|_REQUEST|_COOKIE)\s*\[/g,
+    explanation: "Echoing superglobal variables directly enables XSS. Always escape output.",
+    verify_prompt: "Is htmlspecialchars() or equivalent applied before output? If escaped, respond FALSE_POSITIVE.",
+    cwe: "CWE-79",
+    fix_template: "echo htmlspecialchars($_GET['param'], ENT_QUOTES, 'UTF-8');",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// Ruby Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const RUBY_PATTERNS: BugPattern[] = [
+  {
+    id: "rb-001-eval",
+    title: "eval/send with dynamic input",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\b(?:eval|send|public_send|instance_eval|class_eval)\s*\(\s*(?:params|request|input)/g,
+    explanation: "eval/send with user input enables arbitrary code execution.",
+    verify_prompt: "Is the argument from user input? If internal/constant, respond FALSE_POSITIVE.",
+    cwe: "CWE-95",
+    fix_template: "Use a whitelist: ALLOWED_METHODS.include?(method_name) && obj.public_send(method_name)",
+  },
+  {
+    id: "rb-002-sql-injection",
+    title: "SQL with string interpolation",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\b(?:where|find_by_sql|execute|select)\s*\(\s*"/g,
+    explanation: "ActiveRecord/SQL with string interpolation is vulnerable to injection.",
+    verify_prompt: "Is user input interpolated via #{}? If using ? placeholders, respond FALSE_POSITIVE.",
+    cwe: "CWE-89",
+    fix_template: "User.where('email = ?', params[:email]) instead of string interpolation.",
+  },
+  {
+    id: "rb-003-yaml-unsafe",
+    title: "YAML.load with untrusted input",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\bYAML\.load\s*\(/g,
+    explanation: "YAML.load in Ruby can execute arbitrary code. Use YAML.safe_load instead.",
+    verify_prompt: "Is the YAML from untrusted source? If from internal config file, respond FALSE_POSITIVE.",
+    cwe: "CWE-502",
+    fix_template: "YAML.safe_load(data, permitted_classes: [Symbol])",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// Dart/Flutter Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const DART_PATTERNS: BugPattern[] = [
+  {
+    id: "dart-001-insecure-http",
+    title: "HTTP (not HTTPS) URL in production",
+    severity: "high",
+    languages: ["dart"],
+    regex: /Uri\.parse\s*\(\s*['"]http:\/\/(?!localhost|127\.0\.0\.1|10\.)/g,
+    explanation: "Using HTTP exposes data to MITM attacks. Use HTTPS in production.",
+    verify_prompt: "Is this a dev/local URL or production? If dev, respond FALSE_POSITIVE.",
+    cwe: "CWE-319",
+    fix_template: "Change http:// to https://.",
+  },
+  {
+    id: "dart-002-hardcoded-key",
+    title: "Hardcoded API key in Dart",
+    severity: "high",
+    languages: ["dart"],
+    regex: /(?:apiKey|secretKey|password|token)\s*[:=]\s*['"][A-Za-z0-9+/=_-]{16,}['"]/g,
+    explanation: "Hardcoded secrets in Dart/Flutter apps can be extracted from the compiled binary.",
+    verify_prompt: "Is this a real key or placeholder? If real, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "Use --dart-define=API_KEY=xxx or flutter_dotenv package.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// SQL Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const SQL_PATTERNS: BugPattern[] = [
+  {
+    id: "sql-001-grant-all",
+    title: "GRANT ALL PRIVILEGES (over-permissioned)",
+    severity: "high",
+    languages: ["sql"],
+    regex: /GRANT\s+ALL\s+PRIVILEGES/gi,
+    explanation: "Granting ALL PRIVILEGES violates least-privilege principle. Grant only needed permissions.",
+    verify_prompt: "Is this a setup/migration script for a dedicated service account, or a shared account? If overly broad, respond CONFIRMED.",
+    cwe: "CWE-250",
+    fix_template: "GRANT SELECT, INSERT, UPDATE ON specific_table TO user;",
+  },
+  {
+    id: "sql-002-plaintext-password",
+    title: "Plaintext password in SQL",
+    severity: "critical",
+    languages: ["sql"],
+    regex: /(?:PASSWORD|IDENTIFIED BY)\s+['"][^'"]+['"]/gi,
+    explanation: "Plaintext passwords in SQL scripts are exposed to anyone with repo access.",
+    verify_prompt: "Is this a real password or a placeholder like 'changeme'? If real, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "Use environment variables or secrets manager for credentials.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// Scala Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const SCALA_PATTERNS: BugPattern[] = [
+  {
+    id: "scala-001-sql-injection",
+    title: "SQL with string interpolation",
+    severity: "critical",
+    languages: ["scala"],
+    regex: /\b(?:sql|SQL)\s*"""[^"]*\$\{/g,
+    explanation: "Scala SQL string interpolation with ${} is vulnerable to injection.",
+    verify_prompt: "Is user input interpolated? If using #$param (Slick) or ? placeholders, respond FALSE_POSITIVE.",
+    cwe: "CWE-89",
+    fix_template: "Use parameterized queries: sql\"SELECT * FROM t WHERE id = $id\" (Slick's safe interpolation).",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
 // Cross-language Patterns (shell, HTML, config, etc.)
 // ═══════════════════════════════════════════════════════════════
 
@@ -731,6 +967,13 @@ const ALL_PATTERNS: BugPattern[] = [
   ...RUST_PATTERNS,
   ...JAVA_PATTERNS,
   ...SWIFT_PATTERNS,
+  ...KOTLIN_PATTERNS,
+  ...CSHARP_PATTERNS,
+  ...PHP_PATTERNS,
+  ...RUBY_PATTERNS,
+  ...DART_PATTERNS,
+  ...SQL_PATTERNS,
+  ...SCALA_PATTERNS,
   ...UNIVERSAL_PATTERNS,
 ];
 

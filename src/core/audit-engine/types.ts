@@ -2,7 +2,12 @@
 // Core types for the deterministic audit pipeline.
 
 export type Severity = "critical" | "high" | "medium" | "low";
-export type Language = "c" | "cpp" | "python" | "go" | "rust" | "javascript" | "typescript" | "swift" | "java";
+export type Language =
+  | "c" | "cpp" | "python" | "go" | "rust"
+  | "javascript" | "typescript" | "swift" | "java"
+  | "kotlin" | "csharp" | "php" | "ruby" | "dart"
+  | "scala" | "perl" | "r" | "julia" | "sql"
+  | "matlab";
 
 /**
  * A bug pattern is a rule that identifies a specific class of dangerous code.
