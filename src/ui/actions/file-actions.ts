@@ -713,6 +713,33 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       ].filter(Boolean).join("\n");
     }
 
+    case "rust": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /rust API server with Axum\n  /rust CLI tool for file processing\n  /rust game with Bevy";
+      const { createRustProject } = await import("../../core/web-engine/stacks/rust-engine.js");
+      const r = createRustProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Rust Engine`, `    ${r.config.name}/ | ${r.config.type} | ${r.files.length} files (${m} machine)`, "", `  cargo run / cargo test`].join("\n");
+    }
+
+    case "go": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /go API with Chi\n  /go CLI tool\n  /go gRPC service";
+      const { createGoProject } = await import("../../core/web-engine/stacks/go-engine.js");
+      const r = createGoProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Go Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  make run / make test`].join("\n");
+    }
+
+    case "swift": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /swift iOS app with SwiftUI\n  /swift macOS app\n  /swift CLI tool\n  /swift Vapor server";
+      const { createSwiftProject } = await import("../../core/web-engine/stacks/swift-engine.js");
+      const r = createSwiftProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Swift Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  swift build / swift run / swift test`].join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
