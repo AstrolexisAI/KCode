@@ -659,6 +659,36 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       ].join("\n");
     }
 
+    case "cpp": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /cpp HTTP server with SQLite\n  /cpp embedded firmware for ESP32\n  /cpp game engine with OpenGL\n  /c library for data compression";
+
+      const { createCppProject } = await import("../../core/web-engine/stacks/cpp-engine.js");
+      const result = createCppProject(desc, appConfig.workingDirectory);
+      const machine = result.files.filter(f => !f.needsLlm).length;
+      const llm = result.files.filter(f => f.needsLlm).length;
+
+      return [
+        "  KCode C/C++ Engine",
+        `    Project:      ${result.config.name}/`,
+        `    Type:         ${result.config.type}`,
+        `    Standard:     ${result.config.standard}`,
+        `    Dependencies: ${result.config.dependencies.join(", ") || "none"}`,
+        `    Files:        ${result.files.length} (${machine} machine, ${llm} LLM)`,
+        "",
+        "  Structure:",
+        `    📁 CMakeLists.txt`,
+        `    📁 include/${result.config.name}.*`,
+        `    📁 src/main.* + ${result.config.name}.*`,
+        `    📁 tests/`,
+        result.config.hasDocker ? `    📁 Dockerfile` : "",
+        result.config.hasCI ? `    📁 .github/workflows/ci.yml` : "",
+        "",
+        `  Build: cmake -B build && cmake --build build`,
+        `  Test:  cd build && ctest`,
+      ].filter(Boolean).join("\n");
+    }
+
     case "depgraph": {
       if (!args?.trim()) return "  Usage: /depgraph <file path>";
 
