@@ -683,26 +683,32 @@ export default function App({ config, conversationManager, tools, initialSession
           />
         )}
 
-        {/* Background scan progress bar */}
+        {/* Background scan/pr progress bar */}
         {scanProgress && scanProgress.active && (
           <Box marginLeft={2} marginBottom={0} flexDirection="column">
             <Text color="cyan">
               {"  ◆ "}
               {scanProgress.phase}
             </Text>
-            {scanProgress.total > 0 && (
-              <Text color="cyan">
-                {"    ["}
-                {"█".repeat(Math.round((scanProgress.verified / scanProgress.total) * 20))}
-                {"░".repeat(20 - Math.round((scanProgress.verified / scanProgress.total) * 20))}
-                {"] "}
-                {scanProgress.verified}/{scanProgress.total}
-                {" ("}
-                {Math.round((scanProgress.verified / scanProgress.total) * 100)}
-                {"%) — "}
-                {scanProgress.confirmed} confirmed — {scanProgress.elapsed.toFixed(1)}s
-              </Text>
-            )}
+            {scanProgress.total > 0 && (() => {
+              const pct = Math.round((scanProgress.verified / scanProgress.total) * 100);
+              const filled = Math.round((scanProgress.verified / scanProgress.total) * 20);
+              return (
+                <Text color="cyan">
+                  {"    ["}
+                  {"█".repeat(filled)}
+                  {"░".repeat(20 - filled)}
+                  {"] "}
+                  {scanProgress.verified}/{scanProgress.total}
+                  {` (${pct}%) — `}
+                  {scanProgress.confirmed} confirmed
+                  {(scanProgress as any).escalated > 0 && (
+                    <Text color="yellow">{` — ${(scanProgress as any).escalated} ☁ escalated`}</Text>
+                  )}
+                  {` — ${scanProgress.elapsed.toFixed(1)}s`}
+                </Text>
+              );
+            })()}
           </Box>
         )}
 

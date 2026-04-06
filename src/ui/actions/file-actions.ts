@@ -44,12 +44,26 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
         : buildAuditLlmCallbackFromConfig(appConfig);
 
+      // Auto-detect cloud fallback for hybrid verification
+      let fallbackCallback: ((prompt: string) => Promise<string>) | undefined;
+      if (!skipVerify) {
+        const { buildCloudFallbackCallback, detectCloudFallback } = await import(
+          "../../core/audit-engine/cloud-fallback.js"
+        );
+        const cloudConfig = detectCloudFallback(appConfig.apiBase);
+        if (cloudConfig.available) {
+          fallbackCallback = buildCloudFallbackCallback(appConfig.apiBase) ?? undefined;
+          scanState.cloudProvider = cloudConfig.provider;
+        }
+      }
+
       // Background async — NOT awaited
       (async () => {
         try {
           const result = await runAudit({
             projectRoot,
             llmCallback,
+            fallbackCallback,
             maxFiles: 500,
             skipVerification: skipVerify,
             onPhase: (phase, detail) => {
@@ -63,6 +77,7 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
               scanState.verified++;
               if (verification.verdict === "confirmed") scanState.confirmed++;
               if (verification.verdict === "false_positive") scanState.falsePositives++;
+              if (verification.reasoning?.startsWith("[escalated]")) scanState.escalated++;
             },
           });
 
