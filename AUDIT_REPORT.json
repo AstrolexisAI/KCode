@@ -1,0 +1,131 @@
+{
+  "project": "/home/curly/KCode",
+  "timestamp": "2026-04-06",
+  "languages_detected": [
+    "typescript",
+    "swift",
+    "python",
+    "javascript",
+    "kotlin",
+    "ruby"
+  ],
+  "files_scanned": 500,
+  "candidates_found": 72,
+  "confirmed_findings": 7,
+  "false_positives": 65,
+  "findings": [
+    {
+      "pattern_id": "react-001-dangerously-set",
+      "pattern_title": "dangerouslySetInnerHTML with dynamic content",
+      "severity": "high",
+      "file": "/home/curly/KCode/benchmarks/certification/tasks.ts",
+      "line": 930,
+      "matched_text": "dangerouslySetInnerHTML={{ __html: ",
+      "context": "928: \\`\\`\\`tsx\n929: function UserComment({ comment }: { comment: string }) {\n930:   return <div dangerouslySetInnerHTML={{ __html: comment }} />;\n931: }\n932: \\`\\`\\`\n933: ",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The `__html` property in `dangerouslySetInnerHTML` is indeed a hardcoded constant key, but the *value* (`comment`) is dynamic user input from the database, making the component vulnerable to XSS.",
+        "execution_path": "User submits/comment stored in DB → `UserComment` component receives `comment` prop → `dangerouslySetInnerHTML={{ __html: comment }}` renders raw HTML → malicious script in `comment` executes in browser",
+        "suggested_fix": "Wrap `comment` with a sanitizer like DOMPurify before passing to `__html`, e.g., `__html: DOMPurify.sanitize(comment)`"
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/ide/vscode/src/sidebar.ts",
+      "line": 322,
+      "matched_text": ".innerHTML = ",
+      "context": "320:       div.className = 'message ' + role;\n321:       if (id) div.dataset.id = id;\n322:       div.innerHTML = '<div class=\"role\">' + (role === 'user' ? 'You' : 'KCode') + '</div>' +\n323:         '<div class=\"content\">' + escapeHtml(content) + '</div>';\n324:       messagesEl.appendChild(div);\n325:       messagesEl.scrollTop = messagesEl.scrollHeight;",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The `innerHTML` assignment at line 322–323 uses `escapeHtml(content)` for the content, but the role label (\"You\" or \"KCode\") is derived directly from the `role` parameter, which can be user-controlled (e.g., `'user'` or `'assistant'`), and `content` itself may contain HTML that `escapeHtml` only partially sanitizes—unless `escapeHtml` is robust against all XSS vectors (e.g., script tags, event handlers), the dynamic content remains at risk. (+1 more matches of this pattern in the same file)",
+        "execution_path": "`addMessage(role, content, id)` is called (e.g., from stream handling or user input submission), where `role` and `content` originate from external sources (e.g., LLM response, user input, or server messages); `content` is inserted via `innerHTML` inside a `<div class=\"content\">`, and if `escapeHtml` is insufficient (e.g., only escapes `&`, `<`, `>`, but not quotes or event handlers), XSS can occur.",
+        "suggested_fix": "Replace `div.innerHTML = ...` with `div.innerHTML = '<div class=\"role\">' + (role === 'user' ? 'You' : 'KCode') + '</div>' + '<div class=\"content\">' + escapeHtml(content) + '</div>';` → wrap in a trusted types policy or use `textContent` for role and sanitize `content` with a robust sanitizer (e.g., DOMPurify.sanitizeHTML(content)) before assigning to `innerHTML`."
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/vscode-extension/src/chat-panel.ts",
+      "line": 507,
+      "matched_text": ".innerHTML = ",
+      "context": "505:       div.className = 'message message-' + role;\n506:       if (role === 'assistant') {\n507:         div.innerHTML = formatMarkdown(content);\n508:       } else {\n509:         div.textContent = content;\n510:       }",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The `content` parameter passed to `addMessage()` is used directly in `div.innerHTML = formatMarkdown(content)`, and since `content` originates from user input (e.g., chat messages from the user or assistant responses from the extension host), it is not hardcoded HTML and thus vulnerable to XSS. (+3 more matches of this pattern in the same file)",
+        "execution_path": "`addMessage(role, content)` → `formatMarkdown(content)` → `div.innerHTML = ...` → DOM rendered with unsanitized dynamic content",
+        "suggested_fix": "Replace `div.innerHTML = formatMarkdown(content);` with `div.textContent = formatMarkdown(content);` if HTML is not needed, or use a sanitizer (e.g., `DOMPurify.sanitize(formatMarkdown(content))`) before assigning to `innerHTML`."
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "pattern_title": "innerHTML/outerHTML with dynamic content (XSS)",
+      "severity": "high",
+      "file": "/home/curly/KCode/src/web/static/app.js",
+      "line": 354,
+      "matched_text": ".innerHTML = ",
+      "context": "352: \n353:     if (msg.content) {\n354:       body.innerHTML = window.MarkdownRenderer.renderMarkdown(msg.content);\n355:     }\n356: \n357:     el.appendChild(body);",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The value assigned to `body.innerHTML` comes from `window.MarkdownRenderer.renderMarkdown(msg.content)`, and since `msg.content` is part of a message object likely sourced from user input (e.g., chat messages from users or external APIs), it constitutes dynamic content vulnerable to XSS. (+1 more matches of this pattern in the same file)",
+        "execution_path": "1. User or external system sends a message with `msg.content` (e.g., via WebSocket, API response, or local input). 2. `renderMarkdown(msg.content)` processes the content (potentially returning HTML with embedded scripts/attributes). 3. Result is assigned directly to `body.innerHTML`, causing DOM-based XSS if malicious HTML/JS is present.",
+        "suggested_fix": "Replace `body.innerHTML = window.MarkdownRenderer.renderMarkdown(msg.content);` with `body.textContent = window.MarkdownRenderer.renderMarkdown(msg.content);` *if* the renderer outputs plain text, or wrap it with a sanitizer like `DOMPurify.sanitize(window.MarkdownRenderer.renderMarkdown(msg.content))` before assignment."
+      },
+      "cwe": "CWE-79"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/text-actions.ts",
+      "line": 157,
+      "matched_text": "execSync(`",
+      "context": "155:         try {\n156:           const bin = cmd.split(\" \")[0]!;\n157:           execSync(`which ${bin} 2>/dev/null`, { timeout: 2000 });\n158:           const output = execSync(`${cmd} '${text.replace(/'/g, \"'\\\\''\")}' 2>/dev/null`, {\n159:             timeout: 5000,\n160:           }).toString();",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The template literal on line 158 interpolates `${bin}` (derived from hardcoded `cmds` array but *not* user-controlled) and `${text}` (derived from `args.trim()`), where `args` originates from user input via the `/ascii <text>` command, making it externally controllable and thus vulnerable to shell injection. (+1 more matches of this pattern in the same file)",
+        "execution_path": "User invokes `/ascii <malicious-text>` → `args` is set to `<malicious-text>` → `text = args.trim().slice(0,20)` → `execSync` runs `${cmd} '${text.replace(/'/g, \"'\\\\''\")}'`, where `cmd` is `\"figlet\"` or `\"toilet -f mono12\"` and `text` may contain shell metacharacters like `;`, `|`, `$()`, etc., leading to command injection.",
+        "suggested_fix": "Wrap `text` in a safe quoting function (e.g., `shQuote(text)`) and avoid direct interpolation of untrusted values; specifically, replace line 158 with:"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/ui/actions/tool-actions.ts",
+      "line": 722,
+      "matched_text": "execSync(",
+      "context": "720:         const { execSync } = await import(\"node:child_process\");\n721:         try {\n722:           const filesRaw = execSync(\n723:             `find . -type f -name '${fileGlob.replace(/'/g, \"\")}' -not -path '*/node_modules/*' -not -path '*/.git/*' | head -100`,\n724:             { cwd, timeout: 5000 },\n725:           )",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The `fileGlob` variable interpolated into the shell command comes from a regex match (`filesMatch[1]`) on user-provided input (`prompt`), making it externally controllable and thus vulnerable to shell injection via unescaped quotes or special characters.",
+        "execution_path": "User provides a `prompt` string → `prompt` is parsed via regex `/--files\\s+'[^']+'` → `fileGlob` is extracted from the matched group → `fileGlob` is interpolated into the `execSync` template literal command → shell executes the command with potentially malicious `fileGlob` content.",
+        "suggested_fix": "Escape single quotes in `fileGlob` before interpolation (e.g., replace `'` with `'\\''`) or use array-style `execSync` arguments to avoid shell interpretation:"
+      },
+      "cwe": "CWE-78"
+    },
+    {
+      "pattern_id": "js-007-command-injection",
+      "pattern_title": "Shell command with template literal (injection)",
+      "severity": "critical",
+      "file": "/home/curly/KCode/src/tools/diff-viewer.ts",
+      "line": 168,
+      "matched_text": "execSync(",
+      "context": "166:     if (msg.includes(\"Command failed\") && msg.includes(\"git diff\")) {\n167:       try {\n168:         const result = execSync(\n169:           `git diff ${flag} -U${contextLines} -- \"${resolvedFile}\" 2>&1 || true`,\n170:           {\n171:             cwd: process.cwd(),",
+      "verification": {
+        "verdict": "confirmed",
+        "reasoning": "The template literal on line 169 includes `${flag}`, `${contextLines}`, and `${resolvedFile}` — all of which can originate from external or user-controlled inputs (e.g., `flag` and `contextLines` from function parameters, and `resolvedFile` likely derived from user-selected files or workspace paths).",
+        "execution_path": "`execSync` is called with a shell command string built via template literal → if any of `flag`, `contextLines`, or `resolvedFile` contain shell metacharacters (e.g., `;`, `|`, `$()`, backticks), they will be interpreted by the shell, enabling command injection.",
+        "suggested_fix": "Wrap interpolated values in single quotes or escape shell metacharacters:"
+      },
+      "cwe": "CWE-78"
+    }
+  ],
+  "elapsed_ms": 82203
+}
