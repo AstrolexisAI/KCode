@@ -104,43 +104,41 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
             }
 
             if (scanState.escalationApproved) {
-              scanState.phase = `Escalating ${ncCount} to ${scanState.cloudProvider}...`;
+              scanState.phase = `☁ Re-verifying with ${scanState.cloudProvider}...`;
               scanState.pendingEscalation = undefined;
+              scanState.verified = 0;
+              scanState.total = 0;
+              scanState.escalated = 0;
 
-              // Re-run ONLY the needs_context candidates with cloud
-              const { escalateCandidate } = await import(
-                "../../core/audit-engine/verifier.js"
-              );
-              // Get the raw candidates that were needs_context
-              // Re-scan to get them (quick, from JSON)
-              const allData = JSON.parse(
-                readFileSync(resolvePath(projectRoot, "AUDIT_REPORT.json"), "utf-8"),
-              );
-              // The needs_context aren't in findings — they were filtered out.
-              // We need access to the full verification results.
-              // For now: re-run scan with cloud as primary on ALL candidates
+              // Re-run full scan with cloud as primary
               const cloudResult = await runAudit({
                 projectRoot,
-                llmCallback: fallbackCallback,
+                llmCallback: fallbackCallback!,
                 maxFiles: 500,
                 skipVerification: false,
                 onPhase: (phase, detail) => {
                   scanState.phase = `☁ ${phase}${detail ? ": " + detail : ""}`;
+                  if (phase === "verifying" && detail) {
+                    const m = detail.match(/(\d+) candidate/);
+                    if (m) scanState.total = parseInt(m[1]!, 10);
+                  }
                 },
                 onCandidate: (_cand, verification) => {
+                  scanState.verified++;
                   scanState.escalated++;
                   if (verification.verdict === "confirmed") scanState.confirmed++;
                 },
               });
 
-              // Merge: keep original confirmed + add cloud-confirmed
+              // Merge: keep original confirmed + add cloud-confirmed (dedup by file:line)
               for (const f of cloudResult.findings) {
                 if (!result.findings.some((e) => e.file === f.file && e.line === f.line)) {
-                  f.verification.reasoning = `[☁ escalated] ${f.verification.reasoning}`;
+                  f.verification.reasoning = `[☁ second opinion] ${f.verification.reasoning}`;
                   result.findings.push(f);
                 }
               }
               result.confirmed_findings = result.findings.length;
+              result.false_positives = result.candidates_found - result.confirmed_findings;
             } else {
               scanState.pendingEscalation = undefined;
             }
