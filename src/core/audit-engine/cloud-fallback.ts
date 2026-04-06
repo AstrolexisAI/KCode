@@ -16,12 +16,12 @@ export interface CloudFallbackConfig {
 
 /**
  * Detect if a cloud LLM is configured and available.
- * Checks env vars and config in priority order:
- *   1. ANTHROPIC_API_KEY → Anthropic Claude
- *   2. OPENAI_API_KEY → OpenAI
- *   3. KCODE_API_KEY + cloud-like API base → whatever provider
+ * Checks in priority order:
+ *   1. Claude Code OAuth bridge (sk-ant-oat01-*) → subscription billing, cheapest
+ *   2. ANTHROPIC_API_KEY → per-token billing
+ *   3. OPENAI_API_KEY → OpenAI
  */
-export function detectCloudFallback(currentApiBase?: string): CloudFallbackConfig {
+export async function detectCloudFallback(currentApiBase?: string): Promise<CloudFallbackConfig> {
   const none: CloudFallbackConfig = {
     available: false,
     model: "",
@@ -39,7 +39,24 @@ export function detectCloudFallback(currentApiBase?: string): CloudFallbackConfi
     return none;
   }
 
-  // Check Anthropic
+  // 1. Prefer OAuth bridge (subscription billing — user already pays, no extra cost)
+  try {
+    const { getClaudeCodeToken } = await import("../auth/claude-code-bridge.js");
+    const oauthToken = await getClaudeCodeToken();
+    if (oauthToken) {
+      return {
+        available: true,
+        model: "claude-sonnet-4-20250514",
+        apiBase: "https://api.anthropic.com/v1",
+        apiKey: oauthToken,
+        provider: "anthropic",
+      };
+    }
+  } catch {
+    /* bridge not available */
+  }
+
+  // 2. Check Anthropic API key
   const anthropicKey =
     process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_ANTHROPIC_KEY ?? "";
   if (anthropicKey) {
@@ -52,7 +69,7 @@ export function detectCloudFallback(currentApiBase?: string): CloudFallbackConfi
     };
   }
 
-  // Check OpenAI
+  // 3. Check OpenAI
   const openaiKey = process.env.OPENAI_API_KEY ?? "";
   if (openaiKey) {
     return {
@@ -71,16 +88,17 @@ export function detectCloudFallback(currentApiBase?: string): CloudFallbackConfi
  * Build a cloud fallback LLM callback if one is available.
  * Returns null if no cloud provider is configured.
  */
-export function buildCloudFallbackCallback(
+export async function buildCloudFallbackCallback(
   currentApiBase?: string,
-): ((prompt: string) => Promise<string>) | null {
-  const config = detectCloudFallback(currentApiBase);
+): Promise<((prompt: string) => Promise<string>) | null> {
+  const config = await detectCloudFallback(currentApiBase);
   if (!config.available) return null;
 
   return makeAuditLlmCallback({
     model: config.model,
     apiBase: config.apiBase,
     apiKey: config.apiKey,
-    temperature: 0.05, // very low temp for verification
+    temperature: 0.05,
   });
 }
+
