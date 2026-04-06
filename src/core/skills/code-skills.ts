@@ -153,6 +153,27 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_cpp__`,
   },
   {
+    name: "rust",
+    description: "Create a Rust project (CLI, API, library, WASM, game, system)",
+    aliases: ["rs", "create-rust"],
+    args: ["description"],
+    template: `__builtin_rust__`,
+  },
+  {
+    name: "go",
+    description: "Create a Go project (CLI, API, gRPC, worker, microservice)",
+    aliases: ["golang", "create-go"],
+    args: ["description"],
+    template: `__builtin_go__`,
+  },
+  {
+    name: "swift",
+    description: "Create a Swift project (iOS, macOS, CLI, server, package)",
+    aliases: ["ios", "create-swift"],
+    args: ["description"],
+    template: `__builtin_swift__`,
+  },
+  {
     name: "doc",
     description: "Generate documentation",
     aliases: ["document"],
