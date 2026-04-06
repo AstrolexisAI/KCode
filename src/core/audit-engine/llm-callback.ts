@@ -35,6 +35,21 @@ export function makeAuditLlmCallback(
   const isOAuthToken = apiKey.startsWith("sk-ant-oat01-");
 
   return async (prompt: string): Promise<string> => {
+    // Retry wrapper for 429 rate limits
+    const fetchWithRetry = async (url: string, init: RequestInit, maxRetries = 3): Promise<Response> => {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const res = await fetch(url, init);
+        if (res.status === 429 && attempt < maxRetries) {
+          const retryAfter = parseInt(res.headers.get("retry-after") ?? "5", 10);
+          const delay = Math.min(retryAfter * 1000, 15000) * (attempt + 1);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        return res;
+      }
+      return fetch(url, init); // final attempt
+    };
+
     if (isAnthropic) {
       // OAuth tokens (sk-ant-oat01-*) use Bearer auth + beta header
       // API keys (sk-ant-api03-*) use x-api-key
@@ -46,7 +61,7 @@ export function makeAuditLlmCallback(
           }
         : { "x-api-key": apiKey };
 
-      const res = await fetch(`${apiBase.replace(/\/$/, "")}/messages`, {
+      const res = await fetchWithRetry(`${apiBase.replace(/\/$/, "")}/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -68,7 +83,7 @@ export function makeAuditLlmCallback(
         .join("");
     }
     // OpenAI-compatible (local or cloud)
-    const res = await fetch(`${apiBase.replace(/\/$/, "")}/chat/completions`, {
+    const res = await fetchWithRetry(`${apiBase.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
