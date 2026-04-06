@@ -62,22 +62,18 @@ export const CPP_PATTERNS: BugPattern[] = [
     title: "Buffer access with fixed index, no size validation",
     severity: "high",
     languages: ["c", "cpp"],
-    // Match READ ACCESSES to data[N]/buffer[N]/buf[N]/packet[N]/msg[N]/
-    // payload[N] with fixed index 2-99. Exclude:
-    //   - declarations: `char buf[1024]`, `uint8_t data[16]`, std::array<...>, etc.
-    //   - indices 0 and 1 (often first-byte protocol IDs, typically validated)
-    //   - indices >= 100 (usually declarations of large buffers)
-    // Uses negative lookbehind to skip type-qualifier preceded matches.
     regex:
       /(?<!\b(?:char|unsigned|signed|int|short|long|uint8_t|uint16_t|uint32_t|int8_t|int16_t|int32_t|size_t|float|double|bool|void|std::\w+|u_char|u_int8_t|u_int16_t|u_int32_t)\s)(?<!\w)(data|buffer|buf|packet|msg|payload)\s*\[\s*([2-9]|[1-9]\d)\s*\]/g,
     explanation:
-      "Accessing `data[N]` with a hardcoded index without first validating size. NASA IDF USB decoders (UsbXBox.cpp, UsbDualShock3/4, UsbWingMan) all access fixed offsets into HID packets without checking packet length. Malformed packet → out-of-bounds read.",
+      "Accessing `data[N]` with a hardcoded index without first validating size. Malformed input → out-of-bounds read.",
     verify_prompt:
-      "Is there a size check in the SAME function before this `[N]` access? " +
-      "Look for `if (size < N+1) return`, `if (data.size() <= N) throw`, etc. " +
-      "If a size check exists upstream (in caller, in parser), respond NEEDS_CONTEXT " +
-      "and describe what check would be needed. If this index runs unconditionally " +
-      "on attacker-controlled input, confirm CONFIRMED.",
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the buffer a FIXED-SIZE local array (e.g. `char buf[16]`) where sizeof >= N+1? → FALSE_POSITIVE\n" +
+      "2. Is there an `if (len < N)` or `if (bytes < N)` check BEFORE this access in the same function? → FALSE_POSITIVE\n" +
+      "3. Is the buffer filled by a function that guarantees minimum size (e.g. MD5 always outputs 16 bytes)? → FALSE_POSITIVE\n" +
+      "4. Is this a compile-time constant buffer with known size (e.g. MD5_DIGEST_LENGTH)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the buffer size comes from UNTRUSTED external input " +
+      "(network packet, file, user data) AND no size check exists before the access.",
     cwe: "CWE-125",
     fix_template: "Add `if (container.size() <= N) return;` before the access.",
   },
@@ -130,8 +126,13 @@ export const CPP_PATTERNS: BugPattern[] = [
     explanation:
       "strcpy/strcat/sprintf/gets have no bounds checking. If the source can exceed the destination size, heap/stack buffer overflow. Use the `_s` or `n` variants.",
     verify_prompt:
-      "Is the source length validated before this call? If a guaranteed-short " +
-      "literal or validated length exists, respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the source a short string LITERAL (e.g. \"key:\", \"(*)\", \"sometime\")? → FALSE_POSITIVE\n" +
+      "2. Is there a malloc/calloc BEFORE this call that allocates strlen(src)+1 or more? → FALSE_POSITIVE\n" +
+      "3. Is the destination a fixed-size buffer AND the source is a known-short constant? → FALSE_POSITIVE\n" +
+      "4. Is this in test code, example code, or documentation? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the source is from UNTRUSTED external input (network, file, user) " +
+      "AND no allocation or size check accounts for it.",
     cwe: "CWE-120",
     fix_template: "strcpy→strncpy, strcat→strncat, sprintf→snprintf, gets→fgets.",
   },
@@ -167,9 +168,13 @@ export const CPP_PATTERNS: BugPattern[] = [
     explanation:
       "memcpy length from struct field accessed via pointer is often from untrusted network/file input. If length is unbounded, heap buffer overflow.",
     verify_prompt:
-      "Is the length field validated against the DESTINATION buffer size before " +
-      "this memcpy? If there's a bounds check that ensures len <= dest_size, " +
-      "respond FALSE_POSITIVE. Otherwise CONFIRMED.",
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the length validated with `if (len > max)` or `MIN(len, max)` before memcpy? → FALSE_POSITIVE\n" +
+      "2. Is the destination allocated with the SAME length (e.g. `dst = malloc(len)`)? → FALSE_POSITIVE\n" +
+      "3. Is the length a sizeof() expression or compile-time constant? → FALSE_POSITIVE\n" +
+      "4. Is this copying between two fields of the SAME struct (internal copy)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the length comes from UNTRUSTED input AND neither " +
+      "the destination size nor a bounds check constrains it.",
     cwe: "CWE-120",
     fix_template: "Add `if (len > dest_size) return error;` before memcpy.",
   },
@@ -233,9 +238,14 @@ export const CPP_PATTERNS: BugPattern[] = [
     explanation:
       "Loop bound `i < msg->count` derived from untrusted input. If count is attacker-controlled and unbounded, infinite loop or excessive work.",
     verify_prompt:
-      "Is the loop bound validated against a sane maximum before this loop? " +
-      "If there's a check like `if (count > MAX) return`, respond FALSE_POSITIVE. " +
-      "Otherwise CONFIRMED.",
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the loop bound set from a TRUSTED source (hardware, kernel, compile-time constant)? → FALSE_POSITIVE\n" +
+      "2. Is there a `if (bound > MAX)` check before this loop? → FALSE_POSITIVE\n" +
+      "3. Does the loop body have an early `break` or `return` that limits iterations? → FALSE_POSITIVE\n" +
+      "4. Is the bound from a struct that was ALREADY validated during parsing? → FALSE_POSITIVE\n" +
+      "5. Is this iterating over an internally-allocated array whose size matches the bound? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the bound comes from UNTRUSTED external input (network, file, " +
+      "ASN.1, protocol field) AND no upstream validation caps it.",
     cwe: "CWE-606",
     fix_template: "Add `if (bound > MAX_ALLOWED) return error;` before the loop.",
   },
