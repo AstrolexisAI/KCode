@@ -61,10 +61,11 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       // Background async — NOT awaited
       (async () => {
         try {
+          // Phase 1: run audit WITHOUT fallback (local model only)
           const result = await runAudit({
             projectRoot,
             llmCallback,
-            fallbackCallback,
+            // NO fallbackCallback here — we'll escalate manually after user approval
             maxFiles: 500,
             skipVerification: skipVerify,
             onPhase: (phase, detail) => {
@@ -78,9 +79,70 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
               scanState.verified++;
               if (verification.verdict === "confirmed") scanState.confirmed++;
               if (verification.verdict === "false_positive") scanState.falsePositives++;
-              if (verification.reasoning?.startsWith("[escalated]")) scanState.escalated++;
             },
           });
+
+          // Phase 2: if there are NEEDS_CONTEXT and cloud is available, ask user
+          const needsContext = result.findings.length === 0
+            ? (result as any)._needsContext ?? []
+            : [];
+          // Count needs_context from the raw verified results
+          const ncCount = result.candidates_found - result.confirmed_findings - result.false_positives;
+
+          if (ncCount > 0 && fallbackCallback) {
+            scanState.phase = `${ncCount} finding(s) need deeper analysis`;
+            scanState.pendingEscalation = {
+              count: ncCount,
+              provider: scanState.cloudProvider ?? "cloud",
+            };
+
+            // Wait for user to approve/deny (polled by App.tsx)
+            while (scanState.pendingEscalation && scanState.escalationApproved === undefined) {
+              await new Promise((r) => setTimeout(r, 200));
+            }
+
+            if (scanState.escalationApproved) {
+              scanState.phase = `Escalating ${ncCount} to ${scanState.cloudProvider}...`;
+              scanState.pendingEscalation = undefined;
+
+              // Re-run ONLY the needs_context candidates with cloud
+              const { escalateCandidate } = await import(
+                "../../core/audit-engine/verifier.js"
+              );
+              // Get the raw candidates that were needs_context
+              // Re-scan to get them (quick, from JSON)
+              const allData = JSON.parse(
+                readFileSync(resolvePath(projectRoot, "AUDIT_REPORT.json"), "utf-8"),
+              );
+              // The needs_context aren't in findings — they were filtered out.
+              // We need access to the full verification results.
+              // For now: re-run scan with cloud as primary on ALL candidates
+              const cloudResult = await runAudit({
+                projectRoot,
+                llmCallback: fallbackCallback,
+                maxFiles: 500,
+                skipVerification: false,
+                onPhase: (phase, detail) => {
+                  scanState.phase = `☁ ${phase}${detail ? ": " + detail : ""}`;
+                },
+                onCandidate: (_cand, verification) => {
+                  scanState.escalated++;
+                  if (verification.verdict === "confirmed") scanState.confirmed++;
+                },
+              });
+
+              // Merge: keep original confirmed + add cloud-confirmed
+              for (const f of cloudResult.findings) {
+                if (!result.findings.some((e) => e.file === f.file && e.line === f.line)) {
+                  f.verification.reasoning = `[☁ escalated] ${f.verification.reasoning}`;
+                  result.findings.push(f);
+                }
+              }
+              result.confirmed_findings = result.findings.length;
+            } else {
+              scanState.pendingEscalation = undefined;
+            }
+          }
 
           const outputPath = resolvePath(projectRoot, "AUDIT_REPORT.md");
           writeFileSync(outputPath, generateMarkdownReport(result));

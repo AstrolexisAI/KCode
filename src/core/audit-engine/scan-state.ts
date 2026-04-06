@@ -15,6 +15,10 @@ export interface ScanProgress {
   escalated: number; // candidates sent to cloud fallback
   startTime: number;
   cloudProvider?: string; // "anthropic" | "openai" | "" if no fallback
+  /** Set when NEEDS_CONTEXT candidates exist and cloud is available */
+  pendingEscalation?: { count: number; provider: string };
+  /** Set by the UI when user responds to escalation prompt */
+  escalationApproved?: boolean;
   /** Set when audit completes — the handler reads this to push result. */
   result?: {
     outputPath: string;
@@ -51,6 +55,8 @@ export function resetScanState(): void {
   scanState.escalated = 0;
   scanState.startTime = 0;
   scanState.cloudProvider = undefined;
+  scanState.pendingEscalation = undefined;
+  scanState.escalationApproved = undefined;
   scanState.result = undefined;
   scanState.error = undefined;
 }

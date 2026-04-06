@@ -144,6 +144,31 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         return;
       }
 
+      // Escalation prompt response — Y/N to cloud fallback
+      if (lower === "y" || lower === "n" || lower === "yes" || lower === "no") {
+        try {
+          const { scanState } = await import("../../core/audit-engine/scan-state.js");
+          if (scanState.pendingEscalation) {
+            const approved = lower === "y" || lower === "yes";
+            scanState.escalationApproved = approved;
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "user", text: userInput },
+              {
+                kind: "text",
+                role: "assistant",
+                text: approved
+                  ? `  ☁ Escalating to ${scanState.pendingEscalation?.provider}...`
+                  : "  ⏭ Skipped cloud escalation.",
+              },
+            ]);
+            return;
+          }
+        } catch {
+          /* scan-state not loaded, fall through to normal processing */
+        }
+      }
+
       // ! bash mode — execute command directly, bypass LLM
       if (userInput.startsWith("!") && userInput.length > 1) {
         const cmd = userInput.slice(1).trim();
