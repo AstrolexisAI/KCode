@@ -351,7 +351,13 @@
     body.className = "message-body";
 
     if (msg.content) {
-      body.innerHTML = window.MarkdownRenderer.renderMarkdown(msg.content);
+      // Sanitize rendered markdown to prevent XSS from message content
+      var rendered = window.MarkdownRenderer.renderMarkdown(msg.content);
+      if (window.DOMPurify) {
+        body.innerHTML = window.DOMPurify.sanitize(rendered);
+      } else {
+        body.innerHTML = rendered;
+      }
     }
 
     el.appendChild(body);

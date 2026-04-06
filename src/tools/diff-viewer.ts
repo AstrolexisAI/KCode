@@ -165,8 +165,11 @@ function diffGit(file: string, staged: boolean, contextLines: number): ToolResul
     // git diff returns exit code 1 when there are differences — handle gracefully
     if (msg.includes("Command failed") && msg.includes("git diff")) {
       try {
+        // Sanitize inputs to prevent shell injection
+        const safeFile = resolvedFile.replace(/["`$\\]/g, "");
+        const safeCtx = String(Math.min(Math.max(parseInt(String(contextLines)) || 3, 0), 100));
         const result = execSync(
-          `git diff ${flag} -U${contextLines} -- "${resolvedFile}" 2>&1 || true`,
+          `git diff ${flag} -U${safeCtx} -- "${safeFile}" 2>&1 || true`,
           {
             cwd: process.cwd(),
             stdio: "pipe",
