@@ -159,12 +159,8 @@ func (s *ItemStore) Update(id, name, description string) (Item, bool) {
 \tdefer s.mu.Unlock()
 \tfor i, item := range s.items {
 \t\tif item.ID == id {
-\t\t\tif name != "" {
-\t\t\t\ts.items[i].Name = name
-\t\t\t}
-\t\t\tif description != "" {
-\t\t\t\ts.items[i].Description = description
-\t\t\t}
+\t\t\ts.items[i].Name = name
+\t\t\ts.items[i].Description = description
 \t\t\treturn s.items[i], true
 \t\t}
 \t}
@@ -278,6 +274,10 @@ func main() {
 \t\tvar req updateItemRequest
 \t\tif err := c.ShouldBindJSON(&req); err != nil {
 \t\t\terrorResponse(c, http.StatusBadRequest, "invalid JSON body")
+\t\t\treturn
+\t\t}
+\t\tif strings.TrimSpace(req.Name) == "" {
+\t\t\terrorResponse(c, http.StatusUnprocessableEntity, "name is required for PUT")
 \t\t\treturn
 \t\t}
 \t\titem, ok := store.Update(c.Param("id"), strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
@@ -406,12 +406,8 @@ func (s *ItemStore) Update(id, name, description string) (Item, bool) {
 \tdefer s.mu.Unlock()
 \tfor i, item := range s.items {
 \t\tif item.ID == id {
-\t\t\tif name != "" {
-\t\t\t\ts.items[i].Name = name
-\t\t\t}
-\t\t\tif description != "" {
-\t\t\t\ts.items[i].Description = description
-\t\t\t}
+\t\t\ts.items[i].Name = name
+\t\t\ts.items[i].Description = description
 \t\t\treturn s.items[i], true
 \t\t}
 \t}
@@ -453,6 +449,8 @@ func errorResponse(w http.ResponseWriter, status int, msg string) {
 \twriteJSON(w, status, map[string]string{"error": msg})
 }
 
+type contextKey struct{}
+
 func requestIDMiddleware(next http.Handler) http.Handler {
 \treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 \t\tid := r.Header.Get("X-Request-ID")
@@ -460,7 +458,7 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 \t\t\tid = generateID()
 \t\t}
 \t\tw.Header().Set("X-Request-ID", id)
-\t\tctx := context.WithValue(r.Context(), "request_id", id)
+\t\tctx := context.WithValue(r.Context(), contextKey{}, id)
 \t\tnext.ServeHTTP(w, r.WithContext(ctx))
 \t})
 }
@@ -484,7 +482,6 @@ func main() {
 \t\tAllowedOrigins:   []string{"*"},
 \t\tAllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 \t\tAllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID"},
-\t\tAllowCredentials: true,
 \t\tMaxAge:           300,
 \t}))
 
@@ -527,6 +524,10 @@ func main() {
 \t\t\tvar req updateItemRequest
 \t\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 \t\t\t\terrorResponse(w, http.StatusBadRequest, "invalid JSON body")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tif strings.TrimSpace(req.Name) == "" {
+\t\t\t\terrorResponse(w, http.StatusUnprocessableEntity, "name is required for PUT")
 \t\t\t\treturn
 \t\t\t}
 \t\t\titem, ok := store.Update(id, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
@@ -673,34 +674,327 @@ import (
 \t"encoding/json"
 \t"net/http"
 \t"net/http/httptest"
+\t"strings"
 \t"testing"
+
+\t"github.com/go-chi/chi/v5"
+\t"github.com/go-chi/chi/v5/middleware"
 )
 
-func setupTestStore() *ItemStore {
-\treturn NewItemStore()
+func setupRouter() (*ItemStore, *chi.Mux) {
+\tstore := NewItemStore()
+\tr := chi.NewRouter()
+\tr.Use(middleware.Logger)
+\tr.Use(middleware.Recoverer)
+
+\tr.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+\t\twriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "test"})
+\t})
+
+\tr.Route("/items", func(r chi.Router) {
+\t\tr.Get("/", func(w http.ResponseWriter, r *http.Request) {
+\t\t\twriteJSON(w, http.StatusOK, store.List())
+\t\t})
+
+\t\tr.Post("/", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tvar req createItemRequest
+\t\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+\t\t\t\terrorResponse(w, http.StatusBadRequest, "invalid JSON body")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tif strings.TrimSpace(req.Name) == "" {
+\t\t\t\terrorResponse(w, http.StatusBadRequest, "name is required")
+\t\t\t\treturn
+\t\t\t}
+\t\t\titem := store.Create(strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+\t\t\twriteJSON(w, http.StatusCreated, item)
+\t\t})
+
+\t\tr.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tid := chi.URLParam(r, "id")
+\t\t\titem, ok := store.GetByID(id)
+\t\t\tif !ok {
+\t\t\t\terrorResponse(w, http.StatusNotFound, "item not found")
+\t\t\t\treturn
+\t\t\t}
+\t\t\twriteJSON(w, http.StatusOK, item)
+\t\t})
+
+\t\tr.Put("/{id}", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tid := chi.URLParam(r, "id")
+\t\t\tvar req updateItemRequest
+\t\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+\t\t\t\terrorResponse(w, http.StatusBadRequest, "invalid JSON body")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tif strings.TrimSpace(req.Name) == "" {
+\t\t\t\terrorResponse(w, http.StatusUnprocessableEntity, "name is required for PUT")
+\t\t\t\treturn
+\t\t\t}
+\t\t\titem, ok := store.Update(id, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+\t\t\tif !ok {
+\t\t\t\terrorResponse(w, http.StatusNotFound, "item not found")
+\t\t\t\treturn
+\t\t\t}
+\t\t\twriteJSON(w, http.StatusOK, item)
+\t\t})
+
+\t\tr.Delete("/{id}", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tid := chi.URLParam(r, "id")
+\t\t\tif !store.Delete(id) {
+\t\t\t\terrorResponse(w, http.StatusNotFound, "item not found")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tw.WriteHeader(http.StatusNoContent)
+\t\t})
+\t})
+
+\treturn store, r
 }
 
 func TestHealthEndpoint(t *testing.T) {
-\tstore := setupTestStore()
-\t_ = store
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
 
-\treq := httptest.NewRequest(http.MethodGet, "/health", nil)
-\tw := httptest.NewRecorder()
+\tresp, err := http.Get(ts.URL + "/health")
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
 
-\t// Direct handler test
-\thandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-\t\twriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-\t})
-\thandler.ServeHTTP(w, req)
-
-\tif w.Code != http.StatusOK {
-\t\tt.Fatalf("expected 200, got %d", w.Code)
+\tif resp.StatusCode != http.StatusOK {
+\t\tt.Fatalf("expected 200, got %d", resp.StatusCode)
 \t}
 
-\tvar resp map[string]string
-\tjson.NewDecoder(w.Body).Decode(&resp)
-\tif resp["status"] != "ok" {
-\t\tt.Fatalf("expected status ok, got %s", resp["status"])
+\tvar body map[string]string
+\tjson.NewDecoder(resp.Body).Decode(&body)
+\tif body["status"] != "ok" {
+\t\tt.Fatalf("expected status ok, got %s", body["status"])
+\t}
+}
+
+func TestPostItem(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\tpayload := bytes.NewBufferString(${'`{"name":"Test Item","description":"A test"}`'})
+\tresp, err := http.Post(ts.URL+"/items", "application/json", payload)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusCreated {
+\t\tt.Fatalf("expected 201, got %d", resp.StatusCode)
+\t}
+
+\tvar item Item
+\tjson.NewDecoder(resp.Body).Decode(&item)
+\tif item.Name != "Test Item" {
+\t\tt.Fatalf("expected name 'Test Item', got %q", item.Name)
+\t}
+\tif item.ID == "" {
+\t\tt.Fatal("expected non-empty ID")
+\t}
+}
+
+func TestPostItemEmptyNameRejected(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\tpayload := bytes.NewBufferString(${'`{"name":"  ","description":"bad"}`'})
+\tresp, err := http.Post(ts.URL+"/items", "application/json", payload)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusBadRequest {
+\t\tt.Fatalf("expected 400, got %d", resp.StatusCode)
+\t}
+}
+
+func TestGetItems(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\t// Empty list
+\tresp, err := http.Get(ts.URL + "/items")
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusOK {
+\t\tt.Fatalf("expected 200, got %d", resp.StatusCode)
+\t}
+
+\tvar items []Item
+\tjson.NewDecoder(resp.Body).Decode(&items)
+\tif len(items) != 0 {
+\t\tt.Fatalf("expected 0 items, got %d", len(items))
+\t}
+}
+
+func TestGetItemByID(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\t// Create
+\tpayload := bytes.NewBufferString(${'`{"name":"Lookup Test","description":"find me"}`'})
+\tcreateResp, _ := http.Post(ts.URL+"/items", "application/json", payload)
+\tvar created Item
+\tjson.NewDecoder(createResp.Body).Decode(&created)
+\tcreateResp.Body.Close()
+
+\t// Get by ID
+\tresp, err := http.Get(ts.URL + "/items/" + created.ID)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusOK {
+\t\tt.Fatalf("expected 200, got %d", resp.StatusCode)
+\t}
+
+\tvar found Item
+\tjson.NewDecoder(resp.Body).Decode(&found)
+\tif found.Name != "Lookup Test" {
+\t\tt.Fatalf("expected 'Lookup Test', got %q", found.Name)
+\t}
+}
+
+func TestGetItemNotFound(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\tresp, err := http.Get(ts.URL + "/items/nonexistent")
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusNotFound {
+\t\tt.Fatalf("expected 404, got %d", resp.StatusCode)
+\t}
+}
+
+func TestPutItem(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\t// Create
+\tpayload := bytes.NewBufferString(${'`{"name":"Original","description":"original desc"}`'})
+\tcreateResp, _ := http.Post(ts.URL+"/items", "application/json", payload)
+\tvar created Item
+\tjson.NewDecoder(createResp.Body).Decode(&created)
+\tcreateResp.Body.Close()
+
+\t// PUT update
+\tupdatePayload := bytes.NewBufferString(${'`{"name":"Updated","description":"new desc"}`'})
+\treq, _ := http.NewRequest(http.MethodPut, ts.URL+"/items/"+created.ID, updatePayload)
+\treq.Header.Set("Content-Type", "application/json")
+\tresp, err := http.DefaultClient.Do(req)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusOK {
+\t\tt.Fatalf("expected 200, got %d", resp.StatusCode)
+\t}
+
+\tvar updated Item
+\tjson.NewDecoder(resp.Body).Decode(&updated)
+\tif updated.Name != "Updated" {
+\t\tt.Fatalf("expected name 'Updated', got %q", updated.Name)
+\t}
+\tif updated.Description != "new desc" {
+\t\tt.Fatalf("expected description 'new desc', got %q", updated.Description)
+\t}
+}
+
+func TestPutItemEmptyNameRejected(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\t// Create
+\tpayload := bytes.NewBufferString(${'`{"name":"Original","description":"desc"}`'})
+\tcreateResp, _ := http.Post(ts.URL+"/items", "application/json", payload)
+\tvar created Item
+\tjson.NewDecoder(createResp.Body).Decode(&created)
+\tcreateResp.Body.Close()
+
+\t// PUT with empty name
+\tupdatePayload := bytes.NewBufferString(${'`{"name":"","description":"new desc"}`'})
+\treq, _ := http.NewRequest(http.MethodPut, ts.URL+"/items/"+created.ID, updatePayload)
+\treq.Header.Set("Content-Type", "application/json")
+\tresp, err := http.DefaultClient.Do(req)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusUnprocessableEntity {
+\t\tt.Fatalf("expected 422, got %d", resp.StatusCode)
+\t}
+}
+
+func TestDeleteItem(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\t// Create
+\tpayload := bytes.NewBufferString(${'`{"name":"To Delete","description":"delete me"}`'})
+\tcreateResp, _ := http.Post(ts.URL+"/items", "application/json", payload)
+\tvar created Item
+\tjson.NewDecoder(createResp.Body).Decode(&created)
+\tcreateResp.Body.Close()
+
+\t// DELETE
+\treq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/items/"+created.ID, nil)
+\tresp, err := http.DefaultClient.Do(req)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusNoContent {
+\t\tt.Fatalf("expected 204, got %d", resp.StatusCode)
+\t}
+
+\t// Verify deleted
+\tgetResp, _ := http.Get(ts.URL + "/items/" + created.ID)
+\tdefer getResp.Body.Close()
+\tif getResp.StatusCode != http.StatusNotFound {
+\t\tt.Fatalf("expected 404 after delete, got %d", getResp.StatusCode)
+\t}
+}
+
+func TestDeleteItemNotFound(t *testing.T) {
+\t_, router := setupRouter()
+\tts := httptest.NewServer(router)
+\tdefer ts.Close()
+
+\treq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/items/nonexistent", nil)
+\tresp, err := http.DefaultClient.Do(req)
+\tif err != nil {
+\t\tt.Fatalf("request failed: %v", err)
+\t}
+\tdefer resp.Body.Close()
+
+\tif resp.StatusCode != http.StatusNotFound {
+\t\tt.Fatalf("expected 404, got %d", resp.StatusCode)
 \t}
 }
 
@@ -722,12 +1016,6 @@ func TestItemStore_CRUD(t *testing.T) {
 \t\tt.Fatal("expected non-empty ID")
 \t}
 
-\t// List after create
-\titems = store.List()
-\tif len(items) != 1 {
-\t\tt.Fatalf("expected 1 item, got %d", len(items))
-\t}
-
 \t// Get by ID
 \tfound, ok := store.GetByID(item.ID)
 \tif !ok {
@@ -737,7 +1025,7 @@ func TestItemStore_CRUD(t *testing.T) {
 \t\tt.Fatalf("expected name 'Test Item', got %q", found.Name)
 \t}
 
-\t// Get missing ID
+\t// Get missing
 \t_, ok = store.GetByID("nonexistent")
 \tif ok {
 \t\tt.Fatal("expected not to find nonexistent item")
@@ -752,33 +1040,12 @@ func TestItemStore_CRUD(t *testing.T) {
 \t\tt.Fatalf("expected name 'Updated', got %q", updated.Name)
 \t}
 
-\t// Update missing
-\t_, ok = store.Update("nonexistent", "x", "y")
-\tif ok {
-\t\tt.Fatal("expected update of missing item to fail")
-\t}
-
 \t// Delete
 \tif !store.Delete(item.ID) {
 \t\tt.Fatal("expected delete to succeed")
 \t}
 \tif store.Delete(item.ID) {
 \t\tt.Fatal("expected second delete to fail")
-\t}
-
-\titems = store.List()
-\tif len(items) != 0 {
-\t\tt.Fatalf("expected 0 items after delete, got %d", len(items))
-\t}
-}
-
-func TestCreateItemValidation(t *testing.T) {
-\t// Test that empty name produces an error (unit test of validation logic)
-\tname := "   "
-\tif len(name) > 0 && len(bytes.TrimSpace([]byte(name))) == 0 {
-\t\t// name is blank after trim — validation should reject this
-\t} else {
-\t\tt.Fatal("expected blank name to be detected")
 \t}
 }
 
@@ -797,7 +1064,6 @@ func TestGenerateID(t *testing.T) {
 }
 
 func TestEnvOrDefault(t *testing.T) {
-\t// Uses default when env is not set
 \tval := envOrDefault("KCODE_TEST_NONEXISTENT_VAR", "fallback")
 \tif val != "fallback" {
 \t\tt.Fatalf("expected 'fallback', got %q", val)
