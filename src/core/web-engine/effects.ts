@@ -407,7 +407,7 @@ window.addEventListener('scroll', () => {
       const scrolled = window.scrollY;
       document.querySelectorAll('[data-parallax]').forEach(el => {
         const speed = parseFloat(el.dataset.parallax) || 0.5;
-        el.style.transform = \`translateY(\${scrolled * speed}px)\`;
+        el.style.transform = 'translateY(' + (scrolled * speed) + 'px)';
       });
       ticking = false;
     });
