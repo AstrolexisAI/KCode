@@ -71,7 +71,7 @@ tasks.withType<Test> { useJUnitPlatform() }
   files.push({ path: "gradlew", content: `#!/bin/sh\nexec gradle "$@"\n`, needsLlm: false });
 
   // Application properties
-  files.push({ path: "src/main/resources/application.yml", content: `server:\n  port: 8080\n\nspring:\n  application:\n    name: ${cfg.name}\n`, needsLlm: false });
+  files.push({ path: "src/main/resources/application.yml", content: `server:\n  port: 10080\n\nspring:\n  application:\n    name: ${cfg.name}\n\nlogging:\n  level:\n    root: INFO\n    ${cfg.pkg}: DEBUG\n  pattern:\n    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"\n`, needsLlm: false });
 
   // Main class
   files.push({ path: `src/main/java/${pkgPath}/Application.java`, content: `package ${cfg.pkg};
@@ -104,74 +104,258 @@ public class HealthController {
 }
 `, needsLlm: false });
 
-  // Entity + Service + Controller template
+  // Item model
+  files.push({ path: `src/main/java/${pkgPath}/model/Item.java`, content: `package ${cfg.pkg}.model;
+
+import jakarta.validation.constraints.NotBlank;
+import java.time.Instant;
+import java.util.UUID;
+
+public record Item(
+    String id,
+    @NotBlank(message = "Name is required") String name,
+    String description,
+    Instant createdAt
+) {
+    public Item(String name, String description) {
+        this(UUID.randomUUID().toString(), name, description, Instant.now());
+    }
+}
+`, needsLlm: false });
+
+  // Item service
+  files.push({ path: `src/main/java/${pkgPath}/service/ItemService.java`, content: `package ${cfg.pkg}.service;
+
+import ${cfg.pkg}.model.Item;
+import org.springframework.stereotype.Service;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class ItemService {
+
+    private final Map<String, Item> store = new ConcurrentHashMap<>();
+
+    public List<Item> findAll() {
+        return new ArrayList<>(store.values());
+    }
+
+    public Optional<Item> findById(String id) {
+        return Optional.ofNullable(store.get(id));
+    }
+
+    public Item create(String name, String description) {
+        var item = new Item(name, description);
+        store.put(item.id(), item);
+        return item;
+    }
+
+    public boolean delete(String id) {
+        return store.remove(id) != null;
+    }
+}
+`, needsLlm: false });
+
+  // Error response record
+  files.push({ path: `src/main/java/${pkgPath}/controller/ErrorResponse.java`, content: `package ${cfg.pkg}.controller;
+
+import java.time.Instant;
+import java.util.Map;
+
+public record ErrorResponse(int status, String message, Map<String, String> errors, Instant timestamp) {
+    public ErrorResponse(int status, String message) {
+        this(status, message, Map.of(), Instant.now());
+    }
+
+    public ErrorResponse(int status, String message, Map<String, String> errors) {
+        this(status, message, errors, Instant.now());
+    }
+}
+`, needsLlm: false });
+
+  // Item controller with full CRUD, validation, error handling, logging
   files.push({ path: `src/main/java/${pkgPath}/controller/ItemController.java`, content: `package ${cfg.pkg}.controller;
 
+import ${cfg.pkg}.model.Item;
+import ${cfg.pkg}.service.ItemService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
-import java.util.*;
 
-// TODO: implement CRUD controller
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/items")
 public class ItemController {
 
+    private static final Logger log = LoggerFactory.getLogger(ItemController.class);
+
+    private final ItemService itemService;
+
+    public ItemController(ItemService itemService) {
+        this.itemService = itemService;
+    }
+
+    public record CreateItemRequest(
+        @NotBlank(message = "Name is required") String name,
+        String description
+    ) {}
+
     @GetMapping
-    public List<Map<String, Object>> list() {
-        // TODO: return items from service
-        return List.of(Map.of("id", "1", "name", "Sample"));
+    public List<Item> list() {
+        log.debug("Listing all items");
+        return itemService.findAll();
     }
 
     @PostMapping
-    public Map<String, Object> create(@RequestBody Map<String, Object> body) {
-        // TODO: create item via service
-        return body;
+    public ResponseEntity<Item> create(@Valid @RequestBody CreateItemRequest request) {
+        log.info("Creating item: {}", request.name());
+        var item = itemService.create(request.name(), request.description());
+        return ResponseEntity.status(HttpStatus.CREATED).body(item);
     }
 
     @GetMapping("/{id}")
-    public Map<String, Object> get(@PathVariable String id) {
-        // TODO: get by id
-        return Map.of("id", id);
+    public ResponseEntity<?> get(@PathVariable String id) {
+        log.debug("Getting item: {}", id);
+        return itemService.findById(id)
+            .<ResponseEntity<?>>map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "Item not found: " + id)));
     }
 
     @DeleteMapping("/{id}")
-    public void delete(@PathVariable String id) {
-        // TODO: delete
+    public ResponseEntity<?> delete(@PathVariable String id) {
+        log.info("Deleting item: {}", id);
+        if (itemService.delete(id)) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ErrorResponse(404, "Item not found: " + id));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = ex.getBindingResult().getFieldErrors().stream()
+            .collect(Collectors.toMap(FieldError::getField, FieldError::getDefaultMessage, (a, b) -> a));
+        log.warn("Validation failed: {}", errors);
+        return ResponseEntity.badRequest().body(new ErrorResponse(400, "Validation failed", errors));
     }
 }
-`, needsLlm: true });
+`, needsLlm: false });
 
   // Test
   files.push({ path: `src/test/java/${pkgPath}/ApplicationTests.java`, content: `package ${cfg.pkg};
 
+import ${cfg.pkg}.model.Item;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ApplicationTests {
 
     @Autowired
     TestRestTemplate restTemplate;
 
+    static String createdItemId;
+
     @Test
+    @Order(1)
     void contextLoads() {}
 
     @Test
+    @Order(2)
     void healthEndpoint() {
         var response = restTemplate.getForObject("/api/health", String.class);
         assertThat(response).contains("ok");
     }
 
-    // TODO: add domain-specific tests
+    @Test
+    @Order(3)
+    void listItemsEmpty() {
+        var response = restTemplate.getForEntity("/api/items", Item[].class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+    }
+
+    @Test
+    @Order(4)
+    void createItem() {
+        var body = java.util.Map.of("name", "Test Item", "description", "A test item");
+        var response = restTemplate.postForEntity("/api/items", body, Item.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().name()).isEqualTo("Test Item");
+        assertThat(response.getBody().id()).isNotBlank();
+        createdItemId = response.getBody().id();
+    }
+
+    @Test
+    @Order(5)
+    void getItemById() {
+        // Create an item first
+        var body = java.util.Map.of("name", "Lookup Item", "description", "For retrieval");
+        var created = restTemplate.postForObject("/api/items", body, Item.class);
+        assertThat(created).isNotNull();
+
+        var response = restTemplate.getForEntity("/api/items/" + created.id(), Item.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().name()).isEqualTo("Lookup Item");
+    }
+
+    @Test
+    @Order(6)
+    void getItemNotFound() {
+        var response = restTemplate.getForEntity("/api/items/nonexistent", String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody()).contains("Item not found");
+    }
+
+    @Test
+    @Order(7)
+    void deleteItem() {
+        var body = java.util.Map.of("name", "Delete Me", "description", "To be deleted");
+        var created = restTemplate.postForObject("/api/items", body, Item.class);
+        assertThat(created).isNotNull();
+
+        restTemplate.delete("/api/items/" + created.id());
+
+        var response = restTemplate.getForEntity("/api/items/" + created.id(), String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @Order(8)
+    void createItemValidationFails() {
+        var body = java.util.Map.of("name", "", "description", "No name");
+        var response = restTemplate.postForEntity("/api/items", body, String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
 }
-`, needsLlm: true });
+`, needsLlm: false });
 
   // Extras
   files.push({ path: ".gitignore", content: "build/\n.gradle/\n*.class\n*.jar\n.idea/\n*.iml\n.env\n", needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM eclipse-temurin:21-jdk AS builder\nWORKDIR /app\nCOPY . .\nRUN ./gradlew build -x test\n\nFROM eclipse-temurin:21-jre\nCOPY --from=builder /app/build/libs/*.jar /app/app.jar\nEXPOSE 8080\nCMD ["java", "-jar", "/app/app.jar"]\n`, needsLlm: false });
+  files.push({ path: "Dockerfile", content: `FROM eclipse-temurin:21-jdk AS builder\nWORKDIR /app\nCOPY . .\nRUN ./gradlew build -x test\n\nFROM eclipse-temurin:21-jre\nCOPY --from=builder /app/build/libs/*.jar /app/app.jar\nEXPOSE 10080\nCMD ["java", "-jar", "/app/app.jar"]\n`, needsLlm: false });
   files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-java@v4\n        with: { distribution: temurin, java-version: 21 }\n      - run: ./gradlew test\n`, needsLlm: false });
   files.push({ path: "README.md", content: `# ${cfg.name}\n\nSpring Boot API. Built with KCode.\n\n\`\`\`bash\n./gradlew bootRun\n./gradlew test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
 

@@ -28,6 +28,7 @@ function detectPhpProject(msg: string): PhpConfig {
     deps["slim/slim"] = "^4.0";
     deps["slim/psr7"] = "^1.7";
     deps["php-di/slim-bridge"] = "^3.4";
+    deps["monolog/monolog"] = "^3.0";
   }
   else if (/\b(?:web|site|app|page)\b/i.test(lower)) {
     type = "web"; framework = "laravel";
@@ -43,6 +44,7 @@ function detectPhpProject(msg: string): PhpConfig {
     framework = "slim";
     deps["slim/slim"] = "^4.0";
     deps["slim/psr7"] = "^1.7";
+    deps["monolog/monolog"] = "^3.0";
   }
 
   if (/\b(?:eloquent|database|db|postgres|mysql)\b/i.test(lower)) deps["illuminate/database"] = "^11.0";
@@ -85,23 +87,199 @@ require __DIR__ . '/../vendor/autoload.php';
 use Slim\\Factory\\AppFactory;
 use Psr\\Http\\Message\\ResponseInterface as Response;
 use Psr\\Http\\Message\\ServerRequestInterface as Request;
+use Psr\\Http\\Server\\RequestHandlerInterface as RequestHandler;
+use Slim\\Exception\\HttpNotFoundException;
+use ${cap(cfg.name)}\\ItemRepository;
+use Monolog\\Logger;
+use Monolog\\Handler\\StreamHandler;
+
+$logger = new Logger('${cfg.name}');
+$logger->pushHandler(new StreamHandler(__DIR__ . '/../logs/app.log', Logger::DEBUG));
+$logger->pushHandler(new StreamHandler('php://stderr', Logger::INFO));
 
 $app = AppFactory::create();
-$app->addErrorMiddleware(true, true, true);
 
+// JSON error handling middleware
+$errorMiddleware = $app->addErrorMiddleware(true, true, true);
+$errorMiddleware->setDefaultErrorHandler(function (
+    Request $request,
+    \\Throwable $exception,
+    bool $displayErrorDetails,
+    bool $logErrors,
+    bool $logErrorDetails
+) use ($app, $logger) {
+    $logger->error($exception->getMessage(), ['trace' => $exception->getTraceAsString()]);
+    $statusCode = $exception instanceof \\Slim\\Exception\\HttpException ? $exception->getCode() : 500;
+    $response = $app->getResponseFactory()->createResponse($statusCode);
+    $response->getBody()->write(json_encode([
+        'error' => true,
+        'message' => $exception->getMessage(),
+    ]));
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+// JSON Content-Type middleware
+$app->add(function (Request $request, RequestHandler $handler) {
+    $response = $handler->handle($request);
+    return $response->withHeader('Content-Type', 'application/json');
+});
+
+$repo = new ItemRepository();
+
+// Health check
 $app->get('/health', function (Request $request, Response $response) {
     $response->getBody()->write(json_encode(['status' => 'ok']));
-    return $response->withHeader('Content-Type', 'application/json');
+    return $response;
 });
 
-// TODO: add routes
-$app->get('/api/items', function (Request $request, Response $response) {
-    $response->getBody()->write(json_encode([['id' => 1, 'name' => 'Sample']]));
-    return $response->withHeader('Content-Type', 'application/json');
+// List all items
+$app->get('/api/items', function (Request $request, Response $response) use ($repo, $logger) {
+    $logger->info('Listing all items');
+    $response->getBody()->write(json_encode($repo->findAll()));
+    return $response;
 });
 
+// Get single item
+$app->get('/api/items/{id}', function (Request $request, Response $response, array $args) use ($repo, $logger) {
+    $id = (int) $args['id'];
+    $item = $repo->findById($id);
+    if ($item === null) {
+        $logger->info('Item not found', ['id' => $id]);
+        $response->getBody()->write(json_encode(['error' => true, 'message' => 'Item not found']));
+        return $response->withStatus(404);
+    }
+    $response->getBody()->write(json_encode($item));
+    return $response;
+});
+
+// Create item
+$app->post('/api/items', function (Request $request, Response $response) use ($repo, $logger) {
+    $body = $request->getParsedBody();
+    $errors = [];
+    if (empty($body['name']) || !is_string($body['name'])) {
+        $errors[] = 'name is required and must be a string';
+    }
+    if (isset($body['description']) && !is_string($body['description'])) {
+        $errors[] = 'description must be a string';
+    }
+    if (!empty($errors)) {
+        $logger->info('Validation failed on create', ['errors' => $errors]);
+        $response->getBody()->write(json_encode(['error' => true, 'errors' => $errors]));
+        return $response->withStatus(422);
+    }
+    $item = $repo->create($body['name'], $body['description'] ?? '');
+    $logger->info('Item created', ['id' => $item['id']]);
+    $response->getBody()->write(json_encode($item));
+    return $response->withStatus(201);
+});
+
+// Update item
+$app->put('/api/items/{id}', function (Request $request, Response $response, array $args) use ($repo, $logger) {
+    $id = (int) $args['id'];
+    $body = $request->getParsedBody();
+    $errors = [];
+    if (isset($body['name']) && !is_string($body['name'])) {
+        $errors[] = 'name must be a string';
+    }
+    if (isset($body['description']) && !is_string($body['description'])) {
+        $errors[] = 'description must be a string';
+    }
+    if (!empty($errors)) {
+        $response->getBody()->write(json_encode(['error' => true, 'errors' => $errors]));
+        return $response->withStatus(422);
+    }
+    $item = $repo->update($id, $body['name'] ?? null, $body['description'] ?? null);
+    if ($item === null) {
+        $logger->info('Item not found for update', ['id' => $id]);
+        $response->getBody()->write(json_encode(['error' => true, 'message' => 'Item not found']));
+        return $response->withStatus(404);
+    }
+    $logger->info('Item updated', ['id' => $id]);
+    $response->getBody()->write(json_encode($item));
+    return $response;
+});
+
+// Delete item
+$app->delete('/api/items/{id}', function (Request $request, Response $response, array $args) use ($repo, $logger) {
+    $id = (int) $args['id'];
+    $deleted = $repo->delete($id);
+    if (!$deleted) {
+        $logger->info('Item not found for delete', ['id' => $id]);
+        $response->getBody()->write(json_encode(['error' => true, 'message' => 'Item not found']));
+        return $response->withStatus(404);
+    }
+    $logger->info('Item deleted', ['id' => $id]);
+    $response->getBody()->write(json_encode(['deleted' => true]));
+    return $response;
+});
+
+$app->addBodyParsingMiddleware();
 $app->run();
-`, needsLlm: true });
+`, needsLlm: false });
+
+    files.push({ path: `src/ItemRepository.php`, content: `<?php
+
+declare(strict_types=1);
+
+namespace ${cap(cfg.name)};
+
+class ItemRepository
+{
+    /** @var array<int, array{id: int, name: string, description: string, createdAt: string}> */
+    private array $items = [];
+    private int $nextId = 1;
+
+    /** @return array<int, array{id: int, name: string, description: string, createdAt: string}> */
+    public function findAll(): array
+    {
+        return array_values($this->items);
+    }
+
+    /** @return array{id: int, name: string, description: string, createdAt: string}|null */
+    public function findById(int $id): ?array
+    {
+        return $this->items[$id] ?? null;
+    }
+
+    /** @return array{id: int, name: string, description: string, createdAt: string} */
+    public function create(string $name, string $description = ''): array
+    {
+        $item = [
+            'id' => $this->nextId,
+            'name' => $name,
+            'description' => $description,
+            'createdAt' => date('c'),
+        ];
+        $this->items[$this->nextId] = $item;
+        $this->nextId++;
+        return $item;
+    }
+
+    /** @return array{id: int, name: string, description: string, createdAt: string}|null */
+    public function update(int $id, ?string $name, ?string $description): ?array
+    {
+        if (!isset($this->items[$id])) {
+            return null;
+        }
+        if ($name !== null) {
+            $this->items[$id]['name'] = $name;
+        }
+        if ($description !== null) {
+            $this->items[$id]['description'] = $description;
+        }
+        return $this->items[$id];
+    }
+
+    public function delete(int $id): bool
+    {
+        if (!isset($this->items[$id])) {
+            return false;
+        }
+        unset($this->items[$id]);
+        return true;
+    }
+}
+`, needsLlm: false });
 
   } else if (cfg.type === "cli") {
     files.push({ path: "bin/console", content: `#!/usr/bin/env php
@@ -216,7 +394,87 @@ echo json_encode(['status' => 'ok', 'app' => '${cfg.name}']);
   }
 
   // Test
-  files.push({ path: `tests/${cap(cfg.name)}Test.php`, content: `<?php
+  if (cfg.type === "api" && cfg.framework === "slim") {
+    files.push({ path: `tests/${cap(cfg.name)}Test.php`, content: `<?php
+
+namespace ${cap(cfg.name)}\\Tests;
+
+use PHPUnit\\Framework\\TestCase;
+use ${cap(cfg.name)}\\ItemRepository;
+
+class ${cap(cfg.name)}Test extends TestCase
+{
+    private ItemRepository $repo;
+
+    protected function setUp(): void
+    {
+        $this->repo = new ItemRepository();
+    }
+
+    public function testFindAllEmpty(): void
+    {
+        $this->assertSame([], $this->repo->findAll());
+    }
+
+    public function testCreateItem(): void
+    {
+        $item = $this->repo->create('Widget', 'A fine widget');
+        $this->assertSame(1, $item['id']);
+        $this->assertSame('Widget', $item['name']);
+        $this->assertSame('A fine widget', $item['description']);
+        $this->assertArrayHasKey('createdAt', $item);
+    }
+
+    public function testFindById(): void
+    {
+        $created = $this->repo->create('Gadget');
+        $found = $this->repo->findById($created['id']);
+        $this->assertNotNull($found);
+        $this->assertSame('Gadget', $found['name']);
+    }
+
+    public function testFindByIdNotFound(): void
+    {
+        $this->assertNull($this->repo->findById(999));
+    }
+
+    public function testUpdateItem(): void
+    {
+        $created = $this->repo->create('Old Name', 'Old desc');
+        $updated = $this->repo->update($created['id'], 'New Name', null);
+        $this->assertNotNull($updated);
+        $this->assertSame('New Name', $updated['name']);
+        $this->assertSame('Old desc', $updated['description']);
+    }
+
+    public function testUpdateNotFound(): void
+    {
+        $this->assertNull($this->repo->update(999, 'x', null));
+    }
+
+    public function testDeleteItem(): void
+    {
+        $created = $this->repo->create('ToDelete');
+        $this->assertTrue($this->repo->delete($created['id']));
+        $this->assertNull($this->repo->findById($created['id']));
+    }
+
+    public function testDeleteNotFound(): void
+    {
+        $this->assertFalse($this->repo->delete(999));
+    }
+
+    public function testFindAllAfterMultipleCreates(): void
+    {
+        $this->repo->create('One');
+        $this->repo->create('Two');
+        $this->repo->create('Three');
+        $this->assertCount(3, $this->repo->findAll());
+    }
+}
+`, needsLlm: false });
+  } else {
+    files.push({ path: `tests/${cap(cfg.name)}Test.php`, content: `<?php
 
 namespace ${cap(cfg.name)}\\Tests;
 
@@ -232,6 +490,7 @@ class ${cap(cfg.name)}Test extends TestCase
     // TODO: add tests
 }
 `, needsLlm: true });
+  }
 
   // phpunit.xml
   files.push({ path: "phpunit.xml", content: `<?xml version="1.0" encoding="UTF-8"?>

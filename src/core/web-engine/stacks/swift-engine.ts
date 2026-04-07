@@ -217,9 +217,138 @@ ${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"
         .executableTarget(name: "${cfg.name}", dependencies: [
             .product(name: "Vapor", package: "vapor"),
         ]),
-        .testTarget(name: "${cfg.name}Tests", dependencies: ["${cfg.name}"]),
+        .testTarget(name: "${cfg.name}Tests", dependencies: [
+            "${cfg.name}",
+            .product(name: "XCTVapor", package: "vapor"),
+        ]),
     ]
 )
+`, needsLlm: false });
+
+    files.push({ path: `Sources/Models/Item.swift`, content: `import Vapor
+
+struct Item: Content, Sendable {
+    let id: String
+    var name: String
+    var description: String
+    let createdAt: Date
+}
+
+struct CreateItemRequest: Content, Validatable {
+    let name: String
+    let description: String?
+
+    static func validations(_ validations: inout Validations) {
+        validations.add("name", as: String.self, is: !.empty && .count(1...200))
+    }
+}
+
+struct UpdateItemRequest: Content, Validatable {
+    let name: String
+    let description: String?
+
+    static func validations(_ validations: inout Validations) {
+        validations.add("name", as: String.self, is: !.empty && .count(1...200))
+    }
+}
+`, needsLlm: false });
+
+    files.push({ path: `Sources/Services/ItemStore.swift`, content: `import Foundation
+
+actor ItemStore {
+    static let shared = ItemStore()
+
+    private var items: [String: Item] = [:]
+
+    func getAll() -> [Item] {
+        items.values.sorted { \$0.createdAt > \$1.createdAt }
+    }
+
+    func get(_ id: String) -> Item? {
+        items[id]
+    }
+
+    func create(name: String, description: String) -> Item {
+        let item = Item(
+            id: UUID().uuidString,
+            name: name,
+            description: description,
+            createdAt: Date()
+        )
+        items[item.id] = item
+        return item
+    }
+
+    func update(_ id: String, name: String, description: String) -> Item? {
+        guard var existing = items[id] else { return nil }
+        existing.name = name
+        existing.description = description
+        items[id] = existing
+        return existing
+    }
+
+    func delete(_ id: String) -> Bool {
+        items.removeValue(forKey: id) != nil
+    }
+}
+`, needsLlm: false });
+
+    files.push({ path: `Sources/Routes/ItemRoutes.swift`, content: `import Vapor
+
+func registerItemRoutes(_ app: Application) {
+    let items = app.grouped("api", "items")
+    let store = ItemStore.shared
+
+    items.get { req async throws -> [Item] in
+        req.logger.info("Listing all items")
+        return await store.getAll()
+    }
+
+    items.get(":id") { req async throws -> Item in
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing item ID")
+        }
+        guard let item = await store.get(id) else {
+            throw Abort(.notFound, reason: "Item not found: \\(id)")
+        }
+        return item
+    }
+
+    items.post { req async throws -> Response in
+        try CreateItemRequest.validate(content: req)
+        let input = try req.content.decode(CreateItemRequest.self)
+        let item = await store.create(name: input.name, description: input.description ?? "")
+        req.logger.info("Created item \\(item.id): \\(item.name)")
+        let response = Response(status: .created)
+        try response.content.encode(item)
+        response.headers.replaceOrAdd(name: .location, value: "/api/items/\\(item.id)")
+        return response
+    }
+
+    items.put(":id") { req async throws -> Item in
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing item ID")
+        }
+        try UpdateItemRequest.validate(content: req)
+        let input = try req.content.decode(UpdateItemRequest.self)
+        guard let updated = await store.update(id, name: input.name, description: input.description ?? "") else {
+            throw Abort(.notFound, reason: "Item not found: \\(id)")
+        }
+        req.logger.info("Updated item \\(id)")
+        return updated
+    }
+
+    items.delete(":id") { req async throws -> HTTPStatus in
+        guard let id = req.parameters.get("id") else {
+            throw Abort(.badRequest, reason: "Missing item ID")
+        }
+        guard await store.delete(id) else {
+            throw Abort(.notFound, reason: "Item not found: \\(id)")
+        }
+        req.logger.info("Deleted item \\(id)")
+        return .noContent
+    }
+}
 `, needsLlm: false });
 
     files.push({ path: `Sources/main.swift`, content: `import Vapor
@@ -227,14 +356,19 @@ ${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"
 let app = try Application(.detect())
 defer { app.shutdown() }
 
+app.logger.logLevel = .info
+
 app.get("health") { _ in
     ["status": "ok"]
 }
 
-// TODO: add routes
+registerItemRoutes(app)
+
+app.logger.info("${cfg.name} starting on port 10080")
+app.http.server.configuration.port = 10080
 
 try app.run()
-`, needsLlm: true });
+`, needsLlm: false });
 
   } else { // package
     files.push({ path: "Package.swift", content: `// swift-tools-version: 6.0
@@ -279,7 +413,65 @@ public enum ${cfg.name}Error: Error, CustomStringConvertible {
   }
 
   // Tests
-  files.push({ path: `Tests/${cfg.name}Tests.swift`, content: `import Testing
+  if (cfg.type === "server") {
+    files.push({ path: `Tests/${cfg.name}Tests.swift`, content: `import XCTVapor
+@testable import ${cfg.name}
+
+final class ${cfg.name}Tests: XCTestCase {
+    var app: Application!
+
+    override func setUp() async throws {
+        app = try Application(.testing)
+        app.get("health") { _ in ["status": "ok"] }
+        registerItemRoutes(app)
+    }
+
+    override func tearDown() async throws {
+        app.shutdown()
+    }
+
+    func testHealthEndpoint() async throws {
+        try app.test(.GET, "health") { res in
+            XCTAssertEqual(res.status, .ok)
+        }
+    }
+
+    func testListItemsEmpty() async throws {
+        try app.test(.GET, "api/items") { res in
+            XCTAssertEqual(res.status, .ok)
+        }
+    }
+
+    func testCreateItem() async throws {
+        let body = #"{"name":"Test","description":"A test item"}"#
+        try app.test(.POST, "api/items", headers: ["Content-Type": "application/json"], body: .init(string: body)) { res in
+            XCTAssertEqual(res.status, .created)
+            XCTAssertNotNil(res.headers[.location].first)
+        }
+    }
+
+    func testCreateItemMissingName() async throws {
+        let body = #"{"name":"","description":"No name"}"#
+        try app.test(.POST, "api/items", headers: ["Content-Type": "application/json"], body: .init(string: body)) { res in
+            XCTAssertTrue(res.status == .badRequest || res.status == .unprocessableEntity)
+        }
+    }
+
+    func testGetItemNotFound() async throws {
+        try app.test(.GET, "api/items/nonexistent-id") { res in
+            XCTAssertEqual(res.status, .notFound)
+        }
+    }
+
+    func testDeleteItemNotFound() async throws {
+        try app.test(.DELETE, "api/items/nonexistent-id") { res in
+            XCTAssertEqual(res.status, .notFound)
+        }
+    }
+}
+`, needsLlm: false });
+  } else {
+    files.push({ path: `Tests/${cfg.name}Tests.swift`, content: `import Testing
 @testable import ${cfg.name}
 
 @Suite("${cfg.name} Tests")
@@ -290,6 +482,7 @@ struct ${cfg.name}Tests {
     }
 }
 `, needsLlm: true });
+  }
 
   // Extras
   files.push({ path: ".gitignore", content: ".build/\n.swiftpm/\nPackage.resolved\n*.xcodeproj\nDerivedData/\n", needsLlm: false });
