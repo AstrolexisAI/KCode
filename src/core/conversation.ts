@@ -538,7 +538,21 @@ export class ConversationManager {
         // Web creation gets its own engine (higher priority than generic implement)
         const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce)\b/i.test(userMessage);
 
-        if (task.type === "implement" && isWebRequest) {
+        // ── Code creation engine routing (natural language → engine) ──
+        const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
+        const engineMatch = task.type === "implement" ? detectCodeEngine(userMessage) : null;
+
+        if (task.type === "implement" && engineMatch) {
+          try {
+            const result = await runCodeEngine(engineMatch.engine, userMessage, this.config.workingDirectory);
+            if (result) {
+              orchestratedMessage = result;
+              log.info("orchestrator", `${engineMatch.engine} engine activated for: "${userMessage.slice(0, 50)}"`);
+            }
+          } catch (err) {
+            log.debug("code-engine", `${engineMatch.engine} engine skipped: ${err}`);
+          }
+        } else if (task.type === "implement" && isWebRequest) {
           try {
             const { buildWebCreationPrompt } = await import("./web-engine/web-engine.js");
             orchestratedMessage = buildWebCreationPrompt(userMessage, this.config.workingDirectory);
