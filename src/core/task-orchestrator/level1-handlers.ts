@@ -250,7 +250,11 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
       else if (isVite) devCmd = `${pm} run dev -- --port ${port}`;
       else devCmd = `PORT=${port} ${pm} run dev`;
 
-      return { name: isNext ? "Next.js" : isVite ? "Vite" : pkg.name ?? "Node.js", command: devCmd, port, installCmd: `${pm} install`, needsInstall: !hasNodeModules };
+      // Check if any dependency is missing from node_modules
+      const depsOk = hasNodeModules && Object.keys(pkg.dependencies ?? {}).every(
+        (dep: string) => existsSync(join(cwd, "node_modules", dep))
+      );
+      return { name: isNext ? "Next.js" : isVite ? "Vite" : pkg.name ?? "Node.js", command: devCmd, port, installCmd: `${pm} install`, needsInstall: !depsOk };
     }
     if (scripts.start) {
       return { name: pkg.name ?? "Node.js", command: `PORT=${port} ${pm} run start`, port, installCmd: `${pm} install`, needsInstall: !hasNodeModules };
