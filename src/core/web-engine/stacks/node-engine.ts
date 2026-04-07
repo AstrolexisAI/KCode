@@ -132,18 +132,80 @@ export default ${capitalize(cfg.name)};
 }
 module.exports = { ${capitalize(cfg.name)} };
 `}`,
-    worker: `${cfg.useTs ? 'import { Worker, Queue } from "bullmq";\nimport { Redis } from "ioredis";\n' : ''}
+    worker: `${cfg.useTs ? 'import { Worker, Queue, Job } from "bullmq";\nimport { Redis } from "ioredis";\n' : 'const { Worker, Queue } = require("bullmq");\nconst { Redis } = require("ioredis");\n'}
 const QUEUE_NAME = "${cfg.name}-jobs";
+const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
-// TODO: implement worker logic
-console.log("${cfg.name} worker started");
+const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
 
-process.on("SIGINT", () => { console.log("\\nShutdown"); process.exit(0); });
-process.on("SIGTERM", () => { console.log("\\nShutdown"); process.exit(0); });
+${cfg.useTs ? 'interface JobData { action: string; payload: Record<string, unknown>; }' : ''}
+
+const worker = new Worker(QUEUE_NAME, async (job${cfg.useTs ? ': Job<JobData>' : ''}) => {
+  console.log(\`Processing job \${job.id}: \${job.data.action}\`);
+
+  switch (job.data.action) {
+    case "process":
+      await job.updateProgress(50);
+      // Simulate work
+      await new Promise(r => setTimeout(r, 100));
+      await job.updateProgress(100);
+      return { success: true, processedAt: new Date().toISOString() };
+    default:
+      throw new Error(\`Unknown action: \${job.data.action}\`);
+  }
+}, {
+  connection,
+  concurrency: 5,
+  limiter: { max: 10, duration: 1000 },
+});
+
+worker.on("completed", (job) => console.log(\`Job \${job.id} completed\`));
+worker.on("failed", (job, err) => console.error(\`Job \${job?.id} failed: \${err.message}\`));
+worker.on("error", (err) => console.error("Worker error:", err.message));
+
+console.log(\`${cfg.name} worker started, listening on queue: \${QUEUE_NAME}\`);
+
+async function shutdown() {
+  console.log("\\nShutting down gracefully...");
+  await worker.close();
+  await connection.quit();
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 `,
     bot: `// ${cfg.name} bot
-// TODO: implement bot logic
+${cfg.useTs ? 'import "dotenv/config";\n' : 'require("dotenv").config();\n'}
+const TOKEN = process.env.BOT_TOKEN;
+if (!TOKEN) {
+  console.error("Error: BOT_TOKEN environment variable is required");
+  process.exit(1);
+}
+
 console.log("${cfg.name} bot starting...");
+
+async function handleMessage(message${cfg.useTs ? ': string' : ''})${cfg.useTs ? ': Promise<string>' : ''} {
+  if (message.startsWith("!ping")) return "Pong!";
+  if (message.startsWith("!help")) return "Available commands: !ping, !help, !status";
+  if (message.startsWith("!status")) return \`Bot uptime: \${Math.floor(process.uptime())}s\`;
+  return "";
+}
+
+// Placeholder: replace with your bot framework connection logic
+async function start() {
+  try {
+    console.log("${cfg.name} bot connected successfully");
+  } catch (err) {
+    console.error("Failed to start bot:", err);
+    process.exit(1);
+  }
+}
+
+start();
+
+process.on("SIGINT", () => { console.log("\\nBot shutting down..."); process.exit(0); });
+process.on("SIGTERM", () => { console.log("\\nBot shutting down..."); process.exit(0); });
 `,
     script: `${cfg.useTs ? 'import cron from "node-cron";\nimport "dotenv/config";\n' : 'const cron = require("node-cron");\nrequire("dotenv").config();\n'}
 

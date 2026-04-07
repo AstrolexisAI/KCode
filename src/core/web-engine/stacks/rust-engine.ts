@@ -22,7 +22,7 @@ function detectRustProject(msg: string): RustConfig {
     type = "api";
     if (/\bactix\b/i.test(lower)) { deps.push({ name: "actix-web", version: "4" }, { name: "actix-rt", version: "2" }); }
     else { deps.push({ name: "axum", version: "0.8" }, { name: "tokio", version: "1", features: ["full"] }); }
-    deps.push({ name: "serde", version: "1", features: ["derive"] }, { name: "serde_json", version: "1" }, { name: "tower-http", version: "0.6", features: ["cors"] });
+    deps.push({ name: "serde", version: "1", features: ["derive"] }, { name: "serde_json", version: "1" }, { name: "tower-http", version: "0.6", features: ["cors"] }, { name: "tracing", version: "0.1" }, { name: "tracing-subscriber", version: "0.3", features: ["env-filter"] }, { name: "dotenvy", version: "0.15" });
   }
   else if (/\b(?:lib|library|crate)\b/i.test(lower)) { type = "library"; }
   else if (/\b(?:wasm|web\s*assembly|browser)\b/i.test(lower)) { type = "wasm"; deps.push({ name: "wasm-bindgen", version: "0.2" }); }
@@ -115,46 +115,255 @@ fn main() -> Result<()> {
     Ok(())
 }
 `,
-    api: `use axum::{routing::get, Json, Router};
+    api: `use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{get, post, put, delete},
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
+use tracing_subscriber;
 
-#[derive(Serialize)]
+// --- Models ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Item {
+    id: String,
+    name: String,
+    description: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateItemRequest {
+    name: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateItemRequest {
+    name: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct Health {
     status: String,
+    service: String,
 }
 
-async fn health() -> Json<Health> {
-    Json(Health { status: "ok".into() })
+#[derive(Debug, Serialize)]
+struct ErrorBody {
+    error: String,
 }
 
-// TODO: add your routes and handlers
+// --- Error handling ---
+
+enum AppError {
+    NotFound(String),
+    BadRequest(String),
+    Internal(String),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let (status, msg) = match self {
+            AppError::NotFound(m) => (StatusCode::NOT_FOUND, m),
+            AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m),
+            AppError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
+        };
+        (status, Json(ErrorBody { error: msg })).into_response()
+    }
+}
+
+// --- Shared state ---
+
+type AppState = Arc<Mutex<Vec<Item>>>;
+
+fn generate_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{:016x}", nanos)
+}
+
+fn now_rfc3339() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Simple UTC timestamp
+    format!("{}Z", secs)
+}
+
+fn env_or(key: &str, default: &str) -> String {
+    std::env::var(key).unwrap_or_else(|_| default.to_string())
+}
+
+// --- Handlers ---
+
+async fn health_check() -> Json<Health> {
+    Json(Health {
+        status: "ok".into(),
+        service: "${cfg.name}".into(),
+    })
+}
+
+async fn list_items(State(state): State<AppState>) -> Json<Vec<Item>> {
+    let items = state.lock().await;
+    Json(items.clone())
+}
+
+async fn get_item(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Item>, AppError> {
+    let items = state.lock().await;
+    items
+        .iter()
+        .find(|i| i.id == id)
+        .cloned()
+        .map(Json)
+        .ok_or_else(|| AppError::NotFound("item not found".into()))
+}
+
+async fn create_item(
+    State(state): State<AppState>,
+    Json(req): Json<CreateItemRequest>,
+) -> Result<(StatusCode, Json<Item>), AppError> {
+    let name = req
+        .name
+        .map(|n| n.trim().to_string())
+        .unwrap_or_default();
+    if name.is_empty() {
+        return Err(AppError::BadRequest("name is required".into()));
+    }
+    let description = req
+        .description
+        .map(|d| d.trim().to_string())
+        .unwrap_or_default();
+    let item = Item {
+        id: generate_id(),
+        name,
+        description,
+        created_at: now_rfc3339(),
+    };
+    tracing::info!(id = %item.id, name = %item.name, "item created");
+    let mut items = state.lock().await;
+    items.push(item.clone());
+    Ok((StatusCode::CREATED, Json(item)))
+}
+
+async fn update_item(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateItemRequest>,
+) -> Result<Json<Item>, AppError> {
+    let mut items = state.lock().await;
+    let item = items
+        .iter_mut()
+        .find(|i| i.id == id)
+        .ok_or_else(|| AppError::NotFound("item not found".into()))?;
+
+    if let Some(name) = req.name {
+        let trimmed = name.trim().to_string();
+        if !trimmed.is_empty() {
+            item.name = trimmed;
+        }
+    }
+    if let Some(desc) = req.description {
+        item.description = desc.trim().to_string();
+    }
+    tracing::info!(id = %item.id, "item updated");
+    Ok(Json(item.clone()))
+}
+
+async fn delete_item(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    let mut items = state.lock().await;
+    let len_before = items.len();
+    items.retain(|i| i.id != id);
+    if items.len() == len_before {
+        return Err(AppError::NotFound("item not found".into()));
+    }
+    tracing::info!(id = %id, "item deleted");
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub fn create_router(state: AppState) -> Router {
+    Router::new()
+        .route("/health", get(health_check))
+        .route("/items", get(list_items).post(create_item))
+        .route("/items/{id}", get(get_item).put(update_item).delete(delete_item))
+        .layer(CorsLayer::permissive())
+        .with_state(state)
+}
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new()
-        .route("/health", get(health))
-        // TODO: add routes
-        .layer(CorsLayer::permissive());
+    // Load .env file if present (via dotenvy)
+    let _ = dotenvy::dotenv();
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("${cfg.name} listening on {addr}");
+    tracing_subscriber::fmt()
+        .with_env_filter(env_or("RUST_LOG", "info"))
+        .init();
+
+    let port: u16 = env_or("PORT", "10080").parse().unwrap_or(10080);
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    tracing::info!("${cfg.name} starting on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap();
+
+    tracing::info!("server stopped");
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c().await.unwrap();
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .unwrap()
+            .recv()
+            .await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    tracing::info!("shutdown signal received");
 }
 `,
     library: `//! ${cfg.name} — A Rust library
 //!
 //! # Examples
 //!
-//! \`\`\`rust
+//! ${"```"}rust
 //! use ${cfg.name.replace(/-/g, "_")}::${cap(cfg.name)};
 //!
 //! let instance = ${cap(cfg.name)}::new();
 //! instance.run().unwrap();
-//! \`\`\`
+//! ${"```"}
 
 use std::fmt;
 
@@ -246,10 +455,11 @@ async fn main() {
 `,
   };
 
+  const isApi = cfg.type === "api";
   files.push({
     path: isLib ? "src/lib.rs" : "src/main.rs",
     content: mainTemplates[cfg.type] ?? mainTemplates["cli"]!,
-    needsLlm: true,
+    needsLlm: !isApi,
   });
 
   // Tests
@@ -275,6 +485,181 @@ fn test_run_without_init_fails() {
     let instance = ${cap(cfg.name)}::new();
     assert!(instance.run().is_err());
 }
+` : isApi ? `use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tower::ServiceExt;
+
+// Import the binary crate's public items
+// Note: for this to work, main.rs exposes create_router and AppState as pub
+use ${cfg.name.replace(/-/g, "_")}::*;
+
+fn test_state() -> Arc<Mutex<Vec<()>>> {
+    Arc::new(Mutex::new(Vec::new()))
+}
+
+#[tokio::test]
+async fn test_health_endpoint() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "ok");
+    assert_eq!(json["service"], "${cfg.name}");
+}
+
+#[tokio::test]
+async fn test_list_items_empty() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/items")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert!(json.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn test_create_item() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/items")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    serde_json::to_string(&json!({"name": "Test", "description": "A test item"})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["name"], "Test");
+    assert_eq!(json["description"], "A test item");
+    assert!(json["id"].as_str().is_some());
+    assert!(json["created_at"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn test_create_item_empty_name_rejected() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/items")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    serde_json::to_string(&json!({"name": "  ", "description": "bad"})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["error"], "name is required");
+}
+
+#[tokio::test]
+async fn test_create_item_missing_name_rejected() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/items")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    serde_json::to_string(&json!({"description": "no name"})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_get_item_not_found() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/items/nonexistent")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_delete_item_not_found() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/items/nonexistent")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
 ` : `// Integration tests for ${cfg.name}
 
 #[test]
@@ -283,7 +668,7 @@ fn test_basic() {
     assert!(true);
 }
 `,
-    needsLlm: true,
+    needsLlm: !isApi,
   });
 
   // Extras

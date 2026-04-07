@@ -75,27 +75,124 @@ EndProject
   // Main code per type
   if (cfg.type === "api") {
     if (cfg.framework === "minimal") {
-      files.push({ path: "Program.cs", content: `var builder = WebApplication.CreateBuilder(args);
+      files.push({ path: "Program.cs", content: `using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
+
+var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSingleton<ItemStore>();
 
 var app = builder.Build();
+
+app.UseMiddleware<GlobalExceptionHandler>();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-// TODO: add routes
-app.MapGet("/api/items", () => new[] { new { Id = 1, Name = "Sample" } });
-app.MapPost("/api/items", (ItemRequest req) => Results.Created($"/api/items/1", req));
+var items = app.MapGroup("/api/items");
+
+items.MapGet("/", (ItemStore store) =>
+    Results.Ok(store.GetAll()));
+
+items.MapGet("/{id}", (string id, ItemStore store) =>
+    store.Get(id) is { } item ? Results.Ok(item) : Results.NotFound(new { error = "Item not found", id }));
+
+items.MapPost("/", (CreateItemRequest req, ItemStore store, ILogger<Program> logger) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Name))
+        return Results.BadRequest(new { error = "Name is required" });
+
+    var item = store.Create(req.Name, req.Description ?? "");
+    logger.LogInformation("Created item {Id}: {Name}", item.Id, item.Name);
+    return Results.Created(\$"/api/items/{item.Id}", item);
+});
+
+items.MapPut("/{id}", (string id, UpdateItemRequest req, ItemStore store, ILogger<Program> logger) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Name))
+        return Results.BadRequest(new { error = "Name is required" });
+
+    var updated = store.Update(id, req.Name, req.Description ?? "");
+    if (updated is null) return Results.NotFound(new { error = "Item not found", id });
+    logger.LogInformation("Updated item {Id}", id);
+    return Results.Ok(updated);
+});
+
+items.MapDelete("/{id}", (string id, ItemStore store, ILogger<Program> logger) =>
+{
+    if (!store.Delete(id)) return Results.NotFound(new { error = "Item not found", id });
+    logger.LogInformation("Deleted item {Id}", id);
+    return Results.NoContent();
+});
 
 app.Run();
 
-record ItemRequest(string Name, string Description);
-`, needsLlm: true });
+// --- Records & DTOs ---
+record Item(string Id, string Name, string Description, DateTime CreatedAt);
+record CreateItemRequest([property: Required] string Name, string? Description);
+record UpdateItemRequest([property: Required] string Name, string? Description);
+
+// --- In-memory store ---
+class ItemStore
+{
+    private readonly ConcurrentDictionary<string, Item> _items = new();
+
+    public IEnumerable<Item> GetAll() => _items.Values.OrderByDescending(i => i.CreatedAt);
+    public Item? Get(string id) => _items.GetValueOrDefault(id);
+
+    public Item Create(string name, string description)
+    {
+        var item = new Item(Guid.NewGuid().ToString(), name, description, DateTime.UtcNow);
+        _items[item.Id] = item;
+        return item;
+    }
+
+    public Item? Update(string id, string name, string description)
+    {
+        if (!_items.ContainsKey(id)) return null;
+        var updated = _items[id] with { Name = name, Description = description };
+        _items[id] = updated;
+        return updated;
+    }
+
+    public bool Delete(string id) => _items.TryRemove(id, out _);
+}
+
+// --- Global exception handler middleware ---
+class GlobalExceptionHandler
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<GlobalExceptionHandler> _logger;
+
+    public GlobalExceptionHandler(RequestDelegate next, ILogger<GlobalExceptionHandler> logger)
+    {
+        _next = next;
+        _logger = logger;
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        try { await _next(context); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new { error = "Internal server error" });
+        }
+    }
+}
+`, needsLlm: false });
     } else {
-      files.push({ path: "Program.cs", content: `var builder = WebApplication.CreateBuilder(args);
+      files.push({ path: "Program.cs", content: `using ${cfg.name}.Middleware;
+using ${cfg.name}.Services;
+
+var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSingleton<ItemStore>();
 
 var app = builder.Build();
+app.UseMiddleware<GlobalExceptionHandler>();
 app.MapControllers();
 app.Run();
 `, needsLlm: false });
@@ -113,7 +210,96 @@ public class HealthController : ControllerBase
 }
 `, needsLlm: false });
 
+      files.push({ path: "Models/Item.cs", content: `namespace ${cfg.name}.Models;
+
+public record Item(string Id, string Name, string Description, DateTime CreatedAt);
+`, needsLlm: false });
+
+      files.push({ path: "Models/ItemDtos.cs", content: `using System.ComponentModel.DataAnnotations;
+
+namespace ${cfg.name}.Models;
+
+public record CreateItemRequest
+{
+    [Required(ErrorMessage = "Name is required")]
+    [StringLength(200, MinimumLength = 1)]
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
+}
+
+public record UpdateItemRequest
+{
+    [Required(ErrorMessage = "Name is required")]
+    [StringLength(200, MinimumLength = 1)]
+    public required string Name { get; init; }
+
+    public string? Description { get; init; }
+}
+`, needsLlm: false });
+
+      files.push({ path: "Services/ItemStore.cs", content: `using System.Collections.Concurrent;
+using ${cfg.name}.Models;
+
+namespace ${cfg.name}.Services;
+
+public class ItemStore
+{
+    private readonly ConcurrentDictionary<string, Item> _items = new();
+
+    public IEnumerable<Item> GetAll() => _items.Values.OrderByDescending(i => i.CreatedAt);
+
+    public Item? Get(string id) => _items.GetValueOrDefault(id);
+
+    public Item Create(string name, string description)
+    {
+        var item = new Item(Guid.NewGuid().ToString(), name, description, DateTime.UtcNow);
+        _items[item.Id] = item;
+        return item;
+    }
+
+    public Item? Update(string id, string name, string description)
+    {
+        if (!_items.TryGetValue(id, out var existing)) return null;
+        var updated = existing with { Name = name, Description = description };
+        _items[id] = updated;
+        return updated;
+    }
+
+    public bool Delete(string id) => _items.TryRemove(id, out _);
+}
+`, needsLlm: false });
+
+      files.push({ path: "Middleware/GlobalExceptionHandler.cs", content: `namespace ${cfg.name}.Middleware;
+
+public class GlobalExceptionHandler
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<GlobalExceptionHandler> _logger;
+
+    public GlobalExceptionHandler(RequestDelegate next, ILogger<GlobalExceptionHandler> logger)
+    {
+        _next = next;
+        _logger = logger;
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        try { await _next(context); }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            context.Response.StatusCode = 500;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new { error = "Internal server error" });
+        }
+    }
+}
+`, needsLlm: false });
+
       files.push({ path: "Controllers/ItemsController.cs", content: `using Microsoft.AspNetCore.Mvc;
+using ${cfg.name}.Models;
+using ${cfg.name}.Services;
 
 namespace ${cfg.name}.Controllers;
 
@@ -121,21 +307,54 @@ namespace ${cfg.name}.Controllers;
 [Route("api/[controller]")]
 public class ItemsController : ControllerBase
 {
+    private readonly ItemStore _store;
+    private readonly ILogger<ItemsController> _logger;
+
+    public ItemsController(ItemStore store, ILogger<ItemsController> logger)
+    {
+        _store = store;
+        _logger = logger;
+    }
+
     [HttpGet]
-    public IActionResult List() => Ok(new[] { new { Id = 1, Name = "Sample" } });
+    public IActionResult List() => Ok(_store.GetAll());
 
     [HttpGet("{id}")]
-    public IActionResult Get(int id) => Ok(new { Id = id, Name = "Sample" });
+    public IActionResult Get(string id)
+    {
+        var item = _store.Get(id);
+        if (item is null) return NotFound(new { error = "Item not found", id });
+        return Ok(item);
+    }
 
     [HttpPost]
-    public IActionResult Create([FromBody] object body) => CreatedAtAction(nameof(Get), new { id = 1 }, body);
+    public IActionResult Create([FromBody] CreateItemRequest request)
+    {
+        if (!ModelState.IsValid) return ValidationProblem();
+        var item = _store.Create(request.Name, request.Description ?? "");
+        _logger.LogInformation("Created item {Id}: {Name}", item.Id, item.Name);
+        return CreatedAtAction(nameof(Get), new { id = item.Id }, item);
+    }
+
+    [HttpPut("{id}")]
+    public IActionResult Update(string id, [FromBody] UpdateItemRequest request)
+    {
+        if (!ModelState.IsValid) return ValidationProblem();
+        var updated = _store.Update(id, request.Name, request.Description ?? "");
+        if (updated is null) return NotFound(new { error = "Item not found", id });
+        _logger.LogInformation("Updated item {Id}", id);
+        return Ok(updated);
+    }
 
     [HttpDelete("{id}")]
-    public IActionResult Delete(int id) => NoContent();
-
-    // TODO: implement with real data
+    public IActionResult Delete(string id)
+    {
+        if (!_store.Delete(id)) return NotFound(new { error = "Item not found", id });
+        _logger.LogInformation("Deleted item {Id}", id);
+        return NoContent();
+    }
 }
-`, needsLlm: true });
+`, needsLlm: false });
     }
 
     files.push({ path: "Properties/launchSettings.json", content: JSON.stringify({
@@ -274,7 +493,108 @@ await builder.Build().RunAsync();
   }
 
   // Tests
-  files.push({ path: `Tests/${cfg.name}Tests.cs`, content: `namespace ${cfg.name}.Tests;
+  if (cfg.type === "api") {
+    files.push({ path: `Tests/${cfg.name}Tests.cs`, content: `using Microsoft.AspNetCore.Mvc.Testing;
+using System.Net;
+using System.Net.Http.Json;
+
+namespace ${cfg.name}.Tests;
+
+public class ApiTests : IClassFixture<WebApplicationFactory<Program>>
+{
+    private readonly HttpClient _client;
+
+    public ApiTests(WebApplicationFactory<Program> factory)
+    {
+        _client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task HealthEndpoint_ReturnsOk()
+    {
+        var response = await _client.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ListItems_ReturnsEmptyInitially()
+    {
+        var response = await _client.GetAsync("/api/items");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var items = await response.Content.ReadFromJsonAsync<object[]>();
+        Assert.NotNull(items);
+    }
+
+    [Fact]
+    public async Task CreateItem_ReturnsCreated()
+    {
+        var response = await _client.PostAsJsonAsync("/api/items", new { Name = "Test Item", Description = "A test" });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateItem_InvalidName_ReturnsBadRequest()
+    {
+        var response = await _client.PostAsJsonAsync("/api/items", new { Name = "", Description = "No name" });
+        Assert.True(response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
+    public async Task GetItem_NotFound_Returns404()
+    {
+        var response = await _client.GetAsync("/api/items/nonexistent-id");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateAndGetItem_Roundtrip()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/api/items", new { Name = "Roundtrip", Description = "Test" });
+        createResponse.EnsureSuccessStatusCode();
+        var location = createResponse.Headers.Location?.ToString();
+        Assert.NotNull(location);
+
+        var getResponse = await _client.GetAsync(location);
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateItem_ReturnsOk()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/api/items", new { Name = "Original", Description = "v1" });
+        createResponse.EnsureSuccessStatusCode();
+        var location = createResponse.Headers.Location!.ToString();
+        var id = location.Split('/').Last();
+
+        var updateResponse = await _client.PutAsJsonAsync(\$"/api/items/{id}", new { Name = "Updated", Description = "v2" });
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteItem_ReturnsNoContent()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/api/items", new { Name = "ToDelete", Description = "" });
+        createResponse.EnsureSuccessStatusCode();
+        var location = createResponse.Headers.Location!.ToString();
+        var id = location.Split('/').Last();
+
+        var deleteResponse = await _client.DeleteAsync(\$"/api/items/{id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var getResponse = await _client.GetAsync(\$"/api/items/{id}");
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteItem_NotFound_Returns404()
+    {
+        var response = await _client.DeleteAsync("/api/items/nonexistent-id");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+}
+`, needsLlm: false });
+  } else {
+    files.push({ path: `Tests/${cfg.name}Tests.cs`, content: `namespace ${cfg.name}.Tests;
 
 public class BasicTests
 {
@@ -287,7 +607,9 @@ public class BasicTests
     // TODO: add tests
 }
 `, needsLlm: true });
+  }
 
+  const testExtraPkgs = cfg.type === "api" ? `\n    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="*" />` : "";
   files.push({ path: `Tests/${cfg.name}.Tests.csproj`, content: `<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>${cfg.targetFramework}</TargetFramework>
@@ -296,7 +618,7 @@ public class BasicTests
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="*" />
     <PackageReference Include="xunit" Version="*" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="*" />${testExtraPkgs}
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\\${cfg.name}.csproj" />

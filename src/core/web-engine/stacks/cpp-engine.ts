@@ -217,27 +217,188 @@ int main(int argc, char* argv[]) {
 }
 `,
     server: `#include <iostream>
+#include <sstream>
+#include <string>
+#include <map>
+#include <vector>
+#include <mutex>
 #include <csignal>
 #include <cstring>
+#include <ctime>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "${cfg.name}.${hext(cfg)}"
 
 static volatile bool running = true;
-
 void signal_handler(int) { running = false; }
+
+// ── Logging ──
+enum class LogLevel { DEBUG, INFO, WARN, ERR };
+static LogLevel min_level = LogLevel::INFO;
+
+void log(LogLevel lvl, const std::string& msg) {
+    if (lvl < min_level) return;
+    const char* labels[] = {"DEBUG", "INFO", "WARN", "ERROR"};
+    time_t now = time(nullptr);
+    char ts[20];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", localtime(&now));
+    std::cerr << ts << " [" << labels[static_cast<int>(lvl)] << "] " << msg << std::endl;
+}
+
+// ── Item Store ──
+struct Item {
+    int id;
+    std::string name;
+    std::string description;
+    std::string created_at;
+};
+
+class ItemStore {
+    std::map<int, Item> items_;
+    std::mutex mu_;
+    int next_id_ = 1;
+public:
+    std::vector<Item> list() {
+        std::lock_guard<std::mutex> lock(mu_);
+        std::vector<Item> result;
+        for (auto& [_, item] : items_) result.push_back(item);
+        return result;
+    }
+
+    Item* get(int id) {
+        std::lock_guard<std::mutex> lock(mu_);
+        auto it = items_.find(id);
+        return it != items_.end() ? &it->second : nullptr;
+    }
+
+    Item create(const std::string& name, const std::string& desc) {
+        std::lock_guard<std::mutex> lock(mu_);
+        time_t now = time(nullptr);
+        char ts[20];
+        strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", localtime(&now));
+        Item item{next_id_++, name, desc, std::string(ts)};
+        items_[item.id] = item;
+        return item;
+    }
+
+    bool remove(int id) {
+        std::lock_guard<std::mutex> lock(mu_);
+        return items_.erase(id) > 0;
+    }
+};
+
+static ItemStore store;
+
+// ── JSON helpers ──
+std::string item_json(const Item& i) {
+    return "{\\"id\\":" + std::to_string(i.id) +
+           ",\\"name\\":\\"" + i.name +
+           "\\",\\"description\\":\\"" + i.description +
+           "\\",\\"created_at\\":\\"" + i.created_at + "\\"}";
+}
+
+std::string items_json(const std::vector<Item>& items) {
+    std::string r = "[";
+    for (size_t i = 0; i < items.size(); i++) {
+        if (i > 0) r += ",";
+        r += item_json(items[i]);
+    }
+    return r + "]";
+}
+
+std::string error_json(const std::string& msg) {
+    return "{\\"error\\":true,\\"message\\":\\"" + msg + "\\"}";
+}
+
+std::string extract_json_field(const std::string& body, const std::string& key) {
+    std::string search = "\\"" + key + "\\":\\"";
+    auto pos = body.find(search);
+    if (pos == std::string::npos) return "";
+    pos += search.length();
+    auto end = body.find("\\"", pos);
+    return (end != std::string::npos) ? body.substr(pos, end - pos) : "";
+}
+
+// ── HTTP helpers ──
+struct HttpRequest {
+    std::string method;
+    std::string path;
+    std::string body;
+};
+
+HttpRequest parse_request(const char* raw, ssize_t len) {
+    HttpRequest req;
+    std::string data(raw, len);
+    std::istringstream iss(data);
+    iss >> req.method >> req.path;
+    auto body_pos = data.find("\\r\\n\\r\\n");
+    if (body_pos != std::string::npos) req.body = data.substr(body_pos + 4);
+    return req;
+}
+
+std::string http_response(int status, const std::string& body) {
+    std::string status_text = (status == 200) ? "OK" : (status == 201) ? "Created" :
+        (status == 204) ? "No Content" : (status == 400) ? "Bad Request" :
+        (status == 404) ? "Not Found" : (status == 422) ? "Unprocessable Entity" : "Error";
+    return "HTTP/1.1 " + std::to_string(status) + " " + status_text +
+           "\\r\\nContent-Type: application/json\\r\\nContent-Length: " +
+           std::to_string(body.length()) + "\\r\\n\\r\\n" + body;
+}
+
+int extract_id(const std::string& path) {
+    auto pos = path.rfind('/');
+    if (pos == std::string::npos) return -1;
+    try { return std::stoi(path.substr(pos + 1)); } catch (...) { return -1; }
+}
+
+// ── Route handler ──
+std::string handle_request(const HttpRequest& req) {
+    log(LogLevel::INFO, req.method + " " + req.path);
+
+    if (req.path == "/health" && req.method == "GET") {
+        return http_response(200, "{\\"status\\":\\"ok\\"}");
+    }
+
+    if (req.path == "/api/items" && req.method == "GET") {
+        return http_response(200, items_json(store.list()));
+    }
+
+    if (req.path == "/api/items" && req.method == "POST") {
+        std::string name = extract_json_field(req.body, "name");
+        if (name.empty()) return http_response(422, error_json("name is required"));
+        std::string desc = extract_json_field(req.body, "description");
+        auto item = store.create(name, desc);
+        log(LogLevel::INFO, "Created item " + std::to_string(item.id));
+        return http_response(201, item_json(item));
+    }
+
+    if (req.path.rfind("/api/items/", 0) == 0 && req.method == "GET") {
+        int id = extract_id(req.path);
+        auto* item = store.get(id);
+        if (!item) return http_response(404, error_json("Item not found"));
+        return http_response(200, item_json(*item));
+    }
+
+    if (req.path.rfind("/api/items/", 0) == 0 && req.method == "DELETE") {
+        int id = extract_id(req.path);
+        if (!store.remove(id)) return http_response(404, error_json("Item not found"));
+        log(LogLevel::INFO, "Deleted item " + std::to_string(id));
+        return http_response(204, "");
+    }
+
+    return http_response(404, error_json("Not found"));
+}
 
 int main(int argc, char* argv[]) {
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    uint16_t port = 8080;
+    uint16_t port = 10080;
     if (argc > 1) port = static_cast<uint16_t>(std::stoi(argv[1]));
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
-        std::cerr << "Failed to create socket: " << strerror(errno) << std::endl;
+        log(LogLevel::ERR, std::string("Socket failed: ") + strerror(errno));
         return 1;
     }
 
@@ -250,41 +411,41 @@ int main(int argc, char* argv[]) {
     addr.sin_port = htons(port);
 
     if (bind(server_fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
-        std::cerr << "Bind failed: " << strerror(errno) << std::endl;
+        log(LogLevel::ERR, std::string("Bind failed: ") + strerror(errno));
         close(server_fd);
         return 1;
     }
 
     if (listen(server_fd, 128) < 0) {
-        std::cerr << "Listen failed: " << strerror(errno) << std::endl;
+        log(LogLevel::ERR, std::string("Listen failed: ") + strerror(errno));
         close(server_fd);
         return 1;
     }
 
-    std::cout << "${cfg.name} listening on port " << port << std::endl;
+    log(LogLevel::INFO, "${cfg.name} listening on port " + std::to_string(port));
 
     while (running) {
         struct sockaddr_in client_addr{};
         socklen_t client_len = sizeof(client_addr);
         int client_fd = accept(server_fd, reinterpret_cast<struct sockaddr*>(&client_addr), &client_len);
         if (client_fd < 0) {
-            if (running) std::cerr << "Accept failed: " << strerror(errno) << std::endl;
+            if (running) log(LogLevel::WARN, std::string("Accept failed: ") + strerror(errno));
             continue;
         }
 
-        // TODO: handle connection (read, process, respond)
-        char buffer[4096];
+        char buffer[8192];
         ssize_t bytes = read(client_fd, buffer, sizeof(buffer) - 1);
         if (bytes > 0) {
             buffer[bytes] = '\\0';
-            const char* response = "HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\n\\r\\nOK";
-            write(client_fd, response, strlen(response));
+            auto req = parse_request(buffer, bytes);
+            auto resp = handle_request(req);
+            write(client_fd, resp.c_str(), resp.length());
         }
         close(client_fd);
     }
 
     close(server_fd);
-    std::cout << "\\nShutdown complete." << std::endl;
+    log(LogLevel::INFO, "Shutdown complete");
     return 0;
 }
 `,
@@ -323,7 +484,7 @@ int main() {
   return {
     path: `src/main.${ext(cfg)}`,
     content: templates[cfg.type] ?? templates["cli"]!,
-    needsLlm: true,
+    needsLlm: cfg.type !== "server",
   };
 }
 

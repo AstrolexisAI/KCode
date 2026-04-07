@@ -26,7 +26,7 @@ function detectScalaProject(msg: string): ScalaConfig {
     type = "api";
     if (/\b(?:akka)\b/i.test(lower)) { framework = "akka"; deps.push("com.typesafe.akka::akka-http:10.6.3", "com.typesafe.akka::akka-actor-typed:2.9.3", "com.typesafe.akka::akka-stream:2.9.3"); }
     else if (/\b(?:play)\b/i.test(lower)) { framework = "play"; }
-    else { framework = "http4s"; deps.push("org.http4s::http4s-ember-server:0.23.27", "org.http4s::http4s-dsl:0.23.27", "org.http4s::http4s-circe:0.23.27"); }
+    else { framework = "http4s"; deps.push("org.http4s::http4s-ember-server:0.23.27", "org.http4s::http4s-dsl:0.23.27", "org.http4s::http4s-circe:0.23.27", "io.circe::circe-core:0.14.9", "io.circe::circe-generic:0.14.9", "org.typelevel::cats-effect:3.5.4", "org.typelevel::log4cats-slf4j:2.7.0"); }
   }
   else if (/\b(?:cli|console|command|tool)\b/i.test(lower)) { type = "cli"; deps.push("com.github.scopt::scopt:4.1.0"); }
   else if (/\b(?:lib|library|package)\b/i.test(lower)) { type = "library"; }
@@ -68,6 +68,10 @@ export function createScalaProject(userRequest: string, cwd: string): ScalaProje
     ? ""
     : ',\n    "org.scalatest" %% "scalatest" % "3.2.19" % Test';
 
+  const logbackDep = cfg.framework === "http4s"
+    ? ',\n    "ch.qos.logback" % "logback-classic" % "1.5.0"'
+    : "";
+
   files.push({ path: "build.sbt", content: `ThisBuild / version := "0.1.0"
 ThisBuild / scalaVersion := "3.4.2"
 ThisBuild / organization := "${cfg.pkg}"
@@ -76,7 +80,7 @@ lazy val root = (project in file("."))
   .settings(
     name := "${cfg.name}",
     libraryDependencies ++= Seq(
-${depsStr}${testDeps}
+${depsStr}${logbackDep}${testDeps}
     )
   )
 `, needsLlm: false });
@@ -88,37 +92,141 @@ addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.10.0")
 
   // Main code
   if (cfg.type === "api" && cfg.framework === "http4s") {
+    // Item model with circe codecs
+    files.push({ path: `src/main/scala/${pkgPath}/model/Item.scala`, content: `package ${cfg.pkg}.model
+
+import io.circe.*
+import io.circe.generic.semiauto.*
+import java.time.Instant
+import java.util.UUID
+
+case class Item(
+  id: String,
+  name: String,
+  description: String,
+  createdAt: String
+)
+
+object Item:
+  given Encoder[Item] = deriveEncoder[Item]
+  given Decoder[Item] = deriveDecoder[Item]
+
+  def create(name: String, description: String): Item =
+    Item(
+      id = UUID.randomUUID().toString,
+      name = name,
+      description = description,
+      createdAt = Instant.now().toString
+    )
+
+case class CreateItemRequest(name: String, description: String = "")
+
+object CreateItemRequest:
+  given Decoder[CreateItemRequest] = deriveDecoder[CreateItemRequest]
+
+case class ErrorResponse(status: Int, message: String)
+
+object ErrorResponse:
+  given Encoder[ErrorResponse] = deriveEncoder[ErrorResponse]
+`, needsLlm: false });
+
+    // Item routes with full CRUD
+    files.push({ path: `src/main/scala/${pkgPath}/routes/ItemRoutes.scala`, content: `package ${cfg.pkg}.routes
+
+import cats.effect.*
+import cats.syntax.all.*
+import ${cfg.pkg}.model.*
+import io.circe.syntax.*
+import org.http4s.*
+import org.http4s.circe.*
+import org.http4s.circe.CirceEntityDecoder.*
+import org.http4s.dsl.io.*
+import org.typelevel.log4cats.Logger
+import org.typelevel.log4cats.slf4j.Slf4jLogger
+
+object ItemRoutes:
+
+  given logger: Logger[IO] = Slf4jLogger.getLoggerFromName[IO]("ItemRoutes")
+
+  def routes(store: Ref[IO, Map[String, Item]]): HttpRoutes[IO] = HttpRoutes.of[IO]:
+
+    case GET -> Root / "api" / "items" =>
+      for
+        _ <- logger.debug("Listing all items")
+        items <- store.get.map(_.values.toList)
+        resp <- Ok(items.asJson)
+      yield resp
+
+    case req @ POST -> Root / "api" / "items" =>
+      for
+        request <- req.as[CreateItemRequest]
+        resp <- if request.name.isBlank then
+          BadRequest(ErrorResponse(400, "Name must not be blank").asJson)
+        else
+          for
+            _ <- logger.info(s"Creating item: \${request.name}")
+            item = Item.create(request.name, request.description)
+            _ <- store.update(_ + (item.id -> item))
+            r <- Created(item.asJson)
+          yield r
+      yield resp
+
+    case GET -> Root / "api" / "items" / id =>
+      for
+        _ <- logger.debug(s"Getting item: $id")
+        items <- store.get
+        resp <- items.get(id) match
+          case Some(item) => Ok(item.asJson)
+          case None => NotFound(ErrorResponse(404, s"Item not found: $id").asJson)
+      yield resp
+
+    case DELETE -> Root / "api" / "items" / id =>
+      for
+        _ <- logger.info(s"Deleting item: $id")
+        removed <- store.modify: m =>
+          if m.contains(id) then (m - id, true)
+          else (m, false)
+        resp <- if removed then NoContent()
+          else NotFound(ErrorResponse(404, s"Item not found: $id").asJson)
+      yield resp
+`, needsLlm: false });
+
+    // Main with logging middleware
     files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
 
 import cats.effect.*
+import ${cfg.pkg}.model.Item
+import ${cfg.pkg}.routes.ItemRoutes
+import io.circe.syntax.*
 import org.http4s.*
 import org.http4s.dsl.io.*
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.circe.*
-import io.circe.syntax.*
+import org.http4s.server.middleware.{Logger as Http4sLogger}
 import com.comcast.ip4s.*
 
 object Main extends IOApp.Simple:
 
-  val routes: HttpRoutes[IO] = HttpRoutes.of[IO]:
+  val healthRoutes: HttpRoutes[IO] = HttpRoutes.of[IO]:
     case GET -> Root / "health" =>
       Ok(Map("status" -> "ok").asJson)
 
-    case GET -> Root / "api" / "items" =>
-      Ok(List(Map("id" -> "1", "name" -> "Sample")).asJson)
-
-    case req @ POST -> Root / "api" / "items" =>
-      Ok(Map("created" -> "true").asJson)
-
   override def run: IO[Unit] =
-    EmberServerBuilder
-      .default[IO]
-      .withHost(host"0.0.0.0")
-      .withPort(port"10080")
-      .withHttpApp(routes.orNotFound)
-      .build
-      .useForever
-`, needsLlm: true });
+    for
+      store <- Ref.of[IO, Map[String, Item]](Map.empty)
+      allRoutes = healthRoutes <+> ItemRoutes.routes(store)
+      loggedRoutes = Http4sLogger.httpApp[IO](
+        logHeaders = false,
+        logBody = false
+      )(allRoutes.orNotFound)
+      _ <- EmberServerBuilder
+        .default[IO]
+        .withHost(host"0.0.0.0")
+        .withPort(port"10080")
+        .withHttpApp(loggedRoutes)
+        .build
+        .useForever
+    yield ()
+`, needsLlm: false });
 
   } else if (cfg.type === "api" && cfg.framework === "akka") {
     files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
@@ -279,8 +387,103 @@ object ${cap(cfg.name)}:
 `, needsLlm: true });
   }
 
-  // Test
-  files.push({ path: `src/test/scala/${pkgPath}/MainSpec.scala`, content: `package ${cfg.pkg}
+  // Test — http4s API gets full CRUD tests, others get basic tests
+  if (cfg.type === "api" && cfg.framework === "http4s") {
+    files.push({ path: `src/test/scala/${pkgPath}/MainSpec.scala`, content: `package ${cfg.pkg}
+
+import cats.effect.*
+import cats.effect.unsafe.implicits.global
+import ${cfg.pkg}.model.*
+import ${cfg.pkg}.routes.ItemRoutes
+import io.circe.*
+import io.circe.parser.*
+import io.circe.syntax.*
+import org.http4s.*
+import org.http4s.circe.*
+import org.http4s.circe.CirceEntityDecoder.*
+import org.http4s.dsl.io.*
+import org.http4s.implicits.*
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+
+class MainSpec extends AnyFlatSpec with Matchers:
+
+  def withRoutes(test: (HttpRoutes[IO], Ref[IO, Map[String, Item]]) => IO[Unit]): Unit =
+    (for
+      store <- Ref.of[IO, Map[String, Item]](Map.empty)
+      routes = ItemRoutes.routes(store)
+      _ <- test(routes, store)
+    yield ()).unsafeRunSync()
+
+  "${cfg.name}" should "return health ok" in:
+    val healthRoutes = org.http4s.HttpRoutes.of[IO]:
+      case GET -> Root / "health" =>
+        Ok(Map("status" -> "ok").asJson)
+    val req = Request[IO](Method.GET, uri"/health")
+    val resp = healthRoutes.orNotFound.run(req).unsafeRunSync()
+    resp.status shouldBe Status.Ok
+
+  it should "list items (empty)" in withRoutes: (routes, _) =>
+    val req = Request[IO](Method.GET, uri"/api/items")
+    for
+      resp <- routes.orNotFound.run(req)
+      body <- resp.as[String]
+    yield
+      resp.status shouldBe Status.Ok
+      body shouldBe "[]"
+
+  it should "create an item" in withRoutes: (routes, _) =>
+    val body = CreateItemRequest("Test Item", "A test").asJson(using
+      io.circe.generic.semiauto.deriveEncoder[CreateItemRequest])
+    val req = Request[IO](Method.POST, uri"/api/items").withEntity(body)
+    for
+      resp <- routes.orNotFound.run(req)
+      item <- resp.as[Item]
+    yield
+      resp.status shouldBe Status.Created
+      item.name shouldBe "Test Item"
+
+  it should "reject blank name" in withRoutes: (routes, _) =>
+    val body = CreateItemRequest("", "No name").asJson(using
+      io.circe.generic.semiauto.deriveEncoder[CreateItemRequest])
+    val req = Request[IO](Method.POST, uri"/api/items").withEntity(body)
+    for
+      resp <- routes.orNotFound.run(req)
+    yield
+      resp.status shouldBe Status.BadRequest
+
+  it should "get item by id" in withRoutes: (routes, store) =>
+    val item = Item.create("Lookup", "For retrieval")
+    for
+      _ <- store.update(_ + (item.id -> item))
+      req = Request[IO](Method.GET, Uri.unsafeFromString(s"/api/items/\${item.id}"))
+      resp <- routes.orNotFound.run(req)
+      found <- resp.as[Item]
+    yield
+      resp.status shouldBe Status.Ok
+      found.name shouldBe "Lookup"
+
+  it should "return 404 for missing item" in withRoutes: (routes, _) =>
+    val req = Request[IO](Method.GET, uri"/api/items/nonexistent")
+    for
+      resp <- routes.orNotFound.run(req)
+    yield
+      resp.status shouldBe Status.NotFound
+
+  it should "delete an item" in withRoutes: (routes, store) =>
+    val item = Item.create("Delete Me", "Bye")
+    for
+      _ <- store.update(_ + (item.id -> item))
+      delReq = Request[IO](Method.DELETE, Uri.unsafeFromString(s"/api/items/\${item.id}"))
+      delResp <- routes.orNotFound.run(delReq)
+      getReq = Request[IO](Method.GET, Uri.unsafeFromString(s"/api/items/\${item.id}"))
+      getResp <- routes.orNotFound.run(getReq)
+    yield
+      delResp.status shouldBe Status.NoContent
+      getResp.status shouldBe Status.NotFound
+`, needsLlm: false });
+  } else {
+    files.push({ path: `src/test/scala/${pkgPath}/MainSpec.scala`, content: `package ${cfg.pkg}
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -289,9 +492,8 @@ class MainSpec extends AnyFlatSpec with Matchers:
 
   "${cfg.name}" should "run basic test" in:
     1 + 1 shouldBe 2
-
-  // TODO: add tests
-`, needsLlm: true });
+`, needsLlm: false });
+  }
 
   // Extras
   files.push({ path: ".gitignore", content: "target/\nproject/target/\nproject/project/\n.bsp/\n.idea/\n*.class\n.env\nmetals.sbt\n.bloop/\n.metals/\n", needsLlm: false });

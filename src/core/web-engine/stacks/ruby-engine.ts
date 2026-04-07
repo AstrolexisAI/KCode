@@ -19,7 +19,7 @@ function detectRubyProject(msg: string): RubyConfig {
   }
   else if (/\b(?:sinatra|api|rest|server)\b/i.test(lower)) {
     type = "api"; framework = "sinatra";
-    gems.push("sinatra", "sinatra-contrib", "puma", "rack");
+    gems.push("sinatra", "sinatra-contrib", "puma", "rack", "rack-test");
   }
   else if (/\b(?:grape)\b/i.test(lower)) {
     type = "api"; framework = "grape";
@@ -36,7 +36,7 @@ function detectRubyProject(msg: string): RubyConfig {
   }
   else {
     framework = "sinatra";
-    gems.push("sinatra", "sinatra-contrib", "puma");
+    gems.push("sinatra", "sinatra-contrib", "puma", "rack-test");
   }
 
   if (/\b(?:sequel|activerecord|database|db|postgres|mysql|sqlite)\b/i.test(lower)) {
@@ -77,24 +77,120 @@ end
   if (cfg.type === "api" && cfg.framework === "sinatra") {
     files.push({ path: "app.rb", content: `require "sinatra"
 require "sinatra/json"
+require "json"
+require "logger"
+require "securerandom"
+require "time"
 
 set :port, 10080
 set :bind, "0.0.0.0"
+
+LOGGER = Logger.new($stdout)
+LOGGER.level = Logger::INFO
+
+Item = Struct.new(:id, :name, :description, :created_at, keyword_init: true) do
+  def to_h
+    { id: id, name: name, description: description, created_at: created_at }
+  end
+end
+
+ITEMS = {}
+NEXT_ID = { value: 1 }
+
+before do
+  content_type :json
+end
+
+helpers do
+  def parse_json_body
+    body = request.body.read
+    return {} if body.empty?
+    JSON.parse(body)
+  rescue JSON::ParserError
+    halt 400, json(error: true, message: "Invalid JSON")
+  end
+
+  def find_item!(id)
+    item = ITEMS[id.to_i]
+    halt 404, json(error: true, message: "Item not found") unless item
+    item
+  end
+
+  def validate_create!(data)
+    errors = []
+    errors << "name is required" unless data["name"].is_a?(String) && !data["name"].strip.empty?
+    errors << "description must be a string" if data.key?("description") && !data["description"].is_a?(String)
+    halt 422, json(error: true, errors: errors) unless errors.empty?
+  end
+
+  def validate_update!(data)
+    errors = []
+    errors << "name must be a non-empty string" if data.key?("name") && (!data["name"].is_a?(String) || data["name"].strip.empty?)
+    errors << "description must be a string" if data.key?("description") && !data["description"].is_a?(String)
+    halt 422, json(error: true, errors: errors) unless errors.empty?
+  end
+end
+
+error do |e|
+  LOGGER.error("Unhandled error: #{e.message}")
+  status 500
+  json error: true, message: "Internal server error"
+end
 
 get "/health" do
   json status: "ok"
 end
 
-# TODO: add routes
 get "/api/items" do
-  json [{ id: 1, name: "Sample" }]
+  LOGGER.info("Listing all items")
+  json ITEMS.values.map(&:to_h)
+end
+
+get "/api/items/:id" do
+  item = find_item!(params[:id])
+  json item.to_h
 end
 
 post "/api/items" do
-  body = JSON.parse(request.body.read)
-  json body.merge("id" => 1)
+  data = parse_json_body
+  validate_create!(data)
+
+  id = NEXT_ID[:value]
+  NEXT_ID[:value] += 1
+
+  item = Item.new(
+    id: id,
+    name: data["name"].strip,
+    description: data["description"]&.strip || "",
+    created_at: Time.now.iso8601
+  )
+  ITEMS[id] = item
+
+  LOGGER.info("Created item #{id}")
+  status 201
+  json item.to_h
 end
-`, needsLlm: true });
+
+put "/api/items/:id" do
+  item = find_item!(params[:id])
+  data = parse_json_body
+  validate_update!(data)
+
+  item.name = data["name"].strip if data.key?("name")
+  item.description = data["description"].strip if data.key?("description")
+
+  LOGGER.info("Updated item #{item.id}")
+  json item.to_h
+end
+
+delete "/api/items/:id" do
+  item = find_item!(params[:id])
+  ITEMS.delete(item.id)
+
+  LOGGER.info("Deleted item #{item.id}")
+  json deleted: true
+end
+`, needsLlm: false });
 
     files.push({ path: "config.ru", content: `require_relative "app"
 run Sinatra::Application
@@ -189,14 +285,140 @@ puts "${cfg.name} started"
   }
 
   // RSpec
-  files.push({ path: "spec/spec_helper.rb", content: `RSpec.configure do |config|
+  if (cfg.type === "api" && cfg.framework === "sinatra") {
+    files.push({ path: `spec/${cfg.name}_spec.rb`, content: `require "spec_helper"
+require "rack/test"
+require_relative "../app"
+
+RSpec.describe "#{cfg.name} API" do
+  include Rack::Test::Methods
+
+  def app
+    Sinatra::Application
+  end
+
+  before(:each) do
+    ITEMS.clear
+    NEXT_ID[:value] = 1
+  end
+
+  describe "GET /health" do
+    it "returns ok status" do
+      get "/health"
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body["status"]).to eq("ok")
+    end
+  end
+
+  describe "GET /api/items" do
+    it "returns empty array when no items" do
+      get "/api/items"
+      expect(last_response.status).to eq(200)
+      expect(JSON.parse(last_response.body)).to eq([])
+    end
+
+    it "returns all items" do
+      post "/api/items", { name: "First", description: "Desc" }.to_json, "CONTENT_TYPE" => "application/json"
+      post "/api/items", { name: "Second" }.to_json, "CONTENT_TYPE" => "application/json"
+      get "/api/items"
+      expect(last_response.status).to eq(200)
+      items = JSON.parse(last_response.body)
+      expect(items.length).to eq(2)
+    end
+  end
+
+  describe "GET /api/items/:id" do
+    it "returns an item by id" do
+      post "/api/items", { name: "Widget", description: "A widget" }.to_json, "CONTENT_TYPE" => "application/json"
+      item = JSON.parse(last_response.body)
+      get "/api/items/\#{item['id']}"
+      expect(last_response.status).to eq(200)
+      found = JSON.parse(last_response.body)
+      expect(found["name"]).to eq("Widget")
+    end
+
+    it "returns 404 for missing item" do
+      get "/api/items/999"
+      expect(last_response.status).to eq(404)
+    end
+  end
+
+  describe "POST /api/items" do
+    it "creates an item with valid data" do
+      post "/api/items", { name: "New Item", description: "A desc" }.to_json, "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(201)
+      item = JSON.parse(last_response.body)
+      expect(item["name"]).to eq("New Item")
+      expect(item["description"]).to eq("A desc")
+      expect(item).to have_key("id")
+      expect(item).to have_key("created_at")
+    end
+
+    it "returns 422 when name is missing" do
+      post "/api/items", { description: "no name" }.to_json, "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body["errors"]).to include("name is required")
+    end
+  end
+
+  describe "PUT /api/items/:id" do
+    it "updates an existing item" do
+      post "/api/items", { name: "Old", description: "Old desc" }.to_json, "CONTENT_TYPE" => "application/json"
+      item = JSON.parse(last_response.body)
+      put "/api/items/\#{item['id']}", { name: "Updated" }.to_json, "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(200)
+      updated = JSON.parse(last_response.body)
+      expect(updated["name"]).to eq("Updated")
+      expect(updated["description"]).to eq("Old desc")
+    end
+
+    it "returns 404 for missing item" do
+      put "/api/items/999", { name: "x" }.to_json, "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(404)
+    end
+  end
+
+  describe "DELETE /api/items/:id" do
+    it "deletes an existing item" do
+      post "/api/items", { name: "ToDelete" }.to_json, "CONTENT_TYPE" => "application/json"
+      item = JSON.parse(last_response.body)
+      delete "/api/items/\#{item['id']}"
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body["deleted"]).to eq(true)
+      get "/api/items/\#{item['id']}"
+      expect(last_response.status).to eq(404)
+    end
+
+    it "returns 404 for missing item" do
+      delete "/api/items/999"
+      expect(last_response.status).to eq(404)
+    end
+  end
+end
+`, needsLlm: false });
+
+    files.push({ path: "spec/spec_helper.rb", content: `require "rack/test"
+require "json"
+
+RSpec.configure do |config|
+  config.expect_with :rspec do |c|
+    c.syntax = :expect
+  end
+  config.include Rack::Test::Methods
+end
+`, needsLlm: false });
+  } else {
+    files.push({ path: "spec/spec_helper.rb", content: `RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
 end
 `, needsLlm: false });
 
-  files.push({ path: `spec/${cfg.name}_spec.rb`, content: `require "spec_helper"
+    files.push({ path: `spec/${cfg.name}_spec.rb`, content: `require "spec_helper"
 
 RSpec.describe "${cfg.name}" do
   it "works" do
@@ -206,6 +428,7 @@ RSpec.describe "${cfg.name}" do
   # TODO: add tests
 end
 `, needsLlm: true });
+  }
 
   // Extras
   files.push({ path: ".gitignore", content: ".bundle/\nvendor/\n*.gem\n.env\nGemfile.lock\ntmp/\n", needsLlm: false });

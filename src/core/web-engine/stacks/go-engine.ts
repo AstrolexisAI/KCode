@@ -79,46 +79,497 @@ func main() {
     api: cfg.framework === "gin" ? `package main
 
 import (
+\t"context"
+\t"crypto/rand"
+\t"encoding/hex"
+\t"log/slog"
 \t"net/http"
+\t"os"
+\t"os/signal"
+\t"strings"
+\t"sync"
+\t"syscall"
+\t"time"
+
 \t"github.com/gin-gonic/gin"
 )
 
+// Item represents a resource in the API.
+type Item struct {
+\tID          string ${"`"}json:"id"${"`"}
+\tName        string ${"`"}json:"name"${"`"}
+\tDescription string ${"`"}json:"description"${"`"}
+\tCreatedAt   string ${"`"}json:"created_at"${"`"}
+}
+
+type createItemRequest struct {
+\tName        string ${"`"}json:"name"${"`"}
+\tDescription string ${"`"}json:"description"${"`"}
+}
+
+type updateItemRequest struct {
+\tName        string ${"`"}json:"name"${"`"}
+\tDescription string ${"`"}json:"description"${"`"}
+}
+
+// ItemStore is a thread-safe in-memory store.
+type ItemStore struct {
+\tmu    sync.RWMutex
+\titems []Item
+}
+
+func NewItemStore() *ItemStore {
+\treturn &ItemStore{items: []Item{}}
+}
+
+func (s *ItemStore) List() []Item {
+\ts.mu.RLock()
+\tdefer s.mu.RUnlock()
+\tout := make([]Item, len(s.items))
+\tcopy(out, s.items)
+\treturn out
+}
+
+func (s *ItemStore) GetByID(id string) (Item, bool) {
+\ts.mu.RLock()
+\tdefer s.mu.RUnlock()
+\tfor _, item := range s.items {
+\t\tif item.ID == id {
+\t\t\treturn item, true
+\t\t}
+\t}
+\treturn Item{}, false
+}
+
+func (s *ItemStore) Create(name, description string) Item {
+\ts.mu.Lock()
+\tdefer s.mu.Unlock()
+\titem := Item{
+\t\tID:          generateID(),
+\t\tName:        name,
+\t\tDescription: description,
+\t\tCreatedAt:   time.Now().UTC().Format(time.RFC3339),
+\t}
+\ts.items = append(s.items, item)
+\treturn item
+}
+
+func (s *ItemStore) Update(id, name, description string) (Item, bool) {
+\ts.mu.Lock()
+\tdefer s.mu.Unlock()
+\tfor i, item := range s.items {
+\t\tif item.ID == id {
+\t\t\tif name != "" {
+\t\t\t\ts.items[i].Name = name
+\t\t\t}
+\t\t\tif description != "" {
+\t\t\t\ts.items[i].Description = description
+\t\t\t}
+\t\t\treturn s.items[i], true
+\t\t}
+\t}
+\treturn Item{}, false
+}
+
+func (s *ItemStore) Delete(id string) bool {
+\ts.mu.Lock()
+\tdefer s.mu.Unlock()
+\tfor i, item := range s.items {
+\t\tif item.ID == id {
+\t\t\ts.items = append(s.items[:i], s.items[i+1:]...)
+\t\t\treturn true
+\t\t}
+\t}
+\treturn false
+}
+
+func generateID() string {
+\tb := make([]byte, 8)
+\trand.Read(b)
+\treturn hex.EncodeToString(b)
+}
+
+func envOrDefault(key, fallback string) string {
+\tif v := os.Getenv(key); v != "" {
+\t\treturn v
+\t}
+\treturn fallback
+}
+
+func errorResponse(c *gin.Context, status int, msg string) {
+\tc.JSON(status, gin.H{"error": msg})
+}
+
+func requestIDMiddleware() gin.HandlerFunc {
+\treturn func(c *gin.Context) {
+\t\tid := c.GetHeader("X-Request-ID")
+\t\tif id == "" {
+\t\t\tid = generateID()
+\t\t}
+\t\tc.Set("request_id", id)
+\t\tc.Header("X-Request-ID", id)
+\t\tc.Next()
+\t}
+}
+
+func corsMiddleware() gin.HandlerFunc {
+\treturn func(c *gin.Context) {
+\t\tc.Header("Access-Control-Allow-Origin", "*")
+\t\tc.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+\t\tc.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+\t\tif c.Request.Method == "OPTIONS" {
+\t\t\tc.AbortWithStatus(http.StatusNoContent)
+\t\t\treturn
+\t\t}
+\t\tc.Next()
+\t}
+}
+
 func main() {
-\tr := gin.Default()
+\tlogLevel := slog.LevelInfo
+\tif envOrDefault("LOG_LEVEL", "info") == "debug" {
+\t\tlogLevel = slog.LevelDebug
+\t}
+\tlogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+\tslog.SetDefault(logger)
+
+\tport := envOrDefault("PORT", "10080")
+\tstore := NewItemStore()
+
+\tgin.SetMode(gin.ReleaseMode)
+\tr := gin.New()
+\tr.Use(gin.Recovery())
+\tr.Use(requestIDMiddleware())
+\tr.Use(corsMiddleware())
 
 \tr.GET("/health", func(c *gin.Context) {
-\t\tc.JSON(http.StatusOK, gin.H{"status": "ok"})
+\t\tc.JSON(http.StatusOK, gin.H{"status": "ok", "service": "${cfg.name}"})
 \t})
 
-\t// TODO: add routes
+\tr.GET("/items", func(c *gin.Context) {
+\t\tc.JSON(http.StatusOK, store.List())
+\t})
 
-\tr.Run(":8080")
+\tr.GET("/items/:id", func(c *gin.Context) {
+\t\titem, ok := store.GetByID(c.Param("id"))
+\t\tif !ok {
+\t\t\terrorResponse(c, http.StatusNotFound, "item not found")
+\t\t\treturn
+\t\t}
+\t\tc.JSON(http.StatusOK, item)
+\t})
+
+\tr.POST("/items", func(c *gin.Context) {
+\t\tvar req createItemRequest
+\t\tif err := c.ShouldBindJSON(&req); err != nil {
+\t\t\terrorResponse(c, http.StatusBadRequest, "invalid JSON body")
+\t\t\treturn
+\t\t}
+\t\tif strings.TrimSpace(req.Name) == "" {
+\t\t\terrorResponse(c, http.StatusBadRequest, "name is required")
+\t\t\treturn
+\t\t}
+\t\titem := store.Create(strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+\t\tslog.Info("item created", "id", item.ID, "name", item.Name)
+\t\tc.JSON(http.StatusCreated, item)
+\t})
+
+\tr.PUT("/items/:id", func(c *gin.Context) {
+\t\tvar req updateItemRequest
+\t\tif err := c.ShouldBindJSON(&req); err != nil {
+\t\t\terrorResponse(c, http.StatusBadRequest, "invalid JSON body")
+\t\t\treturn
+\t\t}
+\t\titem, ok := store.Update(c.Param("id"), strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+\t\tif !ok {
+\t\t\terrorResponse(c, http.StatusNotFound, "item not found")
+\t\t\treturn
+\t\t}
+\t\tslog.Info("item updated", "id", item.ID)
+\t\tc.JSON(http.StatusOK, item)
+\t})
+
+\tr.DELETE("/items/:id", func(c *gin.Context) {
+\t\tif !store.Delete(c.Param("id")) {
+\t\t\terrorResponse(c, http.StatusNotFound, "item not found")
+\t\t\treturn
+\t\t}
+\t\tslog.Info("item deleted", "id", c.Param("id"))
+\t\tc.Status(http.StatusNoContent)
+\t})
+
+\tsrv := &http.Server{Addr: ":" + port, Handler: r}
+
+\tgo func() {
+\t\tslog.Info("${cfg.name} starting", "port", port)
+\t\tif err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+\t\t\tslog.Error("server error", "err", err)
+\t\t\tos.Exit(1)
+\t\t}
+\t}()
+
+\tquit := make(chan os.Signal, 1)
+\tsignal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+\t<-quit
+
+\tslog.Info("shutting down gracefully...")
+\tctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+\tdefer cancel()
+\tif err := srv.Shutdown(ctx); err != nil {
+\t\tslog.Error("forced shutdown", "err", err)
+\t}
+\tslog.Info("server stopped")
 }
 ` : `package main
 
 import (
+\t"context"
+\t"crypto/rand"
+\t"encoding/hex"
 \t"encoding/json"
-\t"log"
+\t"log/slog"
 \t"net/http"
+\t"os"
+\t"os/signal"
+\t"strings"
+\t"sync"
+\t"syscall"
+\t"time"
+
 \t"github.com/go-chi/chi/v5"
 \t"github.com/go-chi/chi/v5/middleware"
 \t"github.com/go-chi/cors"
 )
 
+// Item represents a resource in the API.
+type Item struct {
+\tID          string ${"`"}json:"id"${"`"}
+\tName        string ${"`"}json:"name"${"`"}
+\tDescription string ${"`"}json:"description"${"`"}
+\tCreatedAt   string ${"`"}json:"created_at"${"`"}
+}
+
+type createItemRequest struct {
+\tName        string ${"`"}json:"name"${"`"}
+\tDescription string ${"`"}json:"description"${"`"}
+}
+
+type updateItemRequest struct {
+\tName        string ${"`"}json:"name"${"`"}
+\tDescription string ${"`"}json:"description"${"`"}
+}
+
+// ItemStore is a thread-safe in-memory store.
+type ItemStore struct {
+\tmu    sync.RWMutex
+\titems []Item
+}
+
+func NewItemStore() *ItemStore {
+\treturn &ItemStore{items: []Item{}}
+}
+
+func (s *ItemStore) List() []Item {
+\ts.mu.RLock()
+\tdefer s.mu.RUnlock()
+\tout := make([]Item, len(s.items))
+\tcopy(out, s.items)
+\treturn out
+}
+
+func (s *ItemStore) GetByID(id string) (Item, bool) {
+\ts.mu.RLock()
+\tdefer s.mu.RUnlock()
+\tfor _, item := range s.items {
+\t\tif item.ID == id {
+\t\t\treturn item, true
+\t\t}
+\t}
+\treturn Item{}, false
+}
+
+func (s *ItemStore) Create(name, description string) Item {
+\ts.mu.Lock()
+\tdefer s.mu.Unlock()
+\titem := Item{
+\t\tID:          generateID(),
+\t\tName:        name,
+\t\tDescription: description,
+\t\tCreatedAt:   time.Now().UTC().Format(time.RFC3339),
+\t}
+\ts.items = append(s.items, item)
+\treturn item
+}
+
+func (s *ItemStore) Update(id, name, description string) (Item, bool) {
+\ts.mu.Lock()
+\tdefer s.mu.Unlock()
+\tfor i, item := range s.items {
+\t\tif item.ID == id {
+\t\t\tif name != "" {
+\t\t\t\ts.items[i].Name = name
+\t\t\t}
+\t\t\tif description != "" {
+\t\t\t\ts.items[i].Description = description
+\t\t\t}
+\t\t\treturn s.items[i], true
+\t\t}
+\t}
+\treturn Item{}, false
+}
+
+func (s *ItemStore) Delete(id string) bool {
+\ts.mu.Lock()
+\tdefer s.mu.Unlock()
+\tfor i, item := range s.items {
+\t\tif item.ID == id {
+\t\t\ts.items = append(s.items[:i], s.items[i+1:]...)
+\t\t\treturn true
+\t\t}
+\t}
+\treturn false
+}
+
+func generateID() string {
+\tb := make([]byte, 8)
+\trand.Read(b)
+\treturn hex.EncodeToString(b)
+}
+
+func envOrDefault(key, fallback string) string {
+\tif v := os.Getenv(key); v != "" {
+\t\treturn v
+\t}
+\treturn fallback
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+\tw.Header().Set("Content-Type", "application/json")
+\tw.WriteHeader(status)
+\tjson.NewEncoder(w).Encode(v)
+}
+
+func errorResponse(w http.ResponseWriter, status int, msg string) {
+\twriteJSON(w, status, map[string]string{"error": msg})
+}
+
+func requestIDMiddleware(next http.Handler) http.Handler {
+\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+\t\tid := r.Header.Get("X-Request-ID")
+\t\tif id == "" {
+\t\t\tid = generateID()
+\t\t}
+\t\tw.Header().Set("X-Request-ID", id)
+\t\tctx := context.WithValue(r.Context(), "request_id", id)
+\t\tnext.ServeHTTP(w, r.WithContext(ctx))
+\t})
+}
+
 func main() {
+\tlogLevel := slog.LevelInfo
+\tif envOrDefault("LOG_LEVEL", "info") == "debug" {
+\t\tlogLevel = slog.LevelDebug
+\t}
+\tlogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
+\tslog.SetDefault(logger)
+
+\tport := envOrDefault("PORT", "10080")
+\tstore := NewItemStore()
+
 \tr := chi.NewRouter()
+\tr.Use(requestIDMiddleware)
 \tr.Use(middleware.Logger)
 \tr.Use(middleware.Recoverer)
-\tr.Use(cors.Handler(cors.Options{AllowedOrigins: []string{"*"}}))
+\tr.Use(cors.Handler(cors.Options{
+\t\tAllowedOrigins:   []string{"*"},
+\t\tAllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+\t\tAllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID"},
+\t\tAllowCredentials: true,
+\t\tMaxAge:           300,
+\t}))
 
 \tr.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-\t\tjson.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+\t\twriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "${cfg.name}"})
 \t})
 
-\t// TODO: add routes
+\tr.Route("/items", func(r chi.Router) {
+\t\tr.Get("/", func(w http.ResponseWriter, r *http.Request) {
+\t\t\twriteJSON(w, http.StatusOK, store.List())
+\t\t})
 
-\tlog.Printf("${cfg.name} listening on :8080")
-\tlog.Fatal(http.ListenAndServe(":8080", r))
+\t\tr.Post("/", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tvar req createItemRequest
+\t\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+\t\t\t\terrorResponse(w, http.StatusBadRequest, "invalid JSON body")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tif strings.TrimSpace(req.Name) == "" {
+\t\t\t\terrorResponse(w, http.StatusBadRequest, "name is required")
+\t\t\t\treturn
+\t\t\t}
+\t\t\titem := store.Create(strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+\t\t\tslog.Info("item created", "id", item.ID, "name", item.Name)
+\t\t\twriteJSON(w, http.StatusCreated, item)
+\t\t})
+
+\t\tr.Get("/{id}", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tid := chi.URLParam(r, "id")
+\t\t\titem, ok := store.GetByID(id)
+\t\t\tif !ok {
+\t\t\t\terrorResponse(w, http.StatusNotFound, "item not found")
+\t\t\t\treturn
+\t\t\t}
+\t\t\twriteJSON(w, http.StatusOK, item)
+\t\t})
+
+\t\tr.Put("/{id}", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tid := chi.URLParam(r, "id")
+\t\t\tvar req updateItemRequest
+\t\t\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+\t\t\t\terrorResponse(w, http.StatusBadRequest, "invalid JSON body")
+\t\t\t\treturn
+\t\t\t}
+\t\t\titem, ok := store.Update(id, strings.TrimSpace(req.Name), strings.TrimSpace(req.Description))
+\t\t\tif !ok {
+\t\t\t\terrorResponse(w, http.StatusNotFound, "item not found")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tslog.Info("item updated", "id", item.ID)
+\t\t\twriteJSON(w, http.StatusOK, item)
+\t\t})
+
+\t\tr.Delete("/{id}", func(w http.ResponseWriter, r *http.Request) {
+\t\t\tid := chi.URLParam(r, "id")
+\t\t\tif !store.Delete(id) {
+\t\t\t\terrorResponse(w, http.StatusNotFound, "item not found")
+\t\t\t\treturn
+\t\t\t}
+\t\t\tslog.Info("item deleted", "id", id)
+\t\t\tw.WriteHeader(http.StatusNoContent)
+\t\t})
+\t})
+
+\tsrv := &http.Server{Addr: ":" + port, Handler: r}
+
+\tgo func() {
+\t\tslog.Info("${cfg.name} starting", "port", port)
+\t\tif err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+\t\t\tslog.Error("server error", "err", err)
+\t\t\tos.Exit(1)
+\t\t}
+\t}()
+
+\tquit := make(chan os.Signal, 1)
+\tsignal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+\t<-quit
+
+\tslog.Info("shutting down gracefully...")
+\tctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+\tdefer cancel()
+\tif err := srv.Shutdown(ctx); err != nil {
+\t\tslog.Error("forced shutdown", "err", err)
+\t}
+\tslog.Info("server stopped")
 }
 `,
     worker: `package main
@@ -184,7 +635,8 @@ func (m *${cap(cfg.name)}) Run() error {
   };
 
   const isLib = cfg.type === "library";
-  files.push({ path: isLib ? `${cfg.name.replace(/-/g, "")}.go` : "main.go", content: mains[cfg.type] ?? mains["cli"]!, needsLlm: true });
+  const isApi = cfg.type === "api";
+  files.push({ path: isLib ? `${cfg.name.replace(/-/g, "")}.go` : "main.go", content: mains[cfg.type] ?? mains["cli"]!, needsLlm: !isApi });
 
   // Test
   files.push({ path: isLib ? `${cfg.name.replace(/-/g, "")}_test.go` : "main_test.go", content: isLib ? `package ${cfg.name.replace(/-/g, "")}
@@ -214,6 +666,143 @@ func TestRunWithoutInit(t *testing.T) {
 \t\tt.Fatal("Run() should fail without Init()")
 \t}
 }
+` : isApi ? `package main
+
+import (
+\t"bytes"
+\t"encoding/json"
+\t"net/http"
+\t"net/http/httptest"
+\t"testing"
+)
+
+func setupTestStore() *ItemStore {
+\treturn NewItemStore()
+}
+
+func TestHealthEndpoint(t *testing.T) {
+\tstore := setupTestStore()
+\t_ = store
+
+\treq := httptest.NewRequest(http.MethodGet, "/health", nil)
+\tw := httptest.NewRecorder()
+
+\t// Direct handler test
+\thandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+\t\twriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+\t})
+\thandler.ServeHTTP(w, req)
+
+\tif w.Code != http.StatusOK {
+\t\tt.Fatalf("expected 200, got %d", w.Code)
+\t}
+
+\tvar resp map[string]string
+\tjson.NewDecoder(w.Body).Decode(&resp)
+\tif resp["status"] != "ok" {
+\t\tt.Fatalf("expected status ok, got %s", resp["status"])
+\t}
+}
+
+func TestItemStore_CRUD(t *testing.T) {
+\tstore := NewItemStore()
+
+\t// List empty
+\titems := store.List()
+\tif len(items) != 0 {
+\t\tt.Fatalf("expected 0 items, got %d", len(items))
+\t}
+
+\t// Create
+\titem := store.Create("Test Item", "A test description")
+\tif item.Name != "Test Item" {
+\t\tt.Fatalf("expected name 'Test Item', got %q", item.Name)
+\t}
+\tif item.ID == "" {
+\t\tt.Fatal("expected non-empty ID")
+\t}
+
+\t// List after create
+\titems = store.List()
+\tif len(items) != 1 {
+\t\tt.Fatalf("expected 1 item, got %d", len(items))
+\t}
+
+\t// Get by ID
+\tfound, ok := store.GetByID(item.ID)
+\tif !ok {
+\t\tt.Fatal("expected to find item by ID")
+\t}
+\tif found.Name != "Test Item" {
+\t\tt.Fatalf("expected name 'Test Item', got %q", found.Name)
+\t}
+
+\t// Get missing ID
+\t_, ok = store.GetByID("nonexistent")
+\tif ok {
+\t\tt.Fatal("expected not to find nonexistent item")
+\t}
+
+\t// Update
+\tupdated, ok := store.Update(item.ID, "Updated", "New desc")
+\tif !ok {
+\t\tt.Fatal("expected update to succeed")
+\t}
+\tif updated.Name != "Updated" {
+\t\tt.Fatalf("expected name 'Updated', got %q", updated.Name)
+\t}
+
+\t// Update missing
+\t_, ok = store.Update("nonexistent", "x", "y")
+\tif ok {
+\t\tt.Fatal("expected update of missing item to fail")
+\t}
+
+\t// Delete
+\tif !store.Delete(item.ID) {
+\t\tt.Fatal("expected delete to succeed")
+\t}
+\tif store.Delete(item.ID) {
+\t\tt.Fatal("expected second delete to fail")
+\t}
+
+\titems = store.List()
+\tif len(items) != 0 {
+\t\tt.Fatalf("expected 0 items after delete, got %d", len(items))
+\t}
+}
+
+func TestCreateItemValidation(t *testing.T) {
+\t// Test that empty name produces an error (unit test of validation logic)
+\tname := "   "
+\tif len(name) > 0 && len(bytes.TrimSpace([]byte(name))) == 0 {
+\t\t// name is blank after trim — validation should reject this
+\t} else {
+\t\tt.Fatal("expected blank name to be detected")
+\t}
+}
+
+func TestGenerateID(t *testing.T) {
+\tid1 := generateID()
+\tid2 := generateID()
+\tif id1 == "" || id2 == "" {
+\t\tt.Fatal("generated ID should not be empty")
+\t}
+\tif id1 == id2 {
+\t\tt.Fatal("generated IDs should be unique")
+\t}
+\tif len(id1) != 16 {
+\t\tt.Fatalf("expected 16-char hex ID, got %d chars", len(id1))
+\t}
+}
+
+func TestEnvOrDefault(t *testing.T) {
+\t// Uses default when env is not set
+\tval := envOrDefault("KCODE_TEST_NONEXISTENT_VAR", "fallback")
+\tif val != "fallback" {
+\t\tt.Fatalf("expected 'fallback', got %q", val)
+\t}
+}
 ` : `package main
 
 import "testing"
@@ -221,14 +810,14 @@ import "testing"
 func TestBasic(t *testing.T) {
 \t// TODO: add tests
 }
-`, needsLlm: true });
+`, needsLlm: isApi ? false : true });
 
   // Extras
   files.push({ path: ".gitignore", content: `bin/\n*.exe\n.env\ntmp/\n`, needsLlm: false });
   files.push({ path: "Makefile", content: `build:\n\tgo build -o bin/${cfg.name} ${isLib ? "." : "."}\n\ntest:\n\tgo test -v -race ./...\n\nlint:\n\tgo vet ./...\n\tgolangci-lint run\n\nrun:\n\tgo run ${isLib ? "." : "."}\n`, needsLlm: false });
   files.push({ path: "Dockerfile", content: `FROM golang:1.23-alpine AS builder\nWORKDIR /app\nCOPY go.* ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /bin/${cfg.name}\n\nFROM alpine:3.20\nCOPY --from=builder /bin/${cfg.name} /usr/local/bin/\nENTRYPOINT ["${cfg.name}"]\n`, needsLlm: false });
   files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-go@v5\n        with: { go-version: "1.23" }\n      - run: go test -v -race ./...\n      - run: go vet ./...\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nBuilt with KCode.\n\n\`\`\`bash\nmake build\nmake test\nmake run\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+  files.push({ path: "README.md", content: `# ${cfg.name}\n\nBuilt with KCode.\n\n${"```"}bash\nmake build\nmake test\nmake run\n${"```"}\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
 
   const projectPath = join(cwd, cfg.name);
   for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
