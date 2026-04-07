@@ -576,8 +576,10 @@ export class ConversationManager {
 
           if (!engineHandled && isWebRequest) {
             try {
+              log.info("orchestrator", `Trying web engine for: "${userMessage.slice(0, 50)}"`);
               const { createWebProject } = await import("./web-engine/web-engine.js");
               const webResult = createWebProject(userMessage, this.config.workingDirectory);
+              log.info("orchestrator", `Web engine result: type=${webResult.intent.siteType} machine=${webResult.machineFiles} llm=${webResult.llmFiles}`);
               const totalFiles = webResult.machineFiles + webResult.llmFiles;
 
               if (webResult.llmFiles === 0) {
