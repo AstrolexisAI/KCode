@@ -1,15 +1,24 @@
 // KCode - Web Engine Types
 
 export type SiteType =
-  | "landing"      // Landing page / marketing
-  | "dashboard"    // Admin dashboard / SaaS panel
-  | "blog"         // Blog / content site
-  | "ecommerce"    // E-commerce / store
-  | "portfolio"    // Portfolio / personal site
-  | "docs"         // Documentation site
-  | "saas"         // Full SaaS app (auth + dashboard + landing)
-  | "api"          // API-only backend
-  | "fullstack"    // Full-stack app
+  | "landing"           // Landing page / marketing
+  | "dashboard"         // Generic admin dashboard
+  | "trading-dashboard" // Financial/trading dashboard
+  | "analytics"         // Analytics dashboard
+  | "admin-panel"       // Admin panel with CRUD
+  | "blog"              // Blog / content site
+  | "ecommerce"         // E-commerce / store
+  | "social-feed"       // Social media feed
+  | "crm"               // CRM pipeline
+  | "project-mgmt"      // Project management / kanban
+  | "chat"              // Chat / messaging app
+  | "education"         // LMS / education platform
+  | "iot"               // IoT / device monitoring
+  | "portfolio"         // Portfolio / personal site
+  | "docs"              // Documentation site
+  | "saas"              // Full SaaS app
+  | "api"               // API-only backend
+  | "fullstack"         // Full-stack app
   | "custom";
 
 export type Stack =
