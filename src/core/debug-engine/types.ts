@@ -19,6 +19,8 @@ export interface DebugContext {
   callers: string[];
   /** Stack trace or error message from user */
   errorMessage?: string;
+  /** Machine pre-diagnosis from behavior pattern matching */
+  machineDiagnosis?: string;
 }
 
 export interface ErrorPattern {
