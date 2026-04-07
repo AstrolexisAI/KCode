@@ -378,8 +378,12 @@ export interface Level1Result {
 export function tryLevel1(message: string, cwd: string): Level1Result {
   const lower = message.toLowerCase().trim();
 
-  // Multi-line or very long messages are complex — let LLM handle
+  // Multi-line, very long, or multi-intent messages — let engine/LLM handle
   if (lower.includes("\n") || lower.split(/\s+/).length > 15) {
+    return { handled: false, output: "" };
+  }
+  // If message has creation intent + run intent, skip Level 1 (engine handles both)
+  if (/\b(?:create|build|make|crea|genera|scaffold)\b/i.test(lower) && /\b(?:levant|start|run|launch|arranca|ejecuta)\b/i.test(lower)) {
     return { handled: false, output: "" };
   }
 
