@@ -115,6 +115,8 @@ export interface CollectOptions {
   files: string[];
   /** Error message from user (stack trace, error text) */
   errorMessage?: string;
+  /** User's full natural language request */
+  userRequest?: string;
   /** Working directory */
   cwd: string;
   /** Progress callback */
@@ -124,6 +126,18 @@ export interface CollectOptions {
 export async function collectEvidence(opts: CollectOptions): Promise<DebugContext> {
   const { files, errorMessage, cwd } = opts;
   const step = opts.onStep ?? (() => {});
+
+  // Step 0: Machine pattern matching on user description
+  let matchedPatterns: import("./debug-patterns").DebugPattern[] = [];
+  let smartKeywords: string[] = [];
+  if (opts.userRequest) {
+    const { matchDebugPatterns, extractSearchKeywords } = await import("./debug-patterns.js");
+    matchedPatterns = matchDebugPatterns(opts.userRequest);
+    smartKeywords = extractSearchKeywords(opts.userRequest);
+    if (matchedPatterns.length > 0) {
+      step(`Detected behavior pattern: ${matchedPatterns[0]!.id}`);
+    }
+  }
 
   // Step 1: Resolve target files
   step("Resolving target files...");
@@ -141,7 +155,45 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
     }
   }
 
-  // If still no files, grep for the error keyword
+  // If still no files, use smart pattern-based search
+  if (targetFiles.length === 0 && matchedPatterns.length > 0) {
+    step("Smart search using behavior pattern...");
+    const pat = matchedPatterns[0]!;
+    const globArgs = pat.searchStrategy.fileGlobs.map(g => `--include="${g}"`).join(" ");
+    for (const gp of pat.searchStrategy.grepPatterns.slice(0, 6)) {
+      const grepResult = run(
+        `grep -rn "${gp}" ${globArgs} -l 2>/dev/null | head -3`,
+        cwd,
+      );
+      if (grepResult) {
+        for (const f of grepResult.split("\n").filter(Boolean)) {
+          const full = resolve(cwd, f);
+          if (existsSync(full) && !targetFiles.includes(full)) targetFiles.push(full);
+        }
+      }
+      if (targetFiles.length >= 5) break;
+    }
+  }
+
+  // Smart keyword search from user description
+  if (targetFiles.length === 0 && smartKeywords.length > 0) {
+    step("Searching by keywords...");
+    for (const kw of smartKeywords.slice(0, 4)) {
+      const grepResult = run(
+        `grep -rn "${kw}" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.py" --include="*.go" -l 2>/dev/null | head -3`,
+        cwd,
+      );
+      if (grepResult) {
+        for (const f of grepResult.split("\n").filter(Boolean)) {
+          const full = resolve(cwd, f);
+          if (existsSync(full) && !targetFiles.includes(full)) targetFiles.push(full);
+        }
+      }
+      if (targetFiles.length >= 5) break;
+    }
+  }
+
+  // Fallback: grep for error keyword from error message
   if (targetFiles.length === 0 && errorMessage) {
     step("Searching for error source...");
     const keyword = errorMessage.split(/[\s:]+/).find(w => w.length > 4) ?? "error";
@@ -216,6 +268,26 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
     callers.push(...findCallers(relative(cwd, f), cwd));
   }
 
+  // Step 9: Machine pre-diagnosis using code signals
+  let machineDiagnosis: string | undefined;
+  if (matchedPatterns.length > 0) {
+    step("Analyzing code signals...");
+    const pat = matchedPatterns[0]!;
+    const signals: string[] = [];
+    for (const [, content] of fileContents) {
+      for (const sig of pat.searchStrategy.codeSignals) {
+        if (sig.pattern.test(content)) {
+          signals.push(`• ${sig.meaning} → ${sig.likely_fix}`);
+        }
+      }
+    }
+    if (signals.length > 0) {
+      machineDiagnosis = `**Pattern: ${pat.id}**\n${pat.diagnosis}\n\n**Code signals found:**\n${signals.join("\n")}`;
+    } else {
+      machineDiagnosis = `**Pattern: ${pat.id}**\n${pat.diagnosis}`;
+    }
+  }
+
   return {
     targetFiles: targetFiles.map(f => relative(cwd, f)),
     fileContents,
@@ -226,6 +298,7 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
     testOutput,
     callers,
     errorMessage,
+    machineDiagnosis,
   };
 }
 
@@ -235,6 +308,10 @@ export function formatEvidenceForLLM(ctx: DebugContext): string {
   const parts: string[] = [];
 
   parts.push("# Debug Evidence Package\n");
+
+  if (ctx.machineDiagnosis) {
+    parts.push(`## Machine Pre-Diagnosis\n${ctx.machineDiagnosis}\n`);
+  }
 
   if (ctx.errorMessage) {
     parts.push(`## Error reported by user\n\`\`\`\n${ctx.errorMessage}\n\`\`\`\n`);
