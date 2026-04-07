@@ -60,7 +60,7 @@ export const DEBUG_PATTERNS: DebugPattern[] = [
   // ── Slow / performance ─────────────────────────────────────
   {
     id: "slow-performance",
-    triggers: /\b(?:lento|slow|tarda|takes?\s*(?:long|forever|mucho)|lag(?:s|gy)?|delay|demora|performance|heavy|pesado|memory\s*leak|se\s*come\s*la\s*memoria)\b/i,
+    triggers: /\b(?:lent[oa]|slow|tarda|takes?\s*(?:long|forever|mucho)|lag(?:s|gy)?|delay|demora|performance|heavy|pesad[oa]|memory\s*leak|se\s*come\s*la\s*memoria)\b/i,
     searchStrategy: {
       grepPatterns: ["for ", "while ", "forEach", "map(", "reduce(", "setInterval", "setTimeout", "useEffect", "render", "memo", "useMemo", "concat", "push"],
       fileGlobs: ["*.ts", "*.tsx", "*.js", "*.jsx", "*.py", "*.go"],
@@ -129,7 +129,7 @@ export const DEBUG_PATTERNS: DebugPattern[] = [
   // ── Login / auth / permission ──────────────────────────────
   {
     id: "auth-issue",
-    triggers: /\b(?:login|auth|permiso|permission|denied|forbidden|401|403|token|session|cookie|credentials|unauthorized|acceso|access\s*denied|no\s*puede\s*entrar|can'?t\s*(?:log\s*in|access|sign\s*in))\b/i,
+    triggers: /\b(?:login|permiso|permission|denied|forbidden|401|403|token\s*(?:expir|invalid|miss)|session\s*(?:expir|invalid)|credentials|unauthorized|acceso\s*denegado|access\s*denied|no\s*puede\s*entrar|can'?t\s*(?:log\s*in|access|sign\s*in))\b/i,
     searchStrategy: {
       grepPatterns: ["auth", "token", "session", "cookie", "jwt", "bearer", "middleware", "guard", "protect", "verify", "decode", "expire"],
       fileGlobs: ["*.ts", "*.js", "*.py", "*.go", "*.rs", "*.java", "*.rb", "*.php"],
