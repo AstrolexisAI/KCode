@@ -56,9 +56,11 @@ interface ProjectSignal { type: "web" | "api" | "mobile" | "cli" | "data" | "gam
 
 function detectProjectType(msg: string): ProjectSignal | null {
   const lower = msg.toLowerCase();
-  // Data/analytics checks before web — "dashboard with real data" is data, not web
-  const hasDataSignal = /\b(?:data|pipeline|etl|analytics|chart|graph|csv|report|scraper|crawler|real\s*data|stock|trading|financial|wallstreet|wall\s*street|crypto|market)\b/i.test(lower);
-  if (hasDataSignal) return { type: "data" };
+  // Visual UI signals — if user wants a dashboard/page WITH visual elements, it's web
+  const hasVisualUI = /\b(?:dashboard|page|ui|frontend|dark\s*(?:theme|ui|mode)|chart|heatmap|candlestick|ticker|interface|panel|widget|responsive)\b/i.test(lower);
+  const hasDataSignal = /\b(?:pipeline|etl|csv|report|scraper|crawler|batch|transform|ingest|bot|trading\s*bot|stock\s*(?:bot|script|tool))\b/i.test(lower);
+  // "wallstreet dashboard with charts" = web (visual), "data pipeline with ETL" = data (processing)
+  if (hasDataSignal && !hasVisualUI) return { type: "data" };
   if (/\b(?:dashboard|landing|page|website|sitio|portal|blog|portfolio|store|tienda|saas|admin\s*panel|cms)\b/i.test(lower)) return { type: "web" };
   if (/\b(?:api|backend|server|microservice|endpoint|servicio|servidor)\b/i.test(lower)) return { type: "api" };
   if (/\b(?:desktop|gui|window|native\s*app|tray|menubar)\b/i.test(lower)) return { type: "desktop" };
