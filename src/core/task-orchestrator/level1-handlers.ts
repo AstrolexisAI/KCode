@@ -378,6 +378,11 @@ export interface Level1Result {
 export function tryLevel1(message: string, cwd: string): Level1Result {
   const lower = message.toLowerCase().trim();
 
+  // Multi-line or very long messages are complex — let LLM handle
+  if (lower.includes("\n") || lower.split(/\s+/).length > 15) {
+    return { handled: false, output: "" };
+  }
+
   // ── Build ──
   if (/^(?:build|compile|make|construir|compilar)(?:\s+(?:the\s+)?(?:project|app|it))?[.!]?$/i.test(lower)) {
     const bs = detectBuildSystem(cwd);
