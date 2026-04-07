@@ -151,6 +151,11 @@ public class ItemService {
         return item;
     }
 
+    public Optional<Item> update(String id, String name, String description) {
+        return Optional.ofNullable(store.computeIfPresent(id, (k, existing) ->
+            new Item(id, name, description, existing.createdAt())));
+    }
+
     public boolean delete(String id) {
         return store.remove(id) != null;
     }
@@ -210,6 +215,11 @@ public class ItemController {
         String description
     ) {}
 
+    public record UpdateItemRequest(
+        @NotBlank(message = "Name is required") String name,
+        String description
+    ) {}
+
     @GetMapping
     public List<Item> list() {
         log.debug("Listing all items");
@@ -227,6 +237,15 @@ public class ItemController {
     public ResponseEntity<?> get(@PathVariable String id) {
         log.debug("Getting item: {}", id);
         return itemService.findById(id)
+            .<ResponseEntity<?>>map(ResponseEntity::ok)
+            .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ErrorResponse(404, "Item not found: " + id)));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable String id, @Valid @RequestBody UpdateItemRequest request) {
+        log.info("Updating item: {}", id);
+        return itemService.update(id, request.name(), request.description())
             .<ResponseEntity<?>>map(ResponseEntity::ok)
             .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(404, "Item not found: " + id)));
@@ -311,15 +330,11 @@ class ApplicationTests {
     @Test
     @Order(5)
     void getItemById() {
-        // Create an item first
-        var body = java.util.Map.of("name", "Lookup Item", "description", "For retrieval");
-        var created = restTemplate.postForObject("/api/items", body, Item.class);
-        assertThat(created).isNotNull();
-
-        var response = restTemplate.getForEntity("/api/items/" + created.id(), Item.class);
+        assertThat(createdItemId).isNotBlank();
+        var response = restTemplate.getForEntity("/api/items/" + createdItemId, Item.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().name()).isEqualTo("Lookup Item");
+        assertThat(response.getBody().name()).isEqualTo("Test Item");
     }
 
     @Test
@@ -349,6 +364,23 @@ class ApplicationTests {
         var body = java.util.Map.of("name", "", "description", "No name");
         var response = restTemplate.postForEntity("/api/items", body, String.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @Order(9)
+    void updateItem() {
+        var createBody = java.util.Map.of("name", "Before Update", "description", "Original");
+        var created = restTemplate.postForObject("/api/items", createBody, Item.class);
+        assertThat(created).isNotNull();
+
+        var updateBody = java.util.Map.of("name", "After Update", "description", "Modified");
+        restTemplate.put("/api/items/" + created.id(), updateBody);
+
+        var response = restTemplate.getForEntity("/api/items/" + created.id(), Item.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().name()).isEqualTo("After Update");
+        assertThat(response.getBody().description()).isEqualTo("Modified");
     }
 }
 `, needsLlm: false });
