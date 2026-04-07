@@ -831,6 +831,79 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       return [`  KCode Elixir Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  mix run --no-halt / mix test`].join("\n");
     }
 
+    case "dart":
+    case "flutter": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /dart Flutter mobile app\n  /dart CLI tool\n  /dart server with shelf\n  /flutter iOS + Android app with Riverpod";
+      const { createDartProject } = await import("../../core/web-engine/stacks/dart-engine.js");
+      const r = createDartProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Dart/Flutter Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  ${r.config.type === "mobile" || r.config.type === "web" ? "flutter run" : "dart run"} / dart test`].join("\n");
+    }
+
+    case "lua":
+    case "love2d": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /lua Love2D game\n  /lua Neovim plugin\n  /lua CLI script\n  /lua server with Lapis";
+      const { createLuaProject } = await import("../../core/web-engine/stacks/lua-engine.js");
+      const r = createLuaProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Lua Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  lua main.lua / busted`].join("\n");
+    }
+
+    case "haskell":
+    case "hs": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /haskell API with Scotty\n  /haskell CLI tool\n  /hs library";
+      const { createHaskellProject } = await import("../../core/web-engine/stacks/haskell-engine.js");
+      const r = createHaskellProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Haskell Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  stack build / stack run / stack test`].join("\n");
+    }
+
+    case "scala": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /scala API with http4s\n  /scala Spark data pipeline\n  /scala CLI tool";
+      const { createScalaProject } = await import("../../core/web-engine/stacks/scala-engine.js");
+      const r = createScalaProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Scala Engine`, `    ${r.config.name}/ | ${r.config.type}${r.config.framework ? " (" + r.config.framework + ")" : ""} | ${r.files.length} files (${m} machine)`, "", `  sbt run / sbt test`].join("\n");
+    }
+
+    case "terraform":
+    case "tf":
+    case "iac":
+    case "infra": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /terraform AWS VPC with RDS and S3\n  /tf Kubernetes deployment\n  /iac GCP Cloud Run service";
+      const { createTerraformProject } = await import("../../core/web-engine/stacks/terraform-engine.js");
+      const r = createTerraformProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Terraform Engine`, `    ${r.config.name}/ | ${r.config.type} | ${r.files.length} files (${m} machine)`, "", `  terraform init / terraform plan / terraform apply`].join("\n");
+    }
+
+    case "monorepo":
+    case "turborepo":
+    case "nx": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /monorepo web + API with shared lib\n  /turborepo Next.js frontend with Express API\n  /nx React + Node monorepo";
+      const { createMonorepoProject } = await import("../../core/web-engine/stacks/monorepo-engine.js");
+      const r = createMonorepoProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode Monorepo Engine`, `    ${r.config.name}/ | ${r.config.tool} + ${r.config.packageManager} | ${r.config.packages.length} packages | ${r.files.length} files (${m} machine)`, "", `  ${r.config.packageManager} run dev / ${r.config.packageManager} run build`].join("\n");
+    }
+
+    case "cicd":
+    case "ci":
+    case "pipeline": {
+      const desc = (args ?? "").trim();
+      if (!desc) return "  Usage: /cicd Node.js with deploy to Vercel\n  /ci Python with Docker\n  /pipeline Go with GitHub Actions";
+      const { createCicdProject } = await import("../../core/web-engine/stacks/cicd-engine.js");
+      const r = createCicdProject(desc, appConfig.workingDirectory);
+      const m = r.files.filter(f => !f.needsLlm).length;
+      return [`  KCode CI/CD Engine`, `    ${r.config.name}/ | ${r.config.platform} | ${r.config.projectType} | ${r.files.length} files (${m} machine)`, `    Test: ${r.config.hasTest} | Lint: ${r.config.hasLint} | Deploy: ${r.config.hasDeploy}${r.config.deployTarget ? " → " + r.config.deployTarget : ""}`, "", `  git push (triggers pipeline)`].join("\n");
+    }
+
     case "db":
     case "database":
     case "schema": {

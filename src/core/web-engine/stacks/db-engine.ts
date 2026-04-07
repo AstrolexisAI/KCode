@@ -4,7 +4,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type DbProjectType = "postgres" | "mysql" | "sqlite" | "mongo" | "redis" | "supabase" | "custom";
+export type DbProjectType = "postgres" | "mysql" | "sqlite" | "mongo" | "redis" | "supabase" | "mssql" | "custom";
 export type OrmType = "prisma" | "drizzle" | "typeorm" | "knex" | "mongoose" | "raw" | "none";
 
 interface Entity {
@@ -160,7 +160,8 @@ function detectDbProject(msg: string): DbConfig {
   let port = 5432;
 
   // DB type
-  if (/\b(?:mysql|mariadb)\b/i.test(lower)) { type = "mysql"; port = 3306; }
+  if (/\b(?:mssql|sql\s*server|sqlserver|microsoft\s*sql)\b/i.test(lower)) { type = "mssql"; port = 1433; }
+  else if (/\b(?:mysql|mariadb)\b/i.test(lower)) { type = "mysql"; port = 3306; }
   else if (/\b(?:sqlite|lite)\b/i.test(lower)) { type = "sqlite"; port = 0; }
   else if (/\b(?:mongo|mongodb|nosql)\b/i.test(lower)) { type = "mongo"; port = 27017; orm = "mongoose"; }
   else if (/\b(?:redis)\b/i.test(lower)) { type = "redis"; port = 6379; orm = "none"; }
@@ -240,6 +241,15 @@ function genCreateSQL(entities: Entity[], type: DbProjectType): string {
 }
 
 function mapType(t: string, db: DbProjectType): string {
+  if (db === "mssql") {
+    if (t === "uuid") return "UNIQUEIDENTIFIER";
+    if (t === "timestamptz") return "DATETIME2";
+    if (t === "text") return "NVARCHAR(MAX)";
+    if (t.startsWith("varchar")) return "N" + t.toUpperCase();
+    if (t === "boolean") return "BIT";
+    if (t === "serial") return "INT IDENTITY(1,1)";
+    return t.toUpperCase();
+  }
   if (db === "mysql") {
     if (t === "uuid") return "CHAR(36)";
     if (t === "timestamptz") return "TIMESTAMP";
@@ -286,7 +296,7 @@ function genSeedSQL(entities: Entity[]): string {
 }
 
 function genPrismaSchema(entities: Entity[], type: DbProjectType): string {
-  const provider = type === "postgres" ? "postgresql" : type === "mysql" ? "mysql" : "sqlite";
+  const provider = type === "postgres" ? "postgresql" : type === "mysql" ? "mysql" : type === "mssql" ? "sqlserver" : "sqlite";
   const url = type === "sqlite" ? '"file:./dev.db"' : 'env("DATABASE_URL")';
   const lines: string[] = [];
 
@@ -434,7 +444,7 @@ export function createDbProject(userRequest: string, cwd: string): DbProjectResu
     files.push({ path: "prisma/schema.prisma", content: genPrismaSchema(cfg.entities, cfg.type), needsLlm: false });
   } else if (cfg.orm === "drizzle") {
     files.push({ path: "src/db/schema.ts", content: genDrizzleSchema(cfg.entities), needsLlm: false });
-    files.push({ path: "drizzle.config.ts", content: `import type { Config } from "drizzle-kit";\n\nexport default {\n  schema: "./src/db/schema.ts",\n  out: "./drizzle",\n  dialect: "${cfg.type === "mysql" ? "mysql" : cfg.type === "sqlite" ? "sqlite" : "postgresql"}",\n  dbCredentials: { url: process.env.DATABASE_URL! },\n} satisfies Config;\n`, needsLlm: false });
+    files.push({ path: "drizzle.config.ts", content: `import type { Config } from "drizzle-kit";\n\nexport default {\n  schema: "./src/db/schema.ts",\n  out: "./drizzle",\n  dialect: "${cfg.type === "mysql" ? "mysql" : cfg.type === "sqlite" ? "sqlite" : cfg.type === "mssql" ? "sqlite" : "postgresql"}",\n  dbCredentials: { url: process.env.DATABASE_URL! },\n} satisfies Config;\n`, needsLlm: false });
   } else if (cfg.orm === "mongoose") {
     files.push({ path: "src/models/index.ts", content: genMongooseSchemas(cfg.entities), needsLlm: false });
     files.push({ path: "src/db/connection.ts", content: `import mongoose from "mongoose";\n\nconst MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/${cfg.name}";\n\nexport async function connectDb() {\n  await mongoose.connect(MONGO_URI);\n  console.log("MongoDB connected");\n}\n`, needsLlm: false });
@@ -473,6 +483,8 @@ export function createDbProject(userRequest: string, cwd: string): DbProjectResu
       composeServices.push(`  mysql:\n    image: mysql:8.4\n    ports:\n      - "3306:3306"\n    environment:\n      MYSQL_ROOT_PASSWORD: changeme\n      MYSQL_DATABASE: ${cfg.name}\n      MYSQL_USER: app\n      MYSQL_PASSWORD: changeme\n    volumes:\n      - mysqldata:/var/lib/mysql\n      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql\n    healthcheck:\n      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]\n      interval: 5s\n      timeout: 5s\n      retries: 5\n    restart: unless-stopped`);
     } else if (cfg.type === "mongo") {
       composeServices.push(`  mongo:\n    image: mongo:7\n    ports:\n      - "27017:27017"\n    environment:\n      MONGO_INITDB_ROOT_USERNAME: app\n      MONGO_INITDB_ROOT_PASSWORD: changeme\n      MONGO_INITDB_DATABASE: ${cfg.name}\n    volumes:\n      - mongodata:/data/db\n    restart: unless-stopped`);
+    } else if (cfg.type === "mssql") {
+      composeServices.push(`  mssql:\n    image: mcr.microsoft.com/mssql/server:2022-latest\n    ports:\n      - "1433:1433"\n    environment:\n      ACCEPT_EULA: "Y"\n      MSSQL_SA_PASSWORD: "Changeme1!"\n      MSSQL_PID: Developer\n    volumes:\n      - mssqldata:/var/opt/mssql\n    healthcheck:\n      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P Changeme1! -Q 'SELECT 1' -C -N"]\n      interval: 10s\n      timeout: 5s\n      retries: 5\n    restart: unless-stopped`);
     } else if (cfg.type === "redis") {
       composeServices.push(`  redis:\n    image: redis:7-alpine\n    ports:\n      - "6379:6379"\n    command: redis-server --appendonly yes --requirepass changeme\n    volumes:\n      - redisdata:/data\n    healthcheck:\n      test: ["CMD", "redis-cli", "-a", "changeme", "ping"]\n      interval: 5s\n      timeout: 5s\n      retries: 5\n    restart: unless-stopped`);
     }
@@ -484,7 +496,7 @@ export function createDbProject(userRequest: string, cwd: string): DbProjectResu
       composeServices.push(`\n  mongo-express:\n    image: mongo-express:latest\n    ports:\n      - "10081:8081"\n    environment:\n      ME_CONFIG_MONGODB_ADMINUSERNAME: app\n      ME_CONFIG_MONGODB_ADMINPASSWORD: changeme\n      ME_CONFIG_MONGODB_URL: mongodb://app:changeme@mongo:27017/\n    depends_on:\n      - mongo\n    restart: unless-stopped`);
     }
 
-    const volumes = cfg.type === "postgres" ? "pgdata" : cfg.type === "mysql" ? "mysqldata" : cfg.type === "mongo" ? "mongodata" : "redisdata";
+    const volumes = cfg.type === "postgres" ? "pgdata" : cfg.type === "mysql" ? "mysqldata" : cfg.type === "mongo" ? "mongodata" : cfg.type === "mssql" ? "mssqldata" : "redisdata";
     files.push({ path: "docker-compose.yml", content: `services:\n${composeServices.join("\n\n")}\n\nvolumes:\n  ${volumes}:\n`, needsLlm: false });
   }
 
@@ -496,6 +508,8 @@ export function createDbProject(userRequest: string, cwd: string): DbProjectResu
       ? `#!/bin/bash\nset -euo pipefail\nDATE=$(date +%Y%m%d_%H%M%S)\nBACKUP_DIR="./backups"\nmkdir -p "$BACKUP_DIR"\n\necho "Backing up ${cfg.name}..."\nmysqldump -h localhost -u app -pchangeme ${cfg.name} | gzip > "$BACKUP_DIR/${cfg.name}_$DATE.sql.gz"\nfind "$BACKUP_DIR" -name "*.sql.gz" -mtime +7 -delete\necho "Backup complete"`
       : cfg.type === "mongo"
       ? `#!/bin/bash\nset -euo pipefail\nDATE=$(date +%Y%m%d_%H%M%S)\nBACKUP_DIR="./backups"\nmkdir -p "$BACKUP_DIR"\n\necho "Backing up ${cfg.name}..."\nmongodump --uri="\${MONGO_URI:-mongodb://app:changeme@localhost:27017/${cfg.name}}" --archive="$BACKUP_DIR/${cfg.name}_$DATE.gz" --gzip\nfind "$BACKUP_DIR" -name "*.gz" -mtime +7 -delete\necho "Backup complete"`
+      : cfg.type === "mssql"
+      ? `#!/bin/bash\nset -euo pipefail\nDATE=$(date +%Y%m%d_%H%M%S)\nBACKUP_DIR="./backups"\nmkdir -p "$BACKUP_DIR"\n\necho "Backing up ${cfg.name}..."\n/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "\${MSSQL_SA_PASSWORD:-Changeme1!}" -Q "BACKUP DATABASE [${cfg.name}] TO DISK='/var/opt/mssql/backup/${cfg.name}_$DATE.bak'" -C -N\nfind "$BACKUP_DIR" -name "*.bak" -mtime +7 -delete\necho "Backup complete"`
       : `#!/bin/bash\ncp ./dev.db "./backups/${cfg.name}_$(date +%Y%m%d_%H%M%S).db"`;
 
     files.push({ path: "scripts/backup.sh", content: backupCmd + "\n", needsLlm: false });
@@ -515,6 +529,7 @@ export function createDbProject(userRequest: string, cwd: string): DbProjectResu
   if (cfg.orm === "typeorm") { deps["typeorm"] = "*"; deps["reflect-metadata"] = "*"; if (cfg.type === "postgres") deps["pg"] = "*"; }
   if (cfg.orm === "knex") { deps["knex"] = "*"; if (cfg.type === "postgres") deps["pg"] = "*"; if (cfg.type === "mysql") deps["mysql2"] = "*"; if (cfg.type === "sqlite") deps["better-sqlite3"] = "*"; }
   if (cfg.orm === "mongoose") { deps["mongoose"] = "*"; }
+  if (cfg.type === "mssql") { deps["mssql"] = "*"; deps["tedious"] = "*"; }
   if (cfg.type === "redis") { deps["ioredis"] = "*"; }
 
   files.push({ path: "package.json", content: JSON.stringify({
@@ -536,6 +551,7 @@ export function createDbProject(userRequest: string, cwd: string): DbProjectResu
   if (cfg.type === "postgres") envLines.push(`DATABASE_URL=postgresql://app:changeme@localhost:5432/${cfg.name}`);
   else if (cfg.type === "mysql") envLines.push(`DATABASE_URL=mysql://app:changeme@localhost:3306/${cfg.name}`);
   else if (cfg.type === "sqlite") envLines.push(`DATABASE_URL=file:./dev.db`);
+  else if (cfg.type === "mssql") envLines.push(`DATABASE_URL=mssql://sa:Changeme1!@localhost:1433/${cfg.name}`);
   else if (cfg.type === "mongo") envLines.push(`MONGO_URI=mongodb://app:changeme@localhost:27017/${cfg.name}`);
   else if (cfg.type === "redis") envLines.push(`REDIS_URL=redis://:changeme@localhost:6379`);
 
