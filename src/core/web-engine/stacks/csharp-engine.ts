@@ -79,6 +79,7 @@ EndProject
 using System.ComponentModel.DataAnnotations;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://0.0.0.0:10080");
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton<ItemStore>();
 
@@ -148,8 +149,8 @@ class ItemStore
 
     public Item? Update(string id, string name, string description)
     {
-        if (!_items.ContainsKey(id)) return null;
-        var updated = _items[id] with { Name = name, Description = description };
+        if (!_items.TryGetValue(id, out var existing)) return null;
+        var updated = existing with { Name = name, Description = description };
         _items[id] = updated;
         return updated;
     }
@@ -187,6 +188,7 @@ class GlobalExceptionHandler
 using ${cfg.name}.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseUrls("http://0.0.0.0:10080");
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSingleton<ItemStore>();
