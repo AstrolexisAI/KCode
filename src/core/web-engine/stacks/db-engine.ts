@@ -198,12 +198,28 @@ function genCreateSQL(entities: Entity[], type: DbProjectType): string {
 
   if (type === "postgres") lines.push("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n");
 
+  const ifNotExists = type !== "mssql" ? "IF NOT EXISTS " : "";
+  const mapDefault = (d: string): string => {
+    if (type === "mssql") {
+      if (d === "gen_random_uuid()") return "NEWID()";
+      if (d === "now()") return "GETDATE()";
+      if (d === "false") return "0";
+      if (d === "true") return "1";
+    }
+    return d;
+  };
+
   for (const e of entities) {
-    lines.push(`CREATE TABLE IF NOT EXISTS ${e.table} (`);
+    if (type === "mssql") {
+      lines.push(`IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = '${e.table}')`);
+      lines.push(`CREATE TABLE ${e.table} (`);
+    } else {
+      lines.push(`CREATE TABLE ${ifNotExists}${e.table} (`);
+    }
     const cols: string[] = [];
     for (const f of e.fields) {
       let col = `  ${f.name} ${mapType(f.type, type)}`;
-      if (f.default) col += ` DEFAULT ${f.default}`;
+      if (f.default) col += ` DEFAULT ${mapDefault(f.default)}`;
       if (f.unique) col += " UNIQUE";
       if (!f.nullable && f.name !== "id") col += " NOT NULL";
       if (f.name === "id") col += " PRIMARY KEY";
@@ -217,11 +233,12 @@ function genCreateSQL(entities: Entity[], type: DbProjectType): string {
     lines.push(");\n");
 
     // Indexes
+    const idxPrefix = type === "mssql" ? "CREATE INDEX" : `CREATE INDEX ${ifNotExists}`;
     for (const f of e.fields) {
-      if (f.ref) lines.push(`CREATE INDEX IF NOT EXISTS idx_${e.table}_${f.name} ON ${e.table}(${f.name});`);
-      if (f.name === "slug" || f.name === "email") lines.push(`CREATE INDEX IF NOT EXISTS idx_${e.table}_${f.name} ON ${e.table}(${f.name});`);
+      if (f.ref) lines.push(`${idxPrefix} idx_${e.table}_${f.name} ON ${e.table}(${f.name});`);
+      if (f.name === "slug" || f.name === "email") lines.push(`${idxPrefix} idx_${e.table}_${f.name} ON ${e.table}(${f.name});`);
     }
-    if (e.fields.find(f => f.name === "created_at")) lines.push(`CREATE INDEX IF NOT EXISTS idx_${e.table}_created_at ON ${e.table}(created_at DESC);`);
+    if (e.fields.find(f => f.name === "created_at")) lines.push(`${idxPrefix} idx_${e.table}_created_at ON ${e.table}(created_at DESC);`);
     lines.push("");
   }
 

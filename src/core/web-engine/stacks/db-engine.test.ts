@@ -169,8 +169,12 @@ describe("db-engine", () => {
       expect(r.config.type).toBe("mssql");
       expect(r.config.port).toBe(1433);
       const sql = readFileSync(join(r.projectPath, "sql/schema.sql"), "utf-8");
-      expect(sql).toContain("UNIQUEIDENTIFIER"); // UUID mapped to UNIQUEIDENTIFIER
+      expect(sql).toContain("UNIQUEIDENTIFIER");
       expect(sql).toContain("NVARCHAR");
+      expect(sql).toContain("NEWID()");
+      expect(sql).toContain("GETDATE()");
+      expect(sql).toContain("BIT DEFAULT 0");
+      expect(sql).toContain("sys.tables");
       const compose = readFileSync(join(r.projectPath, "docker-compose.yml"), "utf-8");
       expect(compose).toContain("mssql/server");
       expect(compose).toContain("ACCEPT_EULA");
