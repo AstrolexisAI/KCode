@@ -485,9 +485,20 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   const runMatch = lower.match(/(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
   if (runMatch) {
     const requestedPort = runMatch[1] ? parseInt(runMatch[1], 10) : undefined;
-    const srv = detectDevServer(cwd, requestedPort);
+
+    // Try cwd first, then last created project
+    let srv = detectDevServer(cwd, requestedPort);
+    let serveCwd = cwd;
+    if (!srv) {
+      const lastProject = (globalThis as any).__kcode_last_project as string | undefined;
+      if (lastProject && existsSync(lastProject)) {
+        srv = detectDevServer(lastProject, requestedPort);
+        if (srv) serveCwd = lastProject;
+      }
+    }
+
     if (srv) {
-      return startDevServer(srv, cwd);
+      return startDevServer(srv, serveCwd);
     }
     return { handled: true, output: "  No project detected. Need package.json, Cargo.toml, go.mod, or similar." };
   }

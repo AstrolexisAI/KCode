@@ -600,7 +600,11 @@ export class ConversationManager {
 
                 // Auto-cd into the project so "levantalo" works immediately
                 this.config.workingDirectory = webResult.projectPath;
-                try { process.chdir(webResult.projectPath); } catch {}
+                try {
+                  process.chdir(webResult.projectPath);
+                  // Store last project path for Level 1 handlers
+                  (globalThis as any).__kcode_last_project = webResult.projectPath;
+                } catch {}
 
                 this.state.messages.push({ role: "user", content: userMessage });
                 this.state.messages.push({ role: "assistant", content: summary });
