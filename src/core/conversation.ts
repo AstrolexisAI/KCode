@@ -583,22 +583,22 @@ export class ConversationManager {
               const totalFiles = webResult.machineFiles + webResult.llmFiles;
 
               if (webResult.llmFiles === 0) {
-                // 100% machine — respond directly, skip LLM
+                // 100% machine — show progress, then result
+                yield { type: "turn_start" };
+
+                // Step 1: Show project creation
+                yield { type: "text_delta", text: `  ⚡ Creating ${webResult.intent.siteType} project...\n` };
+
                 const summary = [
                   `  ✅ Project created: ${webResult.projectPath}`,
                   `  Type: ${webResult.intent.siteType}`,
                   `  Files: ${totalFiles} (${webResult.machineFiles} machine, 0 LLM)`,
                   `  Stack: Next.js + React + Tailwind CSS`,
-                  "",
-                  `  To run:`,
-                  `    cd ${webResult.projectPath}`,
-                  `    npm install`,
-                  `    npm run dev`,
-                  "",
-                  `  Or use: "levantalo en el puerto 15623"`,
                 ].join("\n");
 
-                // Save last project path so "levantalo" finds it
+                yield { type: "text_delta", text: summary + "\n" };
+
+                // Save last project path
                 this.config.workingDirectory = webResult.projectPath;
                 try {
                   process.chdir(webResult.projectPath);
@@ -607,23 +607,25 @@ export class ConversationManager {
                   writeFileSync(kcodePath("last-project"), webResult.projectPath);
                 } catch {}
 
-                // Check if user also asked to run the project (multi-intent)
+                // Step 2: Check if user also asked to run
                 const runMatch = userMessage.match(/(?:levant[ae](?:lo|la)?|run|start|launch|arranca|ejecuta|inicia|lanza)(?:\s+(?:.*?))?(?:(?:en|on|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
-                let runOutput = "";
                 if (runMatch) {
-                  const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
                   const port = runMatch[1] ? parseInt(runMatch[1], 10) : 10080;
+                  yield { type: "text_delta", text: `\n  ⚡ Installing dependencies...\n` };
+                  const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
                   const l1 = tryLevel1(`levantalo en el puerto ${port}`, webResult.projectPath);
-                  if (l1.handled) runOutput = "\n\n" + l1.output;
+                  if (l1.handled) {
+                    yield { type: "text_delta", text: l1.output + "\n" };
+                  }
+                } else {
+                  yield { type: "text_delta", text: `\n  To run:\n    cd ${webResult.projectPath}\n    npm install && npm run dev\n\n  Or: "levantalo en el puerto 15623"\n` };
                 }
 
-                const fullSummary = summary + runOutput;
+                const fullText = summary;
                 this.state.messages.push({ role: "user", content: userMessage });
-                this.state.messages.push({ role: "assistant", content: fullSummary });
-                yield { type: "turn_start" };
-                yield { type: "text_delta", text: fullSummary };
+                this.state.messages.push({ role: "assistant", content: fullText });
                 yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
-                log.info("orchestrator", `Web engine 100% machine: ${webResult.intent.siteType} (0 tokens)${runOutput ? " + auto-serve" : ""}`);
+                log.info("orchestrator", `Web engine 100% machine: ${webResult.intent.siteType} (0 tokens)${runMatch ? " + auto-serve" : ""}`);
                 return;
               }
 
