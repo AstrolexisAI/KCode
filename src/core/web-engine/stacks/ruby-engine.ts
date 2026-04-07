@@ -290,7 +290,7 @@ puts "${cfg.name} started"
 require "rack/test"
 require_relative "../app"
 
-RSpec.describe "#{cfg.name} API" do
+RSpec.describe "${cfg.name} API" do
   include Rack::Test::Methods
 
   def app
