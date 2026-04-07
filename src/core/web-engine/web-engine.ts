@@ -69,7 +69,7 @@ export function createWebProject(
     const baseConfigFiles = baseTemplate.files.filter(f =>
       f.path === "package.json" || f.path === "next.config.ts" || f.path === "tsconfig.json" ||
       f.path === "postcss.config.mjs" || f.path === "tailwind.config.ts" || f.path === ".gitignore" ||
-      f.path === "README.md"
+      f.path === "README.md" || f.path === "src/app/globals.css"
     );
     // Specialized files override any base files with same path
     const specialPaths = new Set(specializedFiles.map(f => f.path));
