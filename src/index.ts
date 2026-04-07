@@ -494,9 +494,26 @@ async function runMain(
       }
     }
 
-    // Auto-start llama-server and wait for model to be fully loaded
+    // ── Smart startup: detect local/cloud capability ──
     profileCheckpoint("server_check");
     if (isSetupComplete()) {
+      const { resolveStartup, checkCloudProviders } = await import("./core/startup-resolver");
+      const startup = await resolveStartup();
+
+      if (startup.needsPrompt && startup.mode === "none" && !startup.message.includes("Choose")) {
+        // No local, no cloud — guide to setup
+        const providers = checkCloudProviders();
+        console.log(`\n\x1b[33m⚠ ${startup.message}\x1b[0m\n`);
+        console.log("  Available cloud providers:");
+        for (const p of providers) {
+          console.log(`    ${p.configured ? "\x1b[32m✓\x1b[0m" : "\x1b[2m○\x1b[0m"} ${p.name} ${p.configured ? "(configured)" : `(set ${p.envVar})`}`);
+        }
+        console.log(`\n  Run \x1b[1mkcode setup\x1b[0m or \x1b[1m/cloud\x1b[0m inside KCode to configure.\n`);
+        // Don't exit — let it fall through to setup wizard or TUI
+      } else if (startup.mode === "cloud" && startup.message) {
+        process.stderr.write(`\x1b[36mℹ\x1b[0m ${startup.message}\n`);
+      }
+
       // Check if the selected model has a registered baseUrl (external server)
       let externalServerUrl: string | null = null;
       try {
@@ -605,9 +622,13 @@ async function runMain(
             process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
           }
         } else {
+          // Model failed to load — suggest cloud fallback
           console.error(
-            `\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s. Check ~/.kcode/server.log\x1b[0m`,
+            `\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s.\x1b[0m`,
           );
+          console.error(`  Check: \x1b[2m~/.kcode/server.log\x1b[0m`);
+          console.error(`\n  \x1b[33mTip:\x1b[0m If your hardware can't run local models, use cloud inference:`);
+          console.error(`  Run \x1b[1mkcode setup\x1b[0m or use \x1b[1m/cloud\x1b[0m to configure Anthropic, OpenAI, or other providers.\n`);
           process.exit(1);
         }
       } // close else (local llama.cpp server management)
