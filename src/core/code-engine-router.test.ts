@@ -120,6 +120,68 @@ describe("code-engine-router", () => {
     expect(detectCodeEngine("debug the Java test")).toBeNull();
   });
 
+  // ── Auto-selector tests ──
+  test("auto-selects Go for API without explicit language", () => {
+    expect(detectCodeEngine("create an API for user management")?.engine).toBe("go");
+    expect(detectCodeEngine("build a backend microservice")?.engine).toBe("go");
+  });
+
+  test("auto-selects Flutter for mobile app", () => {
+    expect(detectCodeEngine("create a mobile app for banking")?.engine).toBe("dart");
+    expect(detectCodeEngine("make a mobile app for banking")?.engine).toBe("dart");
+  });
+
+  test("auto-selects Go for CLI tools", () => {
+    expect(detectCodeEngine("create a CLI tool for file management")?.engine).toBe("go");
+    expect(detectCodeEngine("build a terminal automation tool")?.engine).toBe("go");
+  });
+
+  test("auto-selects Python for data/analytics", () => {
+    expect(detectCodeEngine("create a data pipeline with charts")?.engine).toBe("python");
+    expect(detectCodeEngine("build a scraper for real data")?.engine).toBe("python");
+    expect(detectCodeEngine("create a wallstreet dashboard cinematographic, real data")?.engine).toBe("python");
+  });
+
+  test("auto-selects Lua for games", () => {
+    expect(detectCodeEngine("create a 2D game with physics")?.engine).toBe("lua");
+    expect(detectCodeEngine("build a game with sprites and player")?.engine).toBe("lua");
+  });
+
+  test("auto-selects Elixir for realtime", () => {
+    expect(detectCodeEngine("create a realtime chat application")?.engine).toBe("elixir");
+    expect(detectCodeEngine("build a websocket notification service")?.engine).toBe("elixir");
+  });
+
+  test("auto-selects C++ for embedded", () => {
+    expect(detectCodeEngine("create firmware for Arduino sensor")?.engine).toBe("cpp");
+    expect(detectCodeEngine("build an IoT device controller")?.engine).toBe("cpp");
+  });
+
+  test("auto-selects Python for ML/AI", () => {
+    expect(detectCodeEngine("create a machine learning model")?.engine).toBe("python");
+    expect(detectCodeEngine("build an AI training pipeline")?.engine).toBe("python");
+  });
+
+  test("auto-selects C# for desktop", () => {
+    expect(detectCodeEngine("create a desktop GUI application")?.engine).toBe("csharp");
+    expect(detectCodeEngine("build a native app with tray icon")?.engine).toBe("csharp");
+  });
+
+  test("explicit language overrides auto-select", () => {
+    // "API" would auto-select Go, but "Rust" is explicit
+    expect(detectCodeEngine("create a Rust API server")?.engine).toBe("rust");
+    // "mobile app" would auto-select Flutter, but "Swift" is explicit
+    expect(detectCodeEngine("create a SwiftUI mobile app")?.engine).toBe("swift");
+    // "data pipeline" would auto-select Python, but "Scala Spark" is explicit
+    expect(detectCodeEngine("create a Scala Spark data pipeline")?.engine).toBe("scala");
+  });
+
+  test("web type returns null (handled by web engine separately)", () => {
+    expect(detectCodeEngine("create a landing page")).toBeNull();
+    expect(detectCodeEngine("build a dashboard website")).toBeNull();
+    expect(detectCodeEngine("create a blog with portfolio")).toBeNull();
+  });
+
   // Spanish support
   test("detects Spanish creation intent", () => {
     expect(detectCodeEngine("crear un proyecto en Rust")?.engine).toBe("rust");

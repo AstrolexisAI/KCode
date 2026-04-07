@@ -48,15 +48,61 @@ const ENGINE_PATTERNS: Array<{ engine: EngineId; pattern: RegExp }> = [
 // Must also match "create" intent — don't hijack "fix my Go code" or "explain this Python"
 const CREATE_INTENT = /\b(?:crea(?:r|te|ting)?|make|build|genera(?:te|r)?|scaffold|setup|new|init|starter|bootstrap|hazme|construir|proyecto\s+(?:de|en|con)|project\s+(?:in|with|for|using))\b/i;
 
+// ── Auto-selector: infer best engine from project description ──
+
+interface ProjectSignal { type: "web" | "api" | "mobile" | "cli" | "data" | "game" | "realtime" | "embedded" | "ml" | "desktop"; }
+
+function detectProjectType(msg: string): ProjectSignal | null {
+  const lower = msg.toLowerCase();
+  // Data/analytics checks before web — "dashboard with real data" is data, not web
+  const hasDataSignal = /\b(?:data|pipeline|etl|analytics|chart|graph|csv|report|scraper|crawler|real\s*data|stock|trading|financial|wallstreet|wall\s*street|crypto|market)\b/i.test(lower);
+  if (hasDataSignal) return { type: "data" };
+  if (/\b(?:dashboard|landing|page|website|sitio|portal|blog|portfolio|store|tienda|saas|admin\s*panel|cms)\b/i.test(lower)) return { type: "web" };
+  if (/\b(?:api|backend|server|microservice|endpoint|servicio|servidor)\b/i.test(lower)) return { type: "api" };
+  if (/\b(?:desktop|gui|window|native\s*app|tray|menubar)\b/i.test(lower)) return { type: "desktop" };
+  if (/\b(?:mobile|app|ios|android|tablet|telefono|celular)\b/i.test(lower)) return { type: "mobile" };
+  if (/\b(?:cli|command|terminal|tool|herramienta|script|automation|cron)\b/i.test(lower)) return { type: "cli" };
+  if (/\b(?:game|juego|2d|3d|engine|sprite|physics|player)\b/i.test(lower)) return { type: "game" };
+  if (/\b(?:realtime|real.?time|websocket|chat|streaming|live|notification)\b/i.test(lower)) return { type: "realtime" };
+  if (/\b(?:embedded|firmware|iot|sensor|arduino|raspberry|microcontroller)\b/i.test(lower)) return { type: "embedded" };
+  if (/\b(?:ml|machine\s*learn|ai|model|train|neural|deep\s*learn|torch|tensorflow|llm)\b/i.test(lower)) return { type: "ml" };
+  return null;
+}
+
+// Best engine per project type (based on ecosystem strength)
+const AUTO_SELECT: Record<string, EngineId> = {
+  web: "node",        // Next.js via web engine (handled by isWebRequest in conversation.ts)
+  api: "go",          // Go Chi — fast, simple, production-proven
+  mobile: "dart",     // Flutter — cross-platform
+  cli: "go",          // Go — single binary, fast compilation
+  data: "python",     // Python — pandas, charts, scrapers
+  game: "lua",        // Love2D — simple 2D games
+  realtime: "elixir", // Elixir — built for concurrency
+  embedded: "cpp",    // C/C++ — hardware level
+  ml: "python",       // Python — PyTorch, TensorFlow
+  desktop: "csharp",  // .NET MAUI — cross-platform desktop
+};
+
 export function detectCodeEngine(message: string): EngineMatch | null {
   // Must have creation intent
   if (!CREATE_INTENT.test(message)) return null;
 
+  // 1. Explicit language/stack match (highest priority)
   for (const { engine, pattern } of ENGINE_PATTERNS) {
     if (pattern.test(message)) {
-      return { engine, confidence: 0.9 };
+      return { engine, confidence: 0.95 };
     }
   }
+
+  // 2. Auto-select: infer engine from project type description
+  const projectType = detectProjectType(message);
+  if (projectType) {
+    // "web" type is handled by isWebRequest in conversation.ts, so skip it here
+    if (projectType.type === "web") return null;
+    const engine = AUTO_SELECT[projectType.type];
+    if (engine) return { engine, confidence: 0.75 };
+  }
+
   return null;
 }
 
