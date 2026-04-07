@@ -186,12 +186,14 @@ impl IntoResponse for AppError {
 type AppState = Arc<Mutex<Vec<Item>>>;
 
 fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = RandomState::new().build_hasher();
+    hasher.write_u64(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_nanos();
-    format!("{:016x}", nanos)
+        .as_nanos() as u64);
+    format!("{:016x}", hasher.finish())
 }
 
 fn now_rfc3339() -> String {
@@ -200,8 +202,28 @@ fn now_rfc3339() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // Simple UTC timestamp
-    format!("{}Z", secs)
+    let days = secs / 86400;
+    let time_of_day = secs % 86400;
+    let hours = time_of_day / 3600;
+    let minutes = (time_of_day % 3600) / 60;
+    let seconds = time_of_day % 60;
+    // Convert days since epoch to Y-M-D
+    let mut y = 1970i64;
+    let mut remaining = days as i64;
+    loop {
+        let days_in_year: i64 = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 366 } else { 365 };
+        if remaining < days_in_year { break; }
+        remaining -= days_in_year;
+        y += 1;
+    }
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let month_days: [i64; 12] = [31, if leap {29} else {28}, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut m = 0usize;
+    while m < 12 && remaining >= month_days[m] {
+        remaining -= month_days[m];
+        m += 1;
+    }
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m + 1, remaining + 1, hours, minutes, seconds)
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -498,10 +520,6 @@ use tower::ServiceExt;
 // Note: for this to work, main.rs exposes create_router and AppState as pub
 use ${cfg.name.replace(/-/g, "_")}::*;
 
-fn test_state() -> Arc<Mutex<Vec<()>>> {
-    Arc::new(Mutex::new(Vec::new()))
-}
-
 #[tokio::test]
 async fn test_health_endpoint() {
     let state: AppState = Arc::new(Mutex::new(Vec::new()));
@@ -659,6 +677,54 @@ async fn test_delete_item_not_found() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_update_item_via_put() {
+    let state: AppState = Arc::new(Mutex::new(Vec::new()));
+    let app = create_router(state.clone());
+
+    // Create an item first
+    let create_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/items")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    serde_json::to_string(&json!({"name": "Original", "description": "original desc"})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let body = axum::body::to_bytes(create_response.into_body(), usize::MAX).await.unwrap();
+    let created: Value = serde_json::from_slice(&body).unwrap();
+    let id = created["id"].as_str().unwrap();
+
+    // Update via PUT
+    let app = create_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(format!("/items/{}", id))
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    serde_json::to_string(&json!({"name": "Updated", "description": "new desc"})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let updated: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(updated["name"], "Updated");
+    assert_eq!(updated["description"], "new desc");
 }
 ` : `// Integration tests for ${cfg.name}
 
