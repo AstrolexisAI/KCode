@@ -598,6 +598,10 @@ export class ConversationManager {
                   `  Or use: "levantalo en el puerto 15623"`,
                 ].join("\n");
 
+                // Auto-cd into the project so "levantalo" works immediately
+                this.config.workingDirectory = webResult.projectPath;
+                try { process.chdir(webResult.projectPath); } catch {}
+
                 this.state.messages.push({ role: "user", content: userMessage });
                 this.state.messages.push({ role: "assistant", content: summary });
                 yield { type: "turn_start" };
