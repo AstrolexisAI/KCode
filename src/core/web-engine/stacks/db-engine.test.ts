@@ -163,6 +163,20 @@ describe("db-engine", () => {
     });
   });
 
+  test("creates SQL Server project", () => {
+    withTmp((dir) => {
+      const r = createDbProject("SQL Server database with users and orders", dir);
+      expect(r.config.type).toBe("mssql");
+      expect(r.config.port).toBe(1433);
+      const sql = readFileSync(join(r.projectPath, "sql/schema.sql"), "utf-8");
+      expect(sql).toContain("UNIQUEIDENTIFIER"); // UUID mapped to UNIQUEIDENTIFIER
+      expect(sql).toContain("NVARCHAR");
+      const compose = readFileSync(join(r.projectPath, "docker-compose.yml"), "utf-8");
+      expect(compose).toContain("mssql/server");
+      expect(compose).toContain("ACCEPT_EULA");
+    });
+  });
+
   test("Redis project has no ORM", () => {
     withTmp((dir) => {
       const r = createDbProject("Redis cache", dir);
