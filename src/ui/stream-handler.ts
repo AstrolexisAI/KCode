@@ -85,6 +85,8 @@ export async function processStreamEvents(
         if (!isEngineMode) {
           setLoadingMessage("Connecting to model...");
           setSpinnerPhase("thinking");
+        } else {
+          setLoadingMessage("");
         }
         // Show any pending file change suggestions
         {
