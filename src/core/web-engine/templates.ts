@@ -44,7 +44,7 @@ function nextjsBase(intent: DetectedIntent): FileTemplate[] {
           next: "15.3.0",
           react: "19.1.0",
           "react-dom": "19.1.0",
-          ...(intent.hasAuth ? { "next-auth": "^5.0.0" } : {}),
+          ...(intent.hasAuth ? { "next-auth": "^4.24.0" } : {}),
           ...(intent.hasPayments ? { stripe: "^17.0.0" } : {}),
         },
         devDependencies: {
