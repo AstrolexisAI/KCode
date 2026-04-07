@@ -316,7 +316,9 @@ export default function App({ config, conversationManager, tools, initialSession
     process.stdout.write(`\x1b]0;✅ KCode\x07`);
   }, [mode, scanProgress?.active]);
 
-  // Ask user if they want to resume the previous session's model
+  // Ask user if they want to resume the previous session's model.
+  // Smart flow: only ask ONCE. If user already confirmed this model
+  // in a previous session, auto-switch without asking.
   const [pendingLastModel, setPendingLastModel] = useState<string | null>(null);
 
   useEffect(() => {
@@ -325,9 +327,31 @@ export default function App({ config, conversationManager, tools, initialSession
         const { loadUserSettingsRaw } = await import("../core/config.js");
         const settings = await loadUserSettingsRaw();
         const lastModel = settings.lastSessionModel as string | undefined;
-        if (lastModel && lastModel !== config.model) {
-          setPendingLastModel(lastModel);
+        const confirmedModel = settings.confirmedModel as string | undefined;
+
+        if (!lastModel || lastModel === config.model) return;
+
+        // If user previously confirmed this model, auto-switch silently
+        if (lastModel === confirmedModel) {
+          config.model = lastModel;
+          config.modelExplicitlySet = true;
+          conversationManager.getConfig().model = lastModel;
+          conversationManager.getConfig().modelExplicitlySet = true;
+          const { getModelContextSize } = await import("../core/models.js");
+          const ctxSize = await getModelContextSize(lastModel);
+          if (ctxSize) {
+            config.contextWindowSize = ctxSize;
+            conversationManager.getConfig().contextWindowSize = ctxSize;
+          }
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: `  Using ${lastModel} (saved preference).` },
+          ]);
+          return;
         }
+
+        // Model changed since last confirmation — ask the user
+        setPendingLastModel(lastModel);
       } catch {
         // Ignore — settings may not exist yet
       }
@@ -351,6 +375,9 @@ export default function App({ config, conversationManager, tools, initialSession
             config.contextWindowSize = ctxSize;
             conversationManager.getConfig().contextWindowSize = ctxSize;
           }
+          // Save as confirmed — won't ask again on next startup
+          const { saveUserSettingsRaw } = await import("../core/config.js");
+          await saveUserSettingsRaw({ confirmedModel: lastModel });
           setCompleted((prev) => [
             ...prev,
             {
@@ -362,6 +389,11 @@ export default function App({ config, conversationManager, tools, initialSession
         })();
       } else {
         setPendingLastModel(null);
+        (async () => {
+          // Save current model as confirmed — won't ask again
+          const { saveUserSettingsRaw } = await import("../core/config.js");
+          await saveUserSettingsRaw({ confirmedModel: config.model, lastSessionModel: config.model });
+        })();
         setCompleted((prev) => [
           ...prev,
           { kind: "text", role: "assistant", text: `  Continuing with ${config.model}.` },
@@ -529,8 +561,8 @@ export default function App({ config, conversationManager, tools, initialSession
         conversationManager.getConfig().model = newModel;
         conversationManager.getConfig().modelExplicitlySet = true;
 
-        // Persist last used model for next session prompt
-        await saveUserSettingsRaw({ lastSessionModel: newModel });
+        // Persist last used model + confirm it (won't ask on next startup)
+        await saveUserSettingsRaw({ lastSessionModel: newModel, confirmedModel: newModel });
 
         // Update context window size from registry
         const { getModelContextSize } = await import("../core/models.js");
@@ -640,9 +672,9 @@ export default function App({ config, conversationManager, tools, initialSession
         config.anthropicApiKey = process.env.ANTHROPIC_API_KEY;
       }
 
-      // Persist last used model for next session prompt
+      // Persist last used model + confirm it (won't ask on next startup)
       import("../core/config.js").then(({ saveUserSettingsRaw }) =>
-        saveUserSettingsRaw({ lastSessionModel: newModel }),
+        saveUserSettingsRaw({ lastSessionModel: newModel, confirmedModel: newModel }),
       );
 
       const isLocal =
