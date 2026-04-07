@@ -486,15 +486,21 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   if (runMatch) {
     const requestedPort = runMatch[1] ? parseInt(runMatch[1], 10) : undefined;
 
-    // Try cwd first, then last created project
+    // Try cwd first, then last created project (saved to file)
     let srv = detectDevServer(cwd, requestedPort);
     let serveCwd = cwd;
     if (!srv) {
-      const lastProject = (globalThis as any).__kcode_last_project as string | undefined;
-      if (lastProject && existsSync(lastProject)) {
-        srv = detectDevServer(lastProject, requestedPort);
-        if (srv) serveCwd = lastProject;
-      }
+      try {
+        const { kcodeHome } = require("../paths.js");
+        const lastProjectFile = join(kcodeHome(), "last-project");
+        if (existsSync(lastProjectFile)) {
+          const lastProject = readFileSync(lastProjectFile, "utf-8").trim();
+          if (lastProject && existsSync(lastProject)) {
+            srv = detectDevServer(lastProject, requestedPort);
+            if (srv) serveCwd = lastProject;
+          }
+        }
+      } catch { /* ignore */ }
     }
 
     if (srv) {
