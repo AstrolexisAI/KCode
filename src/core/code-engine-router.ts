@@ -13,22 +13,20 @@ interface EngineMatch {
   confidence: number;
 }
 
-// Order matters — more specific patterns first
+// Order: high-confidence infra FIRST, then languages, then generic stacks
 const ENGINE_PATTERNS: Array<{ engine: EngineId; pattern: RegExp }> = [
-  // Specific stacks/infra (check before languages)
-  { engine: "terraform", pattern: /\b(?:terraform|infra(?:structure)?(?:\s+as\s+code)?|iac|vpc|ec2|s3|cloud\s*formation|hcl)\b/i },
+  // ── High-confidence infra (when the PRIMARY intent is infra, not language) ──
+  { engine: "terraform", pattern: /\b(?:terraform|infra(?:structure)?(?:\s+as\s+code)?|iac|vpc|hcl)\b/i },
   { engine: "docker", pattern: /\b(?:docker(?:\s*file)?|docker.?compose|containerize)\b/i },
   { engine: "monorepo", pattern: /\b(?:monorepo|turborepo|nx\s+workspace|mono.?repo)\b/i },
   { engine: "cicd", pattern: /\b(?:ci\/?cd|github\s*action|gitlab\s*ci|jenkins(?:file)?|ci\s+pipeline)\b/i },
   { engine: "db", pattern: /\b(?:database|schema|migration|postgres(?:ql)?|mysql|sqlite|mongo(?:db)?|redis|sql\s*server|mssql|prisma|drizzle|typeorm|knex|mongoose)\b/i },
   { engine: "css", pattern: /\b(?:design\s*system|css\s+(?:framework|library|component)|tailwind\s+plugin|sass\s+framework|animation\s+library|ui\s*kit)\b/i },
-  { engine: "fullstack", pattern: /\b(?:fullstack|full.?stack|frontend.{0,5}backend|front.{0,5}back)\b/i },
-  { engine: "api", pattern: /\b(?:rest\s*api|express\s*api|api\s+(?:with|con|para)\s+(?:users|products|auth))\b/i },
 
-  // Languages — specific frameworks first
+  // ── Languages (explicit mention wins over generic stacks) ──
   { engine: "dart", pattern: /\b(?:flutter|dart)\b/i },
   { engine: "rust", pattern: /\b(?:rust|cargo|axum|tokio|actix)\b/i },
-  { engine: "go", pattern: /\b(?:golang|go\s+(?:api|server|cli|project|app)|chi\s+|gin\s+|go\s+lang)\b/i },
+  { engine: "go", pattern: /\b(?:golang|go\s+(?:api|server|cli|project|app|rest)|chi\s+|gin\s+|go\s+lang)\b/i },
   { engine: "swift", pattern: /\b(?:swift(?:ui)?|vapor|ios\s+app|macos\s+app|xcode)\b/i },
   { engine: "kotlin", pattern: /\b(?:kotlin|ktor|android\s+(?:app|project)|jetpack\s*compose)\b/i },
   { engine: "scala", pattern: /\b(?:scala|http4s|akka|spark\s+(?:job|pipeline|app)|sbt)\b/i },
@@ -36,13 +34,17 @@ const ENGINE_PATTERNS: Array<{ engine: EngineId; pattern: RegExp }> = [
   { engine: "elixir", pattern: /\b(?:elixir|phoenix|liveview|plug|mix\s+project|otp)\b/i },
   { engine: "zig", pattern: /\b(?:zig)\b/i },
   { engine: "lua", pattern: /\b(?:lua|love2d|neovim\s+plugin|roblox)\b/i },
-  { engine: "csharp", pattern: /\b(?:c#|csharp|\.?net\b|dotnet|asp\.?net|blazor|maui)\b/i },
+  { engine: "csharp", pattern: /(?:c#|csharp|\b(?:\.?net|dotnet|asp\.?net|blazor|maui)\b)/i },
   { engine: "java", pattern: /\b(?:java\s+(?:api|app|project|server)|spring\s*boot|spring|gradle\s+project|maven)\b/i },
   { engine: "php", pattern: /\b(?:php|laravel|symfony|slim\s+(?:api|app)|wordpress\s+plugin|composer\s+project)\b/i },
   { engine: "ruby", pattern: /\b(?:ruby|rails|sinatra|gem\s+(?:library|package)|bundler|sidekiq)\b/i },
   { engine: "python", pattern: /\b(?:python|fastapi|django|flask|pip|poetry|pytorch|pandas)\b/i },
-  { engine: "cpp", pattern: /\b(?:c\+\+|cpp|cmake|c\s+(?:library|server|project|program))\b|\bC\+\+/i },
+  { engine: "cpp", pattern: /(?:\bc\+\+|cpp|cmake|\bc\s+(?:library|server|project|program)\b)|C\+\+/i },
   { engine: "node", pattern: /\b(?:node\.?js|npm\s+package|typescript\s+(?:cli|project|library)|bun\s+project)\b/i },
+
+  // ── Generic stacks (checked last) ──
+  { engine: "fullstack", pattern: /\b(?:fullstack|full.?stack|frontend.{0,5}backend|front.{0,5}back)\b/i },
+  { engine: "api", pattern: /\b(?:rest\s*api|express\s*api|api\s+(?:with|con|para)\s+(?:users|products|auth))\b/i },
 ];
 
 // Must also match "create" intent — don't hijack "fix my Go code" or "explain this Python"
