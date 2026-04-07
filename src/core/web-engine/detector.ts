@@ -27,6 +27,92 @@ interface SiteRule {
 }
 
 const SITE_RULES: SiteRule[] = [
+  // ── Specialized templates (check first — more specific) ──
+  {
+    type: "trading-dashboard",
+    patterns: [
+      /\b(?:trading|stock|wallstreet|wall\s*street|candlestick|ticker|financial\s+dashboard|market\s+(?:dashboard|heatmap)|portfolio\s+tracker|order\s*book)\b/i,
+      /\b(?:bolsa|acciones|mercado\s+(?:financiero|de\s+valores))\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["candlestick", "ticker", "heatmap", "portfolio", "orderbook", "dark-mode"],
+    defaultPages: ["dashboard"],
+  },
+  {
+    type: "analytics",
+    patterns: [
+      /\b(?:analytics\s+dashboard|web\s+analytics|traffic\s+dashboard|google\s+analytics|data\s+visualization|kpi\s+dashboard)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["kpis", "charts", "geography", "realtime", "sources", "dark-mode"],
+    defaultPages: ["dashboard"],
+  },
+  {
+    type: "admin-panel",
+    patterns: [
+      /\b(?:admin\s*panel|back\s*office|cms\s+panel|crud\s+dashboard|data\s+table|user\s+management\s+panel)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["sidebar", "datatable", "metrics", "activity", "dark-mode"],
+    defaultPages: ["dashboard", "users", "settings"],
+  },
+  {
+    type: "social-feed",
+    patterns: [
+      /\b(?:social\s+(?:media|feed|network)|news\s*feed|twitter\s+clone|instagram\s+clone|post\s+feed|timeline\s+feed)\b/i,
+      /\b(?:red\s+social|feed\s+social)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["posts", "comments", "likes", "stories", "profiles", "dark-mode"],
+    defaultPages: ["feed", "profile", "messages"],
+  },
+  {
+    type: "crm",
+    patterns: [
+      /\b(?:crm|customer\s+relationship|sales\s+pipeline|deal\s+tracker|contact\s+management|pipeline\s+board)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["pipeline", "contacts", "deals", "activity", "dark-mode"],
+    defaultPages: ["dashboard", "contacts", "deals"],
+  },
+  {
+    type: "project-mgmt",
+    patterns: [
+      /\b(?:project\s+manag|kanban|task\s+(?:board|manager)|gantt|sprint\s+board|trello\s+clone|jira\s+clone)\b/i,
+      /\b(?:gesti[oó]n\s+de\s+proyectos|tablero\s+de\s+tareas)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["kanban", "tasks", "timeline", "team", "calendar", "dark-mode"],
+    defaultPages: ["board", "timeline", "team"],
+  },
+  {
+    type: "chat",
+    patterns: [
+      /\b(?:chat\s+app|messag(?:ing|e)\s+app|whatsapp\s+clone|slack\s+clone|real.?time\s+chat|conversation)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["messages", "contacts", "online-status", "dark-mode"],
+    defaultPages: ["chat"],
+  },
+  {
+    type: "education",
+    patterns: [
+      /\b(?:lms|learning\s+(?:management|platform)|course\s+platform|education|e-?learning|online\s+courses?|udemy\s+clone)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["courses", "lessons", "progress", "leaderboard", "dark-mode"],
+    defaultPages: ["dashboard", "courses", "course"],
+  },
+  {
+    type: "iot",
+    patterns: [
+      /\b(?:iot|device\s+(?:monitor|dashboard)|sensor\s+dashboard|smart\s+home|connected\s+devices|telemetry)\b/i,
+    ],
+    defaultStack: "nextjs",
+    defaultFeatures: ["devices", "gauges", "alerts", "sensors", "dark-mode"],
+    defaultPages: ["dashboard", "devices", "alerts"],
+  },
+  // ── Original templates ──
   {
     type: "saas",
     patterns: [
