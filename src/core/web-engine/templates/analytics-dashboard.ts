@@ -199,7 +199,7 @@ export default function TrafficChart() {
           <p className="text-xs text-gray-500 mt-0.5">Page views over the last 30 days</p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-white">{trafficData.reduce((a, b) => a + b, 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-white">{trafficData.reduce((a, b) => a + b, 0)}</p>
           <p className="text-xs text-emerald-400">Total views</p>
         </div>
       </div>
@@ -238,7 +238,7 @@ export default function TrafficChart() {
                 <circle cx={p.x} cy={p.y} r="5" fill="#6366f1" stroke="#0a0a0a" strokeWidth="2" />
                 <rect x={p.x - 40} y={p.y - 30} width="80" height="22" rx="4" fill="#1f1f1f" />
                 <text x={p.x} y={p.y - 15} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="600">
-                  {p.value.toLocaleString()}
+                  {p.value}
                 </text>
               </>
             )}
@@ -371,8 +371,8 @@ export default function TopPages() {
             {pages.map((p) => (
               <tr key={p.path} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition">
                 <td className="px-6 py-3 font-medium text-indigo-400">{p.path}</td>
-                <td className="px-6 py-3 text-right text-gray-300">{p.views.toLocaleString()}</td>
-                <td className="px-6 py-3 text-right text-gray-400">{p.uniques.toLocaleString()}</td>
+                <td className="px-6 py-3 text-right text-gray-300">{p.views}</td>
+                <td className="px-6 py-3 text-right text-gray-400">{p.uniques}</td>
                 <td className="px-6 py-3 text-right text-gray-400">{p.avgTime}</td>
                 <td className="px-6 py-3 text-right text-gray-400">{p.bounce}</td>
               </tr>
@@ -475,7 +475,7 @@ export default function GeographyMap() {
                 <div className="flex-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-300">{c.name}</span>
-                    <span className="text-gray-500">{c.visitors.toLocaleString()}</span>
+                    <span className="text-gray-500">{c.visitors}</span>
                   </div>
                   <div className="mt-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
                     <div
@@ -611,7 +611,7 @@ export default function SourceBreakdown() {
                   <span className="text-sm text-gray-300">{s.label}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-white">{s.visitors.toLocaleString()}</span>
+                  <span className="text-sm font-medium text-white">{s.visitors}</span>
                   <span className="text-xs text-gray-500">{s.pct}%</span>
                 </div>
               </div>
