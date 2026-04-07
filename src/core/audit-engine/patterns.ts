@@ -575,7 +575,13 @@ export const JS_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /\beval\s*\(/g,
     explanation: "eval() executes arbitrary JavaScript. If input is user-controlled, this is XSS/RCE.",
-    verify_prompt: "Is the argument entirely hardcoded or internal? If ANY external input reaches eval(), respond CONFIRMED.",
+    verify_prompt: "Is the argument entirely hardcoded or internal? If ANY external input reaches eval(), respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The argument is a compile-time constant or hardcoded string literal\n" +
+      "2. The input comes from a trusted internal source (not user/network input)\n" +
+      "3. This is in test/example/documentation code\n" +
+      "4. The eval is used for JSON.parse fallback on a validated string\n" +
+      "Only respond CONFIRMED if user-controlled or external input can reach the eval() argument.",
     cwe: "CWE-95",
     fix_template: "Remove eval() or use JSON.parse() for data, Function constructor for controlled cases.",
   },
@@ -630,7 +636,13 @@ export const JS_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /(?:SECRET|API_KEY|PRIVATE_KEY|PASSWORD|TOKEN|AUTH)\s*[:=]\s*["'][A-Za-z0-9+/=_-]{16,}["']/g,
     explanation: "Hardcoded secrets in source code are exposed to anyone with repo access.",
-    verify_prompt: "Is this a real secret or a placeholder/test value? If it looks like a real key (long, random), respond CONFIRMED.",
+    verify_prompt: "Is this a real secret or a placeholder/test value? If it looks like a real key (long, random), respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The value is a placeholder ('changeme', 'xxx', 'your-api-key-here', 'TODO', 'REPLACE_ME')\n" +
+      "2. This is in test, example, or documentation code\n" +
+      "3. The value is loaded from an environment variable (process.env.X)\n" +
+      "4. The value is a well-known public key or non-secret identifier\n" +
+      "Only respond CONFIRMED if the value appears to be a real secret committed to source code in production code.",
     cwe: "CWE-798",
     fix_template: "Use process.env.SECRET_KEY or a secrets manager.",
   },
@@ -1437,7 +1449,13 @@ export const JAVA_PATTERNS: BugPattern[] = [
     languages: ["java"],
     regex: /\bObjectInputStream\s*\(/g,
     explanation: "Java ObjectInputStream deserializes arbitrary objects. Attackers can craft payloads that execute code on deserialization (Commons Collections gadget chain, etc.).",
-    verify_prompt: "Is the input stream from a trusted source (local file, internal service) or untrusted (network, user upload)? CONFIRMED if untrusted.",
+    verify_prompt: "Is the input stream from a trusted source (local file, internal service) or untrusted (network, user upload)? CONFIRMED if untrusted." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The data comes from a trusted internal source (local file written by the same app, internal service)\n" +
+      "2. An ObjectInputFilter or class whitelist is configured before deserialization\n" +
+      "3. This is in test code deserializing test fixtures\n" +
+      "4. The stream is wrapped in a filtering/validating decorator\n" +
+      "Only respond CONFIRMED if the deserialized data originates from untrusted input (network, user upload, external API) without filtering.",
     cwe: "CWE-502",
     fix_template: "Use JSON/Protobuf instead, or add a whitelist ObjectInputFilter.",
   },
@@ -1760,7 +1778,13 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     languages: ["swift"],
     regex: /(?:apiKey|secretKey|password|token|authToken)\s*[:=]\s*"[A-Za-z0-9+/=_-]{16,}"/g,
     explanation: "Hardcoded secrets in source code are exposed to anyone with app binary access (strings can be extracted from .ipa).",
-    verify_prompt: "Is this a real API key or a placeholder/example? If it looks like a real key (long random string), respond CONFIRMED.",
+    verify_prompt: "Is this a real API key or a placeholder/example? If it looks like a real key (long random string), respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The value is a placeholder ('changeme', 'xxx', 'your-api-key-here', 'TODO', 'REPLACE_ME', 'test')\n" +
+      "2. This is in test, example, or documentation code\n" +
+      "3. The value is loaded from environment, plist, keychain, or a secrets manager\n" +
+      "4. The value is a well-known public identifier (not a secret)\n" +
+      "Only respond CONFIRMED if the value appears to be a real secret committed to source code in production code.",
     cwe: "CWE-798",
     fix_template: "Load from Info.plist (excluded from repo) or a secrets manager.",
   },
@@ -2136,7 +2160,13 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     languages: ["csharp"],
     regex: /\bBinaryFormatter\s*\(\s*\)|\.Deserialize\s*\(/g,
     explanation: "BinaryFormatter deserializes arbitrary .NET objects. Microsoft marks it as dangerous — attackers can execute code via crafted payloads.",
-    verify_prompt: "Is the deserialized data from a trusted source? If from network/user input, respond CONFIRMED.",
+    verify_prompt: "Is the deserialized data from a trusted source? If from network/user input, respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The data comes from a trusted internal source (local file written by the same app, internal service)\n" +
+      "2. A type binder or whitelist restricts deserializable types\n" +
+      "3. This is in test code deserializing test fixtures\n" +
+      "4. The code is in a migration path being replaced with safe serialization\n" +
+      "Only respond CONFIRMED if the deserialized data originates from untrusted input (network, user upload, external API) without type restrictions.",
     cwe: "CWE-502",
     fix_template: "Use System.Text.Json or JsonSerializer instead of BinaryFormatter.",
   },
@@ -2147,7 +2177,13 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     languages: ["csharp"],
     regex: /(?:connectionString|ConnectionString)\s*=\s*"[^"]*(?:Password|Pwd|password)=[^"]+"/gi,
     explanation: "Connection strings with embedded passwords are exposed in source code.",
-    verify_prompt: "Is this a real connection string with credentials or a placeholder? If real, respond CONFIRMED.",
+    verify_prompt: "Is this a real connection string with credentials or a placeholder? If real, respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The password is a placeholder ('changeme', 'xxx', 'password', 'TODO', 'REPLACE_ME')\n" +
+      "2. This is in test, example, or documentation code\n" +
+      "3. The connection string is loaded from configuration/environment at runtime\n" +
+      "4. This is a local development connection (localhost with default credentials)\n" +
+      "Only respond CONFIRMED if real production credentials are hardcoded in source code.",
     cwe: "CWE-798",
     fix_template: "Use appsettings.json with User Secrets or Azure Key Vault.",
   },
@@ -2720,7 +2756,13 @@ export const DART_PATTERNS: BugPattern[] = [
     languages: ["dart"],
     regex: /(?:apiKey|secretKey|password|token)\s*[:=]\s*['"][A-Za-z0-9+/=_-]{16,}['"]/g,
     explanation: "Hardcoded secrets in Dart/Flutter apps can be extracted from the compiled binary.",
-    verify_prompt: "Is this a real key or placeholder? If real, respond CONFIRMED.",
+    verify_prompt: "Is this a real key or placeholder? If real, respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The value is a placeholder ('changeme', 'xxx', 'your-api-key-here', 'TODO', 'REPLACE_ME', 'test')\n" +
+      "2. This is in test, example, or documentation code\n" +
+      "3. The value is loaded from environment, dart-define, or a secrets manager at runtime\n" +
+      "4. The value is a well-known public identifier (not a secret)\n" +
+      "Only respond CONFIRMED if the value appears to be a real secret committed to source code in production code.",
     cwe: "CWE-798",
     fix_template: "Use --dart-define=API_KEY=xxx or flutter_dotenv package.",
   },
@@ -3142,7 +3184,13 @@ export const SQL_PATTERNS: BugPattern[] = [
     languages: ["sql"],
     regex: /GRANT\s+ALL\s+PRIVILEGES/gi,
     explanation: "Granting ALL PRIVILEGES violates least-privilege principle. Grant only needed permissions.",
-    verify_prompt: "Is this a setup/migration script for a dedicated service account, or a shared account? If overly broad, respond CONFIRMED.",
+    verify_prompt: "Is this a setup/migration script for a dedicated service account, or a shared account? If overly broad, respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. This is a local development/test setup script (not used in production)\n" +
+      "2. The GRANT is for a dedicated service account with limited scope on a specific database\n" +
+      "3. This is a temporary migration script with a corresponding REVOKE\n" +
+      "4. The user is a superadmin/DBA account intended to have full access\n" +
+      "Only respond CONFIRMED if this grants ALL PRIVILEGES to a shared or application account in production.",
     cwe: "CWE-250",
     fix_template: "GRANT SELECT, INSERT, UPDATE ON specific_table TO user;",
   },
@@ -3153,7 +3201,13 @@ export const SQL_PATTERNS: BugPattern[] = [
     languages: ["sql"],
     regex: /(?:PASSWORD|IDENTIFIED BY)\s+['"][^'"]+['"]/gi,
     explanation: "Plaintext passwords in SQL scripts are exposed to anyone with repo access.",
-    verify_prompt: "Is this a real password or a placeholder like 'changeme'? If real, respond CONFIRMED.",
+    verify_prompt: "Is this a real password or a placeholder like 'changeme'? If real, respond CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The password is a placeholder ('changeme', 'xxx', 'password', 'TODO', 'REPLACE_ME', 'secret')\n" +
+      "2. This is in test, example, seed data, or documentation code\n" +
+      "3. The password is loaded from an environment variable or secrets manager at runtime\n" +
+      "4. This is a local development setup script not intended for production\n" +
+      "Only respond CONFIRMED if a real production password is hardcoded in the SQL script.",
     cwe: "CWE-798",
     fix_template: "Use environment variables or secrets manager for credentials.",
   },
@@ -3343,7 +3397,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /\b(?:raw|extra)\s*\(\s*(?:f["']|["'].*%|["'].*\.format)/g,
     explanation: "Django raw()/extra() with string formatting bypasses ORM protections → SQL injection.",
-    verify_prompt: "Check ALL: 1. Is this using Django's parameterized form raw(sql, [params])? → FP. 2. Is user input interpolated? Only CONFIRMED if untrusted input is formatted into SQL.",
+    verify_prompt: "Check ALL: 1. Is this using Django's parameterized form raw(sql, [params])? → FP. 2. Is user input interpolated? Only CONFIRMED if untrusted input is formatted into SQL." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. Parameterized queries are used: raw('SELECT ... WHERE id = %s', [param])\n" +
+      "2. The interpolated values are integer IDs from validated/internal sources\n" +
+      "3. The query is constructed from trusted constants only (no user input)\n" +
+      "4. This is in test/migration code with no user-facing input path\n" +
+      "Only respond CONFIRMED if untrusted user input is string-formatted into the SQL query.",
     cwe: "CWE-89",
     fix_template: "Use Model.objects.raw('SELECT * FROM t WHERE id = %s', [user_id])",
   },
@@ -3354,7 +3414,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /\bmark_safe\s*\(\s*(?:f["']|.*\+|.*\.format|.*%)/g,
     explanation: "mark_safe() tells Django to NOT escape HTML. With dynamic content → XSS.",
-    verify_prompt: "Is the argument entirely hardcoded HTML? → FP. Does it include ANY user input? → CONFIRMED.",
+    verify_prompt: "Is the argument entirely hardcoded HTML? → FP. Does it include ANY user input? → CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The argument is entirely hardcoded HTML with no dynamic content\n" +
+      "2. The dynamic content is already escaped via django.utils.html.escape() before mark_safe()\n" +
+      "3. The content comes from a trusted admin-only source (CMS managed by staff)\n" +
+      "4. This is in test or documentation code\n" +
+      "Only respond CONFIRMED if user-controlled input is included without escaping.",
     cwe: "CWE-79",
     fix_template: "Use format_html() instead: format_html('<b>{}</b>', user_input)",
   },
@@ -3365,7 +3431,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /SECRET_KEY\s*=\s*["'][A-Za-z0-9!@#$%^&*]{20,}["']/g,
     explanation: "Hardcoded SECRET_KEY in settings.py. If leaked, session forgery + CSRF bypass.",
-    verify_prompt: "Is this in a test/example file? → FP. Is it in production settings? → CONFIRMED.",
+    verify_prompt: "Is this in a test/example file? → FP. Is it in production settings? → CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. This is in a test, example, or template file (not production settings)\n" +
+      "2. The value is a placeholder ('changeme', 'your-secret-key-here', 'TODO')\n" +
+      "3. The SECRET_KEY is loaded from environment variable with a hardcoded fallback for dev only\n" +
+      "4. This is in a settings file explicitly marked as local/development\n" +
+      "Only respond CONFIRMED if a real secret key is hardcoded in production settings.",
     cwe: "CWE-798",
     fix_template: "SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')",
   },
@@ -3377,7 +3449,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /\b(?:find|findOne|updateOne|deleteOne)\s*\(\s*(?:req\.body|req\.query|req\.params)/g,
     explanation: "Passing req.body directly to MongoDB enables NoSQL injection ($gt, $ne operators).",
-    verify_prompt: "Is req.body passed directly without type validation/casting? → CONFIRMED. Is input validated/cast first? → FP.",
+    verify_prompt: "Is req.body passed directly without type validation/casting? → CONFIRMED. Is input validated/cast first? → FP." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. Input fields are explicitly cast/validated (String(), Number(), mongoose schema validation)\n" +
+      "2. A validation middleware (joi, zod, express-validator) runs before this handler\n" +
+      "3. Only specific scalar fields are extracted (not the entire req.body object)\n" +
+      "4. This is in test code with controlled input\n" +
+      "Only respond CONFIRMED if req.body/req.query/req.params is passed directly to a MongoDB query without type validation.",
     cwe: "CWE-943",
     fix_template: "Validate and cast: { email: String(req.body.email) }",
   },
@@ -3388,7 +3466,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /res\.send\s*\(\s*(?:req\.|`.*\$\{req\.)/g,
     explanation: "Sending user input directly in response without escaping → reflected XSS.",
-    verify_prompt: "Is the response HTML with user input interpolated? → CONFIRMED. Is it JSON or escaped? → FP.",
+    verify_prompt: "Is the response HTML with user input interpolated? → CONFIRMED. Is it JSON or escaped? → FP." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The response is JSON (res.json()) not HTML\n" +
+      "2. The output is already escaped/sanitized before being sent\n" +
+      "3. The content comes from a trusted admin-only source\n" +
+      "4. Content-Type is set to text/plain (not text/html)\n" +
+      "Only respond CONFIRMED if user input is interpolated into an HTML response without escaping.",
     cwe: "CWE-79",
     fix_template: "Use a template engine with auto-escaping, or escape: require('he').encode(input)",
   },
@@ -3399,7 +3483,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /cors\s*\(\s*\{[^}]*origin\s*:\s*(?:true|["']\*["'])/g,
     explanation: "CORS with wildcard origin allows any site to make authenticated requests.",
-    verify_prompt: "Is credentials: true also set? → CONFIRMED. Is this a public API without auth? → FP.",
+    verify_prompt: "Is credentials: true also set? → CONFIRMED. Is this a public API without auth? → FP." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. This is a public API that requires no authentication (no cookies/sessions)\n" +
+      "2. credentials is not set or is set to false\n" +
+      "3. This is a local development configuration not used in production\n" +
+      "4. The wildcard origin is in a development-only code path (e.g., if (isDev))\n" +
+      "Only respond CONFIRMED if origin '*' is combined with credentials: true in production code.",
     cwe: "CWE-942",
     fix_template: "Whitelist specific origins: origin: ['https://myapp.com']",
   },
@@ -3411,7 +3501,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:\s*(?!["'`]\s*[}])/g,
     explanation: "dangerouslySetInnerHTML bypasses React's XSS protection. With dynamic content → XSS.",
-    verify_prompt: "Is __html a hardcoded constant? → FP. Does it include ANY user/external data? → CONFIRMED.",
+    verify_prompt: "Is __html a hardcoded constant? → FP. Does it include ANY user/external data? → CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The __html value is a hardcoded constant string\n" +
+      "2. The content is sanitized with DOMPurify or a similar sanitizer before use\n" +
+      "3. The content comes from a trusted admin-only CMS source\n" +
+      "4. This is in test or storybook code with controlled input\n" +
+      "Only respond CONFIRMED if user-controlled or external data is set as __html without sanitization.",
     cwe: "CWE-79",
     fix_template: "Use DOMPurify: { __html: DOMPurify.sanitize(content) }",
   },
@@ -3423,7 +3519,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /\brender_template_string\s*\(\s*(?:request\.|f["']|.*\+|.*\.format|.*%)/g,
     explanation: "render_template_string() with user input enables Server-Side Template Injection → RCE.",
-    verify_prompt: "Is the template string from user input? → CONFIRMED. Is it hardcoded? → FP.",
+    verify_prompt: "Is the template string from user input? → CONFIRMED. Is it hardcoded? → FP." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The template string is hardcoded (no user input in the template itself)\n" +
+      "2. User input is passed only as template variables (not as part of the template string)\n" +
+      "3. This is in test or documentation code\n" +
+      "4. The template string comes from a trusted internal source (admin config)\n" +
+      "Only respond CONFIRMED if user-controlled input is part of the template string itself (not just template variables).",
     cwe: "CWE-1336",
     fix_template: "Use render_template() with a .html file instead of render_template_string().",
   },
@@ -3435,7 +3537,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /\b(?:execute|text)\s*\(\s*(?:f["']|["'].*\{)/g,
     explanation: "Raw SQL with f-strings in FastAPI/SQLAlchemy bypasses parameterized queries.",
-    verify_prompt: "Is this using text() with :param placeholders? → FP. Is user input in f-string? → CONFIRMED.",
+    verify_prompt: "Is this using text() with :param placeholders? → FP. Is user input in f-string? → CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. Parameterized queries are used: text('... WHERE id = :id').bindparams(id=val)\n" +
+      "2. The interpolated values are integer IDs from validated/internal sources\n" +
+      "3. The query is constructed from trusted constants only (table names, column names)\n" +
+      "4. This is in test/migration code with no user-facing input path\n" +
+      "Only respond CONFIRMED if untrusted user input is string-formatted into the SQL query.",
     cwe: "CWE-89",
     fix_template: "Use text('SELECT * FROM t WHERE id = :id').bindparams(id=user_id)",
   },
@@ -3447,7 +3555,13 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["ruby"],
     regex: /\.html_safe\b/g,
     explanation: ".html_safe tells Rails to skip HTML escaping. On user content → XSS.",
-    verify_prompt: "Is the string entirely hardcoded/internal? → FP. Could it contain user input? → CONFIRMED.",
+    verify_prompt: "Is the string entirely hardcoded/internal? → FP. Could it contain user input? → CONFIRMED." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The string is entirely hardcoded HTML (e.g., '<br>'.html_safe)\n" +
+      "2. The content is already sanitized with sanitize() or ERB::Util.html_escape before .html_safe\n" +
+      "3. The content comes from a trusted admin-only source\n" +
+      "4. This is in test, helper, or view code rendering only internal/static content\n" +
+      "Only respond CONFIRMED if user-controlled content could reach .html_safe without prior escaping.",
     cwe: "CWE-79",
     fix_template: "Use sanitize() helper: sanitize(user_content, tags: %w[b i em])",
   },
@@ -3466,7 +3580,13 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
     languages: ["c", "cpp", "python", "javascript", "typescript", "go", "rust", "java"],
     regex: /\beval\s+["']?\$[\{(]/g,
     explanation: "eval with variable expansion in shell enables command injection.",
-    verify_prompt: "Is the variable from trusted internal source or user input? CONFIRMED if user-controlled.",
+    verify_prompt: "Is the variable from trusted internal source or user input? CONFIRMED if user-controlled." +
+      "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
+      "1. The variable is set from a trusted internal source (hardcoded config, internal script logic)\n" +
+      "2. The variable is validated/sanitized before reaching eval\n" +
+      "3. This is in a build script or CI/CD pipeline with controlled inputs\n" +
+      "4. The eval operates on a compile-time constant or environment variable set by the system\n" +
+      "Only respond CONFIRMED if user-controlled or external input can reach the eval through the variable.",
     cwe: "CWE-78",
     fix_template: "Avoid eval in shell. Use direct execution or arrays for args.",
   },
