@@ -57,7 +57,9 @@ interface ProjectSignal { type: "web" | "api" | "mobile" | "cli" | "data" | "gam
 function detectProjectType(msg: string): ProjectSignal | null {
   const lower = msg.toLowerCase();
   // Web app signals — these are always web, regardless of other keywords
-  const isWebApp = /\b(?:crm|kanban|chat\s+app|messag|social\s+feed|social\s+media|lms|course\s+platform|e-?commerce|store|shop|admin\s+panel|project\s+manag|task\s+(?:board|manag)|iot\s+(?:monitor|dashboard)|device\s+monitor)\b/i.test(lower);
+  // "create a chat" / "chat app" / "chat messaging app" / "messaging app" → web
+  const isWebApp = /\b(?:crm|kanban|chat\s+(?:app|messag)|chat\b(?=.*\b(?:levant|run|start|app|and))|messag(?:ing)?\s+app|social\s+(?:media\s+)?feed|lms|course\s+platform|e-?commerce|store|shop|admin\s+panel|project\s+manag|task\s+(?:board|manag)|iot\s+(?:monitor|dashboard)|device\s+monitor)\b/i.test(lower)
+    || /\b(?:crea|create|build|make)\s+(?:an?\s+)?chat\b/i.test(lower);
   if (isWebApp) return { type: "web" };
   // Visual UI signals — if user wants a dashboard/page WITH visual elements, it's web
   const hasVisualUI = /\b(?:dashboard|page|ui|frontend|dark\s*(?:theme|ui|mode)|chart|heatmap|candlestick|ticker|interface|panel|widget|responsive)\b/i.test(lower);
