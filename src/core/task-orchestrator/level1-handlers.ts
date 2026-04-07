@@ -220,6 +220,117 @@ function generateCommitMessage(cwd: string): { message: string; files: string } 
 
 // ── Public API ─────────────────────────────────────────────────
 
+// ── Dev Server Detection ──────────────────────────────────────
+
+interface DevServer {
+  name: string;
+  command: string;
+  port: number;
+  installCmd?: string;
+  needsInstall: boolean;
+}
+
+function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
+  const port = requestedPort ?? 10080;
+
+  // Node.js (Next.js, Vite, Express, etc.)
+  const pkg = readJson(join(cwd, "package.json"));
+  if (pkg) {
+    const hasNodeModules = existsSync(join(cwd, "node_modules"));
+    const scripts = pkg.scripts ?? {};
+    const pm = existsSync(join(cwd, "bun.lockb")) ? "bun" : existsSync(join(cwd, "pnpm-lock.yaml")) ? "pnpm" : "npm";
+
+    if (scripts.dev) {
+      // Next.js uses --port, Vite uses --port, generic uses PORT env
+      const isNext = existsSync(join(cwd, "next.config.ts")) || existsSync(join(cwd, "next.config.js")) || existsSync(join(cwd, "next.config.mjs"));
+      const isVite = existsSync(join(cwd, "vite.config.ts")) || existsSync(join(cwd, "vite.config.js"));
+
+      let devCmd: string;
+      if (isNext) devCmd = `${pm} run dev -- --port ${port}`;
+      else if (isVite) devCmd = `${pm} run dev -- --port ${port}`;
+      else devCmd = `PORT=${port} ${pm} run dev`;
+
+      return { name: isNext ? "Next.js" : isVite ? "Vite" : pkg.name ?? "Node.js", command: devCmd, port, installCmd: `${pm} install`, needsInstall: !hasNodeModules };
+    }
+    if (scripts.start) {
+      return { name: pkg.name ?? "Node.js", command: `PORT=${port} ${pm} run start`, port, installCmd: `${pm} install`, needsInstall: !hasNodeModules };
+    }
+  }
+
+  // Python (FastAPI, Flask, Django)
+  if (existsSync(join(cwd, "pyproject.toml")) || existsSync(join(cwd, "requirements.txt"))) {
+    const hasFastapi = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("fastapi");
+    const hasFlask = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("flask");
+    const hasDjango = existsSync(join(cwd, "manage.py"));
+
+    if (hasDjango) return { name: "Django", command: `python manage.py runserver 0.0.0.0:${port}`, port, needsInstall: false };
+    if (hasFastapi) return { name: "FastAPI", command: `uvicorn main:app --host 0.0.0.0 --port ${port} --reload`, port, needsInstall: false };
+    if (hasFlask) return { name: "Flask", command: `flask run --host 0.0.0.0 --port ${port}`, port, needsInstall: false };
+    return { name: "Python", command: `python -m http.server ${port}`, port, needsInstall: false };
+  }
+
+  // Go
+  if (existsSync(join(cwd, "go.mod"))) {
+    return { name: "Go", command: `PORT=${port} go run .`, port, needsInstall: false };
+  }
+
+  // Rust
+  if (existsSync(join(cwd, "Cargo.toml"))) {
+    return { name: "Rust", command: `PORT=${port} cargo run`, port, needsInstall: false };
+  }
+
+  // Elixir
+  if (existsSync(join(cwd, "mix.exs"))) {
+    return { name: "Elixir", command: `PORT=${port} mix run --no-halt`, port, needsInstall: false };
+  }
+
+  // Docker Compose
+  if (existsSync(join(cwd, "docker-compose.yml")) || existsSync(join(cwd, "compose.yml"))) {
+    return { name: "Docker Compose", command: "docker compose up", port: 0, needsInstall: false };
+  }
+
+  // Static HTML
+  if (existsSync(join(cwd, "index.html"))) {
+    return { name: "Static", command: `python3 -m http.server ${port}`, port, needsInstall: false };
+  }
+
+  return null;
+}
+
+function startDevServer(srv: DevServer, cwd: string): Level1Result {
+  // Step 1: Install dependencies if needed
+  if (srv.needsInstall && srv.installCmd) {
+    const installResult = run(srv.installCmd, cwd, 120_000);
+    if (installResult.code !== 0) {
+      return { handled: true, output: `  ❌ Install failed\n  $ ${srv.installCmd}\n\n${installResult.output.slice(-1000)}` };
+    }
+  }
+
+  // Step 2: Start the dev server in background
+  try {
+    const { spawn } = require("child_process");
+    const child = spawn("sh", ["-c", srv.command], {
+      cwd,
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env },
+    });
+    child.unref();
+
+    // Wait a moment for the server to start
+    const { execSync: es } = require("child_process");
+    try { es("sleep 2", { timeout: 5000 }); } catch {}
+
+    const portInfo = srv.port > 0 ? `\n  🌐 http://localhost:${srv.port}` : "";
+    return {
+      handled: true,
+      output: `  ✅ ${srv.name} server started (PID: ${child.pid})\n  $ ${srv.command}${portInfo}\n\n  Stop with: /stop or "para el server"`,
+    };
+  } catch (err: any) {
+    return { handled: true, output: `  ❌ Failed to start: ${err.message}` };
+  }
+}
+
 export interface Level1Result {
   handled: boolean;
   output: string;
@@ -328,6 +439,23 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
       lines.push(`  No results found.`);
     }
     return { handled: true, output: lines.join("\n") };
+  }
+
+  // ── Run / Serve / Start (dev server) ──
+  const runMatch = lower.match(/(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|serve|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
+  if (runMatch) {
+    const requestedPort = runMatch[1] ? parseInt(runMatch[1], 10) : undefined;
+    const srv = detectDevServer(cwd, requestedPort);
+    if (srv) {
+      return startDevServer(srv, cwd);
+    }
+    return { handled: true, output: "  No project detected. Need package.json, Cargo.toml, go.mod, or similar." };
+  }
+
+  // ── Stop / Kill server ──
+  if (/^(?:stop|kill|para|detén|detenlo|frena|baja)(?:\s+(?:the\s+)?(?:server|app|it|lo))?[.!]?$/i.test(lower)) {
+    const result = run("pkill -f 'next dev|vite|tsx watch|uvicorn|flask run|cargo run|go run|mix phx' 2>/dev/null; echo 'stopped'", cwd);
+    return { handled: true, output: "  ✅ Server stopped." };
   }
 
   // Not a Level 1 command
