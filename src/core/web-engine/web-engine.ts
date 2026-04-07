@@ -62,7 +62,22 @@ export function createWebProject(
 
   // Step 2: Check for specialized template first, fall back to generic
   const specializedFiles = getSpecializedTemplate(intent.siteType);
-  const template = specializedFiles ? { files: specializedFiles } : buildProjectTemplate(intent);
+  let template: { files: FileTemplate[] };
+  if (specializedFiles) {
+    // Specialized template: merge with base project files (package.json, configs)
+    const baseTemplate = buildProjectTemplate(intent);
+    const baseConfigFiles = baseTemplate.files.filter(f =>
+      f.path === "package.json" || f.path === "next.config.ts" || f.path === "tsconfig.json" ||
+      f.path === "postcss.config.mjs" || f.path === "tailwind.config.ts" || f.path === ".gitignore" ||
+      f.path === "README.md"
+    );
+    // Specialized files override any base files with same path
+    const specialPaths = new Set(specializedFiles.map(f => f.path));
+    const mergedBase = baseConfigFiles.filter(f => !specialPaths.has(f.path));
+    template = { files: [...mergedBase, ...specializedFiles] };
+  } else {
+    template = buildProjectTemplate(intent);
+  }
 
   // Step 3: Clean previous project if exists, then write files
   const projectPath = join(cwd, intent.name);
