@@ -577,16 +577,22 @@ export class ConversationManager {
           if (!engineHandled && isWebRequest) {
             try {
               log.info("orchestrator", `Trying web engine for: "${userMessage.slice(0, 50)}"`);
+
+              // Activate engine progress BEFORE creating project
+              const { engineState, resetEngineState } = await import("./engine-progress.js");
+              resetEngineState();
+              engineState.active = true;
+              engineState.phase = "Detecting project type...";
+              engineState.step = 0;
+              engineState.startTime = Date.now();
+
               const { createWebProject } = await import("./web-engine/web-engine.js");
               const webResult = createWebProject(userMessage, this.config.workingDirectory);
               log.info("orchestrator", `Web engine result: type=${webResult.intent.siteType} machine=${webResult.machineFiles} llm=${webResult.llmFiles}`);
               const totalFiles = webResult.machineFiles + webResult.llmFiles;
 
               if (webResult.llmFiles === 0) {
-                // 100% machine — use engine progress state for animated bar
-                const { engineState, resetEngineState } = await import("./engine-progress.js");
-                resetEngineState();
-                engineState.active = true;
+                // 100% machine — continue with progress bar
                 engineState.siteType = webResult.intent.siteType;
                 engineState.projectPath = webResult.projectPath;
                 engineState.startTime = Date.now();
@@ -654,11 +660,13 @@ export class ConversationManager {
                 return;
               }
 
-              // Has LLM files — build focused prompt
+              // Has LLM files — deactivate engine progress, send to LLM
+              engineState.active = false;
               orchestratedMessage = `${webResult.prompt}\n\nThe machine already created ${webResult.machineFiles} files at ${webResult.projectPath}.\nYou MUST only edit the ${webResult.llmFiles} files marked for LLM customization.\nDo NOT create new files or restructure the project. Only customize content.\nUSER REQUEST: "${userMessage}"`;
               engineHandled = true;
               log.info("orchestrator", `Web engine + LLM: ${webResult.intent.siteType} (${webResult.llmFiles} files to customize)`);
             } catch (err) {
+              engineState.active = false;
               log.debug("web-engine", `Web engine skipped: ${err}`);
             }
           }
