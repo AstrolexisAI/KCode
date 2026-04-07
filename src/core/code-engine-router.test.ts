@@ -139,7 +139,8 @@ describe("code-engine-router", () => {
   test("auto-selects Python for data/analytics", () => {
     expect(detectCodeEngine("create a data pipeline with charts")?.engine).toBe("python");
     expect(detectCodeEngine("build a scraper for real data")?.engine).toBe("python");
-    expect(detectCodeEngine("create a wallstreet dashboard cinematographic, real data")?.engine).toBe("python");
+    // "wallstreet dashboard" with visual UI → web engine (null), not data
+    expect(detectCodeEngine("create a wallstreet dashboard cinematographic, real data")).toBeNull();
   });
 
   test("auto-selects Lua for games", () => {
