@@ -519,8 +519,9 @@ export class ConversationManager {
       if (l1.handled) {
         this.state.messages.push({ role: "user", content: userMessage });
         this.state.messages.push({ role: "assistant", content: l1.output });
-        yield { type: "text", text: l1.output };
-        yield { type: "turn_end", inputTokens: 0, outputTokens: 0 };
+        yield { type: "turn_start" };
+        yield { type: "text_delta", text: l1.output };
+        yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
         log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
         return;
       }
