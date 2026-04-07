@@ -379,6 +379,19 @@ std::string handle_request(const HttpRequest& req) {
         return http_response(200, item_json(*item));
     }
 
+    if (req.path.rfind("/api/items/", 0) == 0 && req.method == "PUT") {
+        int id = extract_id(req.path);
+        auto* item = store.get(id);
+        if (!item) return http_response(404, error_json("Item not found"));
+        std::string name = extract_json_field(req.body, "name");
+        if (name.empty()) return http_response(422, error_json("name is required"));
+        std::string desc = extract_json_field(req.body, "description");
+        item->name = name;
+        item->description = desc;
+        log(LogLevel::INFO, "Updated item " + std::to_string(id));
+        return http_response(200, item_json(*item));
+    }
+
     if (req.path.rfind("/api/items/", 0) == 0 && req.method == "DELETE") {
         int id = extract_id(req.path);
         if (!store.remove(id)) return http_response(404, error_json("Item not found"));
