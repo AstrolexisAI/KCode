@@ -4,7 +4,7 @@
 // and executes directly — no tokens spent, instant response.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 function run(cmd: string, cwd: string, timeout = 30_000): { output: string; code: number } {
