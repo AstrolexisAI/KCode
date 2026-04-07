@@ -607,12 +607,23 @@ export class ConversationManager {
                   writeFileSync(kcodePath("last-project"), webResult.projectPath);
                 } catch {}
 
+                // Check if user also asked to run the project (multi-intent)
+                const runMatch = userMessage.match(/(?:levant[ae](?:lo|la)?|run|start|launch|arranca|ejecuta|inicia|lanza)(?:\s+(?:.*?))?(?:(?:en|on|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
+                let runOutput = "";
+                if (runMatch) {
+                  const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
+                  const port = runMatch[1] ? parseInt(runMatch[1], 10) : 10080;
+                  const l1 = tryLevel1(`levantalo en el puerto ${port}`, webResult.projectPath);
+                  if (l1.handled) runOutput = "\n\n" + l1.output;
+                }
+
+                const fullSummary = summary + runOutput;
                 this.state.messages.push({ role: "user", content: userMessage });
-                this.state.messages.push({ role: "assistant", content: summary });
+                this.state.messages.push({ role: "assistant", content: fullSummary });
                 yield { type: "turn_start" };
-                yield { type: "text_delta", text: summary };
+                yield { type: "text_delta", text: fullSummary };
                 yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
-                log.info("orchestrator", `Web engine 100% machine: ${webResult.intent.siteType} (0 tokens)`);
+                log.info("orchestrator", `Web engine 100% machine: ${webResult.intent.siteType} (0 tokens)${runOutput ? " + auto-serve" : ""}`);
                 return;
               }
 
