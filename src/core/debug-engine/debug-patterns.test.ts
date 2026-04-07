@@ -21,6 +21,7 @@ describe("debug-patterns", () => {
     expect(matchDebugPatterns("the page is really slow")[0]!.id).toBe("slow-performance");
     expect(matchDebugPatterns("la app tarda mucho en cargar")[0]!.id).toBe("slow-performance");
     expect(matchDebugPatterns("there's a memory leak")[0]!.id).toBe("slow-performance");
+    expect(matchDebugPatterns("la página está muy lenta")[0]!.id).toBe("slow-performance");
   });
 
   test("detects stale UI", () => {
@@ -65,6 +66,7 @@ describe("debug-patterns", () => {
   test("returns empty for unmatched descriptions", () => {
     expect(matchDebugPatterns("add a new button to the header")).toHaveLength(0);
     expect(matchDebugPatterns("refactor the utils module")).toHaveLength(0);
+    expect(matchDebugPatterns("refactor the auth module")).toHaveLength(0);
   });
 
   // ── Keyword extraction ──
