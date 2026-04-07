@@ -75,9 +75,17 @@ export async function processStreamEvents(
 
   for await (const event of events) {
     switch (event.type) {
-      case "turn_start":
-        setLoadingMessage("Connecting to model...");
-        setSpinnerPhase("thinking");
+      case "turn_start": {
+        // Don't show "Connecting to model" when engine is handling (0 tokens)
+        let isEngineMode = false;
+        try {
+          const { engineState } = await import("../core/engine-progress.js");
+          isEngineMode = engineState.active;
+        } catch {}
+        if (!isEngineMode) {
+          setLoadingMessage("Connecting to model...");
+          setSpinnerPhase("thinking");
+        }
         // Show any pending file change suggestions
         {
           const suggester = getFileChangeSuggester(config.workingDirectory);
@@ -94,6 +102,7 @@ export async function processStreamEvents(
           /* ignore */
         }
         break;
+      }
 
       case "text_delta":
         if (currentText.length === 0) {
