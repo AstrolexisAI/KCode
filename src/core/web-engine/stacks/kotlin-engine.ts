@@ -150,6 +150,13 @@ class ItemRepository {
         return item
     }
 
+    fun update(id: String, name: String, description: String): Item? {
+        val existing = store[id] ?: return null
+        val updated = existing.copy(name = name, description = description)
+        store[id] = updated
+        return updated
+    }
+
     fun delete(id: String): Boolean = store.remove(id) != null
 }
 `, needsLlm: false });
@@ -192,6 +199,24 @@ fun Route.itemRoutes(repository: ItemRepository) {
             )
             logger.debug("Getting item: {}", id)
             val item = repository.findById(id)
+            if (item != null) {
+                call.respond(item)
+            } else {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(404, "Item not found: $id"))
+            }
+        }
+
+        put("/{id}") {
+            val id = call.parameters["id"] ?: return@put call.respond(
+                HttpStatusCode.BadRequest, ErrorResponse(400, "Missing id parameter")
+            )
+            val request = call.receive<CreateItemRequest>()
+            if (request.name.isBlank()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(400, "Name must not be blank"))
+                return@put
+            }
+            logger.info("Updating item: {}", id)
+            val item = repository.update(id, request.name, request.description)
             if (item != null) {
                 call.respond(item)
             } else {
