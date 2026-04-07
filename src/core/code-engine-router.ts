@@ -19,7 +19,7 @@ const ENGINE_PATTERNS: Array<{ engine: EngineId; pattern: RegExp }> = [
   { engine: "terraform", pattern: /\b(?:terraform|infra(?:structure)?(?:\s+as\s+code)?|iac|vpc|hcl)\b/i },
   { engine: "docker", pattern: /\b(?:docker(?:\s*file)?|docker.?compose|containerize)\b/i },
   { engine: "monorepo", pattern: /\b(?:monorepo|turborepo|nx\s+workspace|mono.?repo)\b/i },
-  { engine: "cicd", pattern: /\b(?:ci\/?cd|github\s*action|gitlab\s*ci|jenkins(?:file)?|ci\s+pipeline)\b/i },
+  { engine: "cicd", pattern: /\b(?:ci\/?cd|github\s*actions?|gitlab\s*ci|jenkins(?:file)?|ci\s+pipeline)\b/i },
   { engine: "db", pattern: /\b(?:database|schema|migration|postgres(?:ql)?|mysql|sqlite|mongo(?:db)?|redis|sql\s*server|mssql|prisma|drizzle|typeorm|knex|mongoose)\b/i },
   { engine: "css", pattern: /\b(?:design\s*system|css\s+(?:framework|library|component)|tailwind\s+plugin|sass\s+framework|animation\s+library|ui\s*kit)\b/i },
 
