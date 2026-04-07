@@ -445,8 +445,14 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
     return { handled: true, output: lines.join("\n") };
   }
 
+  // ── Stop / Kill server (BEFORE run — "para el server" must not match "serve") ──
+  if (/(?:^|\s)(?:stop|kill|para(?:r|\s+el)?|det[eé]n(?:lo)?|frena|baja|shutdown|apaga)(?:\s+(?:the\s+)?(?:server|app|it|lo|el\s+server|la\s+app))?[.!]?$/i.test(lower)) {
+    run("pkill -f 'next dev|vite|tsx watch|uvicorn|flask run|cargo run|go run|mix phx|http.server' 2>/dev/null; true", cwd);
+    return { handled: true, output: "  ✅ Server stopped." };
+  }
+
   // ── Run / Serve / Start (dev server) ──
-  const runMatch = lower.match(/(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|serve|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
+  const runMatch = lower.match(/(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
   if (runMatch) {
     const requestedPort = runMatch[1] ? parseInt(runMatch[1], 10) : undefined;
     const srv = detectDevServer(cwd, requestedPort);
@@ -454,12 +460,6 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
       return startDevServer(srv, cwd);
     }
     return { handled: true, output: "  No project detected. Need package.json, Cargo.toml, go.mod, or similar." };
-  }
-
-  // ── Stop / Kill server ──
-  if (/^(?:stop|kill|para|detén|detenlo|frena|baja)(?:\s+(?:the\s+)?(?:server|app|it|lo))?[.!]?$/i.test(lower)) {
-    const result = run("pkill -f 'next dev|vite|tsx watch|uvicorn|flask run|cargo run|go run|mix phx' 2>/dev/null; echo 'stopped'", cwd);
-    return { handled: true, output: "  ✅ Server stopped." };
   }
 
   // Not a Level 1 command
