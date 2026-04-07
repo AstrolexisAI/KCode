@@ -10,28 +10,34 @@ import { detectWebIntent, type DetectedIntent } from "./detector";
 import { buildProjectTemplate, type FileTemplate, type ProjectTemplate } from "./templates";
 import type { SiteType } from "./types";
 
+// Import all templates statically — no dynamic require that breaks in bundled builds
+import { tradingDashboardComponents } from "./templates/trading-dashboard";
+import { analyticsDashboardComponents } from "./templates/analytics-dashboard";
+import { adminPanelComponents } from "./templates/admin-panel";
+import { ecommerceComponents } from "./templates/ecommerce";
+import { socialFeedComponents } from "./templates/social-feed";
+import { crmComponents } from "./templates/crm";
+import { projectManagementComponents } from "./templates/project-management";
+import { chatAppComponents } from "./templates/chat-app";
+import { educationLmsComponents } from "./templates/education-lms";
+import { iotMonitoringComponents } from "./templates/iot-monitoring";
+
+const SPECIALIZED_TEMPLATES: Partial<Record<SiteType, () => FileTemplate[]>> = {
+  "trading-dashboard": tradingDashboardComponents,
+  "analytics": analyticsDashboardComponents,
+  "admin-panel": adminPanelComponents,
+  "ecommerce": ecommerceComponents,
+  "social-feed": socialFeedComponents,
+  "crm": crmComponents,
+  "project-mgmt": projectManagementComponents,
+  "chat": chatAppComponents,
+  "education": educationLmsComponents,
+  "iot": iotMonitoringComponents,
+};
+
 function getSpecializedTemplate(siteType: SiteType): FileTemplate[] | null {
-  const templateMap: Partial<Record<SiteType, () => Promise<FileTemplate[]>>> = {
-    "trading-dashboard": async () => (await import("./templates/trading-dashboard.js")).tradingDashboardComponents(),
-    "analytics": async () => (await import("./templates/analytics-dashboard.js")).analyticsDashboardComponents(),
-    "admin-panel": async () => (await import("./templates/admin-panel.js")).adminPanelComponents(),
-    "ecommerce": async () => (await import("./templates/ecommerce.js")).ecommerceComponents(),
-    "social-feed": async () => (await import("./templates/social-feed.js")).socialFeedComponents(),
-    "crm": async () => (await import("./templates/crm.js")).crmComponents(),
-    "project-mgmt": async () => (await import("./templates/project-management.js")).projectManagementComponents(),
-    "chat": async () => (await import("./templates/chat-app.js")).chatAppComponents(),
-    "education": async () => (await import("./templates/education-lms.js")).educationLmsComponents(),
-    "iot": async () => (await import("./templates/iot-monitoring.js")).iotMonitoringComponents(),
-  };
-  // Synchronous wrapper — templates are sync functions, dynamic import is for lazy loading
-  try {
-    const loader = templateMap[siteType];
-    if (!loader) return null;
-    // Use require for sync access (templates are sync)
-    const mod = require(`./templates/${siteType === "trading-dashboard" ? "trading-dashboard" : siteType === "admin-panel" ? "admin-panel" : siteType === "social-feed" ? "social-feed" : siteType === "project-mgmt" ? "project-management" : siteType === "analytics" ? "analytics-dashboard" : siteType === "education" ? "education-lms" : siteType === "iot" ? "iot-monitoring" : siteType === "chat" ? "chat-app" : siteType}.ts`);
-    const fnName = Object.keys(mod).find(k => typeof mod[k] === "function");
-    return fnName ? mod[fnName]() : null;
-  } catch { return null; }
+  const fn = SPECIALIZED_TEMPLATES[siteType];
+  return fn ? fn() : null;
 }
 
 export interface WebEngineResult {
