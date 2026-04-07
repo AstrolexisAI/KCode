@@ -58,8 +58,13 @@ export function createWebProject(
   const specializedFiles = getSpecializedTemplate(intent.siteType);
   const template = specializedFiles ? { files: specializedFiles } : buildProjectTemplate(intent);
 
-  // Step 3: Write all machine-generated files
+  // Step 3: Clean previous project if exists, then write files
   const projectPath = join(cwd, intent.name);
+
+  // Remove old src/ to avoid stale files from different template types
+  const srcPath = join(projectPath, "src");
+  try { const { rmSync } = require("fs"); rmSync(srcPath, { recursive: true, force: true }); } catch {}
+
   let machineFiles = 0;
   let llmFiles = 0;
 
