@@ -66,12 +66,15 @@ export function createWebProject(
   if (specializedFiles) {
     // Specialized template: merge with base project files (package.json, configs)
     const baseTemplate = buildProjectTemplate(intent);
+    const specialPaths = new Set(specializedFiles.map(f => f.path));
     const baseConfigFiles = baseTemplate.files.filter(f =>
-      f.path === "package.json" || f.path === "next.config.ts" || f.path === "tsconfig.json" ||
-      f.path === "postcss.config.mjs" || f.path === "tailwind.config.ts" || f.path === ".gitignore" ||
-      f.path === "README.md" || f.path === "src/app/globals.css" || f.path === "public/favicon.ico"
+      !specialPaths.has(f.path) && (
+        f.path === "package.json" || f.path === "next.config.ts" || f.path === "tsconfig.json" ||
+        f.path === "postcss.config.mjs" || f.path === "tailwind.config.ts" || f.path === ".gitignore" ||
+        f.path === "README.md" || f.path === "src/app/globals.css"
+      )
     );
-    // Add SVG icon (Next.js auto-uses src/app/icon.svg as favicon)
+    // Add SVG icon if template doesn't have one
     if (!specialPaths.has("src/app/icon.svg")) {
       baseConfigFiles.push({
         path: "src/app/icon.svg",
@@ -79,9 +82,7 @@ export function createWebProject(
         needsLlm: false,
       });
     }
-    // Specialized files override any base files with same path
-    const specialPaths = new Set(specializedFiles.map(f => f.path));
-    const mergedBase = baseConfigFiles.filter(f => !specialPaths.has(f.path));
+    const mergedBase = baseConfigFiles;
     template = { files: [...mergedBase, ...specializedFiles] };
   } else {
     template = buildProjectTemplate(intent);
