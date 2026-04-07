@@ -583,24 +583,27 @@ export class ConversationManager {
               const totalFiles = webResult.machineFiles + webResult.llmFiles;
 
               if (webResult.llmFiles === 0) {
-                // 100% machine — show progress bar, then result
+                // 100% machine — use engine progress state for animated bar
+                const { engineState, resetEngineState } = await import("./engine-progress.js");
+                resetEngineState();
+                engineState.active = true;
+                engineState.siteType = webResult.intent.siteType;
+                engineState.projectPath = webResult.projectPath;
+                engineState.startTime = Date.now();
+                engineState.totalSteps = 4;
+
                 yield { type: "turn_start" };
 
-                const bar = (pct: number, label: string) => {
-                  const filled = Math.round(pct / 5);
-                  return `  [${"\u2588".repeat(filled)}${"\u2591".repeat(20 - filled)}] ${pct}% ${label}`;
-                };
-
                 // Step 1: Scaffolding
-                yield { type: "text_delta", text: bar(25, "Scaffolding project...") + "\n" };
+                engineState.phase = "Scaffolding project...";
+                engineState.step = 1;
+                // Small delay so UI can render the progress bar
+                await new Promise(r => setTimeout(r, 200));
 
-                // Step 2: Writing files
-                yield { type: "text_delta", text: bar(50, `Writing ${totalFiles} files...`) + "\n" };
-
-                const summary = [
-                  `  ✅ ${webResult.intent.siteType} — ${totalFiles} files (${webResult.machineFiles} machine, 0 LLM)`,
-                  `  📁 ${webResult.projectPath}`,
-                ].join("\n");
+                // Step 2: Files written
+                engineState.phase = `Writing ${totalFiles} files...`;
+                engineState.step = 2;
+                await new Promise(r => setTimeout(r, 200));
 
                 // Save last project path
                 this.config.workingDirectory = webResult.projectPath;
@@ -613,20 +616,35 @@ export class ConversationManager {
 
                 // Step 3: Check if user also asked to run
                 const runMatch = userMessage.match(/(?:levant[ae](?:lo|la)?|run|start|launch|arranca|ejecuta|inicia|lanza)(?:\s+(?:.*?))?(?:(?:en|on|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
+                let runOutput = "";
                 if (runMatch) {
                   const port = runMatch[1] ? parseInt(runMatch[1], 10) : 10080;
-                  yield { type: "text_delta", text: bar(75, "Installing dependencies...") + "\n" };
+                  engineState.phase = "Installing dependencies...";
+                  engineState.step = 3;
+                  await new Promise(r => setTimeout(r, 200));
+
                   const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
                   const l1 = tryLevel1(`levantalo en el puerto ${port}`, webResult.projectPath);
-                  if (l1.handled) {
-                    yield { type: "text_delta", text: bar(100, "Server started!") + "\n" };
-                    yield { type: "text_delta", text: "\n" + summary + "\n" + l1.output + "\n" };
-                  } else {
-                    yield { type: "text_delta", text: bar(100, "Done!") + "\n\n" + summary + "\n" };
-                  }
+
+                  engineState.phase = "Server started!";
+                  engineState.step = 4;
+                  if (l1.handled) runOutput = "\n" + l1.output;
                 } else {
-                  yield { type: "text_delta", text: bar(100, "Done!") + "\n\n" + summary + `\n\n  To run: "levantalo en el puerto 15623"\n` };
+                  engineState.phase = "Done!";
+                  engineState.step = 4;
                 }
+
+                // Done — deactivate progress, show summary
+                await new Promise(r => setTimeout(r, 300));
+                engineState.active = false;
+
+                const summary = [
+                  `  ✅ ${webResult.intent.siteType} — ${totalFiles} files (${webResult.machineFiles} machine, 0 LLM)`,
+                  `  📁 ${webResult.projectPath}`,
+                ].join("\n");
+
+                const finalText = summary + runOutput + (runMatch ? "" : `\n\n  To run: "levantalo en el puerto 15623"`);
+                yield { type: "text_delta", text: finalText + "\n" };
 
                 const fullText = summary;
                 this.state.messages.push({ role: "user", content: userMessage });

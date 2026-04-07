@@ -129,6 +129,16 @@ export default function App({ config, conversationManager, tools, initialSession
   const [sessionName, setSessionName] = useState<string>(initialSessionName ?? "");
   const [sessionTags, setSessionTags] = useState<string[]>([]);
 
+  // Engine creation progress (polled from global engineState)
+  const [engineProgress, setEngineProgress] = useState<{
+    active: boolean;
+    phase: string;
+    step: number;
+    totalSteps: number;
+    siteType: string;
+    startTime: number;
+  } | null>(null);
+
   // Background scan progress (polled from global scanState)
   const [scanProgress, setScanProgress] = useState<{
     active: boolean;
@@ -292,6 +302,28 @@ export default function App({ config, conversationManager, tools, initialSession
     }, 200);
     return () => clearInterval(timer);
   }, [scanProgress]);
+
+  // Poll engine creation progress
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const { engineState } = await import("../core/engine-progress.js");
+        if (engineState.active) {
+          setEngineProgress({
+            active: engineState.active,
+            phase: engineState.phase,
+            step: engineState.step,
+            totalSteps: engineState.totalSteps,
+            siteType: engineState.siteType,
+            startTime: engineState.startTime,
+          });
+        } else if (engineProgress?.active) {
+          setEngineProgress(null);
+        }
+      } catch { /* not loaded */ }
+    }, 150);
+    return () => clearInterval(timer);
+  }, [engineProgress]);
 
   // Terminal tab title — shows activity status with emojis
   useEffect(() => {
@@ -802,6 +834,30 @@ export default function App({ config, conversationManager, tools, initialSession
                     <Text color="yellow">{` — ${(scanProgress as any).escalated} ☁ escalated`}</Text>
                   )}
                   {` — ${scanProgress.elapsed.toFixed(1)}s`}
+                </Text>
+              );
+            })()}
+          </Box>
+        )}
+
+        {/* Engine progress bar (project creation) */}
+        {engineProgress && engineProgress.active && (
+          <Box marginLeft={2} marginBottom={0} flexDirection="column">
+            <Text color="magenta">
+              {"  ◆ "}
+              {engineProgress.phase}
+            </Text>
+            {engineProgress.totalSteps > 0 && (() => {
+              const pct = Math.round((engineProgress.step / engineProgress.totalSteps) * 100);
+              const filled = Math.round((engineProgress.step / engineProgress.totalSteps) * 20);
+              const elapsed = ((Date.now() - engineProgress.startTime) / 1000).toFixed(1);
+              return (
+                <Text color="magenta">
+                  {"    ["}
+                  {"█".repeat(filled)}
+                  {"░".repeat(20 - filled)}
+                  {"] "}
+                  {`${pct}% — ${engineProgress.siteType} — ${elapsed}s`}
                 </Text>
               );
             })()}
