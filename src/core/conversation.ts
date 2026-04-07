@@ -537,7 +537,7 @@ export class ConversationManager {
       if (task.type !== "general" && task.confidence >= 0.8) {
         // ── Level 2: Machine-first code/web creation ──
         // If engine can handle 100%, respond directly (0 tokens). If partial, send focused prompt.
-        const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|iot|analytics|admin\s*panel)\b/i.test(userMessage);
+        const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
 
         if (task.type === "implement") {
           const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
