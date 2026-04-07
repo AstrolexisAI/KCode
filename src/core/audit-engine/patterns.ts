@@ -376,6 +376,191 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     cwe: "CWE-22",
     fix_template: "Use os.path.abspath() + check it starts with expected base directory.",
   },
+  {
+    id: "py-009-pickle-untrusted",
+    title: "pickle.load() on untrusted data (arbitrary code execution)",
+    severity: "critical",
+    languages: ["python"],
+    regex: /\bpickle\.loads?\s*\(\s*(?:request|data|payload|body|content|recv|read|input)/g,
+    explanation:
+      "pickle.load() on data from network, user upload, or any untrusted source allows arbitrary code execution. An attacker can craft a pickle payload that runs shell commands on deserialization.",
+    verify_prompt:
+      "Is the data passed to pickle.load() from an UNTRUSTED source (network, " +
+      "user upload, API response, shared storage)? If the pickle data is from a " +
+      "local file written only by the same application, respond FALSE_POSITIVE. " +
+      "If from any external source, respond CONFIRMED.",
+    cwe: "CWE-502",
+    fix_template: "Use json.loads() or a safe serialization format. If pickle is required, use hmac-signed pickles with a secret key.",
+  },
+  {
+    id: "py-010-assert-validation",
+    title: "assert used for input validation (stripped in -O mode)",
+    severity: "medium",
+    languages: ["python"],
+    regex: /\bassert\s+(?:isinstance|len|type|int|str|float|0\s*<|0\s*<=|\w+\s*(?:>|<|>=|<=|!=|==)\s*\d)/g,
+    explanation:
+      "assert statements are removed when Python runs with -O (optimized) or -OO flags. Using assert for input validation means the check disappears in production.",
+    verify_prompt:
+      "Is this assert validating external input or function arguments that could " +
+      "be wrong at runtime? If it's a debug-only invariant that documents assumptions " +
+      "and is never exposed to external data, respond FALSE_POSITIVE. If it guards " +
+      "against bad input, respond CONFIRMED.",
+    cwe: "CWE-617",
+    fix_template: "Replace assert with: if not condition: raise ValueError('...')",
+  },
+  {
+    id: "py-011-eq-without-hash",
+    title: "__eq__ defined without __hash__ (breaks sets/dicts)",
+    severity: "medium",
+    languages: ["python"],
+    regex: /def\s+__eq__\s*\(\s*self[\s\S]{0,500}?(?!def\s+__hash__)/g,
+    explanation:
+      "Defining __eq__ without __hash__ makes the class unhashable in Python 3. Objects cannot be used in sets or as dict keys, and may cause subtle bugs if inherited __hash__ produces inconsistent results.",
+    verify_prompt:
+      "Does this class define __eq__ but NOT __hash__? Check the full class body. " +
+      "If __hash__ is defined elsewhere in the class, respond FALSE_POSITIVE. " +
+      "If the class is intentionally unhashable (e.g. mutable container), respond " +
+      "FALSE_POSITIVE. If __hash__ is missing and the object may be used in sets/dicts, respond CONFIRMED.",
+    cwe: "CWE-697",
+    fix_template: "Add __hash__ that returns hash of the same fields used in __eq__, or set __hash__ = None explicitly.",
+  },
+  {
+    id: "py-012-mutable-default-arg",
+    title: "Mutable default argument (shared between calls)",
+    severity: "medium",
+    languages: ["python"],
+    regex: /def\s+\w+\s*\([^)]*(?::\s*(?:list|dict|set)\s*=\s*(?:\[\]|\{\}|set\(\))|=\s*(?:\[\]|\{\}))/g,
+    explanation:
+      "Mutable default arguments (def foo(x=[])) are created once and shared across all calls. Appending to them accumulates state between invocations, causing hard-to-debug issues.",
+    verify_prompt:
+      "Is this default argument a mutable object (list, dict, set) that gets modified " +
+      "inside the function? If the function never mutates the default (only reads), " +
+      "respond FALSE_POSITIVE. If it appends/modifies the default, respond CONFIRMED.",
+    cwe: "CWE-665",
+    fix_template: "Use None as default and create inside: def foo(x=None): x = x if x is not None else []",
+  },
+  {
+    id: "py-013-bare-except",
+    title: "Bare except: catches SystemExit and KeyboardInterrupt",
+    severity: "medium",
+    languages: ["python"],
+    regex: /\bexcept\s*:/g,
+    explanation:
+      "A bare except: clause catches ALL exceptions including SystemExit (sys.exit()), KeyboardInterrupt (Ctrl+C), and GeneratorExit. This can prevent clean shutdown and make the program unkillable.",
+    verify_prompt:
+      "Is this a bare except: (no exception type specified)? If it catches a specific " +
+      "exception type like except Exception: or except ValueError:, respond FALSE_POSITIVE. " +
+      "If it's truly bare except:, respond CONFIRMED.",
+    cwe: "CWE-396",
+    fix_template: "Replace except: with except Exception: to allow SystemExit and KeyboardInterrupt to propagate.",
+  },
+  {
+    id: "py-014-late-binding-closure",
+    title: "Late binding closure in loop (captures variable reference)",
+    severity: "medium",
+    languages: ["python"],
+    regex: /for\s+(\w+)\s+in\s+[\s\S]{0,100}?(?:lambda\s*[^:]*:\s*\1\b|lambda\s*:\s*\1\b)/g,
+    explanation:
+      "Closures in Python capture variables by reference, not value. A lambda defined inside a loop that references the loop variable will use the FINAL value of that variable when called, not the value at the time of definition.",
+    verify_prompt:
+      "Does the lambda/closure reference a loop variable without binding it as a " +
+      "default argument? If the variable is bound via default arg (lambda x=x: ...), " +
+      "respond FALSE_POSITIVE. If it references the loop variable directly, respond CONFIRMED.",
+    cwe: "CWE-758",
+    fix_template: "Bind via default arg: lambda i=i: i, or use functools.partial().",
+  },
+  {
+    id: "py-015-os-system-user-input",
+    title: "os.system() with user-controlled input",
+    severity: "critical",
+    languages: ["python"],
+    regex: /\bos\.system\s*\(\s*(?:f["']|.*\+|.*\.format\(|.*%\s)/g,
+    explanation:
+      "os.system() runs commands through the shell. If any part of the command string comes from user input, this is a command injection vulnerability.",
+    verify_prompt:
+      "Does the command string include ANY external/user input? If the entire command " +
+      "is a hardcoded constant with no interpolation, respond FALSE_POSITIVE. " +
+      "If any variable is interpolated, respond CONFIRMED.",
+    cwe: "CWE-78",
+    fix_template: "Use subprocess.run([...], shell=False) with a list of arguments.",
+  },
+  {
+    id: "py-016-tempfile-mktemp",
+    title: "tempfile.mktemp() race condition (use mkstemp)",
+    severity: "medium",
+    languages: ["python"],
+    regex: /\btempfile\.mktemp\s*\(/g,
+    explanation:
+      "tempfile.mktemp() returns a filename but does not create it, creating a TOCTOU race condition. An attacker can create a symlink at that path between mktemp() and open(), leading to symlink attacks.",
+    verify_prompt:
+      "Is this code using tempfile.mktemp() to generate a temporary filename? " +
+      "If it uses mkstemp(), NamedTemporaryFile, or TemporaryDirectory instead, " +
+      "respond FALSE_POSITIVE. If mktemp(), respond CONFIRMED.",
+    cwe: "CWE-377",
+    fix_template: "Use tempfile.mkstemp() (returns fd+name atomically) or tempfile.NamedTemporaryFile().",
+  },
+  {
+    id: "py-017-hardcoded-secret-assign",
+    title: "Hardcoded secret or API key in assignment",
+    severity: "high",
+    languages: ["python"],
+    regex: /(?:api_key|api_secret|aws_secret|private_key|database_password|db_password)\s*=\s*["'][A-Za-z0-9+/=_-]{12,}["']/gi,
+    explanation:
+      "Hardcoded secrets in source code are exposed to anyone with repository access and persist in git history even after deletion.",
+    verify_prompt:
+      "Is this a REAL secret or a placeholder (e.g. 'your-key-here', 'changeme', " +
+      "'xxx', 'test')? If it looks like a real credential (long, random string), " +
+      "respond CONFIRMED. If placeholder or test, respond FALSE_POSITIVE.",
+    cwe: "CWE-798",
+    fix_template: "Use os.environ.get('API_KEY') or a secrets manager (AWS Secrets Manager, Vault).",
+  },
+  {
+    id: "py-018-re-no-raw-string",
+    title: "re.compile/re.match without raw string (backslash issues)",
+    severity: "low",
+    languages: ["python"],
+    regex: /\bre\.(?:compile|match|search|findall|sub)\s*\(\s*"(?:[^"]*\\[dDwWsSbB])/g,
+    explanation:
+      "Using regular strings instead of raw strings (r'...') with regex causes backslash escaping confusion. Python processes \\d as an escape sequence before re sees it. Use r'\\d' instead of '\\\\d'.",
+    verify_prompt:
+      "Is this regex using a regular string (not r'...') with backslash sequences " +
+      "like \\d, \\w, \\s? If it uses a raw string r'...', respond FALSE_POSITIVE. " +
+      "If the backslashes are doubled correctly (\\\\d), respond FALSE_POSITIVE. " +
+      "If single backslashes in a non-raw string, respond CONFIRMED.",
+    cwe: "CWE-185",
+    fix_template: "Use raw strings: re.compile(r'\\d+') instead of re.compile('\\\\d+')",
+  },
+  {
+    id: "py-019-fstring-logging",
+    title: "f-string in logging call (always evaluates)",
+    severity: "low",
+    languages: ["python"],
+    regex: /\blogger\.(?:debug|info|warning|error|critical)\s*\(\s*f["']/g,
+    explanation:
+      "Using f-strings in logging always evaluates the string even if the log level is disabled. This wastes CPU on string formatting and can cause errors if the interpolated values are expensive or have side effects. Use lazy % formatting.",
+    verify_prompt:
+      "Is this a logging call using an f-string? If the string is simple and cheap, " +
+      "respond FALSE_POSITIVE. If it involves expensive computation (database queries, " +
+      "serialization, repr of large objects), respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use lazy formatting: logger.debug('Value: %s', expensive_value) instead of logger.debug(f'Value: {expensive_value}')",
+  },
+  {
+    id: "py-020-global-keyword",
+    title: "global keyword usage (code smell, shared mutable state)",
+    severity: "low",
+    languages: ["python"],
+    regex: /^\s*global\s+\w+/gm,
+    explanation:
+      "The global keyword creates shared mutable state that makes code harder to test, reason about, and maintain. It can cause subtle bugs in multi-threaded code and makes dependency injection impossible.",
+    verify_prompt:
+      "Is this global used for legitimate module-level state (e.g., singleton " +
+      "initialization, configuration cache)? If it's a well-known pattern like " +
+      "module-level logger or config, respond FALSE_POSITIVE. If it's used to pass " +
+      "state between functions, respond CONFIRMED.",
+    cwe: "CWE-1054",
+    fix_template: "Pass the value as a function parameter, use a class to encapsulate state, or use a module-level constant.",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -460,6 +645,173 @@ export const JS_PATTERNS: BugPattern[] = [
     cwe: "CWE-78",
     fix_template: "Use spawn/execFile with array args instead of shell string.",
   },
+  {
+    id: "js-008-prototype-pollution-bracket",
+    title: "Prototype pollution via bracket notation with user key",
+    severity: "high",
+    languages: ["javascript", "typescript"],
+    regex: /\w+\[\s*(?:req\.|params\.|body\.|query\.|input|key|prop|name|field)\w*\s*\]\s*=/g,
+    explanation:
+      "Setting object properties via bracket notation with a user-controlled key allows prototype pollution. An attacker can set __proto__.isAdmin = true to affect all objects.",
+    verify_prompt:
+      "Is the key (property name) from user/external input? Check if __proto__, " +
+      "constructor, or prototype keys are filtered. If there's a hasOwnProperty check " +
+      "or allowlist, respond FALSE_POSITIVE. If user controls the key without filtering, respond CONFIRMED.",
+    cwe: "CWE-1321",
+    fix_template: "Validate keys: if (['__proto__', 'constructor', 'prototype'].includes(key)) return; or use Map instead of plain objects.",
+  },
+  {
+    id: "js-009-redos-nested-quantifier",
+    title: "ReDoS: regex with nested quantifiers on user input",
+    severity: "high",
+    languages: ["javascript", "typescript"],
+    regex: /new\s+RegExp\s*\([^)]*\)[\s\S]{0,100}?\.(?:test|match|exec)\s*\(\s*(?:req\.|params\.|body\.|query\.|input|user)/g,
+    explanation:
+      "Regex with nested quantifiers (e.g., (a+)+, (a|b)*c) on user input can cause catastrophic backtracking (ReDoS), freezing the event loop for minutes or hours.",
+    verify_prompt:
+      "Does this regex run on user-controlled input? If the input is from a trusted " +
+      "source or the regex has no nested quantifiers/alternation, respond FALSE_POSITIVE. " +
+      "If user input hits a complex regex, respond CONFIRMED.",
+    cwe: "CWE-1333",
+    fix_template: "Use re2 library for safe regex, or add input length limits and timeouts.",
+  },
+  {
+    id: "js-010-innerhtml-xss",
+    title: "innerHTML assignment with dynamic content (XSS)",
+    severity: "high",
+    languages: ["javascript", "typescript"],
+    regex: /\.innerHTML\s*(?:=|\+=)\s*(?!["'`]\s*;)(?:.*\+|`[^`]*\$\{)/g,
+    explanation:
+      "Assigning dynamic content to innerHTML enables XSS. Attacker-controlled HTML can execute scripts, steal cookies, and hijack sessions.",
+    verify_prompt:
+      "Is the assigned value constructed from user input or external data? " +
+      "If it's entirely hardcoded HTML or sanitized with DOMPurify, respond FALSE_POSITIVE. " +
+      "If any user data is concatenated or interpolated, respond CONFIRMED.",
+    cwe: "CWE-79",
+    fix_template: "Use textContent for text, or sanitize: el.innerHTML = DOMPurify.sanitize(html).",
+  },
+  {
+    id: "js-011-eval-new-function",
+    title: "new Function() with user input (code execution)",
+    severity: "critical",
+    languages: ["javascript", "typescript"],
+    regex: /\bnew\s+Function\s*\(\s*(?:req\.|params\.|body\.|query\.|input|user|arg|data)/g,
+    explanation:
+      "new Function() creates a function from a string, equivalent to eval(). If the string contains user input, this is remote code execution.",
+    verify_prompt:
+      "Is the string passed to new Function() from user/external input? " +
+      "If entirely hardcoded or from trusted internal source, respond FALSE_POSITIVE. " +
+      "If any user data is interpolated, respond CONFIRMED.",
+    cwe: "CWE-95",
+    fix_template: "Avoid new Function() with dynamic strings. Use a safe expression parser or sandbox.",
+  },
+  {
+    id: "js-012-event-listener-leak",
+    title: "addEventListener without corresponding removeEventListener",
+    severity: "low",
+    languages: ["javascript", "typescript"],
+    regex: /addEventListener\s*\(\s*["'][^"']+["']\s*,\s*(?:function|\([^)]*\)\s*=>|[a-zA-Z_]\w*)\s*\)/g,
+    explanation:
+      "Adding event listeners without removing them causes memory leaks, especially in SPAs where components mount/unmount. Each re-render adds another listener.",
+    verify_prompt:
+      "Is this addEventListener in a component or context that gets destroyed/unmounted? " +
+      "If there's a corresponding removeEventListener in a cleanup/destroy/unmount handler, " +
+      "respond FALSE_POSITIVE. If the listener is added repeatedly without cleanup, respond CONFIRMED.",
+    cwe: "CWE-401",
+    fix_template:
+      "Store reference and remove in cleanup: const handler = () => {}; el.addEventListener('click', handler); // later: el.removeEventListener('click', handler);",
+  },
+  {
+    id: "js-013-loose-equality",
+    title: "Loose equality (==) instead of strict equality (===)",
+    severity: "low",
+    languages: ["javascript", "typescript"],
+    regex: /[^!=<>]==[^=]/g,
+    explanation:
+      "The == operator performs type coercion, leading to surprising results: '' == false, 0 == '', null == undefined. This causes subtle bugs in conditionals.",
+    verify_prompt:
+      "Is this == comparison intentional for type coercion (e.g., x == null to check " +
+      "both null and undefined)? If it's an intentional null-check idiom, respond " +
+      "FALSE_POSITIVE. If it's comparing values that should use strict equality, respond CONFIRMED.",
+    cwe: "CWE-697",
+    fix_template: "Use === for strict equality, or == null specifically for null/undefined checks.",
+  },
+  {
+    id: "js-014-json-parse-no-catch",
+    title: "JSON.parse without try/catch (crash on invalid input)",
+    severity: "medium",
+    languages: ["javascript", "typescript"],
+    regex: /(?<!try\s*\{[\s\S]{0,200}?)JSON\.parse\s*\(\s*(?:req\.|body\.|data|input|response|text|content)/g,
+    explanation:
+      "JSON.parse() throws SyntaxError on invalid JSON. Without try/catch, malformed input crashes the process or rejects the promise unhandled.",
+    verify_prompt:
+      "Is this JSON.parse() wrapped in a try/catch block? Check the surrounding " +
+      "context (may be in an outer try block). If properly caught, respond FALSE_POSITIVE. " +
+      "If no error handling exists, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Wrap in try/catch: try { const obj = JSON.parse(data); } catch (e) { /* handle */ }",
+  },
+  {
+    id: "js-015-promise-no-catch",
+    title: "Promise chain without .catch() (unhandled rejection)",
+    severity: "medium",
+    languages: ["javascript", "typescript"],
+    regex: /\.then\s*\([^)]+\)\s*(?:;|\n)(?!\s*\.catch)/g,
+    explanation:
+      "A Promise .then() chain without .catch() leads to unhandled promise rejections. In Node.js, unhandled rejections crash the process by default.",
+    verify_prompt:
+      "Does this promise chain have a .catch() handler anywhere in the chain? " +
+      "If there's a .catch() further down, or it's inside an async function with try/catch, " +
+      "respond FALSE_POSITIVE. If no error handler exists, respond CONFIRMED.",
+    cwe: "CWE-755",
+    fix_template: "Add .catch(err => { /* handle */ }) at the end of the chain, or use async/await with try/catch.",
+  },
+  {
+    id: "js-016-open-redirect",
+    title: "window.location set from user input (open redirect)",
+    severity: "medium",
+    languages: ["javascript", "typescript"],
+    regex: /(?:window\.location|location\.href|location\.assign|location\.replace)\s*(?:=|\()\s*(?:req\.|params\.|query\.|input|user|data|url)/g,
+    explanation:
+      "Setting window.location from user-controlled input enables open redirect attacks. An attacker can craft a URL that redirects users to a phishing site.",
+    verify_prompt:
+      "Is the redirect URL from user/external input? If the URL is hardcoded or " +
+      "validated against an allowlist of domains, respond FALSE_POSITIVE. " +
+      "If user controls the full URL, respond CONFIRMED.",
+    cwe: "CWE-601",
+    fix_template:
+      "Validate redirect URL against allowlist: const allowed = ['/dashboard', '/home']; if (allowed.includes(url)) location.href = url;",
+  },
+  {
+    id: "js-017-hardcoded-secret-inline",
+    title: "Hardcoded secret or API key in JavaScript/TypeScript",
+    severity: "high",
+    languages: ["javascript", "typescript"],
+    regex: /(?:api[_-]?key|api[_-]?secret|auth[_-]?token|private[_-]?key)\s*[:=]\s*["'][A-Za-z0-9+/=_\-]{20,}["']/gi,
+    explanation:
+      "Hardcoded API keys and secrets in source code are exposed in git history, build artifacts, and client-side bundles. They can be extracted and abused.",
+    verify_prompt:
+      "Is this a REAL API key/secret or a placeholder/test value (e.g. 'test-key', " +
+      "'your-api-key-here', 'sk-test-...')? If it looks like a real credential, " +
+      "respond CONFIRMED. If placeholder or test, respond FALSE_POSITIVE.",
+    cwe: "CWE-798",
+    fix_template: "Use process.env.API_KEY or a secrets manager. Never commit real keys.",
+  },
+  {
+    id: "js-018-document-write",
+    title: "document.write() usage (XSS vector, performance issue)",
+    severity: "medium",
+    languages: ["javascript", "typescript"],
+    regex: /\bdocument\.write(?:ln)?\s*\(/g,
+    explanation:
+      "document.write() can inject arbitrary HTML/scripts into the page. Called after page load, it replaces the entire document. It's both an XSS vector and a performance anti-pattern.",
+    verify_prompt:
+      "Is the argument to document.write() from user/external input? If entirely " +
+      "hardcoded (e.g. analytics snippet), respond FALSE_POSITIVE. If dynamic " +
+      "content or if called after DOMContentLoaded, respond CONFIRMED.",
+    cwe: "CWE-79",
+    fix_template: "Use DOM APIs: document.createElement() + appendChild(), or element.textContent for text.",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -522,6 +874,286 @@ export const GO_PATTERNS: BugPattern[] = [
     cwe: "CWE-295",
     fix_template: "Remove InsecureSkipVerify: true, or use proper CA certificates.",
   },
+
+  // ── Unchecked error return ────────────────────────────────────
+  {
+    id: "go-006-blank-error",
+    title: "Error return assigned to blank identifier",
+    severity: "medium",
+    languages: ["go"],
+    regex: /\w+\s*,\s*_\s*:?=\s*\w+(?:\.\w+)*\s*\([^)]*\)/g,
+    explanation:
+      "Assigning the error return to `_` silently discards it. The calling code continues as if the operation succeeded, leading to data corruption or silent failures.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the function known to never return a meaningful error (e.g. bytes.Buffer.Write)? → FALSE_POSITIVE\n" +
+      "2. Is this in test code or a code example? → FALSE_POSITIVE\n" +
+      "3. Is there a comment explaining why the error is intentionally ignored? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the function can fail in production AND the error is silently discarded.",
+    cwe: "CWE-252",
+    fix_template: "Replace `val, _ := foo()` with `val, err := foo(); if err != nil { return err }`.",
+  },
+
+  // ── Goroutine leak ────────────────────────────────────────────
+  {
+    id: "go-007-goroutine-leak",
+    title: "Goroutine launched without context or done channel",
+    severity: "medium",
+    languages: ["go"],
+    regex: /\bgo\s+func\s*\([^)]*\)\s*\{(?![\s\S]{0,300}?(?:ctx\.Done|<-done|<-quit|<-stop|context\.))/g,
+    explanation:
+      "A goroutine launched without a context.Done() or done channel has no way to be signaled to stop. If the parent exits or the goroutine blocks on I/O, it leaks forever, consuming memory and OS threads.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Does the goroutine body contain a select with ctx.Done() or a done/quit channel? → FALSE_POSITIVE\n" +
+      "2. Is the goroutine doing a short, bounded operation (e.g., fire-and-forget log)? → FALSE_POSITIVE\n" +
+      "3. Is there a WaitGroup or errgroup ensuring the goroutine is joined? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the goroutine runs indefinitely with no cancellation mechanism.",
+    cwe: "CWE-404",
+    fix_template: "Pass a context.Context and select on ctx.Done() to allow graceful shutdown.",
+  },
+
+  // ── Defer in loop ─────────────────────────────────────────────
+  {
+    id: "go-008-defer-in-loop",
+    title: "defer inside a loop (resource accumulation)",
+    severity: "medium",
+    languages: ["go"],
+    regex: /\bfor\b[\s\S]{0,100}?\{[\s\S]{0,300}?\bdefer\b/g,
+    explanation:
+      "defer inside a for loop delays cleanup until the enclosing function returns, not until the loop iteration ends. Resources (file handles, locks, connections) accumulate until the function exits, potentially exhausting limits.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the loop body wrapped in an immediately-invoked function (func() { defer ... }())? → FALSE_POSITIVE\n" +
+      "2. Is the loop guaranteed to run a small fixed number of iterations? → FALSE_POSITIVE\n" +
+      "3. Is the deferred call lightweight (e.g., mutex.Unlock with no allocation)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the loop can run many iterations and defer accumulates heavyweight resources.",
+    cwe: "CWE-772",
+    fix_template: "Move the body into a helper function so defer runs per iteration, or close explicitly.",
+  },
+
+  // ── Nil map write ─────────────────────────────────────────────
+  {
+    id: "go-009-nil-map-write",
+    title: "Write to nil map (runtime panic)",
+    severity: "high",
+    languages: ["go"],
+    regex: /\bvar\s+(\w+)\s+map\s*\[[^\]]+\][^\n=]*\n(?![\s\S]{0,200}?\1\s*=\s*make)[\s\S]{0,200}?\1\s*\[/g,
+    explanation:
+      "Declaring a map variable with `var m map[K]V` initializes it to nil. Writing to a nil map causes a runtime panic. The map must be initialized with make() before use.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the map initialized with make() or a literal before the write? → FALSE_POSITIVE\n" +
+      "2. Is the map only read from (not written to)? → FALSE_POSITIVE\n" +
+      "3. Is there a nil check before the write? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the map is declared as nil and written to without initialization.",
+    cwe: "CWE-476",
+    fix_template: "Initialize with `m = make(map[K]V)` before writing, or use a map literal.",
+  },
+
+  // ── Race condition ────────────────────────────────────────────
+  {
+    id: "go-010-race-shared-var",
+    title: "Shared variable accessed in goroutine without synchronization",
+    severity: "high",
+    languages: ["go"],
+    regex: /\bgo\s+func\s*\([^)]*\)\s*\{[\s\S]{0,300}?(\w+)\s*(?:\+\+|--|(?:\+|-)=|=(?!=))[\s\S]{0,50}?\}\s*\(/g,
+    explanation:
+      "A variable from the outer scope is modified inside a goroutine without a mutex, atomic, or channel. This is a data race — undefined behavior in Go, detectable with `go test -race`.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the variable protected by a sync.Mutex or sync.RWMutex? → FALSE_POSITIVE\n" +
+      "2. Is it using atomic operations (atomic.AddInt64, etc.)? → FALSE_POSITIVE\n" +
+      "3. Is the variable a channel or only accessed after a WaitGroup.Wait()? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the variable is shared and modified without synchronization.",
+    cwe: "CWE-362",
+    fix_template: "Use sync.Mutex, atomic operations, or channels to synchronize access.",
+  },
+
+  // ── Context not propagated ────────────────────────────────────
+  {
+    id: "go-011-context-not-propagated",
+    title: "HTTP handler ignoring request context",
+    severity: "medium",
+    languages: ["go"],
+    regex: /func\s+\w*\s*\(\s*\w+\s+http\.ResponseWriter\s*,\s*(\w+)\s+\*http\.Request\s*\)[\s\S]{0,500}?(?:http\.Get|http\.Post|http\.Do|sql\.Query|sql\.Exec)\s*\(/g,
+    explanation:
+      "An HTTP handler makes outbound calls (HTTP, SQL) without passing the request's context. When the client disconnects, the downstream call continues wasting resources instead of being cancelled.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is req.Context() passed to the outbound call? → FALSE_POSITIVE\n" +
+      "2. Is the outbound call to a local/fast resource where cancellation doesn't matter? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if a slow outbound call ignores the request context.",
+    cwe: "CWE-404",
+    fix_template: "Use req.Context(): http.NewRequestWithContext(req.Context(), ...) or db.QueryContext(req.Context(), ...).",
+  },
+
+  // ── Infinite recursion ────────────────────────────────────────
+  {
+    id: "go-012-infinite-recursion",
+    title: "Function calls itself without visible base case",
+    severity: "high",
+    languages: ["go"],
+    regex: /func\s+(\w+)\s*\([^)]*\)[^{]*\{(?![\s\S]{0,200}?\b(?:if|switch|case|return)\b)[\s\S]{0,300}?\b\1\s*\(/g,
+    explanation:
+      "A function calls itself without a visible base case (no if/switch/return before the recursive call). This will cause a stack overflow at runtime.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is there a base case (if, switch, or early return) before the recursive call? → FALSE_POSITIVE\n" +
+      "2. Is this an intentional wrapper that delegates to a different overload? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if there is no terminating condition visible.",
+    cwe: "CWE-674",
+    fix_template: "Add a base case: if condition { return } before the recursive call.",
+  },
+
+  // ── Hardcoded credentials ─────────────────────────────────────
+  {
+    id: "go-013-hardcoded-credentials",
+    title: "Hardcoded password, secret, or API key in Go code",
+    severity: "high",
+    languages: ["go"],
+    regex: /(?:password|secret|apiKey|api_key|token|auth)\s*(?::=|=)\s*"[^"]{8,}"/gi,
+    explanation:
+      "Hardcoded credentials in source code are exposed to anyone with repo access. Secrets should come from environment variables, config files, or a secrets manager.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the value a placeholder like \"changeme\", \"TODO\", \"xxx\", or \"test\"? → FALSE_POSITIVE\n" +
+      "2. Is this in test code or example code? → FALSE_POSITIVE\n" +
+      "3. Is it a non-secret identifier (e.g., a header name, env var name)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if it looks like a real credential embedded in production code.",
+    cwe: "CWE-798",
+    fix_template: "Use os.Getenv(\"SECRET_KEY\") or a secrets manager.",
+  },
+
+  // ── Unbuffered channel deadlock ───────────────────────────────
+  {
+    id: "go-014-unbuffered-channel-deadlock",
+    title: "Unbuffered channel send/receive in same goroutine",
+    severity: "high",
+    languages: ["go"],
+    regex: /(\w+)\s*:=\s*make\s*\(\s*chan\s+[^,)]+\)[\s\S]{0,200}?\1\s*<-[\s\S]{0,100}?<-\s*\1/g,
+    explanation:
+      "Sending to and receiving from an unbuffered channel in the same goroutine deadlocks. The send blocks waiting for a receiver, but the receiver is after the send in the same goroutine.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the channel buffered (make(chan T, N) with N > 0)? → FALSE_POSITIVE\n" +
+      "2. Is the send/receive in different goroutines? → FALSE_POSITIVE\n" +
+      "3. Is this inside a select statement with a default case? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if both send and receive happen in the same goroutine on an unbuffered channel.",
+    cwe: "CWE-833",
+    fix_template: "Use a buffered channel: make(chan T, 1), or move send/receive to separate goroutines.",
+  },
+
+  // ── WaitGroup misuse ──────────────────────────────────────────
+  {
+    id: "go-015-waitgroup-add-after-go",
+    title: "sync.WaitGroup.Add() called after goroutine launch",
+    severity: "high",
+    languages: ["go"],
+    regex: /\bgo\s+(?:func\b|\w+\()[\s\S]{0,100}?\.Add\s*\(\s*1\s*\)/g,
+    explanation:
+      "Calling wg.Add(1) after `go func()` creates a race condition. The goroutine may call wg.Done() before Add(1) runs, causing a negative WaitGroup counter panic.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is wg.Add(1) called BEFORE the go statement? → FALSE_POSITIVE\n" +
+      "2. Is wg.Add(N) called once before a loop that launches N goroutines? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if Add is called after or inside the goroutine.",
+    cwe: "CWE-362",
+    fix_template: "Move wg.Add(1) to BEFORE the go statement.",
+  },
+
+  // ── HTTP response body not closed ─────────────────────────────
+  {
+    id: "go-016-http-body-not-closed",
+    title: "HTTP response body not closed (connection leak)",
+    severity: "medium",
+    languages: ["go"],
+    regex: /(?:http\.(?:Get|Post|Head))\s*\([^)]*\)[\s\S]{0,300}?(?![\s\S]{0,300}?\.Body\.Close\s*\(\))/g,
+    explanation:
+      "Not closing the HTTP response body leaks the underlying TCP connection. The transport cannot reuse it, eventually exhausting file descriptors or connection pool.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is resp.Body.Close() called (directly or via defer) after the HTTP call? → FALSE_POSITIVE\n" +
+      "2. Is the error checked and returned before body access (body is nil on error)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the response body is used but never closed.",
+    cwe: "CWE-772",
+    fix_template: "Add `defer resp.Body.Close()` immediately after the nil-error check.",
+  },
+
+  // ── Slice append capacity trap ────────────────────────────────
+  {
+    id: "go-017-slice-append-shared",
+    title: "Append to slice from function argument (shared backing array)",
+    severity: "medium",
+    languages: ["go"],
+    regex: /func\s+\w+\s*\([^)]*(\w+)\s+\[\]\w+[^)]*\)[\s\S]{0,300}?\1\s*=\s*append\s*\(\s*\1\s*,/g,
+    explanation:
+      "Appending to a slice parameter may modify the caller's backing array if there's spare capacity, causing silent data corruption. The caller doesn't see the new length but their data is overwritten.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the function documented to intentionally mutate the slice? → FALSE_POSITIVE\n" +
+      "2. Is the slice copied first (copy() or append([]T{}, s...))? → FALSE_POSITIVE\n" +
+      "3. Is the result returned and assigned by the caller? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the function appends to the parameter without returning the result.",
+    cwe: "CWE-119",
+    fix_template: "Copy first: local := make([]T, len(s)); copy(local, s); then append to local.",
+  },
+
+  // ── fmt.Sprintf in hot path ───────────────────────────────────
+  {
+    id: "go-018-sprintf-hot-path",
+    title: "fmt.Sprintf in performance-critical loop",
+    severity: "low",
+    languages: ["go"],
+    regex: /\bfor\b[\s\S]{0,200}?\{[\s\S]{0,300}?fmt\.Sprintf\s*\(/g,
+    explanation:
+      "fmt.Sprintf allocates on every call. In tight loops this creates significant GC pressure. Use strconv, strings.Builder, or pre-allocated buffers.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this loop bounded to a small number of iterations (< 100)? → FALSE_POSITIVE\n" +
+      "2. Is this in initialization code, not a hot path? → FALSE_POSITIVE\n" +
+      "3. Is the Sprintf result needed for error formatting (rare path)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if this is in a high-frequency loop where allocation matters.",
+    fix_template: "Use strconv.Itoa/FormatFloat, or strings.Builder for concatenation.",
+  },
+
+  // ── os.Exit in library code ───────────────────────────────────
+  {
+    id: "go-019-os-exit-library",
+    title: "os.Exit() in library/non-main package",
+    severity: "medium",
+    languages: ["go"],
+    regex: /\bos\.Exit\s*\(\s*\d+\s*\)/g,
+    explanation:
+      "os.Exit() in library code terminates the entire process, bypassing deferred cleanup, running goroutines, and any error handling the caller might have. Libraries should return errors, not exit.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this in a main package (package main)? → FALSE_POSITIVE\n" +
+      "2. Is this in a CLI tool's root command handler? → FALSE_POSITIVE\n" +
+      "3. Is this in a test file (TestMain)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if os.Exit is called in a library/utility package.",
+    cwe: "CWE-705",
+    fix_template: "Return an error instead of calling os.Exit(). Let the caller decide how to handle it.",
+  },
+
+  // ── Loop variable captured by goroutine ───────────────────────
+  {
+    id: "go-020-loop-var-goroutine",
+    title: "Loop variable captured by goroutine closure (pre-Go 1.22)",
+    severity: "medium",
+    languages: ["go"],
+    regex: /\bfor\s+(?:\w+\s*,\s*)?(\w+)\s*:?=\s*range\b[\s\S]{0,200}?\bgo\s+func\s*\([^)]*\)\s*\{[\s\S]{0,200}?\b\1\b/g,
+    explanation:
+      "Before Go 1.22, the loop variable is shared across all iterations. Goroutines capturing it by closure all see the LAST value. In Go 1.22+ with GOEXPERIMENT=loopvar this is fixed, but older code is affected.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the variable passed as a goroutine argument (go func(v T) { ... }(v))? → FALSE_POSITIVE\n" +
+      "2. Is there a `v := v` shadow inside the loop before the goroutine? → FALSE_POSITIVE\n" +
+      "3. Is the project using Go 1.22+ with loopvar semantics? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the loop variable is captured by closure without shadowing.",
+    cwe: "CWE-362",
+    fix_template: "Shadow the variable: `v := v` before the go statement, or pass it as a goroutine argument.",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -561,6 +1193,224 @@ export const RUST_PATTERNS: BugPattern[] = [
     verify_prompt: "Is user input interpolated via format!()? If parameterized ($1, ?), respond FALSE_POSITIVE.",
     cwe: "CWE-89",
     fix_template: 'Use sqlx::query("SELECT * FROM t WHERE id = $1").bind(id).',
+  },
+
+  // ── .unwrap() in non-test code ────────────────────────────────
+  {
+    id: "rs-004-unwrap-non-test",
+    title: ".unwrap() in non-test production code",
+    severity: "medium",
+    languages: ["rust"],
+    regex: /(?<!\#\[test\][\s\S]{0,500})\.\s*unwrap\s*\(\s*\)/g,
+    explanation:
+      ".unwrap() panics on None/Err, crashing the process. In server or library code this is unacceptable — a single bad input kills the service.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this in a test file (#[cfg(test)] module or tests/ directory)? → FALSE_POSITIVE\n" +
+      "2. Is this in main() where panic is acceptable for fatal startup errors? → FALSE_POSITIVE\n" +
+      "3. Is the unwrap on a value that is statically guaranteed (e.g., Regex::new on a literal)? → FALSE_POSITIVE\n" +
+      "4. Is there a comment explaining why unwrap is safe here? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if this is in library/server code where the value could be None/Err at runtime.",
+    cwe: "CWE-754",
+    fix_template: "Replace .unwrap() with ? operator, .unwrap_or_default(), or .map_err(|e| ...)?.",
+  },
+
+  // ── .expect() without meaningful message ──────────────────────
+  {
+    id: "rs-005-expect-no-message",
+    title: ".expect() with generic or empty message",
+    severity: "low",
+    languages: ["rust"],
+    regex: /\.expect\s*\(\s*"(?:failed|error|unexpected|should not happen|impossible|bug|todo|fixme|unreachable|panic|oops|crash)"\s*\)/gi,
+    explanation:
+      ".expect() should provide a meaningful error message explaining WHY the value should be present. Generic messages like \"failed\" give no debugging context when the panic occurs in production logs.",
+    verify_prompt:
+      "Does the .expect() message explain the specific condition that was expected? " +
+      "If the message is descriptive (e.g., \"database connection must be initialized before query\"), " +
+      "respond FALSE_POSITIVE. If it's generic (\"failed\", \"error\", \"should not happen\"), respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Use a descriptive message: .expect(\"config file must exist after init phase\")",
+  },
+
+  // ── unsafe without SAFETY comment ─────────────────────────────
+  {
+    id: "rs-006-unsafe-no-safety",
+    title: "unsafe block without // SAFETY: comment",
+    severity: "medium",
+    languages: ["rust"],
+    regex: /(?<!\/{2}\s*SAFETY:[^\n]*\n\s*)\bunsafe\s*\{/g,
+    explanation:
+      "Rust convention requires a `// SAFETY:` comment before every unsafe block explaining why the invariants are upheld. Missing comments indicate the author may not have verified safety.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is there a // SAFETY: comment on the line(s) immediately before the unsafe block? → FALSE_POSITIVE\n" +
+      "2. Is this in a well-known FFI wrapper where safety is documented at module level? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the unsafe block has no safety justification comment.",
+    cwe: "CWE-787",
+    fix_template: "Add a // SAFETY: comment explaining why the invariants are upheld.",
+  },
+
+  // ── Arc<Mutex> vs Arc<RwLock> ─────────────────────────────────
+  {
+    id: "rs-007-arc-mutex-read-heavy",
+    title: "Arc<Mutex<T>> used where Arc<RwLock<T>> may be better",
+    severity: "low",
+    languages: ["rust"],
+    regex: /Arc\s*<\s*Mutex\s*<[^>]+>\s*>/g,
+    explanation:
+      "Arc<Mutex<T>> serializes all access (reads AND writes). If the data is read-heavy with infrequent writes, Arc<RwLock<T>> allows concurrent reads and significantly improves throughput.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the data mostly written to (not read-heavy)? → FALSE_POSITIVE\n" +
+      "2. Is the lock held for very short durations where RwLock overhead isn't worth it? → FALSE_POSITIVE\n" +
+      "3. Is the Mutex protecting a resource that requires exclusive access (e.g., socket, file)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the data is clearly read-heavy and would benefit from concurrent reads.",
+    fix_template: "Replace Mutex with RwLock: Arc<RwLock<T>>. Use .read() for shared access, .write() for exclusive.",
+  },
+
+  // ── Blocking in async ─────────────────────────────────────────
+  {
+    id: "rs-008-blocking-in-async",
+    title: "Blocking call inside async function",
+    severity: "high",
+    languages: ["rust"],
+    regex: /async\s+fn\s+\w+[\s\S]{0,500}?(?:std::thread::sleep|std::fs::\w+|std::net::\w+|\.read_to_string|\.write_all)\s*\(/g,
+    explanation:
+      "Calling std::thread::sleep, std::fs, or std::net (blocking I/O) inside an async function blocks the executor thread. This starves other tasks on the same runtime, causing latency spikes or deadlocks.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this wrapped in tokio::task::spawn_blocking() or equivalent? → FALSE_POSITIVE\n" +
+      "2. Is the async runtime configured with multi-threaded scheduler AND this is rare? → FALSE_POSITIVE\n" +
+      "3. Is this using the async version (tokio::fs, tokio::time::sleep, tokio::net)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if a blocking call is made directly in an async context without spawn_blocking.",
+    cwe: "CWE-400",
+    fix_template: "Use tokio::time::sleep, tokio::fs, or wrap in spawn_blocking(|| { ... }).await.",
+  },
+
+  // ── clone() in loop ───────────────────────────────────────────
+  {
+    id: "rs-009-clone-in-loop",
+    title: "clone() on potentially large type inside loop",
+    severity: "low",
+    languages: ["rust"],
+    regex: /\bfor\b[\s\S]{0,200}?\{[\s\S]{0,300}?\.clone\s*\(\s*\)/g,
+    explanation:
+      "Calling .clone() inside a loop creates a deep copy on every iteration. For large structs, Vecs, or Strings, this is an O(n*m) allocation pattern that kills performance.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the cloned type small/cheap (e.g., Arc, Rc, i32, bool)? → FALSE_POSITIVE\n" +
+      "2. Is the loop bounded to a small number of iterations? → FALSE_POSITIVE\n" +
+      "3. Can the clone be replaced with a borrow (&T) or Cow? → If yes, respond CONFIRMED.\n" +
+      "Only respond CONFIRMED if the cloned data is large and the loop is hot.",
+    fix_template: "Use references (&T), Cow<T>, or Arc<T> instead of cloning. Move allocation outside the loop.",
+  },
+
+  // ── Missing Send + Sync on async return ───────────────────────
+  {
+    id: "rs-010-async-send-sync",
+    title: "Async function return not Send (cannot spawn across threads)",
+    severity: "medium",
+    languages: ["rust"],
+    regex: /async\s+fn\s+\w+[^{]*->\s*(?:impl\s+Future|Box\s*<\s*dyn\s+Future)(?![\s\S]{0,50}?Send)/g,
+    explanation:
+      "Async functions that return impl Future without a Send bound cannot be spawned with tokio::spawn() or used in multi-threaded executors. This causes confusing compile errors downstream.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this explicitly single-threaded (e.g., LocalSet, #[tokio::main(flavor = \"current_thread\")])? → FALSE_POSITIVE\n" +
+      "2. Does the return type already include + Send? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the future is used in a multi-threaded context without Send bound.",
+    fix_template: "Add Send bound: -> impl Future<Output = T> + Send, or use Pin<Box<dyn Future + Send>>.",
+  },
+
+  // ── Hardcoded secrets ─────────────────────────────────────────
+  {
+    id: "rs-011-hardcoded-secrets",
+    title: "Hardcoded password, secret, or API key in Rust code",
+    severity: "high",
+    languages: ["rust"],
+    regex: /(?:password|secret|api_key|apikey|token|auth_token)\s*(?::|=)\s*"[^"]{8,}"/gi,
+    explanation:
+      "Hardcoded credentials in source code are exposed to anyone with repo access. Compiled binaries also contain string literals that can be extracted.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the value a placeholder like \"changeme\", \"TODO\", \"test\", or \"example\"? → FALSE_POSITIVE\n" +
+      "2. Is this in test code or documentation? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if it looks like a real credential in production code.",
+    cwe: "CWE-798",
+    fix_template: "Use std::env::var(\"SECRET_KEY\") or a config/secrets manager.",
+  },
+
+  // ── Panic in Drop ─────────────────────────────────────────────
+  {
+    id: "rs-012-panic-in-drop",
+    title: "Potential panic inside Drop implementation",
+    severity: "high",
+    languages: ["rust"],
+    regex: /impl\s+Drop\s+for\s+\w+[\s\S]{0,300}?(?:\.unwrap\(\)|\.expect\(|panic!\(|unreachable!\()/g,
+    explanation:
+      "Panicking inside a Drop implementation causes a double panic if the Drop runs during stack unwinding from another panic. This aborts the process immediately with no cleanup.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the unwrap/expect on a value that is statically guaranteed to succeed? → FALSE_POSITIVE\n" +
+      "2. Is there a std::thread::panicking() check before the panic-able code? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the Drop impl can panic on a fallible operation.",
+    cwe: "CWE-754",
+    fix_template: "Use if let Ok(v) = ... or .unwrap_or_else(|_| default) instead of unwrap/expect in Drop.",
+  },
+
+  // ── Unbounded Vec from user input ─────────────────────────────
+  {
+    id: "rs-013-unbounded-vec",
+    title: "Vec grown from untrusted input without capacity limit",
+    severity: "high",
+    languages: ["rust"],
+    regex: /(?:Vec::with_capacity|Vec::new)\s*\([^)]*\)[\s\S]{0,300}?(?:\.push|\.extend|\.append)\s*\([^)]*(?:input|request|body|payload|data|recv|read)/g,
+    explanation:
+      "Growing a Vec from untrusted input without a maximum capacity allows an attacker to trigger OOM by sending a large payload. The program allocates until it crashes.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is there a maximum length check before the loop/extend? → FALSE_POSITIVE\n" +
+      "2. Is the Vec pre-allocated with a bounded capacity? → FALSE_POSITIVE\n" +
+      "3. Is the input from a trusted source (not network/user)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if untrusted input drives unbounded Vec growth.",
+    cwe: "CWE-789",
+    fix_template: "Add a capacity limit: if data.len() > MAX_SIZE { return Err(...) }",
+  },
+
+  // ── mem::transmute ────────────────────────────────────────────
+  {
+    id: "rs-014-mem-transmute",
+    title: "mem::transmute usage (type-punning, UB risk)",
+    severity: "high",
+    languages: ["rust"],
+    regex: /\bmem::transmute\s*[:<(]/g,
+    explanation:
+      "mem::transmute reinterprets bits of one type as another without any checks. It can easily cause undefined behavior if the source and target types have different sizes, alignments, or validity invariants.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this transmuting between types with identical layout (e.g., repr(C) newtypes)? → FALSE_POSITIVE\n" +
+      "2. Is there a // SAFETY: comment with a sound justification? → FALSE_POSITIVE\n" +
+      "3. Can this be replaced with safe alternatives (as, From, TryFrom, bytemuck)? → If yes, CONFIRMED.\n" +
+      "Only respond CONFIRMED if the transmute is unjustified or can be replaced with safe code.",
+    cwe: "CWE-843",
+    fix_template: "Use safe alternatives: `as` casts, From/TryFrom, bytemuck::cast, or pointer::cast.",
+  },
+
+  // ── String formatting in SQL ──────────────────────────────────
+  {
+    id: "rs-015-format-sql",
+    title: "SQL query with format!/format_args! (injection risk)",
+    severity: "critical",
+    languages: ["rust"],
+    regex: /\b(?:query|execute|raw_sql)\s*\(\s*&?(?:format!\s*\(|format_args!\s*\()/g,
+    explanation:
+      "Building SQL queries with format!() or string concatenation bypasses parameterized query protection. User input in the formatted string enables SQL injection.",
+    verify_prompt:
+      "Is user/external input interpolated into the SQL via format!()? If the query uses " +
+      "bind parameters ($1, ?, :name) instead of string interpolation, respond FALSE_POSITIVE. " +
+      "If user input is formatted into the SQL string, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "Use parameterized queries: sqlx::query(\"SELECT * FROM t WHERE id = $1\").bind(id).",
   },
 ];
 
@@ -612,6 +1462,245 @@ export const JAVA_PATTERNS: BugPattern[] = [
     verify_prompt: "Is the file path derived from user/external input? If from internal config, respond FALSE_POSITIVE.",
     cwe: "CWE-22",
     fix_template: "Validate path: canonical = new File(base, input).getCanonicalPath(); if (!canonical.startsWith(base)) throw;",
+  },
+
+  // ── NullPointerException risk ──────────────────────────────────
+  {
+    id: "java-005-nullable-method-call",
+    title: "Method call on nullable return without null check",
+    severity: "high",
+    languages: ["java"],
+    regex: /\b(?:get|find|lookup|search|fetch|load|resolve|query)\w*\s*\([^)]*\)\s*\.\s*\w+\s*\(/g,
+    explanation:
+      "Calling a method on the return value of a get/find/lookup without checking for null first. If the lookup returns null, this throws NullPointerException.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Does the method have a @NonNull/@NotNull annotation on its return type? → FALSE_POSITIVE\n" +
+      "2. Is the return value an Optional that is being unwrapped with .get()? (separate pattern) → FALSE_POSITIVE\n" +
+      "3. Is there a null check on the same variable earlier in the method? → FALSE_POSITIVE\n" +
+      "4. Does the method contract guarantee non-null (e.g., getOrDefault, computeIfAbsent)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the method can return null AND no check exists.",
+    cwe: "CWE-476",
+    fix_template: "Add null check: Object result = getX(); if (result != null) { result.method(); }",
+  },
+
+  // ── Resource leak ──────────────────────────────────────────────
+  {
+    id: "java-006-resource-leak",
+    title: "InputStream/Connection not in try-with-resources",
+    severity: "medium",
+    languages: ["java"],
+    regex: /\b(?:InputStream|OutputStream|FileReader|FileWriter|BufferedReader|BufferedWriter|Connection|Statement|ResultSet|Socket|RandomAccessFile)\s+\w+\s*=\s*(?:new\s|.*\.(?:open|get|create))\s*[^;]*;(?![\s\S]{0,50}?\btry\b)/g,
+    explanation:
+      "A closeable resource is assigned but not wrapped in try-with-resources. If an exception is thrown before close(), the resource leaks.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the resource declared inside a try-with-resources statement? → FALSE_POSITIVE\n" +
+      "2. Is there a finally block that closes this resource? → FALSE_POSITIVE\n" +
+      "3. Is the resource returned from the method (caller's responsibility)? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the resource is opened, used, and no close mechanism exists.",
+    cwe: "CWE-772",
+    fix_template: "Wrap in try-with-resources: try (var stream = new FileInputStream(f)) { ... }",
+  },
+
+  // ── SQL injection in PreparedStatement ─────────────────────────
+  {
+    id: "java-007-sql-concat-prepared",
+    title: "String concatenation in PreparedStatement SQL",
+    severity: "critical",
+    languages: ["java"],
+    regex: /prepareStatement\s*\(\s*["'].*["']\s*\+/g,
+    explanation:
+      "Using string concatenation inside prepareStatement() defeats the purpose of parameterized queries. The concatenated part is still vulnerable to SQL injection.",
+    verify_prompt:
+      "Is user input being concatenated into the SQL string inside prepareStatement()? " +
+      "If only constants (table names, column names) are concatenated, respond FALSE_POSITIVE. " +
+      "If user-controlled values are concatenated, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "Use ? placeholders for ALL user values: prepareStatement(\"SELECT * FROM t WHERE id = ?\");",
+  },
+
+  // ── ConcurrentModificationException ────────────────────────────
+  {
+    id: "java-008-concurrent-modification",
+    title: "Modifying collection while iterating",
+    severity: "high",
+    languages: ["java"],
+    regex: /for\s*\(\s*\w+(?:\s*<[^>]*>)?\s+\w+\s*:\s*(\w+)\s*\)[\s\S]{0,300}?\1\s*\.(?:add|remove|clear)\s*\(/g,
+    explanation:
+      "Modifying a collection (add/remove/clear) while iterating over it with a for-each loop throws ConcurrentModificationException at runtime.",
+    verify_prompt:
+      "Is the collection being modified the SAME collection being iterated? " +
+      "If they are different collections (e.g., iterating copy, modifying original), respond FALSE_POSITIVE. " +
+      "If same collection, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Use Iterator.remove(), or collect items to remove and process after the loop, or use ConcurrentHashMap/CopyOnWriteArrayList.",
+  },
+
+  // ── Thread-unsafe singleton ────────────────────────────────────
+  {
+    id: "java-009-unsafe-singleton",
+    title: "Lazy singleton without synchronization (race condition)",
+    severity: "medium",
+    languages: ["java"],
+    regex: /if\s*\(\s*instance\s*==\s*null\s*\)\s*\{?\s*\n?\s*instance\s*=\s*new\b/g,
+    explanation:
+      "Lazy initialization of a singleton without synchronized or volatile allows two threads to create separate instances, breaking the singleton guarantee and causing subtle bugs.",
+    verify_prompt:
+      "Is this null-check + assignment inside a synchronized block, or is the field declared volatile with double-checked locking? " +
+      "If properly synchronized, respond FALSE_POSITIVE. If unprotected, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Use double-checked locking with volatile, or an enum singleton, or holder class pattern.",
+  },
+
+  // ── Hardcoded credentials ──────────────────────────────────────
+  {
+    id: "java-010-hardcoded-creds",
+    title: "Hardcoded password, secret, or API key in Java",
+    severity: "high",
+    languages: ["java"],
+    regex: /(?:password|passwd|secret|apiKey|api_key|token|credential)\s*=\s*"[^"]{8,}"/gi,
+    explanation:
+      "Hardcoded credentials in Java source code are exposed to anyone with access to the compiled class files (strings are stored in plaintext in .class files).",
+    verify_prompt:
+      "Is this a REAL secret (not a placeholder like \"changeme\", not a test fixture, not an empty/example value)? " +
+      "If it looks like a real credential, respond CONFIRMED. If test/placeholder, respond FALSE_POSITIVE.",
+    cwe: "CWE-798",
+    fix_template: "Load from environment: System.getenv(\"API_KEY\") or use a secrets vault.",
+  },
+
+  // ── Insecure deserialization ───────────────────────────────────
+  {
+    id: "java-011-insecure-deserialize",
+    title: "ObjectInputStream from untrusted source",
+    severity: "critical",
+    languages: ["java"],
+    regex: /new\s+ObjectInputStream\s*\(\s*(?:request\.|socket\.|conn\.|input|stream|is\b)/g,
+    explanation:
+      "Creating ObjectInputStream from network/request streams deserializes arbitrary objects. Attackers can execute code via gadget chains (Commons Collections, Spring, etc.).",
+    verify_prompt:
+      "Is the InputStream from a network source (HTTP request, socket, RMI)? " +
+      "If from a trusted local file written by the same application, respond FALSE_POSITIVE. " +
+      "If from any network/untrusted source, respond CONFIRMED.",
+    cwe: "CWE-502",
+    fix_template: "Use JSON/Protobuf for network data, or add ObjectInputFilter to whitelist allowed classes.",
+  },
+
+  // ── Path traversal ─────────────────────────────────────────────
+  {
+    id: "java-012-path-traversal-string",
+    title: "User input in File path without sanitization",
+    severity: "high",
+    languages: ["java"],
+    regex: /new\s+File\s*\(\s*(?:.*\+\s*(?:param|input|request|user|name|path|filename))/gi,
+    explanation:
+      "Constructing File paths with unsanitized user input allows path traversal attacks (../../etc/passwd).",
+    verify_prompt:
+      "Is the user input validated/sanitized before being used in the File path? " +
+      "Check for: canonical path comparison, regex filtering of ../, whitelist validation. " +
+      "If validated, respond FALSE_POSITIVE. If raw user input, respond CONFIRMED.",
+    cwe: "CWE-22",
+    fix_template: "Validate: String safe = new File(base, input).getCanonicalPath(); if (!safe.startsWith(baseDir)) throw new SecurityException();",
+  },
+
+  // ── XXE injection ──────────────────────────────────────────────
+  {
+    id: "java-013-xxe-transformer",
+    title: "XML TransformerFactory without disabling external entities",
+    severity: "high",
+    languages: ["java"],
+    regex: /TransformerFactory\.newInstance\s*\(\s*\)/g,
+    explanation:
+      "Default TransformerFactory configuration allows XML external entities, enabling XXE attacks that can read local files or perform SSRF.",
+    verify_prompt:
+      "Is the TransformerFactory configured with setAttribute to disable external entities (ACCESS_EXTERNAL_DTD, ACCESS_EXTERNAL_STYLESHEET set to \"\")? " +
+      "If protected, respond FALSE_POSITIVE. If default configuration, respond CONFIRMED.",
+    cwe: "CWE-611",
+    fix_template: "factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, \"\"); factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");",
+  },
+
+  // ── Log injection ──────────────────────────────────────────────
+  {
+    id: "java-014-log-injection",
+    title: "Unsanitized user input in log message",
+    severity: "medium",
+    languages: ["java"],
+    regex: /\b(?:log|logger|LOG)\s*\.\s*(?:info|warn|error|debug|trace)\s*\(\s*(?:"[^"]*"\s*\+\s*(?:request|param|input|user|req\.))/gi,
+    explanation:
+      "Logging unsanitized user input allows log injection/forging. Attackers can inject newlines to create fake log entries or exploit log parsing tools.",
+    verify_prompt:
+      "Is user input being concatenated into the log message? " +
+      "If using parameterized logging (logger.info(\"msg {}\", param)), respond FALSE_POSITIVE. " +
+      "If string concatenation with user input, respond CONFIRMED.",
+    cwe: "CWE-117",
+    fix_template: "Use parameterized logging: logger.info(\"User login: {}\", sanitize(username));",
+  },
+
+  // ── Infinite loop ──────────────────────────────────────────────
+  {
+    id: "java-015-infinite-loop",
+    title: "while(true) or for(;;) without break/return condition",
+    severity: "medium",
+    languages: ["java"],
+    regex: /(?:while\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\))\s*\{(?:(?!\b(?:break|return|throw)\b)[\s\S]){0,500}?\}/g,
+    explanation:
+      "An infinite loop without a break, return, or throw will hang the thread indefinitely. This can cause DoS or resource exhaustion.",
+    verify_prompt:
+      "Does this loop body contain a break, return, throw, or System.exit() that provides an exit condition? " +
+      "If an exit condition exists but the regex didn't capture it (long body), respond FALSE_POSITIVE. " +
+      "If genuinely no exit condition, respond CONFIRMED.",
+    cwe: "CWE-835",
+    fix_template: "Add an explicit break/return condition, or use a bounded loop with a max iteration count.",
+  },
+
+  // ── equals without hashCode ────────────────────────────────────
+  {
+    id: "java-016-equals-no-hashcode",
+    title: "equals() overridden without hashCode()",
+    severity: "medium",
+    languages: ["java"],
+    regex: /public\s+boolean\s+equals\s*\(\s*Object\b(?![\s\S]{0,500}?public\s+int\s+hashCode\s*\(\s*\))/g,
+    explanation:
+      "Overriding equals() without hashCode() violates the Object contract. Objects that are equals() will have different hash codes, causing failures in HashMap, HashSet, and other hash-based collections.",
+    verify_prompt:
+      "Does this class also override hashCode()? Search the entire class, not just nearby lines. " +
+      "If hashCode() is overridden (possibly further down in the file), respond FALSE_POSITIVE. " +
+      "If only equals() is overridden, respond CONFIRMED.",
+    cwe: "CWE-697",
+    fix_template: "Add @Override public int hashCode() { return Objects.hash(field1, field2); } consistent with equals().",
+  },
+
+  // ── Mutable static field ───────────────────────────────────────
+  {
+    id: "java-017-mutable-static",
+    title: "Mutable static field (thread-safety risk)",
+    severity: "medium",
+    languages: ["java"],
+    regex: /static\s+(?!final\b)(?:(?:private|public|protected)\s+)?(?:List|Map|Set|Collection|ArrayList|HashMap|HashSet|TreeMap|LinkedList|Queue|Deque)\s*<[^>]*>\s+\w+\s*=/g,
+    explanation:
+      "A non-final static collection field can be modified by any thread without synchronization, causing race conditions, ConcurrentModificationExceptions, or data corruption.",
+    verify_prompt:
+      "Is this static field properly synchronized (synchronized access, ConcurrentHashMap, Collections.synchronizedX, or volatile)? " +
+      "If thread-safe access is ensured, respond FALSE_POSITIVE. If unprotected, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Make field final with an unmodifiable collection, or use ConcurrentHashMap/CopyOnWriteArrayList.",
+  },
+
+  // ── Catching generic Exception ─────────────────────────────────
+  {
+    id: "java-018-catch-generic-exception",
+    title: "Catching generic Exception instead of specific type",
+    severity: "low",
+    languages: ["java"],
+    regex: /\bcatch\s*\(\s*(?:Exception|Throwable)\s+\w+\s*\)/g,
+    explanation:
+      "Catching Exception or Throwable swallows all exceptions including programming errors (NullPointerException, ClassCastException) that should propagate. This hides bugs and makes debugging difficult.",
+    verify_prompt:
+      "Is this a top-level catch-all handler (e.g., main method, thread run, request handler) where catching broadly is intentional? " +
+      "If it's a legitimate catch-all at a boundary, respond FALSE_POSITIVE. " +
+      "If it's in business logic catching Exception to suppress errors, respond CONFIRMED.",
+    cwe: "CWE-396",
+    fix_template: "Catch specific exceptions: catch (IOException | SQLException e) { ... }",
   },
 ];
 
@@ -686,6 +1775,144 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     cwe: "CWE-79",
     fix_template: "Disable JS if not needed, or restrict navigation with WKNavigationDelegate.",
   },
+  {
+    id: "swift-007-force-unwrap-production",
+    title: "Force unwrap (!) in production code path",
+    severity: "high",
+    languages: ["swift"],
+    regex: /\b(?:let|var)\s+\w+\s*=\s*\w+!\s*$/gm,
+    explanation:
+      "Force unwrapping optionals with ! crashes at runtime with a fatal error if the value is nil. In production code paths, this creates fragile code that crashes instead of handling errors gracefully.",
+    verify_prompt:
+      "Is this force unwrap in production code where nil is a realistic possibility? " +
+      "If the value is guaranteed non-nil by the language (e.g., IBOutlet after viewDidLoad, " +
+      "known-good constant, or immediately after a nil check), respond FALSE_POSITIVE. " +
+      "If nil could occur at runtime, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Use guard let unwrapped = optional else { return } or if let, or provide a default with ??.",
+  },
+  {
+    id: "swift-008-retain-cycle",
+    title: "Retain cycle: strong reference in closure without [weak self]",
+    severity: "medium",
+    languages: ["swift"],
+    regex: /\{\s*(?!\[(?:weak|unowned)\s+self\])(?:\([^)]*\)\s*(?:->.*?)?\s*in\s+)?[^}]*\bself\./g,
+    explanation:
+      "Closures that capture self strongly can create retain cycles, causing memory leaks. If self holds a strong reference to the closure (directly or through a chain), neither will be deallocated.",
+    verify_prompt:
+      "Does this closure capture self strongly AND is self likely to hold a reference " +
+      "to this closure (e.g., stored in a property, passed to a long-lived handler)? " +
+      "If the closure is short-lived (e.g., DispatchQueue.main.async, map/filter), " +
+      "respond FALSE_POSITIVE. If it's stored as a property or completion handler, respond CONFIRMED.",
+    cwe: "CWE-401",
+    fix_template: "Add [weak self] or [unowned self] capture list: { [weak self] in guard let self else { return } ... }",
+  },
+  {
+    id: "swift-009-main-thread-violation",
+    title: "UI update from background thread",
+    severity: "high",
+    languages: ["swift"],
+    regex: /DispatchQueue\.global\b[\s\S]{0,300}?(?:\.text\s*=|\.isHidden\s*=|\.alpha\s*=|\.image\s*=|\.reloadData\(\)|\.setTitle\(|\.backgroundColor\s*=|\.frame\s*=|\.addSubview\()/g,
+    explanation:
+      "Updating UIKit/AppKit views from a background queue causes undefined behavior: visual glitches, crashes, or data corruption. All UI updates must happen on the main thread.",
+    verify_prompt:
+      "Is this UI update inside a DispatchQueue.global() or background queue block? " +
+      "If it's wrapped in DispatchQueue.main.async { } inside the background block, " +
+      "respond FALSE_POSITIVE. If the UI update happens directly on the background queue, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Wrap UI updates: DispatchQueue.main.async { self.label.text = result }",
+  },
+  {
+    id: "swift-010-force-try-production",
+    title: "Force try (try!) in production code",
+    severity: "high",
+    languages: ["swift"],
+    regex: /\btry!\s+\w+/g,
+    explanation:
+      "try! crashes the app with a fatal error if the called function throws. In production, use do/catch to handle errors gracefully instead of crashing.",
+    verify_prompt:
+      "Is this try! in production code? If the throwing function is GUARANTEED to succeed " +
+      "(e.g., compiling a known-good regex literal, decoding a bundled resource), respond " +
+      "FALSE_POSITIVE. If it could fail at runtime with user data, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Use do { try expression } catch { handle error } or try? with a default value.",
+  },
+  {
+    id: "swift-011-force-cast",
+    title: "Force cast (as!) without safety check",
+    severity: "medium",
+    languages: ["swift"],
+    regex: /\bas!\s+\w+/g,
+    explanation:
+      "Force casting with as! crashes at runtime if the cast fails. Use conditional cast (as?) with proper handling instead.",
+    verify_prompt:
+      "Is this as! cast guaranteed to succeed (e.g., casting from a known type, " +
+      "dequeuing a registered cell)? If the type is guaranteed by the system, " +
+      "respond FALSE_POSITIVE. If the source type could be wrong at runtime, respond CONFIRMED.",
+    cwe: "CWE-704",
+    fix_template: "Use conditional cast: guard let typed = value as? TargetType else { return }",
+  },
+  {
+    id: "swift-012-unowned-dealloc",
+    title: "Unowned reference to potentially deallocated object",
+    severity: "high",
+    languages: ["swift"],
+    regex: /\[unowned\s+self\][\s\S]{0,300}?(?:DispatchQueue|Timer|URLSession|NotificationCenter|after\(deadline)/g,
+    explanation:
+      "Unowned references crash if the referenced object is deallocated. Using [unowned self] in async callbacks (network requests, timers, delayed dispatch) is dangerous because self may be deallocated before the callback fires.",
+    verify_prompt:
+      "Could self be deallocated before this async callback executes? If the closure " +
+      "is guaranteed to complete while self is alive (e.g., synchronous operation), " +
+      "respond FALSE_POSITIVE. If it's async (network, timer, delayed), respond CONFIRMED.",
+    cwe: "CWE-416",
+    fix_template: "Use [weak self] instead of [unowned self] for async callbacks: { [weak self] in guard let self else { return } }",
+  },
+  {
+    id: "swift-013-missing-main-actor",
+    title: "Missing @MainActor annotation on UI-related class",
+    severity: "medium",
+    languages: ["swift"],
+    regex: /class\s+\w+(?:ViewController|View|Cell|Controller)\s*(?::\s*\w+)?\s*\{(?![\s\S]{0,50}?@MainActor)/g,
+    explanation:
+      "UI-related classes (ViewControllers, Views, Cells) should be annotated with @MainActor to ensure all property access and method calls happen on the main thread. Without it, concurrent access from Swift concurrency can cause data races.",
+    verify_prompt:
+      "Is this a UIKit/SwiftUI class that accesses UI elements? If the class " +
+      "has @MainActor on the class declaration or inherits from a @MainActor class, " +
+      "respond FALSE_POSITIVE. If it's a plain data model, respond FALSE_POSITIVE. " +
+      "If it's a UI class without @MainActor, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Add @MainActor annotation: @MainActor class MyViewController: UIViewController { }",
+  },
+  {
+    id: "swift-014-hardcoded-secret-swift",
+    title: "Hardcoded secret or API key in Swift source",
+    severity: "high",
+    languages: ["swift"],
+    regex: /(?:apiKey|secretKey|password|authToken|privateKey|accessToken)\s*[:=]\s*"[A-Za-z0-9+/=_\-]{16,}"/g,
+    explanation:
+      "Hardcoded secrets in Swift source code can be extracted from the compiled binary using the strings command. Anyone with access to the .ipa/.app can recover them.",
+    verify_prompt:
+      "Is this a REAL API key/secret or a placeholder/example? If it looks like a " +
+      "real credential (long random string), respond CONFIRMED. If placeholder, " +
+      "test value, or loaded from Info.plist/Keychain, respond FALSE_POSITIVE.",
+    cwe: "CWE-798",
+    fix_template: "Load from Info.plist (excluded from repo), Keychain, or a remote config service.",
+  },
+  {
+    id: "swift-015-missing-async-error-handling",
+    title: "Missing error handling in async/await",
+    severity: "medium",
+    languages: ["swift"],
+    regex: /\bawait\s+\w+[\s\S]{0,50}?(?:(?!\btry\b)(?!\bcatch\b)(?!\bdo\b).){50}/g,
+    explanation:
+      "Async/await calls to throwing functions without try/catch will propagate errors silently. In non-throwing contexts, this may cause compile errors or unhandled failures.",
+    verify_prompt:
+      "Is this await call inside a do/catch block or is the containing function " +
+      "marked as throws? If error handling exists (try/catch, Task with error handling), " +
+      "respond FALSE_POSITIVE. If no error handling, respond CONFIRMED.",
+    cwe: "CWE-755",
+    fix_template: "Wrap in do/catch: do { let result = try await fetchData() } catch { handleError(error) }",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -714,6 +1941,175 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
     verify_prompt: "Is user input interpolated? If parameterized with ?, respond FALSE_POSITIVE.",
     cwe: "CWE-89",
     fix_template: "Use parameterized queries with ? placeholders and selectionArgs array.",
+  },
+
+  // ── Not-null assertion in production ───────────────────────────
+  {
+    id: "kt-003-double-bang-production",
+    title: "!! (not-null assertion) in production code path",
+    severity: "medium",
+    languages: ["kotlin"],
+    regex: /\w+!!\s*(?:\.|$)/gm,
+    explanation:
+      "The !! operator throws KotlinNullPointerException if the value is null. In production code this causes crashes that safe calls (?.) or elvis (?:) would handle gracefully.",
+    verify_prompt:
+      "Is this !! in production code or in test/example code? " +
+      "If the value is guaranteed non-null by language contract (e.g., after a null check, inside a let block), respond FALSE_POSITIVE. " +
+      "If it could be null at runtime, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Replace x!! with x?.method() ?: fallback, or guard with requireNotNull(x) { \"message\" }.",
+  },
+
+  // ── lateinit never initialized ─────────────────────────────────
+  {
+    id: "kt-004-lateinit-uninit",
+    title: "lateinit var used without initialization guarantee",
+    severity: "high",
+    languages: ["kotlin"],
+    regex: /lateinit\s+var\s+(\w+)\s*:\s*\w+/g,
+    explanation:
+      "lateinit var throws UninitializedPropertyAccessException if accessed before initialization. Unlike lazy, there's no compiler guarantee it will be initialized.",
+    verify_prompt:
+      "Is this lateinit var initialized in a guaranteed lifecycle method (onCreate, setUp, @Before, init block, dependency injection)? " +
+      "If initialization is guaranteed before access, respond FALSE_POSITIVE. " +
+      "If it could be accessed before initialization (e.g., in a callback, optional path), respond CONFIRMED.",
+    cwe: "CWE-457",
+    fix_template: "Use val with lazy { }, or nullable var with null check, or by inject() for DI.",
+  },
+
+  // ── Coroutine leak ─────────────────────────────────────────────
+  {
+    id: "kt-005-coroutine-leak",
+    title: "Coroutine launch without structured concurrency",
+    severity: "medium",
+    languages: ["kotlin"],
+    regex: /GlobalScope\s*\.\s*launch\b/g,
+    explanation:
+      "GlobalScope.launch creates coroutines that outlive their parent scope. If the parent is destroyed (Activity, ViewModel), the coroutine keeps running — leaking memory and potentially crashing.",
+    verify_prompt:
+      "Is GlobalScope used intentionally for application-lifetime work (e.g., singleton initialization, daemon task)? " +
+      "If it's in a component with a lifecycle (Activity, Fragment, ViewModel), respond CONFIRMED. " +
+      "If it's truly application-scoped, respond FALSE_POSITIVE.",
+    cwe: "CWE-772",
+    fix_template: "Use viewModelScope, lifecycleScope, or a custom CoroutineScope tied to the component's lifecycle.",
+  },
+
+  // ── Blocking call in coroutine ─────────────────────────────────
+  {
+    id: "kt-006-blocking-in-coroutine",
+    title: "Blocking call inside coroutine scope",
+    severity: "high",
+    languages: ["kotlin"],
+    regex: /(?:suspend\s+fun|launch\s*\{|async\s*\{)[\s\S]{0,300}?\b(?:Thread\.sleep|\.join\(\)|\.get\(\)|\.await\(\))\b/g,
+    explanation:
+      "Calling Thread.sleep(), Future.get(), or other blocking calls inside a coroutine blocks the dispatcher thread, defeating the purpose of coroutines and potentially freezing the UI or exhausting the thread pool.",
+    verify_prompt:
+      "Is this blocking call wrapped in withContext(Dispatchers.IO)? " +
+      "If dispatched to IO, respond FALSE_POSITIVE. " +
+      "If blocking on Main or Default dispatcher, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use delay() instead of Thread.sleep(), or wrap in withContext(Dispatchers.IO) { }.",
+  },
+
+  // ── Platform type null crash ───────────────────────────────────
+  {
+    id: "kt-007-platform-type-null",
+    title: "Java interop return used without null check (platform type)",
+    severity: "medium",
+    languages: ["kotlin"],
+    regex: /\b(?:Java\w+|java\w+)\s*\.\s*\w+\s*\([^)]*\)\s*\.\s*\w+/g,
+    explanation:
+      "Java methods return platform types (T!) in Kotlin. The compiler doesn't enforce null checks, but the Java method may return null, causing NullPointerException.",
+    verify_prompt:
+      "Is the Java method annotated with @Nullable/@NonNull? " +
+      "If @NonNull or the method contract guarantees non-null, respond FALSE_POSITIVE. " +
+      "If the Java method can return null and no safe call (?.) is used, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Use safe call: javaObj.method()?.property, or declare the type as nullable: val x: String? = javaObj.method().",
+  },
+
+  // ── Mutable collection exposed ─────────────────────────────────
+  {
+    id: "kt-008-mutable-collection-exposed",
+    title: "Mutable collection returned directly from function/property",
+    severity: "low",
+    languages: ["kotlin"],
+    regex: /(?:fun\s+\w+\s*\([^)]*\)\s*(?::\s*(?:Mutable)?List|:\s*(?:Mutable)?Map|:\s*(?:Mutable)?Set)[\s\S]{0,100}?return\s+\w+|get\(\)\s*=\s*(?:_\w+|mutable\w+))/g,
+    explanation:
+      "Returning a mutable collection directly allows callers to modify the internal state of the class, breaking encapsulation. This can lead to unexpected behavior and bugs.",
+    verify_prompt:
+      "Does the function/property return a mutable collection directly? " +
+      "If it returns .toList(), .toMap(), Collections.unmodifiable*(), or the return type is immutable (List, not MutableList), respond FALSE_POSITIVE. " +
+      "If the internal mutable collection is exposed, respond CONFIRMED.",
+    cwe: "CWE-495",
+    fix_template: "Return a defensive copy: return _items.toList(), or use a read-only return type.",
+  },
+
+  // ── Hardcoded secrets in Kotlin ────────────────────────────────
+  {
+    id: "kt-009-hardcoded-secrets",
+    title: "Hardcoded password, secret, or API key in Kotlin",
+    severity: "high",
+    languages: ["kotlin"],
+    regex: /(?:password|secret|apiKey|api_key|token|credential|authToken)\s*=\s*"[^"]{8,}"/gi,
+    explanation:
+      "Hardcoded secrets in Kotlin source code are compiled into bytecode where strings are trivially extractable.",
+    verify_prompt:
+      "Is this a REAL secret or a placeholder/test value (\"changeme\", \"test123\", \"TODO\")? " +
+      "If it looks like a real credential, respond CONFIRMED. If test/placeholder, respond FALSE_POSITIVE.",
+    cwe: "CWE-798",
+    fix_template: "Use BuildConfig fields, environment variables, or Android Keystore/EncryptedSharedPreferences.",
+  },
+
+  // ── SQL injection in Kotlin ────────────────────────────────────
+  {
+    id: "kt-010-sql-template-injection",
+    title: "SQL query with string template interpolation",
+    severity: "critical",
+    languages: ["kotlin"],
+    regex: /\b(?:query|execute|rawQuery|execSQL)\s*\(\s*"[^"]*\$\{?[a-zA-Z]/g,
+    explanation:
+      "SQL queries using Kotlin string templates ($var or ${expr}) are vulnerable to SQL injection when user input is interpolated.",
+    verify_prompt:
+      "Is user input interpolated into the SQL string via $ or ${}? " +
+      "If using parameterized queries with ? and selectionArgs, respond FALSE_POSITIVE. " +
+      "If user-controlled values are template-interpolated, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "Use parameterized queries: db.rawQuery(\"SELECT * FROM t WHERE id = ?\", arrayOf(userId)).",
+  },
+
+  // ── runBlocking on main thread ─────────────────────────────────
+  {
+    id: "kt-011-runblocking-main",
+    title: "runBlocking on main/UI thread",
+    severity: "high",
+    languages: ["kotlin"],
+    regex: /\brunBlocking\s*(?:\(\s*(?:Dispatchers\.Main)?\s*\))?\s*\{/g,
+    explanation:
+      "runBlocking blocks the current thread until the coroutine completes. On the main/UI thread, this freezes the application and can trigger ANR (Application Not Responding).",
+    verify_prompt:
+      "Is this runBlocking called on the main/UI thread (e.g., in an Activity, Fragment, or Composable function)? " +
+      "If it's in a background thread, test code, or main() function of a CLI app, respond FALSE_POSITIVE. " +
+      "If it's on the UI thread, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use lifecycleScope.launch or viewModelScope.launch instead of runBlocking.",
+  },
+
+  // ── GlobalScope usage ──────────────────────────────────────────
+  {
+    id: "kt-012-globalscope",
+    title: "GlobalScope usage (unstructured concurrency)",
+    severity: "medium",
+    languages: ["kotlin"],
+    regex: /\bGlobalScope\s*\.\s*(?:launch|async)\b/g,
+    explanation:
+      "GlobalScope creates coroutines with application-wide lifetime that are not cancelled when the calling component is destroyed. This leads to resource leaks and potential crashes.",
+    verify_prompt:
+      "Is GlobalScope used for a truly application-lifetime task (e.g., singleton background work, process-level daemon)? " +
+      "If it's in a component with a shorter lifecycle (Activity, ViewModel, request handler), respond CONFIRMED. " +
+      "If genuinely application-scoped, respond FALSE_POSITIVE.",
+    cwe: "CWE-772",
+    fix_template: "Use a CoroutineScope tied to the component lifecycle: viewModelScope, lifecycleScope, or custom scope with SupervisorJob().",
   },
 ];
 
@@ -754,6 +2150,159 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     verify_prompt: "Is this a real connection string with credentials or a placeholder? If real, respond CONFIRMED.",
     cwe: "CWE-798",
     fix_template: "Use appsettings.json with User Secrets or Azure Key Vault.",
+  },
+
+  // ── Async void ─────────────────────────────────────────────────
+  {
+    id: "cs-004-async-void",
+    title: "async void method (fire-and-forget, swallows exceptions)",
+    severity: "high",
+    languages: ["csharp"],
+    regex: /\basync\s+void\s+(?!On\w+|Handle\w+)\w+\s*\(/g,
+    explanation:
+      "async void methods cannot be awaited and swallow exceptions (they crash the process in non-UI contexts). Only event handlers should be async void.",
+    verify_prompt:
+      "Is this an event handler (OnClick, OnLoad, HandleX, Button_Click)? " +
+      "If it's an event handler, respond FALSE_POSITIVE. " +
+      "If it's a regular method that should return Task, respond CONFIRMED.",
+    cwe: "CWE-755",
+    fix_template: "Change to async Task MethodName() and await at the call site.",
+  },
+
+  // ── Task not awaited ───────────────────────────────────────────
+  {
+    id: "cs-005-task-not-awaited",
+    title: "Task-returning method called without await",
+    severity: "high",
+    languages: ["csharp"],
+    regex: /(?<!\bawait\s)(?<!\breturn\s)(?<!\bvar\s+\w+\s*=\s*)(?<!\bTask\s+\w+\s*=\s*)\b\w+Async\s*\([^)]*\)\s*;/g,
+    explanation:
+      "Calling an async method without await means the task runs as fire-and-forget. Exceptions are silently swallowed, and the caller proceeds before the operation completes.",
+    verify_prompt:
+      "Is the Task being stored in a variable, passed to Task.WhenAll, or otherwise tracked? " +
+      "If the result is captured or intentionally fire-and-forget with _ = , respond FALSE_POSITIVE. " +
+      "If the Task is completely discarded, respond CONFIRMED.",
+    cwe: "CWE-755",
+    fix_template: "Add await: await MethodAsync(); or capture: var task = MethodAsync();",
+  },
+
+  // ── IDisposable not in using ───────────────────────────────────
+  {
+    id: "cs-006-disposable-no-using",
+    title: "IDisposable object not in using statement",
+    severity: "medium",
+    languages: ["csharp"],
+    regex: /(?:new\s+(?:SqlConnection|SqlCommand|HttpClient|StreamReader|StreamWriter|FileStream|MemoryStream|BinaryReader|BinaryWriter|WebClient|TcpClient|SmtpClient)\s*\([^)]*\))(?![\s\S]{0,10}?\busing\b)/g,
+    explanation:
+      "IDisposable objects not wrapped in a using statement may not be properly disposed, leading to resource leaks (connections, file handles, memory).",
+    verify_prompt:
+      "Is this IDisposable created inside a using statement or using declaration? " +
+      "If using/using var is present, respond FALSE_POSITIVE. " +
+      "If the object is created without using and no Dispose() call exists, respond CONFIRMED.",
+    cwe: "CWE-772",
+    fix_template: "Wrap in using: using var conn = new SqlConnection(cs); or using (var conn = new SqlConnection(cs)) { }",
+  },
+
+  // ── SQL injection with interpolation ───────────────────────────
+  {
+    id: "cs-007-sql-interpolation",
+    title: "SQL query with string interpolation",
+    severity: "critical",
+    languages: ["csharp"],
+    regex: /\b(?:CommandText|SqlCommand)\s*(?:=|\()\s*\$"/g,
+    explanation:
+      "SQL queries built with C# string interpolation ($\"\") are vulnerable to injection. Use SqlParameter for user values.",
+    verify_prompt:
+      "Is user input interpolated in the SQL string? " +
+      "If only constants/config values are interpolated (table names), respond FALSE_POSITIVE. " +
+      "If user-controlled values are interpolated, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "Use parameters: cmd.Parameters.AddWithValue(\"@id\", userId); with CommandText = \"SELECT * FROM t WHERE id = @id\";",
+  },
+
+  // ── LINQ multiple enumeration ──────────────────────────────────
+  {
+    id: "cs-008-multiple-enumeration",
+    title: "IEnumerable enumerated multiple times (LINQ deferred execution)",
+    severity: "low",
+    languages: ["csharp"],
+    regex: /(?:IEnumerable\s*<[^>]+>\s+(\w+)\s*=[\s\S]{0,200}?(?:Where|Select|OrderBy|GroupBy))[\s\S]{0,500}?\1\s*\.\s*\w+[\s\S]{0,200}?\1\s*\.\s*\w+/g,
+    explanation:
+      "An IEnumerable query is enumerated multiple times. Due to LINQ's deferred execution, each enumeration re-executes the query (database call, file read, computation), causing performance issues or inconsistent results.",
+    verify_prompt:
+      "Is the IEnumerable materialized (.ToList(), .ToArray()) before multiple accesses? " +
+      "If materialized, respond FALSE_POSITIVE. " +
+      "If the raw IEnumerable is accessed multiple times, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Materialize the query: var items = query.ToList(); then use items multiple times.",
+  },
+
+  // ── Lock on this/typeof ────────────────────────────────────────
+  {
+    id: "cs-009-lock-this-typeof",
+    title: "lock on `this` or `typeof()` (anti-pattern)",
+    severity: "medium",
+    languages: ["csharp"],
+    regex: /\block\s*\(\s*(?:this|typeof\s*\([^)]+\))\s*\)/g,
+    explanation:
+      "Locking on `this` allows external code to lock on the same object, causing deadlocks. Locking on `typeof()` locks globally across all instances. Both are anti-patterns.",
+    verify_prompt:
+      "Is the lock target `this` or `typeof()`? " +
+      "If locking on a private readonly object field, respond FALSE_POSITIVE. " +
+      "If locking on this or typeof, respond CONFIRMED.",
+    cwe: "CWE-764",
+    fix_template: "Use a private lock object: private readonly object _lock = new object(); lock (_lock) { }",
+  },
+
+  // ── ConfigureAwait(false) missing ──────────────────────────────
+  {
+    id: "cs-010-configureawait-missing",
+    title: "Missing ConfigureAwait(false) in library code",
+    severity: "low",
+    languages: ["csharp"],
+    regex: /\bawait\s+\w+(?:\.\w+)*\s*\([^)]*\)\s*(?!\.ConfigureAwait)/g,
+    explanation:
+      "In library code, not using ConfigureAwait(false) captures the synchronization context, which can cause deadlocks when the library is called from UI threads with .Result or .Wait().",
+    verify_prompt:
+      "Is this code in a library/shared project (not an application entry point, controller, or UI code)? " +
+      "If it's application-level code (ASP.NET controller, WPF handler), respond FALSE_POSITIVE. " +
+      "If it's library code that could be called from any context, respond CONFIRMED.",
+    cwe: "CWE-764",
+    fix_template: "Add ConfigureAwait(false): await MethodAsync().ConfigureAwait(false);",
+  },
+
+  // ── Nullable reference without check ───────────────────────────
+  {
+    id: "cs-011-nullable-no-check",
+    title: "Nullable reference used without null check",
+    severity: "medium",
+    languages: ["csharp"],
+    regex: /\b(\w+)\?\s+\w+\s*=[\s\S]{0,100}?\b\1\s*\.\s*\w+(?!\s*\?)/g,
+    explanation:
+      "A variable declared as nullable (Type?) is accessed with . instead of ?. (null-conditional), risking NullReferenceException.",
+    verify_prompt:
+      "Is there a null check (if (x != null), x is not null, x?.Method()) before this access? " +
+      "If null-checked or using null-conditional, respond FALSE_POSITIVE. " +
+      "If accessed directly without check, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Use null-conditional: obj?.Method() or add guard: if (obj is not null) { obj.Method(); }",
+  },
+
+  // ── Dictionary key not found ───────────────────────────────────
+  {
+    id: "cs-012-dictionary-key-not-found",
+    title: "Dictionary[] access without TryGetValue (KeyNotFoundException risk)",
+    severity: "low",
+    languages: ["csharp"],
+    regex: /\b(?:dictionary|dict|map|lookup|cache|index)\s*\[\s*\w+\s*\](?!\s*=)/gi,
+    explanation:
+      "Accessing a Dictionary with [] throws KeyNotFoundException if the key doesn't exist. Use TryGetValue or ContainsKey for safe access.",
+    verify_prompt:
+      "Is there a ContainsKey/TryGetValue check before this access, or is the key guaranteed to exist? " +
+      "If checked or guaranteed, respond FALSE_POSITIVE. " +
+      "If accessing without validation, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Use TryGetValue: if (dict.TryGetValue(key, out var value)) { ... } or dict.GetValueOrDefault(key).",
   },
 ];
 
@@ -806,6 +2355,170 @@ export const PHP_PATTERNS: BugPattern[] = [
     cwe: "CWE-79",
     fix_template: "echo htmlspecialchars($_GET['param'], ENT_QUOTES, 'UTF-8');",
   },
+  {
+    id: "php-005-sql-superglobal",
+    title: "SQL injection via $_GET/$_POST in query",
+    severity: "critical",
+    languages: ["php"],
+    regex: /\b(?:query|execute|prepare)\s*\([^)]*\$_(?:GET|POST|REQUEST)\s*\[/g,
+    explanation:
+      "Superglobal variables ($_GET, $_POST) used directly in SQL queries without parameterization enable SQL injection.",
+    verify_prompt:
+      "Is the superglobal value passed through a prepared statement with bind_param or execute([...])? " +
+      "If parameterized, respond FALSE_POSITIVE. If interpolated into SQL string, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "$stmt = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $stmt->execute([$_GET['id']]);",
+  },
+  {
+    id: "php-006-unserialize",
+    title: "unserialize() with untrusted data",
+    severity: "critical",
+    languages: ["php"],
+    regex: /\bunserialize\s*\(\s*\$(?:_GET|_POST|_REQUEST|_COOKIE|input|data|body)/g,
+    explanation:
+      "unserialize() with user-controlled data enables PHP Object Injection. Attackers craft serialized payloads that trigger __wakeup/__destruct chains for RCE.",
+    verify_prompt:
+      "Is the serialized data from an untrusted source (request, cookie, user upload)? " +
+      "If from trusted internal cache with HMAC verification, respond FALSE_POSITIVE. " +
+      "If from user input without signature check, respond CONFIRMED.",
+    cwe: "CWE-502",
+    fix_template: "Use json_decode() instead of unserialize(), or pass allowed_classes: ['ClassName'] option.",
+  },
+  {
+    id: "php-007-path-traversal",
+    title: "Path traversal via $_GET/$_POST in file operations",
+    severity: "high",
+    languages: ["php"],
+    regex: /\b(?:file_get_contents|fopen|readfile|file)\s*\([^)]*\$_(?:GET|POST|REQUEST)\s*\[/g,
+    explanation:
+      "Using $_GET/$_POST in file operations allows path traversal (../../etc/passwd). Attacker can read arbitrary files on the server.",
+    verify_prompt:
+      "Is the path validated (basename(), realpath() + prefix check)? " +
+      "If the path is sanitized before use, respond FALSE_POSITIVE. " +
+      "If user input goes directly to file operation, respond CONFIRMED.",
+    cwe: "CWE-22",
+    fix_template: "$path = basename($_GET['file']); readfile('/safe/dir/' . $path);",
+  },
+  {
+    id: "php-008-csrf-no-token",
+    title: "POST handler without CSRF token validation",
+    severity: "medium",
+    languages: ["php"],
+    regex: /\$_SERVER\s*\[\s*['"]REQUEST_METHOD['"]\s*\]\s*===?\s*['"]POST['"](?![\s\S]{0,300}?(?:csrf|token|nonce|verify))/gi,
+    explanation:
+      "POST handler without CSRF token validation. An attacker can craft a form on another site that submits to this endpoint on behalf of an authenticated user.",
+    verify_prompt:
+      "Does this POST handler validate a CSRF token (hidden field, header, or session check) " +
+      "within the handler body? If token is checked, respond FALSE_POSITIVE. " +
+      "If this is an API endpoint using Bearer tokens (not cookies), respond FALSE_POSITIVE. " +
+      "If no CSRF protection exists, respond CONFIRMED.",
+    cwe: "CWE-352",
+    fix_template: "Add CSRF token: if ($_POST['csrf_token'] !== $_SESSION['csrf_token']) die('CSRF');",
+  },
+  {
+    id: "php-009-type-juggling",
+    title: "Loose comparison (==) with security-sensitive value",
+    severity: "medium",
+    languages: ["php"],
+    regex: /\$(?:password|token|hash|secret|api_key)\s*==\s*(?!\s*=)/g,
+    explanation:
+      "PHP loose comparison (==) causes type juggling. '0e123' == '0e456' is true, 0 == 'any-string' is true. This breaks password/token comparisons.",
+    verify_prompt:
+      "Is this a security-sensitive comparison (password, token, hash, API key)? " +
+      "If it's a non-security comparison (feature flag, pagination), respond FALSE_POSITIVE. " +
+      "If comparing credentials/tokens with ==, respond CONFIRMED.",
+    cwe: "CWE-697",
+    fix_template: "Use strict comparison (===) or hash_equals() for timing-safe comparison.",
+  },
+  {
+    id: "php-010-extract-user-input",
+    title: "extract() with user input (variable injection)",
+    severity: "high",
+    languages: ["php"],
+    regex: /\bextract\s*\(\s*\$_(?:GET|POST|REQUEST|COOKIE)/g,
+    explanation:
+      "extract() creates local variables from array keys. With user input, attackers can overwrite any variable including $isAdmin, $authenticated, etc.",
+    verify_prompt:
+      "Is extract() called on user-controlled data ($_GET, $_POST, $_REQUEST)? " +
+      "If called with EXTR_SKIP or EXTR_PREFIX_ALL flag, respond FALSE_POSITIVE. " +
+      "If called without protection on superglobals, respond CONFIRMED.",
+    cwe: "CWE-621",
+    fix_template: "Access values explicitly: $name = $_POST['name']; or use extract($data, EXTR_SKIP);",
+  },
+  {
+    id: "php-011-shell-exec",
+    title: "Shell execution with user input",
+    severity: "critical",
+    languages: ["php"],
+    regex: /\b(?:shell_exec|exec|system|passthru|popen|proc_open)\s*\([^)]*\$_(?:GET|POST|REQUEST)/g,
+    explanation:
+      "Passing user input to shell execution functions enables command injection. Attacker can chain commands with ; | && etc.",
+    verify_prompt:
+      "Is the user input escaped with escapeshellarg()/escapeshellcmd() before use? " +
+      "If properly escaped, respond FALSE_POSITIVE. " +
+      "If raw superglobal goes to shell function, respond CONFIRMED.",
+    cwe: "CWE-78",
+    fix_template: "$output = shell_exec('ls ' . escapeshellarg($_GET['dir']));",
+  },
+  {
+    id: "php-012-hardcoded-credentials",
+    title: "Hardcoded credentials in PHP",
+    severity: "high",
+    languages: ["php"],
+    regex: /\$(?:password|db_pass|secret|api_key|auth_token)\s*=\s*['"][A-Za-z0-9!@#$%^&*+/=_-]{8,}['"]\s*;/g,
+    explanation:
+      "Hardcoded credentials in source code are exposed to anyone with repo access and persist in version history even after removal.",
+    verify_prompt:
+      "Is this a real credential or a placeholder/example (e.g., 'changeme', 'your-key-here')? " +
+      "If placeholder or test fixture, respond FALSE_POSITIVE. " +
+      "If it looks like a real password/key, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "$password = getenv('DB_PASSWORD'); or use .env with vlucas/phpdotenv.",
+  },
+  {
+    id: "php-013-weak-hash-password",
+    title: "md5/sha1 used for password hashing",
+    severity: "high",
+    languages: ["php"],
+    regex: /\b(?:md5|sha1)\s*\(\s*\$(?:password|pass|pwd|user_pass)/g,
+    explanation:
+      "md5/sha1 are fast hashes unsuitable for passwords. GPU cracking breaks them trivially. Use password_hash() with bcrypt/argon2.",
+    verify_prompt:
+      "Is md5/sha1 being used to hash a PASSWORD specifically? " +
+      "If used for a non-security purpose (checksum, cache key, file hash), respond FALSE_POSITIVE. " +
+      "If hashing a password or credential, respond CONFIRMED.",
+    cwe: "CWE-328",
+    fix_template: "$hash = password_hash($password, PASSWORD_DEFAULT); // bcrypt by default",
+  },
+  {
+    id: "php-014-print-xss",
+    title: "print/printf of user input without escaping (XSS)",
+    severity: "high",
+    languages: ["php"],
+    regex: /\b(?:print|printf)\s*\(?[^)]*\$_(?:GET|POST|REQUEST|COOKIE)\s*\[/g,
+    explanation:
+      "Printing user input without htmlspecialchars() enables reflected XSS attacks.",
+    verify_prompt:
+      "Is the output HTML-escaped with htmlspecialchars() or htmlentities()? " +
+      "If escaped, respond FALSE_POSITIVE. If raw output, respond CONFIRMED.",
+    cwe: "CWE-79",
+    fix_template: "print htmlspecialchars($_GET['name'], ENT_QUOTES, 'UTF-8');",
+  },
+  {
+    id: "php-015-backtick-injection",
+    title: "Backtick operator with user input (command injection)",
+    severity: "critical",
+    languages: ["php"],
+    regex: /`[^`]*\$_(?:GET|POST|REQUEST)[^`]*`/g,
+    explanation:
+      "PHP backtick operator executes shell commands. With user input interpolated, this is command injection.",
+    verify_prompt:
+      "Is user input interpolated inside backticks? " +
+      "If the entire command is a hardcoded constant, respond FALSE_POSITIVE. " +
+      "If superglobals appear inside backticks, respond CONFIRMED.",
+    cwe: "CWE-78",
+    fix_template: "Use escapeshellarg(): $out = shell_exec('cmd ' . escapeshellarg($_GET['arg']));",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -846,6 +2559,142 @@ export const RUBY_PATTERNS: BugPattern[] = [
     cwe: "CWE-502",
     fix_template: "YAML.safe_load(data, permitted_classes: [Symbol])",
   },
+  {
+    id: "rb-004-send-user-input",
+    title: "send()/public_send() with user-controlled method name",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\b(?:send|public_send)\s*\(\s*(?:params\[|request\.|input|user_)/g,
+    explanation:
+      "send() invokes any method by name. With user input, attackers can call private/destructive methods like system(), exec(), or delete_all.",
+    verify_prompt:
+      "Is the method name from user input (params, request, form data)? " +
+      "If from a hardcoded symbol or internal constant, respond FALSE_POSITIVE. " +
+      "If user-controlled, respond CONFIRMED.",
+    cwe: "CWE-95",
+    fix_template: "Whitelist: SAFE = %w[name email]; obj.public_send(method) if SAFE.include?(method)",
+  },
+  {
+    id: "rb-005-mass-assignment",
+    title: "Mass assignment without strong parameters",
+    severity: "high",
+    languages: ["ruby"],
+    regex: /\.(?:new|create|update|update_attributes|assign_attributes)\s*\(\s*params(?!\s*\.\s*(?:require|permit))/g,
+    explanation:
+      "Passing params directly to model methods without permit/require allows attackers to set any column (is_admin, role, etc.).",
+    verify_prompt:
+      "Is params passed directly without .require().permit()? " +
+      "If strong parameters are used (params.require(:user).permit(:name)), respond FALSE_POSITIVE. " +
+      "If raw params hash, respond CONFIRMED.",
+    cwe: "CWE-915",
+    fix_template: "User.new(params.require(:user).permit(:name, :email))",
+  },
+  {
+    id: "rb-006-system-backtick",
+    title: "system()/backticks with user input (command injection)",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\b(?:system|%x)\s*(?:\(?\s*["'].*#\{|.*params|.*request)/g,
+    explanation:
+      "system(), %x{}, or backticks with interpolated user input enables OS command injection.",
+    verify_prompt:
+      "Does the shell command include user input via #{} interpolation or concatenation? " +
+      "If the command is entirely hardcoded, respond FALSE_POSITIVE. " +
+      "If user input is interpolated, respond CONFIRMED.",
+    cwe: "CWE-78",
+    fix_template: "Use array form: system('ls', '-la', user_input) which avoids shell interpretation.",
+  },
+  {
+    id: "rb-007-open-redirect",
+    title: "Open redirect (redirect_to with user input)",
+    severity: "medium",
+    languages: ["ruby"],
+    regex: /\bredirect_to\s*\(?\s*(?:params\[|request\.|input|url)/g,
+    explanation:
+      "redirect_to with user-controlled URL enables open redirect attacks (phishing). Attacker sends a link to your site that redirects to their malicious site.",
+    verify_prompt:
+      "Is the redirect URL from user input (params, query string, form)? " +
+      "If redirecting to a hardcoded internal path or using only_path: true, respond FALSE_POSITIVE. " +
+      "If user-controlled URL, respond CONFIRMED.",
+    cwe: "CWE-601",
+    fix_template: "Validate URL: redirect_to(params[:url]) only if URI(params[:url]).host == request.host",
+  },
+  {
+    id: "rb-008-hardcoded-secrets",
+    title: "Hardcoded secrets in Ruby",
+    severity: "high",
+    languages: ["ruby"],
+    regex: /(?:secret_key|api_key|password|token|auth_token)\s*=\s*['"][A-Za-z0-9+/=_-]{12,}['"]/g,
+    explanation:
+      "Hardcoded secrets in source code are exposed to anyone with repo access and persist in git history.",
+    verify_prompt:
+      "Is this a real secret or a placeholder/example value? " +
+      "If test fixture or placeholder (e.g., 'changeme', 'test_token'), respond FALSE_POSITIVE. " +
+      "If it looks like a real credential, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "Use ENV['SECRET_KEY'] or Rails credentials (rails credentials:edit).",
+  },
+  {
+    id: "rb-009-marshal-load",
+    title: "Marshal.load with untrusted data",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\bMarshal\.load\s*\(/g,
+    explanation:
+      "Marshal.load deserializes arbitrary Ruby objects. Attackers can craft payloads that execute code on deserialization, similar to Java deserialization attacks.",
+    verify_prompt:
+      "Is the data being deserialized from a trusted source (internal cache, same-app storage) " +
+      "or untrusted (network, user upload, cookie, shared storage)? " +
+      "If trusted with integrity check, respond FALSE_POSITIVE. " +
+      "If untrusted, respond CONFIRMED.",
+    cwe: "CWE-502",
+    fix_template: "Use JSON.parse() or YAML.safe_load() instead of Marshal.load.",
+  },
+  {
+    id: "rb-010-sql-interpolation",
+    title: "SQL injection via string interpolation in where clause",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\.where\s*\(\s*"[^"]*#\{/g,
+    explanation:
+      "String interpolation (#{}) inside ActiveRecord .where() bypasses parameterization. User input in the interpolated value enables SQL injection.",
+    verify_prompt:
+      "Does the #{} expression contain user input (params, request data)? " +
+      "If the interpolated value is a constant or internal variable, respond FALSE_POSITIVE. " +
+      "If user-controlled, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "User.where('email = ?', user_email) — use ? placeholders.",
+  },
+  {
+    id: "rb-011-instance-eval-untrusted",
+    title: "instance_eval/class_eval with untrusted string",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\b(?:instance_eval|class_eval)\s*\(\s*(?:params|request|input|data|body|str)/g,
+    explanation:
+      "instance_eval/class_eval with user-provided strings executes arbitrary Ruby code in the object's context, enabling RCE.",
+    verify_prompt:
+      "Is the evaluated string from user input or external data? " +
+      "If from a hardcoded template or internal DSL, respond FALSE_POSITIVE. " +
+      "If from untrusted source, respond CONFIRMED.",
+    cwe: "CWE-95",
+    fix_template: "Use a block instead of string: instance_eval { method_call } or a whitelist approach.",
+  },
+  {
+    id: "rb-012-eval-string",
+    title: "eval() with string variable (code injection)",
+    severity: "critical",
+    languages: ["ruby"],
+    regex: /\beval\s*\(\s*(?!['"])[a-zA-Z_]\w*/g,
+    explanation:
+      "eval() with a variable (not a string literal) executes arbitrary Ruby code. If the variable contains any user input, this is RCE.",
+    verify_prompt:
+      "Is the variable passed to eval() derived from user input or external data? " +
+      "If it's a known-safe internal string (e.g., generated DSL, hardcoded template), respond FALSE_POSITIVE. " +
+      "If it could contain untrusted data, respond CONFIRMED.",
+    cwe: "CWE-95",
+    fix_template: "Avoid eval(). Use a hash lookup, case/when, or method dispatch with a whitelist.",
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════
@@ -874,6 +2723,410 @@ export const DART_PATTERNS: BugPattern[] = [
     verify_prompt: "Is this a real key or placeholder? If real, respond CONFIRMED.",
     cwe: "CWE-798",
     fix_template: "Use --dart-define=API_KEY=xxx or flutter_dotenv package.",
+  },
+  {
+    id: "dart-003-force-unwrap",
+    title: "Force unwrap (!) on nullable type (runtime crash)",
+    severity: "medium",
+    languages: ["dart"],
+    regex: /\b\w+!\s*\.\s*\w+/g,
+    explanation:
+      "The null assertion operator (!) throws a runtime exception if the value is null. In production Flutter apps, this crashes the entire widget tree.",
+    verify_prompt:
+      "Is this force unwrap on a value that could realistically be null at runtime? " +
+      "If the value is guaranteed non-null by a preceding null check or assert, respond FALSE_POSITIVE. " +
+      "If it's on data from JSON parsing, API response, or user input, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Use null-aware operators: value?.property ?? defaultValue, or guard with if (value != null).",
+  },
+  {
+    id: "dart-004-dart-mirrors",
+    title: "dart:mirrors in production (breaks tree shaking)",
+    severity: "medium",
+    languages: ["dart"],
+    regex: /import\s+['"]dart:mirrors['"]/g,
+    explanation:
+      "dart:mirrors disables tree shaking, dramatically increasing app size. It's also unavailable in Flutter and AOT-compiled code, causing runtime failures.",
+    verify_prompt:
+      "Is this import in production code or test/tooling code? " +
+      "If in test helpers or build scripts, respond FALSE_POSITIVE. " +
+      "If in production/library code, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use code generation (build_runner, json_serializable) instead of dart:mirrors.",
+  },
+  {
+    id: "dart-005-setstate-after-dispose",
+    title: "setState after dispose (Flutter memory leak)",
+    severity: "high",
+    languages: ["dart"],
+    regex: /(?:await\s+\w[\w.]*\([^)]*\)|\.then\s*\()[^}]*setState\s*\(/g,
+    explanation:
+      "Calling setState() after an async operation without checking mounted/disposed state causes 'setState() called after dispose()' error and memory leaks.",
+    verify_prompt:
+      "Is there a `if (!mounted) return;` or `if (disposed) return;` check before this setState? " +
+      "If mounted check exists, respond FALSE_POSITIVE. " +
+      "If setState is called after await without mounted check, respond CONFIRMED.",
+    cwe: "CWE-672",
+    fix_template: "Add guard: if (!mounted) return; before setState() after any async gap.",
+  },
+  {
+    id: "dart-006-future-no-error",
+    title: "Future without error handling",
+    severity: "medium",
+    languages: ["dart"],
+    regex: /\bFuture\s*\.\s*(?:delayed|wait|forEach)\s*\([^)]*\)(?!\s*\.\s*(?:catchError|onError|then\([^)]*,[^)]*onError))/g,
+    explanation:
+      "Futures without error handling silently swallow exceptions. Unhandled errors in Flutter can crash the app or leave it in an inconsistent state.",
+    verify_prompt:
+      "Is this Future wrapped in a try/catch block, or does it have .catchError()/.onError()? " +
+      "If error handling exists (try/catch, catchError, runZonedGuarded), respond FALSE_POSITIVE. " +
+      "If no error handling, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Add .catchError((e) => handleError(e)), or wrap in try/catch with await.",
+  },
+  {
+    id: "dart-007-json-null-check",
+    title: "Missing null check on JSON map access",
+    severity: "medium",
+    languages: ["dart"],
+    regex: /\bjson\s*\[\s*['"][^'"]+['"]\s*\]\s*(?:as\s+\w+|\.toString\(\)|\.length)/g,
+    explanation:
+      "Accessing JSON map values without null check throws NoSuchMethodError at runtime if the key is missing. API responses often have missing fields.",
+    verify_prompt:
+      "Is the JSON key guaranteed to exist (required field, validated schema)? " +
+      "If the key is optional or from an external API, respond CONFIRMED. " +
+      "If the JSON structure is validated beforehand, respond FALSE_POSITIVE.",
+    cwe: "CWE-476",
+    fix_template: "Use null-safe access: (json['key'] as String?) ?? 'default', or use json_serializable.",
+  },
+  {
+    id: "dart-008-buildcontext-async",
+    title: "BuildContext used after async gap",
+    severity: "high",
+    languages: ["dart"],
+    regex: /await\s+\w[\w.]*\([^)]*\)\s*;[\s\S]{0,100}?\b(?:Navigator|ScaffoldMessenger|Theme|MediaQuery|showDialog)\s*\.\s*of\s*\(\s*context/g,
+    explanation:
+      "Using BuildContext after an async gap (await) is unsafe because the widget may have been unmounted. The context may point to a disposed element tree.",
+    verify_prompt:
+      "Is there a `if (!mounted) return;` or `if (!context.mounted) return;` check between the await and the context usage? " +
+      "If mounted check exists, respond FALSE_POSITIVE. " +
+      "If context is used directly after await without checking, respond CONFIRMED.",
+    cwe: "CWE-672",
+    fix_template: "Add: if (!mounted) return; // or if (!context.mounted) return; before using context after await.",
+  },
+  {
+    id: "dart-009-http-no-https",
+    title: "http.get/post without HTTPS enforcement",
+    severity: "high",
+    languages: ["dart"],
+    regex: /\bhttp\.(?:get|post|put|delete|patch)\s*\(\s*(?:Uri\.parse\s*\(\s*)?['"]http:\/\/(?!localhost|127\.0\.0\.1)/g,
+    explanation:
+      "Making HTTP requests over plaintext HTTP exposes request/response data (including auth tokens, user data) to network attackers.",
+    verify_prompt:
+      "Is this HTTP call to a local/development server or a production endpoint? " +
+      "If localhost or dev environment, respond FALSE_POSITIVE. " +
+      "If production traffic over HTTP, respond CONFIRMED.",
+    cwe: "CWE-319",
+    fix_template: "Change http:// to https:// for all production endpoints.",
+  },
+  {
+    id: "dart-010-string-hardcoded-secret",
+    title: "Hardcoded secret string in Dart/Flutter",
+    severity: "high",
+    languages: ["dart"],
+    regex: /(?:const|final)\s+\w*(?:secret|key|password|token|auth)\w*\s*=\s*['"][A-Za-z0-9+/=_-]{16,}['"]/gi,
+    explanation:
+      "Constants containing secrets are compiled into the Dart binary and can be extracted with string analysis tools.",
+    verify_prompt:
+      "Is this a real secret/API key or a placeholder/test value? " +
+      "If it's 'test_key', 'changeme', or clearly a placeholder, respond FALSE_POSITIVE. " +
+      "If it looks like a real credential, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: "Use String.fromEnvironment('API_KEY') with --dart-define, or flutter_dotenv.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// Elixir Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const ELIXIR_PATTERNS: BugPattern[] = [
+  {
+    id: "ex-001-atom-from-user-input",
+    title: "Atom creation from user input (atom table exhaustion)",
+    severity: "high",
+    languages: ["elixir"],
+    regex: /\bString\.to_atom\s*\(/g,
+    explanation:
+      "String.to_atom() creates atoms that are never garbage collected. If called with user input, attackers can exhaust the atom table (default limit: 1,048,576) and crash the BEAM VM.",
+    verify_prompt:
+      "Is the string from user/external input (request params, API data, form fields)? " +
+      "If from internal constants or compile-time config, respond FALSE_POSITIVE. " +
+      "If from untrusted input, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use String.to_existing_atom() which only converts already-existing atoms, or keep as string.",
+  },
+  {
+    id: "ex-002-to-atom-untrusted",
+    title: "String.to_atom with untrusted data",
+    severity: "high",
+    languages: ["elixir"],
+    regex: /\bString\.to_atom\s*\(\s*(?:params|conn\.|request|input|body|data)/g,
+    explanation:
+      "String.to_atom() with request/user data is a denial-of-service vector. Each unique string creates a new permanent atom in the BEAM VM.",
+    verify_prompt:
+      "Is the argument from user input (Phoenix params, Plug conn, API body)? " +
+      "If from internal/compile-time source, respond FALSE_POSITIVE. " +
+      "If user-controlled, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use String.to_existing_atom() or keep the value as a string. Map strings to atoms with a whitelist.",
+  },
+  {
+    id: "ex-003-unbounded-mailbox",
+    title: "GenServer without backpressure (unbounded mailbox)",
+    severity: "medium",
+    languages: ["elixir"],
+    regex: /\bGenServer\.cast\s*\([^)]*\)[\s\S]{0,500}?(?!handle_info.*:check_mailbox|Process\.info.*:message_queue_len)/g,
+    explanation:
+      "GenServer.cast() is fire-and-forget. If messages arrive faster than the server processes them, the mailbox grows unbounded until the VM runs out of memory.",
+    verify_prompt:
+      "Is this GenServer under a high message rate (e.g., receiving events from many sources)? " +
+      "If it's a low-rate administrative GenServer, respond FALSE_POSITIVE. " +
+      "If it could receive bursts of messages without backpressure, respond CONFIRMED.",
+    cwe: "CWE-770",
+    fix_template: "Use GenServer.call() for backpressure, or monitor mailbox size with Process.info(self(), :message_queue_len).",
+  },
+  {
+    id: "ex-004-ets-race-condition",
+    title: "ETS read-modify-write without transaction",
+    severity: "medium",
+    languages: ["elixir"],
+    regex: /\b:ets\.lookup\s*\([^)]*\)[\s\S]{0,200}?:ets\.insert\s*\(/g,
+    explanation:
+      "ETS lookup followed by insert is not atomic. Concurrent processes can read stale data, compute based on it, and overwrite each other's updates (lost update race).",
+    verify_prompt:
+      "Is this ETS table accessed by multiple processes concurrently? " +
+      "If it's a single-writer table or protected by a GenServer serializing access, respond FALSE_POSITIVE. " +
+      "If multiple processes read-modify-write, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Use :ets.update_counter() for atomic increments, or serialize access through a GenServer.",
+  },
+  {
+    id: "ex-005-process-exit-kill",
+    title: "Process.exit(:kill) misuse",
+    severity: "medium",
+    languages: ["elixir"],
+    regex: /\bProcess\.exit\s*\([^,)]+,\s*:kill\s*\)/g,
+    explanation:
+      "Process.exit(pid, :kill) sends an untrappable exit signal. The target process cannot run cleanup code (terminate/2 callback). This can leave resources (files, sockets, ETS tables) in an inconsistent state.",
+    verify_prompt:
+      "Is :kill used as a last resort after a normal shutdown attempt, or is it the primary shutdown mechanism? " +
+      "If it's a fallback after timeout on normal exit, respond FALSE_POSITIVE. " +
+      "If it's the first/only shutdown signal, respond CONFIRMED.",
+    cwe: "CWE-404",
+    fix_template: "Use Process.exit(pid, :shutdown) first, which allows cleanup. Only use :kill as a timeout fallback.",
+  },
+  {
+    id: "ex-006-ecto-raw-sql-injection",
+    title: "SQL injection in Ecto raw query",
+    severity: "critical",
+    languages: ["elixir"],
+    regex: /\bEcto\.Adapters\.\w+\.query\s*\(\s*\w+\s*,\s*"[^"]*#\{/g,
+    explanation:
+      "String interpolation in Ecto raw SQL queries bypasses parameterization. User input in the interpolated expression enables SQL injection.",
+    verify_prompt:
+      "Does the #{} interpolation contain user input (params, conn.params, form data)? " +
+      "If interpolating a module constant or compile-time value, respond FALSE_POSITIVE. " +
+      "If user-controlled data, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: 'Use parameterized queries: Ecto.Adapters.SQL.query(repo, "SELECT * FROM t WHERE id = $1", [user_id])',
+  },
+  {
+    id: "ex-007-hardcoded-secrets-config",
+    title: "Hardcoded secrets in config",
+    severity: "high",
+    languages: ["elixir"],
+    regex: /(?:secret_key_base|api_key|password|secret|token):\s*"[A-Za-z0-9+/=_-]{16,}"/g,
+    explanation:
+      "Hardcoded secrets in config.exs or runtime.exs are committed to version control. Use environment variables or vault.",
+    verify_prompt:
+      "Is this in a config file committed to git (config.exs, dev.exs, prod.exs)? " +
+      "If it's in runtime.exs reading from System.get_env(), respond FALSE_POSITIVE. " +
+      "If the secret is a hardcoded literal in a committed config, respond CONFIRMED.",
+    cwe: "CWE-798",
+    fix_template: 'Use System.get_env("SECRET_KEY_BASE") in runtime.exs.',
+  },
+  {
+    id: "ex-008-missing-supervisor-strategy",
+    title: "Supervisor without explicit restart strategy",
+    severity: "low",
+    languages: ["elixir"],
+    regex: /\bSupervisor\.start_link\s*\(\s*\[[^\]]*\]\s*,\s*(?:name:|strategy:(?!\s*:one_for_one|\s*:rest_for_one|\s*:one_for_all))/g,
+    explanation:
+      "Using the default supervisor strategy without explicit thought can lead to cascading failures. The default :one_for_one may not be appropriate for processes with dependencies.",
+    verify_prompt:
+      "Is the default :one_for_one strategy appropriate for these child processes? " +
+      "If the children are independent, respond FALSE_POSITIVE. " +
+      "If children depend on each other (e.g., producer-consumer), respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Explicitly set strategy: Supervisor.start_link(children, strategy: :one_for_all) for dependent processes.",
+  },
+  {
+    id: "ex-009-task-async-no-await",
+    title: "Task.async without Task.await (orphaned task)",
+    severity: "medium",
+    languages: ["elixir"],
+    regex: /\bTask\.async\s*\([^)]*\)(?![\s\S]{0,300}?Task\.(?:await|yield))/g,
+    explanation:
+      "Task.async() creates a linked task that MUST be awaited. If never awaited, the caller process will crash when the task finishes or times out (default 5 seconds).",
+    verify_prompt:
+      "Is Task.await() or Task.yield() called on this task within the same function or scope? " +
+      "If awaited, respond FALSE_POSITIVE. " +
+      "If the task result is never collected, respond CONFIRMED.",
+    cwe: "CWE-404",
+    fix_template: "Add Task.await(task) to collect the result, or use Task.start/Task.start_link for fire-and-forget.",
+  },
+  {
+    id: "ex-010-io-inspect-production",
+    title: "IO.inspect left in production code",
+    severity: "low",
+    languages: ["elixir"],
+    regex: /\bIO\.inspect\s*\(/g,
+    explanation:
+      "IO.inspect() is a debugging tool that writes to stdout. In production, it can leak sensitive data to logs, and the synchronous I/O impacts performance under load.",
+    verify_prompt:
+      "Is this IO.inspect in production code or in test/development helpers? " +
+      "If in test files, IEx helpers, or behind a debug flag, respond FALSE_POSITIVE. " +
+      "If in production code path (controllers, contexts, GenServers), respond CONFIRMED.",
+    cwe: "CWE-532",
+    fix_template: "Use Logger.debug(inspect(value)) for structured logging, or remove the IO.inspect call.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// Lua Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const LUA_PATTERNS: BugPattern[] = [
+  {
+    id: "lua-001-global-pollution",
+    title: "Global variable pollution (missing local)",
+    severity: "medium",
+    languages: ["lua"],
+    regex: /^(?!\s*local\s)\s*([a-zA-Z_]\w*)\s*=\s*(?!nil\b)/gm,
+    explanation:
+      "Variables without 'local' keyword are global in Lua, polluting the global namespace. This causes hard-to-debug name collisions across modules and files.",
+    verify_prompt:
+      "Is this an intentional global assignment (module export, configuration table)? " +
+      "If it's a module-level export or in the main script, respond FALSE_POSITIVE. " +
+      "If it's inside a function and should be local, respond CONFIRMED.",
+    cwe: "CWE-1108",
+    fix_template: "Add 'local' keyword: local myVar = value",
+  },
+  {
+    id: "lua-002-loadstring-injection",
+    title: "loadstring/load with user input (code injection)",
+    severity: "critical",
+    languages: ["lua"],
+    regex: /\b(?:loadstring|load)\s*\(\s*(?!["'])[a-zA-Z_]/g,
+    explanation:
+      "loadstring()/load() compiles and returns a Lua function from a string. With user input, attackers can execute arbitrary Lua code including os.execute(), io.open(), etc.",
+    verify_prompt:
+      "Is the string argument from user/external input (network, file, config)? " +
+      "If it's a hardcoded string literal, respond FALSE_POSITIVE. " +
+      "If the string could contain untrusted data, respond CONFIRMED.",
+    cwe: "CWE-95",
+    fix_template: "Avoid loadstring with user data. Use a data format (JSON) and parse it instead.",
+  },
+  {
+    id: "lua-003-table-nil-index",
+    title: "Table indexed with potentially nil key",
+    severity: "medium",
+    languages: ["lua"],
+    regex: /\b(\w+)\s*\[\s*(\w+)\s*\]\s*=(?![\s\S]{0,50}?if\s+\2\s*~=\s*nil)/g,
+    explanation:
+      "Indexing a table with nil crashes Lua: 'table index is nil'. This commonly happens when a variable is uninitialized or a function returns nil unexpectedly.",
+    verify_prompt:
+      "Is the index variable guaranteed to be non-nil at this point? " +
+      "If there's a preceding nil check or the variable is always set, respond FALSE_POSITIVE. " +
+      "If the index could be nil (from function return, optional parameter), respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Add nil guard: if key ~= nil then tbl[key] = value end",
+  },
+  {
+    id: "lua-004-string-concat-loop",
+    title: "String concatenation in loop (O(n^2) performance)",
+    severity: "low",
+    languages: ["lua"],
+    regex: /(?:for|while)\s+[\s\S]{0,100}?\b(\w+)\s*=\s*\1\s*\.\.\s*/g,
+    explanation:
+      "Lua strings are immutable. Concatenating with .. in a loop creates a new string each iteration, causing O(n^2) memory allocation. Use table.concat instead.",
+    verify_prompt:
+      "Is this string concatenation inside a loop that could iterate many times? " +
+      "If the loop iterates a fixed small number of times (< 10), respond FALSE_POSITIVE. " +
+      "If it processes variable-length data (file lines, records), respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Collect in table, join at end: local parts = {}; for ... do parts[#parts+1] = chunk end; result = table.concat(parts)",
+  },
+  {
+    id: "lua-005-os-execute-injection",
+    title: "os.execute with user input (command injection)",
+    severity: "critical",
+    languages: ["lua"],
+    regex: /\bos\.execute\s*\(\s*(?!["'])[a-zA-Z_]/g,
+    explanation:
+      "os.execute() runs a shell command. If the argument includes user input, attackers can inject additional commands with ; | && etc.",
+    verify_prompt:
+      "Is the command string from user/external input or constructed with user data? " +
+      "If entirely hardcoded, respond FALSE_POSITIVE. " +
+      "If user input is concatenated into the command, respond CONFIRMED.",
+    cwe: "CWE-78",
+    fix_template: "Avoid os.execute with user data. Use io.popen with proper escaping, or avoid shell entirely.",
+  },
+  {
+    id: "lua-006-pcall-no-error-handling",
+    title: "pcall result ignored (silent error swallowing)",
+    severity: "medium",
+    languages: ["lua"],
+    regex: /\bpcall\s*\([^)]*\)\s*\n\s*(?!(?:if|local\s+\w+\s*,\s*\w+))/g,
+    explanation:
+      "pcall() returns success boolean and result/error, but if the return values are ignored, errors are silently swallowed. This hides bugs and makes debugging difficult.",
+    verify_prompt:
+      "Are the pcall return values (ok, err) captured and checked? " +
+      "If the result is assigned and checked, respond FALSE_POSITIVE. " +
+      "If pcall is called as a statement with no return value capture, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "local ok, err = pcall(fn); if not ok then log_error(err) end",
+  },
+  {
+    id: "lua-007-infinite-coroutine",
+    title: "Infinite loop without yield in coroutine",
+    severity: "high",
+    languages: ["lua"],
+    regex: /coroutine\.create\s*\(\s*function[\s\S]{0,200}?while\s+true\s+do(?![\s\S]{0,200}?coroutine\.yield)/g,
+    explanation:
+      "A coroutine with while-true and no yield will never return control to the caller, effectively hanging the program.",
+    verify_prompt:
+      "Does this while-true loop inside the coroutine contain a coroutine.yield()? " +
+      "If yield exists within the loop body, respond FALSE_POSITIVE. " +
+      "If the loop has no yield or break, respond CONFIRMED.",
+    cwe: "CWE-835",
+    fix_template: "Add coroutine.yield() inside the loop to return control to the caller.",
+  },
+  {
+    id: "lua-008-require-path-injection",
+    title: "require() with user input (path injection)",
+    severity: "high",
+    languages: ["lua"],
+    regex: /\brequire\s*\(\s*(?!["'])[a-zA-Z_]\w*\s*\)/g,
+    explanation:
+      "require() with a variable module name allows attackers to load arbitrary Lua modules. Combined with package.path manipulation, this can execute attacker-controlled code.",
+    verify_prompt:
+      "Is the module name from user/external input or a dynamic variable? " +
+      "If it's an internal variable set from a trusted whitelist, respond FALSE_POSITIVE. " +
+      "If it could be user-controlled, respond CONFIRMED.",
+    cwe: "CWE-98",
+    fix_template: "Whitelist modules: local ALLOWED = {mod1=true, mod2=true}; if ALLOWED[name] then require(name) end",
   },
 ];
 
@@ -921,6 +3174,159 @@ export const SCALA_PATTERNS: BugPattern[] = [
     verify_prompt: "Is user input interpolated? If using #$param (Slick) or ? placeholders, respond FALSE_POSITIVE.",
     cwe: "CWE-89",
     fix_template: "Use parameterized queries: sql\"SELECT * FROM t WHERE id = $id\" (Slick's safe interpolation).",
+  },
+
+  // ── Option.get ─────────────────────────────────────────────────
+  {
+    id: "scala-002-option-get",
+    title: ".get on Option (throws NoSuchElementException)",
+    severity: "high",
+    languages: ["scala"],
+    regex: /\b\w+\s*\.\s*get\b(?!\s*\()/g,
+    explanation:
+      "Calling .get on an Option throws NoSuchElementException if the Option is None. This defeats the purpose of using Option for null safety.",
+    verify_prompt:
+      "Is .get called on an Option type? " +
+      "If it's called on a Map (map.get(key) returns Option — that's fine) or the Option is guaranteed Some by prior pattern match/isDefined check, respond FALSE_POSITIVE. " +
+      "If .get is called on an Option without checking, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Use .getOrElse(default), pattern matching, .map/.flatMap, or .fold(ifEmpty)(ifPresent).",
+  },
+
+  // ── Blocking in Future ─────────────────────────────────────────
+  {
+    id: "scala-003-blocking-future",
+    title: "Blocking call inside Future (thread pool starvation)",
+    severity: "high",
+    languages: ["scala"],
+    regex: /Future\s*\{[\s\S]{0,300}?\b(?:Thread\.sleep|Await\.result|\.get\b|synchronized)\b/g,
+    explanation:
+      "Blocking calls (Thread.sleep, Await.result, synchronized) inside a Future block the execution context thread, potentially starving the thread pool and causing deadlocks.",
+    verify_prompt:
+      "Is this Future using a dedicated blocking execution context (e.g., ExecutionContext.fromExecutor, blocking { })? " +
+      "If using scala.concurrent.blocking or a dedicated pool, respond FALSE_POSITIVE. " +
+      "If blocking on the default execution context, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Wrap blocking code in scala.concurrent.blocking { }, or use a separate ExecutionContext for blocking I/O.",
+  },
+
+  // ── Mutable variable in concurrent context ─────────────────────
+  {
+    id: "scala-004-mutable-concurrent",
+    title: "var used in concurrent/shared context",
+    severity: "medium",
+    languages: ["scala"],
+    regex: /\bvar\s+\w+\s*(?::\s*\w+)?\s*=[\s\S]{0,300}?\b(?:Future|Actor|Thread|Runnable|Executor|parallel)\b/g,
+    explanation:
+      "Mutable variables (var) shared across concurrent contexts (Futures, Actors, threads) cause race conditions. Scala idiom prefers immutable values.",
+    verify_prompt:
+      "Is this var accessed from multiple concurrent contexts (Futures, Actors, threads)? " +
+      "If it's local to a single-threaded scope or protected by synchronization/AtomicReference, respond FALSE_POSITIVE. " +
+      "If shared without protection, respond CONFIRMED.",
+    cwe: "CWE-362",
+    fix_template: "Use val with AtomicReference, Ref (Cats Effect), or Actor message passing instead of shared var.",
+  },
+
+  // ── Non-exhaustive pattern match ───────────────────────────────
+  {
+    id: "scala-005-nonexhaustive-match",
+    title: "Pattern match potentially non-exhaustive (missing case)",
+    severity: "medium",
+    languages: ["scala"],
+    regex: /\bmatch\s*\{(?:(?!\bcase\s+_\s*=>)[\s\S])*?\}/g,
+    explanation:
+      "A pattern match without a wildcard case (_) or covering all sealed trait members throws MatchError at runtime for unhandled cases.",
+    verify_prompt:
+      "Does this match expression cover ALL cases of a sealed trait/enum, or include a wildcard (case _ =>) catch-all? " +
+      "If exhaustive or has a wildcard, respond FALSE_POSITIVE. " +
+      "If cases could be missed at runtime, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Add a catch-all case: case _ => handleDefault(), or cover all sealed subtypes.",
+  },
+
+  // ── Implicit conversion confusion ──────────────────────────────
+  {
+    id: "scala-006-implicit-conversion",
+    title: "Implicit conversion may cause unexpected behavior",
+    severity: "low",
+    languages: ["scala"],
+    regex: /\bimplicit\s+def\s+\w+\s*\([^)]+\)\s*:\s*\w+/g,
+    explanation:
+      "Implicit conversions silently convert types, making code harder to reason about and introducing subtle bugs when the wrong conversion is applied.",
+    verify_prompt:
+      "Is this implicit conversion well-documented and narrowly scoped (e.g., value class wrapper, DSL builder)? " +
+      "If it's a broad type-to-type conversion (e.g., String to Int, or between unrelated domain types), respond CONFIRMED. " +
+      "If narrowly scoped and intentional, respond FALSE_POSITIVE.",
+    cwe: "CWE-704",
+    fix_template: "Use extension methods (Scala 3) or explicit conversion methods instead of implicit def.",
+  },
+
+  // ── Try.get without handling Failure ────────────────────────────
+  {
+    id: "scala-007-try-get",
+    title: "Try.get without handling Failure case",
+    severity: "high",
+    languages: ["scala"],
+    regex: /\bTry\s*[\[({][\s\S]{0,200}?\.get\b/g,
+    explanation:
+      "Calling .get on a Try throws the contained exception if it's a Failure. This defeats Try's purpose of safe error handling.",
+    verify_prompt:
+      "Is .get called on a Try without prior isSuccess check or pattern matching? " +
+      "If the Try is matched/checked before .get, respond FALSE_POSITIVE. " +
+      "If .get is called unconditionally, respond CONFIRMED.",
+    cwe: "CWE-755",
+    fix_template: "Use .getOrElse(default), .recover { case e => fallback }, .toOption, or pattern matching.",
+  },
+
+  // ── Akka unhandled message ─────────────────────────────────────
+  {
+    id: "scala-008-akka-unhandled",
+    title: "Akka Actor receive without catch-all (unhandled messages)",
+    severity: "medium",
+    languages: ["scala"],
+    regex: /\bdef\s+receive\s*(?::\s*Receive)?\s*=\s*\{(?:(?!\bcase\s+_\s*=>)[\s\S])*?\}/g,
+    explanation:
+      "An Akka Actor's receive block without a catch-all case drops unhandled messages silently (published to eventStream as UnhandledMessage). This makes debugging difficult.",
+    verify_prompt:
+      "Does the receive block include a catch-all case (case _ => or case msg => unhandled(msg))? " +
+      "If a catch-all exists, respond FALSE_POSITIVE. " +
+      "If messages could be silently dropped, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Add catch-all: case msg => log.warning(s\"Unhandled message: $msg\"); unhandled(msg)",
+  },
+
+  // ── SQL injection in Slick/Doobie ──────────────────────────────
+  {
+    id: "scala-009-sql-string-concat",
+    title: "SQL injection via string concatenation in Slick/Doobie",
+    severity: "critical",
+    languages: ["scala"],
+    regex: /\b(?:sql|fr|fr0|query)\s*(?:"""|\()\s*[^)]*\+\s*\w+/g,
+    explanation:
+      "Concatenating variables into SQL strings in Slick or Doobie bypasses the safe interpolation. Use the framework's built-in interpolation which auto-parameterizes.",
+    verify_prompt:
+      "Is the SQL string built with + concatenation including user input? " +
+      "If using Slick's sql\"...${param}\" or Doobie's fr\"...${param}\" (which auto-parameterize), respond FALSE_POSITIVE. " +
+      "If string concatenation is used, respond CONFIRMED.",
+    cwe: "CWE-89",
+    fix_template: "Use framework interpolation: sql\"SELECT * FROM t WHERE id = ${userId}\" (Slick auto-parameterizes).",
+  },
+
+  // ── Null usage in Scala ────────────────────────────────────────
+  {
+    id: "scala-010-null-usage",
+    title: "null usage (anti-pattern in Scala)",
+    severity: "low",
+    languages: ["scala"],
+    regex: /(?:\b\w+\s*(?:==|!=)\s*null\b|\b(?:val|var)\s+\w+\s*(?::\s*\w+)?\s*=\s*null\b|\breturn\s+null\b)/g,
+    explanation:
+      "Using null in Scala is an anti-pattern. Scala provides Option, Try, and Either for representing absence or failure. Null breaks type safety and leads to NullPointerException.",
+    verify_prompt:
+      "Is null used for Java interop (calling/implementing Java APIs that require null)? " +
+      "If required for Java interop, respond FALSE_POSITIVE. " +
+      "If null is used in pure Scala code where Option/Try/Either would be appropriate, respond CONFIRMED.",
+    cwe: "CWE-476",
+    fix_template: "Use Option(value) instead of null checks, None instead of null, and .map/.getOrElse for transformations.",
   },
 ];
 
@@ -1090,6 +3496,332 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
   },
 ];
 
+// ═══════════════════════════════════════════════════════════════
+// Haskell Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const HASKELL_PATTERNS: BugPattern[] = [
+  {
+    id: "hs-001-head-empty-list",
+    title: "head on potentially empty list (partial function)",
+    severity: "high",
+    languages: ["haskell"],
+    regex: /\bhead\s+(?!\$\s*(?:filter|map|take|drop|sort)\b)/g,
+    explanation:
+      "head is a partial function that throws an exception on an empty list. In production Haskell code, calling head on a potentially empty list causes a runtime crash with 'Prelude.head: empty list'.",
+    verify_prompt:
+      "Is this head call guaranteed to receive a non-empty list? If there's a " +
+      "pattern match or null/length check before it, or if the list is known non-empty " +
+      "(e.g., NonEmpty type), respond FALSE_POSITIVE. If the list could be empty, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Use pattern matching: case xs of (x:_) -> x; [] -> defaultValue, or use Data.List.NonEmpty, or listToMaybe.",
+  },
+  {
+    id: "hs-002-fromjust",
+    title: "fromJust on potentially Nothing (partial function)",
+    severity: "high",
+    languages: ["haskell"],
+    regex: /\bfromJust\b/g,
+    explanation:
+      "fromJust is a partial function that throws an exception on Nothing. It defeats the purpose of Maybe by converting a type-safe optional into a runtime crash.",
+    verify_prompt:
+      "Is fromJust used on a value that is GUARANTEED to be Just? If the Maybe was " +
+      "just constructed as Just x, or if isJust was checked immediately before, respond " +
+      "FALSE_POSITIVE. If the Maybe comes from a lookup, parse, or external source, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Use fromMaybe defaultValue x, or pattern match: case mx of Just x -> f x; Nothing -> handleMissing.",
+  },
+  {
+    id: "hs-003-read-no-error",
+    title: "read without error handling (partial function)",
+    severity: "medium",
+    languages: ["haskell"],
+    regex: /\bread\s+(?:"|line|input|str|arg|s\b)/g,
+    explanation:
+      "read is a partial function that throws an exception if the string cannot be parsed. On user input or external data, this causes a runtime crash instead of graceful error handling.",
+    verify_prompt:
+      "Is read applied to user input or external data? If the string is a known-good " +
+      "constant or the result of show, respond FALSE_POSITIVE. If it parses user input, " +
+      "file content, or network data, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Use readMaybe from Text.Read: case readMaybe str of Just n -> use n; Nothing -> handleError.",
+  },
+  {
+    id: "hs-004-unsafe-perform-io",
+    title: "unsafePerformIO usage (breaks referential transparency)",
+    severity: "high",
+    languages: ["haskell"],
+    regex: /\bunsafePerformIO\b/g,
+    explanation:
+      "unsafePerformIO breaks Haskell's purity guarantees and referential transparency. It can cause unpredictable behavior: results may be cached, reordered, or duplicated by the compiler. Only acceptable for top-level FFI bindings or global IORef initialization.",
+    verify_prompt:
+      "Is this unsafePerformIO used for a well-known safe pattern (top-level global " +
+      "IORef/MVar initialization, FFI binding, NOINLINE-annotated constant)? If it " +
+      "follows the established safe patterns with NOINLINE pragma, respond FALSE_POSITIVE. " +
+      "If used for side effects in pure code, respond CONFIRMED.",
+    cwe: "CWE-758",
+    fix_template: "Keep the computation in IO monad, or use unsafePerformIO only with {-# NOINLINE #-} for top-level refs.",
+  },
+  {
+    id: "hs-005-space-leak",
+    title: "Space leak: lazy accumulator without bang pattern",
+    severity: "medium",
+    languages: ["haskell"],
+    regex: /\bfoldl\s+(?!\')(?!Data\.List\.Strict)/g,
+    explanation:
+      "foldl (without the strict variant foldl') builds up thunks proportional to the input size, causing O(n) memory usage instead of O(1). This is one of the most common Haskell performance bugs.",
+    verify_prompt:
+      "Is this foldl used on a potentially large list? If the list is known-small " +
+      "(< 100 elements), respond FALSE_POSITIVE. If it processes a file, stream, " +
+      "or unbounded input, respond CONFIRMED. Also FALSE_POSITIVE if the accumulator " +
+      "is already strict by type (e.g., Int# or strict data type).",
+    cwe: "CWE-400",
+    fix_template: "Use Data.List.foldl' (strict left fold) instead of foldl.",
+  },
+  {
+    id: "hs-006-missing-show-error",
+    title: "Missing deriving (Show) for error types",
+    severity: "low",
+    languages: ["haskell"],
+    regex: /data\s+\w*(?:Error|Exception|Err)\b(?![\s\S]{0,200}?deriving[\s\S]{0,50}?Show)/g,
+    explanation:
+      "Error types without a Show instance cannot be printed in error messages, making debugging extremely difficult. Exception types also require Show for the Exception typeclass.",
+    verify_prompt:
+      "Does this error/exception data type derive or have an instance for Show? " +
+      "Check both deriving clauses and standalone deriving/instance declarations. " +
+      "If Show is provided, respond FALSE_POSITIVE. If missing, respond CONFIRMED.",
+    cwe: "CWE-755",
+    fix_template: "Add deriving (Show) to the data type, or write a custom Show instance.",
+  },
+  {
+    id: "hs-007-error-control-flow",
+    title: "error used for control flow (partial function)",
+    severity: "medium",
+    languages: ["haskell"],
+    regex: /\berror\s+"[^"]+"/g,
+    explanation:
+      "Using error for control flow creates a partial function that crashes at runtime with an uncatchable exception (in pure code). Use Either, Maybe, or MonadError for recoverable failures.",
+    verify_prompt:
+      "Is this error call in a code path that should NEVER be reached (genuine " +
+      "impossible state), or is it handling a recoverable condition? If it's a truly " +
+      "impossible case (e.g., exhaustive pattern match that GHC can't prove), respond " +
+      "FALSE_POSITIVE. If it handles user input or recoverable failures, respond CONFIRMED.",
+    cwe: "CWE-754",
+    fix_template: "Return Either ErrorType ResultType or use throwError from MonadError for recoverable failures.",
+  },
+  {
+    id: "hs-008-string-type",
+    title: "String type used instead of Text (performance)",
+    severity: "low",
+    languages: ["haskell"],
+    regex: /\b(?:::?\s*(?:\[Char\]|String)\b|::\s*\w+\s*->\s*String\b|String\s*->)/g,
+    explanation:
+      "Haskell's String type is a linked list of characters ([Char]), using ~24 bytes per character. For any non-trivial text processing, Data.Text is orders of magnitude faster and uses less memory.",
+    verify_prompt:
+      "Is this String type in a performance-sensitive context (parsing, network I/O, " +
+      "file processing, large text manipulation)? If it's a small internal label, " +
+      "error message, or test code, respond FALSE_POSITIVE. If it processes real data, respond CONFIRMED.",
+    cwe: "CWE-400",
+    fix_template: "Use Data.Text instead of String: import qualified Data.Text as T; and replace String with T.Text.",
+  },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// Zig Patterns
+// ═══════════════════════════════════════════════════════════════
+
+export const ZIG_PATTERNS: BugPattern[] = [
+  // ── Use-after-free ────────────────────────────────────────────
+  {
+    id: "zig-001-use-after-free",
+    title: "Potential use-after-free (access after allocator.free/destroy)",
+    severity: "critical",
+    languages: ["zig"],
+    regex: /(?:allocator\.free|allocator\.destroy)\s*\([^)]*(\w+)[^)]*\)[\s\S]{0,200}?\1\s*[\[.]/g,
+    explanation:
+      "Accessing memory after calling allocator.free() or allocator.destroy() is undefined behavior. The memory may be reused by subsequent allocations, causing silent data corruption or crashes.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the variable reassigned before the subsequent access? → FALSE_POSITIVE\n" +
+      "2. Is the access in a different scope that doesn't execute after the free? → FALSE_POSITIVE\n" +
+      "3. Is the free conditional and the access is in the non-freed branch? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the same pointer/slice is accessed after being freed.",
+    cwe: "CWE-416",
+    fix_template: "Set the pointer to undefined after free: ptr = undefined; or restructure to not access after free.",
+  },
+
+  // ── Ignoring error return ─────────────────────────────────────
+  {
+    id: "zig-002-ignored-error",
+    title: "Error union return value discarded",
+    severity: "high",
+    languages: ["zig"],
+    regex: /\b_\s*=\s*\w+(?:\.\w+)*\s*\([^)]*\)\s*(?:catch\s+\|_\|\s*\{\s*\}|catch\s+unreachable)/g,
+    explanation:
+      "Discarding an error return with `_ = foo()` or `catch unreachable` silences failures. If the function can genuinely error at runtime, `catch unreachable` causes safety-checked undefined behavior in debug and actual UB in release.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the function guaranteed to succeed in this context (proven precondition)? → FALSE_POSITIVE\n" +
+      "2. Is there a comment explaining why the error is intentionally discarded? → FALSE_POSITIVE\n" +
+      "3. Is this in test code? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the function can error at runtime and the error is silently discarded.",
+    cwe: "CWE-252",
+    fix_template: "Handle the error: const result = foo() catch |err| { return err; };",
+  },
+
+  // ── Undefined behavior in release mode ────────────────────────
+  {
+    id: "zig-003-release-ub",
+    title: "Safety check removed in ReleaseFast/ReleaseSmall (undefined behavior)",
+    severity: "critical",
+    languages: ["zig"],
+    regex: /\b(?:@intCast|@truncate|@ptrCast)\s*\(/g,
+    explanation:
+      "Zig builtins like @intCast, @truncate, and @ptrCast perform safety checks in Debug mode but become undefined behavior in ReleaseFast/ReleaseSmall if the precondition is violated. Code that \"works in debug\" may silently corrupt data in release.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the input value validated/bounded before the cast? → FALSE_POSITIVE\n" +
+      "2. Is the value a compile-time known constant? → FALSE_POSITIVE\n" +
+      "3. Is this in code that only runs in Debug mode? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the cast could fail at runtime without prior validation.",
+    cwe: "CWE-681",
+    fix_template: "Validate the value before casting, or use std.math.cast() which returns null on failure.",
+  },
+
+  // ── Buffer overflow via unchecked indexing ────────────────────
+  {
+    id: "zig-004-buffer-overflow",
+    title: "Slice indexing without bounds check (UB in release)",
+    severity: "high",
+    languages: ["zig"],
+    regex: /\b(\w+)\s*\[\s*(\w+)\s*\](?!\s*(?:\.\.|\s*=\s*))[\s\S]{0,50}?(?![\s\S]{0,200}?(?:if\s*\(\s*\2\s*<\s*\1\.len|assert\s*\(\s*\2\s*<))/g,
+    explanation:
+      "Array/slice indexing in Zig is bounds-checked in Debug but becomes undefined behavior in release modes. If the index comes from external input without validation, this is a buffer overflow in production.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is there a bounds check (if idx < slice.len) before the index? → FALSE_POSITIVE\n" +
+      "2. Is the index a compile-time constant within known bounds? → FALSE_POSITIVE\n" +
+      "3. Is this in code that always runs with safety checks enabled? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the index comes from runtime input without prior bounds validation.",
+    cwe: "CWE-120",
+    fix_template: "Add bounds check: if (idx < slice.len) slice[idx] else return error.OutOfBounds;",
+  },
+
+  // ── Memory leak ───────────────────────────────────────────────
+  {
+    id: "zig-005-memory-leak",
+    title: "Allocation without corresponding free (memory leak)",
+    severity: "medium",
+    languages: ["zig"],
+    regex: /allocator\.(?:alloc|create|dupe|dupeZ|alignedAlloc)\s*\([^)]*\)[\s\S]{0,500}?(?:return|break|continue)(?![\s\S]{0,300}?(?:defer\s+allocator\.free|errdefer\s+allocator\.free))/g,
+    explanation:
+      "Memory allocated with an allocator but not freed (or not covered by defer/errdefer) leaks. Unlike garbage-collected languages, Zig requires explicit memory management.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is there a `defer allocator.free(...)` or `errdefer allocator.free(...)` for this allocation? → FALSE_POSITIVE\n" +
+      "2. Is the allocation returned to the caller (ownership transfer)? → FALSE_POSITIVE\n" +
+      "3. Is this using an arena allocator that frees everything at once? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the allocation has no corresponding free on all code paths.",
+    cwe: "CWE-401",
+    fix_template: "Add defer allocator.free(ptr) immediately after allocation, or use errdefer for error paths.",
+  },
+
+  // ── Sentinel-terminated string misuse ─────────────────────────
+  {
+    id: "zig-006-sentinel-misuse",
+    title: "Sentinel-terminated slice used as regular slice (missing sentinel)",
+    severity: "high",
+    languages: ["zig"],
+    regex: /\[\*\](?:const\s+)?u8\s*(?!=\s*@as\(\[:\d\])[\s\S]{0,100}?@ptrCast/g,
+    explanation:
+      "Converting between sentinel-terminated ([*:0]u8) and regular ([*]u8) slices can lose the sentinel guarantee. C interop functions expect null-terminated strings — passing a non-terminated slice causes reads past the buffer until a stray zero is found.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the sentinel preserved through the conversion? → FALSE_POSITIVE\n" +
+      "2. Is this not being passed to C interop (no extern fn call)? → FALSE_POSITIVE\n" +
+      "3. Is the slice known to be null-terminated from its source? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if a non-sentinel slice is passed where a sentinel-terminated one is expected.",
+    cwe: "CWE-170",
+    fix_template: "Use [:0]u8 type explicitly, or use std.mem.sliceTo() to create a sentinel-terminated slice.",
+  },
+
+  // ── Integer overflow in release ───────────────────────────────
+  {
+    id: "zig-007-integer-overflow",
+    title: "Arithmetic overflow undefined in release mode",
+    severity: "high",
+    languages: ["zig"],
+    regex: /(?:@as\s*\(\s*u\d+|:\s*u\d+\s*=)[\s\S]{0,100}?(?:\+\s*(?!%)|(?<!\+)%\s*(?!\+)|-\s*(?!%)|\*\s*(?!%))/g,
+    explanation:
+      "Integer arithmetic in Zig is checked in Debug (panic on overflow) but wraps silently in ReleaseFast/ReleaseSmall. Use +% (wrapping add), -% (wrapping sub), or std.math.add for explicit overflow handling.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is wrapping arithmetic intentional (using +%, -%, *%)? → FALSE_POSITIVE\n" +
+      "2. Are the operands bounded to prevent overflow? → FALSE_POSITIVE\n" +
+      "3. Is this using std.math.add/sub/mul which return errors on overflow? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if unchecked arithmetic on unsigned types could overflow with runtime values.",
+    cwe: "CWE-190",
+    fix_template: "Use std.math.add(a, b) catch return error.Overflow, or +% for intentional wrapping.",
+  },
+
+  // ── @ptrCast without alignment ────────────────────────────────
+  {
+    id: "zig-008-ptrcast-alignment",
+    title: "@ptrCast without verifying alignment requirements",
+    severity: "high",
+    languages: ["zig"],
+    regex: /@ptrCast\s*\(\s*(?:\[\*\]|[*])\s*(?:align\s*\(\s*\d+\s*\)\s*)?(?:const\s+)?(?:u8|i8|c_char|anyopaque)/g,
+    explanation:
+      "@ptrCast can change alignment requirements. Casting a [*]u8 (align 1) to [*]u32 (align 4) on a non-aligned address is undefined behavior. This causes SIGBUS on ARM and silent corruption on x86.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is @alignCast used together with @ptrCast? → FALSE_POSITIVE\n" +
+      "2. Is the source pointer guaranteed to be properly aligned (e.g., from allocator)? → FALSE_POSITIVE\n" +
+      "3. Is the target type the same or smaller alignment than the source? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the cast increases alignment requirements without verification.",
+    cwe: "CWE-188",
+    fix_template: "Use @alignCast before @ptrCast: @ptrCast(@alignCast(ptr)), or use std.mem.bytesAsSlice.",
+  },
+
+  // ── Unreachable code ──────────────────────────────────────────
+  {
+    id: "zig-009-unreachable-misuse",
+    title: "unreachable used as assertion (UB in release)",
+    severity: "critical",
+    languages: ["zig"],
+    regex: /\bunreachable\s*[;,)]/g,
+    explanation:
+      "In Zig, `unreachable` is a promise to the compiler that code is never reached. In Debug mode it panics, but in release mode it's undefined behavior. If the code CAN be reached (e.g., in an else branch for \"impossible\" cases), this causes silent corruption.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is this truly unreachable (e.g., after exhaustive switch, after noreturn)? → FALSE_POSITIVE\n" +
+      "2. Is this in a switch prong that handles a comptime-known impossible case? → FALSE_POSITIVE\n" +
+      "3. Is there a comment explaining why this is genuinely unreachable? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if the unreachable could be reached at runtime (e.g., catch-all else branch).",
+    cwe: "CWE-561",
+    fix_template: "Replace unreachable with an explicit error: return error.UnexpectedState, or use @panic() for debugging.",
+  },
+
+  // ── Comptime vs runtime confusion ─────────────────────────────
+  {
+    id: "zig-010-comptime-runtime",
+    title: "Comptime value used in runtime context (or vice versa)",
+    severity: "medium",
+    languages: ["zig"],
+    regex: /comptime\s+(?:var|const)\s+\w+[\s\S]{0,200}?(?:if\s*\(|while\s*\(|for\s*\()(?!comptime)/g,
+    explanation:
+      "Mixing comptime and runtime values can cause subtle bugs. A comptime variable used in a runtime branch always takes the compile-time value, ignoring runtime state. Conversely, trying to use runtime values in comptime context causes compile errors that are confusing.",
+    verify_prompt:
+      "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
+      "1. Is the comptime value intentionally used as a constant in runtime code? → FALSE_POSITIVE\n" +
+      "2. Is this a comptime if/for that generates different code paths (inline for)? → FALSE_POSITIVE\n" +
+      "3. Is the developer clearly aware of the comptime/runtime boundary? → FALSE_POSITIVE\n" +
+      "Only respond CONFIRMED if a comptime value is mistakenly expected to change at runtime.",
+    cwe: "CWE-758",
+    fix_template: "Use var instead of comptime var for runtime-changing values, or use comptime blocks explicitly.",
+  },
+];
+
 // ─── Registry ───────────────────────────────────────────────────
 
 const ALL_PATTERNS: BugPattern[] = [
@@ -1105,8 +3837,12 @@ const ALL_PATTERNS: BugPattern[] = [
   ...PHP_PATTERNS,
   ...RUBY_PATTERNS,
   ...DART_PATTERNS,
+  ...ELIXIR_PATTERNS,
+  ...LUA_PATTERNS,
   ...SQL_PATTERNS,
   ...SCALA_PATTERNS,
+  ...HASKELL_PATTERNS,
+  ...ZIG_PATTERNS,
   ...FRAMEWORK_PATTERNS,
   ...UNIVERSAL_PATTERNS,
 ];

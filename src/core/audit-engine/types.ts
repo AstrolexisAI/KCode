@@ -6,8 +6,8 @@ export type Language =
   | "c" | "cpp" | "python" | "go" | "rust"
   | "javascript" | "typescript" | "swift" | "java"
   | "kotlin" | "csharp" | "php" | "ruby" | "dart"
-  | "scala" | "perl" | "r" | "julia" | "sql"
-  | "matlab";
+  | "scala" | "elixir" | "lua" | "zig" | "haskell"
+  | "perl" | "r" | "julia" | "sql" | "matlab";
 
 /**
  * A bug pattern is a rule that identifies a specific class of dangerous code.
