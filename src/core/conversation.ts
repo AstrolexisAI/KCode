@@ -598,12 +598,13 @@ export class ConversationManager {
                   `  Or use: "levantalo en el puerto 15623"`,
                 ].join("\n");
 
-                // Auto-cd into the project so "levantalo" works immediately
+                // Save last project path so "levantalo" finds it
                 this.config.workingDirectory = webResult.projectPath;
                 try {
                   process.chdir(webResult.projectPath);
-                  // Store last project path for Level 1 handlers
-                  (globalThis as any).__kcode_last_project = webResult.projectPath;
+                  const { writeFileSync } = await import("node:fs");
+                  const { kcodePath } = await import("./paths.js");
+                  writeFileSync(kcodePath("last-project"), webResult.projectPath);
                 } catch {}
 
                 this.state.messages.push({ role: "user", content: userMessage });
