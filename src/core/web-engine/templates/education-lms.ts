@@ -526,7 +526,7 @@ export function LeaderBoard() {
               <p className="text-sm font-medium truncate">{student.name}</p>
               <p className="text-xs text-gray-500">{student.streak} day streak</p>
             </div>
-            <span className="text-sm font-semibold text-blue-400">{student.xp.toLocaleString()} XP</span>
+            <span className="text-sm font-semibold text-blue-400">{student.xp} XP</span>
           </div>
         ))}
       </div>

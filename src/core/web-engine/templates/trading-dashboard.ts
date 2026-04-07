@@ -449,7 +449,7 @@ export default function CandlestickChart() {
         `import { ArrowUpRight, ArrowDownRight } from "lucide-react";`,
         ``,
         `const D = "$";`,
-        `function usd(n: number) { return D + n.toLocaleString("en-US", { minimumFractionDigits: 2 }); }`,
+        `function usd(n: number) { return D + n.toFixed(2); }`,
         ``,
         `const holdings = [`,
         `  { symbol: "AAPL", name: "Apple Inc.", shares: 150, avgCost: 178.25, current: 198.11 },`,
@@ -843,7 +843,7 @@ export default function OrderBook() {
               />
               <span className="relative font-mono-num text-red-400">{a.price.toFixed(2)}</span>
               <span className="relative font-mono-num text-gray-300 text-right">{a.amount}</span>
-              <span className="relative font-mono-num text-gray-500 text-right">{a.total.toLocaleString()}</span>
+              <span className="relative font-mono-num text-gray-500 text-right">{a.total}</span>
             </div>
           ))}
         </div>
@@ -865,7 +865,7 @@ export default function OrderBook() {
               />
               <span className="relative font-mono-num text-emerald-400">{b.price.toFixed(2)}</span>
               <span className="relative font-mono-num text-gray-300 text-right">{b.amount}</span>
-              <span className="relative font-mono-num text-gray-500 text-right">{b.total.toLocaleString()}</span>
+              <span className="relative font-mono-num text-gray-500 text-right">{b.total}</span>
             </div>
           ))}
         </div>
