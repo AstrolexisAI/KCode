@@ -233,17 +233,30 @@ interface DevServer {
 function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
   const port = requestedPort ?? 10080;
 
-  // If no project in cwd, check immediate subdirectories (1 level deep)
+  // If no project in cwd, check common project subdirectory names
   if (!existsSync(join(cwd, "package.json")) && !existsSync(join(cwd, "go.mod")) &&
       !existsSync(join(cwd, "Cargo.toml")) && !existsSync(join(cwd, "pyproject.toml")) &&
       !existsSync(join(cwd, "mix.exs")) && !existsSync(join(cwd, "docker-compose.yml")) &&
       !existsSync(join(cwd, "index.html"))) {
+    // Check well-known project directory names first (fast)
+    const commonNames = ["my-site", "my-app", "app", "web", "frontend", "backend", "api", "server", "project", "site"];
+    for (const name of commonNames) {
+      const sub = join(cwd, name);
+      if (existsSync(sub)) {
+        const subResult = detectDevServer(sub, requestedPort);
+        if (subResult) return subResult;
+      }
+    }
+    // Then scan recent directories (max 20, skip hidden/node_modules)
     try {
       const entries = readdirSync(cwd, { withFileTypes: true });
+      let checked = 0;
       for (const entry of entries) {
-        if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+        if (checked >= 20) break;
+        if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules" && !commonNames.includes(entry.name)) {
           const subResult = detectDevServer(join(cwd, entry.name), requestedPort);
           if (subResult) return subResult;
+          checked++;
         }
       }
     } catch { /* ignore */ }
