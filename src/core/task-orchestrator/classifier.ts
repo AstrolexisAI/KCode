@@ -41,8 +41,8 @@ const RULES: Rule[] = [
   {
     type: "implement" as TaskType,
     patterns: [
-      /\b(?:create|build|make|crea|construye|haz)\s+(?:an?\s+)?(?:[\w-]+\s+)*(?:website|web\s*(?:site|app|page)|landing\s*(?:page)?|dashboard|blog|portfolio|tienda|store|shop|sitio\s*web|p[aá]gina\s*web|app|platform|plataforma)\b/i,
-      /\b(?:saas|e-?commerce|crm|kanban|chat|lms|iot|social\s+feed|admin\s+panel)\b/i,
+      /\b(?:create|build|make|crea|construye|haz)\s+(?:an?\s+)?(?:[\w-]+\s+)*(?:website|web\s*(?:site|app|page)|landing\s*(?:page)?|dashboard|blog|portfolio|tienda|store|shop|sitio\s*web|p[aá]gina\s*web|app|platform|plataforma|feed|board|panel|monitor)\b/i,
+      /\b(?:saas|e-?commerce|crm|kanban|chat|lms|iot|social\s+(?:media\s+)?feed|admin\s+panel|project\s+manag|task\s+board|device\s+monitor|course\s+platform|messaging)\b/i,
     ],
     confidence: 0.95,
   },
