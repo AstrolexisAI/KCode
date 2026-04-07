@@ -228,13 +228,13 @@ end
   end
 
   get "/api/items/:id" do
-    id = String.to_integer(id)
-    case Store.get(id) do
-      {:ok, item} ->
-        send_json(conn, 200, item)
-      :not_found ->
-        Logger.info("Item not found: \#{id}")
-        send_json(conn, 404, %{error: true, message: "Item not found"})
+    with {id_int, ""} <- Integer.parse(id) do
+      case Store.get(id_int) do
+        {:ok, item} -> send_json(conn, 200, item)
+        :not_found -> send_json(conn, 404, %{error: true, message: "Item not found"})
+      end
+    else
+      _ -> send_json(conn, 400, %{error: true, message: "Invalid ID format"})
     end
   end
 
@@ -251,29 +251,35 @@ end
   end
 
   put "/api/items/:id" do
-    id = String.to_integer(id)
-    case validate_update(conn.body_params) do
-      {:ok, attrs} ->
-        case Store.update(id, attrs) do
-          {:ok, item} ->
-            Logger.info("Updated item \#{id}")
-            send_json(conn, 200, item)
-          :not_found ->
-            send_json(conn, 404, %{error: true, message: "Item not found"})
-        end
-      {:error, errors} ->
-        send_json(conn, 422, %{error: true, errors: errors})
+    with {id_int, ""} <- Integer.parse(id) do
+      case validate_update(conn.body_params) do
+        {:ok, attrs} ->
+          case Store.update(id_int, attrs) do
+            {:ok, item} ->
+              Logger.info("Updated item \#{id_int}")
+              send_json(conn, 200, item)
+            :not_found ->
+              send_json(conn, 404, %{error: true, message: "Item not found"})
+          end
+        {:error, errors} ->
+          send_json(conn, 422, %{error: true, errors: errors})
+      end
+    else
+      _ -> send_json(conn, 400, %{error: true, message: "Invalid ID format"})
     end
   end
 
   delete "/api/items/:id" do
-    id = String.to_integer(id)
-    case Store.delete(id) do
-      :ok ->
-        Logger.info("Deleted item \#{id}")
-        send_json(conn, 200, %{deleted: true})
-      :not_found ->
-        send_json(conn, 404, %{error: true, message: "Item not found"})
+    with {id_int, ""} <- Integer.parse(id) do
+      case Store.delete(id_int) do
+        :ok ->
+          Logger.info("Deleted item \#{id_int}")
+          send_json(conn, 200, %{deleted: true})
+        :not_found ->
+          send_json(conn, 404, %{error: true, message: "Item not found"})
+      end
+    else
+      _ -> send_json(conn, 400, %{error: true, message: "Invalid ID format"})
     end
   end
 
@@ -465,7 +471,7 @@ end
   // Tests
   if (cfg.type === "api" && cfg.framework === "plug") {
     files.push({ path: `test/${snake}_test.exs`, content: `defmodule ${mod}Test do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   use Plug.Test
 
   alias ${mod}.Router
