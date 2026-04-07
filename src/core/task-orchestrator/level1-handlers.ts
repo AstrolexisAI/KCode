@@ -233,6 +233,23 @@ interface DevServer {
 function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
   const port = requestedPort ?? 10080;
 
+  // If no project in cwd, check immediate subdirectories (1 level deep)
+  if (!existsSync(join(cwd, "package.json")) && !existsSync(join(cwd, "go.mod")) &&
+      !existsSync(join(cwd, "Cargo.toml")) && !existsSync(join(cwd, "pyproject.toml")) &&
+      !existsSync(join(cwd, "mix.exs")) && !existsSync(join(cwd, "docker-compose.yml")) &&
+      !existsSync(join(cwd, "index.html"))) {
+    try {
+      const entries = readdirSync(cwd, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+          const subResult = detectDevServer(join(cwd, entry.name), requestedPort);
+          if (subResult) return subResult;
+        }
+      }
+    } catch { /* ignore */ }
+    return null;
+  }
+
   // Node.js (Next.js, Vite, Express, etc.)
   const pkg = readJson(join(cwd, "package.json"));
   if (pkg) {

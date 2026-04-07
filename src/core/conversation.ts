@@ -535,44 +535,98 @@ export class ConversationManager {
       const task = classifyTask(userMessage);
 
       if (task.type !== "general" && task.confidence >= 0.8) {
-        // Specialized engines for each task type
-        // Web creation gets its own engine (higher priority than generic implement)
-        const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce)\b/i.test(userMessage);
+        // ── Level 2: Machine-first code/web creation ──
+        // If engine can handle 100%, respond directly (0 tokens). If partial, send focused prompt.
+        const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|iot|analytics|admin\s*panel)\b/i.test(userMessage);
 
-        // ── Code creation engine routing (natural language → engine) ──
-        const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
-        const engineMatch = task.type === "implement" ? detectCodeEngine(userMessage) : null;
+        if (task.type === "implement") {
+          const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
+          const engineMatch = detectCodeEngine(userMessage);
 
-        if (task.type === "implement" && engineMatch) {
-          try {
-            const result = await runCodeEngine(engineMatch.engine, userMessage, this.config.workingDirectory);
-            if (result) {
-              orchestratedMessage = result;
-              log.info("orchestrator", `${engineMatch.engine} engine activated for: "${userMessage.slice(0, 50)}"`);
+          // Try code engine first (Go, Rust, Python, etc.)
+          // Then web engine (dashboard, ecommerce, etc.)
+          // If engine handles 100%, respond directly without LLM
+          let engineHandled = false;
+
+          if (engineMatch) {
+            try {
+              const result = await runCodeEngine(engineMatch.engine, userMessage, this.config.workingDirectory);
+              if (result) {
+                // Check if all files are machine-generated (0 LLM needed)
+                const hasLlmFiles = result.includes("LLM customization") || result.includes("need LLM") || !result.includes("0 LLM");
+                if (!hasLlmFiles) {
+                  // 100% machine — respond directly, skip LLM
+                  this.state.messages.push({ role: "user", content: userMessage });
+                  this.state.messages.push({ role: "assistant", content: result });
+                  yield { type: "turn_start" };
+                  yield { type: "text_delta", text: result };
+                  yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
+                  log.info("orchestrator", `Engine handled 100% machine: ${engineMatch.engine} (0 tokens)`);
+                  return;
+                }
+                // Partial machine — send to LLM with focused prompt
+                orchestratedMessage = result;
+                engineHandled = true;
+                log.info("orchestrator", `${engineMatch.engine} engine + LLM for: "${userMessage.slice(0, 50)}"`);
+              }
+            } catch (err) {
+              log.debug("code-engine", `${engineMatch.engine} engine skipped: ${err}`);
             }
-          } catch (err) {
-            log.debug("code-engine", `${engineMatch.engine} engine skipped: ${err}`);
           }
-        } else if (task.type === "implement" && isWebRequest) {
-          try {
-            const { buildWebCreationPrompt } = await import("./web-engine/web-engine.js");
-            orchestratedMessage = buildWebCreationPrompt(userMessage, this.config.workingDirectory);
-            log.info("orchestrator", `Web engine activated for: "${userMessage.slice(0, 50)}"`);
-          } catch (err) {
-            log.debug("web-engine", `Web engine skipped: ${err}`);
+
+          if (!engineHandled && isWebRequest) {
+            try {
+              const { createWebProject } = await import("./web-engine/web-engine.js");
+              const webResult = createWebProject(userMessage, this.config.workingDirectory);
+              const totalFiles = webResult.machineFiles + webResult.llmFiles;
+
+              if (webResult.llmFiles === 0) {
+                // 100% machine — respond directly, skip LLM
+                const summary = [
+                  `  ✅ Project created: ${webResult.projectPath}`,
+                  `  Type: ${webResult.intent.siteType}`,
+                  `  Files: ${totalFiles} (${webResult.machineFiles} machine, 0 LLM)`,
+                  `  Stack: Next.js + React + Tailwind CSS`,
+                  "",
+                  `  To run:`,
+                  `    cd ${webResult.projectPath}`,
+                  `    npm install`,
+                  `    npm run dev`,
+                  "",
+                  `  Or use: "levantalo en el puerto 15623"`,
+                ].join("\n");
+
+                this.state.messages.push({ role: "user", content: userMessage });
+                this.state.messages.push({ role: "assistant", content: summary });
+                yield { type: "turn_start" };
+                yield { type: "text_delta", text: summary };
+                yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
+                log.info("orchestrator", `Web engine 100% machine: ${webResult.intent.siteType} (0 tokens)`);
+                return;
+              }
+
+              // Has LLM files — build focused prompt
+              orchestratedMessage = `${webResult.prompt}\n\nThe machine already created ${webResult.machineFiles} files at ${webResult.projectPath}.\nYou MUST only edit the ${webResult.llmFiles} files marked for LLM customization.\nDo NOT create new files or restructure the project. Only customize content.\nUSER REQUEST: "${userMessage}"`;
+              engineHandled = true;
+              log.info("orchestrator", `Web engine + LLM: ${webResult.intent.siteType} (${webResult.llmFiles} files to customize)`);
+            } catch (err) {
+              log.debug("web-engine", `Web engine skipped: ${err}`);
+            }
           }
-        } else if (task.type === "implement") {
-          try {
-            const { buildImplementPrompt } = await import("./implement-engine/scaffold.js");
-            const result = buildImplementPrompt(userMessage, this.config.workingDirectory);
-            orchestratedMessage = result.prompt;
-            log.info(
-              "orchestrator",
-              `Implement engine: ${result.project.framework} (${result.project.language}), ` +
-                `${result.patterns.length} patterns found, ${result.estimatedFiles.length} files to create`,
-            );
-          } catch (err) {
-            log.debug("implement-engine", `Implement engine skipped: ${err}`);
+
+          if (!engineHandled) {
+            try {
+              const { buildImplementPrompt } = await import("./implement-engine/scaffold.js");
+              const result = buildImplementPrompt(userMessage, this.config.workingDirectory);
+              orchestratedMessage = result.prompt;
+              log.info(
+                "orchestrator",
+                `Implement engine: ${result.project.framework} (${result.project.language}), ` +
+                  `${result.patterns.length} patterns found, ${result.estimatedFiles.length} files to create`,
+              );
+            } catch (err) {
+              log.debug("implement-engine", `Implement engine skipped: ${err}`);
+            }
           }
         } else if (task.type === "test") {
           try {
