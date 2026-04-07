@@ -69,8 +69,27 @@ export function createWebProject(
     const baseConfigFiles = baseTemplate.files.filter(f =>
       f.path === "package.json" || f.path === "next.config.ts" || f.path === "tsconfig.json" ||
       f.path === "postcss.config.mjs" || f.path === "tailwind.config.ts" || f.path === ".gitignore" ||
-      f.path === "README.md" || f.path === "src/app/globals.css"
+      f.path === "README.md" || f.path === "src/app/globals.css" || f.path === "public/favicon.ico"
     );
+    // Add favicon if not in base
+    if (!baseConfigFiles.some(f => f.path === "public/favicon.ico")) {
+      baseConfigFiles.push({
+        path: "public/favicon.ico",
+        content: "",
+        needsLlm: false,
+      });
+      // Use SVG favicon instead
+      baseConfigFiles.push({
+        path: "src/app/favicon.ico",
+        content: "",
+        needsLlm: false,
+      });
+      baseConfigFiles.push({
+        path: "src/app/icon.svg",
+        content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#6366f1"/><text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" font-size="18" font-family="system-ui" fill="white">K</text></svg>`,
+        needsLlm: false,
+      });
+    }
     // Specialized files override any base files with same path
     const specialPaths = new Set(specializedFiles.map(f => f.path));
     const mergedBase = baseConfigFiles.filter(f => !specialPaths.has(f.path));
