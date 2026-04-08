@@ -347,6 +347,8 @@ export function buildCodeGuidelines(): string {
   return `# Code Guidelines
 
 - Always Read files before modifying them to understand existing patterns and context
+- When modifying existing files, ALWAYS use Edit (not Write). Write replaces the entire file and loses existing code. Edit makes surgical changes that preserve everything else.
+- Only change what is necessary — preserve all existing imports, components, functions, and logic. If you need to add something, add it alongside what already exists; never replace the whole file.
 - Keep changes minimal and focused on what was requested; do not add unrequested features
 - Do not over-engineer solutions; prefer simplicity and clarity
 - Follow existing code style, naming conventions, and architecture patterns in the project
