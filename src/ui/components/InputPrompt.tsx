@@ -487,6 +487,27 @@ export default function InputPrompt({
           }
         }
 
+        // Short exit commands should never be treated as paste, even if
+        // they arrive with trailing newlines or during an active paste
+        // settle window (terminal can deliver "quit\n" as a single chunk).
+        const pendingFull = (value + inputBufferRef.current).trim().toLowerCase();
+        const EXIT_COMMANDS = new Set(["quit", "exit", "q", "/exit"]);
+        if (EXIT_COMMANDS.has(pendingFull)) {
+          // Drain buffer and submit as a clean single command
+          inputBufferRef.current = "";
+          if (flushTimerRef.current) {
+            clearTimeout(flushTimerRef.current);
+            flushTimerRef.current = null;
+          }
+          pasteActiveRef.current = false;
+          if (pasteSettleTimerRef.current) {
+            clearTimeout(pasteSettleTimerRef.current);
+            pasteSettleTimerRef.current = null;
+          }
+          submit();
+          return;
+        }
+
         // If the input buffer has pending characters OR paste is still
         // active (buffer was recently flushed), this Enter is part of a
         // paste — append \n to the buffer instead of submitting.
