@@ -20,9 +20,9 @@ export function astroBase(intent: DetectedIntent): FileTemplate[] {
         },
         dependencies: {
           astro: "^5.7.0",
-          "@astrojs/tailwind": "^6.0.0",
           "@astrojs/mdx": "^4.0.0",
           tailwindcss: "^4.0.0",
+          "@tailwindcss/vite": "^4.0.0",
         },
       }, null, 2),
       needsLlm: false,
@@ -30,11 +30,12 @@ export function astroBase(intent: DetectedIntent): FileTemplate[] {
     {
       path: "astro.config.mjs",
       content: `import { defineConfig } from 'astro/config';
-import tailwind from '@astrojs/tailwind';
+import tailwindcss from '@tailwindcss/vite';
 import mdx from '@astrojs/mdx';
 
 export default defineConfig({
-  integrations: [tailwind(), mdx()],
+  integrations: [mdx()],
+  vite: { plugins: [tailwindcss()] },
   site: 'https://${intent.name}.com',
 });
 `,

@@ -180,6 +180,24 @@ object ItemRoutes:
           case None => NotFound(ErrorResponse(404, s"Item not found: $id").asJson)
       yield resp
 
+    case req @ PUT -> Root / "api" / "items" / id =>
+      for
+        request <- req.as[CreateItemRequest]
+        items <- store.get
+        resp <- items.get(id) match
+          case None => NotFound(ErrorResponse(404, s"Item not found: $id").asJson)
+          case Some(existing) =>
+            if request.name.isBlank then
+              BadRequest(ErrorResponse(400, "Name must not be blank").asJson)
+            else
+              for
+                _ <- logger.info(s"Updating item: $id")
+                updated = existing.copy(name = request.name, description = request.description)
+                _ <- store.update(_ + (id -> updated))
+                r <- Ok(updated.asJson)
+              yield r
+      yield resp
+
     case DELETE -> Root / "api" / "items" / id =>
       for
         _ <- logger.info(s"Deleting item: $id")

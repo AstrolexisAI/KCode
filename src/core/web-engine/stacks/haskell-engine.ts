@@ -19,7 +19,7 @@ function detectHaskellProject(msg: string): HaskellConfig {
   }
   else if (/\b(?:scotty)\b/i.test(lower)) {
     type = "api"; framework = "scotty";
-    deps.push({ name: "scotty", version: ">=0.22" }, { name: "aeson", version: ">=2.1" }, { name: "wai", version: ">=3.2" });
+    deps.push({ name: "scotty", version: ">=0.22" }, { name: "aeson", version: ">=2.1" }, { name: "wai", version: ">=3.2" }, { name: "containers", version: ">=0.6" }, { name: "text", version: ">=2.0" });
   }
   else if (/\b(?:warp)\b/i.test(lower)) {
     type = "api"; framework = "warp";
@@ -35,7 +35,7 @@ function detectHaskellProject(msg: string): HaskellConfig {
   }
   else if (/\b(?:api|rest|server|http)\b/i.test(lower)) {
     type = "api"; framework = "scotty";
-    deps.push({ name: "scotty", version: ">=0.22" }, { name: "aeson", version: ">=2.1" }, { name: "wai", version: ">=3.2" });
+    deps.push({ name: "scotty", version: ">=0.22" }, { name: "aeson", version: ">=2.1" }, { name: "wai", version: ">=3.2" }, { name: "containers", version: ">=0.6" }, { name: "text", version: ">=2.0" });
   }
   else if (/\b(?:cli|command|tool|escript)\b/i.test(lower)) { type = "cli"; }
   else if (/\b(?:lib|library|package|hackage)\b/i.test(lower)) { type = "library"; }
@@ -46,7 +46,7 @@ function detectHaskellProject(msg: string): HaskellConfig {
   }
   else {
     framework = "scotty";
-    deps.push({ name: "scotty", version: ">=0.22" }, { name: "aeson", version: ">=2.1" }, { name: "wai", version: ">=3.2" });
+    deps.push({ name: "scotty", version: ">=0.22" }, { name: "aeson", version: ">=2.1" }, { name: "wai", version: ">=3.2" }, { name: "containers", version: ">=0.6" }, { name: "text", version: ">=2.0" });
   }
 
   // Additional dependency detection
@@ -137,22 +137,100 @@ extra-deps: []
   // Source code based on project type
   if ((cfg.type === "api" && cfg.framework === "scotty") || (cfg.type === "api" && !cfg.framework)) {
     files.push({ path: "app/Main.hs", content: `{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main (main) where
 
 import Web.Scotty
-import Data.Aeson (object, (.=))
+import Data.Aeson (ToJSON, FromJSON, object, (.=))
+import Data.IORef
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+import Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as T
+import GHC.Generics (Generic)
+import Control.Monad.IO.Class (liftIO)
+
+data Item = Item
+  { itemId :: Int
+  , itemName :: Text
+  , itemDescription :: Text
+  } deriving (Show, Generic)
+
+instance ToJSON Item
+instance FromJSON Item
+
+data CreateItem = CreateItem
+  { createName :: Text
+  , createDescription :: Text
+  } deriving (Show, Generic)
+
+instance FromJSON CreateItem
 
 main :: IO ()
-main = scotty 10080 $ do
-  get "/health" $ do
-    json $ object ["status" .= ("ok" :: String)]
+main = do
+  store <- newIORef (Map.empty :: Map Int Item)
+  nextId <- newIORef (1 :: Int)
+  scotty 10080 $ do
+    get "/health" $
+      json $ object ["status" .= ("ok" :: String)]
 
-  get "/api/items" $ do
-    json $ object ["items" .= ([] :: [String])]
+    get "/api/items" $ do
+      items <- liftIO $ readIORef store
+      json $ Map.elems items
 
-  -- TODO: add routes
-`, needsLlm: true });
+    get "/api/items/:id" $ do
+      i <- captureParam "id"
+      items <- liftIO $ readIORef store
+      case Map.lookup i items of
+        Just item -> json item
+        Nothing -> do
+          status status404
+          json $ object ["error" .= ("Item not found" :: String)]
+
+    post "/api/items" $ do
+      body <- jsonData :: ActionM CreateItem
+      if T.null (T.strip (createName body))
+        then do
+          status status400
+          json $ object ["error" .= ("Name is required" :: String)]
+        else do
+          newId <- liftIO $ atomicModifyIORef' nextId (\\n -> (n + 1, n))
+          let item = Item newId (createName body) (createDescription body)
+          liftIO $ modifyIORef' store (Map.insert newId item)
+          status status201
+          json item
+
+    put "/api/items/:id" $ do
+      i <- captureParam "id"
+      body <- jsonData :: ActionM CreateItem
+      items <- liftIO $ readIORef store
+      case Map.lookup i items of
+        Nothing -> do
+          status status404
+          json $ object ["error" .= ("Item not found" :: String)]
+        Just _ -> do
+          if T.null (T.strip (createName body))
+            then do
+              status status400
+              json $ object ["error" .= ("Name is required" :: String)]
+            else do
+              let updated = Item i (createName body) (createDescription body)
+              liftIO $ modifyIORef' store (Map.insert i updated)
+              json updated
+
+    delete "/api/items/:id" $ do
+      i <- captureParam "id"
+      items <- liftIO $ readIORef store
+      case Map.lookup i items of
+        Nothing -> do
+          status status404
+          json $ object ["error" .= ("Item not found" :: String)]
+        Just _ -> do
+          liftIO $ modifyIORef' store (Map.delete i)
+          status status204
+          text ""
+`, needsLlm: false });
 
     files.push({ path: "src/Lib.hs", content: `module Lib (appName) where
 
