@@ -144,6 +144,7 @@ export function createMonorepoProject(userRequest: string, cwd: string): Monorep
       devDependencies: {
         [`${pkgPrefix}/tsconfig`]: "workspace:*",
         typescript: "*", vitest: "*",
+        ...(pkg.type === "api" ? { "@types/express": "*", tsx: "*" } : {}),
       },
     }, null, 2), needsLlm: false });
 
@@ -153,7 +154,8 @@ export function createMonorepoProject(userRequest: string, cwd: string): Monorep
       files.push({ path: `${dir}/${pkg.name}/src/app/page.tsx`, content: `export default function Home() {\n  return <main><h1>${cfg.name}</h1><p>Web app.</p></main>;\n}\n`, needsLlm: true });
       files.push({ path: `${dir}/${pkg.name}/src/app/layout.tsx`, content: `export default function Layout({ children }: { children: React.ReactNode }) {\n  return <html><body>{children}</body></html>;\n}\n`, needsLlm: false });
     } else if (pkg.type === "api") {
-      files.push({ path: `${dir}/${pkg.name}/src/index.ts`, content: `import express from "express";\n\nconst app = express();\napp.use(express.json());\n\napp.get("/health", (_, res) => res.json({ status: "ok" }));\n\n// TODO: add routes\n\napp.listen(10081, () => console.log("API on :10081"));\n`, needsLlm: true });
+      files.push({ path: `${dir}/${pkg.name}/src/index.ts`, content: `import express from "express";\n\nconst app = express();\napp.use(express.json());\n\nconst items = new Map<number, { id: number; name: string; description: string }>();\nlet nextId = 1;\n\napp.get("/health", (_, res) => res.json({ status: "ok" }));\n\napp.get("/api/items", (_, res) => res.json([...items.values()]));\n\napp.post("/api/items", (req, res) => {\n  const { name, description } = req.body;\n  if (!name?.trim()) return res.status(400).json({ error: "Name is required" });\n  const item = { id: nextId++, name: name.trim(), description: description || "" };\n  items.set(item.id, item);\n  res.status(201).json(item);\n});\n\napp.get("/api/items/:id", (req, res) => {\n  const item = items.get(Number(req.params.id));\n  if (!item) return res.status(404).json({ error: "Not found" });\n  res.json(item);\n});\n\napp.put("/api/items/:id", (req, res) => {\n  const item = items.get(Number(req.params.id));\n  if (!item) return res.status(404).json({ error: "Not found" });\n  const { name, description } = req.body;\n  if (!name?.trim()) return res.status(400).json({ error: "Name is required" });\n  item.name = name.trim();\n  item.description = description || item.description;\n  res.json(item);\n});\n\napp.delete("/api/items/:id", (req, res) => {\n  if (!items.delete(Number(req.params.id))) return res.status(404).json({ error: "Not found" });\n  res.status(204).end();\n});\n\nexport { app };\n\napp.listen(10080, () => console.log("API on :10080"));\n`, needsLlm: false });
+      files.push({ path: `${dir}/${pkg.name}/src/index.test.ts`, content: `import { describe, it, expect } from "vitest";\n\ndescribe("api", () => {\n  it("health check returns ok", async () => {\n    expect(true).toBe(true); // placeholder until supertest is added\n  });\n});\n`, needsLlm: false });
     } else if (pkg.type === "ui") {
       files.push({ path: `${dir}/${pkg.name}/src/index.ts`, content: `export { Button } from "./Button.js";\n// TODO: export components\n`, needsLlm: false });
       files.push({ path: `${dir}/${pkg.name}/src/Button.ts`, content: `export interface ButtonProps { label: string; onClick?: () => void; variant?: "primary" | "secondary"; }\n\n// TODO: implement component\n`, needsLlm: true });

@@ -274,20 +274,65 @@ async def health() -> HealthResponse:
     return HealthResponse(status="ok", timestamp=datetime.now())
 
 
-# TODO: add your routes here
-# Example:
-# class Item(BaseModel):
-#     name: str
-#     price: float
-#
-# @app.post("/items")
-# async def create_item(item: Item):
-#     return item
+class ItemBase(BaseModel):
+    name: str
+    description: str = ""
+
+
+class Item(ItemBase):
+    id: int
+    created_at: datetime
+
+
+_items: dict[int, Item] = {}
+_next_id = 1
+
+
+@app.get("/api/items")
+async def list_items() -> list[Item]:
+    return list(_items.values())
+
+
+@app.post("/api/items", status_code=201)
+async def create_item(data: ItemBase) -> Item:
+    global _next_id
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    item = Item(id=_next_id, name=data.name, description=data.description, created_at=datetime.now())
+    _items[_next_id] = item
+    _next_id += 1
+    return item
+
+
+@app.get("/api/items/{item_id}")
+async def get_item(item_id: int) -> Item:
+    if item_id not in _items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return _items[item_id]
+
+
+@app.put("/api/items/{item_id}")
+async def update_item(item_id: int, data: ItemBase) -> Item:
+    if item_id not in _items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    existing = _items[item_id]
+    updated = Item(id=existing.id, name=data.name, description=data.description, created_at=existing.created_at)
+    _items[item_id] = updated
+    return updated
+
+
+@app.delete("/api/items/{item_id}", status_code=204)
+async def delete_item(item_id: int) -> None:
+    if item_id not in _items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    del _items[item_id]
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=10080)
 ` : `"""${cfg.name} API."""
 # TODO: implement with ${cfg.framework}
 `,
@@ -693,7 +738,7 @@ format:
 \truff check --fix .
 
 ${cfg.type === "api" ? `run:
-\tuvicorn ${cfg.name}.main:app --reload --port 8000
+\tuvicorn ${cfg.name}.main:app --reload --port 10080
 ` : cfg.type === "cli" ? `run:
 \tpython -m ${cfg.name}.cli
 ` : `run:
@@ -717,8 +762,8 @@ RUN pip install --no-cache-dir .
 COPY . .
 RUN pip install --no-cache-dir -e .
 
-${cfg.type === "api" ? `EXPOSE 8000
-CMD ["uvicorn", "${cfg.name}.main:app", "--host", "0.0.0.0", "--port", "8000"]` : `CMD ["python", "-m", "${cfg.name}.main"]`}
+${cfg.type === "api" ? `EXPOSE 10080
+CMD ["uvicorn", "${cfg.name}.main:app", "--host", "0.0.0.0", "--port", "10080"]` : `CMD ["python", "-m", "${cfg.name}.main"]`}
 `,
       needsLlm: false,
     });
@@ -752,7 +797,7 @@ jobs:
     path: ".env.example",
     content: `# ${cfg.name} configuration
 # Copy to .env and fill in values
-${cfg.type === "api" ? "PORT=8000\nDATABASE_URL=sqlite:///data.db" : ""}
+${cfg.type === "api" ? "PORT=10080\nDATABASE_URL=sqlite:///data.db" : ""}
 ${cfg.dependencies.includes("openai") ? "OPENAI_API_KEY=sk-..." : ""}
 ${cfg.dependencies.includes("web3") ? "WEB3_PROVIDER_URL=https://mainnet.infura.io/v3/YOUR_KEY\nPRIVATE_KEY=" : ""}
 ${cfg.type === "bot" ? "BOT_TOKEN=your-bot-token-here" : ""}

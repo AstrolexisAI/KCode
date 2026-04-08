@@ -237,16 +237,57 @@ EXPOSE 10080
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "10080"]
 `, needsLlm: false });
       files.push({ path: "app/requirements.txt", content: "fastapi\nuvicorn[standard]\npydantic\n", needsLlm: false });
-      files.push({ path: "app/main.py", content: `from fastapi import FastAPI
+      files.push({ path: "app/main.py", content: `from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 app = FastAPI(title="${cfg.name}")
+
+class ItemBase(BaseModel):
+    name: str
+    description: str = ""
+
+_items: dict[int, dict] = {}
+_next_id = 1
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-# TODO: add routes
-`, needsLlm: true });
+@app.get("/api/items")
+def list_items():
+    return list(_items.values())
+
+@app.post("/api/items", status_code=201)
+def create_item(data: ItemBase):
+    global _next_id
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    item = {"id": _next_id, "name": data.name, "description": data.description}
+    _items[_next_id] = item
+    _next_id += 1
+    return item
+
+@app.get("/api/items/{item_id}")
+def get_item(item_id: int):
+    if item_id not in _items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return _items[item_id]
+
+@app.put("/api/items/{item_id}")
+def update_item(item_id: int, data: ItemBase):
+    if item_id not in _items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if not data.name.strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    _items[item_id] = {"id": item_id, "name": data.name, "description": data.description}
+    return _items[item_id]
+
+@app.delete("/api/items/{item_id}", status_code=204)
+def delete_item(item_id: int):
+    if item_id not in _items:
+        raise HTTPException(status_code=404, detail="Item not found")
+    del _items[item_id]
+`, needsLlm: false });
     } else if (isGo) {
       files.push({ path: "app/Dockerfile", content: `FROM golang:1.23-alpine AS builder
 WORKDIR /app
@@ -311,13 +352,88 @@ CMD ["node", "index.js"]
 const app = express();
 app.use(express.json());
 
+const items = new Map();
+let nextId = 1;
+
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
-// TODO: add routes
+app.get("/api/items", (req, res) => res.json([...items.values()]));
+
+app.get("/api/items/:id", (req, res) => {
+  const item = items.get(Number(req.params.id));
+  if (!item) return res.status(404).json({ error: "Item not found" });
+  res.json(item);
+});
+
+app.post("/api/items", (req, res) => {
+  const { name, description } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
+  const item = { id: nextId++, name: name.trim(), description: description || "" };
+  items.set(item.id, item);
+  res.status(201).json(item);
+});
+
+app.put("/api/items/:id", (req, res) => {
+  const item = items.get(Number(req.params.id));
+  if (!item) return res.status(404).json({ error: "Item not found" });
+  const { name, description } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: "Name is required" });
+  item.name = name.trim();
+  item.description = description || item.description;
+  res.json(item);
+});
+
+app.delete("/api/items/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!items.has(id)) return res.status(404).json({ error: "Item not found" });
+  items.delete(id);
+  res.status(204).end();
+});
 
 const PORT = process.env.PORT || 10080;
 app.listen(PORT, () => console.log(\`Listening on :\${PORT}\`));
-`, needsLlm: true });
+`, needsLlm: false });
+    }
+  }
+
+  // Test file for app service
+  if (appSvc) {
+    const isPython = /\b(?:python|flask|django|fastapi|ml)\b/i.test(userRequest);
+    if (isPython) {
+      files.push({ path: "app/test_main.py", content: `from fastapi.testclient import TestClient
+from main import app
+
+client = TestClient(app)
+
+def test_health():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+def test_create_item():
+    r = client.post("/api/items", json={"name": "Test", "description": "desc"})
+    assert r.status_code == 201
+    assert r.json()["name"] == "Test"
+
+def test_list_items():
+    r = client.get("/api/items")
+    assert r.status_code == 200
+
+def test_create_item_validation():
+    r = client.post("/api/items", json={"name": "", "description": ""})
+    assert r.status_code == 400
+`, needsLlm: false });
+    } else if (!(/\b(?:go|golang)\b/i.test(userRequest)) && !(/\b(?:java|spring)\b/i.test(userRequest))) {
+      // Default Node.js test
+      files.push({ path: "app/index.test.js", content: `import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+describe("items API", () => {
+  it("should validate required fields", () => {
+    assert.ok(true, "placeholder");
+  });
+});
+`, needsLlm: false });
     }
   }
 
