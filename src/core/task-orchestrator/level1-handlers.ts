@@ -383,7 +383,7 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
     return { handled: false, output: "" };
   }
   // If message has creation intent + run intent, skip Level 1 (engine handles both)
-  if (/\b(?:create|build|make|crea|genera|scaffold)\b/i.test(lower) && /(?:levant|start it|launch|arranca|ejecuta|run it|run on)/i.test(lower)) {
+  if (/\b(?:create|build|make|crea|genera|scaffold)\b/i.test(lower) && /(?:levant|start|launch|arranca|ejecuta|run\s)/i.test(lower)) {
     return { handled: false, output: "" };
   }
 
