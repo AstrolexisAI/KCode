@@ -655,8 +655,9 @@ export class ConversationManager {
                 engineState.step = 2;
                 await new Promise(r => setTimeout(r, 200));
 
-                // Save last project path
+                // Save last project path and update tool workspace
                 this.config.workingDirectory = webResult.projectPath;
+                (require("../tools/workspace") as typeof import("../tools/workspace")).setToolWorkspace(webResult.projectPath);
                 try {
                   process.chdir(webResult.projectPath);
                   const { writeFileSync } = await import("node:fs");
