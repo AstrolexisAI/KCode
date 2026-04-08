@@ -15,8 +15,25 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       // Expand ~ to home directory
       if (pathToken.startsWith("~/")) pathToken = pathToken.replace("~", process.env.HOME ?? "");
       const { resolve: resolvePath } = await import("node:path");
-      const { writeFileSync, existsSync, statSync } = await import("node:fs");
-      const projectRoot = pathToken.startsWith("/") ? pathToken : resolvePath(appConfig.workingDirectory, pathToken);
+      const { join: joinPath } = await import("node:path");
+      const { writeFileSync, existsSync, statSync, readFileSync: readFs } = await import("node:fs");
+
+      let projectRoot = pathToken.startsWith("/") ? pathToken : resolvePath(appConfig.workingDirectory, pathToken);
+
+      // Guard: if scanning home directory, try last-project instead
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      if (projectRoot === home || projectRoot === home + "/") {
+        const lastProjectFile = joinPath(home, ".kcode", "last-project");
+        if (existsSync(lastProjectFile)) {
+          const lastProject = readFs(lastProjectFile, "utf-8").trim();
+          if (lastProject && existsSync(lastProject)) {
+            projectRoot = lastProject;
+          }
+        }
+        if (projectRoot === home || projectRoot === home + "/") {
+          return "  ⚠ Cannot scan home directory. Use: /scan <project-path> or /scan ~/my-project";
+        }
+      }
 
       if (!existsSync(projectRoot) || !statSync(projectRoot).isDirectory()) {
         return `  Path not found or not a directory: ${pathToken}`;
