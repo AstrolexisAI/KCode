@@ -665,10 +665,11 @@ export class ConversationManager {
                 } catch {}
 
                 // Step 3: Check if user also asked to run
-                const runMatch = userMessage.match(/(?:levant[ae](?:lo|la)?|run|start|launch|arranca|ejecuta|inicia|lanza)(?:\s+(?:.*?))?(?:(?:en|on|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
+                const runMatch = userMessage.match(/(?:levant|run|start|launch|arranca|ejecuta|inicia|lanza)/i);
+                const portMatch = userMessage.match(/(?:(?:en|on|at)\s+)?(?:(?:el\s+)?puerto|port)\s+(\d+)/i);
                 let runOutput = "";
                 if (runMatch) {
-                  const port = runMatch[1] ? parseInt(runMatch[1], 10) : 10080;
+                  const port = portMatch?.[1] ? parseInt(portMatch[1], 10) : 10080;
                   engineState.phase = "Installing dependencies...";
                   engineState.step = 3;
                   await new Promise(r => setTimeout(r, 200));
