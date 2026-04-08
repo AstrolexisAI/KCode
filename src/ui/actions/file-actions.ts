@@ -11,10 +11,12 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       // Parse args: first token = path, optional flags
       const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
       const skipVerify = tokens.includes("--skip-verify");
-      const pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
+      let pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
+      // Expand ~ to home directory
+      if (pathToken.startsWith("~/")) pathToken = pathToken.replace("~", process.env.HOME ?? "");
       const { resolve: resolvePath } = await import("node:path");
       const { writeFileSync, existsSync, statSync } = await import("node:fs");
-      const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
+      const projectRoot = pathToken.startsWith("/") ? pathToken : resolvePath(appConfig.workingDirectory, pathToken);
 
       if (!existsSync(projectRoot) || !statSync(projectRoot).isDirectory()) {
         return `  Path not found or not a directory: ${pathToken}`;

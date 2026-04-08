@@ -577,10 +577,13 @@ export class ConversationManager {
 
       if (task.type !== "general" && task.confidence >= 0.8) {
         // ── Level 2: Machine-first code/web creation ──
-        // If engine can handle 100%, respond directly (0 tokens). If partial, send focused prompt.
-        const isWebRequest = /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
+        // IMPORTANT: Only activate engine for NEW project creation, NOT for modifications
+        const isModification = /\b(?:make|hazlo|fix|arregla|change|cambia|update|actualiza|add|agrega|remove|quita|improve|mejora|refactor|move|mueve|delete|borra|resize|collaps|expand|drag)\b/i.test(userMessage)
+          && !/\b(?:create|crea|build|construye|scaffold|genera|new|nueva?o?)\b/i.test(userMessage);
 
-        if (task.type === "implement") {
+        const isWebRequest = !isModification && /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
+
+        if (task.type === "implement" && !isModification) {
           const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
           const engineMatch = detectCodeEngine(userMessage);
 

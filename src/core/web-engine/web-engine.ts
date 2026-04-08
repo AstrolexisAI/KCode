@@ -88,8 +88,10 @@ export function createWebProject(
     template = buildProjectTemplate(intent);
   }
 
-  // Step 3: Clean previous project if exists, then write files
-  const projectPath = join(cwd, intent.name);
+  // Step 3: Determine project path — don't nest inside existing project
+  const { existsSync: pathExists } = require("fs");
+  const cwdHasProject = pathExists(join(cwd, "package.json")) || pathExists(join(cwd, "go.mod")) || pathExists(join(cwd, "Cargo.toml"));
+  const projectPath = cwdHasProject ? cwd : join(cwd, intent.name);
 
   // Remove old src/ to avoid stale files from different template types
   const srcPath = join(projectPath, "src");

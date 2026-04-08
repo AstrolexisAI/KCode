@@ -99,6 +99,7 @@ const SOURCE_EXTENSIONS: Record<string, Language> = {
 const SKIP_DIRS = new Set([
   "node_modules",
   ".git",
+  ".next",
   "build",
   "dist",
   "target",
@@ -217,6 +218,15 @@ function applyPattern(pattern: BugPattern, path: string, content: string): Candi
       .slice(startCtx, endCtx)
       .map((l, i) => `${startCtx + i + 1}: ${l}`)
       .join("\n");
+    // Pre-filter: skip obvious false positives in web framework code
+    const isTestFile = path.includes("test") || path.includes("spec") || path.includes("__tests__");
+    const isConfig = path.includes("config") || path.includes(".config.");
+    const isGenerated = path.includes(".next/") || path.includes("dist/") || path.includes("build/");
+    // Skip low-severity findings in test/config/generated files
+    if ((isTestFile || isConfig || isGenerated) && pattern.severity === "low") continue;
+    // Skip hardcoded-secret patterns if the value looks like a placeholder
+    if (pattern.id.includes("hardcoded") && /changeme|placeholder|example|xxx|YOUR_|TODO/i.test(matched_text)) continue;
+
     candidates.push({
       pattern_id: pattern.id,
       severity: pattern.severity,
