@@ -515,15 +515,56 @@ export class ConversationManager {
     // Level 1: try to handle deterministically without LLM (0 tokens)
     try {
       const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
-      const l1 = tryLevel1(userMessage, this.config.workingDirectory);
-      if (l1.handled) {
-        this.state.messages.push({ role: "user", content: userMessage });
-        this.state.messages.push({ role: "assistant", content: l1.output });
-        yield { type: "turn_start" };
-        yield { type: "text_delta", text: l1.output };
-        yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
-        log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
-        return;
+      const lower = userMessage.toLowerCase().trim();
+      const isSlowCommand = /(?:levant|start|run\s|launch|arranca|build|compile|construir)/.test(lower) && !(/\b(?:create|make|crea|genera)\b/.test(lower));
+
+      if (isSlowCommand) {
+        // Show progress bar for commands that take time (install, build)
+        const { engineState, resetEngineState } = await import("./engine-progress.js");
+        resetEngineState();
+        engineState.active = true;
+        engineState.startTime = Date.now();
+
+        const isBuild = /^(?:build|compile|construir|compilar)/i.test(lower);
+        engineState.phase = isBuild ? "Building project..." : "Starting server...";
+        engineState.step = 1;
+        engineState.totalSteps = isBuild ? 2 : 3;
+
+        // Small delay for UI to render progress
+        await new Promise(r => setTimeout(r, 100));
+
+        if (!isBuild) {
+          engineState.phase = "Installing dependencies...";
+          engineState.step = 2;
+        }
+
+        const l1 = tryLevel1(userMessage, this.config.workingDirectory);
+        if (l1.handled) {
+          engineState.phase = isBuild ? "Build complete!" : "Server started!";
+          engineState.step = engineState.totalSteps;
+          await new Promise(r => setTimeout(r, 200));
+          engineState.active = false;
+
+          this.state.messages.push({ role: "user", content: userMessage });
+          this.state.messages.push({ role: "assistant", content: l1.output });
+          yield { type: "turn_start" };
+          yield { type: "text_delta", text: l1.output };
+          yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
+          log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
+          return;
+        }
+        engineState.active = false;
+      } else {
+        const l1 = tryLevel1(userMessage, this.config.workingDirectory);
+        if (l1.handled) {
+          this.state.messages.push({ role: "user", content: userMessage });
+          this.state.messages.push({ role: "assistant", content: l1.output });
+          yield { type: "turn_start" };
+          yield { type: "text_delta", text: l1.output };
+          yield { type: "turn_end", inputTokens: 0, outputTokens: 0, stopReason: "end_turn" };
+          log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
+          return;
+        }
       }
     } catch (err) {
       log.debug("orchestrator", `Level 1 skipped: ${err}`);
