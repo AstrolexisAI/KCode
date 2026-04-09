@@ -149,7 +149,10 @@ describe("code-engine-router", () => {
   });
 
   test("auto-selects Elixir for realtime", () => {
-    expect(detectCodeEngine("create a realtime chat application")?.engine).toBe("elixir");
+    // "chat" with "create" goes to web engine (chat template), not elixir
+    expect(detectCodeEngine("create a realtime chat application")).toBeNull();
+    // But explicit "Elixir" overrides
+    expect(detectCodeEngine("create a realtime service with Elixir")?.engine).toBe("elixir");
     expect(detectCodeEngine("build a websocket notification service")?.engine).toBe("elixir");
   });
 
