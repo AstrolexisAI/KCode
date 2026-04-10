@@ -289,7 +289,41 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
         }
       }
 
-      lines.push("", `  Run: cd ${pathToken} && mkdir -p build && cd build && cmake .. && make`);
+      // Pick a build/test command based on the files present in the project
+      // root. The old hardcoded cmake hint was wrong for every non-C++ project.
+      const { existsSync: fsExists } = await import("node:fs");
+      const { join: pJoin } = await import("node:path");
+      const hint = (() => {
+        if (fsExists(pJoin(projectRoot, "package.json"))) {
+          return fsExists(pJoin(projectRoot, "bun.lockb"))
+            ? "bun test"
+            : "npm test";
+        }
+        if (fsExists(pJoin(projectRoot, "Cargo.toml"))) return "cargo test";
+        if (fsExists(pJoin(projectRoot, "go.mod"))) return "go test ./...";
+        if (fsExists(pJoin(projectRoot, "pyproject.toml")) || fsExists(pJoin(projectRoot, "setup.py"))) {
+          return "pytest";
+        }
+        if (fsExists(pJoin(projectRoot, "Gemfile"))) return "bundle exec rspec";
+        if (fsExists(pJoin(projectRoot, "pom.xml"))) return "mvn test";
+        if (fsExists(pJoin(projectRoot, "build.gradle")) || fsExists(pJoin(projectRoot, "build.gradle.kts"))) {
+          return "gradle test";
+        }
+        if (fsExists(pJoin(projectRoot, "mix.exs"))) return "mix test";
+        if (fsExists(pJoin(projectRoot, "build.zig"))) return "zig build test";
+        if (fsExists(pJoin(projectRoot, "dune-project"))) return "dune runtest";
+        if (fsExists(pJoin(projectRoot, "stack.yaml")) || fsExists(pJoin(projectRoot, "cabal.project"))) {
+          return "cabal test";
+        }
+        if (fsExists(pJoin(projectRoot, "pubspec.yaml"))) return "flutter test";
+        if (fsExists(pJoin(projectRoot, "Package.swift"))) return "swift test";
+        if (fsExists(pJoin(projectRoot, "CMakeLists.txt"))) {
+          return "cmake -B build && cmake --build build && ctest --test-dir build";
+        }
+        if (fsExists(pJoin(projectRoot, "Makefile"))) return "make test";
+        return "# no test runner detected — verify manually";
+      })();
+      lines.push("", `  Run: cd ${pathToken} && ${hint}`);
       lines.push(`  to verify the fixes compile cleanly.`);
 
       return lines.join("\n");
