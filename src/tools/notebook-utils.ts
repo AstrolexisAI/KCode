@@ -33,6 +33,7 @@ export interface CellOutput {
 
 /** Parse .ipynb JSON content into a typed notebook structure */
 export function parseNotebook(content: string): JupyterNotebook {
+  // KCODE-AUDIT:js-014-json-parse-no-catch — Wrap JSON.parse in try/catch and handle SyntaxError.
   const nb = JSON.parse(content);
   if (nb.nbformat !== 4) {
     throw new Error(`Only nbformat 4 is supported, found: ${nb.nbformat}`);
