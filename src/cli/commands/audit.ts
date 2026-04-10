@@ -6,8 +6,8 @@
 // Works with local (llama.cpp/Ollama) or cloud (Anthropic/OpenAI) models.
 // The model is used ONLY for per-candidate verification, not for discovery.
 
-import { writeFileSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
+import { existsSync, writeFileSync } from "node:fs";
+import { join as pathJoin, resolve as pathResolve } from "node:path";
 import type { Command } from "commander";
 import { runAudit } from "../../core/audit-engine/audit-engine";
 import { makeAuditLlmCallback } from "../../core/audit-engine/llm-callback";
@@ -61,6 +61,16 @@ export function registerAuditCommand(program: Command): void {
       console.log(`  Project:  ${projectRoot}`);
       console.log(`  Output:   ${outputPath}`);
       console.log("");
+
+      // Auto-skip verification for machine-generated projects. The web engine
+      // drops a .kcode-generated marker at the project root; when present we
+      // know the tree is scaffolded from audited templates, so per-candidate
+      // LLM verification is wasted time (it took 3h+ on local models for a
+      // clean Next.js scaffold).
+      if (!opts.skipVerify && existsSync(pathJoin(projectRoot, ".kcode-generated"))) {
+        opts.skipVerify = true;
+        console.log("  \x1b[33m.kcode-generated detected — auto-enabling --skip-verify\x1b[0m");
+      }
 
       // Resolve LLM config from settings (unless --skip-verify)
       let llmCallback: (prompt: string) => Promise<string>;
