@@ -164,6 +164,7 @@ export class McpManager {
     const validated: McpServersConfig = {};
     for (const [name, config] of Object.entries(configs)) {
       if (isValidServerConfig(config)) {
+        // KCODE-AUDIT:js-008-prototype-pollution-bracket — Reject __proto__, constructor and prototype keys before assigning.
         validated[name] = config as McpServerConfig;
       }
     }
