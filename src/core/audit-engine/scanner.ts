@@ -227,6 +227,29 @@ function applyPattern(pattern: BugPattern, path: string, content: string): Candi
     // Skip hardcoded-secret patterns if the value looks like a placeholder
     if (pattern.id.includes("hardcoded") && /changeme|placeholder|example|xxx|YOUR_|TODO/i.test(matched_text)) continue;
 
+    // Skip matches inside JSX className attributes (Tailwind utility strings
+    // like "bg-red-500 p-4 text-white" trigger several patterns as false
+    // positives). Only applies to JSX/TSX sources. The check walks backwards
+    // from the match to find the nearest attribute boundary on the same line.
+    const isJsx = path.endsWith(".tsx") || path.endsWith(".jsx");
+    if (isJsx) {
+      const lineStart = content.lastIndexOf("\n", m.index - 1) + 1;
+      const lineText = content.slice(lineStart, content.indexOf("\n", m.index) === -1 ? content.length : content.indexOf("\n", m.index));
+      const offsetInLine = m.index - lineStart;
+      const before = lineText.slice(0, offsetInLine);
+      // Match is inside className="..." or className={`...`} if the last
+      // attribute opener before the match is className and no closing quote
+      // has intervened.
+      const classNameMatch = before.match(/class(?:Name)?\s*=\s*(["'`])([^"'`]*)$/);
+      if (classNameMatch) continue;
+      // Also skip if the match sits inside any JSX string attribute that's
+      // clearly a Tailwind-ish token list (letters, digits, dashes, slashes,
+      // colons, spaces only) — catches className aliases like `class=` or
+      // attributes passed through spreads.
+      const stringAttr = before.match(/\w+\s*=\s*(["'])([a-zA-Z0-9\s\-:/]*)$/);
+      if (stringAttr && /[\s-]/.test(stringAttr[2] ?? "")) continue;
+    }
+
     candidates.push({
       pattern_id: pattern.id,
       severity: pattern.severity,

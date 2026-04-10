@@ -100,6 +100,20 @@ export function createWebProject(
   let machineFiles = 0;
   let llmFiles = 0;
 
+  // Marker: tells the audit engine this tree was scaffolded by KCode and is
+  // machine-safe, so it can auto-skip model verification (fixes 3h+ scans
+  // on fresh generated projects against local models).
+  mkdirSync(projectPath, { recursive: true });
+  writeFileSync(
+    join(projectPath, ".kcode-generated"),
+    JSON.stringify({
+      generator: "kcode-web-engine",
+      siteType: intent.siteType,
+      stack: intent.stack,
+      createdAt: new Date().toISOString(),
+    }, null, 2),
+  );
+
   for (const file of template.files) {
     const fullPath = join(projectPath, file.path);
     mkdirSync(dirname(fullPath), { recursive: true });
