@@ -295,9 +295,13 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       const { join: pJoin } = await import("node:path");
       const hint = (() => {
         if (fsExists(pJoin(projectRoot, "package.json"))) {
-          return fsExists(pJoin(projectRoot, "bun.lockb"))
-            ? "bun test"
-            : "npm test";
+          // Bun moved from binary bun.lockb to text bun.lock — check both.
+          const hasBun = fsExists(pJoin(projectRoot, "bun.lock")) ||
+            fsExists(pJoin(projectRoot, "bun.lockb"));
+          if (hasBun) return "bun test";
+          if (fsExists(pJoin(projectRoot, "pnpm-lock.yaml"))) return "pnpm test";
+          if (fsExists(pJoin(projectRoot, "yarn.lock"))) return "yarn test";
+          return "npm test";
         }
         if (fsExists(pJoin(projectRoot, "Cargo.toml"))) return "cargo test";
         if (fsExists(pJoin(projectRoot, "go.mod"))) return "go test ./...";
