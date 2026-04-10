@@ -107,12 +107,20 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixPySqlInjection(lines, finding);
     case "py-005-yaml-unsafe-load":
       return fixPyYamlLoad(lines, finding);
-    default:
+    default: {
+      // Fall through to the generic recipe table below. Every pattern
+      // registered in patterns.ts has an entry here — the bespoke fixers
+      // above handle the patterns that need multi-line transforms, and
+      // the table covers the rest with either a mechanical replacement
+      // or a language-aware safety comment.
+      const recipe = PATTERN_RECIPES[finding.pattern_id];
+      if (recipe) return applyRecipe(lines, finding, recipe);
       return {
         applied: false,
         lines,
         description: `No auto-fix for pattern: ${finding.pattern_id}`,
       };
+    }
   }
 }
 
@@ -530,4 +538,396 @@ function fixLoopBound(lines: string[], finding: Finding): OneFixResult {
     lines: result,
     description: `Added loop bound cap: ${boundExpr} > 10000`,
   };
+}
+
+// ── Generic recipe table ──────────────────────────────────────
+//
+// Every pattern in patterns.ts must have coverage: either a bespoke
+// fixer above, or an entry in PATTERN_RECIPES below. A recipe inserts
+// a language-aware safety comment directly above the finding, tagged
+// `KCODE-AUDIT:<pattern_id>` so subsequent runs can detect and skip it.
+// This gives developers a concrete, greppable marker per finding and
+// keeps /fix from reporting "no auto-fix" for any registered pattern.
+
+interface PatternRecipe {
+  description: string;
+  warnings: string[];
+}
+
+const r = (description: string, ...warnings: string[]): PatternRecipe => ({
+  description,
+  warnings,
+});
+
+// Shared warning strings — recipes reference these so the guidance
+// stays consistent across languages.
+const W = {
+  SQL: "Use a parameterized query — never concatenate user input into SQL.",
+  SECRET: "Move this credential to an environment variable or secret store.",
+  XSS: "Escape/sanitize this value before rendering it as HTML.",
+  SHELL: "Pass arguments as an array — never build a shell string from user input.",
+  DESER: "Never deserialize untrusted data — use JSON or a safe_load variant.",
+  PROTO: "Reject __proto__, constructor and prototype keys before assigning.",
+  PATH: "Resolve the absolute path and verify it stays within the allowed root.",
+  EVAL: "Remove eval — use an explicit parser or a safe evaluator.",
+  UNWRAP: "Handle the null/error case instead of force-unwrapping.",
+  LEAK: "Ensure this resource is released (defer/using/try-with-resources).",
+  NULL: "Guard against null/undefined before dereferencing.",
+  RACE: "Synchronize access to this shared state.",
+  UNSAFE: "Document the invariants that make this unsafe code sound.",
+  REDOS: "Rewrite this regex to avoid catastrophic backtracking.",
+  ERR: "Handle this error explicitly instead of ignoring it.",
+  HTTPS: "Use HTTPS and enable certificate verification.",
+};
+
+const PATTERN_RECIPES: Record<string, PatternRecipe> = {
+  // ── C/C++ (bespoke covers 001-004, 006, 012) ───────────────
+  "cpp-005-int-returned-as-size": r("int→size_t cast", "Return size_t or validate the int is non-negative before casting."),
+  "cpp-007-deref-before-null-check": r("null check after deref", "Move the null check BEFORE dereferencing the pointer."),
+  "cpp-008-memcpy-untrusted-len": r("memcpy untrusted length", "Clamp the length against the destination buffer size before memcpy."),
+  "cpp-009-toctou-stat-open": r("TOCTOU stat+open", "Use openat/fstat on the open fd instead of stat() + open()."),
+  "cpp-010-malloc-mul-overflow": r("malloc size overflow", "Check SIZE_MAX / a < b before multiplying in a malloc size."),
+  "cpp-011-signed-unsigned-cmp": r("signed/unsigned compare", "Cast both sides to the same signedness before comparing."),
+
+  // ── C# ─────────────────────────────────────────────────────
+  "cs-001-sql-injection": r("C# SQL injection", W.SQL),
+  "cs-002-deserialization": r("C# deserialization", W.DESER),
+  "cs-003-hardcoded-connection": r("hardcoded connection string", W.SECRET),
+  "cs-004-async-void": r("async void", "Use async Task instead of async void except for event handlers."),
+  "cs-005-task-not-awaited": r("task not awaited", "Await the returned Task or store it for later await."),
+  "cs-006-disposable-no-using": r("IDisposable without using", W.LEAK),
+  "cs-007-sql-interpolation": r("C# SQL interpolation", W.SQL),
+  "cs-008-multiple-enumeration": r("multiple enumeration", "Materialize with ToList()/ToArray() before enumerating more than once."),
+  "cs-009-lock-this-typeof": r("lock on this/typeof", "Lock on a private readonly object, not `this` or `typeof(T)`."),
+  "cs-010-configureawait-missing": r("missing ConfigureAwait", "Append .ConfigureAwait(false) in library code."),
+  "cs-011-nullable-no-check": r("nullable without check", W.NULL),
+  "cs-012-dictionary-key-not-found": r("dict key not checked", "Use TryGetValue or ContainsKey before indexing."),
+
+  // ── Dart / Flutter ─────────────────────────────────────────
+  "dart-001-insecure-http": r("insecure http", W.HTTPS),
+  "dart-002-hardcoded-key": r("hardcoded key", W.SECRET),
+  "dart-003-force-unwrap": r("force unwrap", W.UNWRAP),
+  "dart-004-dart-mirrors": r("dart:mirrors", "dart:mirrors breaks Flutter tree-shaking — use code generation."),
+  "dart-005-setstate-after-dispose": r("setState after dispose", "Check `mounted` before calling setState."),
+  "dart-006-future-no-error": r("Future without error", "Add .catchError or wrap in try/catch."),
+  "dart-007-json-null-check": r("json missing null check", "Verify the map has the key and the value is non-null before accessing."),
+  "dart-008-buildcontext-async": r("BuildContext after await", "Check `context.mounted` after the async gap before using BuildContext."),
+  "dart-009-http-no-https": r("http without https", W.HTTPS),
+  "dart-010-string-hardcoded-secret": r("hardcoded secret", W.SECRET),
+
+  // ── Django ─────────────────────────────────────────────────
+  "django-001-raw-sql": r("Django raw SQL", W.SQL),
+  "django-002-mark-safe": r("mark_safe on user content", W.XSS),
+  "django-003-secret-key": r("hardcoded SECRET_KEY", W.SECRET),
+
+  // ── Elixir ─────────────────────────────────────────────────
+  "ex-001-atom-from-user-input": r("atom from user input", "Atoms are never garbage collected — never create atoms from user input."),
+  "ex-002-to-atom-untrusted": r("to_atom on untrusted", "Use String.to_existing_atom/1 or reject unknown values."),
+  "ex-003-unbounded-mailbox": r("unbounded mailbox", "Add backpressure — use GenStage or a bounded buffer."),
+  "ex-004-ets-race-condition": r("ETS race", "Use :ets.update_counter or transaction primitives."),
+  "ex-005-process-exit-kill": r("System.halt in library", "Don't call System.halt from library code — let the supervisor decide."),
+  "ex-006-ecto-raw-sql-injection": r("Ecto raw SQL", W.SQL),
+  "ex-007-hardcoded-secrets-config": r("hardcoded secret in config", W.SECRET),
+  "ex-008-missing-supervisor-strategy": r("missing supervisor strategy", "Define a supervision strategy (:one_for_one, etc.) explicitly."),
+  "ex-009-task-async-no-await": r("Task.async not awaited", "Await the task or use Task.Supervisor.async_nolink."),
+  "ex-010-io-inspect-production": r("IO.inspect in production", "Remove IO.inspect before shipping — use Logger.debug."),
+
+  // ── Express / Node web ─────────────────────────────────────
+  "express-001-nosql-injection": r("NoSQL injection", "Validate input type — use $eq operators explicitly for untrusted input."),
+  "express-002-xss-render": r("xss in render", W.XSS),
+  "express-003-cors-wildcard": r("CORS wildcard", "Restrict CORS origin to an allowlist instead of '*'."),
+
+  // ── FastAPI ────────────────────────────────────────────────
+  "fastapi-001-sql-raw": r("FastAPI raw SQL", W.SQL),
+
+  // ── Flask ──────────────────────────────────────────────────
+  "flask-001-render-string": r("render_template_string", "Use render_template, not render_template_string with user input."),
+
+  // ── Go ─────────────────────────────────────────────────────
+  "go-001-sql-injection": r("Go SQL injection", W.SQL),
+  "go-002-unsafe-pointer": r("unsafe.Pointer", W.UNSAFE),
+  "go-003-command-injection": r("command injection", W.SHELL),
+  "go-004-error-ignored": r("error ignored", W.ERR),
+  "go-005-tls-skip-verify": r("InsecureSkipVerify", "Remove InsecureSkipVerify or gate it behind a dev-only flag."),
+  "go-006-blank-error": r("blank error return", W.ERR),
+  "go-007-goroutine-leak": r("goroutine leak", "Ensure this goroutine has an exit path (context.Done or channel close)."),
+  "go-008-defer-in-loop": r("defer in loop", "Move defer out of the loop — it runs on function return, not iteration end."),
+  "go-009-nil-map-write": r("nil map write", "Initialize the map with make() before writing."),
+  "go-010-race-shared-var": r("race on shared var", W.RACE),
+  "go-011-context-not-propagated": r("context not propagated", "Thread ctx through the call chain."),
+  "go-012-infinite-recursion": r("infinite recursion", "Add a base case or convert to iteration."),
+  "go-013-hardcoded-credentials": r("hardcoded credentials", W.SECRET),
+  "go-014-unbuffered-channel-deadlock": r("unbuffered channel deadlock", "Use a buffered channel or run sender/receiver in separate goroutines."),
+  "go-015-waitgroup-add-after-go": r("wg.Add after go", "Call wg.Add(1) BEFORE launching the goroutine."),
+  "go-016-http-body-not-closed": r("response body not closed", "defer resp.Body.Close() immediately after the request."),
+  "go-017-slice-append-shared": r("append on shared slice", "Copy the slice with append([]T{}, s...) before append to avoid aliasing."),
+  "go-018-sprintf-hot-path": r("Sprintf in hot path", "Use strings.Builder instead of fmt.Sprintf in hot paths."),
+  "go-019-os-exit-library": r("os.Exit in library", "Don't call os.Exit from library code — return an error."),
+  "go-020-loop-var-goroutine": r("loop var in goroutine", "Shadow the loop variable with `v := v` before `go func()`."),
+
+  // ── Haskell ────────────────────────────────────────────────
+  "hs-001-head-empty-list": r("head on list", "Use listToMaybe or pattern match instead of head."),
+  "hs-002-fromjust": r("fromJust", W.UNWRAP),
+  "hs-003-read-no-error": r("read without error handling", "Use readMaybe instead of read for untrusted input."),
+  "hs-004-unsafe-perform-io": r("unsafePerformIO", W.UNSAFE),
+  "hs-005-space-leak": r("space leak", "Force strict evaluation with seq / $! to avoid thunk accumulation."),
+  "hs-006-missing-show-error": r("missing Show instance", "Derive Show or provide an instance."),
+  "hs-007-error-control-flow": r("error for control flow", "Return Either/Maybe instead of calling error for control flow."),
+  "hs-008-string-type": r("String type", "Prefer Text/ByteString over String for performance."),
+
+  // ── Java ───────────────────────────────────────────────────
+  "java-001-sql-injection": r("Java SQL injection", W.SQL),
+  "java-002-deserialization": r("Java deserialization", W.DESER),
+  "java-003-xxe": r("XXE", "Disable DTD: factory.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)."),
+  "java-004-path-traversal": r("path traversal", W.PATH),
+  "java-005-nullable-method-call": r("nullable method call", W.NULL),
+  "java-006-resource-leak": r("resource leak", "Use try-with-resources to auto-close."),
+  "java-007-sql-concat-prepared": r("SQL concat in PreparedStatement", W.SQL),
+  "java-008-concurrent-modification": r("concurrent modification", "Use Iterator.remove() or a concurrent collection."),
+  "java-009-unsafe-singleton": r("unsafe singleton", "Use the holder idiom or an enum singleton for thread-safety."),
+  "java-010-hardcoded-creds": r("hardcoded credentials", W.SECRET),
+  "java-011-insecure-deserialize": r("insecure deserialization", W.DESER),
+  "java-012-path-traversal-string": r("path traversal string", W.PATH),
+  "java-013-xxe-transformer": r("XXE in transformer", "Set TransformerFactory.FEATURE_SECURE_PROCESSING to true."),
+  "java-014-log-injection": r("log injection", "Strip CRLF from user input before logging."),
+  "java-015-infinite-loop": r("infinite loop", "Add a termination condition."),
+  "java-016-equals-no-hashcode": r("equals without hashCode", "Override hashCode() whenever equals() is overridden."),
+  "java-017-mutable-static": r("mutable static field", "Make the field final and the collection immutable."),
+  "java-018-catch-generic-exception": r("generic catch", "Catch specific exceptions, not Exception/Throwable."),
+
+  // ── JavaScript / TypeScript ───────────────────────────────
+  "js-001-eval": r("eval", W.EVAL),
+  "js-002-innerhtml": r("innerHTML", "Use textContent or DOMPurify.sanitize() before innerHTML."),
+  "js-003-prototype-pollution": r("prototype pollution", W.PROTO),
+  "js-004-nosql-injection": r("NoSQL injection", "Validate input type before passing to the Mongo query."),
+  "js-005-regex-dos": r("regex DoS", W.REDOS),
+  "js-006-hardcoded-secret": r("hardcoded secret", W.SECRET),
+  "js-007-command-injection": r("command injection", W.SHELL),
+  "js-008-prototype-pollution-bracket": r("prototype pollution (bracket)", W.PROTO),
+  "js-009-redos-nested-quantifier": r("ReDoS nested quantifier", W.REDOS),
+  "js-010-innerhtml-xss": r("innerHTML XSS", W.XSS),
+  "js-011-eval-new-function": r("new Function()", W.EVAL),
+  "js-012-event-listener-leak": r("event listener leak", "Remove the listener in the cleanup/unmount callback."),
+  "js-013-loose-equality": r("loose equality", "Use === or !== for strict comparison."),
+  "js-014-json-parse-no-catch": r("JSON.parse no catch", "Wrap JSON.parse in try/catch and handle SyntaxError."),
+  "js-015-promise-no-catch": r("promise no catch", "Add .catch() or await inside try/catch."),
+  "js-016-open-redirect": r("open redirect", "Validate the redirect URL against an allowlist."),
+  "js-017-hardcoded-secret-inline": r("hardcoded secret inline", W.SECRET),
+  "js-018-document-write": r("document.write", "Avoid document.write — build DOM nodes explicitly."),
+
+  // ── Kotlin ─────────────────────────────────────────────────
+  "kt-001-force-unwrap": r("force unwrap !!", W.UNWRAP),
+  "kt-002-sql-injection": r("Kotlin SQL injection", W.SQL),
+  "kt-003-double-bang-production": r("!! in production", "Use safe call ?. or elvis ?:."),
+  "kt-004-lateinit-uninit": r("lateinit unchecked", "Check ::field.isInitialized before use."),
+  "kt-005-coroutine-leak": r("coroutine leak", "Launch inside a lifecycle-scoped CoroutineScope."),
+  "kt-006-blocking-in-coroutine": r("blocking in coroutine", "Wrap blocking calls in withContext(Dispatchers.IO)."),
+  "kt-007-platform-type-null": r("platform type null", "Java platform types can be null — annotate or check."),
+  "kt-008-mutable-collection-exposed": r("mutable collection exposed", "Return an immutable view (toList/toSet)."),
+  "kt-009-hardcoded-secrets": r("hardcoded secret", W.SECRET),
+  "kt-010-sql-template-injection": r("SQL template injection", W.SQL),
+  "kt-011-runblocking-main": r("runBlocking in main", "Use a CoroutineScope.launch instead of runBlocking in production."),
+  "kt-012-globalscope": r("GlobalScope", "Use a scoped CoroutineScope tied to lifecycle."),
+
+  // ── Lua ────────────────────────────────────────────────────
+  "lua-001-global-pollution": r("global pollution", "Declare with `local` to avoid polluting globals."),
+  "lua-002-loadstring-injection": r("loadstring injection", W.EVAL),
+  "lua-003-table-nil-index": r("table nil index", "Check value ~= nil before chaining further indices."),
+  "lua-004-string-concat-loop": r("string concat in loop", "Accumulate into a table and call table.concat at the end."),
+  "lua-005-os-execute-injection": r("os.execute injection", W.SHELL),
+  "lua-006-pcall-no-error-handling": r("pcall no error handling", "Handle the error return of pcall explicitly."),
+  "lua-007-infinite-coroutine": r("infinite coroutine", "Add a termination condition to the coroutine loop."),
+  "lua-008-require-path-injection": r("require path injection", "Validate the require path against an allowlist."),
+
+  // ── PHP ────────────────────────────────────────────────────
+  "php-001-sql-injection": r("PHP SQL injection", W.SQL),
+  "php-002-eval": r("eval", W.EVAL),
+  "php-003-file-include": r("dynamic include", "Validate the include path against an allowlist."),
+  "php-004-xss": r("XSS", "Use htmlspecialchars with ENT_QUOTES before output."),
+  "php-005-sql-superglobal": r("SQL from superglobal", W.SQL),
+  "php-006-unserialize": r("unserialize", W.DESER),
+  "php-007-path-traversal": r("path traversal", W.PATH),
+  "php-008-csrf-no-token": r("missing CSRF token", "Validate a CSRF token before mutating state."),
+  "php-009-type-juggling": r("type juggling", "Use === for strict comparison."),
+  "php-010-extract-user-input": r("extract on user input", "Never extract() user input — assign fields explicitly."),
+  "php-011-shell-exec": r("shell exec", W.SHELL),
+  "php-012-hardcoded-credentials": r("hardcoded credentials", W.SECRET),
+  "php-013-weak-hash-password": r("weak password hash", "Use password_hash with PASSWORD_BCRYPT or PASSWORD_ARGON2ID."),
+  "php-014-print-xss": r("print XSS", W.XSS),
+  "php-015-backtick-injection": r("backtick injection", W.SHELL),
+
+  // ── Python (bespoke covers 001, 002, 004, 005, 008) ───────
+  "py-003-pickle-deserialize": r("pickle deserialize", W.DESER),
+  "py-006-hardcoded-secret": r("hardcoded secret", W.SECRET),
+  "py-007-assert-security": r("assert for security", "Don't use assert for security — it's stripped in python -O mode."),
+  "py-009-pickle-untrusted": r("pickle untrusted", W.DESER),
+  "py-010-assert-validation": r("assert for validation", "Don't use assert for validation in production."),
+  "py-011-eq-without-hash": r("__eq__ without __hash__", "Define __hash__ alongside __eq__."),
+  "py-012-mutable-default-arg": r("mutable default arg", "Use None as default and assign inside the function."),
+  "py-013-bare-except": r("bare except", "Catch specific exceptions, not bare `except:`."),
+  "py-014-late-binding-closure": r("late-binding closure", "Capture the loop variable with a default arg."),
+  "py-015-os-system-user-input": r("os.system user input", W.SHELL),
+  "py-016-tempfile-mktemp": r("tempfile.mktemp", "Use tempfile.mkstemp or NamedTemporaryFile — mktemp is race-prone."),
+  "py-017-hardcoded-secret-assign": r("hardcoded secret assign", W.SECRET),
+  "py-018-re-no-raw-string": r("regex no raw string", "Use raw string r'...' for regex patterns."),
+  "py-019-fstring-logging": r("f-string logging", "Use lazy % formatting: logger.info('msg %s', val)."),
+  "py-020-global-keyword": r("global keyword", "Avoid `global` — pass state explicitly or use a class."),
+
+  // ── Rails ──────────────────────────────────────────────────
+  "rails-001-html-safe": r("html_safe on user content", W.XSS),
+
+  // ── Ruby ───────────────────────────────────────────────────
+  "rb-001-eval": r("eval", W.EVAL),
+  "rb-002-sql-injection": r("Ruby SQL injection", W.SQL),
+  "rb-003-yaml-unsafe": r("YAML.load", "Use YAML.safe_load instead of YAML.load."),
+  "rb-004-send-user-input": r("send(user input)", "Whitelist methods before send()."),
+  "rb-005-mass-assignment": r("mass assignment", "Use strong_parameters (permit/require)."),
+  "rb-006-system-backtick": r("system/backtick", W.SHELL),
+  "rb-007-open-redirect": r("open redirect", "Validate the redirect against an allowlist."),
+  "rb-008-hardcoded-secrets": r("hardcoded secret", W.SECRET),
+  "rb-009-marshal-load": r("Marshal.load", W.DESER),
+  "rb-010-sql-interpolation": r("SQL interpolation", W.SQL),
+  "rb-011-instance-eval-untrusted": r("instance_eval untrusted", W.EVAL),
+  "rb-012-eval-string": r("eval string", W.EVAL),
+
+  // ── React ──────────────────────────────────────────────────
+  "react-001-dangerously-set": r("dangerouslySetInnerHTML", "Use DOMPurify.sanitize() before dangerouslySetInnerHTML."),
+
+  // ── Rust ───────────────────────────────────────────────────
+  "rs-001-unsafe-block": r("unsafe block", W.UNSAFE),
+  "rs-002-unwrap-panic": r("unwrap panic", W.UNWRAP),
+  "rs-003-sql-injection": r("Rust SQL injection", W.SQL),
+  "rs-004-unwrap-non-test": r("unwrap in non-test", W.UNWRAP),
+  "rs-005-expect-no-message": r("expect without message", "Add a descriptive message to .expect() explaining the invariant."),
+  "rs-006-unsafe-no-safety": r("unsafe without SAFETY", "Add a `// SAFETY:` comment above every unsafe block."),
+  "rs-007-arc-mutex-read-heavy": r("Arc<Mutex> read-heavy", "Use RwLock for read-heavy workloads."),
+  "rs-008-blocking-in-async": r("blocking in async", "Use tokio::task::spawn_blocking or an async variant."),
+  "rs-009-clone-in-loop": r("clone in loop", "Hoist the clone out of the loop."),
+  "rs-010-async-send-sync": r("async Send/Sync", "Ensure the future is Send + Sync when crossing threads."),
+  "rs-011-hardcoded-secrets": r("hardcoded secret", W.SECRET),
+  "rs-012-panic-in-drop": r("panic in Drop", "Don't panic in Drop::drop."),
+  "rs-013-unbounded-vec": r("unbounded Vec growth", "Preallocate with Vec::with_capacity or cap growth."),
+  "rs-014-mem-transmute": r("mem::transmute", "Prefer safe casting (as / From / Into) over transmute."),
+  "rs-015-format-sql": r("format! SQL", "Use sqlx::query! with parameters."),
+
+  // ── Scala ──────────────────────────────────────────────────
+  "scala-001-sql-injection": r("Scala SQL injection", W.SQL),
+  "scala-002-option-get": r("Option.get", "Use getOrElse or pattern match."),
+  "scala-003-blocking-future": r("blocking in Future", "Wrap blocking calls in blocking { ... }."),
+  "scala-004-mutable-concurrent": r("mutable in concurrent", "Use a concurrent collection or synchronized access."),
+  "scala-005-nonexhaustive-match": r("non-exhaustive match", "Add a wildcard case _."),
+  "scala-006-implicit-conversion": r("implicit conversion", "Make the conversion explicit."),
+  "scala-007-try-get": r("Try.get", "Pattern match on Success/Failure instead of .get."),
+  "scala-008-akka-unhandled": r("akka unhandled", "Add `case _ => unhandled(msg)` to the receive block."),
+  "scala-009-sql-string-concat": r("SQL string concat", W.SQL),
+  "scala-010-null-usage": r("null usage", "Use Option instead of null."),
+
+  // ── Shell ──────────────────────────────────────────────────
+  "sh-001-eval-injection": r("eval injection", W.EVAL),
+
+  // ── SQL ────────────────────────────────────────────────────
+  "sql-001-grant-all": r("GRANT ALL", "Grant specific privileges, not ALL."),
+  "sql-002-plaintext-password": r("plaintext password", "Store a password hash (bcrypt/argon2), never plaintext."),
+
+  // ── Swift ──────────────────────────────────────────────────
+  "swift-001-force-unwrap": r("force unwrap", W.UNWRAP),
+  "swift-002-force-try": r("force try", "Use do/catch or try?."),
+  "swift-003-insecure-http": r("insecure http", W.HTTPS),
+  "swift-004-keychain-no-access": r("keychain no access", "Set kSecAttrAccessibleWhenUnlockedThisDeviceOnly."),
+  "swift-005-hardcoded-secret": r("hardcoded secret", W.SECRET),
+  "swift-006-webview-js": r("webview JS", "Validate JavaScript before evaluateJavaScript."),
+  "swift-007-force-unwrap-production": r("force unwrap prod", W.UNWRAP),
+  "swift-008-retain-cycle": r("retain cycle", "Capture [weak self] in the closure."),
+  "swift-009-main-thread-violation": r("off main thread UI", "Dispatch UI work to DispatchQueue.main."),
+  "swift-010-force-try-production": r("force try prod", "Use try? or do/catch."),
+  "swift-011-force-cast": r("force cast", "Use `as?` for optional cast."),
+  "swift-012-unowned-dealloc": r("unowned may dealloc", "Use [weak self] if the referenced object may outlive self."),
+  "swift-013-missing-main-actor": r("missing @MainActor", "Annotate the class/method with @MainActor."),
+  "swift-014-hardcoded-secret-swift": r("hardcoded secret", W.SECRET),
+  "swift-015-missing-async-error-handling": r("async no error handling", "Wrap the async call in do/catch."),
+
+  // ── Universal ──────────────────────────────────────────────
+  "uni-001-hardcoded-ip": r("hardcoded IP", "Move the IP address to config — hardcoding makes deployment brittle."),
+  "uni-002-security-todo": r("security TODO", "Address this security TODO before shipping."),
+
+  // ── Zig ────────────────────────────────────────────────────
+  "zig-001-use-after-free": r("use-after-free", "Don't use memory after free — null the pointer or use defer."),
+  "zig-002-ignored-error": r("ignored error", "Use `try` or `catch` instead of `_ = ...`."),
+  "zig-003-release-ub": r("release UB", "Undefined behavior in release mode — fix or guard with @setRuntimeSafety(.on)."),
+  "zig-004-buffer-overflow": r("buffer overflow", "Clamp the index against buffer.len before access."),
+  "zig-005-memory-leak": r("memory leak", "Use defer allocator.free(...) right after allocation."),
+  "zig-006-sentinel-misuse": r("sentinel misuse", "Validate the sentinel byte before slicing."),
+  "zig-007-integer-overflow": r("integer overflow", "Use @addWithOverflow or explicit wrap/saturate."),
+  "zig-008-ptrcast-alignment": r("ptrCast alignment", "Validate alignment before @ptrCast."),
+  "zig-009-unreachable-misuse": r("unreachable misuse", "Replace `unreachable` with a real error return or @panic."),
+  "zig-010-comptime-runtime": r("comptime/runtime mix", "Distinguish comptime from runtime evaluation explicitly."),
+};
+
+function commentPrefix(path: string): string {
+  const p = path.toLowerCase();
+  if (
+    p.endsWith(".py") || p.endsWith(".rb") || p.endsWith(".sh") ||
+    p.endsWith(".yaml") || p.endsWith(".yml") || p.endsWith(".toml") ||
+    p.endsWith(".lua") || p.endsWith(".ex") || p.endsWith(".exs")
+  ) {
+    return "# ";
+  }
+  if (p.endsWith(".hs") || p.endsWith(".sql")) {
+    return "-- ";
+  }
+  return "// ";
+}
+
+function applyRecipe(
+  lines: string[],
+  finding: Finding,
+  recipe: PatternRecipe,
+): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) {
+    return { applied: false, lines, description: "Line out of range" };
+  }
+  const line = lines[idx]!;
+  const indent = line.match(/^(\s*)/)?.[1] ?? "";
+  const prefix = commentPrefix(finding.file);
+  const tag = `KCODE-AUDIT:${finding.pattern_id}`;
+
+  // Skip if a previous /fix run already tagged this line.
+  const prev = lines[idx - 1] ?? "";
+  if (prev.includes(tag)) {
+    return { applied: false, lines, description: "Warning already present" };
+  }
+
+  const warningLines: string[] = [];
+  warningLines.push(`${indent}${prefix}${tag} — ${recipe.warnings[0]}`);
+  for (let i = 1; i < recipe.warnings.length; i++) {
+    warningLines.push(`${indent}${prefix}  ${recipe.warnings[i]}`);
+  }
+
+  const result = [...lines];
+  result.splice(idx, 0, ...warningLines);
+  return { applied: true, lines: result, description: recipe.description };
+}
+
+/**
+ * Returns true when every pattern id in `patternIds` has coverage
+ * (either a bespoke fixer above or a PATTERN_RECIPES entry). Used by
+ * tests to detect when a new pattern is added without a fix recipe.
+ */
+const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
+  "cpp-001-ptr-address-index",
+  "cpp-002-unreachable-after-return",
+  "cpp-003-unchecked-data-index",
+  "cpp-004-fd-leak-throw",
+  "cpp-006-strcpy-family",
+  "cpp-012-loop-unvalidated-bound",
+  "py-001-eval-exec",
+  "py-002-shell-injection",
+  "py-004-sql-injection",
+  "py-005-yaml-unsafe-load",
+  "py-008-path-traversal",
+]);
+
+export function hasFixRecipe(patternId: string): boolean {
+  return BESPOKE_PATTERN_IDS.has(patternId) || patternId in PATTERN_RECIPES;
 }

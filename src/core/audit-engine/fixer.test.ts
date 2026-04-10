@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAudit } from "./audit-engine";
-import { applyFixes } from "./fixer";
+import { applyFixes, hasFixRecipe } from "./fixer";
+import { getAllPatterns } from "./patterns";
 
 describe("fixer", () => {
   let tmp: string;
@@ -115,5 +116,17 @@ describe("fixer", () => {
     const skipped = fixes.filter((f) => !f.applied);
     expect(skipped.length).toBe(1);
     expect(skipped[0]!.description).toContain("already exists");
+  });
+
+  // Coverage gate: any pattern registered in patterns.ts must have a
+  // corresponding fix recipe (bespoke or in PATTERN_RECIPES). This test
+  // fails loudly when a new pattern is added without a fix, preventing
+  // `/fix` from regressing to "no auto-fix for pattern: ..." messages.
+  test("every registered pattern has a fix recipe", () => {
+    const missing: string[] = [];
+    for (const p of getAllPatterns()) {
+      if (!hasFixRecipe(p.id)) missing.push(p.id);
+    }
+    expect(missing).toEqual([]);
   });
 });
