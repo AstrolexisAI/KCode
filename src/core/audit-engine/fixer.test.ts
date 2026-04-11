@@ -200,6 +200,152 @@ describe("fixer", () => {
     expect(content).not.toMatch(/\?\s*\?\?\s*\w+\?\s*\?\?/);
   });
 
+  test("dart-007 does NOT rewrite non-json as-casts (business logic safety)", async () => {
+    // This file intentionally has:
+    //   (a) a real json[...] as int cast that SHOULD be fixed
+    //   (b) an unrelated `users.length as int` that MUST be left alone
+    //   (c) a generic `result as String` that MUST be left alone
+    writeFileSync(
+      join(tmp, "mixed.dart"),
+      `class Mixed {
+  final int id;
+  final int count;
+  final String label;
+
+  Mixed({required this.id, required this.count, required this.label});
+
+  factory Mixed.fromJson(Map<String, dynamic> json) {
+    final users = [1, 2, 3];
+    final count = users.length as int;
+    final result = someCall();
+    return Mixed(
+      id: json['id'] as int,
+      count: count,
+      label: result as String,
+    );
+  }
+  static dynamic someCall() => 'hi';
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const transformed = fixes.filter((f) => f.kind === "transformed");
+
+    const content = readFileSync(join(tmp, "mixed.dart"), "utf-8");
+    // The json[...] cast should be fixed.
+    expect(content).toContain("json['id'] as int? ?? 0");
+    // The non-json casts MUST remain untouched — this is the whole
+    // point of the hole-#1 fix. If the regex started matching them,
+    // it would silently change the semantics of business logic.
+    expect(content).toContain("users.length as int;");
+    expect(content).toContain("result as String,");
+    expect(content).not.toContain("users.length as int? ??");
+    expect(content).not.toContain("result as String? ??");
+    // Sanity: at least one real fix was applied.
+    expect(transformed.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("dart-005 skips insertion when setState is not inside a State<T> subclass", async () => {
+    // The setState call here is on a misleading helper that isn't
+    // inside a State<T>, so `mounted` wouldn't be defined. The fixer
+    // must skip rather than produce uncompilable code.
+    writeFileSync(
+      join(tmp, "helper.dart"),
+      `class NotAState {
+  void doWork() async {
+    await Future.delayed(Duration(seconds: 1));
+    setState(() => print('oops'));
+  }
+  void setState(void Function() fn) => fn();
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const dart005 = fixes.filter((f) => f.pattern_id === "dart-005-setstate-after-dispose");
+    // If the pattern fires, the fixer must NOT apply it to this file —
+    // NotAState doesn't extend State<T>. Either no finding or all
+    // findings for this pattern are skipped.
+    for (const f of dart005) {
+      expect(f.kind).toBe("skipped");
+    }
+
+    // Confirm the file was not touched by this pattern.
+    const content = readFileSync(join(tmp, "helper.dart"), "utf-8");
+    expect(content).not.toContain("if (!mounted) return;");
+  });
+
+  test("dart-005 recognizes a mounted guard added earlier in the same block", async () => {
+    // The await and setState are 6+ lines apart. A valid mounted guard
+    // sits right after the await — the old 3-line lookback missed this
+    // and would insert a DUPLICATE guard. The full-span check should
+    // recognize it and skip the insertion.
+    writeFileSync(
+      join(tmp, "state.dart"),
+      `import 'package:flutter/widgets.dart';
+
+class MyScreen extends StatefulWidget {
+  @override
+  State<MyScreen> createState() => _MyScreenState();
+}
+
+class _MyScreenState extends State<MyScreen> {
+  bool _loaded = false;
+
+  Future<void> _load() async {
+    final data = await fetchData();
+    if (!mounted) return;
+    // Four spacer lines between the guard and setState to defeat a
+    // short-window lookback.
+    // spacer
+    // spacer
+    // spacer
+    setState(() {
+      _loaded = true;
+    });
+  }
+
+  Future<List<int>> fetchData() async => [];
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const dart005 = fixes.filter((f) => f.pattern_id === "dart-005-setstate-after-dispose");
+    // Either the pattern doesn't fire at all (regex doesn't match
+    // because a guard is already there and no setState "after" an
+    // unchecked await remains), or the fixer sees the guard and skips.
+    // Both are acceptable; what's NOT acceptable is a "transformed"
+    // result that inserts a duplicate guard.
+    for (const f of dart005) {
+      expect(f.kind).not.toBe("transformed");
+    }
+
+    const content = readFileSync(join(tmp, "state.dart"), "utf-8");
+    // Count occurrences of `if (!mounted) return;` — must be exactly 1.
+    const guardCount = (content.match(/if \(!mounted\) return;/g) ?? []).length;
+    expect(guardCount).toBe(1);
+  });
+
   test("generic recipes are reported as 'annotated', not 'transformed'", async () => {
     // Pick a pattern that uses the generic recipe fallback (no bespoke
     // fixer). dart-001-insecure-http is a simple regex pattern with only

@@ -137,6 +137,55 @@ describe("scanner", () => {
     const hits = candidates.filter((c) => c.pattern_id === "cpp-006-strcpy-family");
     expect(hits.length).toBe(2);
   });
+
+  test("findSourceFiles does NOT follow symlinks that escape the project root", async () => {
+    // Create a sibling directory with a source file that is NOT part
+    // of the audited project. Then place a symlink inside the project
+    // pointing at it. A naïve walker would follow the symlink and
+    // report the outside file; our scanner must reject it.
+    const outside = mkdtempSync(join(tmpdir(), "kcode-scan-outside-"));
+    try {
+      writeFileSync(join(outside, "leaked.py"), "print('secret')");
+      writeFileSync(join(tmp, "normal.py"), "print('ok')");
+      const { symlinkSync } = await import("node:fs");
+      try {
+        symlinkSync(outside, join(tmp, "linked-outside"));
+      } catch {
+        // Symlinks may not be supported (e.g., non-privileged Windows);
+        // skip this test gracefully on such platforms.
+        return;
+      }
+      const files = findSourceFiles(tmp);
+      // We should see the normal file but NEVER the leaked file.
+      expect(files.some((f) => f.endsWith("normal.py"))).toBe(true);
+      expect(files.some((f) => f.endsWith("leaked.py"))).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  test("findSourceFiles breaks symlink cycles without hanging", async () => {
+    // Two symlinks pointing at each other → naïve walker would loop.
+    // The scanner uses realpath + a visited-inode set and must
+    // terminate in bounded time.
+    writeFileSync(join(tmp, "real.ts"), "export const x = 1;");
+    const { symlinkSync } = await import("node:fs");
+    try {
+      mkdirSync(join(tmp, "a"));
+      mkdirSync(join(tmp, "b"));
+      symlinkSync(join(tmp, "b"), join(tmp, "a/to-b"));
+      symlinkSync(join(tmp, "a"), join(tmp, "b/to-a"));
+    } catch {
+      // Symlinks unsupported; skip.
+      return;
+    }
+    const files = findSourceFiles(tmp);
+    // Must include the real file and must not explode.
+    expect(files.some((f) => f.endsWith("real.ts"))).toBe(true);
+    // Upper bound on walk size is also a loose regression check:
+    // an infinite loop would blow past any sensible count.
+    expect(files.length).toBeLessThan(100);
+  });
 });
 
 describe("verifier", () => {
