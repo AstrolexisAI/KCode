@@ -7,7 +7,7 @@ export type Language =
   | "javascript" | "typescript" | "swift" | "java"
   | "kotlin" | "csharp" | "php" | "ruby" | "dart"
   | "scala" | "elixir" | "lua" | "zig" | "haskell"
-  | "perl" | "r" | "julia" | "sql" | "matlab";
+  | "perl" | "r" | "julia" | "sql" | "matlab" | "shell";
 
 /**
  * A bug pattern is a rule that identifies a specific class of dangerous code.

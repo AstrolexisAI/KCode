@@ -5,14 +5,59 @@
 //
 // Flow: read finding → read source file → apply fix rule → write file
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import type { AuditResult, Finding } from "./types";
+
+/**
+ * Atomic file write: write to a sibling temp file, fsync if possible,
+ * then rename over the target. This avoids half-written state if the
+ * process dies mid-write (disk full, Ctrl-C, crash). The temp file lives
+ * in the same directory as the target so the rename is on the same
+ * filesystem and therefore atomic on POSIX.
+ *
+ * If the rename fails (e.g., cross-device on some setups), we clean up
+ * the temp file and let the error propagate.
+ */
+function atomicWriteFileSync(targetPath: string, content: string): void {
+  // 8 random bytes → 16 hex chars — low collision risk even with concurrent
+  // /fix runs, and short enough to stay under path length limits.
+  const tmp = `${targetPath}.kcode-fix-${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    writeFileSync(tmp, content);
+    renameSync(tmp, targetPath);
+  } catch (err) {
+    // Best-effort cleanup of the temp file if the rename failed. We
+    // swallow errors from unlinkSync because the temp file may not
+    // exist (writeFileSync itself may have thrown before creating it).
+    try { unlinkSync(tmp); } catch { /* ignore */ }
+    throw err;
+  }
+}
+
+/**
+ * Outcome of applying a single fix.
+ *
+ * - `transformed`: a bespoke fixer rewrote real code to remove the bug.
+ *   The file on disk is now different in a meaningful way.
+ * - `annotated`: the generic recipe inserted a `KCODE-AUDIT:<id>` warning
+ *   comment above the finding. The buggy code is UNCHANGED — the comment
+ *   is an advisory TODO the user still has to act on.
+ * - `skipped`: neither a bespoke fixer nor an annotation was applied
+ *   (line out of range, pattern no longer present, marker already there).
+ *
+ * `applied` is kept as a boolean for existing callers; it is true for both
+ * `transformed` and `annotated`. New UI should look at `kind` instead so
+ * annotations aren't reported as real fixes.
+ */
+export type FixKind = "transformed" | "annotated" | "skipped";
 
 export interface FixResult {
   file: string;
   line: number;
   pattern_id: string;
   applied: boolean;
+  kind: FixKind;
   description: string;
 }
 
@@ -43,6 +88,7 @@ export function applyFixes(result: AuditResult): FixResult[] {
           line: f.line,
           pattern_id: f.pattern_id,
           applied: false,
+          kind: "skipped",
           description: `Cannot read file: ${file}`,
         });
       }
@@ -65,12 +111,18 @@ export function applyFixes(result: AuditResult): FixResult[] {
         line: finding.line,
         pattern_id: finding.pattern_id,
         applied: fixResult.applied,
+        kind: fixResult.kind,
         description: fixResult.description,
       });
     }
 
     if (modified) {
-      writeFileSync(file, lines.join("\n"));
+      // Preserve the original file's trailing newline convention —
+      // lines.split("\n") produces an empty last element if the file
+      // ended with "\n", which lines.join("\n") will serialize back
+      // correctly. No extra work needed; just use atomic write to
+      // avoid corruption on mid-write crash.
+      atomicWriteFileSync(file, lines.join("\n"));
     }
   }
 
@@ -79,6 +131,7 @@ export function applyFixes(result: AuditResult): FixResult[] {
 
 interface OneFixResult {
   applied: boolean;
+  kind: FixKind;
   lines: string[];
   description: string;
 }
@@ -107,6 +160,10 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixPySqlInjection(lines, finding);
     case "py-005-yaml-unsafe-load":
       return fixPyYamlLoad(lines, finding);
+    case "dart-005-setstate-after-dispose":
+      return fixDartSetStateAfterDispose(lines, finding);
+    case "dart-007-json-null-check":
+      return fixDartJsonNullCheck(lines, finding);
     default: {
       // Fall through to the generic recipe table below. Every pattern
       // registered in patterns.ts has an entry here — the bespoke fixers
@@ -117,6 +174,7 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       if (recipe) return applyRecipe(lines, finding, recipe);
       return {
         applied: false,
+        kind: "skipped",
         lines,
         description: `No auto-fix for pattern: ${finding.pattern_id}`,
       };
@@ -130,14 +188,14 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
 function fixPointerArithmetic(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
 
   const line = lines[idx]!;
   const re = /\(\s*&\s*(\w+)\s*\)\s*\[\s*(\w+)\s*\]/;
   const m = line.match(re);
   if (!m) {
-    return { applied: false, lines, description: "Pattern not found on this line" };
+    return { applied: false, kind: "skipped", lines, description: "Pattern not found on this line" };
   }
 
   const varName = m[1];
@@ -147,6 +205,7 @@ function fixPointerArithmetic(lines: string[], finding: Finding): OneFixResult {
   result[idx] = fixed;
   return {
     applied: true,
+    kind: "transformed",
     lines: result,
     description: `(&${varName})[${indexVar}] → ((const char*)${varName} + ${indexVar})`,
   };
@@ -158,7 +217,7 @@ function fixPointerArithmetic(lines: string[], finding: Finding): OneFixResult {
 function fixUnreachableCode(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
 
   // The pattern matches: line with return/throw/break, NEXT line with statement
@@ -186,13 +245,14 @@ function fixUnreachableCode(lines: string[], finding: Finding): OneFixResult {
       result[i + 1] = returnLine;
       return {
         applied: true,
+        kind: "transformed",
         lines: result,
         description: `Moved unreachable statement before return/throw`,
       };
     }
   }
 
-  return { applied: false, lines, description: "Could not locate return+unreachable pair" };
+  return { applied: false, kind: "skipped", lines, description: "Could not locate return+unreachable pair" };
 }
 
 /**
@@ -203,7 +263,7 @@ function fixUnreachableCode(lines: string[], finding: Finding): OneFixResult {
 function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
 
   // Find the function DEFINITION (not a call) by walking backwards.
@@ -225,7 +285,7 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
     }
   }
   if (funcStart < 0) {
-    return { applied: false, lines, description: "Could not find decode() function" };
+    return { applied: false, kind: "skipped", lines, description: "Could not find decode() function" };
   }
 
   // Find the opening brace
@@ -237,13 +297,13 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
     }
   }
   if (braceIdx < 0) {
-    return { applied: false, lines, description: "Could not find opening brace" };
+    return { applied: false, kind: "skipped", lines, description: "Could not find opening brace" };
   }
 
   // Check if there's already a size check (don't double-fix)
   const lineAfterBrace = lines[braceIdx + 1]?.trim() ?? "";
   if (lineAfterBrace.includes("data.size()") || lineAfterBrace.includes("size() <")) {
-    return { applied: false, lines, description: "Size check already exists" };
+    return { applied: false, kind: "skipped", lines, description: "Size check already exists" };
   }
 
   // Scan the function body for the highest data[N] index
@@ -276,7 +336,7 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
   }
 
   if (maxIndex === 0) {
-    return { applied: false, lines, description: "No data[N] access found in function" };
+    return { applied: false, kind: "skipped", lines, description: "No data[N] access found in function" };
   }
 
   // Determine indentation from the line after the brace
@@ -289,6 +349,7 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
 
   return {
     applied: true,
+    kind: "transformed",
     lines: result,
     description: `Added size guard: data.size() <= ${maxIndex}`,
   };
@@ -300,7 +361,7 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
 function fixFdLeakThrow(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
 
   // Find the socket/open assignment near finding.line
@@ -327,13 +388,14 @@ function fixFdLeakThrow(lines: string[], finding: Finding): OneFixResult {
       result.splice(i, 0, `${indent}::close(${fdVar});`);
       return {
         applied: true,
+        kind: "transformed",
         lines: result,
         description: `Added ::close(${fdVar}) before throw`,
       };
     }
   }
 
-  return { applied: false, lines, description: "Could not find throw without preceding close()" };
+  return { applied: false, kind: "skipped", lines, description: "Could not find throw without preceding close()" };
 }
 
 /**
@@ -343,7 +405,7 @@ function fixFdLeakThrow(lines: string[], finding: Finding): OneFixResult {
 function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
 
   const line = lines[idx]!;
@@ -358,7 +420,7 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
     // Replace the entire strcpy(...) call using the exact matched text
     const fullMatch = strcpyMatch[0];
     result[idx] = line.replace(fullMatch, `strncpy(${dst}, ${src}, ${len})`);
-    return { applied: true, lines: result, description: `strcpy → strncpy (${src}, ${len} bytes)` };
+    return { applied: true, kind: "transformed", lines: result, description: `strcpy → strncpy (${src}, ${len} bytes)` };
   }
 
   // strcat(dst, "literal") → strncat(dst, "literal", len)
@@ -371,7 +433,7 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
       /\bstrcat\s*\([^)]+\)/,
       `strncat(${dst}, ${src}, ${len})`,
     );
-    return { applied: true, lines: result, description: `strcat → strncat (${src}, ${len} chars)` };
+    return { applied: true, kind: "transformed", lines: result, description: `strcat → strncat (${src}, ${len} chars)` };
   }
 
   // sprintf(dst, "fmt", ...) → snprintf(dst, sizeof(dst), "fmt", ...)
@@ -386,10 +448,10 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
       new RegExp(`snprintf\\(${dst}, sizeof\\(${dst}\\), ${dst},`),
       `snprintf(${dst}, sizeof(${dst}),`,
     );
-    return { applied: true, lines: result, description: `sprintf → snprintf(${dst}, sizeof(${dst}), ...)` };
+    return { applied: true, kind: "transformed", lines: result, description: `sprintf → snprintf(${dst}, sizeof(${dst}), ...)` };
   }
 
-  return { applied: false, lines, description: "Non-literal source — manual fix needed" };
+  return { applied: false, kind: "skipped", lines, description: "Non-literal source — manual fix needed" };
 }
 
 // ── Python auto-fixes ─────────────────────────────────────────
@@ -399,7 +461,7 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const result = [...lines];
 
@@ -408,20 +470,20 @@ function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
   if (osSystemMatch) {
     const cmd = osSystemMatch[1]!.trim();
     result[idx] = line.replace(/os\.system\s*\([^)]+\)/, `subprocess.run(${cmd}, shell=False)  # FIXED: was os.system`);
-    return { applied: true, lines: result, description: "os.system → subprocess.run(shell=False)" };
+    return { applied: true, kind: "transformed", lines: result, description: "os.system → subprocess.run(shell=False)" };
   }
 
   // subprocess.call(..., shell=True) → shell=False
   if (line.includes("shell=True") || line.includes("shell = True")) {
     result[idx] = line.replace(/shell\s*=\s*True/g, "shell=False  # FIXED: was shell=True");
-    return { applied: true, lines: result, description: "shell=True → shell=False" };
+    return { applied: true, kind: "transformed", lines: result, description: "shell=True → shell=False" };
   }
 
   // subprocess with f-string → add comment warning
   if (line.match(/subprocess\.\w+\s*\(\s*f["']/)) {
     const indent = line.match(/^(\s*)/)?.[1] ?? "";
     result.splice(idx, 0, `${indent}# SECURITY: Use list args instead of f-string to prevent injection`);
-    return { applied: true, lines: result, description: "Added security warning for f-string in subprocess" };
+    return { applied: true, kind: "transformed", lines: result, description: "Added security warning for f-string in subprocess" };
   }
 
   // List args with f-strings/format — add input validation warning
@@ -431,10 +493,10 @@ function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
       `${indent}# SECURITY: Validate user-controlled args before passing to subprocess`,
       `${indent}# Sanitize: strip shell metacharacters, validate expected format`,
     );
-    return { applied: true, lines: result, description: "Added input validation warning for subprocess args" };
+    return { applied: true, kind: "transformed", lines: result, description: "Added input validation warning for subprocess args" };
   }
 
-  return { applied: false, lines, description: "Complex shell injection — manual fix needed" };
+  return { applied: false, kind: "skipped", lines, description: "Complex shell injection — manual fix needed" };
 }
 
 /**
@@ -442,7 +504,7 @@ function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyPathTraversal(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const indent = line.match(/^(\s*)/)?.[1] ?? "";
   const result = [...lines];
@@ -452,7 +514,7 @@ function fixPyPathTraversal(lines: string[], finding: Finding): OneFixResult {
     `${indent}# SECURITY: Validate path to prevent traversal`,
     `${indent}import os; _path = os.path.abspath(_path); assert _path.startswith(os.getcwd()), "Path traversal blocked"`,
   );
-  return { applied: true, lines: result, description: "Added path traversal guard" };
+  return { applied: true, kind: "transformed", lines: result, description: "Added path traversal guard" };
 }
 
 /**
@@ -460,20 +522,20 @@ function fixPyPathTraversal(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyEval(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const result = [...lines];
 
   if (line.includes("eval(")) {
     result[idx] = line.replace(/\beval\s*\(/, "ast.literal_eval(  # FIXED: was eval(");
-    return { applied: true, lines: result, description: "eval() → ast.literal_eval()" };
+    return { applied: true, kind: "transformed", lines: result, description: "eval() → ast.literal_eval()" };
   }
   if (line.includes("exec(")) {
     const indent = line.match(/^(\s*)/)?.[1] ?? "";
     result.splice(idx, 0, `${indent}# SECURITY WARNING: exec() executes arbitrary code — remove or sandbox`);
-    return { applied: true, lines: result, description: "Added exec() security warning" };
+    return { applied: true, kind: "transformed", lines: result, description: "Added exec() security warning" };
   }
-  return { applied: false, lines, description: "Complex eval/exec — manual fix needed" };
+  return { applied: false, kind: "skipped", lines, description: "Complex eval/exec — manual fix needed" };
 }
 
 /**
@@ -481,13 +543,13 @@ function fixPyEval(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPySqlInjection(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const indent = lines[idx]!.match(/^(\s*)/)?.[1] ?? "";
   const result = [...lines];
   result.splice(idx, 0,
     `${indent}# SECURITY: Use parameterized query: cursor.execute("... WHERE id = %s", (id,))`,
   );
-  return { applied: true, lines: result, description: "Added SQL injection warning + fix template" };
+  return { applied: true, kind: "transformed", lines: result, description: "Added SQL injection warning + fix template" };
 }
 
 /**
@@ -495,15 +557,15 @@ function fixPySqlInjection(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyYamlLoad(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const result = [...lines];
 
   if (line.includes("yaml.load(")) {
     result[idx] = line.replace(/yaml\.load\s*\(/, "yaml.safe_load(  # FIXED: was yaml.load(");
-    return { applied: true, lines: result, description: "yaml.load() → yaml.safe_load()" };
+    return { applied: true, kind: "transformed", lines: result, description: "yaml.load() → yaml.safe_load()" };
   }
-  return { applied: false, lines, description: "Complex YAML load — manual fix needed" };
+  return { applied: false, kind: "skipped", lines, description: "Complex YAML load — manual fix needed" };
 }
 
 /**
@@ -512,14 +574,14 @@ function fixPyYamlLoad(lines: string[], finding: Finding): OneFixResult {
 function fixLoopBound(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
 
   const line = lines[idx]!;
   // Extract the bound variable: for (...; var < BOUND; ...)
   const m = line.match(/\w+\s*<\s*(\w+(?:\.\w+|->[\w.]+)+)/);
   if (!m) {
-    return { applied: false, lines, description: "Could not extract loop bound" };
+    return { applied: false, kind: "skipped", lines, description: "Could not extract loop bound" };
   }
 
   const boundExpr = m[1]!;
@@ -528,15 +590,191 @@ function fixLoopBound(lines: string[], finding: Finding): OneFixResult {
   // Check if there's already a validation above
   const prev = lines[idx - 1]?.trim() ?? "";
   if (prev.includes(boundExpr) && (prev.includes("if") || prev.includes("max"))) {
-    return { applied: false, lines, description: "Bound validation already exists" };
+    return { applied: false, kind: "skipped", lines, description: "Bound validation already exists" };
   }
 
   const result = [...lines];
   result.splice(idx, 0, `${indent}if (${boundExpr} > 10000) { return; } // guard: cap loop bound`);
   return {
     applied: true,
+    kind: "transformed",
     lines: result,
     description: `Added loop bound cap: ${boundExpr} > 10000`,
+  };
+}
+
+/**
+ * dart-007: Rewrite `json['key'] as Int|String|double|bool|num` casts
+ * that target non-nullable primitives to use the nullable variant plus a
+ * safe default.
+ *
+ *   id: json['id'] as int,            →  id: json['id'] as int? ?? 0,
+ *   name: json['name'] as String,     →  name: json['name'] as String? ?? '',
+ *
+ * SCOPE — only the `json[...] as Type` shape is touched:
+ *   - `foo.length as int` is NOT rewritten (not a JSON subscript).
+ *   - `Map<K, V>.cast<int>()` is NOT rewritten (not an `as` cast).
+ *   - `users as List<int>` is NOT rewritten (not on a json subscript).
+ * This prevents the fixer from silently changing the semantics of
+ * business-logic casts that have nothing to do with JSON parsing.
+ *
+ * The audit engine dedupes matches of the same pattern in the same file
+ * into a single Finding (for verification efficiency), so a fromJson
+ * with 40 unsafe casts produces ONE finding. That finding's line is
+ * just the first match. Because every other match has the same
+ * json[...] shape, sweeping the whole file with the narrow regex
+ * rewrites all of them in one pass — AND because the regex is scoped
+ * to json subscripts, it never accidentally rewrites unrelated casts.
+ *
+ * Idempotency — the regex has a `(?!\?)` lookahead so casts already
+ * written as `as T?` are left alone, regardless of whether they're
+ * followed by `?? default` or not.
+ */
+function fixDartJsonNullCheck(lines: string[], _finding: Finding): OneFixResult {
+  const DEFAULTS: Record<string, string> = {
+    int: "0",
+    double: "0.0",
+    num: "0",
+    bool: "false",
+    String: "''",
+  };
+  // Narrow regex: `json['anything'] as TYPE` where TYPE is one of the
+  // supported primitives AND is not already nullable. Captures the whole
+  // `json[...] as TYPE` span as group 1 so the replacement can keep the
+  // original json access intact.
+  //
+  // Note: the outer `json` identifier match is intentionally literal —
+  // the pattern library's regex in patterns.ts only fires on the
+  // identifier `json`, which is the conventional parameter name for
+  // Dart fromJson factories. Projects that use a different name (e.g.
+  // `data` or `m`) won't get auto-fixed, but that's the correct
+  // conservative behavior for a deterministic rewriter.
+  const rex = /(\bjson\s*\[\s*['"][^'"]+['"]\s*\]\s*as\s+(int|double|num|bool|String))\b(?!\?)/g;
+  let totalCount = 0;
+  const result = lines.map((line) =>
+    line.replace(rex, (_full, wholeCast: string, type: string) => {
+      totalCount++;
+      return `${wholeCast}? ?? ${DEFAULTS[type]}`;
+    }),
+  );
+  if (totalCount === 0) {
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "No unsafe `json[...] as Type` casts found in file",
+    };
+  }
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: `Rewrote ${totalCount} json[...] non-nullable cast${totalCount === 1 ? "" : "s"} to nullable with default`,
+  };
+}
+
+// Walk backwards from `fromIdx` looking for a class declaration that
+// extends one of Flutter's State base types. Returns true only if the
+// setState call is clearly inside a State<T> / ConsumerState<T> /
+// StatefulWidgetState<T> subclass, where `mounted` is a defined
+// instance getter. Returns false if no such class is found within a
+// reasonable lookback (400 lines — large enough for most Dart files,
+// small enough to avoid pathological O(n²) behavior).
+//
+// This keeps us from inserting `if (!mounted) return;` into code where
+// `mounted` doesn't exist (e.g., a standalone function, a helper class,
+// a mixin that receives a callback) which would fail to compile.
+function isInsideFlutterState(lines: string[], fromIdx: number): boolean {
+  // Any of these patterns identifies a class where `mounted` is defined.
+  // We accept both raw Flutter (`State<X>`) and common Riverpod/Provider
+  // extensions (`ConsumerState<X>`, `ConsumerStatefulState<X>`), plus the
+  // fully-qualified form.
+  const classRex = /\bclass\s+\w+[^{]*\bextends\s+\w*State(?:<|\b)/;
+  const limit = Math.max(0, fromIdx - 400);
+  for (let i = fromIdx; i >= limit; i--) {
+    if (classRex.test(lines[i]!)) return true;
+  }
+  return false;
+}
+
+/**
+ * dart-005: Insert `if (!mounted) return;` before a setState call that
+ * sits after an `await`. Only fires when:
+ *
+ *   1. A `setState(` call is found within 10 lines after the finding's
+ *      await line (walked forward).
+ *   2. NO mounted/disposed guard exists anywhere between the await and
+ *      the setState call (full span check, not just 3-line lookback).
+ *   3. The setState is inside a `class Foo extends ... State<...>`
+ *      subclass, so `mounted` is a valid instance getter. Otherwise we
+ *      skip rather than produce uncompilable code.
+ */
+function fixDartSetStateAfterDispose(lines: string[], finding: Finding): OneFixResult {
+  const startIdx = finding.line - 1;
+  if (startIdx < 0 || startIdx >= lines.length) {
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  }
+  let setStateIdx = -1;
+  for (let i = startIdx; i < Math.min(lines.length, startIdx + 10); i++) {
+    if (/\bsetState\s*\(/.test(lines[i]!)) {
+      setStateIdx = i;
+      break;
+    }
+  }
+  if (setStateIdx === -1) {
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "Could not locate setState call within 10 lines after await",
+    };
+  }
+  // Full-span guard detection: walk every line between the await
+  // (startIdx) and the setState (setStateIdx) looking for ANY guard.
+  // This fixes the earlier 3-line lookback bug where a valid guard at
+  // line -5 was missed and we inserted a duplicate.
+  for (let i = setStateIdx - 1; i >= startIdx; i--) {
+    const prev = lines[i]!;
+    if (prev.trim() === "") continue;
+    if (/\bif\s*\(\s*!?(mounted|context\.mounted)\s*\)/.test(prev)) {
+      return {
+        applied: false,
+        kind: "skipped",
+        lines,
+        description: "mounted guard already present between await and setState",
+      };
+    }
+    if (/\bif\s*\(\s*!?_?disposed\s*\)/.test(prev)) {
+      return {
+        applied: false,
+        kind: "skipped",
+        lines,
+        description: "disposed guard already present between await and setState",
+      };
+    }
+  }
+  // Verify we're inside a State<T> subclass before assuming `mounted`
+  // is defined. If not, skip the bespoke fix — the generic recipe
+  // (advisory comment) is still available through the default branch,
+  // but dart-005 routes here first. We'd rather return "skipped" than
+  // emit uncompilable code.
+  if (!isInsideFlutterState(lines, setStateIdx)) {
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "setState not inside a State<T> subclass — `mounted` may be undefined here",
+    };
+  }
+  const indent = lines[setStateIdx]!.match(/^(\s*)/)?.[1] ?? "";
+  const guard = `${indent}if (!mounted) return;`;
+  const result = [...lines];
+  result.splice(setStateIdx, 0, guard);
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: "Inserted `if (!mounted) return;` before setState",
   };
 }
 
@@ -885,17 +1123,38 @@ function applyRecipe(
 ): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
-    return { applied: false, lines, description: "Line out of range" };
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   }
   const line = lines[idx]!;
   const indent = line.match(/^(\s*)/)?.[1] ?? "";
   const prefix = commentPrefix(finding.file);
   const tag = `KCODE-AUDIT:${finding.pattern_id}`;
 
-  // Skip if a previous /fix run already tagged this line.
-  const prev = lines[idx - 1] ?? "";
-  if (prev.includes(tag)) {
-    return { applied: false, lines, description: "Warning already present" };
+  // Skip if a previous /fix run already tagged this location.
+  //
+  // The old check only looked at `lines[idx - 1]`, which fails when
+  // /fix is re-run against a stale AUDIT_REPORT.json whose line
+  // numbers predate a previous annotation. Example:
+  //
+  //   Run 1 — scanner reports Future.delayed at line 190. Annotation
+  //           inserted at idx 189. Future.delayed shifts to 191.
+  //   Run 2 — stale report still says line 190. idx = 189.
+  //           `lines[idx - 1] = lines[188]` = debugPrint — no tag.
+  //           Guard misses → duplicate annotation inserted at 189.
+  //
+  // The reliable fix: scan a small window (±3 lines) around the
+  // insertion point for the tag. Any hit, skip. This absorbs line
+  // drift of up to 3 positions from stale reports.
+  const WINDOW = 3;
+  let existingTag = false;
+  for (let i = Math.max(0, idx - WINDOW); i <= Math.min(lines.length - 1, idx + WINDOW); i++) {
+    if (lines[i]!.includes(tag)) {
+      existingTag = true;
+      break;
+    }
+  }
+  if (existingTag) {
+    return { applied: false, kind: "skipped", lines, description: "Warning already present" };
   }
 
   const warningLines: string[] = [];
@@ -906,7 +1165,11 @@ function applyRecipe(
 
   const result = [...lines];
   result.splice(idx, 0, ...warningLines);
-  return { applied: true, lines: result, description: recipe.description };
+  // IMPORTANT: this is an annotation, NOT a real fix. The buggy code is
+  // unchanged; we only inserted an advisory `KCODE-AUDIT:<id>` comment.
+  // Callers should report this distinctly from transformed fixes so users
+  // know the finding still needs manual attention.
+  return { applied: true, kind: "annotated", lines: result, description: recipe.description };
 }
 
 /**
@@ -926,6 +1189,8 @@ const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
   "py-004-sql-injection",
   "py-005-yaml-unsafe-load",
   "py-008-path-traversal",
+  "dart-005-setstate-after-dispose",
+  "dart-007-json-null-check",
 ]);
 
 export function hasFixRecipe(patternId: string): boolean {

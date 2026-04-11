@@ -51,8 +51,16 @@ describe("parseNotebook", () => {
     expect(() => parseNotebook(nb3)).toThrow("Only nbformat 4");
   });
 
-  test("rejects invalid JSON", () => {
-    expect(() => parseNotebook("not json")).toThrow();
+  test("rejects invalid JSON with a descriptive error", () => {
+    // Bare SyntaxError is unhelpful ("Unexpected token n in JSON at
+    // position 0"); parseNotebook must wrap it with context so the
+    // caller knows this was a notebook parse failure.
+    expect(() => parseNotebook("not json")).toThrow(/Invalid notebook JSON/);
+  });
+
+  test("rejects non-object root (e.g., array or string literal)", () => {
+    expect(() => parseNotebook('"just a string"')).toThrow(/root is not an object/);
+    expect(() => parseNotebook("[1, 2, 3]")).toThrow("Only nbformat 4");
   });
 });
 

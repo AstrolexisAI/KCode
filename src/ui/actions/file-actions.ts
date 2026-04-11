@@ -258,28 +258,50 @@ export async function handleFileAction(action: string, ctx: ActionContext): Prom
       const { applyFixes } = await import("../../core/audit-engine/fixer.js");
       const fixes = applyFixes(auditResult);
 
-      const applied = fixes.filter((f) => f.applied);
-      const skipped = fixes.filter((f) => !f.applied);
+      // Three-way split: transformed (real code change), annotated
+      // (KCODE-AUDIT advisory comment only — finding still needs a manual
+      // fix), skipped (nothing applied). The previous UI lumped
+      // transformed and annotated together as "Applied", which lied to
+      // the user: they'd see "5 applied" and then discover every
+      // "fix" was just a TODO comment.
+      const transformed = fixes.filter((f) => f.kind === "transformed");
+      const annotated = fixes.filter((f) => f.kind === "annotated");
+      const skipped = fixes.filter((f) => f.kind === "skipped");
 
       const lines: string[] = [
         `  KCode Auto-Fixer`,
         `    Project: ${projectRoot}`,
         "",
-        `    ✅ Applied: ${applied.length} fixes`,
+        `    ✅ Fixed: ${transformed.length} (real code transforms)`,
+        `    📝 Annotated: ${annotated.length} (advisory comment only — still needs manual fix)`,
         `    ⏭  Skipped: ${skipped.length}`,
         "",
       ];
 
-      if (applied.length > 0) {
-        lines.push("  Applied fixes:");
-        for (const f of applied) {
+      if (transformed.length > 0) {
+        lines.push("  Real fixes (code rewritten):");
+        for (const f of transformed) {
           const rel = f.file.replace(projectRoot + "/", "");
           lines.push(`    ✅ ${rel}:${f.line}  ${f.description}`);
         }
       }
 
+      if (annotated.length > 0) {
+        lines.push("", "  Advisory annotations (KCODE-AUDIT comments added, code unchanged):");
+        for (const f of annotated.slice(0, 10)) {
+          const rel = f.file.replace(projectRoot + "/", "");
+          lines.push(`    📝 ${rel}:${f.line}  ${f.pattern_id} — ${f.description}`);
+        }
+        if (annotated.length > 10) {
+          lines.push(`    ... and ${annotated.length - 10} more`);
+        }
+        lines.push(
+          "    (Use `grep -rn KCODE-AUDIT` to list all advisories in the project.)",
+        );
+      }
+
       if (skipped.length > 0) {
-        lines.push("", "  Skipped (manual fix needed):");
+        lines.push("", "  Skipped (no fix strategy available):");
         for (const f of skipped.slice(0, 10)) {
           const rel = f.file.replace(projectRoot + "/", "");
           lines.push(`    ⏭  ${rel}:${f.line}  ${f.description}`);
