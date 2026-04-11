@@ -3577,7 +3577,7 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
     id: "sh-001-eval-injection",
     title: "eval with variable expansion in shell script",
     severity: "critical",
-    languages: ["c", "cpp", "python", "javascript", "typescript", "go", "rust", "java"],
+    languages: ["shell"],
     regex: /\beval\s+["']?\$[\{(]/g,
     explanation: "eval with variable expansion in shell enables command injection.",
     verify_prompt: "Is the variable from trusted internal source or user input? CONFIRMED if user-controlled." +
