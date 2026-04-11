@@ -129,4 +129,107 @@ describe("fixer", () => {
     }
     expect(missing).toEqual([]);
   });
+
+  test("dart-007-json-null-check rewrites non-nullable casts to nullable+default", async () => {
+    writeFileSync(
+      join(tmp, "plant.dart"),
+      `class Plant {
+  final int id;
+  final String name;
+  final double capacity;
+
+  Plant({required this.id, required this.name, required this.capacity});
+
+  factory Plant.fromJson(Map<String, dynamic> json) {
+    return Plant(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      capacity: json['capacity'] as double,
+    );
+  }
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const transformed = fixes.filter((f) => f.kind === "transformed");
+    expect(transformed.length).toBeGreaterThanOrEqual(1);
+
+    const content = readFileSync(join(tmp, "plant.dart"), "utf-8");
+    expect(content).toContain("as int? ?? 0");
+    expect(content).toContain("as String? ?? ''");
+    expect(content).toContain("as double? ?? 0.0");
+    // No raw non-nullable casts left.
+    expect(content).not.toMatch(/as\s+int\b(?!\?)/);
+    expect(content).not.toMatch(/as\s+String\b(?!\?)/);
+    expect(content).not.toMatch(/as\s+double\b(?!\?)/);
+  });
+
+  test("dart-007 is idempotent — rerunning /fix does not double-wrap", async () => {
+    writeFileSync(
+      join(tmp, "safe.dart"),
+      `class Safe {
+  factory Safe.fromJson(Map<String, dynamic> json) {
+    return Safe(id: json['id'] as int? ?? 0, name: json['name'] as String? ?? '');
+  }
+  Safe({required this.id, required this.name});
+  final int id;
+  final String name;
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    // Either the pattern doesn't match (no unsafe cast) or the fixer skips
+    // the already-safe line. Either way, zero transformed changes.
+    const transformed = fixes.filter((f) => f.kind === "transformed");
+    expect(transformed.length).toBe(0);
+
+    const content = readFileSync(join(tmp, "safe.dart"), "utf-8");
+    // Verify the file is still well-formed — no `as int? ?? 0? ?? 0`.
+    expect(content).not.toMatch(/\?\s*\?\?\s*\w+\?\s*\?\?/);
+  });
+
+  test("generic recipes are reported as 'annotated', not 'transformed'", async () => {
+    // Pick a pattern that uses the generic recipe fallback (no bespoke
+    // fixer). dart-001-insecure-http is a simple regex pattern with only
+    // an advisory recipe — ideal for this test.
+    writeFileSync(
+      join(tmp, "api.dart"),
+      `import 'package:http/http.dart' as http;
+
+Future<void> fetch() async {
+  final r = await http.get(Uri.parse('http://api.example.com/data'));
+  print(r.body);
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    // At least one finding should be annotated (recipe-only). None of
+    // these recipe-based findings should be reported as 'transformed'.
+    const annotated = fixes.filter((f) => f.kind === "annotated");
+    expect(annotated.length).toBeGreaterThanOrEqual(1);
+    // The key property: buggy code is UNCHANGED. The `http://` URL must
+    // still be in the file — an annotation did not rewrite it.
+    const content = readFileSync(join(tmp, "api.dart"), "utf-8");
+    expect(content).toContain("http://api.example.com/data");
+    // And a KCODE-AUDIT marker comment was inserted above it.
+    expect(content).toContain("KCODE-AUDIT:dart-001-insecure-http");
+  });
 });
