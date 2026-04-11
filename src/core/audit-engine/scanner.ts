@@ -94,6 +94,10 @@ const SOURCE_EXTENSIONS: Record<string, Language> = {
   ".jl": "julia",
   ".sql": "sql",
   ".m": "matlab",
+  ".sh": "shell",
+  ".bash": "shell",
+  ".zsh": "shell",
+  ".ksh": "shell",
 };
 
 const SKIP_DIRS = new Set([
@@ -114,6 +118,25 @@ const SKIP_DIRS = new Set([
   "hidtest",
   "testgui",
   "pp_data_dump",
+  // Flutter generated / ephemeral — plugin symlinks, dart tool cache, ephemeral
+  // platform projects. All of this is either vendored plugin code or generated
+  // by `flutter pub get`, and should never surface in a user project audit.
+  ".dart_tool",
+  ".plugin_symlinks",
+  "ephemeral",
+  ".flutter-plugins",
+  ".flutter-plugins-dependencies",
+  // iOS / macOS generated
+  "Pods",
+  "DerivedData",
+  "xcuserdata",
+  // Android generated
+  ".gradle",
+  ".idea",
+  ".cxx",
+  // Other platform junk
+  ".kotlin",
+  ".mvn",
   // Test directories — findings in test code are low-value noise.
   // Unit test stubs intentionally replicate unsafe patterns (e.g. strcat)
   // and test harnesses control their own inputs.
