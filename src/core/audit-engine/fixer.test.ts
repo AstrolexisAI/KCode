@@ -346,6 +346,55 @@ class _MyScreenState extends State<MyScreen> {
     expect(guardCount).toBe(1);
   });
 
+  test("applyRecipe does not insert duplicate annotations across repeated /fix runs", async () => {
+    // dart-001-insecure-http uses the generic recipe (advisory only,
+    // no bespoke fixer), so repeated /fix runs go through applyRecipe
+    // each time. The file starts with one `http://` URL. After the
+    // first /fix the annotation should be present exactly once, and
+    // a second /fix must NOT append another identical annotation.
+    writeFileSync(
+      join(tmp, "api.dart"),
+      `import 'package:http/http.dart' as http;
+
+Future<void> fetch() async {
+  final r = await http.get(Uri.parse('http://api.example.com/data'));
+  print(r.body);
+}
+`,
+    );
+
+    // First /fix run — adds one annotation.
+    const r1 = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    applyFixes(r1);
+    const afterFirst = readFileSync(join(tmp, "api.dart"), "utf-8");
+    const firstCount = (afterFirst.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    expect(firstCount).toBe(1);
+
+    // Second /fix run against the same (stale) audit result. The
+    // annotation is already in the file; the guard must catch it.
+    applyFixes(r1);
+    const afterSecond = readFileSync(join(tmp, "api.dart"), "utf-8");
+    const secondCount = (afterSecond.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    expect(secondCount).toBe(1);
+
+    // Third run with a re-scan (scanner now reports the line AFTER
+    // the annotation shifted everything down by 1). The guard must
+    // still catch it because the window check looks ±3 lines.
+    const r3 = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    applyFixes(r3);
+    const afterThird = readFileSync(join(tmp, "api.dart"), "utf-8");
+    const thirdCount = (afterThird.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    expect(thirdCount).toBe(1);
+  });
+
   test("generic recipes are reported as 'annotated', not 'transformed'", async () => {
     // Pick a pattern that uses the generic recipe fallback (no bespoke
     // fixer). dart-001-insecure-http is a simple regex pattern with only

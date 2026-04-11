@@ -1130,9 +1130,30 @@ function applyRecipe(
   const prefix = commentPrefix(finding.file);
   const tag = `KCODE-AUDIT:${finding.pattern_id}`;
 
-  // Skip if a previous /fix run already tagged this line.
-  const prev = lines[idx - 1] ?? "";
-  if (prev.includes(tag)) {
+  // Skip if a previous /fix run already tagged this location.
+  //
+  // The old check only looked at `lines[idx - 1]`, which fails when
+  // /fix is re-run against a stale AUDIT_REPORT.json whose line
+  // numbers predate a previous annotation. Example:
+  //
+  //   Run 1 — scanner reports Future.delayed at line 190. Annotation
+  //           inserted at idx 189. Future.delayed shifts to 191.
+  //   Run 2 — stale report still says line 190. idx = 189.
+  //           `lines[idx - 1] = lines[188]` = debugPrint — no tag.
+  //           Guard misses → duplicate annotation inserted at 189.
+  //
+  // The reliable fix: scan a small window (±3 lines) around the
+  // insertion point for the tag. Any hit, skip. This absorbs line
+  // drift of up to 3 positions from stale reports.
+  const WINDOW = 3;
+  let existingTag = false;
+  for (let i = Math.max(0, idx - WINDOW); i <= Math.min(lines.length - 1, idx + WINDOW); i++) {
+    if (lines[i]!.includes(tag)) {
+      existingTag = true;
+      break;
+    }
+  }
+  if (existingTag) {
     return { applied: false, kind: "skipped", lines, description: "Warning already present" };
   }
 
