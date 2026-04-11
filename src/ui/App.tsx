@@ -325,27 +325,35 @@ export default function App({ config, conversationManager, tools, initialSession
     return () => clearInterval(timer);
   }, [engineProgress]);
 
-  // Terminal tab title — shows activity status with emojis
+  // Terminal tab title — professional block-progress indicator
   useEffect(() => {
     const isWorking =
       mode === "responding" ||
       (scanProgress?.active ?? false) ||
       mode === ("escalation" as any);
 
-    // Animated title when working, static when idle
     if (isWorking) {
-      const frames = ["⚡ KCode", "🔥 KCode", "⚡ KCode", "💥 KCode"];
+      const frames = [
+        "▰▱▱▱ KCode",
+        "▰▰▱▱ KCode",
+        "▰▰▰▱ KCode",
+        "▰▰▰▰ KCode",
+        "▱▰▰▰ KCode",
+        "▱▱▰▰ KCode",
+        "▱▱▱▰ KCode",
+        "▱▱▱▱ KCode",
+      ];
       let frame = 0;
       const timer = setInterval(() => {
-        process.stdout.write(`\x1b]0;${frames[frame % frames.length]} — working...\x07`);
+        process.stdout.write(`\x1b]0;${frames[frame % frames.length]}\x07`);
         frame++;
-      }, 400);
+      }, 250);
       return () => {
         clearInterval(timer);
-        process.stdout.write(`\x1b]0;✅ KCode\x07`);
+        process.stdout.write(`\x1b]0;▪ KCode\x07`);
       };
     }
-    process.stdout.write(`\x1b]0;✅ KCode\x07`);
+    process.stdout.write(`\x1b]0;▪ KCode\x07`);
   }, [mode, scanProgress?.active]);
 
   // Ask user if they want to resume the previous session's model.

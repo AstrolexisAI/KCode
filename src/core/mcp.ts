@@ -161,10 +161,17 @@ export class McpManager {
    * Used by --mcp-config CLI flag.
    */
   async loadFromConfigs(configs: McpServersConfig): Promise<void> {
-    const validated: McpServersConfig = {};
+    // Reject dangerous keys before assigning — a malicious MCP config
+    // could use "__proto__", "constructor", or "prototype" as a server
+    // name to pollute Object.prototype via bracket assignment.
+    const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+    // Use a null-prototype object so even a bypass (e.g., via Proxy
+    // or some exotic Object.defineProperty trick) cannot touch the
+    // prototype chain of a normal object.
+    const validated: McpServersConfig = Object.create(null) as McpServersConfig;
     for (const [name, config] of Object.entries(configs)) {
+      if (UNSAFE_KEYS.has(name)) continue;
       if (isValidServerConfig(config)) {
-        // KCODE-AUDIT:js-008-prototype-pollution-bracket — Reject __proto__, constructor and prototype keys before assigning.
         validated[name] = config as McpServerConfig;
       }
     }

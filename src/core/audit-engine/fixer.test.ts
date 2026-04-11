@@ -129,4 +129,302 @@ describe("fixer", () => {
     }
     expect(missing).toEqual([]);
   });
+
+  test("dart-007-json-null-check rewrites non-nullable casts to nullable+default", async () => {
+    writeFileSync(
+      join(tmp, "plant.dart"),
+      `class Plant {
+  final int id;
+  final String name;
+  final double capacity;
+
+  Plant({required this.id, required this.name, required this.capacity});
+
+  factory Plant.fromJson(Map<String, dynamic> json) {
+    return Plant(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      capacity: json['capacity'] as double,
+    );
+  }
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const transformed = fixes.filter((f) => f.kind === "transformed");
+    expect(transformed.length).toBeGreaterThanOrEqual(1);
+
+    const content = readFileSync(join(tmp, "plant.dart"), "utf-8");
+    expect(content).toContain("as int? ?? 0");
+    expect(content).toContain("as String? ?? ''");
+    expect(content).toContain("as double? ?? 0.0");
+    // No raw non-nullable casts left.
+    expect(content).not.toMatch(/as\s+int\b(?!\?)/);
+    expect(content).not.toMatch(/as\s+String\b(?!\?)/);
+    expect(content).not.toMatch(/as\s+double\b(?!\?)/);
+  });
+
+  test("dart-007 is idempotent — rerunning /fix does not double-wrap", async () => {
+    writeFileSync(
+      join(tmp, "safe.dart"),
+      `class Safe {
+  factory Safe.fromJson(Map<String, dynamic> json) {
+    return Safe(id: json['id'] as int? ?? 0, name: json['name'] as String? ?? '');
+  }
+  Safe({required this.id, required this.name});
+  final int id;
+  final String name;
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    // Either the pattern doesn't match (no unsafe cast) or the fixer skips
+    // the already-safe line. Either way, zero transformed changes.
+    const transformed = fixes.filter((f) => f.kind === "transformed");
+    expect(transformed.length).toBe(0);
+
+    const content = readFileSync(join(tmp, "safe.dart"), "utf-8");
+    // Verify the file is still well-formed — no `as int? ?? 0? ?? 0`.
+    expect(content).not.toMatch(/\?\s*\?\?\s*\w+\?\s*\?\?/);
+  });
+
+  test("dart-007 does NOT rewrite non-json as-casts (business logic safety)", async () => {
+    // This file intentionally has:
+    //   (a) a real json[...] as int cast that SHOULD be fixed
+    //   (b) an unrelated `users.length as int` that MUST be left alone
+    //   (c) a generic `result as String` that MUST be left alone
+    writeFileSync(
+      join(tmp, "mixed.dart"),
+      `class Mixed {
+  final int id;
+  final int count;
+  final String label;
+
+  Mixed({required this.id, required this.count, required this.label});
+
+  factory Mixed.fromJson(Map<String, dynamic> json) {
+    final users = [1, 2, 3];
+    final count = users.length as int;
+    final result = someCall();
+    return Mixed(
+      id: json['id'] as int,
+      count: count,
+      label: result as String,
+    );
+  }
+  static dynamic someCall() => 'hi';
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const transformed = fixes.filter((f) => f.kind === "transformed");
+
+    const content = readFileSync(join(tmp, "mixed.dart"), "utf-8");
+    // The json[...] cast should be fixed.
+    expect(content).toContain("json['id'] as int? ?? 0");
+    // The non-json casts MUST remain untouched — this is the whole
+    // point of the hole-#1 fix. If the regex started matching them,
+    // it would silently change the semantics of business logic.
+    expect(content).toContain("users.length as int;");
+    expect(content).toContain("result as String,");
+    expect(content).not.toContain("users.length as int? ??");
+    expect(content).not.toContain("result as String? ??");
+    // Sanity: at least one real fix was applied.
+    expect(transformed.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("dart-005 skips insertion when setState is not inside a State<T> subclass", async () => {
+    // The setState call here is on a misleading helper that isn't
+    // inside a State<T>, so `mounted` wouldn't be defined. The fixer
+    // must skip rather than produce uncompilable code.
+    writeFileSync(
+      join(tmp, "helper.dart"),
+      `class NotAState {
+  void doWork() async {
+    await Future.delayed(Duration(seconds: 1));
+    setState(() => print('oops'));
+  }
+  void setState(void Function() fn) => fn();
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const dart005 = fixes.filter((f) => f.pattern_id === "dart-005-setstate-after-dispose");
+    // If the pattern fires, the fixer must NOT apply it to this file —
+    // NotAState doesn't extend State<T>. Either no finding or all
+    // findings for this pattern are skipped.
+    for (const f of dart005) {
+      expect(f.kind).toBe("skipped");
+    }
+
+    // Confirm the file was not touched by this pattern.
+    const content = readFileSync(join(tmp, "helper.dart"), "utf-8");
+    expect(content).not.toContain("if (!mounted) return;");
+  });
+
+  test("dart-005 recognizes a mounted guard added earlier in the same block", async () => {
+    // The await and setState are 6+ lines apart. A valid mounted guard
+    // sits right after the await — the old 3-line lookback missed this
+    // and would insert a DUPLICATE guard. The full-span check should
+    // recognize it and skip the insertion.
+    writeFileSync(
+      join(tmp, "state.dart"),
+      `import 'package:flutter/widgets.dart';
+
+class MyScreen extends StatefulWidget {
+  @override
+  State<MyScreen> createState() => _MyScreenState();
+}
+
+class _MyScreenState extends State<MyScreen> {
+  bool _loaded = false;
+
+  Future<void> _load() async {
+    final data = await fetchData();
+    if (!mounted) return;
+    // Four spacer lines between the guard and setState to defeat a
+    // short-window lookback.
+    // spacer
+    // spacer
+    // spacer
+    setState(() {
+      _loaded = true;
+    });
+  }
+
+  Future<List<int>> fetchData() async => [];
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    const dart005 = fixes.filter((f) => f.pattern_id === "dart-005-setstate-after-dispose");
+    // Either the pattern doesn't fire at all (regex doesn't match
+    // because a guard is already there and no setState "after" an
+    // unchecked await remains), or the fixer sees the guard and skips.
+    // Both are acceptable; what's NOT acceptable is a "transformed"
+    // result that inserts a duplicate guard.
+    for (const f of dart005) {
+      expect(f.kind).not.toBe("transformed");
+    }
+
+    const content = readFileSync(join(tmp, "state.dart"), "utf-8");
+    // Count occurrences of `if (!mounted) return;` — must be exactly 1.
+    const guardCount = (content.match(/if \(!mounted\) return;/g) ?? []).length;
+    expect(guardCount).toBe(1);
+  });
+
+  test("applyRecipe does not insert duplicate annotations across repeated /fix runs", async () => {
+    // dart-001-insecure-http uses the generic recipe (advisory only,
+    // no bespoke fixer), so repeated /fix runs go through applyRecipe
+    // each time. The file starts with one `http://` URL. After the
+    // first /fix the annotation should be present exactly once, and
+    // a second /fix must NOT append another identical annotation.
+    writeFileSync(
+      join(tmp, "api.dart"),
+      `import 'package:http/http.dart' as http;
+
+Future<void> fetch() async {
+  final r = await http.get(Uri.parse('http://api.example.com/data'));
+  print(r.body);
+}
+`,
+    );
+
+    // First /fix run — adds one annotation.
+    const r1 = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    applyFixes(r1);
+    const afterFirst = readFileSync(join(tmp, "api.dart"), "utf-8");
+    const firstCount = (afterFirst.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    expect(firstCount).toBe(1);
+
+    // Second /fix run against the same (stale) audit result. The
+    // annotation is already in the file; the guard must catch it.
+    applyFixes(r1);
+    const afterSecond = readFileSync(join(tmp, "api.dart"), "utf-8");
+    const secondCount = (afterSecond.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    expect(secondCount).toBe(1);
+
+    // Third run with a re-scan (scanner now reports the line AFTER
+    // the annotation shifted everything down by 1). The guard must
+    // still catch it because the window check looks ±3 lines.
+    const r3 = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    applyFixes(r3);
+    const afterThird = readFileSync(join(tmp, "api.dart"), "utf-8");
+    const thirdCount = (afterThird.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    expect(thirdCount).toBe(1);
+  });
+
+  test("generic recipes are reported as 'annotated', not 'transformed'", async () => {
+    // Pick a pattern that uses the generic recipe fallback (no bespoke
+    // fixer). dart-001-insecure-http is a simple regex pattern with only
+    // an advisory recipe — ideal for this test.
+    writeFileSync(
+      join(tmp, "api.dart"),
+      `import 'package:http/http.dart' as http;
+
+Future<void> fetch() async {
+  final r = await http.get(Uri.parse('http://api.example.com/data'));
+  print(r.body);
+}
+`,
+    );
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      skipVerification: true,
+    });
+    const fixes = applyFixes(result);
+    // At least one finding should be annotated (recipe-only). None of
+    // these recipe-based findings should be reported as 'transformed'.
+    const annotated = fixes.filter((f) => f.kind === "annotated");
+    expect(annotated.length).toBeGreaterThanOrEqual(1);
+    // The key property: buggy code is UNCHANGED. The `http://` URL must
+    // still be in the file — an annotation did not rewrite it.
+    const content = readFileSync(join(tmp, "api.dart"), "utf-8");
+    expect(content).toContain("http://api.example.com/data");
+    // And a KCODE-AUDIT marker comment was inserted above it.
+    expect(content).toContain("KCODE-AUDIT:dart-001-insecure-http");
+  });
 });

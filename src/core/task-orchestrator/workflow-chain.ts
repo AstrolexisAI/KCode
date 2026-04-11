@@ -91,13 +91,17 @@ async function stepFix(cwd: string, ctx: Map<string, string>): Promise<{ output:
   const { applyFixes } = await import("../audit-engine/fixer");
   const data = JSON.parse(readFileSync(jsonPath, "utf-8"));
   const fixes = applyFixes(data);
-  const applied = fixes.filter(f => f.applied).length;
-  const skipped = fixes.filter(f => !f.applied).length;
+  const transformed = fixes.filter(f => f.kind === "transformed").length;
+  const annotated = fixes.filter(f => f.kind === "annotated").length;
+  const skipped = fixes.filter(f => f.kind === "skipped").length;
 
-  ctx.set("fixes_applied", String(applied));
+  // Only "transformed" counts as a real fix. Annotations are advisory
+  // TODOs that still need manual attention, so don't claim them as done.
+  ctx.set("fixes_applied", String(transformed));
+  ctx.set("fixes_annotated", String(annotated));
   return {
-    output: `${applied} fixes applied, ${skipped} skipped`,
-    success: applied > 0 || skipped === 0,
+    output: `${transformed} real fixes, ${annotated} advisory comments, ${skipped} skipped`,
+    success: transformed > 0 || (annotated === 0 && skipped === 0),
   };
 }
 
