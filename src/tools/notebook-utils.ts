@@ -33,10 +33,24 @@ export interface CellOutput {
 
 /** Parse .ipynb JSON content into a typed notebook structure */
 export function parseNotebook(content: string): JupyterNotebook {
-  // KCODE-AUDIT:js-014-json-parse-no-catch — Wrap JSON.parse in try/catch and handle SyntaxError.
-  const nb = JSON.parse(content);
-  if (nb.nbformat !== 4) {
-    throw new Error(`Only nbformat 4 is supported, found: ${nb.nbformat}`);
+  // Catch malformed .ipynb JSON and re-raise with a useful diagnostic.
+  // Raw SyntaxError from JSON.parse dumps its position offset but no
+  // context about which file the caller was trying to read, so the
+  // user sees "Unexpected token } in JSON at position 1234" instead of
+  // "Invalid notebook JSON: ...".
+  let nb: unknown;
+  try {
+    nb = JSON.parse(content);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid notebook JSON: ${msg}`);
+  }
+  if (typeof nb !== "object" || nb === null) {
+    throw new Error("Invalid notebook: root is not an object");
+  }
+  const root = nb as { nbformat?: unknown };
+  if (root.nbformat !== 4) {
+    throw new Error(`Only nbformat 4 is supported, found: ${String(root.nbformat)}`);
   }
   return nb as JupyterNotebook;
 }
