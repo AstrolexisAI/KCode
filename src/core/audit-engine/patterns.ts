@@ -554,10 +554,19 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     explanation:
       "The global keyword creates shared mutable state that makes code harder to test, reason about, and maintain. It can cause subtle bugs in multi-threaded code and makes dependency injection impossible.",
     verify_prompt:
-      "Is this global used for legitimate module-level state (e.g., singleton " +
-      "initialization, configuration cache)? If it's a well-known pattern like " +
-      "module-level logger or config, respond FALSE_POSITIVE. If it's used to pass " +
-      "state between functions, respond CONFIRMED.",
+      "Is this global used for a legitimate module-level state pattern? " +
+      "Respond FALSE_POSITIVE for any of: " +
+      "(1) module-level logger, (2) configuration / settings cache, " +
+      "(3) singleton lazy-init (e.g., `_instance`, `_client`, `_pool`), " +
+      "(4) circuit breaker state (`_circuit_open_until`, `_failure_count`, `_last_failure`), " +
+      "(5) rate limiter / token bucket state, " +
+      "(6) connection pool / HTTP session reuse, " +
+      "(7) feature flag cache or hot-reloaded config, " +
+      "(8) memoization / LRU cache implementation, " +
+      "(9) test fixtures or pytest monkeypatch setup. " +
+      "These are all well-known Python patterns where module-level state is idiomatic. " +
+      "Only respond CONFIRMED if the global is used to pass arbitrary state between " +
+      "unrelated functions in a way that suggests the code should have been a class.",
     cwe: "CWE-1054",
     fix_template: "Pass the value as a function parameter, use a class to encapsulate state, or use a module-level constant.",
   },
