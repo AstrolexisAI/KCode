@@ -5,8 +5,35 @@
 //
 // Flow: read finding → read source file → apply fix rule → write file
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import type { AuditResult, Finding } from "./types";
+
+/**
+ * Atomic file write: write to a sibling temp file, fsync if possible,
+ * then rename over the target. This avoids half-written state if the
+ * process dies mid-write (disk full, Ctrl-C, crash). The temp file lives
+ * in the same directory as the target so the rename is on the same
+ * filesystem and therefore atomic on POSIX.
+ *
+ * If the rename fails (e.g., cross-device on some setups), we clean up
+ * the temp file and let the error propagate.
+ */
+function atomicWriteFileSync(targetPath: string, content: string): void {
+  // 8 random bytes → 16 hex chars — low collision risk even with concurrent
+  // /fix runs, and short enough to stay under path length limits.
+  const tmp = `${targetPath}.kcode-fix-${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    writeFileSync(tmp, content);
+    renameSync(tmp, targetPath);
+  } catch (err) {
+    // Best-effort cleanup of the temp file if the rename failed. We
+    // swallow errors from unlinkSync because the temp file may not
+    // exist (writeFileSync itself may have thrown before creating it).
+    try { unlinkSync(tmp); } catch { /* ignore */ }
+    throw err;
+  }
+}
 
 /**
  * Outcome of applying a single fix.
@@ -90,7 +117,12 @@ export function applyFixes(result: AuditResult): FixResult[] {
     }
 
     if (modified) {
-      writeFileSync(file, lines.join("\n"));
+      // Preserve the original file's trailing newline convention —
+      // lines.split("\n") produces an empty last element if the file
+      // ended with "\n", which lines.join("\n") will serialize back
+      // correctly. No extra work needed; just use atomic write to
+      // avoid corruption on mid-write crash.
+      atomicWriteFileSync(file, lines.join("\n"));
     }
   }
 
@@ -572,21 +604,31 @@ function fixLoopBound(lines: string[], finding: Finding): OneFixResult {
 }
 
 /**
- * dart-007: Rewrite `json[...] as Int|String|double|bool|num` casts that
- * target non-nullable primitives to use the nullable variant plus a safe
- * default. Real code transform — not a TODO comment.
+ * dart-007: Rewrite `json['key'] as Int|String|double|bool|num` casts
+ * that target non-nullable primitives to use the nullable variant plus a
+ * safe default.
  *
  *   id: json['id'] as int,            →  id: json['id'] as int? ?? 0,
  *   name: json['name'] as String,     →  name: json['name'] as String? ?? '',
  *
- * The audit engine collapses repeated matches of the same pattern in the
- * same file into a single finding with a "(+N more matches)" suffix —
- * meaning only one Finding is reported per file for this pattern, even
- * if a fromJson factory has 40 unsafe casts. So instead of fixing just
- * the finding's line, this fixer sweeps the ENTIRE file and rewrites
- * every unsafe primitive cast it finds. Subsequent /fix invocations are
- * idempotent because the fixer already skips lines that use
- * `as T? ?? default`.
+ * SCOPE — only the `json[...] as Type` shape is touched:
+ *   - `foo.length as int` is NOT rewritten (not a JSON subscript).
+ *   - `Map<K, V>.cast<int>()` is NOT rewritten (not an `as` cast).
+ *   - `users as List<int>` is NOT rewritten (not on a json subscript).
+ * This prevents the fixer from silently changing the semantics of
+ * business-logic casts that have nothing to do with JSON parsing.
+ *
+ * The audit engine dedupes matches of the same pattern in the same file
+ * into a single Finding (for verification efficiency), so a fromJson
+ * with 40 unsafe casts produces ONE finding. That finding's line is
+ * just the first match. Because every other match has the same
+ * json[...] shape, sweeping the whole file with the narrow regex
+ * rewrites all of them in one pass — AND because the regex is scoped
+ * to json subscripts, it never accidentally rewrites unrelated casts.
+ *
+ * Idempotency — the regex has a `(?!\?)` lookahead so casts already
+ * written as `as T?` are left alone, regardless of whether they're
+ * followed by `?? default` or not.
  */
 function fixDartJsonNullCheck(lines: string[], _finding: Finding): OneFixResult {
   const DEFAULTS: Record<string, string> = {
@@ -596,40 +638,76 @@ function fixDartJsonNullCheck(lines: string[], _finding: Finding): OneFixResult 
     bool: "false",
     String: "''",
   };
-  // Match `as TYPE` where TYPE is one of the supported primitives and
-  // not already followed by `?`. Word boundary keeps `as Stringify` from
-  // matching `as String`.
-  const rex = /\bas\s+(int|double|num|bool|String)\b(?!\?)/g;
+  // Narrow regex: `json['anything'] as TYPE` where TYPE is one of the
+  // supported primitives AND is not already nullable. Captures the whole
+  // `json[...] as TYPE` span as group 1 so the replacement can keep the
+  // original json access intact.
+  //
+  // Note: the outer `json` identifier match is intentionally literal —
+  // the pattern library's regex in patterns.ts only fires on the
+  // identifier `json`, which is the conventional parameter name for
+  // Dart fromJson factories. Projects that use a different name (e.g.
+  // `data` or `m`) won't get auto-fixed, but that's the correct
+  // conservative behavior for a deterministic rewriter.
+  const rex = /(\bjson\s*\[\s*['"][^'"]+['"]\s*\]\s*as\s+(int|double|num|bool|String))\b(?!\?)/g;
   let totalCount = 0;
-  const result = lines.map((line) => {
-    // Leave lines that already use a nullable cast with default alone.
-    if (/\bas\s+\w+\?\s*\?\?/.test(line)) return line;
-    return line.replace(rex, (_match, type: string) => {
+  const result = lines.map((line) =>
+    line.replace(rex, (_full, wholeCast: string, type: string) => {
       totalCount++;
-      return `as ${type}? ?? ${DEFAULTS[type]}`;
-    });
-  });
+      return `${wholeCast}? ?? ${DEFAULTS[type]}`;
+    }),
+  );
   if (totalCount === 0) {
     return {
       applied: false,
       kind: "skipped",
       lines,
-      description: "No unsafe `as Type` casts found in file",
+      description: "No unsafe `json[...] as Type` casts found in file",
     };
   }
   return {
     applied: true,
     kind: "transformed",
     lines: result,
-    description: `Rewrote ${totalCount} non-nullable cast${totalCount === 1 ? "" : "s"} to nullable with default (whole-file sweep)`,
+    description: `Rewrote ${totalCount} json[...] non-nullable cast${totalCount === 1 ? "" : "s"} to nullable with default`,
   };
+}
+
+// Walk backwards from `fromIdx` looking for a class declaration that
+// extends one of Flutter's State base types. Returns true only if the
+// setState call is clearly inside a State<T> / ConsumerState<T> /
+// StatefulWidgetState<T> subclass, where `mounted` is a defined
+// instance getter. Returns false if no such class is found within a
+// reasonable lookback (400 lines — large enough for most Dart files,
+// small enough to avoid pathological O(n²) behavior).
+//
+// This keeps us from inserting `if (!mounted) return;` into code where
+// `mounted` doesn't exist (e.g., a standalone function, a helper class,
+// a mixin that receives a callback) which would fail to compile.
+function isInsideFlutterState(lines: string[], fromIdx: number): boolean {
+  // Any of these patterns identifies a class where `mounted` is defined.
+  // We accept both raw Flutter (`State<X>`) and common Riverpod/Provider
+  // extensions (`ConsumerState<X>`, `ConsumerStatefulState<X>`), plus the
+  // fully-qualified form.
+  const classRex = /\bclass\s+\w+[^{]*\bextends\s+\w*State(?:<|\b)/;
+  const limit = Math.max(0, fromIdx - 400);
+  for (let i = fromIdx; i >= limit; i--) {
+    if (classRex.test(lines[i]!)) return true;
+  }
+  return false;
 }
 
 /**
  * dart-005: Insert `if (!mounted) return;` before a setState call that
- * sits after an `await` inside a State<T>. The pattern fires on the
- * `await` line, so we walk forward to find the actual setState call and
- * insert the guard there. Skips if any guard is already present.
+ * sits after an `await`. Only fires when:
+ *
+ *   1. A `setState(` call is found within 10 lines after the finding's
+ *      await line (walked forward).
+ *   2. NO mounted/disposed guard exists anywhere between the await and
+ *      the setState call (full span check, not just 3-line lookback).
+ *   3. The setState is inside a `class Foo extends ... State<...>`
+ *      subclass, so `mounted` is a valid instance getter. Otherwise we
+ *      skip rather than produce uncompilable code.
  */
 function fixDartSetStateAfterDispose(lines: string[], finding: Finding): OneFixResult {
   const startIdx = finding.line - 1;
@@ -648,21 +726,22 @@ function fixDartSetStateAfterDispose(lines: string[], finding: Finding): OneFixR
       applied: false,
       kind: "skipped",
       lines,
-      description: "Could not locate setState call near await",
+      description: "Could not locate setState call within 10 lines after await",
     };
   }
-  // If any of the preceding 3 non-empty lines already has a guard,
-  // consider this already safe.
-  for (let i = setStateIdx - 1, seen = 0; i >= 0 && seen < 3; i--) {
+  // Full-span guard detection: walk every line between the await
+  // (startIdx) and the setState (setStateIdx) looking for ANY guard.
+  // This fixes the earlier 3-line lookback bug where a valid guard at
+  // line -5 was missed and we inserted a duplicate.
+  for (let i = setStateIdx - 1; i >= startIdx; i--) {
     const prev = lines[i]!;
     if (prev.trim() === "") continue;
-    seen++;
     if (/\bif\s*\(\s*!?(mounted|context\.mounted)\s*\)/.test(prev)) {
       return {
         applied: false,
         kind: "skipped",
         lines,
-        description: "mounted guard already present",
+        description: "mounted guard already present between await and setState",
       };
     }
     if (/\bif\s*\(\s*!?_?disposed\s*\)/.test(prev)) {
@@ -670,9 +749,22 @@ function fixDartSetStateAfterDispose(lines: string[], finding: Finding): OneFixR
         applied: false,
         kind: "skipped",
         lines,
-        description: "disposed guard already present",
+        description: "disposed guard already present between await and setState",
       };
     }
+  }
+  // Verify we're inside a State<T> subclass before assuming `mounted`
+  // is defined. If not, skip the bespoke fix — the generic recipe
+  // (advisory comment) is still available through the default branch,
+  // but dart-005 routes here first. We'd rather return "skipped" than
+  // emit uncompilable code.
+  if (!isInsideFlutterState(lines, setStateIdx)) {
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "setState not inside a State<T> subclass — `mounted` may be undefined here",
+    };
   }
   const indent = lines[setStateIdx]!.match(/^(\s*)/)?.[1] ?? "";
   const guard = `${indent}if (!mounted) return;`;

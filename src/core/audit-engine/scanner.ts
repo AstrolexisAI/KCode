@@ -5,8 +5,8 @@
 // calls yet — candidates are just regex matches in files.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { extname, join, relative } from "node:path";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { extname, join, relative, resolve, sep } from "node:path";
 import { getAllPatterns } from "./patterns";
 import type { BugPattern, Candidate, Language } from "./types";
 
@@ -311,10 +311,36 @@ function isSkippedPath(fullPath: string): boolean {
 
 /**
  * Walk a directory tree and return absolute paths of source files.
+ *
+ * Symlink safety:
+ *   - Every directory is resolved via `realpath` so cyclic symlinks
+ *     (a→b→a, link→., etc.) are detected and only traversed once.
+ *   - Every resolved path is required to stay inside the resolved
+ *     project root. A symlink that points outside the project
+ *     (`my-lib -> /etc/ssh/...`) is silently skipped instead of
+ *     leaking files outside the audit scope.
+ *   - File symlinks are resolved the same way before being emitted,
+ *     so the audit never double-reports the same file via two aliases.
  */
 export function findSourceFiles(root: string, maxFiles = 500): string[] {
   const out: string[] = [];
-  const stack: string[] = [root];
+  // Resolve the project root once. If realpath fails (broken link,
+  // missing dir) fall back to the plain absolute path.
+  let rootReal: string;
+  try {
+    rootReal = realpathSync(resolve(root));
+  } catch {
+    rootReal = resolve(root);
+  }
+  // rootPrefix is what we compare every resolved descendant against.
+  // Appending the separator avoids `/home/foo` matching `/home/foo-evil`.
+  const rootPrefix = rootReal.endsWith(sep) ? rootReal : rootReal + sep;
+
+  const visitedDirs = new Set<string>();
+  const visitedFiles = new Set<string>();
+  const stack: string[] = [rootReal];
+  visitedDirs.add(rootReal);
+
   while (stack.length > 0 && out.length < maxFiles) {
     const dir = stack.pop()!;
     let entries: string[];
@@ -334,13 +360,38 @@ export function findSourceFiles(root: string, maxFiles = 500): string[] {
       }
       if (s.isDirectory()) {
         if (isSkippedPath(full + "/")) continue;
-        stack.push(full);
+        // Resolve the real path before descending — this is how we
+        // both break symlink cycles and prevent escaping the project
+        // root through a symlink into /etc or $HOME.
+        let real: string;
+        try {
+          real = realpathSync(full);
+        } catch {
+          continue;
+        }
+        // Root-confinement: the resolved directory must equal the
+        // project root itself OR be strictly inside it.
+        if (real !== rootReal && !real.startsWith(rootPrefix)) continue;
+        if (visitedDirs.has(real)) continue;
+        visitedDirs.add(real);
+        stack.push(real);
       } else if (s.isFile()) {
         const ext = extname(entry).toLowerCase();
         if (!SOURCE_EXTENSIONS[ext]) continue;
         if (isSkippedFilename(entry)) continue;
         if (isSkippedPath(full)) continue;
-        out.push(full);
+        let real: string;
+        try {
+          real = realpathSync(full);
+        } catch {
+          continue;
+        }
+        // Same root confinement for file symlinks: never report a file
+        // whose real path is outside the audited project.
+        if (real !== rootReal && !real.startsWith(rootPrefix)) continue;
+        if (visitedFiles.has(real)) continue;
+        visitedFiles.add(real);
+        out.push(real);
         if (out.length >= maxFiles) break;
       }
     }
