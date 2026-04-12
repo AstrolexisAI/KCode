@@ -270,7 +270,28 @@ export async function buildRequestForModel(
     );
   }
 
-  const effortMaxTokens =
+  // Reasoning models (OpenAI o1/o3/o4, xAI Grok reasoning variants,
+  // DeepSeek Reasoner, Claude thinking mode) burn a LARGE number of
+  // tokens on internal chain-of-thought BEFORE emitting the final
+  // output. A "medium" effort budget of 16K can easily be consumed
+  // entirely by reasoning, leaving nothing for the visible response —
+  // the model returns an empty completion.
+  //
+  // Detect these by name prefix/substring and guarantee a floor of
+  // 32K tokens so there's always room for output after reasoning.
+  const lowerModel = modelName.toLowerCase();
+  const isReasoningModel =
+    lowerModel.startsWith("o1") ||
+    lowerModel.startsWith("o3") ||
+    lowerModel.startsWith("o4") ||
+    lowerModel.includes("reasoning") ||
+    lowerModel.includes("reasoner") ||
+    lowerModel === "grok-3-mini" ||
+    lowerModel.startsWith("grok-3-mini") ||
+    lowerModel === "grok-4.20" ||
+    lowerModel === "grok-4.20-latest";
+
+  let effortMaxTokens =
     effort === "low"
       ? Math.min(maxTokens, 4096)
       : effort === "max"
@@ -278,6 +299,14 @@ export async function buildRequestForModel(
         : effort === "high"
           ? Math.max(maxTokens, 32768)
           : maxTokens;
+
+  // Reasoning floor: at least 32K for any reasoning model, 64K on high/max.
+  if (isReasoningModel) {
+    const reasoningFloor = effort === "high" || effort === "max" ? 65536 : 32768;
+    if (effortMaxTokens < reasoningFloor) {
+      effortMaxTokens = reasoningFloor;
+    }
+  }
   const effortTemperature =
     effort === "low" ? 0.3 : effort === "max" ? 0.9 : effort === "high" ? 0.7 : undefined;
 
@@ -430,6 +459,26 @@ export async function buildRequestForModel(
     const finalTemp = effortTemperature ?? profileTemperature;
     if (finalTemp !== undefined) {
       body.temperature = finalTemp;
+    }
+
+    // For reasoning models that support the reasoning_effort parameter
+    // (xAI Grok reasoning variants, OpenAI o-series), map KCode's effort
+    // level to the provider's field. Lower effort → less reasoning
+    // budget → faster + cheaper but still sane output. Without this,
+    // grok-4.20-reasoning can burn 10K+ reasoning tokens on trivial
+    // prompts and return empty text.
+    //
+    // Scoped to xAI and OpenAI base URLs. DeepSeek Reasoner uses its
+    // own mechanism (no reasoning_effort field). Other providers would
+    // reject the field with a 400 if we sent it unconditionally.
+    const apiBaseLower = apiBase.toLowerCase();
+    const supportsReasoningEffort =
+      isReasoningModel &&
+      (apiBaseLower.includes("x.ai") || apiBaseLower.includes("openai.com"));
+    if (supportsReasoningEffort) {
+      const reasoningEffort =
+        effort === "low" ? "low" : effort === "high" || effort === "max" ? "high" : "medium";
+      body.reasoning_effort = reasoningEffort;
     }
 
     if (toolDefs.length > 0) body.tools = toolDefs;
