@@ -230,8 +230,53 @@ interface DevServer {
   needsInstall: boolean;
 }
 
+/**
+ * Find the first free TCP port in [start, end]. Returns `start` if
+ * none are free (so the spawn fails visibly instead of silently
+ * hanging on an unknown collision).
+ *
+ * Tries to bind with `net.createServer().listen(port)` and closes
+ * immediately. Synchronous wrapper via spawnSync('sh', ['-c', ...])
+ * would be cleaner but we want to keep this pure Node.
+ */
+function findFreePort(start: number, end: number): number {
+  const { execSync } = require("node:child_process");
+  for (let port = start; port <= end; port++) {
+    try {
+      // ss -tln shows listening TCP ports. Grep for exactly ":PORT " or ":PORT$".
+      const out = execSync(`ss -tln 2>/dev/null | awk '{print $4}'`, {
+        encoding: "utf8",
+        timeout: 2000,
+      });
+      const taken = out.split(/\n/).some((line: string) => {
+        const m = line.match(/:(\d+)$/);
+        return m && parseInt(m[1]!, 10) === port;
+      });
+      if (!taken) return port;
+    } catch {
+      // ss failed — can't verify. Return the start port and let spawn
+      // complain if it's taken.
+      return start;
+    }
+  }
+  return start;
+}
+
+/**
+ * KCode avoids well-known (< 1024) and user-reserved ports (< 11000
+ * per project convention). Dev servers start at 11000 and scan up to
+ * 11999 for the first free slot. This keeps kcode dev servers out of
+ * the way of other tools (Docker, llama.cpp at 8090, Postgres at
+ * 5432, etc.) and makes them predictable.
+ */
+const KCODE_PORT_FLOOR = 11000;
+const KCODE_PORT_CEILING = 11999;
+
 function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
-  const port = requestedPort ?? 10080;
+  // If the caller gave a specific port, honor it (even if below 11000 —
+  // the user knows what they want). Otherwise find a free one in the
+  // kcode dev-server port range.
+  const port = requestedPort ?? findFreePort(KCODE_PORT_FLOOR, KCODE_PORT_CEILING);
 
   // If no project in cwd, check common project subdirectory names
   if (!existsSync(join(cwd, "package.json")) && !existsSync(join(cwd, "go.mod")) &&
@@ -393,9 +438,21 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
     }
 
     const portInfo = srv.port > 0 ? `\n  🌐 http://localhost:${srv.port}` : "";
+    // Show explicit shell commands so the user can copy them into
+    // another terminal (or their notes) to manage the server manually.
+    // The `kill` command uses the child PID directly — that's the
+    // process group leader because we spawned with `detached: true`.
+    const relCwd = cwd.replace(process.env.HOME ?? "", "~");
+    const manualCommands = [
+      "",
+      "  ── How to manage this server manually ──",
+      `  Start:  cd ${relCwd} && ${srv.command}`,
+      `  Stop:   kill ${child.pid}   (or: pkill -f '${srv.command.split(" ")[0]}')`,
+      `  In kcode: "para el server"  or  /stop`,
+    ].join("\n");
     return {
       handled: true,
-      output: `  ✅ ${srv.name} server started (PID: ${child.pid})\n  $ ${srv.command}${portInfo}\n\n  Stop with: /stop or "para el server"`,
+      output: `  ✅ ${srv.name} server started (PID: ${child.pid})\n  $ ${srv.command}${portInfo}${manualCommands}`,
     };
   } catch (err: any) {
     return { handled: true, output: `  ❌ Failed to start: ${err.message}` };
