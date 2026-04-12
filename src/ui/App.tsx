@@ -114,6 +114,11 @@ export default function App({ config, conversationManager, tools, initialSession
   const [isThinking, setIsThinking] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [tokenCount, setTokenCount] = useState(0);
+  // Running USD cost for the current session. Updated after every turn
+  // by looking up the active model's pricing and applying it to the
+  // cumulative input/output token counts from conversationManager.
+  // For local models (mark5/mark6, no pricing entry) this stays at 0.
+  const [sessionCostUsd, setSessionCostUsd] = useState(0);
   const [turnTokens, setTurnTokens] = useState(0);
   const [turnStartTime, setTurnStartTime] = useState(0);
   const [spinnerPhase, setSpinnerPhase] = useState<"thinking" | "streaming" | "tool">("thinking");
@@ -215,6 +220,33 @@ export default function App({ config, conversationManager, tools, initialSession
       setActivePlan(plan);
     });
   }, []);
+
+  // Recompute running USD cost whenever the token count changes.
+  // Looks up the active model's pricing (KNOWN_PRICING + ~/.kcode/pricing.json)
+  // and applies it to the cumulative input/output tokens from the
+  // conversation manager. Local models return null pricing → cost = 0.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getModelPricing, calculateCost } = await import("../core/pricing.js");
+        const pricing = await getModelPricing(config.model);
+        if (cancelled) return;
+        if (!pricing) {
+          setSessionCostUsd(0);
+          return;
+        }
+        const usage = conversationManager.getUsage();
+        const cost = calculateCost(pricing, usage.inputTokens, usage.outputTokens);
+        setSessionCostUsd(cost);
+      } catch {
+        // Silent — if pricing lookup fails, show 0 rather than crash.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tokenCount, config.model, conversationManager]);
 
   // Poll background scan progress (scanState is mutated by the /scan handler)
   useEffect(() => {
@@ -934,6 +966,7 @@ export default function App({ config, conversationManager, tools, initialSession
           mode={mode}
           toolUseCount={toolUseCount}
           tokenCount={tokenCount}
+          sessionCostUsd={sessionCostUsd}
           activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
           isThinking={isThinking}
           runningAgents={runningAgentCount}
