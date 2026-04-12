@@ -160,6 +160,8 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixPySqlInjection(lines, finding);
     case "py-005-yaml-unsafe-load":
       return fixPyYamlLoad(lines, finding);
+    case "py-013-bare-except":
+      return fixPyBareExcept(lines, finding);
     case "dart-005-setstate-after-dispose":
       return fixDartSetStateAfterDispose(lines, finding);
     case "dart-007-json-null-check":
@@ -566,6 +568,42 @@ function fixPyYamlLoad(lines: string[], finding: Finding): OneFixResult {
     return { applied: true, kind: "transformed", lines: result, description: "yaml.load() → yaml.safe_load()" };
   }
   return { applied: false, kind: "skipped", lines, description: "Complex YAML load — manual fix needed" };
+}
+
+/**
+ * py-013: Replace bare `except:` with `except Exception:`.
+ *
+ * Bare except catches BaseException, which includes SystemExit,
+ * KeyboardInterrupt, and GeneratorExit — signals that should almost
+ * never be silenced. The fix narrows it to Exception, which preserves
+ * error handling for runtime issues while letting system signals
+ * propagate.
+ *
+ * Handles all common indent styles and inline comments.
+ */
+function fixPyBareExcept(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) {
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  }
+  const line = lines[idx]!;
+  // Match `except:` with optional leading whitespace and optional
+  // trailing comment. Don't match `except SomeType:` (already specific).
+  if (!/^\s*except\s*:/.test(line)) {
+    return { applied: false, kind: "skipped", lines, description: "No bare `except:` on this line" };
+  }
+  // Already narrowed to Exception — skip.
+  if (/except\s+Exception\s*:/.test(line)) {
+    return { applied: false, kind: "skipped", lines, description: "Already uses `except Exception:`" };
+  }
+  const result = [...lines];
+  result[idx] = line.replace(/\bexcept\s*:/, "except Exception:");
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: "`except:` → `except Exception:`",
+  };
 }
 
 /**
@@ -1189,6 +1227,7 @@ const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
   "py-004-sql-injection",
   "py-005-yaml-unsafe-load",
   "py-008-path-traversal",
+  "py-013-bare-except",
   "dart-005-setstate-after-dispose",
   "dart-007-json-null-check",
 ]);
