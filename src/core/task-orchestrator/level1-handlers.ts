@@ -4,7 +4,7 @@
 // and executes directly — no tokens spent, instant response.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 function run(cmd: string, cwd: string, timeout = 30_000): { output: string; code: number } {
@@ -373,29 +373,50 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     return { name: "Docker Compose", command: "docker compose up", port: 0, needsInstall: false };
   }
 
-  // Static HTML — only serve with python http.server if the directory
-  // is CLEARLY a static site (index.html at root, no package.json, no
-  // other project markers). This prevents the case where a stale
-  // `last-project` pointing at a directory with a residual index.html
-  // ends up running `python -m http.server` for a user who asked
-  // about a completely different Next.js/Vite/React project.
+  // Static HTML — serve single-file or multi-file HTML sites on the
+  // kcode dev-server port range. This is the correct path for
+  // tutorials, dashboards with Tailwind/Chart.js from CDN, and any
+  // other project that is "just an index.html".
   //
-  // We already filtered out package.json/go.mod/Cargo.toml/pyproject
-  // above, so reaching this branch means none of those exist. Still,
-  // require a typical static-site structure before committing to the
-  // python fallback.
-  if (
-    existsSync(join(cwd, "index.html")) &&
-    !existsSync(join(cwd, "package.json")) &&
-    (existsSync(join(cwd, "styles")) ||
-      existsSync(join(cwd, "css")) ||
-      existsSync(join(cwd, "assets")) ||
-      existsSync(join(cwd, "static")))
-  ) {
-    return { name: "Static", command: `python3 -m http.server ${port}`, port, needsInstall: false };
+  // Requirements (all must hold):
+  //   - index.html exists at the root
+  //   - NO project markers were found above (no package.json, go.mod,
+  //     Cargo.toml, etc.) — those branches would have returned already
+  //   - index.html is non-trivial (>500 bytes) — avoids matching a
+  //     placeholder "Coming soon" page or a stale file left in a
+  //     stripped-down test directory
+  //
+  // We use `bunx serve` instead of `python3 -m http.server` because
+  // (a) CLAUDE.md says "Always use Bun" and (b) bunx serve starts
+  // faster and supports live reload with --single. Falls back to
+  // python3 only if bunx is not on PATH.
+  if (existsSync(join(cwd, "index.html")) && !existsSync(join(cwd, "package.json"))) {
+    try {
+      const size = statSync(join(cwd, "index.html")).size;
+      if (size >= 500) {
+        const hasBunx = tryWhich("bunx");
+        const command = hasBunx
+          ? `bunx serve -l ${port} .`
+          : `python3 -m http.server ${port}`;
+        return { name: "Static", command, port, needsInstall: false };
+      }
+    } catch {
+      /* ignore stat errors */
+    }
   }
 
   return null;
+}
+
+/** Check if a binary is on PATH via `command -v`. Synchronous. */
+function tryWhich(bin: string): boolean {
+  try {
+    const { execSync } = require("node:child_process");
+    execSync(`command -v ${bin}`, { timeout: 1000, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function startDevServer(srv: DevServer, cwd: string): Level1Result {
