@@ -1125,6 +1125,14 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   // ── Universal ──────────────────────────────────────────────
   "uni-001-hardcoded-ip": r("hardcoded IP", "Move the IP address to config — hardcoding makes deployment brittle."),
   "uni-002-security-todo": r("security TODO", "Address this security TODO before shipping."),
+  "uni-003-ssrf": r("SSRF", "Validate the URL against an allowlist of permitted hosts. Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost)."),
+  "uni-004-missing-auth": r("missing auth", "Add authentication middleware/decorator before this endpoint."),
+  "uni-005-weak-auth-compare": r("timing-unsafe compare", "Use constant-time comparison: hmac.compare_digest (Python), crypto.timingSafeEqual (Node.js), subtle.ConstantTimeCompare (Go)."),
+  "uni-006-critical-no-auth": r("critical op no auth", "Require authentication AND authorization before destructive/privileged operations."),
+  "uni-007-command-injection-concat": r("command injection concat", W.SHELL),
+  "uni-008-privilege-escalation": r("privilege escalation", "Run with minimum required privileges. Use 0o755 not 0o777. Drop root after binding ports."),
+  "uni-009-code-injection": r("code injection", "Never compile/evaluate user input. Use a sandboxed interpreter or safe template engine."),
+  "uni-010-client-side-auth": r("client-side auth", "Read authorization from server session or validated JWT — never from request body/query/cookies."),
 
   // ── Zig ────────────────────────────────────────────────────
   "zig-001-use-after-free": r("use-after-free", "Don't use memory after free — null the pointer or use defer."),
