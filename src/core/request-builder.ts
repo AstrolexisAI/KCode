@@ -461,20 +461,24 @@ export async function buildRequestForModel(
       body.temperature = finalTemp;
     }
 
-    // For reasoning models that support the reasoning_effort parameter
-    // (xAI Grok reasoning variants, OpenAI o-series), map KCode's effort
-    // level to the provider's field. Lower effort → less reasoning
-    // budget → faster + cheaper but still sane output. Without this,
-    // grok-4.20-reasoning can burn 10K+ reasoning tokens on trivial
-    // prompts and return empty text.
+    // The reasoning_effort parameter is only supported by OpenAI's
+    // o-series models (o1, o3, o4). xAI supports it for some models
+    // (grok-3-mini accepts it) but rejects it for others
+    // (grok-4.20-0309-reasoning returns 400 "does not support parameter
+    // reasoningEffort"). Rather than maintain a per-model allowlist,
+    // we skip the parameter entirely for xAI and rely on the
+    // max_tokens floor (32K for reasoning models) to prevent the
+    // empty-response bug.
     //
-    // Scoped to xAI and OpenAI base URLs. DeepSeek Reasoner uses its
-    // own mechanism (no reasoning_effort field). Other providers would
-    // reject the field with a 400 if we sent it unconditionally.
+    // For OpenAI o-series, reasoning_effort IS documented and stable,
+    // so we map KCode's effort level to the provider's field.
     const apiBaseLower = apiBase.toLowerCase();
     const supportsReasoningEffort =
       isReasoningModel &&
-      (apiBaseLower.includes("x.ai") || apiBaseLower.includes("openai.com"));
+      apiBaseLower.includes("openai.com") &&
+      (lowerModel.startsWith("o1") ||
+        lowerModel.startsWith("o3") ||
+        lowerModel.startsWith("o4"));
     if (supportsReasoningEffort) {
       const reasoningEffort =
         effort === "low" ? "low" : effort === "high" || effort === "max" ? "high" : "medium";

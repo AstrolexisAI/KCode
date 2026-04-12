@@ -114,7 +114,10 @@ const PROVIDERS: CloudProvider[] = [
     name: "xAI (Grok)",
     envVar: "XAI_API_KEY",
     settingsKey: "xaiApiKey",
-    baseUrl: "https://api.x.ai/v1",
+    // baseUrl MUST NOT include /v1 — the request builder appends
+    // /v1/chat/completions itself. With /v1 here we'd get
+    // /v1/v1/chat/completions and xAI returns 404.
+    baseUrl: "https://api.x.ai",
     hint: "xai-...",
     // First model in the list becomes the active model after /cloud.
     // grok-4.20-0309-reasoning is the user's preferred default — it's
