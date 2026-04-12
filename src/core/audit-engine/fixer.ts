@@ -1133,6 +1133,14 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "uni-008-privilege-escalation": r("privilege escalation", "Run with minimum required privileges. Use 0o755 not 0o777. Drop root after binding ports."),
   "uni-009-code-injection": r("code injection", "Never compile/evaluate user input. Use a sandboxed interpreter or safe template engine."),
   "uni-010-client-side-auth": r("client-side auth", "Read authorization from server session or validated JWT — never from request body/query/cookies."),
+  "uni-011-weak-crypto": r("weak crypto", "Replace MD5/SHA1/DES/RC4 with SHA-256+, bcrypt/argon2, AES-GCM, or Ed25519."),
+  "uni-012-ldap-injection": r("LDAP injection", "Use parameterized LDAP queries or escape input with ldap.filter.escape_filter_chars."),
+  "uni-013-session-fixation": r("session fixation", "Regenerate the session ID immediately after successful authentication."),
+  "uni-014-no-session-timeout": r("session no timeout", "Set a reasonable session expiration (1-24h) and use refresh token rotation for long-lived sessions."),
+  "uni-015-symlink-toctou": r("symlink TOCTOU", "Use atomic operations (openat + O_NOFOLLOW) or realpath + prefix validation instead of check-then-use."),
+  "uni-016-external-file-path": r("external file path", "Use an allowlist of permitted filenames or a server-side ID-to-path mapping."),
+  "uni-017-info-exposure": r("info exposure", "Strip sensitive fields before serializing the response."),
+  "uni-018-sensitive-error": r("sensitive error", "Return a generic error in production and log details server-side with a correlation ID."),
 
   // ── Zig ────────────────────────────────────────────────────
   "zig-001-use-after-free": r("use-after-free", "Don't use memory after free — null the pointer or use defer."),
