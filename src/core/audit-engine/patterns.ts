@@ -265,10 +265,24 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     explanation:
       "eval() and exec() execute arbitrary Python code. If the argument contains any user/external input, this is a remote code execution vulnerability.",
     verify_prompt:
-      "Is the argument to eval()/exec() a hardcoded constant or derived " +
-      "entirely from trusted internal sources? If it includes ANY external " +
-      "input (request params, file content, env vars, config), respond CONFIRMED. " +
-      "If it's a constant string or internal-only, respond FALSE_POSITIVE.",
+      "Is the argument to eval()/exec() derived from external/untrusted input? " +
+      "Respond CONFIRMED only if the argument includes user request params, " +
+      "HTTP body, query strings, websocket messages, or database values that " +
+      "originate from users. " +
+      "Respond FALSE_POSITIVE for ALL of the following safe patterns: " +
+      "(1) exec(open('hardcoded/local/path.py').read()) — simulation framework " +
+      "convention (NASA Trick, Matlab, etc.) for including local config scripts; " +
+      "(2) eval() or exec() on a hardcoded string literal; " +
+      "(3) exec() in test harness, conftest.py, or fixture setup; " +
+      "(4) eval() in CLI/REPL tools that intentionally run user expressions " +
+      "in a sandbox (e.g., IPython, Jupyter, debugger); " +
+      "(5) exec(compile(...)) patterns from code-generation or template engines " +
+      "where the source is an internal template, not user input; " +
+      "(6) eval/exec in migration scripts, build scripts, or setup.py; " +
+      "(7) exec() where the file path being opened is a relative hardcoded " +
+      "string constant (not computed from variables or user input). " +
+      "The key question: does an ATTACKER control the string being eval'd/exec'd? " +
+      "If the string comes entirely from files the developer controls, it's safe.",
     cwe: "CWE-95",
     fix_template: "Replace eval() with ast.literal_eval() for data, or remove entirely.",
   },
