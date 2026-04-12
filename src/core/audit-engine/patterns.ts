@@ -1779,7 +1779,23 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     languages: ["swift"],
     regex: /URL\s*\(\s*string:\s*"http:\/\/(?!localhost|127\.0\.0\.1)/g,
     explanation: "Using HTTP instead of HTTPS exposes data to man-in-the-middle attacks. App Transport Security (ATS) blocks this by default on iOS.",
-    verify_prompt: "Is this URL for a local development server or a production endpoint? If localhost/dev, respond FALSE_POSITIVE. If production, respond CONFIRMED.",
+    verify_prompt:
+      "Does this HTTP URL carry real data at runtime in the production app? " +
+      "Respond FALSE_POSITIVE for ALL of these safe cases: " +
+      "(1) Template boilerplate or Xcode-generated scaffold — specifically " +
+      "`.widgetURL(URL(string: \"http://www.apple.com\"))` and similar " +
+      "Apple-provided placeholder URLs in WidgetKit/ActivityKit templates; " +
+      "(2) deep-link URLs for widgetURL/openURL that just open a browser " +
+      "(no credentials, no session data transmitted); " +
+      "(3) URLs inside #Preview, PreviewProvider, or _Previews structs " +
+      "(preview-only code, never shipped at runtime); " +
+      "(4) URLs pointing to well-known HSTS-preload domains (apple.com, " +
+      "google.com, github.com) where the browser forces HTTPS anyway; " +
+      "(5) URLs in test files, #if DEBUG blocks, or sample data constants; " +
+      "(6) URLs in Info.plist or ATS exception entries (a documented exemption). " +
+      "Respond CONFIRMED only if a real network request (URLSession, Alamofire, " +
+      "AsyncHTTPClient) uses this URL to send or receive application data " +
+      "over plaintext HTTP.",
     cwe: "CWE-319",
     fix_template: "Change http:// to https://.",
   },
