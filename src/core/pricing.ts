@@ -26,6 +26,12 @@ const KNOWN_PRICING: Record<string, ModelPricing> = {
   // DeepSeek
   "deepseek-chat": { inputPer1M: 0.27, outputPer1M: 1.1 },
   "deepseek-reasoner": { inputPer1M: 0.55, outputPer1M: 2.19 },
+  // xAI (Grok) — check https://x.ai/api#pricing for up-to-date rates
+  "grok-4": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-4-latest": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-4-fast-reasoning": { inputPer1M: 0.2, outputPer1M: 0.5 },
+  "grok-3": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-3-mini": { inputPer1M: 0.3, outputPer1M: 0.5 },
 };
 
 // Custom pricing from ~/.kcode/pricing.json

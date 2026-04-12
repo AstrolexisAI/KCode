@@ -74,6 +74,15 @@ const PROVIDERS: CloudProvider[] = [
     hint: "tok_...",
     models: "meta-llama/Llama-3.3-70B, Qwen/Qwen2.5-Coder-32B",
   },
+  {
+    id: "xai",
+    name: "xAI (Grok)",
+    envVar: "XAI_API_KEY",
+    settingsKey: "xaiApiKey",
+    baseUrl: "https://api.x.ai/v1",
+    hint: "xai-...",
+    models: "grok-4, grok-4-latest, grok-4-fast-reasoning, grok-3, grok-3-mini",
+  },
 ];
 
 type Stage = "select" | "auth-method" | "input" | "confirm" | "oauth-pending" | "cli-detected";
