@@ -780,9 +780,27 @@ export const JS_PATTERNS: BugPattern[] = [
     explanation:
       "JSON.parse() throws SyntaxError on invalid JSON. Without try/catch, malformed input crashes the process or rejects the promise unhandled.",
     verify_prompt:
-      "Is this JSON.parse() wrapped in a try/catch block? Check the surrounding " +
-      "context (may be in an outer try block). If properly caught, respond FALSE_POSITIVE. " +
-      "If no error handling exists, respond CONFIRMED.",
+      "Does this JSON.parse() have ANY exception handling that absorbs SyntaxError? " +
+      "Respond FALSE_POSITIVE for ALL of these cases: " +
+      "(1) The JSON.parse is inside a try { ... } catch block anywhere in the " +
+      "enclosing function — even if the catch is at the top of the function and the " +
+      "JSON.parse is 50+ lines deep, that catch will still absorb the SyntaxError. " +
+      "Look UP in the file for any `try {` that hasn't been closed yet at the " +
+      "JSON.parse line. " +
+      "(2) The JSON.parse is inside an async function called from a Promise.catch(), " +
+      ".catch(err => ...), or a global unhandledRejection handler. " +
+      "(3) This is a setup/seed/init/CLI script (paths like setup/, scripts/, " +
+      "seed/, migrate/, tools/, bin/) where crash-on-bad-input is the DESIRED " +
+      "behavior — you want the script to fail loudly if a fixture or config is " +
+      "malformed, not silently continue with bad data. " +
+      "(4) The input is a hardcoded constant string or the result of JSON.stringify " +
+      "(round-trip, can never produce invalid JSON). " +
+      "(5) This is in test code (test/, __tests__/, *.test.js, *.spec.js) — test " +
+      "fixtures are developer-controlled. " +
+      "Respond CONFIRMED only if the JSON.parse runs in a server handler, " +
+      "production request path, or long-running process, AND there is NO try/catch " +
+      "anywhere in the enclosing function, AND the input comes from an untrusted " +
+      "source (user request, external API, file uploaded by users).",
     cwe: "CWE-754",
     fix_template: "Wrap in try/catch: try { const obj = JSON.parse(data); } catch (e) { /* handle */ }",
   },
