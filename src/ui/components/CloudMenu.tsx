@@ -81,7 +81,12 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "xaiApiKey",
     baseUrl: "https://api.x.ai/v1",
     hint: "xai-...",
-    models: "grok-4, grok-4-latest, grok-4-fast-reasoning, grok-3, grok-3-mini",
+    // First model in the list becomes the active model after /cloud.
+    // grok-4.20-0309-reasoning is the user's preferred default — it's
+    // the current flagship reasoning model ($2/$6 per 1M tokens, text+image).
+    // Aliases (grok-4.20, grok-4.20-reasoning, grok-4.20-latest) all resolve
+    // to the same model, so any of them work in /model commands.
+    models: "grok-4.20-0309-reasoning, grok-code-fast-1, grok-4-fast-reasoning, grok-4, grok-3-mini",
   },
 ];
 
