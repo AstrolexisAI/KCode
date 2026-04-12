@@ -144,6 +144,9 @@ export function resolveApiKey(
   if (urlLower.includes("together.xyz")) {
     return process.env.TOGETHER_API_KEY ?? config.apiKey;
   }
+  if (lower.startsWith("grok") || urlLower.includes("x.ai")) {
+    return process.env.XAI_API_KEY ?? config.apiKey;
+  }
 
   return config.apiKey;
 }
