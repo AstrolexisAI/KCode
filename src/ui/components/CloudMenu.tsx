@@ -313,11 +313,33 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         } else if (key.backspace || key.delete) {
           setApiKey((prev) => prev.slice(0, -1));
         } else if (input && !key.ctrl && !key.meta) {
-          setApiKey((prev) => prev + input);
+          // Strip bracketed-paste markers that some terminals inject
+          // around pasted content (\x1b[200~ ... \x1b[201~). Without
+          // this, pasted API keys end up as "[200~xai-KEY[201~" with
+          // the markers embedded literally in the string.
+          //
+          // Also strip any other ESC-sequence residue and non-printable
+          // control characters, since API keys are plain ASCII.
+          const cleaned = input
+            .replace(/\u001b\[200~/g, "")
+            .replace(/\u001b\[201~/g, "")
+            .replace(/\[200~/g, "")
+            .replace(/\[201~/g, "")
+            // Drop any remaining control chars except tab (just in case)
+            .replace(/[\u0000-\u0008\u000a-\u001f\u007f]/g, "");
+          if (cleaned) {
+            setApiKey((prev) => prev + cleaned);
+          }
         }
       } else if (stage === "confirm") {
         if (input.toLowerCase() === "y" || key.return) {
-          onDone({ provider: selectedProvider!, apiKey: apiKey.trim() });
+          // Final safety strip in case any bracketed-paste marker
+          // survived the input stage (shouldn't happen, but cheap).
+          const finalKey = apiKey
+            .replace(/\u001b\[20[01]~/g, "")
+            .replace(/\[20[01]~/g, "")
+            .trim();
+          onDone({ provider: selectedProvider!, apiKey: finalKey });
         } else if (input.toLowerCase() === "n" || key.escape) {
           setStage("input");
         }
