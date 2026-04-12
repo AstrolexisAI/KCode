@@ -4,7 +4,7 @@
 // and executes directly — no tokens spent, instant response.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 function run(cmd: string, cwd: string, timeout = 30_000): { output: string; code: number } {
@@ -291,7 +291,11 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     }
   }
 
-  // Python (FastAPI, Flask, Django)
+  // Python (FastAPI, Flask, Django). Only return a runnable if a real
+  // framework is detected — generic pyproject/requirements without a
+  // known server shouldn't fall back to `python -m http.server` since
+  // that just serves static files from the directory and is never what
+  // a user wanted for a backend project.
   if (existsSync(join(cwd, "pyproject.toml")) || existsSync(join(cwd, "requirements.txt"))) {
     const hasFastapi = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("fastapi");
     const hasFlask = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("flask");
@@ -300,7 +304,8 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     if (hasDjango) return { name: "Django", command: `python manage.py runserver 0.0.0.0:${port}`, port, needsInstall: false };
     if (hasFastapi) return { name: "FastAPI", command: `uvicorn main:app --host 0.0.0.0 --port ${port} --reload`, port, needsInstall: false };
     if (hasFlask) return { name: "Flask", command: `flask run --host 0.0.0.0 --port ${port}`, port, needsInstall: false };
-    return { name: "Python", command: `python -m http.server ${port}`, port, needsInstall: false };
+    // No known Python web framework — don't fall through to http.server.
+    // Let the LLM figure out what to run instead.
   }
 
   // Go
@@ -323,8 +328,25 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     return { name: "Docker Compose", command: "docker compose up", port: 0, needsInstall: false };
   }
 
-  // Static HTML
-  if (existsSync(join(cwd, "index.html"))) {
+  // Static HTML — only serve with python http.server if the directory
+  // is CLEARLY a static site (index.html at root, no package.json, no
+  // other project markers). This prevents the case where a stale
+  // `last-project` pointing at a directory with a residual index.html
+  // ends up running `python -m http.server` for a user who asked
+  // about a completely different Next.js/Vite/React project.
+  //
+  // We already filtered out package.json/go.mod/Cargo.toml/pyproject
+  // above, so reaching this branch means none of those exist. Still,
+  // require a typical static-site structure before committing to the
+  // python fallback.
+  if (
+    existsSync(join(cwd, "index.html")) &&
+    !existsSync(join(cwd, "package.json")) &&
+    (existsSync(join(cwd, "styles")) ||
+      existsSync(join(cwd, "css")) ||
+      existsSync(join(cwd, "assets")) ||
+      existsSync(join(cwd, "static")))
+  ) {
     return { name: "Static", command: `python3 -m http.server ${port}`, port, needsInstall: false };
   }
 
@@ -354,6 +376,21 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
     // Wait a moment for the server to start
     const { execSync: es } = require("child_process");
     try { es("sleep 2", { timeout: 5000 }); } catch {}
+
+    // Update last-project so follow-up commands (re-run on a new port,
+    // stop, etc.) target the same project without re-resolving the cwd.
+    // This also fixes the bug where a stale last-project pointing to a
+    // deleted directory would cause the next run to fall through to
+    // `python -m http.server`.
+    try {
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      if (home) {
+        const lastProjectFile = join(home, ".kcode", "last-project");
+        writeFileSync(lastProjectFile, cwd);
+      }
+    } catch {
+      // Non-fatal: the server is started; only last-project write failed.
+    }
 
     const portInfo = srv.port > 0 ? `\n  🌐 http://localhost:${srv.port}` : "";
     return {
@@ -491,9 +528,30 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Run / Serve / Start (dev server) ──
-  const runMatch = lower.match(/^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
-  if (runMatch) {
-    const requestedPort = runMatch[1] ? parseInt(runMatch[1], 10) : undefined;
+  //
+  // Matches two shapes:
+  //   1. Classic start command: "levantalo", "run it", "start", "inicialo en puerto 15965"
+  //   2. Port override / re-launch: "usa el puerto 15965", "cambia al puerto 15965",
+  //      "el servidor no levantó, usa el puerto 15965" — these are common when
+  //      the first start attempt failed and the user wants to retry on a new port.
+  //
+  // Shape 1 is anchored to the start of the message to avoid matching
+  // random occurrences of "start" in unrelated text. Shape 2 is
+  // looser — it matches anywhere in the message but REQUIRES a port
+  // number to be present, so we only trigger a re-launch when the
+  // user is unambiguously asking for a specific port.
+  const startVerbRex = /^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i;
+  const portOverrideRex = /\b(?:usa(?:lo|la)?|use|cambia(?:lo|la)?|switch|change|move|mu[eé]ve(?:lo|la)?|re?int[eé]ntalo|retry|retri[ée]ntalo|el\s+servidor\s+no\s+levant[oó])\b[^.!?]*?\b(?:(?:el\s+)?puerto|port)\s+(\d+)/i;
+
+  const runMatch = lower.match(startVerbRex);
+  const overrideMatch = !runMatch ? lower.match(portOverrideRex) : null;
+
+  if (runMatch || overrideMatch) {
+    const requestedPort = runMatch?.[1]
+      ? parseInt(runMatch[1], 10)
+      : overrideMatch?.[1]
+        ? parseInt(overrideMatch[1], 10)
+        : undefined;
 
     // Try cwd first, then last created project (saved to ~/.kcode/last-project)
     let srv = detectDevServer(cwd, requestedPort);
@@ -503,6 +561,10 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
       const lastProjectFile = join(home, ".kcode", "last-project");
       if (existsSync(lastProjectFile)) {
         const lastProject = readFileSync(lastProjectFile, "utf-8").trim();
+        // Require last-project to actually be a real dev project,
+        // not a stale pointer to a deleted directory or a static
+        // HTML scratch folder. detectDevServer now returns null for
+        // directories without a real dev framework, so this is safe.
         if (lastProject && existsSync(lastProject)) {
           srv = detectDevServer(lastProject, requestedPort);
           if (srv) serveCwd = lastProject;
@@ -513,7 +575,13 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
     if (srv) {
       return startDevServer(srv, serveCwd);
     }
-    return { handled: true, output: "  No project detected. Need package.json, Cargo.toml, go.mod, or similar." };
+    return {
+      handled: true,
+      output:
+        "  No dev server project detected in the current directory. " +
+        "cd into the project directory and retry, or open the project " +
+        "with `kcode /path/to/project`.",
+    };
   }
 
   // Not a Level 1 command
