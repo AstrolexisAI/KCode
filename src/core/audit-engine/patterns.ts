@@ -3786,6 +3786,159 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
     cwe: "CWE-94",
     fix_template: "Never compile user input into executable code. Use a sandboxed interpreter or a safe template engine.",
   },
+  // CWE-327: Use of Broken/Risky Cryptographic Algorithm
+  {
+    id: "uni-011-weak-crypto",
+    title: "Use of broken cryptographic algorithm (MD5, SHA1, DES, RC4, MD4)",
+    severity: "high",
+    languages: ["python", "javascript", "typescript", "go", "java", "ruby", "php", "c", "cpp", "rust", "csharp"],
+    regex: /\b(?:MD5|md5|sha1|SHA1|SHA-1|DES|RC4|rc4|MD4|md4|hashlib\.md5|hashlib\.sha1|crypto\.createHash\s*\(\s*["'](?:md5|sha1)|MessageDigest\.getInstance\s*\(\s*["'](?:MD5|SHA-?1)|CryptoJS\.(?:MD5|SHA1))\b/g,
+    explanation:
+      "MD5, SHA1, DES, RC4, and MD4 are cryptographically broken. They should NEVER be used for password hashing, digital signatures, HMAC keys, or any security-sensitive operation. Use SHA-256+, bcrypt/argon2 for passwords, AES-GCM for encryption.",
+    verify_prompt:
+      "Is this broken algorithm used for a SECURITY-sensitive purpose? " +
+      "Respond FALSE_POSITIVE if: " +
+      "(1) used for non-security hashing (cache key, ETag, file checksum, bloom filter), " +
+      "(2) used for compatibility with a legacy system that requires MD5/SHA1 (document it), " +
+      "(3) used for integrity verification against a trusted value (not attacker-controlled), " +
+      "(4) this is in test code or a crypto library's own implementation. " +
+      "Respond CONFIRMED if used for passwords, signatures, MAC, key derivation, or TLS.",
+    cwe: "CWE-327",
+    fix_template: "Replace with SHA-256+ for hashing, bcrypt/argon2 for passwords, AES-GCM for encryption, Ed25519 for signatures.",
+  },
+  // CWE-90: LDAP Injection
+  {
+    id: "uni-012-ldap-injection",
+    title: "LDAP query built via string concatenation with user input",
+    severity: "high",
+    languages: ["python", "javascript", "typescript", "java", "csharp", "php"],
+    regex: /(?:ldap.*search.*\(\s*[^,]*\+|ldap_search\s*\([^)]*\$|DirectorySearcher.*Filter\s*=\s*[^"]*\+|LdapContext.*search\s*\([^)]*\+|ldap3.*search\s*\(\s*search_filter\s*=\s*f["'])/g,
+    explanation:
+      "LDAP queries built via string concatenation with user input allow LDAP injection. An attacker can modify the filter to bypass authentication or extract unauthorized records.",
+    verify_prompt:
+      "Does user input flow into the LDAP filter? " +
+      "Respond FALSE_POSITIVE if the filter uses parameterized substitution, " +
+      "LDAP-escape functions (ldap.filter.escape_filter_chars), or an allowlist. " +
+      "Respond CONFIRMED if raw user input is concatenated into the filter string.",
+    cwe: "CWE-90",
+    fix_template: "Use parameterized LDAP queries or escape user input with ldap.filter.escape_filter_chars / LdapEncoder.filterEncode.",
+  },
+  // CWE-384: Session Fixation
+  {
+    id: "uni-013-session-fixation",
+    title: "Session ID not regenerated after authentication",
+    severity: "high",
+    languages: ["python", "javascript", "typescript", "java", "php", "ruby"],
+    regex: /(?:def\s+login|function\s+login|public.*login|app\.post\s*\(\s*["'][^"']*login)/gi,
+    explanation:
+      "After successful authentication, the session ID must be regenerated. Otherwise, an attacker who fixed the session ID before login can hijack the authenticated session.",
+    verify_prompt:
+      "Does this login handler regenerate the session ID after successful auth? " +
+      "Look for: session.regenerate(), req.session.regenerate(), " +
+      "HttpServletRequest.changeSessionId(), session_regenerate_id(true). " +
+      "Respond FALSE_POSITIVE if session regeneration is present within 20 lines of the login success. " +
+      "Respond CONFIRMED only if the function clearly authenticates and returns without regenerating.",
+    cwe: "CWE-384",
+    fix_template: "Call session regeneration immediately after successful authentication: req.session.regenerate() (Express), request.session.cycle_key() (Django), session_regenerate_id(true) (PHP).",
+  },
+  // CWE-613: Insufficient Session Expiration
+  {
+    id: "uni-014-no-session-timeout",
+    title: "Session cookie/token without expiration or with excessive lifetime",
+    severity: "medium",
+    languages: ["python", "javascript", "typescript", "java", "php", "ruby"],
+    regex: /(?:session\.permanent\s*=\s*True|maxAge\s*:\s*(?:null|undefined|Infinity|[1-9][0-9]{9,})|expires\s*:\s*null|session_config.*expire.*0|cookie.*maxAge.*86400000\s*\*\s*[3-9][0-9]+)/g,
+    explanation:
+      "Sessions without expiration (or with >30 day lifetimes) increase the blast radius of a leaked token. Stolen session IDs remain valid indefinitely.",
+    verify_prompt:
+      "Is this session/cookie lacking an expiration OR set to an excessively long lifetime (>30 days)? " +
+      "Respond FALSE_POSITIVE if: (1) it's a 'remember me' feature with rotating refresh tokens, " +
+      "(2) the expiration is managed server-side by a separate mechanism, " +
+      "(3) this is a configuration default that gets overridden elsewhere. " +
+      "Respond CONFIRMED if sessions persist indefinitely.",
+    cwe: "CWE-613",
+    fix_template: "Set session expiration to 1-24 hours for sensitive apps. Use refresh token rotation for long-lived sessions.",
+  },
+  // CWE-59: Symlink TOCTOU (link following)
+  {
+    id: "uni-015-symlink-toctou",
+    title: "File operation following symlinks without resolution check (TOCTOU)",
+    severity: "high",
+    languages: ["python", "javascript", "typescript", "go", "c", "cpp", "ruby", "java"],
+    regex: /(?:os\.stat\s*\([^)]*\)[\s\S]{0,100}?open\s*\(|if\s+os\.path\.(?:exists|isfile)[\s\S]{0,100}?open\s*\(|access\s*\([^)]*F_OK\s*\)[\s\S]{0,100}?open\s*\(|fs\.existsSync[\s\S]{0,100}?fs\.(?:read|write)FileSync)/g,
+    explanation:
+      "Check-then-use patterns on files are vulnerable to TOCTOU attacks via symlinks. " +
+      "Between the check (exists/stat/access) and the use (open/read/write), an attacker " +
+      "can replace the file with a symlink pointing to a sensitive location.",
+    verify_prompt:
+      "Is this a classic check-then-use pattern on an attacker-controllable path? " +
+      "Respond FALSE_POSITIVE if: (1) the path is a hardcoded trusted location, " +
+      "(2) the check uses O_NOFOLLOW or fstatat with AT_SYMLINK_NOFOLLOW, " +
+      "(3) realpath() is called and validated before the file operation. " +
+      "Respond CONFIRMED if an attacker can swap the file between check and use.",
+    cwe: "CWE-59",
+    fix_template: "Use atomic operations (openat with O_NOFOLLOW, fstat on the open fd, realpath + prefix check).",
+  },
+  // CWE-73: External Control of File Name or Path
+  {
+    id: "uni-016-external-file-path",
+    title: "File path directly controlled by user input",
+    severity: "high",
+    languages: ["python", "javascript", "typescript", "go", "java", "ruby", "php"],
+    regex: /(?:open\s*\(\s*(?:request\.|req\.|params\[|args\.|input|sys\.argv)|fs\.(?:read|write|append)File\s*\(\s*(?:req\.|request\.|params\[)|File\s*\(\s*(?:request\.|req\.|params\[)|fopen\s*\(\s*\$_(?:GET|POST|REQUEST))/g,
+    explanation:
+      "Passing user input directly as a file path gives attackers control over which file " +
+      "is read or written. Even without path traversal, an attacker can access any file the " +
+      "process can reach (config, logs, keys).",
+    verify_prompt:
+      "Does the file path come directly from user input without allowlist validation? " +
+      "Respond FALSE_POSITIVE if: (1) the path is validated against a fixed allowlist, " +
+      "(2) it's joined with a fixed directory and os.path.realpath verifies containment, " +
+      "(3) the user only supplies an ID/slug that's used to look up the real path server-side. " +
+      "Respond CONFIRMED if raw user input reaches a file operation.",
+    cwe: "CWE-73",
+    fix_template: "Use an allowlist of permitted filenames, or look up the real path from a user-supplied ID via a trusted mapping.",
+  },
+  // CWE-200: Information Exposure (generic)
+  {
+    id: "uni-017-info-exposure",
+    title: "Debug info / internal state exposed in response",
+    severity: "medium",
+    languages: ["python", "javascript", "typescript", "go", "java", "ruby", "php"],
+    regex: /(?:return\s+(?:jsonify|Response|res\.json)\s*\(\s*\{[^}]*(?:password|token|secret|api_key|hash|salt|private_key)|res\.send\s*\(\s*(?:err|error|exception|traceback)|DEBUG\s*=\s*True.*return)/g,
+    explanation:
+      "Returning sensitive internal state (passwords, tokens, stack traces, debug info) in HTTP " +
+      "responses leaks information to attackers. Error responses especially tend to include " +
+      "database errors or internal paths that aid reconnaissance.",
+    verify_prompt:
+      "Does this response include sensitive data (credentials, internal paths, stack traces, DB errors)? " +
+      "Respond FALSE_POSITIVE if: (1) the response is a sanitized error message with no internal details, " +
+      "(2) this is a development-only endpoint behind auth, " +
+      "(3) the 'password' field is actually a password confirmation input, not an output. " +
+      "Respond CONFIRMED if sensitive data reaches the client.",
+    cwe: "CWE-200",
+    fix_template: "Strip sensitive fields before serializing. Use a generic error message in production and log details server-side.",
+  },
+  // CWE-209: Error Messages Containing Sensitive Information
+  {
+    id: "uni-018-sensitive-error",
+    title: "Raw exception / stack trace returned to client",
+    severity: "medium",
+    languages: ["python", "javascript", "typescript", "java", "csharp", "php", "ruby"],
+    regex: /(?:return\s+(?:str\s*\(\s*)?e(?:xception)?\s*\)|res\.(?:send|json|status\s*\(\s*500\s*\)\.send)\s*\(\s*(?:err|error|e\.stack|e\.message)|printStackTrace\s*\(\s*(?:response|resp|writer)|echo\s+\$(?:e|exception)|raise\s+HTTPException\s*\([^)]*str\s*\(\s*e)/g,
+    explanation:
+      "Returning exception details (stack traces, error messages) to the client leaks internal " +
+      "implementation details: file paths, function names, dependency versions, SQL queries, " +
+      "environment config. Attackers use this for reconnaissance.",
+    verify_prompt:
+      "Is a raw exception/stack trace sent back to the client? " +
+      "Respond FALSE_POSITIVE if: (1) only in development mode (check for DEBUG flag), " +
+      "(2) the error is sanitized first (e.g., only message, no stack), " +
+      "(3) it's an internal admin endpoint that needs detailed errors. " +
+      "Respond CONFIRMED if unconditional raw exceptions reach the client in production paths.",
+    cwe: "CWE-209",
+    fix_template: "In production, return a generic 'Internal server error' and log the exception server-side with a correlation ID the user can reference.",
+  },
   // CWE-863: Incorrect Authorization
   {
     id: "uni-010-client-side-auth",
