@@ -16,6 +16,12 @@ interface KodiProps {
   mode: string;
   toolUseCount: number;
   tokenCount: number;
+  /**
+   * Running USD cost of the current session based on the active
+   * model's pricing. 0 for local models (no billing) or unknown
+   * models with no pricing entry.
+   */
+  sessionCostUsd?: number;
   activeToolName: string | null;
   isThinking: boolean;
   runningAgents: number;
@@ -173,6 +179,7 @@ export default function KodiCompanion({
   mode,
   toolUseCount,
   tokenCount,
+  sessionCostUsd,
   activeToolName,
   isThinking,
   runningAgents,
@@ -410,6 +417,16 @@ export default function KodiCompanion({
               <Text color={theme.dimmed}>tok:{tokenCount.toLocaleString()}</Text>
               <Text color={theme.dimmed}>•</Text>
               <Text color={theme.dimmed}>tools:{toolUseCount}</Text>
+            </>
+          )}
+          {sessionCostUsd != null && sessionCostUsd > 0 && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text color={theme.warning}>
+                {sessionCostUsd < 0.01
+                  ? `$${sessionCostUsd.toFixed(4)}`
+                  : `$${sessionCostUsd.toFixed(2)}`}
+              </Text>
             </>
           )}
           {runningAgents > 0 && (
