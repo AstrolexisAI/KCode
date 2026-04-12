@@ -2,7 +2,7 @@
 // Reads file contents with line numbers, offset, and limit support
 // Supports images (PNG, JPG, GIF, WEBP), PDFs, Office documents, and Jupyter notebooks
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative, resolve } from "node:path";
@@ -424,8 +424,11 @@ function readOfficeDocument(filePath: string): ToolResult {
     const isSpreadsheet = [".xlsx", ".xls", ".ods"].includes(ext);
     const convertFormat = isSpreadsheet ? "csv:Text - txt - csv (StarCalc)" : "txt:Text";
 
-    execSync(
-      `libreoffice --headless --convert-to "${convertFormat}" --outdir "${tmpDir}" "${filePath}"`,
+    // Use execFileSync with args as an array so filePath can't break
+    // out via shell metacharacters — never invoke a shell with user input.
+    execFileSync(
+      "libreoffice",
+      ["--headless", "--convert-to", convertFormat, "--outdir", tmpDir, filePath],
       { timeout: 30000, stdio: "pipe" },
     );
 
