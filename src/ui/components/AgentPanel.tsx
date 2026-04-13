@@ -57,16 +57,11 @@ export default function AgentPanel({ maxVisible = 10 }: AgentPanelProps) {
 
   useEffect(() => {
     const pool = getAgentPool();
-    const unsubscribe = pool.onEvent((_event: PoolEvent) => {
-      setTick((t) => t + 1);
-    });
 
-    // Tick every second to keep elapsed times fresh — BUT only while
-    // there are actually running agents. Idle pools (all agents in
-    // done/error/cancelled state) don't need a ticker, so we skip
-    // the interval entirely when nothing's live. When a new agent
-    // spawns, the event above re-mounts the interval on the next
-    // render via the dependency check below.
+    // Single onEvent subscription does both jobs: re-render on event,
+    // and ensure the 1s ticker is running only while there's live
+    // work. Separate subscriptions would fire the same callbacks
+    // twice per event and waste a bit of CPU on every spawn/tool_end.
     let timer: ReturnType<typeof setInterval> | null = null;
     const ensureTimer = () => {
       const status = pool.getStatus();
@@ -80,16 +75,18 @@ export default function AgentPanel({ maxVisible = 10 }: AgentPanelProps) {
         timer = null;
       }
     };
-    ensureTimer();
 
-    // Re-evaluate the timer on every pool event so it starts/stops
-    // with live work. We piggy-back on the existing onEvent subscription
-    // rather than adding a second one.
-    const unsubscribeTimer = pool.onEvent(() => ensureTimer());
+    const unsubscribe = pool.onEvent((_event: PoolEvent) => {
+      setTick((t) => t + 1);
+      ensureTimer();
+    });
+
+    // Initial check — if the pool already has live agents when the
+    // panel mounts (e.g., after a /stop + remount), start the ticker.
+    ensureTimer();
 
     return () => {
       unsubscribe();
-      unsubscribeTimer();
       if (timer) clearInterval(timer);
     };
   }, []);
