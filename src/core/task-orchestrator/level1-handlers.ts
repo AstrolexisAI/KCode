@@ -3,7 +3,7 @@
 // These commands are 100% deterministic. The machine detects what to do
 // and executes directly — no tokens spent, instant response.
 
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -417,7 +417,6 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
 /** Check if a binary is on PATH via `command -v`. Synchronous. */
 function tryWhich(bin: string): boolean {
   try {
-    const { execSync } = require("node:child_process");
     execSync(`command -v ${bin}`, { timeout: 1000, stdio: "ignore" });
     return true;
   } catch {
@@ -436,7 +435,6 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
 
   // Step 2: Start the dev server in background
   try {
-    const { spawn } = require("child_process");
     const child = spawn("sh", ["-c", srv.command], {
       cwd,
       detached: true,
@@ -445,9 +443,15 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
     });
     child.unref();
 
-    // Wait a moment for the server to start
-    const { execSync: es } = require("child_process");
-    try { es("sleep 2", { timeout: 5000 }); } catch {}
+    // Wait a moment for the server to start. Use the top-level
+    // execSync import — this file used to have three duplicated
+    // require("child_process") calls for the same module, cleaned
+    // up here alongside the L2 finding.
+    try {
+      execSync("sleep 2", { timeout: 5000 });
+    } catch {
+      /* timeout is fine — we just needed a delay */
+    }
 
     // Update last-project so follow-up commands (re-run on a new port,
     // stop, etc.) target the same project without re-resolving the cwd.

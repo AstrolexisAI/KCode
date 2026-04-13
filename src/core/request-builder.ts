@@ -250,17 +250,44 @@ export async function buildRequestForModel(
   const includeTools = opts?.includeTools ?? true;
   const effort = (opts?.effortLevel ?? config.effortLevel ?? "medium") as string;
 
-  // Agent pool injection: if there are live agents in the pool, append
-  // a short "Active Agent Pool" fragment to the system prompt so the
-  // model can reference agents by name. No-op when the pool is empty,
-  // so this is free for sessions that never spawn agents.
+  // Agent pool injection: conditionally append a short "Active Agent
+  // Pool" fragment to the system prompt so the model can reference
+  // agents by name.
+  //
+  // Caching note (fixes M1 from the branch self-audit):
+  //   Anthropic (and some OpenAI-compatible) prompt caching keys on
+  //   the system prompt prefix. Appending the pool fragment changes
+  //   the suffix on every turn while agents are running, which
+  //   invalidates the cache and drives up cost/latency. To minimize
+  //   cache misses, we ONLY inject the fragment when either:
+  //     1. The last user message explicitly mentions agents, OR
+  //     2. An agent was spawned within the last 2 minutes (recent
+  //        activity window where the user is likely iterating).
+  //   Otherwise the fragment is skipped and the system prompt stays
+  //   identical to a no-agent turn — cache hit preserved.
   try {
     const { getAgentPool } = await import("./agents/pool.js");
     const { buildAgentSystemPromptFragment } = await import("./agents/narrative.js");
     const pool = getAgentPool();
-    const fragment = buildAgentSystemPromptFragment(pool.getStatus());
-    if (fragment) {
-      systemPrompt = systemPrompt + "\n\n" + fragment;
+    const status = pool.getStatus();
+    if (status.active.length > 0 || status.queued.length > 0) {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
+      const lastText =
+        lastUser && typeof lastUser.content === "string" ? lastUser.content : "";
+      const mentionsAgents = /\b(agent|agente|worker|bot|grupo|group|team|swarm)\b/i.test(
+        lastText,
+      );
+      const RECENT_SPAWN_WINDOW_MS = 2 * 60 * 1000;
+      const now = Date.now();
+      const hasRecentSpawn = status.active.some(
+        (a) => now - a.startedAt < RECENT_SPAWN_WINDOW_MS,
+      );
+      if (mentionsAgents || hasRecentSpawn) {
+        const fragment = buildAgentSystemPromptFragment(status);
+        if (fragment) {
+          systemPrompt = systemPrompt + "\n\n" + fragment;
+        }
+      }
     }
   } catch {
     // Agent pool module failed to load — continue without the fragment.
