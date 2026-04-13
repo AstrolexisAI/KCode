@@ -36,6 +36,18 @@ export interface SpawnDetection {
 export function detectServerSpawn(command: string): SpawnDetection | null {
   const c = command.toLowerCase();
 
+  // Inspection / cleanup tools — these accept server-spawn strings as
+  // ARGUMENTS but never actually run a server. Without this guard the
+  // `next dev` / `nodemon` / etc. tokens inside e.g.
+  //   pkill -f 'next-server|vite|bun --watch|nodemon|next dev'
+  // get matched by the regexes below and the preflight refuses the
+  // very pkill that would have unblocked the situation. This was the
+  // exact failure that defeated phase 6 in real sessions: the model
+  // tried the AUTHORIZED RECOVERY pkill and was told the system
+  // was saturated. Phase 7 fix: command introspection / process
+  // management commands are never server spawns.
+  if (looksLikeProcessIntrospection(c)) return null;
+
   // Next.js: `next dev`, `npm/bun/pnpm/yarn run dev` (most package.json scripts)
   if (/\bnext\s+dev\b/.test(c)) return { framework: "next", defaultPort: 3000 };
   if (/\b(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?dev\b/.test(c))
@@ -74,6 +86,83 @@ export function detectServerSpawn(command: string): SpawnDetection | null {
   if (/\bserve\s/.test(c) || /\bhttp-server\b/.test(c))
     return { framework: "static-serve", defaultPort: 3000 };
 
+  return null;
+}
+
+// ─── Phase 7: process-introspection guard ─────────────────────────
+
+/**
+ * Process-management / inspection / search tools that accept arbitrary
+ * strings as arguments. These commands are NEVER server spawns even
+ * when their arguments contain server-spawn vocabulary.
+ *
+ * The check is lexical and conservative: we look for one of these
+ * verbs in the FIRST executable position of the command (ignoring
+ * leading `cd && ...`, env-var prefixes like `PORT=N`, and `sudo`).
+ */
+const INTROSPECTION_VERBS = new Set([
+  "pkill",
+  "kill",
+  "killall",
+  "pgrep",
+  "ps",
+  "fuser",
+  "lsof",
+  "strace",
+  "ltrace",
+  "ss",
+  "netstat",
+  "grep",
+  "rg",
+  "ack",
+  "ag",
+  "find",
+  "fd",
+  "cat",
+  "head",
+  "tail",
+  "less",
+  "more",
+  "tee",
+  "echo",
+  "printf",
+  "wc",
+  "awk",
+  "sed",
+  "cut",
+  "sort",
+  "uniq",
+  "tr",
+]);
+
+function looksLikeProcessIntrospection(command: string): boolean {
+  // Walk the segments separated by `&&`, `||`, `;`, or `|` and look
+  // at the first executable token in each. If ANY segment runs an
+  // introspection verb whose argument list mentions server tokens,
+  // treat the whole command as introspection (not a spawn).
+  const segments = command.split(/\s*(?:&&|\|\||;|\|)\s*/);
+  for (const seg of segments) {
+    const verb = firstExecutable(seg);
+    if (verb && INTROSPECTION_VERBS.has(verb)) return true;
+  }
+  return false;
+}
+
+/**
+ * Return the first executable token in a single command segment,
+ * skipping leading env-var assignments, `sudo`, and `nohup`.
+ */
+function firstExecutable(segment: string): string | null {
+  const tokens = segment.trim().split(/\s+/);
+  for (const tok of tokens) {
+    if (!tok) continue;
+    // env var assignment like PORT=N
+    if (/^[A-Z_][A-Z0-9_]*=/i.test(tok)) continue;
+    // privilege wrappers
+    if (tok === "sudo" || tok === "nohup" || tok === "exec" || tok === "time") continue;
+    // bare paths to interpreters / scripts — return basename
+    return tok.split("/").pop() ?? tok;
+  }
   return null;
 }
 

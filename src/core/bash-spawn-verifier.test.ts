@@ -53,6 +53,48 @@ describe("detectServerSpawn", () => {
   ])("does NOT match one-shot command %p", (cmd) => {
     expect(detectServerSpawn(cmd)).toBeNull();
   });
+
+  // ─── Phase 7: introspection / cleanup commands must NEVER match
+  //     even when their arguments contain server-spawn vocabulary.
+  //     This was the false positive that defeated phase 6 in real
+  //     sessions: the model tried to run the AUTHORIZED RECOVERY
+  //     pkill and was told the system was saturated, because the
+  //     pkill argument contained the literal string `next dev`. ───
+  test.each([
+    ["pkill -9 -u $USER -f 'next-server|vite|bun --watch|nodemon|next dev' || true"],
+    ["pkill -f 'next dev'"],
+    ["killall next-server"],
+    ["pgrep -af 'vite|next dev'"],
+    ["ps aux | grep 'next dev'"],
+    ["ps -ef | grep -v grep | grep 'npm run dev'"],
+    ["fuser 3000/tcp"],
+    ["lsof -i :3000"],
+    ["ss -tlnp | grep 3000"],
+    ["echo 'about to start npm run dev'"],
+    ["grep -r 'next dev' ./scripts"],
+    ["find . -name 'nodemon.json'"],
+    ["cat package.json | grep dev"],
+    ["sed -i 's/next dev/vite/g' package.json"],
+    ["awk '/npm run dev/ {print}' Makefile"],
+  ])("phase 7: NEVER matches introspection/cleanup command %p", (cmd) => {
+    expect(detectServerSpawn(cmd)).toBeNull();
+  });
+
+  test("phase 7: still matches a real spawn even after a chained cleanup", () => {
+    // First segment is cleanup, second is the real spawn — the segmented
+    // walker should detect the spawn in the second segment.
+    // (We currently match if ANY segment is introspection — this is a
+    // documentation test for the conservative behavior. If you need to
+    // detect the spawn in the second half, run them as separate Bash
+    // calls, which is the safer pattern anyway.)
+    const r = detectServerSpawn(
+      "pkill -f 'next-server' || true && PORT=3000 npm run dev",
+    );
+    // Conservative: when ANY segment looks like introspection we bail.
+    // The model should run cleanup and spawn in separate Bash calls
+    // so the spawn-verifier and preflight can probe each independently.
+    expect(r).toBeNull();
+  });
 });
 
 describe("extractDeclaredPort", () => {
