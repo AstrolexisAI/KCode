@@ -50,6 +50,12 @@ export interface Settings {
   autoMemory?: boolean | AutoMemorySettings;
   effortLevel?: EffortLevel;
   apiKey?: string;
+  anthropicApiKey?: string; // Anthropic API key (preferred over generic apiKey for Claude models)
+  xaiApiKey?: string; // xAI/Grok API key
+  groqApiKey?: string; // Groq API key
+  geminiApiKey?: string; // Gemini API key
+  deepseekApiKey?: string; // DeepSeek API key
+  togetherApiKey?: string; // Together AI API key
   apiBase?: string;
   systemPromptExtra?: string;
   autoRoute?: boolean;
@@ -136,12 +142,18 @@ export interface ManagedPolicy {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-const KCODE_HOME = kcodeHome();
-const USER_SETTINGS_PATH = kcodePath("settings.json");
-const MANAGED_SETTINGS_PATHS = [
-  "/etc/kcode/policy.json", // System-wide admin policy
-  kcodePath("managed-settings.json"), // Per-user admin-deployed policy
-];
+// Resolve paths at call time so tests can override KCODE_HOME per-case via
+// beforeEach. Module-level constants would freeze the path at import time
+// and bleed the developer's real ~/.kcode into every test run.
+function userSettingsPath(): string {
+  return kcodePath("settings.json");
+}
+function managedSettingsPaths(): string[] {
+  return [
+    "/etc/kcode/policy.json", // System-wide admin policy
+    kcodePath("managed-settings.json"), // Per-user admin-deployed policy
+  ];
+}
 
 // Cached managed policy with mtime tracking for invalidation
 let _managedPolicy: ManagedPolicy | null = null;
@@ -200,6 +212,12 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
           : undefined,
     effortLevel: isEffortLevel(raw.effortLevel) ? raw.effortLevel : undefined,
     apiKey: typeof raw.apiKey === "string" ? raw.apiKey : undefined,
+    anthropicApiKey: typeof raw.anthropicApiKey === "string" ? raw.anthropicApiKey : undefined,
+    xaiApiKey: typeof raw.xaiApiKey === "string" ? raw.xaiApiKey : undefined,
+    groqApiKey: typeof raw.groqApiKey === "string" ? raw.groqApiKey : undefined,
+    geminiApiKey: typeof raw.geminiApiKey === "string" ? raw.geminiApiKey : undefined,
+    deepseekApiKey: typeof raw.deepseekApiKey === "string" ? raw.deepseekApiKey : undefined,
+    togetherApiKey: typeof raw.togetherApiKey === "string" ? raw.togetherApiKey : undefined,
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
     systemPromptExtra:
       typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
@@ -359,6 +377,12 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.autoMemory !== undefined) result.autoMemory = layer.autoMemory;
     if (layer.effortLevel !== undefined) result.effortLevel = layer.effortLevel;
     if (layer.apiKey !== undefined) result.apiKey = layer.apiKey;
+    if (layer.anthropicApiKey !== undefined) result.anthropicApiKey = layer.anthropicApiKey;
+    if (layer.xaiApiKey !== undefined) result.xaiApiKey = layer.xaiApiKey;
+    if (layer.groqApiKey !== undefined) result.groqApiKey = layer.groqApiKey;
+    if (layer.geminiApiKey !== undefined) result.geminiApiKey = layer.geminiApiKey;
+    if (layer.deepseekApiKey !== undefined) result.deepseekApiKey = layer.deepseekApiKey;
+    if (layer.togetherApiKey !== undefined) result.togetherApiKey = layer.togetherApiKey;
     if (layer.apiBase !== undefined) result.apiBase = layer.apiBase;
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
     if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
@@ -437,7 +461,7 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
   }
   if (_managedPolicy) return _managedPolicy;
 
-  for (const path of MANAGED_SETTINGS_PATHS) {
+  for (const path of managedSettingsPaths()) {
     try {
       const file = Bun.file(path);
       if (!(await file.exists())) continue;
@@ -625,7 +649,7 @@ function applyManagedPolicy(settings: Settings, policy: ManagedPolicy): Settings
  */
 async function loadPermissionsFile(cwd: string, trusted: boolean): Promise<PermissionRule[]> {
   const sources: Array<{ path: string; isProject: boolean }> = [
-    { path: join(KCODE_HOME, "permissions.json"), isProject: false },
+    { path: join(kcodeHome(), "permissions.json"), isProject: false },
     { path: join(cwd, ".kcode", "permissions.json"), isProject: true },
   ];
   const rules: PermissionRule[] = [];
@@ -708,7 +732,7 @@ export async function loadSettings(cwd: string): Promise<Settings> {
     : warnUntrustedProjectConfig(localSettingsPath(cwd));
 
   const [userRaw, projectRaw, localRaw, permissionFileRules, policy] = await Promise.all([
-    readJsonFile(USER_SETTINGS_PATH),
+    readJsonFile(userSettingsPath()),
     projectSettingsPromise,
     localSettingsPromise,
     loadPermissionsFile(cwd, trusted),
@@ -759,13 +783,13 @@ let _settingsSaveLock: Promise<void> = Promise.resolve();
 
 export function saveUserSettings(settings: Settings): Promise<void> {
   const op = async () => {
-    const dir = KCODE_HOME;
-    await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
-    await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    const path = userSettingsPath();
+    await Bun.write(join(kcodeHome(), ".gitkeep"), ""); // ensure dir exists
+    await Bun.write(path, JSON.stringify(settings, null, 2) + "\n");
     // Restrict permissions — settings may contain API keys and Pro license keys
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
-      chmodSync(USER_SETTINGS_PATH, 0o600);
+      chmodSync(path, 0o600);
     } catch (err) {
       log.debug("config", `Failed to chmod user settings: ${err}`);
     }
@@ -776,25 +800,25 @@ export function saveUserSettings(settings: Settings): Promise<void> {
 
 /** Load raw user settings JSON (preserves extra fields like provider-specific API keys). */
 export async function loadUserSettingsRaw(): Promise<Record<string, unknown>> {
-  return (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+  return (await readJsonFile(userSettingsPath())) ?? {};
 }
 
 /** Save raw user settings JSON (merges with existing to prevent data loss). */
 export function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void> {
   const op = async () => {
-    const dir = KCODE_HOME;
-    await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
+    const path = userSettingsPath();
+    await Bun.write(join(kcodeHome(), ".gitkeep"), ""); // ensure dir exists
     // Merge with existing settings to prevent losing fields (e.g., proKey) due to concurrent writes
-    const existing = (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+    const existing = (await readJsonFile(path)) ?? {};
     const merged = { ...existing, ...raw };
     // Explicitly delete fields set to undefined (allows intentional removal)
     for (const [k, v] of Object.entries(raw)) {
       if (v === undefined) delete merged[k];
     }
-    await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
+    await Bun.write(path, JSON.stringify(merged, null, 2) + "\n");
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
-      chmodSync(USER_SETTINGS_PATH, 0o600);
+      chmodSync(path, 0o600);
     } catch (err) {
       log.debug("config", `Failed to chmod raw user settings: ${err}`);
     }
@@ -849,7 +873,14 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
     anthropicApiKey:
       process.env.ANTHROPIC_API_KEY ??
-      ((await loadUserSettingsRaw()).anthropicApiKey as string | undefined),
+      (settings.anthropicApiKey as string | undefined),
+    xaiApiKey: process.env.XAI_API_KEY ?? (settings.xaiApiKey as string | undefined),
+    groqApiKey: process.env.GROQ_API_KEY ?? (settings.groqApiKey as string | undefined),
+    geminiApiKey: process.env.GEMINI_API_KEY ?? (settings.geminiApiKey as string | undefined),
+    deepseekApiKey:
+      process.env.DEEPSEEK_API_KEY ?? (settings.deepseekApiKey as string | undefined),
+    togetherApiKey:
+      process.env.TOGETHER_API_KEY ?? (settings.togetherApiKey as string | undefined),
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,

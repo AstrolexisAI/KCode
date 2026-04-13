@@ -535,8 +535,17 @@ export class ConversationManager {
       log.debug("agents", `Intent detection skipped: ${err}`);
     }
 
-    // Level 1: try to handle deterministically without LLM (0 tokens)
-    try {
+    // Level 1: try to handle deterministically without LLM (0 tokens).
+    //
+    // Skip the entire level-1 short-circuit when a customFetch is injected —
+    // that only happens in in-process test harnesses, where the level-1
+    // regexes otherwise consume test prompts like "Run git status" (matches
+    // the dev-server start verb) or "test" (matches the test runner) before
+    // they reach the scripted fake provider. Production never sets
+    // customFetch, so this guard is test-only.
+    if (this.config.customFetch) {
+      /* test mode — route every user message straight to the LLM path */
+    } else try {
       const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");
       const lower = userMessage.toLowerCase().trim();
       const isSlowCommand = /(?:levant|start|run\s|launch|arranca|build|compile|construir)/.test(lower) && !(/\b(?:create|make|crea|genera)\b/.test(lower));
@@ -1159,6 +1168,13 @@ export class ConversationManager {
             permissions: this.permissions,
             config: this.config,
             abortSignal: this.abortController?.signal,
+            shouldSkip: (tc) => {
+              if (guardState.burnedFingerprints.size === 0) return false;
+              for (const fp of guardState.burnedFingerprints) {
+                if (fp.split("|")[0] === tc.name) return true;
+              }
+              return false;
+            },
           })
         : null;
 
@@ -1467,6 +1483,11 @@ export class ConversationManager {
             } satisfies ToolResultBlock);
             if (r.isError) guardState.recordToolError(r.name, r.result);
           }
+          // Count streaming-fast-path tools too — otherwise when all calls
+          // were pre-executed, filteredToolCalls becomes empty, the normal
+          // executors are skipped via `continue` below, and toolUseCount
+          // never advances.
+          this.state.toolUseCount += earlyResults.length;
           filteredToolCalls = filteredToolCalls.filter((tc) => !earlyIds.has(tc.id));
           for (const evt of streamingExecutor.drainEvents()) yield evt;
         }

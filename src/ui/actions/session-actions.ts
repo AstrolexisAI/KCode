@@ -26,7 +26,12 @@ export async function handleSessionAction(
       if (state.messages.length <= 4) return "  Nothing to compact (too few messages).";
 
       const { CompactionManager } = await import("../../core/compaction.js");
-      const compactor = new CompactionManager(appConfig.apiKey, appConfig.model, appConfig.apiBase);
+      const compactor = new CompactionManager(
+        appConfig.apiKey,
+        appConfig.model,
+        appConfig.apiBase,
+        appConfig.customFetch,
+      );
 
       const keepLast = 4;
       const toPrune = state.messages.slice(0, -keepLast);

@@ -29,6 +29,13 @@ export interface StreamingToolExecutorConfig {
   permissions: PermissionManager;
   config: KCodeConfig;
   abortSignal?: AbortSignal;
+  /**
+   * Optional predicate to veto a pending tool call before it is dispatched.
+   * Used by the conversation loop to skip tools whose error fingerprint was
+   * already burned — otherwise the streaming fast-path would re-execute a
+   * known-broken call before the burn check in the post-stream path runs.
+   */
+  shouldSkip?: (toolCall: ToolUseBlock) => boolean;
 }
 
 // ─── StreamingToolExecutor ──────────────────────────────────────
@@ -58,6 +65,13 @@ export class StreamingToolExecutor {
    * If it's read-only and auto-permitted, start executing immediately.
    */
   addTool(toolCall: ToolUseBlock): void {
+    // Veto: honor burned-fingerprint guard so retries of already-failed tools
+    // never enter the streaming fast-path. The post-stream check would catch
+    // them later, but by then the real execution has already happened.
+    if (this.cfg.shouldSkip?.(toolCall)) {
+      return;
+    }
+
     const queued: QueuedTool = { toolCall, status: "queued" };
     this.queue.push(queued);
 
