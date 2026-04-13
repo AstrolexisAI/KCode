@@ -50,6 +50,12 @@ export interface Settings {
   autoMemory?: boolean | AutoMemorySettings;
   effortLevel?: EffortLevel;
   apiKey?: string;
+  anthropicApiKey?: string; // Anthropic API key (preferred over generic apiKey for Claude models)
+  xaiApiKey?: string; // xAI/Grok API key
+  groqApiKey?: string; // Groq API key
+  geminiApiKey?: string; // Gemini API key
+  deepseekApiKey?: string; // DeepSeek API key
+  togetherApiKey?: string; // Together AI API key
   apiBase?: string;
   systemPromptExtra?: string;
   autoRoute?: boolean;
@@ -200,6 +206,12 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
           : undefined,
     effortLevel: isEffortLevel(raw.effortLevel) ? raw.effortLevel : undefined,
     apiKey: typeof raw.apiKey === "string" ? raw.apiKey : undefined,
+    anthropicApiKey: typeof raw.anthropicApiKey === "string" ? raw.anthropicApiKey : undefined,
+    xaiApiKey: typeof raw.xaiApiKey === "string" ? raw.xaiApiKey : undefined,
+    groqApiKey: typeof raw.groqApiKey === "string" ? raw.groqApiKey : undefined,
+    geminiApiKey: typeof raw.geminiApiKey === "string" ? raw.geminiApiKey : undefined,
+    deepseekApiKey: typeof raw.deepseekApiKey === "string" ? raw.deepseekApiKey : undefined,
+    togetherApiKey: typeof raw.togetherApiKey === "string" ? raw.togetherApiKey : undefined,
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
     systemPromptExtra:
       typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
@@ -359,6 +371,12 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.autoMemory !== undefined) result.autoMemory = layer.autoMemory;
     if (layer.effortLevel !== undefined) result.effortLevel = layer.effortLevel;
     if (layer.apiKey !== undefined) result.apiKey = layer.apiKey;
+    if (layer.anthropicApiKey !== undefined) result.anthropicApiKey = layer.anthropicApiKey;
+    if (layer.xaiApiKey !== undefined) result.xaiApiKey = layer.xaiApiKey;
+    if (layer.groqApiKey !== undefined) result.groqApiKey = layer.groqApiKey;
+    if (layer.geminiApiKey !== undefined) result.geminiApiKey = layer.geminiApiKey;
+    if (layer.deepseekApiKey !== undefined) result.deepseekApiKey = layer.deepseekApiKey;
+    if (layer.togetherApiKey !== undefined) result.togetherApiKey = layer.togetherApiKey;
     if (layer.apiBase !== undefined) result.apiBase = layer.apiBase;
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
     if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
@@ -849,7 +867,14 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
     anthropicApiKey:
       process.env.ANTHROPIC_API_KEY ??
-      ((await loadUserSettingsRaw()).anthropicApiKey as string | undefined),
+      (settings.anthropicApiKey as string | undefined),
+    xaiApiKey: process.env.XAI_API_KEY ?? (settings.xaiApiKey as string | undefined),
+    groqApiKey: process.env.GROQ_API_KEY ?? (settings.groqApiKey as string | undefined),
+    geminiApiKey: process.env.GEMINI_API_KEY ?? (settings.geminiApiKey as string | undefined),
+    deepseekApiKey:
+      process.env.DEEPSEEK_API_KEY ?? (settings.deepseekApiKey as string | undefined),
+    togetherApiKey:
+      process.env.TOGETHER_API_KEY ?? (settings.togetherApiKey as string | undefined),
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,

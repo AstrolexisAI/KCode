@@ -133,19 +133,19 @@ export function resolveApiKey(
     urlLower.includes("googleapis.com") ||
     urlLower.includes("generativelanguage")
   ) {
-    return process.env.GEMINI_API_KEY ?? config.apiKey;
+    return process.env.GEMINI_API_KEY ?? config.geminiApiKey ?? config.apiKey;
   }
   if (urlLower.includes("groq.com")) {
-    return process.env.GROQ_API_KEY ?? config.apiKey;
+    return process.env.GROQ_API_KEY ?? config.groqApiKey ?? config.apiKey;
   }
   if (lower.startsWith("deepseek") || urlLower.includes("deepseek.com")) {
-    return process.env.DEEPSEEK_API_KEY ?? config.apiKey;
+    return process.env.DEEPSEEK_API_KEY ?? config.deepseekApiKey ?? config.apiKey;
   }
   if (urlLower.includes("together.xyz")) {
-    return process.env.TOGETHER_API_KEY ?? config.apiKey;
+    return process.env.TOGETHER_API_KEY ?? config.togetherApiKey ?? config.apiKey;
   }
   if (lower.startsWith("grok") || urlLower.includes("x.ai")) {
-    return process.env.XAI_API_KEY ?? config.apiKey;
+    return process.env.XAI_API_KEY ?? config.xaiApiKey ?? config.apiKey;
   }
 
   return config.apiKey;
