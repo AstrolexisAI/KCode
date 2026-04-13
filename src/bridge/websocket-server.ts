@@ -1,8 +1,25 @@
 // KCode Bridge/Daemon Mode - WebSocket Server
 // Bun-native WebSocket server for bidirectional daemon communication.
 
+import { timingSafeEqual } from "node:crypto";
 import type { Server, ServerWebSocket } from "bun";
 import { log } from "../core/logger";
+
+/**
+ * Constant-time comparison of two auth tokens. Prevents timing
+ * side-channel attacks that could recover a token character by
+ * character. Both inputs are normalized to equal-length Buffers
+ * before comparison, since timingSafeEqual throws on length mismatch.
+ */
+function timingSafeTokenEqual(supplied: string, expected: string): boolean {
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) {
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
 import type { PermissionBridge } from "./permission-bridge";
 import { createMessage, isClientMessageType, parseMessage, serializeMessage } from "./protocol";
 import type { SessionManager } from "./session-manager";
@@ -102,7 +119,7 @@ export class BridgeWebSocketServer {
             ? authHeader.slice(7)
             : (url.searchParams.get("token") ?? "");
 
-          if (token !== self.token) {
+          if (!timingSafeTokenEqual(token, self.token)) {
             return new Response("Unauthorized", { status: 401 });
           }
 

@@ -76,7 +76,9 @@ function runAgent(
         lower.includes("gemini") ||
         lower.includes("deepseek") ||
         lower.includes("groq") ||
-        lower.includes("together");
+        lower.includes("together") ||
+        lower.startsWith("grok") ||
+        lower.startsWith("xai");
       if (
         isLikelyCloud &&
         !subEnv.KCODE_API_KEY &&
@@ -85,7 +87,8 @@ function runAgent(
         !subEnv.GROQ_API_KEY &&
         !subEnv.DEEPSEEK_API_KEY &&
         !subEnv.TOGETHER_API_KEY &&
-        !subEnv.GEMINI_API_KEY
+        !subEnv.GEMINI_API_KEY &&
+        !subEnv.XAI_API_KEY
       ) {
         log.warn(
           "swarm",

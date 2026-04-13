@@ -26,6 +26,28 @@ const KNOWN_PRICING: Record<string, ModelPricing> = {
   // DeepSeek
   "deepseek-chat": { inputPer1M: 0.27, outputPer1M: 1.1 },
   "deepseek-reasoner": { inputPer1M: 0.55, outputPer1M: 2.19 },
+  // xAI (Grok) — fetched from https://api.x.ai/v1/language-models
+  // Prices are per 1M tokens. xAI API reports them as USD ticks where
+  // 1 USD = 100,000,000 ticks; 1 ticks-per-token × 1M tokens = $0.01,
+  // so API "prompt_text_token_price: 20000" = $2/1M input.
+  "grok-4": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-4-latest": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-4-0709": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-4.20": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.20-reasoning": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.20-0309-reasoning": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.20-non-reasoning": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.20-0309-non-reasoning": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.20-multi-agent": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4.20-multi-agent-0309": { inputPer1M: 2.0, outputPer1M: 6.0 },
+  "grok-4-fast-reasoning": { inputPer1M: 0.2, outputPer1M: 0.5 },
+  "grok-4-fast-non-reasoning": { inputPer1M: 0.2, outputPer1M: 0.5 },
+  "grok-4-1-fast-reasoning": { inputPer1M: 0.2, outputPer1M: 0.5 },
+  "grok-4-1-fast-non-reasoning": { inputPer1M: 0.2, outputPer1M: 0.5 },
+  "grok-code-fast": { inputPer1M: 0.2, outputPer1M: 1.5 },
+  "grok-code-fast-1": { inputPer1M: 0.2, outputPer1M: 1.5 },
+  "grok-3": { inputPer1M: 3.0, outputPer1M: 15.0 },
+  "grok-3-mini": { inputPer1M: 0.3, outputPer1M: 0.5 },
 };
 
 // Custom pricing from ~/.kcode/pricing.json

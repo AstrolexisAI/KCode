@@ -3,8 +3,8 @@
 // These commands are 100% deterministic. The machine detects what to do
 // and executes directly — no tokens spent, instant response.
 
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 function run(cmd: string, cwd: string, timeout = 30_000): { output: string; code: number } {
@@ -230,8 +230,59 @@ interface DevServer {
   needsInstall: boolean;
 }
 
+/**
+ * Find the first free TCP port in [start, end]. Returns `start` if
+ * the probe fails (so the spawn either succeeds or fails visibly
+ * instead of silently hanging on an unknown collision).
+ *
+ * Runs `ss -tln` ONCE to get the full set of listening ports, then
+ * iterates in memory. The previous implementation spawned `ss` on
+ * every iteration, which could mean up to 1000 subprocess spawns
+ * for the full 11000-11999 range.
+ */
+function findFreePort(start: number, end: number): number {
+  // Snapshot listening ports once — O(subprocess) instead of O(subprocess × range).
+  let takenPorts: Set<number>;
+  try {
+    const out = execSync(`ss -tln 2>/dev/null | awk '{print $4}'`, {
+      encoding: "utf8",
+      timeout: 2000,
+    });
+    takenPorts = new Set(
+      out
+        .split(/\n/)
+        .map((line) => {
+          const m = line.match(/:(\d+)$/);
+          return m ? parseInt(m[1]!, 10) : -1;
+        })
+        .filter((p) => p > 0),
+    );
+  } catch {
+    // ss failed — can't verify which ports are taken. Return start
+    // and let the spawn complain if it collides.
+    return start;
+  }
+  for (let port = start; port <= end; port++) {
+    if (!takenPorts.has(port)) return port;
+  }
+  return start;
+}
+
+/**
+ * KCode avoids well-known (< 1024) and user-reserved ports (< 11000
+ * per project convention). Dev servers start at 11000 and scan up to
+ * 11999 for the first free slot. This keeps kcode dev servers out of
+ * the way of other tools (Docker, llama.cpp at 8090, Postgres at
+ * 5432, etc.) and makes them predictable.
+ */
+const KCODE_PORT_FLOOR = 11000;
+const KCODE_PORT_CEILING = 11999;
+
 function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
-  const port = requestedPort ?? 10080;
+  // If the caller gave a specific port, honor it (even if below 11000 —
+  // the user knows what they want). Otherwise find a free one in the
+  // kcode dev-server port range.
+  const port = requestedPort ?? findFreePort(KCODE_PORT_FLOOR, KCODE_PORT_CEILING);
 
   // If no project in cwd, check common project subdirectory names
   if (!existsSync(join(cwd, "package.json")) && !existsSync(join(cwd, "go.mod")) &&
@@ -291,7 +342,11 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     }
   }
 
-  // Python (FastAPI, Flask, Django)
+  // Python (FastAPI, Flask, Django). Only return a runnable if a real
+  // framework is detected — generic pyproject/requirements without a
+  // known server shouldn't fall back to `python -m http.server` since
+  // that just serves static files from the directory and is never what
+  // a user wanted for a backend project.
   if (existsSync(join(cwd, "pyproject.toml")) || existsSync(join(cwd, "requirements.txt"))) {
     const hasFastapi = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("fastapi");
     const hasFlask = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("flask");
@@ -300,7 +355,8 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     if (hasDjango) return { name: "Django", command: `python manage.py runserver 0.0.0.0:${port}`, port, needsInstall: false };
     if (hasFastapi) return { name: "FastAPI", command: `uvicorn main:app --host 0.0.0.0 --port ${port} --reload`, port, needsInstall: false };
     if (hasFlask) return { name: "Flask", command: `flask run --host 0.0.0.0 --port ${port}`, port, needsInstall: false };
-    return { name: "Python", command: `python -m http.server ${port}`, port, needsInstall: false };
+    // No known Python web framework — don't fall through to http.server.
+    // Let the LLM figure out what to run instead.
   }
 
   // Go
@@ -323,12 +379,49 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
     return { name: "Docker Compose", command: "docker compose up", port: 0, needsInstall: false };
   }
 
-  // Static HTML
-  if (existsSync(join(cwd, "index.html"))) {
-    return { name: "Static", command: `python3 -m http.server ${port}`, port, needsInstall: false };
+  // Static HTML — serve single-file or multi-file HTML sites on the
+  // kcode dev-server port range. This is the correct path for
+  // tutorials, dashboards with Tailwind/Chart.js from CDN, and any
+  // other project that is "just an index.html".
+  //
+  // Requirements (all must hold):
+  //   - index.html exists at the root
+  //   - NO project markers were found above (no package.json, go.mod,
+  //     Cargo.toml, etc.) — those branches would have returned already
+  //   - index.html is non-trivial (>500 bytes) — avoids matching a
+  //     placeholder "Coming soon" page or a stale file left in a
+  //     stripped-down test directory
+  //
+  // We use `bunx serve` instead of `python3 -m http.server` because
+  // (a) CLAUDE.md says "Always use Bun" and (b) bunx serve starts
+  // faster and supports live reload with --single. Falls back to
+  // python3 only if bunx is not on PATH.
+  if (existsSync(join(cwd, "index.html")) && !existsSync(join(cwd, "package.json"))) {
+    try {
+      const size = statSync(join(cwd, "index.html")).size;
+      if (size >= 500) {
+        const hasBunx = tryWhich("bunx");
+        const command = hasBunx
+          ? `bunx serve -l ${port} .`
+          : `python3 -m http.server ${port}`;
+        return { name: "Static", command, port, needsInstall: false };
+      }
+    } catch {
+      /* ignore stat errors */
+    }
   }
 
   return null;
+}
+
+/** Check if a binary is on PATH via `command -v`. Synchronous. */
+function tryWhich(bin: string): boolean {
+  try {
+    execSync(`command -v ${bin}`, { timeout: 1000, stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function startDevServer(srv: DevServer, cwd: string): Level1Result {
@@ -342,7 +435,6 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
 
   // Step 2: Start the dev server in background
   try {
-    const { spawn } = require("child_process");
     const child = spawn("sh", ["-c", srv.command], {
       cwd,
       detached: true,
@@ -351,14 +443,47 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
     });
     child.unref();
 
-    // Wait a moment for the server to start
-    const { execSync: es } = require("child_process");
-    try { es("sleep 2", { timeout: 5000 }); } catch {}
+    // Wait a moment for the server to start. Use the top-level
+    // execSync import — this file used to have three duplicated
+    // require("child_process") calls for the same module, cleaned
+    // up here alongside the L2 finding.
+    try {
+      execSync("sleep 2", { timeout: 5000 });
+    } catch {
+      /* timeout is fine — we just needed a delay */
+    }
+
+    // Update last-project so follow-up commands (re-run on a new port,
+    // stop, etc.) target the same project without re-resolving the cwd.
+    // This also fixes the bug where a stale last-project pointing to a
+    // deleted directory would cause the next run to fall through to
+    // `python -m http.server`.
+    try {
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+      if (home) {
+        const lastProjectFile = join(home, ".kcode", "last-project");
+        writeFileSync(lastProjectFile, cwd);
+      }
+    } catch {
+      // Non-fatal: the server is started; only last-project write failed.
+    }
 
     const portInfo = srv.port > 0 ? `\n  🌐 http://localhost:${srv.port}` : "";
+    // Show explicit shell commands so the user can copy them into
+    // another terminal (or their notes) to manage the server manually.
+    // The `kill` command uses the child PID directly — that's the
+    // process group leader because we spawned with `detached: true`.
+    const relCwd = cwd.replace(process.env.HOME ?? "", "~");
+    const manualCommands = [
+      "",
+      "  ── How to manage this server manually ──",
+      `  Start:  cd ${relCwd} && ${srv.command}`,
+      `  Stop:   kill ${child.pid}   (or: pkill -f '${srv.command.split(" ")[0]}')`,
+      `  In kcode: "para el server"  or  /stop`,
+    ].join("\n");
     return {
       handled: true,
-      output: `  ✅ ${srv.name} server started (PID: ${child.pid})\n  $ ${srv.command}${portInfo}\n\n  Stop with: /stop or "para el server"`,
+      output: `  ✅ ${srv.name} server started (PID: ${child.pid})\n  $ ${srv.command}${portInfo}${manualCommands}`,
     };
   } catch (err: any) {
     return { handled: true, output: `  ❌ Failed to start: ${err.message}` };
@@ -491,9 +616,30 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Run / Serve / Start (dev server) ──
-  const runMatch = lower.match(/^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i);
-  if (runMatch) {
-    const requestedPort = runMatch[1] ? parseInt(runMatch[1], 10) : undefined;
+  //
+  // Matches two shapes:
+  //   1. Classic start command: "levantalo", "run it", "start", "inicialo en puerto 15965"
+  //   2. Port override / re-launch: "usa el puerto 15965", "cambia al puerto 15965",
+  //      "el servidor no levantó, usa el puerto 15965" — these are common when
+  //      the first start attempt failed and the user wants to retry on a new port.
+  //
+  // Shape 1 is anchored to the start of the message to avoid matching
+  // random occurrences of "start" in unrelated text. Shape 2 is
+  // looser — it matches anywhere in the message but REQUIRES a port
+  // number to be present, so we only trigger a re-launch when the
+  // user is unambiguously asking for a specific port.
+  const startVerbRex = /^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i;
+  const portOverrideRex = /\b(?:usa(?:lo|la)?|use|cambia(?:lo|la)?|switch|change|move|mu[eé]ve(?:lo|la)?|re?int[eé]ntalo|retry|retri[ée]ntalo|el\s+servidor\s+no\s+levant[oó])\b[^.!?]*?\b(?:(?:el\s+)?puerto|port)\s+(\d+)/i;
+
+  const runMatch = lower.match(startVerbRex);
+  const overrideMatch = !runMatch ? lower.match(portOverrideRex) : null;
+
+  if (runMatch || overrideMatch) {
+    const requestedPort = runMatch?.[1]
+      ? parseInt(runMatch[1], 10)
+      : overrideMatch?.[1]
+        ? parseInt(overrideMatch[1], 10)
+        : undefined;
 
     // Try cwd first, then last created project (saved to ~/.kcode/last-project)
     let srv = detectDevServer(cwd, requestedPort);
@@ -503,6 +649,10 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
       const lastProjectFile = join(home, ".kcode", "last-project");
       if (existsSync(lastProjectFile)) {
         const lastProject = readFileSync(lastProjectFile, "utf-8").trim();
+        // Require last-project to actually be a real dev project,
+        // not a stale pointer to a deleted directory or a static
+        // HTML scratch folder. detectDevServer now returns null for
+        // directories without a real dev framework, so this is safe.
         if (lastProject && existsSync(lastProject)) {
           srv = detectDevServer(lastProject, requestedPort);
           if (srv) serveCwd = lastProject;
@@ -513,7 +663,13 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
     if (srv) {
       return startDevServer(srv, serveCwd);
     }
-    return { handled: true, output: "  No project detected. Need package.json, Cargo.toml, go.mod, or similar." };
+    return {
+      handled: true,
+      output:
+        "  No dev server project detected in the current directory. " +
+        "cd into the project directory and retry, or open the project " +
+        "with `kcode /path/to/project`.",
+    };
   }
 
   // Not a Level 1 command

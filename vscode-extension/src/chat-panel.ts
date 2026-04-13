@@ -504,9 +504,12 @@ export class KCodeChatPanel implements vscode.WebviewViewProvider {
       const div = document.createElement('div');
       div.className = 'message message-' + role;
       if (role === 'assistant') {
-        // Sanitize markdown output to prevent XSS from model-generated content
         const rendered = formatMarkdown(content);
-        div.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rendered) : rendered;
+        if (typeof DOMPurify !== 'undefined') {
+          div.innerHTML = DOMPurify.sanitize(rendered);
+        } else {
+          div.textContent = content;
+        }
       } else {
         div.textContent = content;
       }
