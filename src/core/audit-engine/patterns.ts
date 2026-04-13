@@ -3728,7 +3728,11 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
     title: "Authentication credential compared with == instead of constant-time comparison",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "ruby", "php"],
-    regex: /(?:password|token|secret|api_key|apiKey|auth_token|session_id|csrf)\s*(?:===?|!==?|==|!=)\s*(?:["']|[a-z_])|(?:["']|[a-z_])\s*(?:===?|!==?)\s*(?:password|token|secret|api_key|apiKey|auth_token)/g,
+    // Negative lookaheads exclude existence checks (null, undefined,
+    // None, "", '') which are almost always innocuous existence
+    // probes, not credential comparisons. Without these lookaheads
+    // the regex fired on `if (password !== null)` and similar.
+    regex: /(?:password|token|secret|api_key|apiKey|auth_token|session_id|csrf)\s*(?:===?|!==?|==|!=)\s*(?!null\b|undefined\b|None\b|["'] *["']|["']\s*\))(?:["']|[a-z_])|(?:["']|[a-z_])\s*(?:===?|!==?)\s*(?:password|token|secret|api_key|apiKey|auth_token)(?!\s*[!=]==?\s*(?:null|undefined|None))/g,
     explanation:
       "Comparing authentication credentials with == or === is vulnerable to timing " +
       "side-channel attacks. An attacker can determine the correct credential one " +

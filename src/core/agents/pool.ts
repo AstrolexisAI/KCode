@@ -341,13 +341,23 @@ export class AgentPool {
    * Write the current pool state to ~/.kcode/agents/active.json.
    * Used for crash recovery and the /agents command. Non-fatal on
    * write errors (snapshots are best-effort).
+   *
+   * WARNING: the snapshot serializes agent.task and agent.result
+   * verbatim. If users put secrets (API keys, passwords, tokens)
+   * into their agent tasks, those secrets will appear in the
+   * snapshot in plaintext. The file is owner-only (chmod 600) but
+   * still — don't paste credentials into agent tasks. The snapshot
+   * is also readable by anyone with access to the user account.
+   *
+   * File permissions: we write with 0600 so even other users on a
+   * multi-user system can't read the snapshot.
    */
   snapshot(): void {
     try {
       const dir = dirname(SNAPSHOT_PATH);
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       const data = this.getStatus();
-      writeFileSync(SNAPSHOT_PATH, JSON.stringify(data, null, 2));
+      writeFileSync(SNAPSHOT_PATH, JSON.stringify(data, null, 2), { mode: 0o600 });
     } catch {
       // Best-effort — snapshot failures should never break the pool.
     }
@@ -368,7 +378,17 @@ export class AgentPool {
     }
   }
 
-  /** Reset the pool completely — used at session start or manual clear. */
+  /**
+   * Reset the pool completely — used at session start or manual clear.
+   *
+   * Note: event subscribers (e.g. the mounted AgentPanel React
+   * component) are intentionally NOT cleared. Subscribers are bound
+   * to the pool singleton lifetime, and clearing them would orphan
+   * the panel until it re-mounts. Tests that need a pool with no
+   * history AND no subscribers should call `_resetAgentPoolForTests()`
+   * instead — that nulls the singleton entirely, so the next
+   * getAgentPool() builds a fresh instance from scratch.
+   */
   reset(): void {
     this.cancelAll();
     this.history = [];

@@ -60,12 +60,37 @@ export default function AgentPanel({ maxVisible = 10 }: AgentPanelProps) {
     const unsubscribe = pool.onEvent((_event: PoolEvent) => {
       setTick((t) => t + 1);
     });
-    // Also tick every second while rendered so elapsed times update
-    // even when no pool event fires.
-    const timer = setInterval(() => setTick((t) => t + 1), 1000);
+
+    // Tick every second to keep elapsed times fresh — BUT only while
+    // there are actually running agents. Idle pools (all agents in
+    // done/error/cancelled state) don't need a ticker, so we skip
+    // the interval entirely when nothing's live. When a new agent
+    // spawns, the event above re-mounts the interval on the next
+    // render via the dependency check below.
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const ensureTimer = () => {
+      const status = pool.getStatus();
+      const hasLiveWork = status.active.some(
+        (a) => a.status === "running" || a.status === "spawning" || a.status === "waiting",
+      );
+      if (hasLiveWork && !timer) {
+        timer = setInterval(() => setTick((t) => t + 1), 1000);
+      } else if (!hasLiveWork && timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    ensureTimer();
+
+    // Re-evaluate the timer on every pool event so it starts/stops
+    // with live work. We piggy-back on the existing onEvent subscription
+    // rather than adding a second one.
+    const unsubscribeTimer = pool.onEvent(() => ensureTimer());
+
     return () => {
       unsubscribe();
-      clearInterval(timer);
+      unsubscribeTimer();
+      if (timer) clearInterval(timer);
     };
   }, []);
 
