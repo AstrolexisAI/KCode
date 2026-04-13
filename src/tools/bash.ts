@@ -417,6 +417,27 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
   }
   const isBackground = run_in_background || /&\s*$/.test(command.trim()) || isServerCommand;
 
+  // ─── Operator-mind preflight (phase 2) ──────────────────────────
+  // For background server spawns, refuse upfront if the system already
+  // has the resource we'd be claiming (port collision) or if inotify
+  // is saturated and we'd boot straight into EMFILE. Spawning anyway
+  // would race, fail, and leak — exactly the Artemis loop pattern.
+  if (isBackground) {
+    try {
+      const { runSpawnPreflight } = require("../core/bash-spawn-preflight.js");
+      const refusal = runSpawnPreflight(command, process.cwd());
+      if (refusal) {
+        return {
+          tool_use_id: "",
+          content: refusal.report,
+          is_error: true,
+        };
+      }
+    } catch (err) {
+      log.debug("tool", `bash-spawn-preflight failed (non-fatal): ${err}`);
+    }
+  }
+
   // ─── Background commands ───────────────────────────────────────
   // Strategy: wrap the command so bash itself handles backgrounding.
   // We run: `( <command> ) > /dev/null 2>&1 &` via nohup-style detach,
