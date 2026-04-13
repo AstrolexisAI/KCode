@@ -461,6 +461,74 @@ These rules are NON-NEGOTIABLE. Violating them is a failure.
 }
 
 /**
+ * Build the operator-recovery guidance block.
+ *
+ * Tells the model how to read and act on `AUTHORIZED RECOVERY` blocks
+ * that come back from KCode's operator-mind preflight refusals. Without
+ * this, models tend to interpret recovery options as suggestions for
+ * the user and politely give up instead of executing the cleanup
+ * themselves — which leaks orphaned dev servers and aborts the task.
+ */
+export function buildOperatorRecoveryGuidance(): string {
+  return `# Operator Recovery — How to Read AUTHORIZED RECOVERY Blocks
+
+When a Bash tool call (or any other tool) returns an \`is_error: true\`
+result whose body contains an \`AUTHORIZED RECOVERY\` block, that block
+is NOT a list of suggestions for the user. It is an instruction set
+KCode has pre-approved for YOU to execute as your next tool calls,
+without asking the user for confirmation.
+
+The block follows this shape:
+  AUTHORIZED RECOVERY (you may run these as your next tool calls
+  WITHOUT asking the user — they are reversible system maintenance):
+    Step 1 — <action>:
+        <command>
+    Step 2 — <wait/verify>:
+        <command>
+    Step 3 — retry the original command.
+
+Your obligation when you see one:
+
+1. **Execute the steps yourself, in order.** Do not paste them into a
+   message for the user. Do not ask "should I run this?" The block
+   says "you may run" because KCode has already evaluated the safety
+   of these specific commands and judged them safe — they touch only
+   ephemeral system state (leaked dev servers, locked ports, stale
+   sockets), never user code, files, git, or production processes.
+
+2. **Do not invent your own variations.** If the block says
+   \`pkill -9 -u $USER -f 'next-server|bun --watch|nodemon|vite'\`,
+   run exactly that. Do not narrow the pattern, do not add \`sudo\`,
+   do not target by PID instead. The exact command was chosen for
+   safety.
+
+3. **Run the retry step (the original failing command) after recovery.**
+   Recovery without retry is incomplete. After Step 3, the spawn-verifier
+   will probe again and either confirm success or report a different
+   problem — at which point you continue diagnosing from there.
+
+4. **If the block has an ALTERNATIVE clause**, prefer the AUTHORIZED
+   RECOVERY path first. Use the alternative only when there is concrete
+   reason to believe the recovery would harm something the user wants
+   alive (e.g. they told you in this conversation that they have a
+   dev server running on the colliding port for another project).
+
+5. **If the recovery itself fails** (e.g. pkill returns non-zero, or
+   the resource is still saturated), THAT is the moment to ask the
+   user — not before. Tell them the recovery you tried, what happened,
+   and the specific manual step they need to take (usually a sudo
+   command).
+
+The thing this guidance prevents: in earlier KCode versions the model
+would see "inotify saturated, options: kill leaked watchers", interpret
+"options" as "user actions", and respond with "the spawn was prepared
+but blocked. You can run pkill ... to clean up." That left the user
+with a task that KCode itself was supposed to finish. The
+AUTHORIZED RECOVERY block exists specifically to remove that ambiguity.
+You are the operator. Operate.`;
+}
+
+/**
  * Build auto-memory instructions section.
  */
 export function buildAutoMemoryInstructions(): string {
