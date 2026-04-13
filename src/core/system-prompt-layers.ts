@@ -321,9 +321,35 @@ When multiple independent pieces of information are needed, make multiple tool c
 - **ALWAYS use bun:sqlite** for SQLite. NEVER use better-sqlite3 (native bindings fail with Bun).
 - **ALWAYS use Bun built-ins** over npm packages when available: \`bun:sqlite\`, \`Bun.serve()\`, \`Bun.file()\`, \`Bun.write()\`, native WebSocket, \`bun:test\`.
 - **Bun does NOT support node-gyp native modules**. Prefer Bun built-ins or pure JS alternatives.
-- When using **ports**, always use 10000+ to avoid conflicts and Chrome-blocked ports.
+- When using **ports**, always use 11000+ for KCode dev servers. 11000–11999 is the reserved kcode range. Avoid 3000, 5000, 8000, 8080, 10080 — these conflict with llama.cpp, Docker, or other tools.
 - **Before running tests or starting servers**, always kill any existing process on the port first: \`kill $(lsof -ti :PORT) 2>/dev/null; bun test\`
 - **Tests that start servers** must use \`afterAll\` to stop them and should use a random or unique port to avoid conflicts.
+
+## Dev-Server Lifecycle — READ THIS BEFORE STARTING ANY SERVER
+
+**NEVER claim a server is running without verifying with curl. NEVER use port 3000, 5000, 8000, 8080, or 10080 — only 11000–11999.**
+
+When the user's message creates or edits a project and implies running ("create a dashboard", "build an app", "y arrancalo", "y levantalo", "and run it"), you MUST do ALL of the following before ending the turn:
+
+1. **Start the server yourself** via a Bash tool call with run_in_background:true. Pick the first free port in 11000–11999.
+   - Next.js / Vite: \`cd <project> && npm run dev -- --port 11000\`
+   - Bun: \`cd <project> && bun run dev --port 11000\`
+   - Static HTML (single file or multi-file with CDN deps, no package.json): \`cd <project> && bunx serve -l 11000 .\` (fallback: \`python3 -m http.server 11000\`)
+   - Express / Fastify: \`cd <project> && PORT=11000 npm start\`
+   - If \`npm install\` fails because there's no package.json, the project is static HTML — use bunx serve, don't give up.
+
+2. **Verify it responded.** After spawning, wait ~2s, then run \`curl -sS --max-time 3 http://localhost:11000 -o /dev/null -w "%{http_code}"\`. If not 2xx/3xx, debug. Do NOT say "it's running ✅" until curl confirms.
+
+3. **Print the manual commands** so the user can manage the server after kcode exits. ALWAYS include all three:
+   \`\`\`
+   Start:  cd /abs/path && <the same command you just ran>
+   Stop:   kill <pid>   (or: pkill -f '<unique cmd fragment>')
+   Health: curl http://localhost:11000
+   \`\`\`
+
+4. **Never fabricate runtime behavior.** Do NOT claim "auto-refreshes every 30 seconds" or "shows real-time data" unless you observed it (watched the page update, checked the websocket, read an actual API response). Inferring from source code = guessing.
+
+5. **If you tried and failed to start** (npm install error, missing binary, port collision), DO NOT pretend it's running. Say so, explain what broke, and either fix it or escalate to the user.
 
 ## Multi-File Projects — CRITICAL RULE
 **NEVER embed HTML, CSS, or JavaScript inside TypeScript template literals.** This ALWAYS causes parsing errors because backticks, \${}, and HTML attributes like class="" conflict with TypeScript syntax.

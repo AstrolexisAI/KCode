@@ -14,6 +14,17 @@ export interface CloudProvider {
   hint: string; // example key format
   models: string; // example models
   supportsOAuth?: boolean;
+  /**
+   * Short pricing summary shown next to the provider in the /cloud menu.
+   * Format: "$INPUT / $OUTPUT per 1M (cheapest: $X / $Y)"
+   * Prices are USD per 1M tokens. Fetched from each provider's public
+   * pricing page as of 2026 — check the /stats command for live per-
+   * session costs and ~/.kcode/pricing.json for overrides.
+   */
+  pricing: {
+    flagship: { name: string; input: number; output: number };
+    cheapest: { name: string; input: number; output: number };
+  };
 }
 
 const PROVIDERS: CloudProvider[] = [
@@ -26,6 +37,10 @@ const PROVIDERS: CloudProvider[] = [
     hint: "sk-ant-api03-...",
     models: "claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5",
     supportsOAuth: true,
+    pricing: {
+      flagship: { name: "claude-opus-4-6", input: 15, output: 75 },
+      cheapest: { name: "claude-haiku-4-5", input: 0.8, output: 4 },
+    },
   },
   {
     id: "openai",
@@ -36,6 +51,10 @@ const PROVIDERS: CloudProvider[] = [
     hint: "sk-proj-...",
     models: "gpt-4o, gpt-4o-mini, o3, o4-mini",
     supportsOAuth: true,
+    pricing: {
+      flagship: { name: "o3", input: 10, output: 40 },
+      cheapest: { name: "gpt-4o-mini", input: 0.15, output: 0.6 },
+    },
   },
   {
     id: "gemini",
@@ -46,6 +65,10 @@ const PROVIDERS: CloudProvider[] = [
     hint: "AIza...",
     models: "gemini-2.5-pro, gemini-2.5-flash",
     supportsOAuth: true,
+    pricing: {
+      flagship: { name: "gemini-2.5-pro", input: 1.25, output: 10 },
+      cheapest: { name: "gemini-2.5-flash", input: 0.15, output: 0.6 },
+    },
   },
   {
     id: "groq",
@@ -55,6 +78,10 @@ const PROVIDERS: CloudProvider[] = [
     baseUrl: "https://api.groq.com/openai",
     hint: "gsk_...",
     models: "llama-3.3-70b, mixtral-8x7b, gemma2-9b",
+    pricing: {
+      flagship: { name: "llama-3.3-70b", input: 0.59, output: 0.79 },
+      cheapest: { name: "gemma2-9b", input: 0.2, output: 0.2 },
+    },
   },
   {
     id: "deepseek",
@@ -64,6 +91,10 @@ const PROVIDERS: CloudProvider[] = [
     baseUrl: "https://api.deepseek.com",
     hint: "sk-...",
     models: "deepseek-chat, deepseek-reasoner",
+    pricing: {
+      flagship: { name: "deepseek-reasoner", input: 0.55, output: 2.19 },
+      cheapest: { name: "deepseek-chat", input: 0.27, output: 1.1 },
+    },
   },
   {
     id: "together",
@@ -73,8 +104,48 @@ const PROVIDERS: CloudProvider[] = [
     baseUrl: "https://api.together.xyz",
     hint: "tok_...",
     models: "meta-llama/Llama-3.3-70B, Qwen/Qwen2.5-Coder-32B",
+    pricing: {
+      flagship: { name: "Llama-3.3-70B", input: 0.88, output: 0.88 },
+      cheapest: { name: "Qwen2.5-Coder-32B", input: 0.8, output: 0.8 },
+    },
+  },
+  {
+    id: "xai",
+    name: "xAI (Grok)",
+    envVar: "XAI_API_KEY",
+    settingsKey: "xaiApiKey",
+    // baseUrl MUST NOT include /v1 — the request builder appends
+    // /v1/chat/completions itself. With /v1 here we'd get
+    // /v1/v1/chat/completions and xAI returns 404.
+    baseUrl: "https://api.x.ai",
+    hint: "xai-...",
+    // First model in the list becomes the active model after /cloud.
+    // grok-4.20-0309-reasoning is the user's preferred default — it's
+    // the current flagship reasoning model ($2/$6 per 1M tokens, text+image).
+    // Aliases (grok-4.20, grok-4.20-reasoning, grok-4.20-latest) all resolve
+    // to the same model, so any of them work in /model commands.
+    models: "grok-4.20-0309-reasoning, grok-code-fast-1, grok-4-fast-reasoning, grok-4, grok-3-mini",
+    pricing: {
+      flagship: { name: "grok-4.20-reasoning", input: 2, output: 6 },
+      cheapest: { name: "grok-code-fast-1", input: 0.2, output: 1.5 },
+    },
   },
 ];
+
+/**
+ * Render a provider's price range as a short string like
+ * "$0.20–$15 in / $1.50–$75 out per 1M".
+ */
+function formatPricing(p: CloudProvider["pricing"]): string {
+  const fmt = (n: number): string => (n < 1 ? `$${n.toFixed(2)}` : `$${n}`);
+  const inLo = Math.min(p.cheapest.input, p.flagship.input);
+  const inHi = Math.max(p.cheapest.input, p.flagship.input);
+  const outLo = Math.min(p.cheapest.output, p.flagship.output);
+  const outHi = Math.max(p.cheapest.output, p.flagship.output);
+  const inRange = inLo === inHi ? fmt(inLo) : `${fmt(inLo)}–${fmt(inHi)}`;
+  const outRange = outLo === outHi ? fmt(outLo) : `${fmt(outLo)}–${fmt(outHi)}`;
+  return `${inRange} in / ${outRange} out per 1M`;
+}
 
 type Stage = "select" | "auth-method" | "input" | "confirm" | "oauth-pending" | "cli-detected";
 
@@ -245,11 +316,33 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
         } else if (key.backspace || key.delete) {
           setApiKey((prev) => prev.slice(0, -1));
         } else if (input && !key.ctrl && !key.meta) {
-          setApiKey((prev) => prev + input);
+          // Strip bracketed-paste markers that some terminals inject
+          // around pasted content (\x1b[200~ ... \x1b[201~). Without
+          // this, pasted API keys end up as "[200~xai-KEY[201~" with
+          // the markers embedded literally in the string.
+          //
+          // Also strip any other ESC-sequence residue and non-printable
+          // control characters, since API keys are plain ASCII.
+          const cleaned = input
+            .replace(/\u001b\[200~/g, "")
+            .replace(/\u001b\[201~/g, "")
+            .replace(/\[200~/g, "")
+            .replace(/\[201~/g, "")
+            // Drop any remaining control chars except tab (just in case)
+            .replace(/[\u0000-\u0008\u000a-\u001f\u007f]/g, "");
+          if (cleaned) {
+            setApiKey((prev) => prev + cleaned);
+          }
         }
       } else if (stage === "confirm") {
         if (input.toLowerCase() === "y" || key.return) {
-          onDone({ provider: selectedProvider!, apiKey: apiKey.trim() });
+          // Final safety strip in case any bracketed-paste marker
+          // survived the input stage (shouldn't happen, but cheap).
+          const finalKey = apiKey
+            .replace(/\u001b\[20[01]~/g, "")
+            .replace(/\[20[01]~/g, "")
+            .trim();
+          onDone({ provider: selectedProvider!, apiKey: finalKey });
         } else if (input.toLowerCase() === "n" || key.escape) {
           setStage("input");
         }
@@ -297,17 +390,53 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
               const currentKey = process.env[p.envVar];
               const hasKey = !!currentKey;
               return (
-                <Box key={p.id} gap={1}>
-                  <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
-                    {isSelected ? "▸ " : "  "}
-                    {p.name}
-                  </Text>
-                  {hasKey && <Text color={theme.success}>✓</Text>}
-                  {p.supportsOAuth && <Text color={theme.info ?? theme.accent}>OAuth</Text>}
-                  {isSelected && <Text dimColor>{p.models}</Text>}
+                <Box key={p.id} flexDirection="column">
+                  <Box gap={1}>
+                    <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
+                      {isSelected ? "▸ " : "  "}
+                      {p.name}
+                    </Text>
+                    {hasKey && <Text color={theme.success}>✓</Text>}
+                    {p.supportsOAuth && <Text color={theme.info ?? theme.accent}>OAuth</Text>}
+                    <Text dimColor>{formatPricing(p.pricing)}</Text>
+                  </Box>
+                  {isSelected && (
+                    <>
+                      <Box paddingLeft={4}>
+                        <Text dimColor>Models: {p.models}</Text>
+                      </Box>
+                      <Box paddingLeft={4}>
+                        <Text dimColor>
+                          {"Flagship: "}
+                          {p.pricing.flagship.name}
+                          {" — $"}
+                          {p.pricing.flagship.input}
+                          {"/$"}
+                          {p.pricing.flagship.output}
+                          {" per 1M tokens"}
+                        </Text>
+                      </Box>
+                      <Box paddingLeft={4}>
+                        <Text dimColor>
+                          {"Cheapest: "}
+                          {p.pricing.cheapest.name}
+                          {" — $"}
+                          {p.pricing.cheapest.input}
+                          {"/$"}
+                          {p.pricing.cheapest.output}
+                          {" per 1M tokens"}
+                        </Text>
+                      </Box>
+                    </>
+                  )}
                 </Box>
               );
             })}
+          </Box>
+          <Box marginTop={1}>
+            <Text dimColor>
+              Prices are USD per 1M tokens (input / output). Use /stats for live session costs.
+            </Text>
           </Box>
         </>
       )}
@@ -433,6 +562,10 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
           <Box gap={1}>
             <Text>Format:</Text>
             <Text dimColor>{selectedProvider.hint}</Text>
+          </Box>
+          <Box gap={1}>
+            <Text>Pricing:</Text>
+            <Text dimColor>{formatPricing(selectedProvider.pricing)}</Text>
           </Box>
           <Box marginTop={1} gap={1}>
             <Text bold>API Key: </Text>

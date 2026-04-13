@@ -512,6 +512,29 @@ export class ConversationManager {
       log.debug("orchestrator", `Chain detection skipped: ${err}`);
     }
 
+    // Agent intent detection: if the user asks to dispatch agents
+    // ("liberemos 3 agentes para auditar backend", "spawn 5 workers"),
+    // spawn them through the pool BEFORE running the LLM turn. The
+    // agents execute asynchronously; their status is injected into
+    // the system prompt on every subsequent turn via the agent
+    // fragment hook in request-builder, so the model sees them.
+    try {
+      const { detectAgentIntent } = await import("./agents/intent.js");
+      const intent = detectAgentIntent(userMessage, this.config.workingDirectory);
+      if (intent && intent.detected && intent.spawned.length > 0) {
+        // Show the dispatch summary inline in the assistant response.
+        // Don't consume the turn — let the LLM still respond, now
+        // with awareness of the new agents in its system prompt.
+        this.state.messages.push({ role: "user", content: userMessage });
+        yield { type: "text_delta", text: intent.message + "\n\n" };
+        // Fall through to the normal turn flow below so the LLM can
+        // frame the next steps (e.g., "while Atlas is auditing,
+        // let me start looking at the tests").
+      }
+    } catch (err) {
+      log.debug("agents", `Intent detection skipped: ${err}`);
+    }
+
     // Level 1: try to handle deterministically without LLM (0 tokens)
     try {
       const { tryLevel1 } = await import("./task-orchestrator/level1-handlers.js");

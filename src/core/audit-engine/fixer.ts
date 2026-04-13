@@ -160,6 +160,8 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixPySqlInjection(lines, finding);
     case "py-005-yaml-unsafe-load":
       return fixPyYamlLoad(lines, finding);
+    case "py-013-bare-except":
+      return fixPyBareExcept(lines, finding);
     case "dart-005-setstate-after-dispose":
       return fixDartSetStateAfterDispose(lines, finding);
     case "dart-007-json-null-check":
@@ -566,6 +568,42 @@ function fixPyYamlLoad(lines: string[], finding: Finding): OneFixResult {
     return { applied: true, kind: "transformed", lines: result, description: "yaml.load() → yaml.safe_load()" };
   }
   return { applied: false, kind: "skipped", lines, description: "Complex YAML load — manual fix needed" };
+}
+
+/**
+ * py-013: Replace bare `except:` with `except Exception:`.
+ *
+ * Bare except catches BaseException, which includes SystemExit,
+ * KeyboardInterrupt, and GeneratorExit — signals that should almost
+ * never be silenced. The fix narrows it to Exception, which preserves
+ * error handling for runtime issues while letting system signals
+ * propagate.
+ *
+ * Handles all common indent styles and inline comments.
+ */
+function fixPyBareExcept(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) {
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  }
+  const line = lines[idx]!;
+  // Match `except:` with optional leading whitespace and optional
+  // trailing comment. Don't match `except SomeType:` (already specific).
+  if (!/^\s*except\s*:/.test(line)) {
+    return { applied: false, kind: "skipped", lines, description: "No bare `except:` on this line" };
+  }
+  // Already narrowed to Exception — skip.
+  if (/except\s+Exception\s*:/.test(line)) {
+    return { applied: false, kind: "skipped", lines, description: "Already uses `except Exception:`" };
+  }
+  const result = [...lines];
+  result[idx] = line.replace(/\bexcept\s*:/, "except Exception:");
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: "`except:` → `except Exception:`",
+  };
 }
 
 /**
@@ -1087,6 +1125,22 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   // ── Universal ──────────────────────────────────────────────
   "uni-001-hardcoded-ip": r("hardcoded IP", "Move the IP address to config — hardcoding makes deployment brittle."),
   "uni-002-security-todo": r("security TODO", "Address this security TODO before shipping."),
+  "uni-003-ssrf": r("SSRF", "Validate the URL against an allowlist of permitted hosts. Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost)."),
+  "uni-004-missing-auth": r("missing auth", "Add authentication middleware/decorator before this endpoint."),
+  "uni-005-weak-auth-compare": r("timing-unsafe compare", "Use constant-time comparison: hmac.compare_digest (Python), crypto.timingSafeEqual (Node.js), subtle.ConstantTimeCompare (Go)."),
+  "uni-006-critical-no-auth": r("critical op no auth", "Require authentication AND authorization before destructive/privileged operations."),
+  "uni-007-command-injection-concat": r("command injection concat", W.SHELL),
+  "uni-008-privilege-escalation": r("privilege escalation", "Run with minimum required privileges. Use 0o755 not 0o777. Drop root after binding ports."),
+  "uni-009-code-injection": r("code injection", "Never compile/evaluate user input. Use a sandboxed interpreter or safe template engine."),
+  "uni-010-client-side-auth": r("client-side auth", "Read authorization from server session or validated JWT — never from request body/query/cookies."),
+  "uni-011-weak-crypto": r("weak crypto", "Replace MD5/SHA1/DES/RC4 with SHA-256+, bcrypt/argon2, AES-GCM, or Ed25519."),
+  "uni-012-ldap-injection": r("LDAP injection", "Use parameterized LDAP queries or escape input with ldap.filter.escape_filter_chars."),
+  "uni-013-session-fixation": r("session fixation", "Regenerate the session ID immediately after successful authentication."),
+  "uni-014-no-session-timeout": r("session no timeout", "Set a reasonable session expiration (1-24h) and use refresh token rotation for long-lived sessions."),
+  "uni-015-symlink-toctou": r("symlink TOCTOU", "Use atomic operations (openat + O_NOFOLLOW) or realpath + prefix validation instead of check-then-use."),
+  "uni-016-external-file-path": r("external file path", "Use an allowlist of permitted filenames or a server-side ID-to-path mapping."),
+  "uni-017-info-exposure": r("info exposure", "Strip sensitive fields before serializing the response."),
+  "uni-018-sensitive-error": r("sensitive error", "Return a generic error in production and log details server-side with a correlation ID."),
 
   // ── Zig ────────────────────────────────────────────────────
   "zig-001-use-after-free": r("use-after-free", "Don't use memory after free — null the pointer or use defer."),
@@ -1189,6 +1243,7 @@ const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
   "py-004-sql-injection",
   "py-005-yaml-unsafe-load",
   "py-008-path-traversal",
+  "py-013-bare-except",
   "dart-005-setstate-after-dispose",
   "dart-007-json-null-check",
 ]);

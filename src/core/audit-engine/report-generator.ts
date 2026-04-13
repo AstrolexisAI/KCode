@@ -139,6 +139,48 @@ export function generateMarkdownReport(result: AuditResult): string {
     lines.push("");
   }
 
+  // Exploit Proofs section (if present)
+  if (result.exploits && result.exploits.length > 0) {
+    lines.push("## Exploit Proofs");
+    lines.push("");
+    lines.push(
+      `${result.exploits.length} proof-of-concept exploit${result.exploits.length === 1 ? "" : "s"} ` +
+        "generated for confirmed findings. These demonstrate exploitability — " +
+        "**do not run against production systems**.",
+    );
+    lines.push("");
+
+    for (let i = 0; i < result.exploits.length; i++) {
+      const e = result.exploits[i]!;
+      const rel = e.file.replace(result.project + "/", "");
+      lines.push(`### Exploit ${i + 1}: ${e.pattern_id}`);
+      lines.push("");
+      lines.push(`**Target:** \`${rel}:${e.line}\``);
+      if (e.cwe) lines.push(`**CWE:** ${e.cwe}`);
+      lines.push("");
+      lines.push("**Attack vector:**");
+      lines.push(e.attack_vector);
+      lines.push("");
+      lines.push("**Payload:**");
+      lines.push("```");
+      lines.push(e.payload);
+      lines.push("```");
+      lines.push("");
+      lines.push("**Expected result:**");
+      lines.push(e.expected_result);
+      lines.push("");
+      lines.push("**Reproduction steps:**");
+      for (const step of e.reproduction_steps) {
+        lines.push(step);
+      }
+      lines.push("");
+      lines.push(`**Severity justification:** ${e.severity_justification}`);
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    }
+  }
+
   // Methodology footer
   lines.push("## Methodology");
   lines.push("");
@@ -148,6 +190,13 @@ export function generateMarkdownReport(result: AuditResult): string {
       "candidate was verified against the actual execution path. Findings listed " +
       "here are only those where the execution path was confirmed.",
   );
+  if (result.exploits && result.exploits.length > 0) {
+    lines.push(
+      " Confirmed findings were then processed by the exploit-gen module, " +
+        "which generates proof-of-concept payloads to demonstrate real-world " +
+        "exploitability.",
+    );
+  }
   lines.push("");
   lines.push(
     "**Pattern library version:** 1.0 — patterns derived from real bugs found " +

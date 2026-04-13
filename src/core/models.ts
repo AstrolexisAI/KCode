@@ -68,6 +68,38 @@ export async function saveModelsConfig(config: ModelsConfig): Promise<void> {
   cachedConfig = config;
 }
 
+/**
+ * Normalize a stored baseUrl at load time. KCode's request builder
+ * appends /v1/chat/completions to the baseUrl, so the stored value
+ * MUST NOT already contain a trailing /v1. If it does (e.g., from an
+ * older /cloud run that mis-entered the xAI base), strip it on load
+ * so the request builder doesn't produce /v1/v1/chat/completions.
+ *
+ * This is a migration path: users who ran /cloud on KCode < 2.10.29
+ * with xAI have "https://api.x.ai/v1" stored; on next startup this
+ * silently normalizes to "https://api.x.ai".
+ */
+function normalizeBaseUrl(url: string): string {
+  const trimmed = url.replace(/\/+$/, "");
+  // Strip trailing /v1 ONLY for providers where the request builder
+  // already appends /v1/... itself. Doing this across the board would
+  // break providers that DO expect /v1 in the baseUrl (e.g., Gemini
+  // which uses /v1beta/openai already in its documented base).
+  const known = [
+    "api.x.ai",
+    "api.openai.com",
+    "api.anthropic.com",
+    "api.deepseek.com",
+    "api.together.xyz",
+    "api.groq.com",
+  ];
+  const lower = trimmed.toLowerCase();
+  if (lower.endsWith("/v1") && known.some((host) => lower.includes(host))) {
+    return trimmed.slice(0, -"/v1".length);
+  }
+  return trimmed;
+}
+
 function parseModelsConfig(raw: any): ModelsConfig {
   const models: ModelEntry[] = [];
 
@@ -76,7 +108,7 @@ function parseModelsConfig(raw: any): ModelsConfig {
       if (typeof entry?.name === "string" && typeof entry?.baseUrl === "string") {
         models.push({
           name: entry.name,
-          baseUrl: entry.baseUrl,
+          baseUrl: normalizeBaseUrl(entry.baseUrl),
           contextSize: typeof entry.contextSize === "number" ? entry.contextSize : undefined,
           capabilities: Array.isArray(entry.capabilities) ? entry.capabilities : undefined,
           gpu: typeof entry.gpu === "string" ? entry.gpu : undefined,

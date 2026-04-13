@@ -1,9 +1,27 @@
 // KCode - Web UI Server
 // HTTP + WebSocket server using Bun.serve for browser-based UI
 
+import { timingSafeEqual } from "node:crypto";
 import { extname, join } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { log } from "../core/logger";
+
+/**
+ * Constant-time comparison of two auth tokens. Prevents timing
+ * side-channel attacks that could recover a token character by
+ * character. Both inputs are normalized to equal-length Buffers
+ * before comparison, since timingSafeEqual throws on length mismatch.
+ */
+function timingSafeTokenEqual(supplied: string | null | undefined, expected: string): boolean {
+  const a = Buffer.from(supplied ?? "");
+  const b = Buffer.from(expected ?? "");
+  if (a.length !== b.length) {
+    // Still perform a fake comparison to equalize timing as much as possible.
+    timingSafeEqual(b, b);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
 import { handleApiRequest } from "./api";
 import type { ServerEvent, WebServerConfig } from "./types";
 import { DEFAULT_WEB_CONFIG, MIME_TYPES } from "./types";
@@ -60,7 +78,7 @@ export class WebServer {
         // WebSocket upgrade on /ws
         if (pathname === "/ws") {
           const token = url.searchParams.get("token") ?? req.headers.get("x-auth-token");
-          if (config.auth.enabled && token !== config.auth.token) {
+          if (config.auth.enabled && !timingSafeTokenEqual(token, config.auth.token)) {
             return new Response("Unauthorized", { status: 401 });
           }
           const upgraded = server.upgrade(req, {

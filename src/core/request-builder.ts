@@ -144,6 +144,9 @@ export function resolveApiKey(
   if (urlLower.includes("together.xyz")) {
     return process.env.TOGETHER_API_KEY ?? config.apiKey;
   }
+  if (lower.startsWith("grok") || urlLower.includes("x.ai")) {
+    return process.env.XAI_API_KEY ?? config.apiKey;
+  }
 
   return config.apiKey;
 }
@@ -247,6 +250,60 @@ export async function buildRequestForModel(
   const includeTools = opts?.includeTools ?? true;
   const effort = (opts?.effortLevel ?? config.effortLevel ?? "medium") as string;
 
+  // Agent pool injection: conditionally append a short "Active Agent
+  // Pool" fragment to the system prompt so the model can reference
+  // agents by name.
+  //
+  // Caching note (fixes M1 from the branch self-audit):
+  //   Anthropic (and some OpenAI-compatible) prompt caching keys on
+  //   the system prompt prefix. Appending the pool fragment changes
+  //   the suffix on every turn while agents are running, which
+  //   invalidates the cache and drives up cost/latency. To minimize
+  //   cache misses, we ONLY inject the fragment when either:
+  //     1. The last user message explicitly mentions agents, OR
+  //     2. An agent was spawned within the last 2 minutes (recent
+  //        activity window where the user is likely iterating).
+  //   Otherwise the fragment is skipped and the system prompt stays
+  //   identical to a no-agent turn — cache hit preserved.
+  try {
+    const { getAgentPool } = await import("./agents/pool.js");
+    const { buildAgentSystemPromptFragment } = await import("./agents/narrative.js");
+    const pool = getAgentPool();
+    const status = pool.getStatus();
+    if (status.active.length > 0 || status.queued.length > 0) {
+      // Find the last user message by iterating backwards — O(n)
+      // in the worst case but avoids cloning the whole array via
+      // [...messages].reverse().find() which was the previous
+      // implementation. In long conversations (100+ messages)
+      // the clone cost dominated request-build time for a field
+      // that's only used here.
+      let lastText = "";
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i]!;
+        if (m.role === "user" && typeof m.content === "string") {
+          lastText = m.content;
+          break;
+        }
+      }
+      const mentionsAgents = /\b(agent|agente|worker|bot|grupo|group|team|swarm)\b/i.test(
+        lastText,
+      );
+      const RECENT_SPAWN_WINDOW_MS = 2 * 60 * 1000;
+      const now = Date.now();
+      const hasRecentSpawn = status.active.some(
+        (a) => now - a.startedAt < RECENT_SPAWN_WINDOW_MS,
+      );
+      if (mentionsAgents || hasRecentSpawn) {
+        const fragment = buildAgentSystemPromptFragment(status);
+        if (fragment) {
+          systemPrompt = systemPrompt + "\n\n" + fragment;
+        }
+      }
+    }
+  } catch {
+    // Agent pool module failed to load — continue without the fragment.
+  }
+
   const tracer = getDebugTracer();
   if (tracer.isEnabled()) {
     const resolvedKey =
@@ -267,7 +324,28 @@ export async function buildRequestForModel(
     );
   }
 
-  const effortMaxTokens =
+  // Reasoning models (OpenAI o1/o3/o4, xAI Grok reasoning variants,
+  // DeepSeek Reasoner, Claude thinking mode) burn a LARGE number of
+  // tokens on internal chain-of-thought BEFORE emitting the final
+  // output. A "medium" effort budget of 16K can easily be consumed
+  // entirely by reasoning, leaving nothing for the visible response —
+  // the model returns an empty completion.
+  //
+  // Detect these by name prefix/substring and guarantee a floor of
+  // 32K tokens so there's always room for output after reasoning.
+  const lowerModel = modelName.toLowerCase();
+  const isReasoningModel =
+    lowerModel.startsWith("o1") ||
+    lowerModel.startsWith("o3") ||
+    lowerModel.startsWith("o4") ||
+    lowerModel.includes("reasoning") ||
+    lowerModel.includes("reasoner") ||
+    lowerModel === "grok-3-mini" ||
+    lowerModel.startsWith("grok-3-mini") ||
+    lowerModel === "grok-4.20" ||
+    lowerModel === "grok-4.20-latest";
+
+  let effortMaxTokens =
     effort === "low"
       ? Math.min(maxTokens, 4096)
       : effort === "max"
@@ -275,6 +353,14 @@ export async function buildRequestForModel(
         : effort === "high"
           ? Math.max(maxTokens, 32768)
           : maxTokens;
+
+  // Reasoning floor: at least 32K for any reasoning model, 64K on high/max.
+  if (isReasoningModel) {
+    const reasoningFloor = effort === "high" || effort === "max" ? 65536 : 32768;
+    if (effortMaxTokens < reasoningFloor) {
+      effortMaxTokens = reasoningFloor;
+    }
+  }
   const effortTemperature =
     effort === "low" ? 0.3 : effort === "max" ? 0.9 : effort === "high" ? 0.7 : undefined;
 
@@ -427,6 +513,30 @@ export async function buildRequestForModel(
     const finalTemp = effortTemperature ?? profileTemperature;
     if (finalTemp !== undefined) {
       body.temperature = finalTemp;
+    }
+
+    // The reasoning_effort parameter is only supported by OpenAI's
+    // o-series models (o1, o3, o4). xAI supports it for some models
+    // (grok-3-mini accepts it) but rejects it for others
+    // (grok-4.20-0309-reasoning returns 400 "does not support parameter
+    // reasoningEffort"). Rather than maintain a per-model allowlist,
+    // we skip the parameter entirely for xAI and rely on the
+    // max_tokens floor (32K for reasoning models) to prevent the
+    // empty-response bug.
+    //
+    // For OpenAI o-series, reasoning_effort IS documented and stable,
+    // so we map KCode's effort level to the provider's field.
+    const apiBaseLower = apiBase.toLowerCase();
+    const supportsReasoningEffort =
+      isReasoningModel &&
+      apiBaseLower.includes("openai.com") &&
+      (lowerModel.startsWith("o1") ||
+        lowerModel.startsWith("o3") ||
+        lowerModel.startsWith("o4"));
+    if (supportsReasoningEffort) {
+      const reasoningEffort =
+        effort === "low" ? "low" : effort === "high" || effort === "max" ? "high" : "medium";
+      body.reasoning_effort = reasoningEffort;
     }
 
     if (toolDefs.length > 0) body.tools = toolDefs;
