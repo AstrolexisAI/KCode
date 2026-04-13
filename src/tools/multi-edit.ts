@@ -63,6 +63,33 @@ function miniDiff(oldStr: string, newStr: string): string {
 }
 
 export async function executeMultiEdit(input: Record<string, unknown>): Promise<ToolResult> {
+  // Phase 4: detect immediate retry of a failed MultiEdit
+  try {
+    const { detectImmediateEditRetry, acknowledgeEditWarning } = await import(
+      "../core/file-edit-history.js"
+    );
+    const warning = detectImmediateEditRetry("MultiEdit", input);
+    if (warning) {
+      acknowledgeEditWarning("MultiEdit", input);
+      return { tool_use_id: "", content: warning.report, is_error: true };
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  const result = await _executeMultiEditInner(input);
+
+  try {
+    const { recordEditAttempt } = await import("../core/file-edit-history.js");
+    recordEditAttempt("MultiEdit", input, result.is_error ?? false, String(result.content ?? ""));
+  } catch {
+    /* non-fatal */
+  }
+
+  return result;
+}
+
+async function _executeMultiEditInner(input: Record<string, unknown>): Promise<ToolResult> {
   const edits = input.edits as EditOp[] | undefined;
 
   if (!edits || !Array.isArray(edits) || edits.length === 0) {

@@ -199,6 +199,33 @@ const SENSITIVE_PATTERNS = [
 ];
 
 export async function executeWrite(input: Record<string, unknown>): Promise<ToolResult> {
+  // Phase 4: detect immediate retry of a failed Write with identical content
+  try {
+    const { detectImmediateEditRetry, acknowledgeEditWarning } = await import(
+      "../core/file-edit-history.js"
+    );
+    const warning = detectImmediateEditRetry("Write", input);
+    if (warning) {
+      acknowledgeEditWarning("Write", input);
+      return { tool_use_id: "", content: warning.report, is_error: true };
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  const result = await _executeWriteInner(input);
+
+  try {
+    const { recordEditAttempt } = await import("../core/file-edit-history.js");
+    recordEditAttempt("Write", input, result.is_error ?? false, String(result.content ?? ""));
+  } catch {
+    /* non-fatal */
+  }
+
+  return result;
+}
+
+async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, content } = input as unknown as FileWriteInput;
 
   // Audit report discipline: block creating a SECOND audit-named file when
