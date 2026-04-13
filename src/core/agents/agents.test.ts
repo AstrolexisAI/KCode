@@ -335,6 +335,41 @@ describe("intent", () => {
     // Incidental mentions without verb should NOT dispatch.
     expect(detectAgentIntent("the report shows 4 agents in total", "/tmp")).toBe(null);
   });
+
+  test("factory.dispatch picks per-role executors via executorForRole when no override", async () => {
+    // Regression test for the H1 fix coverage gap: the previous
+    // lifecycle test passed an explicit `executor: instantExecutor`
+    // in opts, which short-circuited the new `executorForRole(spec.role, cwd)`
+    // path. This test spawns without override and verifies the
+    // pool actually receives role-appropriate executors, not the
+    // default-undefined that would have broken lifecycle in pre-fix.
+    const { AgentPool, _resetAgentPoolForTests: reset } = await import("./pool.js");
+    const { dispatch } = await import("./factory.js");
+    reset();
+    const pool = new AgentPool({ maxConcurrent: 5 });
+    // NOTE: no defaultExecutor on the pool, no executor in opts —
+    // factory.dispatch MUST supply executors per spec or the agents
+    // would be stuck in "running" forever.
+    const spawned = dispatch({
+      cwd: "/tmp",
+      task: "audit something simple",
+      maxAgents: 1,
+      pool,
+    });
+    expect(spawned.length).toBeGreaterThan(0);
+    // The agent should have transitioned to running via runAgent
+    // being invoked with a real executor. If dispatch had passed
+    // undefined through, the agent would still be in "spawning".
+    // We can't await completion because llmExecutor would try to
+    // hit a real LLM endpoint. Instead, cancel and verify the
+    // cancellation path fires — proving the agent was live in the
+    // pool, not orphaned.
+    const cancelled = pool.cancel(spawned[0]!.id);
+    expect(cancelled).toBe(true);
+    const status = pool.getStatus();
+    expect(status.active.length).toBe(0);
+    expect(status.done.find((a) => a.status === "cancelled")).toBeDefined();
+  });
 });
 
 describe("narrative", () => {

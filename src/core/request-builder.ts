@@ -271,9 +271,20 @@ export async function buildRequestForModel(
     const pool = getAgentPool();
     const status = pool.getStatus();
     if (status.active.length > 0 || status.queued.length > 0) {
-      const lastUser = [...messages].reverse().find((m) => m.role === "user");
-      const lastText =
-        lastUser && typeof lastUser.content === "string" ? lastUser.content : "";
+      // Find the last user message by iterating backwards — O(n)
+      // in the worst case but avoids cloning the whole array via
+      // [...messages].reverse().find() which was the previous
+      // implementation. In long conversations (100+ messages)
+      // the clone cost dominated request-build time for a field
+      // that's only used here.
+      let lastText = "";
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i]!;
+        if (m.role === "user" && typeof m.content === "string") {
+          lastText = m.content;
+          break;
+        }
+      }
       const mentionsAgents = /\b(agent|agente|worker|bot|grupo|group|team|swarm)\b/i.test(
         lastText,
       );

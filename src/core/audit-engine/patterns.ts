@@ -3730,9 +3730,12 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
     languages: ["python", "javascript", "typescript", "go", "java", "ruby", "php"],
     // Negative lookaheads exclude existence checks (null, undefined,
     // None, "", '') which are almost always innocuous existence
-    // probes, not credential comparisons. Without these lookaheads
-    // the regex fired on `if (password !== null)` and similar.
-    regex: /(?:password|token|secret|api_key|apiKey|auth_token|session_id|csrf)\s*(?:===?|!==?|==|!=)\s*(?!null\b|undefined\b|None\b|["'] *["']|["']\s*\))(?:["']|[a-z_])|(?:["']|[a-z_])\s*(?:===?|!==?)\s*(?:password|token|secret|api_key|apiKey|auth_token)(?!\s*[!=]==?\s*(?:null|undefined|None))/g,
+    // probes, not credential comparisons. Applied symmetrically to
+    // BOTH alternatives — the first covers `password === "foo"` and
+    // the second covers Yoda-style `"foo" === password`. Without
+    // the LHS lookahead on the second alternative, `null === password`
+    // slipped through.
+    regex: /(?:password|token|secret|api_key|apiKey|auth_token|session_id|csrf)\s*(?:===?|!==?|==|!=)\s*(?!null\b|undefined\b|None\b|["'] *["']|["']\s*\))(?:["']|[a-z_])|(?!null\b|undefined\b|None\b|["'] *["'])(?:["']|[a-z_])\w*\s*(?:===?|!==?)\s*(?:password|token|secret|api_key|apiKey|auth_token)/g,
     explanation:
       "Comparing authentication credentials with == or === is vulnerable to timing " +
       "side-channel attacks. An attacker can determine the correct credential one " +
