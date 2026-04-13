@@ -25,6 +25,7 @@ import {
   buildGitInstructions,
   buildIdentity,
   buildMetacognition,
+  buildOperatorRecoveryGuidance,
   buildToneAndOutput,
   buildToolInstructions,
 } from "./system-prompt-layers";
@@ -155,6 +156,11 @@ RULES:
       content: buildToneAndOutput(),
       priority: SectionPriority.HIGH,
       label: "tone",
+    });
+    sections.push({
+      content: buildOperatorRecoveryGuidance(),
+      priority: SectionPriority.HIGH,
+      label: "operator-recovery",
     });
     if (config.thinking) {
       sections.push({
