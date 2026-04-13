@@ -158,7 +158,41 @@ function findClosestMatch(
   };
 }
 
+/**
+ * Public Edit entrypoint. Wraps the internal executor with operator-mind
+ * phase-4 retry detection: if the model is about to re-issue an Edit
+ * with the same (file_path, old_string) that just failed, intercept
+ * with a STOP report and skip execution. Records every attempt for
+ * future retry detection.
+ */
 export async function executeEdit(input: Record<string, unknown>): Promise<ToolResult> {
+  // Phase 4: detect immediate retry of a failed Edit
+  try {
+    const { detectImmediateEditRetry, acknowledgeEditWarning } = await import(
+      "../core/file-edit-history.js"
+    );
+    const warning = detectImmediateEditRetry("Edit", input);
+    if (warning) {
+      acknowledgeEditWarning("Edit", input);
+      return { tool_use_id: "", content: warning.report, is_error: true };
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  const result = await _executeEditInner(input);
+
+  try {
+    const { recordEditAttempt } = await import("../core/file-edit-history.js");
+    recordEditAttempt("Edit", input, result.is_error ?? false, String(result.content ?? ""));
+  } catch {
+    /* non-fatal */
+  }
+
+  return result;
+}
+
+async function _executeEditInner(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, old_string, new_string, replace_all } = input as unknown as FileEditInput;
 
   // Audit-session guard: when the user asked for an audit, source files
