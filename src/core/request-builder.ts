@@ -250,6 +250,22 @@ export async function buildRequestForModel(
   const includeTools = opts?.includeTools ?? true;
   const effort = (opts?.effortLevel ?? config.effortLevel ?? "medium") as string;
 
+  // Agent pool injection: if there are live agents in the pool, append
+  // a short "Active Agent Pool" fragment to the system prompt so the
+  // model can reference agents by name. No-op when the pool is empty,
+  // so this is free for sessions that never spawn agents.
+  try {
+    const { getAgentPool } = await import("./agents/pool.js");
+    const { buildAgentSystemPromptFragment } = await import("./agents/narrative.js");
+    const pool = getAgentPool();
+    const fragment = buildAgentSystemPromptFragment(pool.getStatus());
+    if (fragment) {
+      systemPrompt = systemPrompt + "\n\n" + fragment;
+    }
+  } catch {
+    // Agent pool module failed to load — continue without the fragment.
+  }
+
   const tracer = getDebugTracer();
   if (tracer.isEnabled()) {
     const resolvedKey =
