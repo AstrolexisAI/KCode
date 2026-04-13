@@ -10,11 +10,10 @@
 // message contains no agent-dispatch intent so the regular
 // conversation flow proceeds unchanged.
 
-import type { Agent, AgentRole, AgentSpec } from "./types";
-import { roleFromTask, ROLES } from "./roles";
+import type { Agent, AgentRole } from "./types";
+import { ROLES } from "./roles";
 import { getAgentPool } from "./pool";
 import { dispatchFromInstruction } from "./factory";
-import { executorForRole } from "./executor";
 
 /**
  * Result returned to the conversation loop when agent intent is
@@ -33,18 +32,34 @@ export interface AgentIntentResult {
   spawned: Agent[];
 }
 
-/** Regex patterns that indicate agent-dispatch intent. */
+/**
+ * Regex patterns that indicate agent-dispatch intent.
+ *
+ * Anchored to require an IMPERATIVE or EXHORTATIVE verb at the start
+ * of the match. This rules out past-tense references ("deployed 3
+ * agents yesterday") and incidental mentions ("the 2 agent accounts
+ * are...") that would otherwise trigger spurious dispatches.
+ *
+ * Allowed openers:
+ *   - Spanish: liberemos, larguemos, soltemos, desplegemos, mandemos,
+ *     vamos a (liberar/largar/soltar/desplegar/mandar), necesitamos,
+ *     quiero, quisiera
+ *   - English: spawn, unleash, deploy, dispatch, launch, let's, I want,
+ *     we need
+ */
 const DISPATCH_PATTERNS: RegExp[] = [
-  // Spanish: "liberemos/liberar/larguemos/soltemos N agentes"
-  /\b(?:liberemos|liberar|larguemos|larga|suelt[ae]|soltemos|desplegemos|desplegar|manda|mandemos|mand[ae])\s+(\d+)\s+(?:agente|agent|worker|bot)/i,
-  // English: "spawn/unleash/deploy/send N agents"
-  /\b(?:spawn|unleash|deploy|dispatch|send|launch|fire\s+up)\s+(\d+)\s+(?:agent|worker|bot)/i,
-  // Spanish: "N agentes para"
-  /\b(\d+)\s+(?:agente|agent)s?\s+(?:para|to)\b/i,
-  // English: "let's have N agents"
-  /\b(?:let'?s\s+have|let\s+us\s+have)\s+(\d+)\s+(?:agent|worker)/i,
-  // "formemos/let's form a team/group of N"
-  /\b(?:formemos|let'?s\s+form|crear|create)\s+(?:un\s+)?(?:grupo|group|team)\s+(\w+)/i,
+  // Spanish imperative/exhortative: "liberemos 3 agentes"
+  /(?:^|\s)(?:liberemos|larguemos|soltemos|desplegemos|mandemos|suelta|larga|libera|despliega|manda)\s+(\d+)\s+(?:agente|agent)/i,
+  // Spanish analytic: "vamos a liberar 3 agentes", "necesitamos 3 agentes"
+  /(?:^|\s)(?:vamos\s+a\s+(?:liberar|largar|soltar|desplegar|mandar|crear|dividir)|necesitamos|quiero|quisiera)\s+(\d+)\s+(?:agente|agent)/i,
+  // English imperative: "spawn 3 agents", "launch 5 workers"
+  /(?:^|\s)(?:spawn|unleash|deploy|dispatch|launch|fire\s+up)\s+(\d+)\s+(?:agent|worker|bot)/i,
+  // English exhortative: "let's spawn/have/launch 3 agents", "let us deploy 5"
+  /(?:^|\s)(?:let'?s\s+(?:spawn|have|launch|deploy|dispatch|unleash|form|create)|let\s+us\s+(?:spawn|have|launch|deploy))\s+(\d+)\s+(?:agent|worker|bot)/i,
+  // "I want/need N agents to X" — requires forward intent
+  /(?:^|\s)(?:i\s+(?:want|need)|we\s+(?:want|need))\s+(\d+)\s+(?:agent|worker)\s+(?:to|for)/i,
+  // Group formation: "formemos grupo Alfa", "let's form team Beta"
+  /(?:^|\s)(?:formemos|creemos|crear|let'?s\s+form|let\s+us\s+form|let'?s\s+create)\s+(?:un\s+|a\s+)?(?:grupo|group|team|squad)\s+(\w+)/i,
 ];
 
 /** Keywords that strongly suggest this message is about agents. */
@@ -109,41 +124,16 @@ export function detectAgentIntent(
   // Dispatch via the factory.
   try {
     const pool = getAgentPool();
+    // dispatchFromInstruction → dispatch() now picks role-appropriate
+    // executors per spec via executorForRole(), so we don't need to
+    // re-invoke executors manually. The pool's runAgent handles
+    // lifecycle (events, retire, queue drain, group completion).
     const spawned = dispatchFromInstruction(message, {
       cwd,
       maxAgents: requestedCount,
       groupName,
-      executor: undefined, // factory will call executorForRole per spec — set below
       pool,
     });
-
-    // Re-attach executors per agent (factory.spawn was called without
-    // one). We emit events and let the pool's runner handle them.
-    // NOTE: the factory's dispatch() uses the pool's defaultExecutor,
-    // so if we want role-based executors we need to call spawn()
-    // directly here. Simpler: on each spawned agent, kick off a
-    // background executor call now that it exists in the pool.
-    // The agent is already marked "running" from spawn(), so we
-    // just trigger its executor asynchronously.
-    for (const agent of spawned) {
-      const role = agent.role as AgentRole;
-      const exec = executorForRole(role, cwd);
-      void (async () => {
-        try {
-          const result = await exec(agent, (event) => {
-            // Forward through the pool's event stream.
-            (pool as any).emit?.(event);
-          });
-          agent.status = "done";
-          agent.result = result;
-          agent.finishedAt = Date.now();
-        } catch (err) {
-          agent.status = "error";
-          agent.error = err instanceof Error ? err.message : String(err);
-          agent.finishedAt = Date.now();
-        }
-      })();
-    }
 
     const roleBreakdown = new Map<string, number>();
     for (const a of spawned) {

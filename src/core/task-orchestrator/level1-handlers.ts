@@ -232,32 +232,38 @@ interface DevServer {
 
 /**
  * Find the first free TCP port in [start, end]. Returns `start` if
- * none are free (so the spawn fails visibly instead of silently
- * hanging on an unknown collision).
+ * the probe fails (so the spawn either succeeds or fails visibly
+ * instead of silently hanging on an unknown collision).
  *
- * Tries to bind with `net.createServer().listen(port)` and closes
- * immediately. Synchronous wrapper via spawnSync('sh', ['-c', ...])
- * would be cleaner but we want to keep this pure Node.
+ * Runs `ss -tln` ONCE to get the full set of listening ports, then
+ * iterates in memory. The previous implementation spawned `ss` on
+ * every iteration, which could mean up to 1000 subprocess spawns
+ * for the full 11000-11999 range.
  */
 function findFreePort(start: number, end: number): number {
-  const { execSync } = require("node:child_process");
+  // Snapshot listening ports once — O(subprocess) instead of O(subprocess × range).
+  let takenPorts: Set<number>;
+  try {
+    const out = execSync(`ss -tln 2>/dev/null | awk '{print $4}'`, {
+      encoding: "utf8",
+      timeout: 2000,
+    });
+    takenPorts = new Set(
+      out
+        .split(/\n/)
+        .map((line) => {
+          const m = line.match(/:(\d+)$/);
+          return m ? parseInt(m[1]!, 10) : -1;
+        })
+        .filter((p) => p > 0),
+    );
+  } catch {
+    // ss failed — can't verify which ports are taken. Return start
+    // and let the spawn complain if it collides.
+    return start;
+  }
   for (let port = start; port <= end; port++) {
-    try {
-      // ss -tln shows listening TCP ports. Grep for exactly ":PORT " or ":PORT$".
-      const out = execSync(`ss -tln 2>/dev/null | awk '{print $4}'`, {
-        encoding: "utf8",
-        timeout: 2000,
-      });
-      const taken = out.split(/\n/).some((line: string) => {
-        const m = line.match(/:(\d+)$/);
-        return m && parseInt(m[1]!, 10) === port;
-      });
-      if (!taken) return port;
-    } catch {
-      // ss failed — can't verify. Return the start port and let spawn
-      // complain if it's taken.
-      return start;
-    }
+    if (!takenPorts.has(port)) return port;
   }
   return start;
 }
