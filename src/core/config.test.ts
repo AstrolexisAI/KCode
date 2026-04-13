@@ -30,14 +30,23 @@ async function writeTextFile(path: string, content: string) {
 }
 
 describe("config", () => {
+  let originalKcodeHome: string | undefined;
+
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "kcode-config-test-"));
+    // Isolate KCODE_HOME inside tempDir so the developer's real ~/.kcode
+    // (which may contain permissionMode, proKey, etc.) does not bleed in.
+    originalKcodeHome = process.env.KCODE_HOME;
+    process.env.KCODE_HOME = join(tempDir, "kcode-home");
+    await mkdir(process.env.KCODE_HOME, { recursive: true });
     // Trust the temp workspace so project-level settings load in tests
     trustWorkspace(tempDir);
   });
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true });
+    if (originalKcodeHome === undefined) delete process.env.KCODE_HOME;
+    else process.env.KCODE_HOME = originalKcodeHome;
     // Clean up env vars we may have set
     delete process.env.KCODE_MODEL;
     delete process.env.KCODE_API_KEY;

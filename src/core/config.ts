@@ -142,12 +142,18 @@ export interface ManagedPolicy {
 
 // ─── Paths ──────────────────────────────────────────────────────
 
-const KCODE_HOME = kcodeHome();
-const USER_SETTINGS_PATH = kcodePath("settings.json");
-const MANAGED_SETTINGS_PATHS = [
-  "/etc/kcode/policy.json", // System-wide admin policy
-  kcodePath("managed-settings.json"), // Per-user admin-deployed policy
-];
+// Resolve paths at call time so tests can override KCODE_HOME per-case via
+// beforeEach. Module-level constants would freeze the path at import time
+// and bleed the developer's real ~/.kcode into every test run.
+function userSettingsPath(): string {
+  return kcodePath("settings.json");
+}
+function managedSettingsPaths(): string[] {
+  return [
+    "/etc/kcode/policy.json", // System-wide admin policy
+    kcodePath("managed-settings.json"), // Per-user admin-deployed policy
+  ];
+}
 
 // Cached managed policy with mtime tracking for invalidation
 let _managedPolicy: ManagedPolicy | null = null;
@@ -455,7 +461,7 @@ export async function loadManagedPolicy(): Promise<ManagedPolicy> {
   }
   if (_managedPolicy) return _managedPolicy;
 
-  for (const path of MANAGED_SETTINGS_PATHS) {
+  for (const path of managedSettingsPaths()) {
     try {
       const file = Bun.file(path);
       if (!(await file.exists())) continue;
@@ -643,7 +649,7 @@ function applyManagedPolicy(settings: Settings, policy: ManagedPolicy): Settings
  */
 async function loadPermissionsFile(cwd: string, trusted: boolean): Promise<PermissionRule[]> {
   const sources: Array<{ path: string; isProject: boolean }> = [
-    { path: join(KCODE_HOME, "permissions.json"), isProject: false },
+    { path: join(kcodeHome(), "permissions.json"), isProject: false },
     { path: join(cwd, ".kcode", "permissions.json"), isProject: true },
   ];
   const rules: PermissionRule[] = [];
@@ -726,7 +732,7 @@ export async function loadSettings(cwd: string): Promise<Settings> {
     : warnUntrustedProjectConfig(localSettingsPath(cwd));
 
   const [userRaw, projectRaw, localRaw, permissionFileRules, policy] = await Promise.all([
-    readJsonFile(USER_SETTINGS_PATH),
+    readJsonFile(userSettingsPath()),
     projectSettingsPromise,
     localSettingsPromise,
     loadPermissionsFile(cwd, trusted),
@@ -777,13 +783,13 @@ let _settingsSaveLock: Promise<void> = Promise.resolve();
 
 export function saveUserSettings(settings: Settings): Promise<void> {
   const op = async () => {
-    const dir = KCODE_HOME;
-    await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
-    await Bun.write(USER_SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n");
+    const path = userSettingsPath();
+    await Bun.write(join(kcodeHome(), ".gitkeep"), ""); // ensure dir exists
+    await Bun.write(path, JSON.stringify(settings, null, 2) + "\n");
     // Restrict permissions — settings may contain API keys and Pro license keys
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
-      chmodSync(USER_SETTINGS_PATH, 0o600);
+      chmodSync(path, 0o600);
     } catch (err) {
       log.debug("config", `Failed to chmod user settings: ${err}`);
     }
@@ -794,25 +800,25 @@ export function saveUserSettings(settings: Settings): Promise<void> {
 
 /** Load raw user settings JSON (preserves extra fields like provider-specific API keys). */
 export async function loadUserSettingsRaw(): Promise<Record<string, unknown>> {
-  return (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+  return (await readJsonFile(userSettingsPath())) ?? {};
 }
 
 /** Save raw user settings JSON (merges with existing to prevent data loss). */
 export function saveUserSettingsRaw(raw: Record<string, unknown>): Promise<void> {
   const op = async () => {
-    const dir = KCODE_HOME;
-    await Bun.write(join(dir, ".gitkeep"), ""); // ensure dir exists
+    const path = userSettingsPath();
+    await Bun.write(join(kcodeHome(), ".gitkeep"), ""); // ensure dir exists
     // Merge with existing settings to prevent losing fields (e.g., proKey) due to concurrent writes
-    const existing = (await readJsonFile(USER_SETTINGS_PATH)) ?? {};
+    const existing = (await readJsonFile(path)) ?? {};
     const merged = { ...existing, ...raw };
     // Explicitly delete fields set to undefined (allows intentional removal)
     for (const [k, v] of Object.entries(raw)) {
       if (v === undefined) delete merged[k];
     }
-    await Bun.write(USER_SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n");
+    await Bun.write(path, JSON.stringify(merged, null, 2) + "\n");
     try {
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
-      chmodSync(USER_SETTINGS_PATH, 0o600);
+      chmodSync(path, 0o600);
     } catch (err) {
       log.debug("config", `Failed to chmod raw user settings: ${err}`);
     }
