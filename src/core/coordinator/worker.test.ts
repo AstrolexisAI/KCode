@@ -220,7 +220,7 @@ describe("buildWorkerPrompt", () => {
 
 describe("buildWorkerArgs", () => {
   test("includes basic flags", () => {
-    const args = buildWorkerArgs(makeSpawnConfig());
+    const { args } = buildWorkerArgs(makeSpawnConfig());
     expect(args).toContain("--print");
     expect(args).toContain("--permission");
     expect(args).toContain("deny");
@@ -228,13 +228,13 @@ describe("buildWorkerArgs", () => {
   });
 
   test("includes model flag when set", () => {
-    const args = buildWorkerArgs(makeSpawnConfig({ model: "qwen2.5-coder" }));
+    const { args } = buildWorkerArgs(makeSpawnConfig({ model: "qwen2.5-coder" }));
     expect(args).toContain("-m");
     expect(args).toContain("qwen2.5-coder");
   });
 
   test("omits model flag when not set", () => {
-    const args = buildWorkerArgs(makeSpawnConfig({ model: undefined }));
+    const { args } = buildWorkerArgs(makeSpawnConfig({ model: undefined }));
     expect(args).not.toContain("-m");
   });
 });

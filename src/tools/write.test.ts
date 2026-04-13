@@ -29,7 +29,7 @@ describe("write tool", () => {
     });
 
     expect(result.is_error).toBeUndefined();
-    expect(result.content).toContain("File written successfully");
+    expect(result.content).toContain("Created");
     expect(result.content).toContain(filePath);
     expect(result.content).toContain("3 lines");
 
