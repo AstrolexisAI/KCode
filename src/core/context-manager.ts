@@ -240,7 +240,7 @@ export async function* pruneMessagesIfNeeded(
           "No tertiary/fallback model configured — compaction uses the primary model (may compete for GPU)",
         );
       }
-      const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase);
+      const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase, config.customFetch);
       const summary = await compactor.compact(toPrune);
       if (summary) {
         messages.splice(keepFirst, pruneCount, summary);
@@ -385,7 +385,7 @@ async function buildLlmSummarizer(config: KCodeConfig): Promise<LlmSummarizer | 
   try {
     const { CompactionManager } = await import("./compaction.js");
     const compactModel = config.tertiaryModel ?? config.fallbackModel ?? config.model;
-    const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase);
+    const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase, config.customFetch);
 
     return async (
       prompt: string,

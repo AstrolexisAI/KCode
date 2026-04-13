@@ -41,6 +41,16 @@ export function clearActivePlan(): void {
 }
 
 /**
+ * Install a plan directly for tests. Exists so unit tests can stage a plan
+ * without going through executePlan + provider wiring, and so they don't
+ * need to mock.module("../tools/plan") — which in Bun 1.3.x leaves the
+ * module permanently patched in the worker and breaks plan.test.ts later.
+ */
+export function setActivePlanForTesting(plan: Plan | null): void {
+  _activePlan = plan;
+}
+
+/**
  * Check if the active plan has a step currently in_progress.
  * Returns the step if found, null otherwise.
  */

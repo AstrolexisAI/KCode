@@ -5,6 +5,8 @@ import { log } from "./logger.js";
 import { getModelBaseUrl, getModelProvider } from "./models.js";
 import type { ContentBlock, Message, TextBlock } from "./types.js";
 
+type FetchFn = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
 // ─── Constants ───────────────────────────────────────────────────
 
 const SUMMARY_MAX_TOKENS = 1024;
@@ -32,8 +34,9 @@ export class CompactionManager {
   private compactionCount = 0;
   private consecutiveFailures = 0;
   private circuitBreakerTripped = false;
+  private customFetch?: FetchFn;
 
-  constructor(apiKey?: string, model?: string, apiBase?: string) {
+  constructor(apiKey?: string, model?: string, apiBase?: string, customFetch?: FetchFn) {
     if (model) {
       this.model = model;
     } else {
@@ -45,6 +48,7 @@ export class CompactionManager {
     }
     this.apiKey = apiKey;
     this.apiBase = apiBase; // resolved lazily via getModelBaseUrl if not provided
+    this.customFetch = customFetch;
   }
 
   private async resolveApiBase(): Promise<string> {
@@ -107,7 +111,8 @@ export class CompactionManager {
             ],
           };
 
-      const response = await fetch(url, {
+      const fetchFn = this.customFetch ?? fetch;
+      const response = await fetchFn(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
