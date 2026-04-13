@@ -13,6 +13,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { executorForRole } from "./executor";
 import { AgentPool, getAgentPool } from "./pool";
 import { roleFromTask, ROLES } from "./roles";
 import type { Agent, AgentExecutor, AgentRole, AgentSpec } from "./types";
@@ -270,10 +271,15 @@ export function dispatch(opts: DispatchOptions): Agent[] {
     pool.createGroup(opts.groupName, opts.groupMission ?? opts.task, []);
   }
 
-  // Spawn each spec and collect the live Agent objects.
+  // Spawn each spec and collect the live Agent objects. Each agent
+  // gets a role-appropriate executor by default (read-only roles use
+  // the lightweight LLM executor, tool-heavy roles spawn a kcode
+  // subprocess). The caller can override via opts.executor to use a
+  // single executor for all agents — useful in tests.
   const spawned: Agent[] = [];
   for (const spec of capped) {
-    spawned.push(pool.spawn(spec, opts.executor));
+    const exec = opts.executor ?? executorForRole(spec.role, opts.cwd);
+    spawned.push(pool.spawn(spec, exec));
   }
   return spawned;
 }

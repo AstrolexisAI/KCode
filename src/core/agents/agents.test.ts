@@ -289,6 +289,54 @@ describe("factory.dispatchFromInstruction", () => {
 
 // ── Narrative ───────────────────────────────────────────────────
 
+// ── Intent detection ────────────────────────────────────────────
+
+describe("intent", () => {
+  beforeEach(() => _resetAgentPoolForTests());
+
+  test("dispatch via intent goes through the pool's retire lifecycle", async () => {
+    // This is the regression test for H1: previously the intent
+    // path spawned agents without an executor and then ran them
+    // outside the pool, so retire() never fired and the queue
+    // never drained. Now dispatch() picks per-role executors and
+    // the pool's runAgent handles lifecycle properly.
+    const { AgentPool, _resetAgentPoolForTests: reset } = await import("./pool.js");
+    reset();
+    const pool = new AgentPool({ maxConcurrent: 5, defaultExecutor: instantExecutor });
+    const { dispatch } = await import("./factory.js");
+    const spawned = dispatch({
+      cwd: process.cwd(),
+      task: "audit the test directory",
+      maxAgents: 2,
+      executor: instantExecutor, // force test executor
+      pool,
+    });
+    expect(spawned.length).toBeGreaterThan(0);
+    // Wait for all of them to finish through the pool's runAgent.
+    await Promise.all(spawned.map((a) => pool.waitFor(a.id)));
+    const status = pool.getStatus();
+    // Every spawned agent must have moved to done/history, not
+    // stuck in active.
+    expect(status.active.length).toBe(0);
+    expect(status.done.length).toBeGreaterThanOrEqual(spawned.length);
+    // Each retired agent must be in "done" state (set by runAgent),
+    // not "running" (which would indicate lifecycle bypass).
+    for (const agent of status.done.slice(0, spawned.length)) {
+      expect(["done", "error", "cancelled"]).toContain(agent.status);
+    }
+  });
+
+  test("intent regex requires imperative verb (no past-tense matches)", async () => {
+    const { detectAgentIntent } = await import("./intent.js");
+    // Past-tense references should NOT dispatch.
+    expect(detectAgentIntent("we deployed 3 agents yesterday", "/tmp")).toBe(null);
+    expect(detectAgentIntent("the 2 agent accounts are broken", "/tmp")).toBe(null);
+    expect(detectAgentIntent("desplegamos 5 agentes la semana pasada", "/tmp")).toBe(null);
+    // Incidental mentions without verb should NOT dispatch.
+    expect(detectAgentIntent("the report shows 4 agents in total", "/tmp")).toBe(null);
+  });
+});
+
 describe("narrative", () => {
   test("buildAgentSystemPromptFragment is empty when pool is empty", () => {
     const pool = new AgentPool({ maxConcurrent: 5, defaultExecutor: instantExecutor });

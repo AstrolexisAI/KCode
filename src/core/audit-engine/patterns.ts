@@ -3702,7 +3702,10 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
     title: "Route/endpoint handler without authorization check",
     severity: "high",
     languages: ["python", "javascript", "typescript", "java", "ruby", "php", "go"],
-    regex: /(?:@app\.(?:route|get|post|put|delete|patch)\s*\(|app\.(?:get|post|put|delete|patch|all)\s*\(\s*["']\/(?:admin|api|internal|dashboard|manage|settings|users|config))|(?:@(?:Get|Post|Put|Delete|Patch)Mapping\s*\(\s*["']\/(?:admin|api|internal))/g,
+    // Each branch requires the route path to be SENSITIVE — without
+    // this filter the Flask branch matched every single @app.route,
+    // generating dozens of false-positive candidates per project.
+    regex: /(?:@app\.(?:route|get|post|put|delete|patch)\s*\(\s*["']\/(?:admin|api|internal|dashboard|manage|settings|users|config|root|sudo|super))|(?:app\.(?:get|post|put|delete|patch|all)\s*\(\s*["']\/(?:admin|api|internal|dashboard|manage|settings|users|config|root|sudo|super))|(?:@(?:Get|Post|Put|Delete|Patch)Mapping\s*\(\s*["']\/(?:admin|api|internal|dashboard|manage|settings|users|config|root|sudo|super))/g,
     explanation:
       "Routes handling sensitive operations (admin, API, internal, settings, user management) " +
       "without visible authorization decorators or middleware. An unauthenticated user may " +

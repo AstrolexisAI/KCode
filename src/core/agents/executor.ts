@@ -51,6 +51,69 @@ function buildAgentUserMessage(agent: Agent): string {
 }
 
 /**
+ * Resolve API credentials and endpoint shape for a given model/URL.
+ * Mirrors the logic in request-builder.ts/resolveApiKey but without
+ * requiring a full KCodeConfig — reads env vars directly.
+ *
+ * Returns:
+ *   - headers to use (Authorization vs x-api-key)
+ *   - URL path (/v1/chat/completions vs /v1/messages)
+ *   - body shape ("openai" or "anthropic" — same fields but system
+ *     prompt goes in a top-level `system` field for Anthropic)
+ */
+function resolveAgentAuth(
+  modelName: string,
+  baseUrl: string,
+): {
+  headers: Record<string, string>;
+  urlPath: string;
+  bodyShape: "openai" | "anthropic";
+} {
+  const lower = modelName.toLowerCase();
+  const urlLower = baseUrl.toLowerCase();
+
+  // Anthropic: needs x-api-key header, not Authorization bearer,
+  // and uses /v1/messages with a different body shape.
+  if (lower.startsWith("claude") || urlLower.includes("anthropic.com")) {
+    const key = process.env.ANTHROPIC_API_KEY ?? "";
+    return {
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      urlPath: "/v1/messages",
+      bodyShape: "anthropic",
+    };
+  }
+
+  // All other providers use OpenAI-compatible endpoints + Bearer auth.
+  // Pick the env var that matches the provider.
+  let key = "";
+  if (urlLower.includes("x.ai")) key = process.env.XAI_API_KEY ?? "";
+  else if (urlLower.includes("groq.com")) key = process.env.GROQ_API_KEY ?? "";
+  else if (urlLower.includes("deepseek.com")) key = process.env.DEEPSEEK_API_KEY ?? "";
+  else if (urlLower.includes("together.xyz")) key = process.env.TOGETHER_API_KEY ?? "";
+  else if (urlLower.includes("googleapis.com") || urlLower.includes("generativelanguage")) {
+    key = process.env.GEMINI_API_KEY ?? "";
+  } else if (urlLower.includes("openai.com")) {
+    key = process.env.OPENAI_API_KEY ?? "";
+  } else {
+    // Unknown provider — try the generic KCODE_API_KEY fallback.
+    key = process.env.KCODE_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+  }
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (key) headers["Authorization"] = `Bearer ${key}`;
+
+  return {
+    headers,
+    urlPath: "/v1/chat/completions",
+    bodyShape: "openai",
+  };
+}
+
+/**
  * Real LLM executor. Makes a single non-streaming request to the
  * active model with the agent's system prompt and task, then
  * returns the model's response as the agent's result.
@@ -59,6 +122,9 @@ function buildAgentUserMessage(agent: Agent): string {
  * or handle multi-turn conversations. For agents that need tools
  * (auditor, fixer, tester), use `createSubprocessExecutor()` below
  * which spawns a real kcode subprocess with full tool access.
+ *
+ * Supports both OpenAI-compatible and Anthropic endpoints. Picks
+ * the right auth header and body shape via resolveAgentAuth().
  */
 export async function llmExecutor(
   agent: Agent,
@@ -71,28 +137,38 @@ export async function llmExecutor(
   const systemPrompt = buildAgentSystemPrompt(agent);
   const userMessage = buildAgentUserMessage(agent);
 
+  const auth = resolveAgentAuth(modelName, baseUrl);
+
   emit({ type: "progress", agentId: agent.id, message: `${agent.name} calling LLM` });
 
-  const body = {
-    model: modelName,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    max_tokens: 4096,
-    stream: false,
-  };
+  // Body shape differs between Anthropic and OpenAI: Anthropic has a
+  // top-level `system` field and the messages array only holds user/
+  // assistant turns. OpenAI-compatible puts the system prompt as the
+  // first message with role="system".
+  const body: Record<string, unknown> =
+    auth.bodyShape === "anthropic"
+      ? {
+          model: modelName,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userMessage }],
+          max_tokens: 4096,
+        }
+      : {
+          model: modelName,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+          max_tokens: 4096,
+          stream: false,
+        };
 
-  const apiKey = process.env.XAI_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.KCODE_API_KEY ?? "";
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
-
-  const url = `${baseUrl}/v1/chat/completions`;
+  const url = `${baseUrl}${auth.urlPath}`;
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
-      headers,
+      headers: auth.headers,
       body: JSON.stringify(body),
     });
   } catch (err) {
@@ -105,35 +181,52 @@ export async function llmExecutor(
     throw new Error(`LLM ${response.status}: ${text.slice(0, 200)}`);
   }
 
-  const json = (await response.json()) as {
-    choices: Array<{ message: { content: string } }>;
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  };
-
-  const content = json.choices?.[0]?.message?.content ?? "";
-  if (json.usage) {
-    agent.tokenUsage.input = json.usage.prompt_tokens;
-    agent.tokenUsage.output = json.usage.completion_tokens;
-    // Approximate cost via the session pricing table
-    try {
-      const { getModelPricing, calculateCost } = await import("../pricing.js");
-      const pricing = await getModelPricing(modelName);
-      if (pricing) {
-        agent.costUsd = calculateCost(
-          pricing,
-          agent.tokenUsage.input,
-          agent.tokenUsage.output,
-        );
-      }
-    } catch {
-      /* pricing lookup optional */
+  // Parse response — Anthropic uses a different shape than OpenAI.
+  let content = "";
+  let inputTokens = 0;
+  let outputTokens = 0;
+  try {
+    if (auth.bodyShape === "anthropic") {
+      const json = (await response.json()) as {
+        content: Array<{ type: string; text?: string }>;
+        usage?: { input_tokens: number; output_tokens: number };
+      };
+      content = json.content
+        ?.filter((c) => c.type === "text" && typeof c.text === "string")
+        .map((c) => c.text!)
+        .join("") ?? "";
+      inputTokens = json.usage?.input_tokens ?? 0;
+      outputTokens = json.usage?.output_tokens ?? 0;
+    } else {
+      const json = (await response.json()) as {
+        choices: Array<{ message: { content: string } }>;
+        usage?: { prompt_tokens: number; completion_tokens: number };
+      };
+      content = json.choices?.[0]?.message?.content ?? "";
+      inputTokens = json.usage?.prompt_tokens ?? 0;
+      outputTokens = json.usage?.completion_tokens ?? 0;
     }
+  } catch (err) {
+    throw new Error(`Failed to parse LLM response: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  agent.tokenUsage.input = inputTokens;
+  agent.tokenUsage.output = outputTokens;
+  // Approximate cost via the session pricing table
+  try {
+    const { getModelPricing, calculateCost } = await import("../pricing.js");
+    const pricing = await getModelPricing(modelName);
+    if (pricing) {
+      agent.costUsd = calculateCost(pricing, inputTokens, outputTokens);
+    }
+  } catch {
+    /* pricing lookup optional */
   }
 
   emit({
     type: "progress",
     agentId: agent.id,
-    message: `${agent.name} done (${agent.tokenUsage.input + agent.tokenUsage.output} tokens)`,
+    message: `${agent.name} done (${inputTokens + outputTokens} tokens)`,
   });
 
   return content || "(empty response from LLM)";
@@ -174,6 +267,11 @@ export function createSubprocessExecutor(cwd: string): AgentExecutor {
       args.push("--model", modelOverride);
     }
 
+    // 10-minute hard timeout — subprocess agents can't hang forever.
+    // If the subprocess exceeds this, SIGTERM is sent, then SIGKILL
+    // after a 5-second grace period.
+    const TIMEOUT_MS = 10 * 60 * 1000;
+
     return new Promise<string>((resolve, reject) => {
       const proc = spawn(kcodeBin, args, {
         cwd,
@@ -183,12 +281,33 @@ export function createSubprocessExecutor(cwd: string): AgentExecutor {
 
       let stdout = "";
       let stderr = "";
+      let finished = false;
+
+      // Schedule the kill fallback. Cleared when the subprocess exits
+      // normally via close/error.
+      const killTimer = setTimeout(() => {
+        if (finished) return;
+        log.warn("agent-executor", `${agent.name} exceeded ${TIMEOUT_MS}ms — SIGTERM`);
+        try {
+          proc.kill("SIGTERM");
+        } catch {
+          /* already dead */
+        }
+        // If it doesn't die within 5s, SIGKILL and reject hard.
+        setTimeout(() => {
+          if (finished) return;
+          try {
+            proc.kill("SIGKILL");
+          } catch {
+            /* already dead */
+          }
+          finished = true;
+          reject(new Error(`${agent.name} timed out after ${TIMEOUT_MS}ms and was killed`));
+        }, 5_000);
+      }, TIMEOUT_MS);
 
       proc.stdout.on("data", (chunk: Buffer) => {
         stdout += chunk.toString("utf-8");
-        // Coarse progress event — the TUI just shows that the agent
-        // is producing output. For per-tool visibility we'd need to
-        // parse kcode's JSON output format (future work).
         emit({ type: "progress", agentId: agent.id, message: "output received" });
       });
 
@@ -197,11 +316,17 @@ export function createSubprocessExecutor(cwd: string): AgentExecutor {
       });
 
       proc.on("error", (err) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(killTimer);
         log.error("agent-executor", `spawn error: ${err.message}`);
         reject(err);
       });
 
       proc.on("close", (code) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(killTimer);
         if (code === 0) {
           resolve(stdout.trim());
         } else {
