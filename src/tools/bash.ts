@@ -489,12 +489,43 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
       proc.stdout.on("data", (data: Buffer) => chunks.push(data));
       proc.stderr.on("data", (data: Buffer) => errChunks.push(data));
 
-      proc.on("close", (code) => {
+      proc.on("close", async (_code) => {
         const stdout = Buffer.concat(chunks).toString("utf-8").trim();
         const stderr = Buffer.concat(errChunks).toString("utf-8").trim();
         const output = stdout + (stderr ? `\n${stderr}` : "");
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
         log.debug("tool", `Bash (background) returned in ${duration}s: ${cmdPrefix}`);
+
+        // Operator-mind: when the spawned command is a known long-running
+        // server, do not trust the wrapper's "PID: X" output. Probe the
+        // server over HTTP and report a real failure if it isn't actually
+        // serving traffic. Without this, broken servers silently report
+        // success and the model loops re-spawning them.
+        try {
+          const { verifyBackgroundSpawn, extractPidFromWrapperOutput } = await import(
+            "../core/bash-spawn-verifier.js"
+          );
+          const pid = extractPidFromWrapperOutput(output);
+          const verdict = await verifyBackgroundSpawn(command, pid, output, process.cwd());
+          if (verdict) {
+            if (verdict.ok) {
+              resolve({
+                tool_use_id: "",
+                content: `${output}\n\n✓ ${verdict.report}`,
+              });
+              return;
+            }
+            resolve({
+              tool_use_id: "",
+              content: `${output}\n\n${verdict.report}`,
+              is_error: true,
+            });
+            return;
+          }
+        } catch (err) {
+          log.debug("tool", `bash-spawn-verifier failed (non-fatal): ${err}`);
+        }
+
         resolve({
           tool_use_id: "",
           content: output || "(background process started)",
