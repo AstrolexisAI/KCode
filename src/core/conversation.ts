@@ -430,6 +430,23 @@ export class ConversationManager {
       }
     }
 
+    // Operator-mind phase 5: probe system invariants and prepend any
+    // findings as a synthetic user-role message. Throttled per-finding-code
+    // so the same warning doesn't nag every turn. Silent when healthy.
+    try {
+      const { probeOperatorState, formatOperatorBanner, selectFindingsForTurn } = await import(
+        "./operator-dashboard.js"
+      );
+      const probe = probeOperatorState(this.config.workingDirectory);
+      const fresh = selectFindingsForTurn(probe.findings);
+      const banner = formatOperatorBanner(fresh);
+      if (banner) {
+        this.state.messages.push({ role: "user", content: banner });
+      }
+    } catch (err) {
+      log.debug("operator-dashboard", `probe failed (non-fatal): ${err}`);
+    }
+
     // Auto-detect theoretical/formal prompts (delegated to conversation-message-prep)
     const theoreticalResult = detectTheoreticalMode(userMessage);
     this._theoreticalMode = theoreticalResult.isTheoretical;
