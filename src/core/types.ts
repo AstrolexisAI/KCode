@@ -84,6 +84,11 @@ export type ToolHandler = (input: Record<string, unknown>) => Promise<ToolResult
 export interface KCodeConfig {
   apiKey?: string;
   anthropicApiKey?: string; // Anthropic-specific API key (ANTHROPIC_API_KEY env var)
+  xaiApiKey?: string; // xAI/Grok API key (XAI_API_KEY env var)
+  groqApiKey?: string; // Groq API key (GROQ_API_KEY env var)
+  geminiApiKey?: string; // Gemini API key (GEMINI_API_KEY env var)
+  deepseekApiKey?: string; // DeepSeek API key (DEEPSEEK_API_KEY env var)
+  togetherApiKey?: string; // Together AI API key (TOGETHER_API_KEY env var)
   apiBase?: string;
   model: string;
   maxTokens: number;
