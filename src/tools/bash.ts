@@ -185,7 +185,56 @@ const SECURITY_TOOLS: Record<string, { category: string; timeout: number; notes:
   tcpdump: { category: "sniffer", timeout: 300_000, notes: "Packet capture" },
 };
 
+/**
+ * Public Bash entrypoint. Wraps the internal executor with operator-mind
+ * phase-3 retry detection: if the model is about to re-issue a command
+ * that just failed in the same cwd, intercept and return a STOP report
+ * instead of executing. Records every attempt (success or failure) for
+ * future retry detection.
+ */
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
+  const command = String((input as { command?: unknown }).command ?? "");
+  const cwd = process.cwd();
+
+  // Phase 3: detect immediate retry of a command that just failed
+  if (command) {
+    try {
+      const { detectImmediateRetry, acknowledgeRetryWarning } = await import(
+        "../core/bash-spawn-history.js"
+      );
+      const warning = detectImmediateRetry(command, cwd);
+      if (warning) {
+        // After showing the warning once, mark it acknowledged so the
+        // very next attempt (the model's actual response to the warning)
+        // runs normally without seeing it again.
+        acknowledgeRetryWarning(command, cwd);
+        return {
+          tool_use_id: "",
+          content: warning.report,
+          is_error: true,
+        };
+      }
+    } catch (err) {
+      log.debug("tool", `bash-spawn-history detect failed (non-fatal): ${err}`);
+    }
+  }
+
+  const result = await _executeBashInner(input);
+
+  // Record this attempt for future retry detection
+  if (command) {
+    try {
+      const { recordBashAttempt } = await import("../core/bash-spawn-history.js");
+      recordBashAttempt(command, cwd, result.is_error ?? false, String(result.content ?? ""));
+    } catch (err) {
+      log.debug("tool", `bash-spawn-history record failed (non-fatal): ${err}`);
+    }
+  }
+
+  return result;
+}
+
+async function _executeBashInner(input: Record<string, unknown>): Promise<ToolResult> {
   const { command, timeout, run_in_background, sandbox } = input as unknown as BashInput & {
     sandbox?: boolean;
   };
