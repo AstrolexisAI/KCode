@@ -79,14 +79,15 @@ describe("runSpawnPreflight", () => {
     expect(r!.refused).toBe(true);
     expect(r!.report).toContain("already in use");
     expect(r!.report).toContain(String(server.port));
-    expect(r!.report).toContain("Options:");
   });
 
-  test("refusal report mentions kill and port-change options", () => {
+  test("port refusal includes AUTHORIZED RECOVERY block (phase 6)", () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("hi") });
     const r = runSpawnPreflight(`next dev --port ${server.port}`, process.cwd());
-    expect(r!.report).toMatch(/kill/i);
-    expect(r!.report).toMatch(/different port/i);
-    expect(r!.report).toMatch(/reuse/i);
+    expect(r!.report).toContain("AUTHORIZED RECOVERY");
+    expect(r!.report).toContain("WITHOUT asking the user");
+    expect(r!.report).toMatch(/Step 1[\s\S]*kill/);
+    expect(r!.report).toMatch(/Step \d[\s\S]*retry/);
+    expect(r!.report).toContain("ALTERNATIVE");
   });
 });
