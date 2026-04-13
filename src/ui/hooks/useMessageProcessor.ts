@@ -298,6 +298,87 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         return;
       }
 
+      // /agents — show live agent pool status
+      if (lower === "/agents" || lower === "/agent-pool" || lower === "/pool") {
+        const { getAgentPool } = await import("../../core/agents/pool.js");
+        const { formatPoolStatus } = await import("../../core/agents/narrative.js");
+        const pool = getAgentPool();
+        const status = pool.getStatus();
+        const text =
+          status.active.length === 0 && status.done.length === 0 && status.queued.length === 0
+            ? "  No agents spawned yet in this session.\n  Use /agent <role> <task> or ask in natural language."
+            : formatPoolStatus(status);
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "text", role: "user", text: userInput },
+          { kind: "text", role: "assistant", text: "  " + text.split("\n").join("\n  ") },
+        ]);
+        return;
+      }
+
+      // /agent <role> <task> — spawn a single agent manually
+      if (lower.startsWith("/agent ")) {
+        const body = userInput.replace(/^\/agent\s+/i, "").trim();
+        // Parse: first token is role, rest is task
+        const spaceIdx = body.indexOf(" ");
+        const role = (spaceIdx > 0 ? body.slice(0, spaceIdx) : body).toLowerCase();
+        const task = spaceIdx > 0 ? body.slice(spaceIdx + 1).trim() : "";
+        if (!task) {
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            {
+              kind: "text",
+              role: "assistant",
+              text: "  Usage: /agent <role> <task>\n  Roles: auditor, fixer, tester, linter, reviewer, architect, security, optimizer, docs, migration, explorer, scribe, worker",
+            },
+          ]);
+          return;
+        }
+        try {
+          const { getAgentPool } = await import("../../core/agents/pool.js");
+          const { ROLES } = await import("../../core/agents/roles.js");
+          const { executorForRole } = await import("../../core/agents/executor.js");
+          if (!(role in ROLES)) {
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "user", text: userInput },
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  Unknown role: ${role}\n  Valid: ${Object.keys(ROLES).join(", ")}`,
+              },
+            ]);
+            return;
+          }
+          const pool = getAgentPool();
+          const agent = pool.spawn(
+            { role: role as any, task },
+            executorForRole(role, config.workingDirectory),
+          );
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            {
+              kind: "text",
+              role: "assistant",
+              text: `  🚀 Spawned **${agent.name}** (${(ROLES as any)[role].displayName}): ${task}\n  Track with /agents or wait for completion.`,
+            },
+          ]);
+        } catch (err) {
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "user", text: userInput },
+            {
+              kind: "text",
+              role: "assistant",
+              text: `  Failed to spawn agent: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ]);
+        }
+        return;
+      }
+
       // /chain — run multiple slash commands in sequence
       if (lower.startsWith("/chain ") || lower.startsWith("/seq ") || lower.startsWith("/multi ")) {
         const chainBody = userInput.replace(/^\/(chain|seq|multi)\s+/i, "").trim();
