@@ -17,6 +17,7 @@ import Header from "./components/Header.js";
 import InputPrompt from "./components/InputPrompt.js";
 import InteractiveQuestion from "./components/InteractiveQuestion.js";
 import { KeybindingProvider } from "./components/KeybindingContext.js";
+import AgentPanel from "./components/AgentPanel.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
 import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
@@ -960,6 +961,9 @@ export default function App({ config, conversationManager, tools, initialSession
               />
             );
           })()}
+
+        {/* Agent pool panel — auto-hides when empty */}
+        <AgentPanel />
 
         {/* Kodi companion — pinned above input, always visible */}
         <KodiCompanion
