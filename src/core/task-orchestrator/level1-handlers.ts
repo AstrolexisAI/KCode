@@ -628,7 +628,12 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   // looser — it matches anywhere in the message but REQUIRES a port
   // number to be present, so we only trigger a re-launch when the
   // user is unambiguously asking for a specific port.
-  const startVerbRex = /^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?/i;
+  // End-anchored: the verb (+ optional object + optional port clause) MUST
+  // consume the entire input modulo trailing punctuation. Without the `$`
+  // anchor, "run git status" / "start the build" / "launch the test runner"
+  // matched on their first word and spawned a dev server — even though the
+  // rest of the sentence was unrelated. See audit round 2026-04-13.
+  const startVerbRex = /^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?[.!?]?$/i;
   const portOverrideRex = /\b(?:usa(?:lo|la)?|use|cambia(?:lo|la)?|switch|change|move|mu[eé]ve(?:lo|la)?|re?int[eé]ntalo|retry|retri[ée]ntalo|el\s+servidor\s+no\s+levant[oó])\b[^.!?]*?\b(?:(?:el\s+)?puerto|port)\s+(\d+)/i;
 
   const runMatch = lower.match(startVerbRex);

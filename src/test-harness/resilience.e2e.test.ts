@@ -127,7 +127,7 @@ describe("Resilience: Malformed SSE chunks", () => {
       async ({ apiBase, customFetch }) => {
         const config = { ...env.config, apiBase, customFetch };
         const cm = new ConversationManager(config, env.registry);
-        const { events } = await sendAndCollect(cm, "test");
+        const { events } = await sendAndCollect(cm, "hola");
 
         const turnEnds = eventsOfType(events, "turn_end");
         expect(turnEnds.length).toBeGreaterThanOrEqual(1);
@@ -218,8 +218,28 @@ describe("Resilience: Huge response", () => {
   });
 
   test("provider sends 100KB of text — streams without OOM", async () => {
-    // Generate ~100KB of text
-    const bigText = "word ".repeat(20_000); // ~100KB
+    // Generate ~100KB of text. Must be non-repetitive: the conversation
+    // streaming pipeline runs a repetition-loop detector
+    // (conversation-streaming.ts detectRepetitionLoop) that aborts any
+    // output where the tail is N consecutive identical blocks of period
+    // 15..500 chars. We build the payload by suffixing each word with its
+    // own unique index so no substring ever repeats.
+    const bag = [
+      "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
+      "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho",
+      "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega", "aurora",
+      "borealis", "cascade", "denali", "everest", "fjord", "glacier",
+      "horizon", "island", "juniper", "kestrel", "lagoon", "meadow",
+      "nebula", "oasis", "plateau", "quarry", "river", "summit", "tundra",
+    ];
+    const parts: string[] = [];
+    let total = 0;
+    for (let i = 0; total < 100_000; i++) {
+      const w = `${bag[i % bag.length]!}${i}`;
+      parts.push(w);
+      total += w.length + 1;
+    }
+    const bigText = parts.join(" ");
     env.provider.addResponse(bigText);
 
     const cm = new ConversationManager(env.config, env.registry);
@@ -554,7 +574,7 @@ describe("Resilience: Double finish", () => {
       async ({ apiBase, customFetch }) => {
         const config = { ...env.config, apiBase, customFetch };
         const cm = new ConversationManager(config, env.registry);
-        const { events, text } = await sendAndCollect(cm, "test");
+        const { events, text } = await sendAndCollect(cm, "hola");
 
         const turnEnds = eventsOfType(events, "turn_end");
         expect(turnEnds.length).toBeGreaterThanOrEqual(1);
@@ -735,7 +755,7 @@ describe("Resilience: SSE with no newline terminator", () => {
       async ({ apiBase, customFetch }) => {
         const config = { ...env.config, apiBase, customFetch };
         const cm = new ConversationManager(config, env.registry);
-        const { events, text } = await sendAndCollect(cm, "test");
+        const { events, text } = await sendAndCollect(cm, "hola");
 
         const turnEnds = eventsOfType(events, "turn_end");
         expect(turnEnds.length).toBeGreaterThanOrEqual(1);
@@ -829,7 +849,7 @@ describe("Resilience: Provider returns non-SSE response", () => {
 
         try {
           const cm = new ConversationManager(env.config, env.registry);
-          const { events } = await sendAndCollect(cm, "test");
+          const { events } = await sendAndCollect(cm, "hola");
 
           const errors = eventsOfType(events, "error");
           const turnEnds = eventsOfType(events, "turn_end");
