@@ -1,7 +1,7 @@
 // Tests for AutoAgentManager — plan evaluation + spawn orchestration
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { AutoAgentManager, type AgentStatus } from "./auto-agents";
-import type { Plan, PlanStep } from "../tools/plan";
+import { clearActivePlan, type Plan, type PlanStep, setActivePlanForTesting } from "../tools/plan";
 import type { KCodeConfig } from "./types";
 
 const mockConfig: KCodeConfig = {
@@ -22,22 +22,27 @@ function makeMockPlan(steps: PlanStep[]): Plan {
   };
 }
 
-// Use module mocking via internal state
+// Use the real plan.ts module with a test-only setter — DO NOT use
+// mock.module() here. Bun 1.3.x leaves mock.module() hooks installed for
+// the lifetime of the test worker, and a partial stub of ../tools/plan
+// would then poison plan.test.ts (and anything else that runs after this
+// file in the same worker) by stripping executePlan/formatPlan.
 let mockPlan: Plan | null = null;
 
-beforeEach(async () => {
+beforeEach(() => {
   mockPlan = null;
-  mock.module("../tools/plan.js", () => ({
-    getActivePlan: () => mockPlan,
-    clearActivePlan: () => {
-      mockPlan = null;
-    },
-  }));
+  setActivePlanForTesting(null);
 });
 
 afterEach(() => {
   mockPlan = null;
+  clearActivePlan();
 });
+
+function installPlan(plan: Plan | null): void {
+  mockPlan = plan;
+  setActivePlanForTesting(plan);
+}
 
 describe("AutoAgentManager — evaluate", () => {
   test("returns shouldSpawn=false when no active plan", async () => {
@@ -54,10 +59,10 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("returns shouldSpawn=false when plan has fewer than minPendingSteps", async () => {
-    mockPlan = makeMockPlan([
+    installPlan(makeMockPlan([
       { id: "1", title: "Step 1", status: "pending" },
       { id: "2", title: "Step 2", status: "pending" },
-    ]);
+    ]));
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3 },
       () => {},
@@ -67,12 +72,12 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("returns shouldSpawn=true with steps when threshold reached", async () => {
-    mockPlan = makeMockPlan([
+    installPlan(makeMockPlan([
       { id: "1", title: "Fix bug A", status: "pending" },
       { id: "2", title: "Add test B", status: "pending" },
       { id: "3", title: "Refactor C", status: "pending" },
       { id: "4", title: "Document D", status: "pending" },
-    ]);
+    ]));
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3 },
       () => {},
@@ -84,14 +89,14 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("caps steps at maxAgents", async () => {
-    mockPlan = makeMockPlan([
+    installPlan(makeMockPlan([
       { id: "1", title: "A", status: "pending" },
       { id: "2", title: "B", status: "pending" },
       { id: "3", title: "C", status: "pending" },
       { id: "4", title: "D", status: "pending" },
       { id: "5", title: "E", status: "pending" },
       { id: "6", title: "F", status: "pending" },
-    ]);
+    ]));
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3, maxAgents: 2 },
       () => {},
@@ -101,12 +106,12 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("only counts pending steps (ignores done/in_progress)", async () => {
-    mockPlan = makeMockPlan([
+    installPlan(makeMockPlan([
       { id: "1", title: "A", status: "done" },
       { id: "2", title: "B", status: "in_progress" },
       { id: "3", title: "C", status: "pending" },
       { id: "4", title: "D", status: "pending" },
-    ]);
+    ]));
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3 },
       () => {},
@@ -145,10 +150,10 @@ describe("AutoAgentManager — state", () => {
 
 describe("AutoAgentManager — config defaults", () => {
   test("uses default minPendingSteps of 3", async () => {
-    mockPlan = makeMockPlan([
+    installPlan(makeMockPlan([
       { id: "1", title: "A", status: "pending" },
       { id: "2", title: "B", status: "pending" },
-    ]);
+    ]));
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig },
       () => {},
@@ -164,7 +169,7 @@ describe("AutoAgentManager — config defaults", () => {
       title: `Step ${i + 1}`,
       status: "pending" as const,
     }));
-    mockPlan = makeMockPlan(steps);
+    installPlan(makeMockPlan(steps));
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig },
       () => {},

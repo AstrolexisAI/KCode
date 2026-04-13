@@ -677,7 +677,12 @@ export async function handleRoute(
       const config = session.manager.getConfig();
       const { CompactionManager } = await import("./compaction.js");
       const compactModel = config.tertiaryModel ?? config.fallbackModel ?? config.model;
-      const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase);
+      const compactor = new CompactionManager(
+        config.apiKey,
+        compactModel,
+        config.apiBase,
+        config.customFetch,
+      );
 
       // Compact the middle portion of messages (keep first 2 and last 6)
       const messages = stateBefore.messages;

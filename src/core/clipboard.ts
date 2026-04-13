@@ -51,8 +51,24 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       proc.stdin.flush();
       proc.stdin.end();
 
-      // Wait for the process to finish
-      const exitCode = await proc.exited;
+      // Wait for the process to finish with a 1s cap. wl-copy hangs
+      // forever when WAYLAND_DISPLAY is unset, and xsel/xclip block on
+      // their daemon fork when DISPLAY is missing — without a timeout
+      // the whole clipboard tool stalls the UI.
+      const timeoutMs = 1000;
+      const exitCode = await Promise.race<number | null>([
+        proc.exited,
+        new Promise<null>((resolve) =>
+          setTimeout(() => {
+            try {
+              proc.kill();
+            } catch {
+              /* already exited */
+            }
+            resolve(null);
+          }, timeoutMs),
+        ),
+      ]);
 
       if (exitCode === 0) {
         return true;
