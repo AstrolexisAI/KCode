@@ -388,6 +388,14 @@ export class ConversationManager {
    */
   async *sendMessage(userMessage: string): AsyncGenerator<StreamEvent> {
     const _t0 = Date.now();
+    // Phase 21: record the user's text for downstream guards (write-guards
+    // uses this to decide whether doc-file creation was authorized).
+    try {
+      const { recordUserText } = await import("./session-tracker.js");
+      recordUserText(userMessage);
+    } catch {
+      /* non-fatal */
+    }
     // Ensure system prompt is built (async due to Pro check in distillation)
     await this._systemPromptReady;
 

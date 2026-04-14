@@ -407,3 +407,207 @@ export function buildShrinkageReport(
   lines.push(`that claim is almost certainly false.`);
   return lines.join("\n");
 }
+
+// ─── Phase 21: unsolicited documentation files ───────────────────
+//
+// The Orbital NASA Dashboard session showed the model creating 10
+// files (orbital.html + server.js + package.json + README.md +
+// QUICK_START.md + .gitignore + TECHNICAL_REFERENCE.md + INSTALLATION_
+// CHECK.md + INDEX.md + SUMMARY.txt) when the user had asked for "un
+// solo archivo HTML completo, autónomo y bonito" with the server as
+// an in-file comment. ~1,851 lines of documentation fabricated on the
+// spot, none of it requested.
+//
+// Phase 21 respects intent. Doc files are NOT always wrong — if the
+// user says "crea un proyecto completo" / "full project" / "repositorio"
+// or explicitly mentions docs, the model should be free to create them.
+// But when the user asks for a single file or doesn't mention docs
+// at all, a Write to README.md / QUICK_START.md / TECHNICAL_REFERENCE.md
+// is scope drift and gets blocked.
+
+/**
+ * Basename patterns that indicate a documentation file. Matched
+ * case-insensitively against basename(filePath).
+ */
+const DOC_FILENAME_PATTERNS: RegExp[] = [
+  /^README(\.\w+)?$/i,
+  /^CHANGELOG(\.\w+)?$/i,
+  /^CONTRIBUTING(\.\w+)?$/i,
+  /^CODE_OF_CONDUCT(\.\w+)?$/i,
+  /^AUTHORS(\.\w+)?$/i,
+  /^QUICK[_-]?START(\.\w+)?$/i,
+  /^GETTING[_-]?STARTED(\.\w+)?$/i,
+  /^INSTALLATION(_\w+)?(\.\w+)?$/i,
+  /^INSTALL(\.\w+)?$/i,
+  /^USAGE(\.\w+)?$/i,
+  /^API(\.\w+)?$/i,
+  /^INDEX\.md$/i,
+  /^SUMMARY(\.\w+)?$/i,
+  /^TROUBLESHOOTING(\.\w+)?$/i,
+  /^FAQ(\.\w+)?$/i,
+  /^GUIDE(\.\w+)?$/i,
+  /^MANUAL(\.\w+)?$/i,
+  /^TUTORIAL(\.\w+)?$/i,
+  /^NOTES?(\.\w+)?$/i,
+  /^DEPLOYMENT(\.\w+)?$/i,
+  /^ARCHITECTURE(\.\w+)?$/i,
+  /^DESIGN(\.\w+)?$/i,
+  /_REFERENCE\.(md|txt|rst)$/i,
+  /_GUIDE\.(md|txt|rst)$/i,
+  /_NOTES\.(md|txt|rst)$/i,
+  /_DOCS?\.(md|txt|rst)$/i,
+  /^TECHNICAL[_-]\w+\.(md|txt|rst)$/i,
+  /^PROJECT[_-]\w+\.(md|txt|rst)$/i,
+];
+
+export function isDocFilename(filePath: string): boolean {
+  const name = basename(filePath);
+  return DOC_FILENAME_PATTERNS.some((re) => re.test(name));
+}
+
+/**
+ * Keywords in the user's request that grant the model permission to
+ * create documentation files. The user either explicitly asked for
+ * docs OR signaled they want a full project/repo/deliverable.
+ */
+const DOC_ALLOWANCE_KEYWORDS = [
+  // direct doc requests
+  /\bread\s*me\b/i,
+  /\breadme\b/i,
+  /\bdocument/i, // matches document, documentation, documenta, documentaci[oó]n
+  /\bdocs?\b/i,
+  /\bdoc\s+(?:files?|comments?)\b/i,
+  /\bguide\b/i,
+  /\bgu[ií]a\b/i,
+  /\btutorial\b/i,
+  /\bchangelog\b/i,
+  /\bmanual\b/i,
+  /\binstructions\b/i,
+  /\binstrucciones\b/i,
+  /\bquick\s*start\b/i,
+  /\btroubleshoot/i,
+  // project-completeness signals
+  /\bcomplete\s+project\b/i,
+  /\bfull\s+project\b/i,
+  /\bproyecto\s+completo\b/i,
+  /\brepositorio\b/i,
+  /\brepository\b/i,
+  /\bboilerplate\b/i,
+  /\bscaffold(?:ing)?\b/i,
+  /\bstarter\s*kit\b/i,
+  /\bdeliverable\b/i,
+  /\bentrega(?:ble)?\b/i,
+  /\bvarios\s+archivos\b/i,
+  /\bm[uú]ltiples?\s+archivos\b/i,
+  /\bmultiple\s+files\b/i,
+];
+
+/**
+ * Look at the user-authored text messages in the conversation and
+ * determine whether they granted doc-creation permission. Considers
+ * ALL user text messages — the user might set scope in an earlier
+ * turn and keep issuing small follow-ups after.
+ */
+export function userAllowedDocs(
+  userTexts: readonly string[],
+): { allowed: boolean; matchedKeyword: string | null } {
+  for (const text of userTexts) {
+    if (!text) continue;
+    for (const re of DOC_ALLOWANCE_KEYWORDS) {
+      const m = text.match(re);
+      if (m) return { allowed: true, matchedKeyword: m[0] };
+    }
+  }
+  return { allowed: false, matchedKeyword: null };
+}
+
+export interface UnsolicitedDocVerdict {
+  isUnsolicitedDoc: boolean;
+  filename: string;
+  /** Matched keyword if the user DID allow docs. Empty string if blocked. */
+  allowanceKeyword: string;
+}
+
+/**
+ * Combined check: is this Write creating a doc file that the user did
+ * not ask for? Returns isUnsolicitedDoc=true when the filename matches
+ * the doc blocklist AND none of the user's text messages contain a
+ * doc-allowance keyword.
+ */
+export function detectUnsolicitedDoc(
+  filePath: string,
+  userTexts: readonly string[],
+): UnsolicitedDocVerdict {
+  const filename = basename(filePath);
+  if (!isDocFilename(filePath)) {
+    return { isUnsolicitedDoc: false, filename, allowanceKeyword: "" };
+  }
+  const { allowed, matchedKeyword } = userAllowedDocs(userTexts);
+  if (allowed) {
+    return {
+      isUnsolicitedDoc: false,
+      filename,
+      allowanceKeyword: matchedKeyword ?? "",
+    };
+  }
+  return { isUnsolicitedDoc: true, filename, allowanceKeyword: "" };
+}
+
+export function buildUnsolicitedDocReport(
+  verdict: UnsolicitedDocVerdict,
+): string {
+  const lines: string[] = [];
+  lines.push(
+    `BLOCKED — FILE NOT CREATED: "${verdict.filename}" looks like an unsolicited documentation file.`,
+  );
+  lines.push("");
+  lines.push(
+    `The user did NOT ask for docs. None of their messages in this`,
+  );
+  lines.push(
+    `conversation contain any of: readme, documentation, guide, docs,`,
+  );
+  lines.push(
+    `tutorial, changelog, instructions, manual, complete project, full`,
+  );
+  lines.push(
+    `project, proyecto completo, repositorio, boilerplate, scaffold,`,
+  );
+  lines.push(`deliverable, multiple files, varios archivos.`);
+  lines.push("");
+  lines.push(
+    `The Write tool description is explicit: "NEVER create documentation`,
+  );
+  lines.push(
+    `files (*.md) or README files unless explicitly requested by the`,
+  );
+  lines.push(`User." This file is blocked for that reason.`);
+  lines.push("");
+  lines.push(`You MUST do ONE of:`);
+  lines.push(
+    `  a) If the user asked for a single file or a specific deliverable,`,
+  );
+  lines.push(
+    `     put any explanatory text as inline comments in that file instead`,
+  );
+  lines.push(`     of a separate doc.`);
+  lines.push(
+    `  b) Skip the doc. Finish the real task. If the user wants a README`,
+  );
+  lines.push(`     later, they'll ask.`);
+  lines.push(
+    `  c) If you believe the user DID ask for docs and the detection is`,
+  );
+  lines.push(
+    `     wrong, re-read their request carefully. Common trigger phrases`,
+  );
+  lines.push(
+    `     are "full project", "complete repo", "README", "documentation".`,
+  );
+  lines.push(`     If none of those are there, they did not ask for docs.`);
+  lines.push("");
+  lines.push(
+    `Do NOT tell the user you created "${verdict.filename}" — you did not.`,
+  );
+  return lines.join("\n");
+}
