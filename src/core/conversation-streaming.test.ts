@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { detectRepetitionLoop } from "./conversation-streaming";
+import {
+  detectLargeBlockRepetition,
+  detectRepetitionLoop,
+} from "./conversation-streaming";
 
 describe("detectRepetitionLoop", () => {
   test("returns null for short text", () => {
@@ -113,5 +116,96 @@ describe("detectRepetitionLoop", () => {
     expect(result).not.toBeNull();
     // Should be truncated to ~63 chars (60 + "...")
     expect(result!.length).toBeLessThanOrEqual(63);
+  });
+});
+
+// ─── Phase 23: large-block repetition ─────────────────────────
+
+describe("detectLargeBlockRepetition", () => {
+  test("returns null for short text", () => {
+    expect(detectLargeBlockRepetition("hello world")).toBeNull();
+    expect(detectLargeBlockRepetition("x".repeat(1400))).toBeNull();
+  });
+
+  test("returns null for normal prose with no repeats", () => {
+    const prose =
+      "This is a normal paragraph of writing. ".repeat(50) +
+      "Now a different passage continues here describing something else entirely. ".repeat(
+        20,
+      );
+    // Different subparagraphs, no exact repeated fingerprint
+    // Actually repeat(50) would catch… so use unique lorem-ish text
+    const text =
+      "Mission control reports all systems nominal at this time. " +
+      "The primary telemetry subsystem is processing incoming data. " +
+      "Guidance computers show stable trajectory parameters throughout. " +
+      "Orbital mechanics are within expected tolerance bands for phase. " +
+      "Ground stations in Madrid and Canberra confirm signal acquisition. " +
+      "Thermal sensors indicate nominal heat dissipation on sunward side. " +
+      "Life support readings well within safety margins across crew bays. " +
+      "Communication latency measurements show 4 minute light-time delay. ";
+    expect(detectLargeBlockRepetition(text)).toBeNull();
+  });
+
+  test("catches the Orbital-style refactor-loop (≥3 large-block repeats)", () => {
+    const refactorBlock =
+      "✅ Refactor Final — Barra Superior (Flight Control Room)\n" +
+      "He aplicado un diseño limpio, profesional y fiel al estilo real " +
+      "de una sala de control de misiones de la NASA (Flight Control " +
+      "Room / MCC).\n" +
+      "Código limpio (reemplaza toda la sección de la barra superior):\n" +
+      "html body content goes here with many Tailwind classes and div " +
+      "elements that make up the entire header section of the page.\n";
+    // Repeat the block 4 times, matching the Orbital session
+    const text = refactorBlock.repeat(4);
+    const result = detectLargeBlockRepetition(text);
+    expect(result).not.toBeNull();
+  });
+
+  test("catches 3 exact repetitions of a long block", () => {
+    // Block is 400+ chars so the total text exceeds LARGE_BLOCK_MIN_TEXT (1500).
+    const block =
+      "The Orbital dashboard refactor step header starts here. This block " +
+      "contains enough recognizable text to serve as a fingerprint across " +
+      "multiple repetitions within the streaming accumulator. We want the " +
+      "detector to catch repetitions like this one immediately. End block. " +
+      "Padding text to make the block large enough to survive the sample offset. " +
+      "Padding text to make the block large enough to survive the sample offset. ";
+    const text = block.repeat(4);
+    expect(detectLargeBlockRepetition(text)).not.toBeNull();
+  });
+
+  test("does NOT fire on only 2 repetitions (below threshold)", () => {
+    const block =
+      "Mission status report: all systems are performing within nominal " +
+      "parameters and there is nothing to report at this precise time.";
+    const text = block.repeat(2) + "different ending here now";
+    expect(detectLargeBlockRepetition(text)).toBeNull();
+  });
+
+  test("ignores fingerprints dominated by punctuation / box-drawing chars", () => {
+    // Markdown tables use many box-drawing chars that repeat legitimately
+    const table =
+      "┌" + "─".repeat(60) + "┐\n" +
+      "│" + " ".repeat(60) + "│\n" +
+      "└" + "─".repeat(60) + "┘\n";
+    const text = "Here is a table:\n" + table.repeat(3) + "End of tables.";
+    // The fingerprint would be mostly box-drawing — reject
+    expect(detectLargeBlockRepetition(text)).toBeNull();
+  });
+
+  test("tolerates whitespace normalization between repetitions", () => {
+    const base =
+      "The operational flight plan section outlines key maneuvers and " +
+      "checkpoints throughout the mission timeline. Each stage is documented " +
+      "with its exact start time, duration, and primary objectives listed " +
+      "in sequence. The flight director tracks progress against this plan. " +
+      "Extra narrative padding included here to keep the fingerprint away " +
+      "from the tail edge of the buffer so the sample offset still hits it. ";
+    // Six repetitions with varying whitespace between — should normalize
+    const text =
+      base + "\n  " + base + "\n\n  " + base + "\n\n\n" + base +
+      "\n\n" + base + "\n" + base;
+    expect(detectLargeBlockRepetition(text)).not.toBeNull();
   });
 });
