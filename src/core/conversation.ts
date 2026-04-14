@@ -506,6 +506,8 @@ export class ConversationManager {
         checkClaimReality,
         buildRealityCheckReminder,
         buildClaimMismatchReminder,
+        checkContentMismatch,
+        buildContentMismatchReminder,
       } = await import("./claim-reality-check.js");
       if (lastAssistantText) {
         const verdict = checkClaimReality(lastAssistantText, this.state.messages);
@@ -526,6 +528,25 @@ export class ConversationManager {
             "reality-check",
             `claim/mutation mismatch: ${verdict.claims.length} claims, ${verdict.successfulMutations} real mutations`,
           );
+        } else {
+          // Phase 20: content-level mismatch — prose URLs that never
+          // appeared in any tool call this turn. Catches the Orbital/Mars
+          // session pattern where the model showed picsum.photos URLs in
+          // a markdown diff while the actual Edit used totally different
+          // photojournal.jpl.nasa.gov URLs. Only runs when phase 15/18
+          // did not already fire.
+          const contentVerdict = checkContentMismatch(
+            lastAssistantText,
+            this.state.messages,
+          );
+          if (contentVerdict.isContentMismatch) {
+            const reminder = buildContentMismatchReminder(contentVerdict);
+            this.state.messages.push({ role: "user", content: reminder });
+            log.info(
+              "reality-check",
+              `content mismatch: ${contentVerdict.missingLiterals.length} fabricated URL(s) in prose`,
+            );
+          }
         }
       }
     } catch (err) {
