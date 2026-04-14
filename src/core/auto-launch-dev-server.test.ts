@@ -153,6 +153,47 @@ describe("hasRunnableWriteInTurn", () => {
     expect(hasRunnableWriteInTurn(messages)).toBe(false);
   });
 
+  test("Bug #10: skips [SYSTEM]-injected user messages when walking back", () => {
+    // Reproduces the Orbital v2.10.65 case where truncation retries
+    // injected [SYSTEM] Your response was cut off messages AFTER
+    // the original Writes, and hasRunnableWriteInTurn then treated
+    // the [SYSTEM] message as the turn boundary — hiding the Write.
+    const messages: Message[] = [
+      { role: "user", content: "levante la aplicación en puerto 24564" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "w1",
+            name: "Write",
+            input: { file_path: "/tmp/orbital.html", content: "<html></html>" },
+          } as unknown as never,
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "w1",
+            is_error: false,
+            content: "Created /tmp/orbital.html (987 lines)",
+          } as unknown as never,
+        ],
+      },
+      // handlePostTurn truncation retry injection
+      {
+        role: "user",
+        content:
+          '[SYSTEM] Your response was cut off. Here is how it ended: "..." Continue EXACTLY from that point.',
+      },
+      // Model generates more text (no tool call)
+      { role: "assistant", content: "More text here" },
+    ];
+    expect(hasRunnableWriteInTurn(messages)).toBe(true);
+  });
+
   test("scopes to the current turn only (ignores earlier user text)", () => {
     const messages: Message[] = [
       { role: "user", content: "earlier request" },

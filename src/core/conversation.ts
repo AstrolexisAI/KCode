@@ -1552,37 +1552,40 @@ export class ConversationManager {
 
         if (postTurnResult.action === "break") {
           // Phase 22: the model has finished its final response and the
-          // agent loop is about to exit. This is the correct firing
-          // point for auto-launch — the previous placement at the
-          // bottom of the while iteration was dead code because
-          // handlePostTurn breaks out of the loop BEFORE reaching it.
-          // The hook itself is guarded by runtime-intent + write-in-turn
-          // checks so it's safe to call on every normal break.
-          if (stopReason === "end_turn") {
-            try {
-              const { maybeAutoLaunchDevServer } = await import(
-                "./auto-launch-dev-server.js"
+          // agent loop is about to exit. The inner hasRuntimeIntent +
+          // hasRunnableWriteInTurn guards inside maybeAutoLaunchDevServer
+          // are sufficient; we drop the stopReason === "end_turn" gate
+          // because (a) the break path already implies the turn is
+          // ending, and (b) the gate was blocking firing on max_tokens
+          // or other legitimate end states. Safe to call on every break.
+          try {
+            const { maybeAutoLaunchDevServer } = await import(
+              "./auto-launch-dev-server.js"
+            );
+            const { getUserTexts } = await import("./session-tracker.js");
+            const launchResult = await maybeAutoLaunchDevServer(
+              this.config.workingDirectory,
+              this.state.messages,
+              getUserTexts(),
+            );
+            if (launchResult) {
+              this.state.messages.push({
+                role: "assistant",
+                content: launchResult.notice,
+              });
+              yield { type: "text_delta", text: launchResult.notice };
+              log.info(
+                "auto-launch",
+                `phase 22 fired: ${launchResult.url ?? "no url"}`,
               );
-              const { getUserTexts } = await import("./session-tracker.js");
-              const launchResult = await maybeAutoLaunchDevServer(
-                this.config.workingDirectory,
-                this.state.messages,
-                getUserTexts(),
+            } else {
+              log.debug(
+                "auto-launch",
+                `phase 22 skipped at break (stopReason=${stopReason})`,
               );
-              if (launchResult) {
-                this.state.messages.push({
-                  role: "assistant",
-                  content: launchResult.notice,
-                });
-                yield { type: "text_delta", text: launchResult.notice };
-                log.info(
-                  "auto-launch",
-                  `phase 22 fired: ${launchResult.url ?? "no url"}`,
-                );
-              }
-            } catch (err) {
-              log.debug("auto-launch", `hook failed (non-fatal): ${err}`);
             }
+          } catch (err) {
+            log.debug("auto-launch", `hook failed (non-fatal): ${err}`);
           }
           this.abortController = null;
           break;
