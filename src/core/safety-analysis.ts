@@ -450,14 +450,16 @@ export function validateFileWritePath(
   workingDirectory: string,
   additionalDirs?: string[],
 ): PermissionResult {
-  if (!isAbsolute(filePath)) {
-    return {
-      allowed: false,
-      reason: `File path must be absolute, got: ${filePath}`,
-    };
-  }
-
-  let resolved = resolve(filePath);
+  // Auto-resolve relative paths against the working directory. Previously
+  // this rejected relative paths outright with a "path must be absolute"
+  // refusal, which was too strict — the LLM routinely passes bare filenames
+  // like `nasa-explorer.html` and the intent is always "in the current cwd".
+  // All downstream checks (sensitive dirs, symlink traversal, working
+  // directory bounds) still apply after resolution, so the relaxation
+  // does not weaken security — it just makes the tool accept the common case.
+  let resolved = isAbsolute(filePath)
+    ? resolve(filePath)
+    : resolve(workingDirectory, filePath);
 
   // Resolve symlinks to prevent directory traversal via symlink chains
   try {
