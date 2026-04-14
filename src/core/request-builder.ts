@@ -85,8 +85,13 @@ export function classifyApiErrorHint(status: number, errorText: string): string 
     return " (hint: request may exceed model context window — try /compact or reduce conversation length)";
   }
   if (status >= 500 && status < 600) {
-    // 5xx from an upstream provider is almost always transient. The
-    // user needs to know retry / model switch is the fix.
+    // 5xx with an explicit "overloaded" body is a provider capacity
+    // problem (e.g. xAI grok saturation, Anthropic model overload).
+    // Point the user at the right fix directly.
+    if (errLower.includes("overload")) {
+      return " (hint: provider model is overloaded right now — retry or /toggle to another provider)";
+    }
+    // Generic 5xx: transient upstream issue, same advice
     return " (hint: provider returned a server error — transient, retry in a moment or /toggle to another model)";
   }
   return "";
