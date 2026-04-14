@@ -227,6 +227,12 @@ export function countSuccessfulMutations(messages: Message[]): {
 export interface RealityVerdict {
   /** True if the assistant text claims changes but no tool actually made any. */
   isHallucinatedCompletion: boolean;
+  /**
+   * Phase 18: true when the claim-to-mutation ratio is suspicious — model
+   * made many distinct claims but only a few mutations landed. Weaker
+   * signal than isHallucinatedCompletion, triggers a softer reminder.
+   */
+  isClaimMutationMismatch: boolean;
   claims: string[];
   successfulMutations: number;
   mutatingToolNames: string[];
@@ -245,8 +251,20 @@ export function checkClaimReality(
   const isHallucinatedCompletion =
     successful === 0 &&
     (claims.length >= 2 || (hasCompletionMarker && claims.length >= 1));
+  // Phase 18: mismatch fires when there ARE real mutations but the claim
+  // count is ≥3x the mutation count AND claims ≥ 5. This catches the
+  // pattern where the model makes 2 small Edits and then writes a bullet
+  // list describing 8-14 "improvements" that never happened. Do NOT fire
+  // when isHallucinatedCompletion is already true — that has its own
+  // stronger reminder.
+  const isClaimMutationMismatch =
+    !isHallucinatedCompletion &&
+    successful >= 1 &&
+    claims.length >= 5 &&
+    claims.length >= successful * 3;
   return {
     isHallucinatedCompletion,
+    isClaimMutationMismatch,
     claims,
     successfulMutations: successful,
     mutatingToolNames: names,
@@ -321,6 +339,62 @@ export function buildRealityCheckReminder(verdict: RealityVerdict): string {
   );
   lines.push(
     `mutation tool has actually returned a success result in this turn.`,
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Phase 18: softer reminder for the claim/mutation mismatch case. Some
+ * mutations landed, but the claim count is far higher than the mutation
+ * count — the model is padding the summary with improvements that never
+ * happened.
+ */
+export function buildClaimMismatchReminder(verdict: RealityVerdict): string {
+  const lines: string[] = [];
+  lines.push(`[CLAIM/MUTATION MISMATCH]`);
+  lines.push(``);
+  lines.push(
+    `You made ${verdict.claims.length} distinct change claims in your summary,`,
+  );
+  lines.push(
+    `but only ${verdict.successfulMutations} mutation tool call(s) actually`,
+  );
+  lines.push(
+    `succeeded in this turn (${verdict.mutatingToolNames.join(", ") || "none"}).`,
+  );
+  lines.push(``);
+  lines.push(`That ratio is suspicious. Some of the claims below may be real,`);
+  lines.push(`but others are almost certainly padding — things you would have`);
+  lines.push(`done if you had kept working, not things that actually landed:`);
+  lines.push(``);
+  for (const claim of verdict.claims.slice(0, 10)) {
+    lines.push(`  • "${claim}"`);
+  }
+  if (verdict.claims.length > 10) {
+    lines.push(`  • ...and ${verdict.claims.length - 10} more`);
+  }
+  lines.push(``);
+  lines.push(`Before responding again, do ONE of:`);
+  lines.push(
+    `  a) Go back and actually implement the claims you listed. Use Edit /`,
+  );
+  lines.push(
+    `     MultiEdit / Write on the real file(s), one claim at a time, until`,
+  );
+  lines.push(`     the summary matches reality.`);
+  lines.push(
+    `  b) Rewrite your summary to describe ONLY what the ${verdict.successfulMutations}`,
+  );
+  lines.push(
+    `     successful mutation(s) actually did. Remove every bullet that wasn't`,
+  );
+  lines.push(`     backed by a real tool call in this turn.`);
+  lines.push(``);
+  lines.push(
+    `Padding a summary with aspirational "improvements" is a quieter version`,
+  );
+  lines.push(
+    `of the same hallucination phase 15 catches. The user checks the file.`,
   );
   return lines.join("\n");
 }

@@ -502,9 +502,11 @@ export class ConversationManager {
     // session evidence: model wrote "Updated version v2.1 → v2.3" while
     // the file still had v2.1 untouched.
     try {
-      const { checkClaimReality, buildRealityCheckReminder } = await import(
-        "./claim-reality-check.js"
-      );
+      const {
+        checkClaimReality,
+        buildRealityCheckReminder,
+        buildClaimMismatchReminder,
+      } = await import("./claim-reality-check.js");
       if (lastAssistantText) {
         const verdict = checkClaimReality(lastAssistantText, this.state.messages);
         if (verdict.isHallucinatedCompletion) {
@@ -513,6 +515,16 @@ export class ConversationManager {
           log.info(
             "reality-check",
             `hallucinated completion detected: ${verdict.claims.length} claims, ${verdict.successfulMutations} real mutations`,
+          );
+        } else if (verdict.isClaimMutationMismatch) {
+          // Phase 18: softer reminder when some mutations landed but the
+          // claim count is ≥3x the mutation count. Model is padding the
+          // summary with improvements that never happened.
+          const reminder = buildClaimMismatchReminder(verdict);
+          this.state.messages.push({ role: "user", content: reminder });
+          log.info(
+            "reality-check",
+            `claim/mutation mismatch: ${verdict.claims.length} claims, ${verdict.successfulMutations} real mutations`,
           );
         }
       }
