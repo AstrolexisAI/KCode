@@ -206,6 +206,27 @@ describe("classifyApiErrorHint", () => {
     expect(classifyApiErrorHint(500, "")).toMatch(/\/toggle to another model/);
   });
 
+  test("returns overload-specific hint when body mentions 'overloaded'", () => {
+    // xAI grok capacity errors:
+    //   {"error":{"message":"Primary model overloaded"}}
+    //   {"error":{"message":"Model overloaded"}}
+    //   {"error":{"message":"Internal server error: model overloaded"}}
+    const h1 = classifyApiErrorHint(
+      500,
+      '{"error":{"message":"Primary model overloaded"}}',
+    );
+    expect(h1).toMatch(/overloaded right now/);
+    expect(h1).toMatch(/\/toggle to another provider/);
+    expect(h1).not.toMatch(/transient/);
+
+    expect(classifyApiErrorHint(500, "Model overloaded")).toMatch(
+      /overloaded right now/,
+    );
+    expect(
+      classifyApiErrorHint(503, "Internal server error: model overloaded"),
+    ).toMatch(/overloaded right now/);
+  });
+
   test("returns empty string for unclassified errors", () => {
     expect(classifyApiErrorHint(418, "")).toBe("");
   });
