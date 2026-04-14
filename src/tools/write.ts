@@ -403,6 +403,8 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
       detectSkeletonContent,
       buildSkeletonReport,
       checkDegradation,
+      detectInPlaceShrinkage,
+      buildShrinkageReport,
     } = await import("../core/write-guards.js");
 
     const proliferation = detectSiblingProliferation(file_path);
@@ -410,6 +412,20 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
       return {
         tool_use_id: "",
         content: buildProliferationReport(file_path, proliferation),
+        is_error: true,
+      };
+    }
+
+    // Phase 19: in-place shrinkage. Block a Write that replaces an
+    // existing file with significantly fewer lines. The NASA Explorer
+    // session showed the model rewriting nasa-explorer.html from 901
+    // lines to 554 lines (39% drop) while claiming "behavior is
+    // identical" — silent lossy rewrite.
+    const shrinkage = detectInPlaceShrinkage(file_path, content);
+    if (shrinkage.isShrinking) {
+      return {
+        tool_use_id: "",
+        content: buildShrinkageReport(file_path, shrinkage),
         is_error: true,
       };
     }

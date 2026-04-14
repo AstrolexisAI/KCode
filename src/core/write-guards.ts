@@ -299,3 +299,111 @@ export function checkDegradation(
   }
   return null;
 }
+
+// ─── Phase 19: in-place shrinkage detection ──────────────────────
+//
+// Different from checkDegradation above — that one compares the new
+// Write against a SIBLING file (foo.html when writing foo-refactored.html).
+// checkShrinkage fires when Write is REPLACING the same file that
+// already exists. The NASA Explorer v2.10.54 session showed the model
+// overwriting nasa-explorer.html from 901 lines to 554 lines (39%
+// shrinkage) in-place, while claiming "behavior is identical" — a
+// silent lossy rewrite that neither skeleton detection nor phase 15
+// caught.
+
+export interface ShrinkageVerdict {
+  /** True if the in-place Write drops below the shrinkage threshold. */
+  isShrinking: boolean;
+  originalLines: number;
+  newLines: number;
+  /** New content as a fraction of the original (e.g. 0.61 = new is 61% of original). */
+  ratio: number;
+}
+
+const SHRINKAGE_MIN_ORIGINAL_LINES = 300;
+/** Fire when new content is less than this fraction of the original. */
+const SHRINKAGE_MAX_RATIO = 0.65;
+
+export function detectInPlaceShrinkage(
+  filePath: string,
+  newContent: string,
+): ShrinkageVerdict {
+  try {
+    if (!existsSync(filePath)) {
+      return { isShrinking: false, originalLines: 0, newLines: 0, ratio: 1 };
+    }
+    const stat = statSync(filePath);
+    if (!stat.isFile()) {
+      return { isShrinking: false, originalLines: 0, newLines: 0, ratio: 1 };
+    }
+    const original = readFileSync(filePath, "utf-8");
+    const originalLines = original.split("\n").length;
+    const newLines = newContent.split("\n").length;
+    if (originalLines < SHRINKAGE_MIN_ORIGINAL_LINES) {
+      return { isShrinking: false, originalLines, newLines, ratio: 1 };
+    }
+    const ratio = newLines / originalLines;
+    return {
+      isShrinking: ratio < SHRINKAGE_MAX_RATIO,
+      originalLines,
+      newLines,
+      ratio,
+    };
+  } catch {
+    return { isShrinking: false, originalLines: 0, newLines: 0, ratio: 1 };
+  }
+}
+
+export function buildShrinkageReport(
+  filePath: string,
+  verdict: ShrinkageVerdict,
+): string {
+  const pct = Math.round((1 - verdict.ratio) * 100);
+  const lines: string[] = [];
+  lines.push(
+    `BLOCKED — FILE NOT OVERWRITTEN: "${basename(filePath)}" would shrink by ${pct}%.`,
+  );
+  lines.push("");
+  lines.push(
+    `Original: ${verdict.originalLines} lines. Your new content: ${verdict.newLines} lines.`,
+  );
+  lines.push(
+    `That's a ${pct}% reduction on a file that already works. Rewriting a large`,
+  );
+  lines.push(
+    `file from scratch in one Write almost always drops features silently —`,
+  );
+  lines.push(
+    `the model writes what it remembers, not what's actually there.`,
+  );
+  lines.push("");
+  lines.push(`You MUST do ONE of:`);
+  lines.push(
+    `  a) Use Edit / MultiEdit for targeted changes. Keep the original file`,
+  );
+  lines.push(
+    `     intact and change only the specific lines that need to change.`,
+  );
+  lines.push(
+    `  b) If you genuinely want a full rewrite, first LIST every feature in`,
+  );
+  lines.push(
+    `     the original (counters, modals, event handlers, animations, data`,
+  );
+  lines.push(
+    `     structures, keyboard shortcuts) and confirm each one is in your new`,
+  );
+  lines.push(`     content. Do NOT claim "behavior is identical" without that check.`);
+  lines.push(
+    `  c) If the user explicitly asked for a shorter version, include that`,
+  );
+  lines.push(
+    `     intent in your response and list the features you are removing.`,
+  );
+  lines.push("");
+  lines.push(
+    `Do NOT tell the user "behavior is identical" after a ${pct}% shrink —`,
+  );
+  lines.push(`that claim is almost certainly false.`);
+  return lines.join("\n");
+}

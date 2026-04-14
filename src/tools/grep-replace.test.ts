@@ -154,4 +154,44 @@ describe("grep-replace tool", () => {
     expect(result.is_error).toBe(true);
     expect(result.content).toContain("within the project directory");
   });
+
+  // ─── Phase 19: oversized multi-region patterns ───
+
+  test("rejects pattern over 500 chars", async () => {
+    const bigPattern = `let foo = ${"x".repeat(600)} end`;
+    const result = await executeGrepReplace({
+      pattern: bigPattern,
+      replacement: "const foo = 1",
+    });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("too large for reliable matching");
+    expect(String(result.content)).toMatch(/Edit with a small unique anchor/);
+  });
+
+  test("rejects pattern with 2+ [\\s\\S]*? lazy wildcards", async () => {
+    const pattern = `const foo = \\{[\\s\\S]*?\\};\\s*const bar = \\[[\\s\\S]*?\\];`;
+    const result = await executeGrepReplace({
+      pattern,
+      replacement: "/* ... */",
+    });
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("too large for reliable matching");
+    expect(String(result.content)).toContain("2 lazy");
+  });
+
+  test("literal=true bypasses pattern size check", async () => {
+    // Literal strings can legitimately be long (e.g. replacing a big
+    // comment block). Size guard only applies to regex patterns.
+    const bigLiteral = "x".repeat(800);
+    const result = await executeGrepReplace({
+      pattern: bigLiteral,
+      replacement: "y",
+      literal: true,
+    });
+    // Should NOT be a size-guard rejection — may hit "no matches" but
+    // that's a different code path.
+    if (result.is_error) {
+      expect(String(result.content)).not.toContain("too large for reliable matching");
+    }
+  });
 });
