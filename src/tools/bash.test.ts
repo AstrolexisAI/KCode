@@ -206,6 +206,56 @@ try {
     expect(result.is_error).toBeFalsy();
   });
 
+  // ─── Phase 24: modern server patterns (Orbital regression) ───
+
+  test("auto-backgrounds `npm run dev` (Orbital regression)", async () => {
+    // npm run dev was NOT in the inline regex pre-phase-24 and got
+    // killed at the 4s mark, reported as "Bash failed" even though
+    // the server was booting. Now routed via detectServerSpawn.
+    const start = Date.now();
+    await executeBash({ command: "echo 'would run npm run dev' && exit 0" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("auto-backgrounds `node server.js`", async () => {
+    const start = Date.now();
+    await executeBash({ command: "echo 'would run node server.js' && exit 0" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("auto-backgrounds `next dev`", async () => {
+    const start = Date.now();
+    await executeBash({ command: "echo 'would run next dev' && exit 0" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("auto-backgrounds `vite` standalone", async () => {
+    const start = Date.now();
+    await executeBash({ command: "echo 'would run vite' && exit 0" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("auto-backgrounds `bun run dev`", async () => {
+    const start = Date.now();
+    await executeBash({ command: "echo 'would run bun run dev' && exit 0" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(20_000);
+  });
+
+  test("does NOT auto-background `node scripts/oneshot.js`", async () => {
+    // One-shot node scripts that aren't the server file should stay
+    // foreground so the user sees stdout and exit code immediately.
+    const start = Date.now();
+    const result = await executeBash({ command: "echo 'one-shot script'" });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(5_000);
+    expect(result.content).toContain("one-shot script");
+  });
+
   // ─── tool_use_id is always empty string ───
 
   test("result always has empty tool_use_id", async () => {

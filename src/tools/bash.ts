@@ -462,11 +462,39 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
   }
 
   // Detect background commands (ending with & OR run_in_background flag)
-  // Auto-detect server/daemon commands that would block forever
-  const isServerCommand =
-    /\b(http\.server|SimpleHTTPServer|serve|live-server|nodemon|uvicorn|gunicorn|flask\s+run|php\s+-S|ruby\s+-run|caddy\s+run|nginx|apache)\b/.test(
-      command,
-    ) && !/&\s*$/.test(command.trim()); // only if not already backgrounded
+  //
+  // Auto-detect server/daemon commands that would block forever. Two
+  // pattern sources:
+  //   1. Classic/legacy server commands matched inline (http.server,
+  //      nodemon, flask run, etc.)
+  //   2. Modern Node/Bun/Python framework patterns covered by
+  //      detectServerSpawn from bash-spawn-verifier — this catches
+  //      `npm run dev`, `node server.js`, `next dev`, `vite`,
+  //      `bun run dev`, `astro dev`, `uvicorn`, etc.
+  //
+  // Pre-phase-24 this detector only used (1), so `cd project && npm
+  // run dev` ran in the foreground and got killed at the 4-second mark
+  // by the bash wrapper timeout. The model saw a "failure" even though
+  // the server was actually booting correctly. See the Orbital
+  // kcode-2026-04-14 session.
+  const alreadyBackgrounded = /&\s*$/.test(command.trim());
+  let isServerCommand = false;
+  if (!alreadyBackgrounded) {
+    const inlineMatch =
+      /\b(http\.server|SimpleHTTPServer|serve|live-server|nodemon|uvicorn|gunicorn|flask\s+run|php\s+-S|ruby\s+-run|caddy\s+run|nginx|apache)\b/.test(
+        command,
+      );
+    if (inlineMatch) {
+      isServerCommand = true;
+    } else {
+      try {
+        const { detectServerSpawn } = await import("../core/bash-spawn-verifier.js");
+        if (detectServerSpawn(command)) isServerCommand = true;
+      } catch {
+        /* non-fatal — fall through without extra detection */
+      }
+    }
+  }
   if (isServerCommand) {
     log.info("tool", `Auto-backgrounding server command: ${cmdPrefix}`);
   }
