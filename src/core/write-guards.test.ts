@@ -9,10 +9,14 @@ import {
   buildProliferationReport,
   buildShrinkageReport,
   buildSkeletonReport,
+  buildUnsolicitedDocReport,
   checkDegradation,
   detectInPlaceShrinkage,
   detectSiblingProliferation,
   detectSkeletonContent,
+  detectUnsolicitedDoc,
+  isDocFilename,
+  userAllowedDocs,
 } from "./write-guards";
 
 describe("detectSkeletonContent", () => {
@@ -315,5 +319,133 @@ describe("buildShrinkageReport", () => {
     expect(report).toMatch(/b\)/);
     expect(report).toMatch(/c\)/);
     expect(report).toMatch(/behavior is identical/);
+  });
+});
+
+// ─── Phase 21: unsolicited documentation detection ───────────────
+
+describe("isDocFilename", () => {
+  test("matches common doc filenames", () => {
+    expect(isDocFilename("/tmp/README.md")).toBe(true);
+    expect(isDocFilename("/tmp/QUICK_START.md")).toBe(true);
+    expect(isDocFilename("/tmp/TECHNICAL_REFERENCE.md")).toBe(true);
+    expect(isDocFilename("/tmp/INDEX.md")).toBe(true);
+    expect(isDocFilename("/tmp/SUMMARY.txt")).toBe(true);
+    expect(isDocFilename("/tmp/INSTALLATION_CHECK.md")).toBe(true);
+    expect(isDocFilename("/tmp/CHANGELOG.md")).toBe(true);
+    expect(isDocFilename("/tmp/CONTRIBUTING.md")).toBe(true);
+    expect(isDocFilename("/tmp/GUIDE.md")).toBe(true);
+    expect(isDocFilename("/tmp/getting-started.md")).toBe(true);
+    expect(isDocFilename("/tmp/PROJECT_OVERVIEW.md")).toBe(true);
+  });
+
+  test("does not match normal source/config files", () => {
+    expect(isDocFilename("/tmp/orbital.html")).toBe(false);
+    expect(isDocFilename("/tmp/server.js")).toBe(false);
+    expect(isDocFilename("/tmp/package.json")).toBe(false);
+    expect(isDocFilename("/tmp/main.py")).toBe(false);
+    expect(isDocFilename("/tmp/app.tsx")).toBe(false);
+    expect(isDocFilename("/tmp/index.ts")).toBe(false); // not INDEX.md
+    expect(isDocFilename("/tmp/style.css")).toBe(false);
+  });
+});
+
+describe("userAllowedDocs", () => {
+  test("grants permission on explicit doc request", () => {
+    expect(userAllowedDocs(["add a README to the project"]).allowed).toBe(true);
+    expect(userAllowedDocs(["documenta todo el código"]).allowed).toBe(true);
+    expect(userAllowedDocs(["write a guide"]).allowed).toBe(true);
+    expect(userAllowedDocs(["include a changelog"]).allowed).toBe(true);
+  });
+
+  test("grants permission on project-completeness signals", () => {
+    expect(userAllowedDocs(["crea un proyecto completo"]).allowed).toBe(true);
+    expect(userAllowedDocs(["build a complete project"]).allowed).toBe(true);
+    expect(userAllowedDocs(["monta un repositorio listo"]).allowed).toBe(true);
+    expect(userAllowedDocs(["scaffold a starter kit"]).allowed).toBe(true);
+    expect(userAllowedDocs(["quiero varios archivos"]).allowed).toBe(true);
+  });
+
+  test("denies permission on the Orbital/NASA single-file prompt", () => {
+    const prompt = `
+      Crea una aplicación web completa llamada "Orbital".
+      La aplicación debe ser un solo archivo HTML completo, autónomo y bonito.
+      Al final del código HTML, agrega una sección comentada con el código Node.js
+    `;
+    expect(userAllowedDocs([prompt]).allowed).toBe(false);
+  });
+
+  test("denies permission when no doc keywords are present", () => {
+    expect(userAllowedDocs(["crea una herramienta web moderna"]).allowed).toBe(false);
+    expect(userAllowedDocs(["fix the bug in login.ts"]).allowed).toBe(false);
+    expect(userAllowedDocs([]).allowed).toBe(false);
+  });
+
+  test("grants permission across multiple user messages", () => {
+    // Earlier turn sets scope
+    const texts = [
+      "crea una app",
+      "ok ahora añádele un README",
+      "también",
+    ];
+    expect(userAllowedDocs(texts).allowed).toBe(true);
+  });
+});
+
+describe("detectUnsolicitedDoc", () => {
+  test("fires on Orbital reproduction: README.md when user asked for single file", () => {
+    const orbitalPrompt = `La aplicación debe ser un solo archivo HTML completo, autónomo y bonito`;
+    const v = detectUnsolicitedDoc("/tmp/README.md", [orbitalPrompt]);
+    expect(v.isUnsolicitedDoc).toBe(true);
+    expect(v.filename).toBe("README.md");
+  });
+
+  test("fires on TECHNICAL_REFERENCE.md when user asked for single file", () => {
+    const orbitalPrompt = `crea una herramienta web llamada "NASA Explorer" en un solo archivo HTML`;
+    const v = detectUnsolicitedDoc("/tmp/TECHNICAL_REFERENCE.md", [orbitalPrompt]);
+    expect(v.isUnsolicitedDoc).toBe(true);
+  });
+
+  test("does NOT fire on README.md when user said 'proyecto completo'", () => {
+    const v = detectUnsolicitedDoc("/tmp/README.md", [
+      "crea un proyecto completo con todo lo necesario",
+    ]);
+    expect(v.isUnsolicitedDoc).toBe(false);
+    expect(v.allowanceKeyword).toMatch(/proyecto completo/i);
+  });
+
+  test("does NOT fire on README.md when user explicitly asked for README", () => {
+    const v = detectUnsolicitedDoc("/tmp/README.md", [
+      "add a README with usage instructions",
+    ]);
+    expect(v.isUnsolicitedDoc).toBe(false);
+  });
+
+  test("does NOT fire on non-doc files even without doc keywords", () => {
+    expect(
+      detectUnsolicitedDoc("/tmp/orbital.html", ["crea un archivo html"])
+        .isUnsolicitedDoc,
+    ).toBe(false);
+    expect(
+      detectUnsolicitedDoc("/tmp/server.js", ["crea un servidor"])
+        .isUnsolicitedDoc,
+    ).toBe(false);
+  });
+});
+
+describe("buildUnsolicitedDocReport", () => {
+  test("names the file and offers resolutions", () => {
+    const report = buildUnsolicitedDocReport({
+      isUnsolicitedDoc: true,
+      filename: "TECHNICAL_REFERENCE.md",
+      allowanceKeyword: "",
+    });
+    expect(report).toContain("BLOCKED");
+    expect(report).toContain("TECHNICAL_REFERENCE.md");
+    expect(report).toContain("NEVER create documentation");
+    expect(report).toMatch(/a\)/);
+    expect(report).toMatch(/b\)/);
+    expect(report).toMatch(/c\)/);
+    expect(report).toContain("Do NOT tell the user you created");
   });
 });
