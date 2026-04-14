@@ -111,7 +111,21 @@ export function hasRunnableWriteInTurn(messages: Message[]): boolean {
       i--;
       continue;
     }
-    if (typeof msg.content === "string") break;
+    if (typeof msg.content === "string") {
+      // Bug #10 fix: skip system-injected user messages when walking
+      // back to the turn boundary. `[SYSTEM]` messages come from
+      // truncation retries, stop-hook blocks, reality-check reminders,
+      // etc., and they should NOT count as the start of a new turn —
+      // the real user's request is still further back. Without this
+      // skip, hasRunnableWriteInTurn rejects phase 22 whenever
+      // handlePostTurn has done any iteration housekeeping, even
+      // though the user's actual Writes are visible.
+      if (msg.content.startsWith("[SYSTEM]")) {
+        i--;
+        continue;
+      }
+      break;
+    }
     if (Array.isArray(msg.content)) {
       const onlyToolResults = msg.content.every(
         (b) => (b as { type?: string }).type === "tool_result",
