@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   __autoLaunchSessionState,
+  extractRequestedPort,
   hasRunnableWriteInTurn,
   hasRuntimeIntent,
   resetAutoLaunchState,
@@ -215,5 +216,47 @@ describe("resetAutoLaunchState", () => {
     resetAutoLaunchState();
     expect(__autoLaunchSessionState.launched).toBe(false);
     expect(__autoLaunchSessionState.launchedCwd).toBe("");
+  });
+});
+
+describe("extractRequestedPort", () => {
+  test("extracts port from Orbital prompt fragment", () => {
+    const orbitalFragment =
+      "Incluir al final del archivo un servidor web simple usando Node.js + Express " +
+      "que levante automáticamente la aplicación en el puerto 24564";
+    expect(extractRequestedPort([orbitalFragment])).toBe(24564);
+  });
+
+  test("extracts English 'port N' phrasing", () => {
+    expect(extractRequestedPort(["start the server on port 3000"])).toBe(3000);
+    expect(extractRequestedPort(["listen at port 8080"])).toBe(8080);
+  });
+
+  test("extracts 'puerto N' and 'puerto:N' phrasing", () => {
+    expect(extractRequestedPort(["usa el puerto 5173"])).toBe(5173);
+    expect(extractRequestedPort(["puerto: 9090"])).toBe(9090);
+  });
+
+  test("ignores out-of-range ports", () => {
+    // Privileged / too-low ports are rejected
+    expect(extractRequestedPort(["port 22"])).toBeUndefined();
+    expect(extractRequestedPort(["port 80"])).toBeUndefined();
+    // 1024 is the floor — this test documents the boundary
+    expect(extractRequestedPort(["port 1023"])).toBeUndefined();
+    expect(extractRequestedPort(["port 1024"])).toBe(1024);
+  });
+
+  test("returns undefined when no port mentioned", () => {
+    expect(extractRequestedPort(["make a web app"])).toBeUndefined();
+    expect(extractRequestedPort([])).toBeUndefined();
+  });
+
+  test("scans across all user texts, returns first match", () => {
+    const texts = [
+      "crea una aplicacion",
+      "en el puerto 24564",
+      "ponle un header",
+    ];
+    expect(extractRequestedPort(texts)).toBe(24564);
   });
 });
