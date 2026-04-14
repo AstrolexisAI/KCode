@@ -1918,7 +1918,11 @@ export class ConversationManager {
               role: "assistant",
               content: launchResult.notice,
             });
-            yield { type: "text", text: launchResult.notice };
+            // Must be text_delta — StreamEvent has no "text" variant.
+            // The UI renders text_delta events via print-mode and
+            // stream-handler. The bug from the initial phase 22 ship
+            // was yielding type: "text", which silently dropped.
+            yield { type: "text_delta", text: launchResult.notice };
           }
         } catch (err) {
           log.debug("auto-launch", `hook failed (non-fatal): ${err}`);

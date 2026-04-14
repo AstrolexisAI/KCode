@@ -86,6 +86,28 @@ export function detectServerSpawn(command: string): SpawnDetection | null {
   if (/\bserve\s/.test(c) || /\bhttp-server\b/.test(c))
     return { framework: "static-serve", defaultPort: 3000 };
 
+  // Bare `node <file>.js` invocations where the filename hints at a
+  // server. `node server.js`, `node app.js`, `node index.js`, and
+  // `node main.js` are the canonical "run the server directly" shapes
+  // used when the user bypasses `npm run dev`. Only trigger on the
+  // filename allowlist to avoid hijacking one-shot scripts like
+  // `node scripts/migrate.js` or `node benchmarks/bench.js`.
+  if (
+    /\bnode\s+(?:[\w\-/.]+\/)?(?:server|app|index|main)\.(?:js|mjs|cjs)\b/.test(
+      c,
+    )
+  ) {
+    return { framework: "node-direct", defaultPort: 3000 };
+  }
+  // Bun equivalent
+  if (
+    /\bbun\s+(?:run\s+)?(?:[\w\-/.]+\/)?(?:server|app|index|main)\.(?:ts|js|mjs|cjs)\b/.test(
+      c,
+    )
+  ) {
+    return { framework: "bun-direct", defaultPort: 3000 };
+  }
+
   return null;
 }
 

@@ -33,6 +33,18 @@ describe("detectServerSpawn", () => {
     ["nodemon index.js", "nodemon"],
     ["serve -s build", "static-serve"],
     ["http-server -p 10080", "static-serve"],
+    // Phase 24 audit fix: bare `node <server-file>` shapes used
+    // when the user bypasses `npm run dev` (exactly the Orbital
+    // case where the model invoked `node server.js` directly).
+    ["node server.js", "node-direct"],
+    ["node app.js", "node-direct"],
+    ["node index.js", "node-direct"],
+    ["node main.js", "node-direct"],
+    ["node src/server.js", "node-direct"],
+    ["node ./server.mjs", "node-direct"],
+    ["node server.cjs", "node-direct"],
+    ["bun server.ts", "bun-direct"],
+    ["bun run app.ts", "bun-direct"],
   ])("detects %p as %p", (cmd, framework) => {
     const d = detectServerSpawn(cmd);
     expect(d).not.toBeNull();
@@ -50,6 +62,15 @@ describe("detectServerSpawn", () => {
     ["cat package.json"],
     ["npm run build"],
     ["npm run test"],
+    // Phase 24 audit fix: bare node invocations that are NOT a
+    // server (migration scripts, one-shot tools, benchmarks).
+    // These must NOT be auto-backgrounded — the user needs to see
+    // stdout and exit code inline.
+    ["node scripts/migrate.js"],
+    ["node benchmarks/bench.js"],
+    ["node tools/generate.js"],
+    ["node build.js"],
+    ["node ./scripts/cleanup.cjs"],
   ])("does NOT match one-shot command %p", (cmd) => {
     expect(detectServerSpawn(cmd)).toBeNull();
   });
