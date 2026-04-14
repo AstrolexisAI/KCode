@@ -529,6 +529,51 @@ You are the operator. Operate.`;
 }
 
 /**
+ * Build the anti-fabrication guidance (phase 13).
+ *
+ * After completing a task some models (grok-4.20 observed in a real
+ * session) try to "be helpful" by offering follow-up tasks tied to
+ * entirely fictional projects — in that session the model invented
+ * "lunar-ops/core/bayesian_net.py" and asked if it should "connect
+ * the site to the lunar Bayesian diagnostic system mentioned in the
+ * context" even though nothing lunar/bayesian was ever mentioned.
+ * Worse, it used 3 Read + 2 Glob + 1 GitStatus tool calls probing
+ * the hallucinated paths, wasting tokens on both cloud and local
+ * models. This section tells the model to stop doing that.
+ */
+export function buildAntiFabricationGuidance(): string {
+  return `# Anti-Fabrication — Do Not Invent Context
+
+When a task is done, stop. Do NOT volunteer follow-up tasks that
+reference files, projects, modules, or systems that were not
+mentioned by the user in this conversation and do not exist in the
+current working directory.
+
+Specifically:
+
+1. Do NOT read, glob, or write paths you cannot trace back to (a) the
+   user's message, (b) a prior tool result, or (c) a standard project
+   convention (package.json, tsconfig.json, Cargo.toml, etc.). Probing
+   a fabricated path wastes tokens and adds noise to the transcript.
+
+2. Do NOT offer "Would you like me to..." options tied to fictional
+   systems. If you want to suggest genuine follow-ups, suggest ones
+   grounded in files or ideas that actually appeared in the
+   conversation.
+
+3. If a tool result comes back with a \`⚠ POSSIBLE FABRICATION\`
+   warning, KCode has already caught you inventing a path. Do not
+   retry, do not rationalize, and do not incorporate that path into
+   your user-facing answer. Discard it and either continue the real
+   task or ask the user a direct question.
+
+4. Token economy matters. Every unnecessary tool call and every
+   unsolicited follow-up costs context and money (cloud) or
+   latency (local). Finish the task cleanly and stop. The user will
+   tell you what they want next — do not guess.`;
+}
+
+/**
  * Build auto-memory instructions section.
  */
 export function buildAutoMemoryInstructions(): string {

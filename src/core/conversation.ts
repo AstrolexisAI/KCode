@@ -1556,6 +1556,7 @@ export class ConversationManager {
       }
 
       if (filteredToolCalls.length === 0) {
+        this.augmentFabricationWarnings(toolResultBlocks, toolCalls);
         this.state.messages.push({ role: "user", content: toolResultBlocks });
         for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
         continue;
@@ -1592,6 +1593,7 @@ export class ConversationManager {
         const parallelResults = genResult.value;
         this.state.toolUseCount = toolExecCtx.toolUseCount;
         toolResultBlocks.push(...parallelResults);
+        this.augmentFabricationWarnings(toolResultBlocks, toolCalls);
         this.state.messages.push({ role: "user", content: toolResultBlocks });
         for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
         continue;
@@ -1637,6 +1639,7 @@ export class ConversationManager {
       this.state.toolUseCount = toolExecCtx.toolUseCount;
       toolResultBlocks.push(...seqToolResults);
 
+      this.augmentFabricationWarnings(toolResultBlocks, toolCalls);
       this.state.messages.push({ role: "user", content: toolResultBlocks });
       for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
 
@@ -2002,6 +2005,61 @@ export class ConversationManager {
   /** Fast string hash for cache comparison (delegated to conversation-state.ts). */
   private hashString(str: string): string {
     return _hashString(str);
+  }
+
+  /**
+   * Phase 13 anti-fabrication: inspect tool-result blocks for errors
+   * on file-path-bearing tools (Read/Edit/Write/MultiEdit), run the
+   * fabrication heuristic against the reference corpus (user messages
+   * + prior tool results in this.state.messages), and if the path
+   * looks fabricated, append a STOP warning to the result content.
+   *
+   * Mutates the blocks in place and returns the same array for
+   * fluent chaining. Zero-cost on successful tool calls (the
+   * is_error=false short-circuit skips the heuristic entirely).
+   */
+  private augmentFabricationWarnings(
+    toolResultBlocks: ContentBlock[],
+    toolCalls: ToolUseBlock[],
+  ): ContentBlock[] {
+    try {
+      const { collectReferenceTexts, isLikelyFabricated, wrapFabricatedError } =
+        require("./anti-fabrication.js") as typeof import("./anti-fabrication.js");
+      let referenceTexts: string[] | null = null;
+      for (const block of toolResultBlocks) {
+        const b = block as ToolResultBlock;
+        if (b.type !== "tool_result" || !b.is_error) continue;
+        const call = toolCalls.find((tc) => tc.id === b.tool_use_id);
+        if (!call) continue;
+        const name = call.name;
+        if (name !== "Read" && name !== "Edit" && name !== "Write" && name !== "MultiEdit") {
+          continue;
+        }
+        const input = call.input as Record<string, unknown>;
+        const attemptedPath = String(input.file_path ?? "");
+        if (!attemptedPath) continue;
+        const errorText = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+        if (referenceTexts === null) {
+          referenceTexts = collectReferenceTexts(this.state.messages);
+        }
+        const verdict = isLikelyFabricated(attemptedPath, errorText, referenceTexts);
+        if (verdict.fabricated) {
+          const originalContent = typeof b.content === "string" ? b.content : errorText;
+          b.content = wrapFabricatedError(
+            originalContent,
+            attemptedPath,
+            verdict.unreferencedTokens,
+          );
+          log.info(
+            "anti-fabrication",
+            `fabricated path detected: ${attemptedPath} — unreferenced tokens [${verdict.unreferencedTokens.join(",")}]`,
+          );
+        }
+      }
+    } catch (err) {
+      log.debug("anti-fabrication", `augment failed (non-fatal): ${err}`);
+    }
+    return toolResultBlocks;
   }
 
   /** Get session start time for elapsed time tracking. */
