@@ -405,7 +405,29 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
       checkDegradation,
       detectInPlaceShrinkage,
       buildShrinkageReport,
+      detectUnsolicitedDoc,
+      buildUnsolicitedDocReport,
     } = await import("../core/write-guards.js");
+
+    // Phase 21: block unsolicited doc files. If the target matches a
+    // doc-filename pattern (README.md, QUICK_START.md, TECHNICAL_
+    // REFERENCE.md, INDEX.md, etc.) AND the user's session text has
+    // not granted doc-creation permission (no "full project", "readme",
+    // "documentation", "proyecto completo", etc.), refuse the write.
+    try {
+      const { getUserTexts } = await import("../core/session-tracker.js");
+      const userTexts = getUserTexts();
+      const docVerdict = detectUnsolicitedDoc(file_path, userTexts);
+      if (docVerdict.isUnsolicitedDoc) {
+        return {
+          tool_use_id: "",
+          content: buildUnsolicitedDocReport(docVerdict),
+          is_error: true,
+        };
+      }
+    } catch {
+      /* non-fatal — if the tracker isn't available, skip this check */
+    }
 
     const proliferation = detectSiblingProliferation(file_path);
     if (proliferation.isProliferation) {
