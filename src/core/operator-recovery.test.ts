@@ -32,6 +32,26 @@ describe("buildOperatorRecoveryGuidance", () => {
     const out = buildOperatorRecoveryGuidance();
     expect(out).toContain("You are the operator. Operate.");
   });
+
+  // Phase 16: recovery must be reactive, not proactive.
+  test("phase 16: contains the reactive-not-proactive rule", () => {
+    const out = buildOperatorRecoveryGuidance();
+    expect(out).toMatch(/reactive, not proactive/i);
+  });
+
+  test("phase 16: warns against speculative preemptive pkill", () => {
+    const out = buildOperatorRecoveryGuidance();
+    expect(out).toMatch(/speculatively/i);
+    expect(out).toContain("pkill");
+    // The rule should explicitly name the pkill-before-failure antipattern
+    expect(out).toMatch(/before any tool has failed is[\s\S]*NOT helpful/i);
+  });
+
+  test("phase 16: tells the model what to do when no tool has failed", () => {
+    const out = buildOperatorRecoveryGuidance();
+    expect(out).toMatch(/do the actual task directly/i);
+    expect(out).toMatch(/only after seeing the failure message/i);
+  });
 });
 
 describe("inotify refusal AUTHORIZED RECOVERY language", () => {
