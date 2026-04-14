@@ -447,6 +447,51 @@ export class ConversationManager {
       log.debug("operator-dashboard", `probe failed (non-fatal): ${err}`);
     }
 
+    // Operator-mind phase 12: plan reconciliation check. If the previous
+    // assistant turn declared the task complete (via phrases like "Task
+    // completed", "Delivered", "Summary of changes") but the active plan
+    // still has unchecked steps, inject a reconciliation reminder as a
+    // user-role message so the model is forced to address the mismatch
+    // before running any more tools.
+    try {
+      const { detectAbandonedPlan, buildPlanReconciliationReminder } = await import(
+        "../tools/plan.js"
+      );
+      // Find the most recent assistant message text to check for
+      // completion phrases.
+      let lastAssistantText = "";
+      for (let i = this.state.messages.length - 1; i >= 0; i--) {
+        const m = this.state.messages[i];
+        if (m?.role !== "assistant") continue;
+        if (typeof m.content === "string") {
+          lastAssistantText = m.content;
+        } else if (Array.isArray(m.content)) {
+          for (const block of m.content) {
+            if ((block as { type?: string }).type === "text") {
+              lastAssistantText += (block as { text?: string }).text ?? "";
+            }
+          }
+        }
+        break;
+      }
+      if (lastAssistantText) {
+        const verdict = detectAbandonedPlan(lastAssistantText);
+        if (verdict.abandoned && verdict.completionPhrase) {
+          const reminder = buildPlanReconciliationReminder(
+            verdict.pendingSteps,
+            verdict.completionPhrase,
+          );
+          this.state.messages.push({ role: "user", content: reminder });
+          log.info(
+            "plan",
+            `reconciliation injected: ${verdict.pendingSteps.length} pending steps, phrase="${verdict.completionPhrase}"`,
+          );
+        }
+      }
+    } catch (err) {
+      log.debug("plan", `reconciliation check failed (non-fatal): ${err}`);
+    }
+
     // Auto-detect theoretical/formal prompts (delegated to conversation-message-prep)
     const theoreticalResult = detectTheoreticalMode(userMessage);
     this._theoreticalMode = theoreticalResult.isTheoretical;
