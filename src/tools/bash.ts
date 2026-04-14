@@ -186,28 +186,50 @@ const SECURITY_TOOLS: Record<string, { category: string; timeout: number; notes:
 };
 
 /**
- * Public Bash entrypoint. Wraps the internal executor with operator-mind
- * phase-3 retry detection: if the model is about to re-issue a command
- * that just failed in the same cwd, intercept and return a STOP report
- * instead of executing. Records every attempt (success or failure) for
- * future retry detection.
+ * Public Bash entrypoint. Wraps the internal executor with:
+ *   - Phase 14: platform-aware command translation (open ↔ xdg-open,
+ *     pbcopy ↔ xsel, etc.) when the model picked a command from the
+ *     wrong OS and the target equivalent is available locally.
+ *   - Phase 3: retry detection — if the model is about to re-issue a
+ *     command that just failed in the same cwd, intercept and return
+ *     a STOP report instead of executing.
+ *   - History recording — every attempt (success or failure) is
+ *     logged for future retry detection.
  */
 export async function executeBash(input: Record<string, unknown>): Promise<ToolResult> {
-  const command = String((input as { command?: unknown }).command ?? "");
+  const originalCommand = String((input as { command?: unknown }).command ?? "");
   const cwd = process.cwd();
 
+  // Phase 14: platform translation (transparent rewrite of commands
+  // the model picked for the wrong OS).
+  let translationNote = "";
+  let effectiveCommand = originalCommand;
+  if (originalCommand) {
+    try {
+      const { translateBashCommand } = await import("../core/bash-platform-translate.js");
+      const t = translateBashCommand(originalCommand);
+      if (t.translated) {
+        effectiveCommand = t.command;
+        translationNote = t.note ?? "";
+        input = { ...input, command: t.command };
+      }
+    } catch (err) {
+      log.debug("tool", `bash-platform-translate failed (non-fatal): ${err}`);
+    }
+  }
+
   // Phase 3: detect immediate retry of a command that just failed
-  if (command) {
+  if (effectiveCommand) {
     try {
       const { detectImmediateRetry, acknowledgeRetryWarning } = await import(
         "../core/bash-spawn-history.js"
       );
-      const warning = detectImmediateRetry(command, cwd);
+      const warning = detectImmediateRetry(effectiveCommand, cwd);
       if (warning) {
         // After showing the warning once, mark it acknowledged so the
         // very next attempt (the model's actual response to the warning)
         // runs normally without seeing it again.
-        acknowledgeRetryWarning(command, cwd);
+        acknowledgeRetryWarning(effectiveCommand, cwd);
         return {
           tool_use_id: "",
           content: warning.report,
@@ -221,11 +243,23 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 
   const result = await _executeBashInner(input);
 
+  // Prepend the translation note to the result content so the model
+  // sees why its `open` became `xdg-open` (or vice versa) and can
+  // learn for future calls in this session.
+  if (translationNote) {
+    result.content = `${translationNote}\n\n${result.content}`;
+  }
+
   // Record this attempt for future retry detection
-  if (command) {
+  if (effectiveCommand) {
     try {
       const { recordBashAttempt } = await import("../core/bash-spawn-history.js");
-      recordBashAttempt(command, cwd, result.is_error ?? false, String(result.content ?? ""));
+      recordBashAttempt(
+        effectiveCommand,
+        cwd,
+        result.is_error ?? false,
+        String(result.content ?? ""),
+      );
     } catch (err) {
       log.debug("tool", `bash-spawn-history record failed (non-fatal): ${err}`);
     }
