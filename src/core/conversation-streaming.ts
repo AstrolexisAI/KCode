@@ -56,6 +56,83 @@ export function detectRepetitionLoop(text: string): string | null {
   return null;
 }
 
+// ─── Phase 23: large-block repetition detection ────────────────
+//
+// detectRepetitionLoop (above) requires identical CONSECUTIVE blocks up
+// to REPETITION_MAX_PERIOD = 500 chars. That catches short phrase loops
+// like "/now, /today, /yesterday, /now, /today..." but MISSES the
+// Orbital session failure mode, where grok-4.20 looped on a ~3000-char
+// block ("✅ Refactor Final — Barra Superior (Flight Control Room)...")
+// twenty times. Block size was above the max period AND the trailing
+// instance was mid-generation so the "consecutive identical" test
+// never matched.
+//
+// detectLargeBlockRepetition complements it with a substring-count
+// approach: take a short unique fingerprint from the current tail
+// region, count how many times that exact fingerprint appears in the
+// whole accumulated text, abort if ≥ MIN_OCCURRENCES.
+
+/** Minimum accumulated text before large-block detection runs. */
+const LARGE_BLOCK_MIN_TEXT = 1500;
+/** Length of the fingerprint substring sampled from the text. */
+const LARGE_BLOCK_FINGERPRINT_LEN = 80;
+/** Number of fingerprint occurrences required to declare a loop. */
+const LARGE_BLOCK_MIN_OCCURRENCES = 3;
+/** How far back from the tail the fingerprint is sampled. This is a
+ *  "recent but not brand-new" window — we want text that's already
+ *  been generated and is likely to be part of a completed repeated
+ *  block, not the still-being-generated tail. */
+const LARGE_BLOCK_SAMPLE_OFFSET = 400;
+
+/**
+ * Detect repeated large blocks by fingerprinting a region of recent
+ * text and counting its occurrences across the full transcript.
+ *
+ * Returns the fingerprint (truncated) if a large-block loop is
+ * detected, or null.
+ *
+ * Complexity: O(n) via String.indexOf. Run at the same cadence as
+ * detectRepetitionLoop (every REPETITION_CHECK_INTERVAL chars).
+ */
+export function detectLargeBlockRepetition(text: string): string | null {
+  if (text.length < LARGE_BLOCK_MIN_TEXT) return null;
+
+  // Sample a fingerprint from a stable point: LARGE_BLOCK_SAMPLE_OFFSET
+  // characters back from the tail, taking LARGE_BLOCK_FINGERPRINT_LEN
+  // characters forward. Whitespace is normalized so minor tokenization
+  // differences (e.g. extra newline) don't defeat the match.
+  const samplePoint = text.length - LARGE_BLOCK_SAMPLE_OFFSET;
+  if (samplePoint < 0) return null;
+
+  const rawFingerprint = text
+    .slice(samplePoint, samplePoint + LARGE_BLOCK_FINGERPRINT_LEN);
+  const fingerprint = rawFingerprint.replace(/\s+/g, " ").trim();
+  if (fingerprint.length < 40) return null; // degenerate / whitespace
+  // Skip fingerprints that are mostly punctuation or box-drawing
+  // chars — those appear legitimately in code fences and markdown
+  // tables and would false-positive on well-formed prose.
+  const alnum = fingerprint.match(/[A-Za-z0-9]/g)?.length ?? 0;
+  if (alnum < 20) return null;
+
+  const normalizedText = text.replace(/\s+/g, " ");
+
+  // Count non-overlapping occurrences of the fingerprint
+  let count = 0;
+  let searchIdx = 0;
+  while (true) {
+    const found = normalizedText.indexOf(fingerprint, searchIdx);
+    if (found === -1) break;
+    count++;
+    if (count >= LARGE_BLOCK_MIN_OCCURRENCES) {
+      return fingerprint.length > 60
+        ? fingerprint.slice(0, 60) + "..."
+        : fingerprint;
+    }
+    searchIdx = found + fingerprint.length;
+  }
+  return null;
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface StreamAccumulator {
@@ -150,18 +227,33 @@ export async function* processSSEStream(
               break;
             }
 
-            // Repetition loop detection
+            // Repetition loop detection. Two complementary detectors:
+            //   1. detectRepetitionLoop — short consecutive blocks (≤500 chars)
+            //   2. detectLargeBlockRepetition — long repeated fingerprints
+            //      (catches the Orbital refactor-loop where grok-4.20
+            //      repeated a ~3000-char "✅ Refactor Final" block twenty
+            //      times until context saturation)
             const fullSoFar = textChunks.join("");
-            const repeated = detectRepetitionLoop(fullSoFar);
+            const repeated =
+              detectRepetitionLoop(fullSoFar) ||
+              detectLargeBlockRepetition(fullSoFar);
             if (repeated) {
-              log.warn("llm", `Repetition loop detected: "${repeated}" — aborting generation`);
+              const tokensSoFar = Math.round(fullSoFar.length / 4);
+              log.warn(
+                "llm",
+                `Repetition loop detected after ~${tokensSoFar} tokens: "${repeated}" — aborting generation`,
+              );
               repetitionAborted = true;
               stopReason = "end_turn";
-              yield {
-                type: "text_delta",
-                text: `\n\n[Generation stopped: repetition loop detected]`,
-              };
-              textChunks.push(`\n\n[Generation stopped: repetition loop detected]`);
+              // Phase 23: actionable abort message so the user knows
+              // exactly what to do (not just "sorry loop detected").
+              const msg =
+                `\n\n[Generation stopped: repetition loop detected after ~${tokensSoFar} tokens.\n` +
+                `The model was repeating the same block — usually means context window\n` +
+                `saturation or provider instability. Try: /compact (reduce history),\n` +
+                `/clear (start fresh), or /toggle (switch model).]`;
+              yield { type: "text_delta", text: msg };
+              textChunks.push(msg);
               break;
             }
           }
