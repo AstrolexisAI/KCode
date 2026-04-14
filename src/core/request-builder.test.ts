@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { estimateToolDefinitionTokens, resolveApiKey } from "./request-builder.ts";
+import {
+  classifyApiErrorHint,
+  estimateToolDefinitionTokens,
+  formatApiErrorMessage,
+  resolveApiKey,
+} from "./request-builder.ts";
 import type { KCodeConfig } from "./types.ts";
 
 // ─── resolveApiKey ─────────────────────────────────────────────
@@ -167,5 +172,93 @@ describe("estimateToolDefinitionTokens", () => {
       50;
     const expectedTokens = Math.ceil(expectedChars / 3.5);
     expect(tokens).toBe(expectedTokens);
+  });
+});
+
+// ─── API error formatting ───────────────────────────────────────
+
+describe("classifyApiErrorHint", () => {
+  test("returns billing hint on 402", () => {
+    expect(classifyApiErrorHint(402, "")).toMatch(/billing\/credits/);
+  });
+
+  test("returns billing hint when body mentions credits", () => {
+    expect(classifyApiErrorHint(400, "insufficient credit balance")).toMatch(
+      /billing/,
+    );
+  });
+
+  test("returns auth hint on 401/403", () => {
+    expect(classifyApiErrorHint(401, "")).toMatch(/API key permissions/);
+    expect(classifyApiErrorHint(403, "")).toMatch(/API key permissions/);
+  });
+
+  test("returns context hint on 400 with 'too many tokens'", () => {
+    expect(classifyApiErrorHint(400, "too many tokens in prompt")).toMatch(
+      /context window/,
+    );
+  });
+
+  test("returns 5xx hint on 500/502/503 (Orbital session fix)", () => {
+    expect(classifyApiErrorHint(500, "")).toMatch(/transient/);
+    expect(classifyApiErrorHint(502, "")).toMatch(/transient/);
+    expect(classifyApiErrorHint(503, "")).toMatch(/transient/);
+    expect(classifyApiErrorHint(500, "")).toMatch(/\/toggle to another model/);
+  });
+
+  test("returns empty string for unclassified errors", () => {
+    expect(classifyApiErrorHint(418, "")).toBe("");
+  });
+});
+
+describe("formatApiErrorMessage", () => {
+  test("includes endpoint origin so dual local+cloud setups are disambiguated", () => {
+    const msg = formatApiErrorMessage({
+      status: 500,
+      statusText: "Internal Server Error",
+      errorText: "upstream down",
+      url: "https://api.x.ai/v1/chat/completions",
+      hint: " (hint: retry)",
+    });
+    expect(msg).toContain("500 Internal Server Error");
+    expect(msg).toContain("from https://api.x.ai/v1/chat/completions");
+    expect(msg).toContain("upstream down");
+    expect(msg).toContain("(hint: retry)");
+  });
+
+  test("works with localhost endpoints", () => {
+    const msg = formatApiErrorMessage({
+      status: 500,
+      statusText: "Internal Server Error",
+      errorText: "",
+      url: "http://localhost:8090/v1/chat/completions",
+      hint: "",
+    });
+    expect(msg).toContain("from http://localhost:8090/v1/chat/completions");
+  });
+
+  test("gracefully handles invalid URLs (no origin label)", () => {
+    const msg = formatApiErrorMessage({
+      status: 500,
+      statusText: "Server Error",
+      errorText: "",
+      url: "not-a-url",
+      hint: "",
+    });
+    expect(msg).toContain("500 Server Error");
+    expect(msg).not.toContain("from ");
+  });
+
+  test("omits empty errorText and empty hint cleanly", () => {
+    const msg = formatApiErrorMessage({
+      status: 502,
+      statusText: "Bad Gateway",
+      errorText: "",
+      url: "https://api.example.com/v1/foo",
+      hint: "",
+    });
+    expect(msg).toBe(
+      "API request failed: 502 Bad Gateway from https://api.example.com/v1/foo",
+    );
   });
 });
