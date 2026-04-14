@@ -455,6 +455,45 @@ export class ConversationManager {
       log.debug("operator-dashboard", `probe failed (non-fatal): ${err}`);
     }
 
+    // Phase 25: user-repetition detector. When the user has reported
+    // the same topic in ≥3 recent messages AND expressed frustration
+    // ("sigue igual", "still broken", "audita esto"), inject a
+    // [USER REPETITION] reminder telling the model it's in a rut and
+    // must try a fundamentally different approach OR honestly admit
+    // it doesn't know. Catches the v2.10.67 Orbital chart-fix case
+    // where phase 15/18/20 were silent because Edits succeeded on
+    // wrong code paths.
+    try {
+      const { checkUserRepetition, buildUserRepetitionReminder } = await import(
+        "./user-repetition-check.js"
+      );
+      const verdict = checkUserRepetition(this.state.messages, userMessage);
+      if (verdict.isRepeating) {
+        // Estimate context saturation so the reminder can suggest
+        // /compact when appropriate.
+        const contextTokens = this.estimateContextTokens();
+        const saturation = this.contextWindowSize
+          ? contextTokens / this.contextWindowSize
+          : undefined;
+        const reminder = buildUserRepetitionReminder(verdict, saturation);
+        this.state.messages.push({ role: "user", content: reminder });
+        log.info(
+          "user-repetition",
+          `injected reminder: topics=[${verdict.sharedTopics
+            .slice(0, 3)
+            .join(",")}] frustration=[${verdict.frustrationSignals
+            .slice(0, 2)
+            .join(",")}]${
+            saturation !== undefined
+              ? ` saturation=${Math.round(saturation * 100)}%`
+              : ""
+          }`,
+        );
+      }
+    } catch (err) {
+      log.debug("user-repetition", `check failed (non-fatal): ${err}`);
+    }
+
     // Find the most recent assistant message text once — shared by
     // plan reconciliation (phase 12) and claim-vs-reality check (phase 15).
     let lastAssistantText = "";
