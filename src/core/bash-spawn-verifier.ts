@@ -272,14 +272,57 @@ export interface VerificationOutcome {
 }
 
 /**
- * Verify that a background spawn is actually serving traffic. Performs
- * up to 3 retries with backoff (~1.5s total) so slow boots are tolerated.
+ * Patterns that indicate the spawned framework is in the middle of
+ * booting and just needs more time. When the captured output already
+ * contains one of these, the verifier extends its probe budget to
+ * ~15s so dev servers like Next.js (which can take 8-12s for first
+ * compile) don't get false-negative'd. Phase 9 fix: previous 3.5s
+ * budget caused KCode to declare a successful Next.js spawn failed
+ * because the HTTP probe ran before the dev server finished
+ * compiling TypeScript.
+ */
+const BOOT_IN_PROGRESS_SIGNALS = [
+  /\bNext\.js\b/i,
+  /\bvite\b.*\bv\d/i,
+  /Local:\s+http:\/\//i,
+  /Network:\s+http:\/\//i,
+  /Starting\.\.\./i,
+  /We detected/i, // Next.js TypeScript detection step
+  /Compiled successfully/i,
+  /Compiling/i,
+  /Ready in /i,
+  /Server started/i,
+  /Serving HTTP on/i,
+  /Running on http/i,
+  /Application startup complete/i,
+  /listening on/i,
+  /Server is running at/i,
+];
+
+function looksLikeBootInProgress(output: string): boolean {
+  if (!output) return false;
+  return BOOT_IN_PROGRESS_SIGNALS.some((re) => re.test(output));
+}
+
+/**
+ * Verify that a background spawn is actually serving traffic.
+ *
+ * Two probe budgets:
+ *   - **Quick mode** (~3.5s): used when the captured wrapper output is
+ *     empty or shows no boot-in-progress signals. Fast-fails on
+ *     missing-dep / port-collision / immediate-crash cases.
+ *   - **Patient mode** (~15s): used when the wrapper output already
+ *     contains one of BOOT_IN_PROGRESS_SIGNALS, meaning the framework
+ *     is mid-compile. Lets Next.js / Vite / etc. finish booting.
+ *
+ * Either mode short-circuits as soon as the PID dies, so a process
+ * that crashes during boot is detected within one probe interval.
  *
  * Inputs:
  *   - command:        the original Bash command (used for port extraction)
  *   - pid:            the spawned process PID (used for liveness checks)
- *   - capturedOutput: the bytes captured by the wrapper sleep — included
- *                     verbatim in failure reports for context
+ *   - capturedOutput: the bytes captured by the wrapper sleep — also
+ *                     scanned for boot-in-progress signals
  *   - cwd:            optional, included in the failure report
  */
 export async function verifyBackgroundSpawn(
@@ -297,17 +340,29 @@ export async function verifyBackgroundSpawn(
     return null;
   }
 
-  // Retry schedule: 0ms, 1500ms, 3500ms (cumulative). Caller already
-  // slept ~3s in the wrapper, so by the time we get here the server
-  // is usually up if it ever will be.
-  const retryDelaysMs = [0, 1500, 2000];
+  // Phase 9: pick the probe budget based on whether the wrapper
+  // already saw boot signals. Patient mode gives slow frameworks
+  // enough time to finish compiling.
+  const patientMode = looksLikeBootInProgress(capturedOutput);
+  const probeIntervalMs = 1500;
+  const totalBudgetMs = patientMode ? 15_000 : 3_500;
+  const probeTimeoutMs = 2_000;
+
+  log.debug(
+    "verifier",
+    `${detection.framework} probe budget=${totalBudgetMs}ms (patient=${patientMode}) port=${port}`,
+  );
+
   let last: ProbeResult | null = null;
-  for (const delay of retryDelaysMs) {
-    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-    last = await probeServer(port);
+  let elapsed = 0;
+  while (elapsed < totalBudgetMs) {
+    last = await probeServer(port, { timeoutMs: probeTimeoutMs });
     if (last.ok) break;
-    // If the process is already dead, no point retrying.
+    // Process died — no point waiting any longer.
     if (pid !== null && !isPidAlive(pid)) break;
+    if (elapsed + probeIntervalMs >= totalBudgetMs) break;
+    await new Promise((r) => setTimeout(r, probeIntervalMs));
+    elapsed += probeIntervalMs + last.durationMs;
   }
 
   if (!last) return null;
