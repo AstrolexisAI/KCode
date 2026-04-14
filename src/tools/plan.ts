@@ -466,7 +466,135 @@ export function formatPlanForPrompt(): string | null {
   lines.push("");
   lines.push(`Progress: ${done}/${total} complete`);
   lines.push("");
-  lines.push("Update step statuses as you complete them using the Plan tool with mode='update'.");
+  lines.push(
+    "MANDATORY plan hygiene (do NOT ignore — this is a hard rule):",
+  );
+  lines.push(
+    "  1. As soon as you finish a step, mark it done with the Plan tool:",
+  );
+  lines.push(`        Plan(mode="update", step_id="N", status="done")`);
+  lines.push(
+    "  2. You MUST NOT declare the overall task complete (with text like",
+  );
+  lines.push(
+    "     \"Task completed\", \"Delivered\", \"Summary of changes\", etc.) while",
+  );
+  lines.push(
+    "     ANY step is still pending or in_progress. Before writing that",
+  );
+  lines.push(
+    "     text, either mark the remaining steps done OR explain precisely",
+  );
+  lines.push("     which steps are NOT done and why.");
+  lines.push(
+    "  3. If you realized mid-task that a step is no longer needed, mark",
+  );
+  lines.push(`        Plan(mode="update", step_id="N", status="skipped") `);
+  lines.push("     with a reason — do not leave it pending.");
+  lines.push(
+    "  4. If the plan is fully done, the Plan tool will automatically clear",
+  );
+  lines.push("     it on your next Plan(mode=\"update\") call — you do not need to",
+  );
+  lines.push("     delete it manually.");
 
+  return lines.join("\n");
+}
+
+/**
+ * Post-turn reconciliation check (operator-mind phase 12).
+ *
+ * Called at end-of-turn to detect the "model declared task complete
+ * but left plan steps unchecked" failure mode. Returns a system
+ * reminder string to inject into the next turn, or null if the plan
+ * state is coherent with the assistant text.
+ *
+ * Heuristic: if there is an active plan with ≥1 step NOT in status
+ * "done"/"skipped", AND the assistant's last text message contains
+ * one of the completion phrases below, the plan is abandoned.
+ *
+ * The reminder is injected AS the next user turn so the model is
+ * forced to address it before doing anything else.
+ */
+const COMPLETION_PHRASES = [
+  /\btask completed?\b/i,
+  /\btask complete\b/i,
+  /\btarea completad[ao]\b/i,
+  /\btodo listo\b/i,
+  /\bdelivered\b/i,
+  /\bsuccessfully (?:created|delivered|implemented|customized|refactored|completed)\b/i,
+  /\bsummary of changes\b/i,
+  /\bwhat was (?:done|built|created|added)\b/i,
+  /\bthe (?:project|file|page|site|site is|implementation is) (?:is )?(?:ready|done|complete|live)\b/i,
+];
+
+export function detectAbandonedPlan(assistantText: string): {
+  abandoned: boolean;
+  pendingSteps: PlanStep[];
+  completionPhrase?: string;
+} {
+  if (!_activePlan) return { abandoned: false, pendingSteps: [] };
+  const pending = _activePlan.steps.filter(
+    (s) => s.status !== "done" && s.status !== "skipped",
+  );
+  if (pending.length === 0) return { abandoned: false, pendingSteps: [] };
+  if (!assistantText) return { abandoned: false, pendingSteps: pending };
+
+  let matchedPhrase: string | undefined;
+  for (const re of COMPLETION_PHRASES) {
+    const m = assistantText.match(re);
+    if (m) {
+      matchedPhrase = m[0];
+      break;
+    }
+  }
+  if (!matchedPhrase) return { abandoned: false, pendingSteps: pending };
+
+  return { abandoned: true, pendingSteps: pending, completionPhrase: matchedPhrase };
+}
+
+/**
+ * Build the reconciliation reminder that gets injected as the next
+ * user message when detectAbandonedPlan returns abandoned=true.
+ */
+export function buildPlanReconciliationReminder(
+  pendingSteps: PlanStep[],
+  completionPhrase: string,
+): string {
+  const lines: string[] = [];
+  lines.push(`[PLAN RECONCILIATION]`);
+  lines.push(``);
+  lines.push(
+    `Your previous turn contained "${completionPhrase}" — that reads as a`,
+  );
+  lines.push(
+    `task-complete declaration. But the active plan still has ${pendingSteps.length}`,
+  );
+  lines.push(
+    `step(s) NOT marked done or skipped:`,
+  );
+  lines.push(``);
+  for (const step of pendingSteps) {
+    lines.push(`  [${step.status}] ${step.id}. ${step.title}`);
+  }
+  lines.push(``);
+  lines.push(`Before doing anything else, you MUST do ONE of:`);
+  lines.push(
+    `  a) Mark each finished step done with Plan(mode="update", step_id="N", status="done").`,
+  );
+  lines.push(
+    `  b) Mark each no-longer-needed step skipped with the same Plan call.`,
+  );
+  lines.push(
+    `  c) Explain precisely which steps are actually NOT done yet and why.`,
+  );
+  lines.push(``);
+  lines.push(
+    `This message is NOT a failure — KCode is asking you to reconcile the`,
+  );
+  lines.push(
+    `plan state with what you just claimed. Your next response must either`,
+  );
+  lines.push(`call the Plan tool or clarify the pending steps in text.`);
   return lines.join("\n");
 }
