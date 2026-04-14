@@ -133,6 +133,83 @@ export function detectLargeBlockRepetition(text: string): string | null {
   return null;
 }
 
+// ─── Phase 23.5: completion-marker loop detection ───────────────
+//
+// detectLargeBlockRepetition requires a byte-identical 80-char
+// fingerprint appearing 3+ times. That fails when the model re-emits
+// a completion summary with slightly different wording each time:
+//
+//   "✅ ¡Aplicación 'Orbital' completada con éxito!..."
+//   "✅ ¡Orbital completada!..."
+//   "✅ ¡Orbital completada con éxito!..."
+//   "✅ ¡Orbital completada!..."
+//   "✅ ¡Orbital completada con éxito!..."
+//
+// Each block is ~2KB of prose with different phrasing, so byte-
+// identical fingerprints don't match 3+ times, and phase 23 stays
+// silent while the model burns tokens restating the same summary.
+//
+// This detector scans for completion-marker phrases and counts how
+// many DISTINCT occurrences exist in the accumulated text. When the
+// model re-emits ≥ 3 completion summaries in a single turn, that's
+// almost always a loop — a well-behaved model summarizes exactly
+// once.
+
+/** Minimum text length before the completion-marker detector runs. */
+const COMPLETION_MARKER_MIN_TEXT = 1500;
+/** Number of completion-marker occurrences required to declare a loop. */
+const COMPLETION_MARKER_MIN_OCCURRENCES = 3;
+
+/**
+ * Patterns that indicate the model is starting a "task complete"
+ * summary. Narrow enough to avoid false positives on normal prose —
+ * requires a leading ✅, 🎉, or explicit "task complete" phrase
+ * near a completion verb (completed, finished, done, listo,
+ * creada, generada, etc.).
+ */
+const COMPLETION_MARKER_PATTERNS: RegExp[] = [
+  // ✅ ¡Completada! / ✅ Task complete! / ✅ Done! (must have emoji
+  // followed within 80 chars by a completion verb)
+  /[✅✔✓🎉🚀]\s*[¡!]?[^\n]{0,80}\b(?:completad[ao]|complete[d]?|creada|creado|generad[ao]|finalizad[ao]|listo|lista|done|finished|ready|terminad[ao])\b/gi,
+  // Explicit "task complete", "aplicación creada", "done!", "listo!"
+  /\b(?:task\s+complete|aplicaci[oó]n\s+(?:completad[ao]|creada|lista|generad[ao]|terminad[ao])|done[.!]?\s*[¡!]?\s*$|listo\s*[¡!]?\s*$)/gim,
+];
+
+/**
+ * Detect when the model has emitted multiple completion-summary
+ * markers in one streamed turn. Returns the first matching marker
+ * phrase when the count reaches COMPLETION_MARKER_MIN_OCCURRENCES,
+ * or null otherwise.
+ *
+ * Deduplicates overlapping matches (two patterns hitting the same
+ * phrase only count once) by normalizing to the string-indexed
+ * position.
+ */
+export function detectCompletionMarkerLoop(text: string): string | null {
+  if (text.length < COMPLETION_MARKER_MIN_TEXT) return null;
+
+  const positions = new Set<number>();
+  let firstMatch: string | null = null;
+
+  for (const pattern of COMPLETION_MARKER_PATTERNS) {
+    pattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = pattern.exec(text)) !== null) {
+      if (!firstMatch) {
+        firstMatch = m[0].trim().slice(0, 80);
+      }
+      positions.add(m.index);
+      // Prevent zero-length match infinite loop
+      if (m.index === pattern.lastIndex) pattern.lastIndex++;
+    }
+  }
+
+  if (positions.size >= COMPLETION_MARKER_MIN_OCCURRENCES) {
+    return firstMatch ?? "completion marker";
+  }
+  return null;
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface StreamAccumulator {
@@ -227,16 +304,20 @@ export async function* processSSEStream(
               break;
             }
 
-            // Repetition loop detection. Two complementary detectors:
+            // Repetition loop detection. Three complementary detectors:
             //   1. detectRepetitionLoop — short consecutive blocks (≤500 chars)
-            //   2. detectLargeBlockRepetition — long repeated fingerprints
-            //      (catches the Orbital refactor-loop where grok-4.20
-            //      repeated a ~3000-char "✅ Refactor Final" block twenty
-            //      times until context saturation)
+            //   2. detectLargeBlockRepetition — long byte-identical blocks
+            //      (catches "✅ Refactor Final" 20x loop)
+            //   3. detectCompletionMarkerLoop — semantic variant of (2)
+            //      catches the case where the model re-emits a completion
+            //      summary with slightly different wording each time
+            //      ("✅ ¡Orbital completada!" / "✅ Aplicación completada
+            //      con éxito!" etc.)
             const fullSoFar = textChunks.join("");
             const repeated =
               detectRepetitionLoop(fullSoFar) ||
-              detectLargeBlockRepetition(fullSoFar);
+              detectLargeBlockRepetition(fullSoFar) ||
+              detectCompletionMarkerLoop(fullSoFar);
             if (repeated) {
               const tokensSoFar = Math.round(fullSoFar.length / 4);
               log.warn(
