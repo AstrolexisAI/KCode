@@ -207,6 +207,31 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
     return { tool_use_id: "", content: "Error: pattern is required.", is_error: true };
   }
 
+  // Phase 19: reject oversized multi-region patterns. A pattern longer
+  // than 500 chars or one containing ≥2 lazy `[\s\S]*?` wildcards almost
+  // never matches cleanly — the model is trying to replace a huge block
+  // in one shot instead of making small targeted edits. Session evidence
+  // (v2.10.54 NASA Explorer): a ~60-line regex with embedded newlines
+  // failed with "No matches found" and the model fell back to a
+  // destructive full-file Write that lost 40% of the original.
+  if (!literal) {
+    const lazyWildcardCount = (patternStr.match(/\[\\s\\S\]\*\??/g) || []).length;
+    if (patternStr.length > 500 || lazyWildcardCount >= 2) {
+      return {
+        tool_use_id: "",
+        content:
+          `Error: pattern is too large for reliable matching ` +
+          `(${patternStr.length} chars, ${lazyWildcardCount} lazy [\\s\\S]*? wildcard(s)). ` +
+          `Patterns this long rarely match — any whitespace drift, invisible ` +
+          `character, or newline difference breaks the regex. Use Edit with a ` +
+          `small unique anchor (5-20 lines) instead, or call Edit multiple ` +
+          `times for separate changes. If you truly need a whole-file rewrite, ` +
+          `use Write — but do not try to simulate one with a huge GrepReplace.`,
+        is_error: true,
+      };
+    }
+  }
+
   // Constrain search path to within cwd
   const resolvedPath = resolve(searchPath);
   const resolvedCwd = resolve(cwd);

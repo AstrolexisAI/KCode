@@ -7,8 +7,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildProliferationReport,
+  buildShrinkageReport,
   buildSkeletonReport,
   checkDegradation,
+  detectInPlaceShrinkage,
   detectSiblingProliferation,
   detectSkeletonContent,
 } from "./write-guards";
@@ -211,5 +213,107 @@ describe("report builders", () => {
     expect(report).toContain("/tmp/foo.html");
     expect(report).toContain("foo-refactored.html");
     expect(report).toContain("Edit");
+  });
+});
+
+// ─── Phase 19: in-place shrinkage detection ─────────────────────
+
+describe("detectInPlaceShrinkage", () => {
+  test("fires on NASA Explorer-style 901 → 554 line in-place rewrite", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
+    try {
+      const original = Array.from({ length: 901 }, (_, i) => `line ${i}`).join("\n");
+      const target = join(dir, "nasa-explorer.html");
+      writeFileSync(target, original);
+      const newContent = Array.from({ length: 554 }, (_, i) => `line ${i}`).join("\n");
+      const v = detectInPlaceShrinkage(target, newContent);
+      expect(v.isShrinking).toBe(true);
+      expect(v.originalLines).toBe(901);
+      expect(v.newLines).toBe(554);
+      expect(v.ratio).toBeLessThan(0.65);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does NOT fire when new content is larger than original", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
+    try {
+      const target = join(dir, "f.ts");
+      writeFileSync(
+        target,
+        Array.from({ length: 400 }, (_, i) => `a ${i}`).join("\n"),
+      );
+      const newContent = Array.from({ length: 500 }, (_, i) => `a ${i}`).join("\n");
+      const v = detectInPlaceShrinkage(target, newContent);
+      expect(v.isShrinking).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does NOT fire when original is small (< 300 lines)", () => {
+    // Legitimate small-file cleanups should pass through freely.
+    const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
+    try {
+      const target = join(dir, "small.ts");
+      writeFileSync(
+        target,
+        Array.from({ length: 200 }, (_, i) => `a ${i}`).join("\n"),
+      );
+      const newContent = "a\nb\nc\n"; // 4 lines — huge ratio drop
+      const v = detectInPlaceShrinkage(target, newContent);
+      expect(v.isShrinking).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does NOT fire when shrinkage is modest (70%+ of original)", () => {
+    // Legitimate cleanup: 500 → 400 lines (80% of original) should pass.
+    const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
+    try {
+      const target = join(dir, "f.ts");
+      writeFileSync(
+        target,
+        Array.from({ length: 500 }, (_, i) => `a ${i}`).join("\n"),
+      );
+      const newContent = Array.from({ length: 400 }, (_, i) => `a ${i}`).join("\n");
+      const v = detectInPlaceShrinkage(target, newContent);
+      expect(v.isShrinking).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("does NOT fire when target file does not exist yet", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
+    try {
+      const target = join(dir, "brand-new.ts");
+      const v = detectInPlaceShrinkage(target, "only 1 line");
+      expect(v.isShrinking).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("buildShrinkageReport", () => {
+  test("names the percentage drop and offers three resolutions", () => {
+    const report = buildShrinkageReport("/tmp/nasa-explorer.html", {
+      isShrinking: true,
+      originalLines: 901,
+      newLines: 554,
+      ratio: 554 / 901,
+    });
+    expect(report).toContain("BLOCKED");
+    expect(report).toContain("nasa-explorer.html");
+    expect(report).toContain("901 lines");
+    expect(report).toContain("554 lines");
+    expect(report).toContain("39%");
+    expect(report).toMatch(/a\)/);
+    expect(report).toMatch(/b\)/);
+    expect(report).toMatch(/c\)/);
+    expect(report).toMatch(/behavior is identical/);
   });
 });
