@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  buildClaimMismatchReminder,
   buildRealityCheckReminder,
   checkClaimReality,
   countSuccessfulMutations,
@@ -238,6 +239,7 @@ describe("buildRealityCheckReminder", () => {
   test("contains [REALITY CHECK] header", () => {
     const reminder = buildRealityCheckReminder({
       isHallucinatedCompletion: true,
+      isClaimMutationMismatch: false,
       claims: ["Updated version to v2.3", "Changed 2025 to 2026"],
       successfulMutations: 0,
       mutatingToolNames: [],
@@ -248,6 +250,7 @@ describe("buildRealityCheckReminder", () => {
   test("lists the specific claims verbatim", () => {
     const reminder = buildRealityCheckReminder({
       isHallucinatedCompletion: true,
+      isClaimMutationMismatch: false,
       claims: ["Updated version to v2.3", "Changed 2025 to 2026"],
       successfulMutations: 0,
       mutatingToolNames: [],
@@ -259,6 +262,7 @@ describe("buildRealityCheckReminder", () => {
   test("explains common causes (Edit fail, GrepReplace no match, sed no-op)", () => {
     const reminder = buildRealityCheckReminder({
       isHallucinatedCompletion: true,
+      isClaimMutationMismatch: false,
       claims: ["x"],
       successfulMutations: 0,
       mutatingToolNames: [],
@@ -271,11 +275,132 @@ describe("buildRealityCheckReminder", () => {
   test("offers two concrete resolutions (a/b)", () => {
     const reminder = buildRealityCheckReminder({
       isHallucinatedCompletion: true,
+      isClaimMutationMismatch: false,
       claims: ["x"],
       successfulMutations: 0,
       mutatingToolNames: [],
     });
     expect(reminder).toMatch(/a\)\s+actually make/i);
     expect(reminder).toMatch(/b\)\s+retract/i);
+  });
+});
+
+// ─── Phase 18: claim/mutation mismatch ──────────────────────────
+
+/**
+ * Build a messages array with N successful Edit tool results. Each Edit
+ * is represented as an assistant tool_use + matching user tool_result
+ * containing a success marker ("Edited" / "replacements") so that
+ * countSuccessfulMutations counts them as real mutations.
+ */
+function buildMessagesWithEdits(editCount: number, userText = "refactor"): Message[] {
+  const messages: Message[] = [{ role: "user", content: userText }];
+  for (let i = 0; i < editCount; i++) {
+    const id = `edit_${i}`;
+    messages.push({
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          id,
+          name: "Edit",
+          input: { file_path: `/tmp/f.html`, old_string: "a", new_string: "b" },
+        } as unknown as never,
+      ],
+    });
+    messages.push({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: id,
+          is_error: false,
+          content: `Edited /tmp/f.html (1 replacement, +1 lines)`,
+        } as unknown as never,
+      ],
+    });
+  }
+  return messages;
+}
+
+describe("phase 18: claim/mutation mismatch", () => {
+  test("fires when many claims but only 2 mutations", () => {
+    const messages = buildMessagesWithEdits(2);
+    // Mirror the NASA Explorer session: lots of padding around 2 real Edits
+    const text = `
+      Refactor complete.
+      Updated the star-bg animation to be smoother.
+      Updated the nav-link active state styling.
+      Updated the section comments throughout.
+      Changed the counter animation to be performant.
+      Changed the modal handling to use a single function.
+      Added a new keyboard support layer.
+      Added the section-header utility class.
+      Fixed the responsive layout edge case.
+    `;
+    const v = checkClaimReality(text, messages);
+    expect(v.isHallucinatedCompletion).toBe(false);
+    expect(v.isClaimMutationMismatch).toBe(true);
+    expect(v.successfulMutations).toBe(2);
+    expect(v.claims.length).toBeGreaterThanOrEqual(6);
+  });
+
+  test("does NOT fire when claims match mutations 1:1", () => {
+    const messages = buildMessagesWithEdits(5);
+    const text = `
+      Updated the version header.
+      Changed the hardcoded date to 2026.
+      Replaced the red-400 class throughout.
+      Fixed the typo in the comment block.
+      Added the new import statement.
+    `;
+    const v = checkClaimReality(text, messages);
+    expect(v.isClaimMutationMismatch).toBe(false);
+  });
+
+  test("does NOT fire when below claim threshold (few claims, 1 edit)", () => {
+    const messages = buildMessagesWithEdits(1);
+    const text = `Updated the config value. Changed the port number.`;
+    const v = checkClaimReality(text, messages);
+    expect(v.isClaimMutationMismatch).toBe(false);
+  });
+
+  test("does NOT fire when isHallucinatedCompletion already fired", () => {
+    // 0 mutations, 5 claims — hallucinatedCompletion takes precedence
+    const messages: Message[] = [{ role: "user", content: "refactor" }];
+    const text = `
+      Updated the config file.
+      Changed the port number.
+      Replaced the URL constant.
+      Fixed the startup typo.
+      Added a new import.
+    `;
+    const v = checkClaimReality(text, messages);
+    expect(v.isHallucinatedCompletion).toBe(true);
+    expect(v.isClaimMutationMismatch).toBe(false);
+  });
+
+  test("mismatch reminder names the ratio and lists claims", () => {
+    const reminder = buildClaimMismatchReminder({
+      isHallucinatedCompletion: false,
+      isClaimMutationMismatch: true,
+      claims: [
+        "Updated star-bg",
+        "Added nav-link.active",
+        "Changed counter animation",
+        "Replaced keyboard handler",
+        "Fixed modal close",
+        "Added section-header utility",
+      ],
+      successfulMutations: 2,
+      mutatingToolNames: ["Edit", "Edit"],
+    });
+    expect(reminder).toContain("CLAIM/MUTATION MISMATCH");
+    expect(reminder).toContain("6 distinct change claims");
+    expect(reminder).toContain("2 mutation tool call");
+    expect(reminder).toMatch(/padding/i);
+    expect(reminder).toMatch(/a\)/);
+    expect(reminder).toMatch(/b\)/);
+    expect(reminder).toContain("Updated star-bg");
   });
 });
