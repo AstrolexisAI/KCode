@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  detectCompletionMarkerLoop,
   detectLargeBlockRepetition,
   detectRepetitionLoop,
 } from "./conversation-streaming";
@@ -207,5 +208,86 @@ describe("detectLargeBlockRepetition", () => {
       base + "\n  " + base + "\n\n  " + base + "\n\n\n" + base +
       "\n\n" + base + "\n" + base;
     expect(detectLargeBlockRepetition(text)).not.toBeNull();
+  });
+});
+
+// ─── Phase 23.5: completion-marker loop detection ───────────────
+
+describe("detectCompletionMarkerLoop", () => {
+  test("returns null for short text", () => {
+    expect(detectCompletionMarkerLoop("hi")).toBeNull();
+    expect(detectCompletionMarkerLoop("✅ done")).toBeNull();
+  });
+
+  test("returns null on a single completion marker with real content after", () => {
+    // Normal flow: model says "done" once, then provides the summary
+    const text =
+      "✅ Aplicación Orbital completada con éxito. " +
+      "x".repeat(1500) + " Additional details here continue below. ";
+    expect(detectCompletionMarkerLoop(text)).toBeNull();
+  });
+
+  test("fires on the Orbital semantic-repetition pattern (3+ variants)", () => {
+    // This is the actual sequence from the v2.10.65 kcode.log —
+    // several completion-summary restarts with slightly different
+    // wording. Phase 23's byte-identical fingerprint matcher misses
+    // it because the wording varies block to block.
+    const block1 =
+      "✅ ¡Aplicación 'Orbital' completada con éxito! " +
+      "Se ha generado un archivo 100% autónomo con todas las " +
+      "secciones solicitadas implementadas correctamente. " +
+      "x".repeat(500) + " ";
+    const block2 =
+      "✅ ¡Orbital completada! " +
+      "He creado una aplicación web profesional y visualmente " +
+      "impactante tal como se solicitó en el prompt original. " +
+      "y".repeat(500) + " ";
+    const block3 =
+      "✅ ¡Orbital completada con éxito! " +
+      "He generado una aplicación web completa con todos los " +
+      "requisitos del Mission Control de la NASA implementados. " +
+      "z".repeat(500) + " ";
+    const text = block1 + block2 + block3;
+    expect(text.length).toBeGreaterThan(1500);
+    const result = detectCompletionMarkerLoop(text);
+    expect(result).not.toBeNull();
+    expect(result).toMatch(/completad/i);
+  });
+
+  test("fires on English Task Complete restarts", () => {
+    const block =
+      "✅ Task complete! The application has been done with all the features " +
+      "requested. Here is a summary of what was done: " + "x".repeat(400);
+    const text = block + " ... " + block + " ... " + block;
+    expect(detectCompletionMarkerLoop(text)).not.toBeNull();
+  });
+
+  test("does NOT fire on 2 restarts (below threshold)", () => {
+    const block =
+      "✅ Orbital completada. Summary follows: " + "x".repeat(500);
+    const text = block + block; // only 2 markers
+    expect(detectCompletionMarkerLoop(text)).toBeNull();
+  });
+
+  test("does NOT fire on legitimate prose mentioning completion verbs", () => {
+    // "The user asked me to complete the task. I finished the setup.
+    // This is done by running X." — no ✅ or restart pattern
+    const text =
+      "The user asked me to complete the task. I finished the setup. " +
+      "This is done by running the command. The completion was smooth. " +
+      "When you are done, the next step is to verify. " +
+      "x".repeat(600) +
+      " More legitimate prose that mentions completion and finish but " +
+      "isn't a restart loop. The task is truly done now. " +
+      "y".repeat(600);
+    expect(detectCompletionMarkerLoop(text)).toBeNull();
+  });
+
+  test("counts position-distinct markers even when two patterns overlap", () => {
+    // ✅ starts a marker, and "Task complete!" ALSO starts one —
+    // if they overlap at the same position, should count once
+    const block = "✅ Task complete! " + "x".repeat(500);
+    const text = block + block + block;
+    expect(detectCompletionMarkerLoop(text)).not.toBeNull();
   });
 });
