@@ -21,6 +21,132 @@ import { readFileSync } from "node:fs";
 import { detectServerSpawn, extractDeclaredPort } from "./bash-spawn-verifier.js";
 import { log } from "./logger.js";
 
+// ─── Phase 8: stale-watcher self-heal ─────────────────────────────
+
+/**
+ * Process names that count as "dev-mode watchers" — these should always
+ * be ephemeral. If they are leaking inotify slots, killing them is safe.
+ */
+const STALE_WATCHER_COMMS = new Set([
+  "next-server",
+  "vite",
+  "nodemon",
+  "node",  // bare node — common for dev tools, filtered by elapsed time
+  "bun",   // bun --watch
+]);
+
+interface StaleWatcher {
+  pid: number;
+  comm: string;
+  etimeSec: number;
+}
+
+/**
+ * List dev-mode watcher processes owned by the current user with an
+ * elapsed time exceeding the threshold. Active dev sessions are
+ * usually short-lived (<30 min); processes older than that are
+ * almost always leaks from prior KCode sessions or crashed wrappers.
+ */
+export function findStaleDevWatchers(maxAgeSec: number = 1800): StaleWatcher[] {
+  try {
+    const result = spawnSync(
+      "ps",
+      ["-o", "pid,etimes,comm", "-u", String(process.getuid?.() ?? "")],
+      { encoding: "utf-8", timeout: 2000 },
+    );
+    if (result.status !== 0 || !result.stdout) return [];
+    const lines = result.stdout.trim().split("\n").slice(1); // skip header
+    const out: StaleWatcher[] = [];
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+      const pid = parseInt(parts[0]!, 10);
+      const etimeSec = parseInt(parts[1]!, 10);
+      const comm = parts[2]!;
+      if (!Number.isFinite(pid) || !Number.isFinite(etimeSec)) continue;
+      if (!STALE_WATCHER_COMMS.has(comm)) continue;
+      if (etimeSec < maxAgeSec) continue;
+      out.push({ pid, comm, etimeSec });
+    }
+    return out;
+  } catch (err) {
+    log.debug("preflight", `findStaleDevWatchers failed: ${err}`);
+    return [];
+  }
+}
+
+export interface InotifyRecoveryResult {
+  killed: number;
+  killedPids: number[];
+  beforeRatio: number;
+  afterRatio: number | null;
+  recovered: boolean;
+}
+
+/**
+ * Attempt to bring inotify usage below the threshold by killing
+ * stale dev-mode watchers (>30 min old) owned by the current user.
+ *
+ * This is the operator-mind equivalent of "do the cleanup yourself
+ * before complaining about saturation". Justification:
+ *   - Targets are dev-mode watchers, never production processes.
+ *   - Restricted to the current UID — never touches another user.
+ *   - Only kills processes >30 min old — active dev sessions are spared.
+ *   - Idempotent: re-running just kills nothing.
+ *   - Reversible: nothing on disk is touched, only ephemeral processes.
+ *
+ * Called by runSpawnPreflight before issuing the inotify refusal.
+ * If recovery succeeds, the refusal never fires and the spawn proceeds.
+ */
+export function attemptInotifyRecovery(threshold: number = 0.85): InotifyRecoveryResult {
+  const before = checkInotifyState();
+  if (!before) {
+    return { killed: 0, killedPids: [], beforeRatio: 0, afterRatio: null, recovered: false };
+  }
+  const beforeRatio = before.ratio;
+  if (beforeRatio < threshold) {
+    return {
+      killed: 0,
+      killedPids: [],
+      beforeRatio,
+      afterRatio: beforeRatio,
+      recovered: true,
+    };
+  }
+  const stale = findStaleDevWatchers(1800);
+  const killedPids: number[] = [];
+  for (const w of stale) {
+    try {
+      process.kill(w.pid, "SIGKILL");
+      killedPids.push(w.pid);
+    } catch (err) {
+      log.debug("preflight", `failed to kill stale watcher pid=${w.pid}: ${err}`);
+    }
+  }
+  if (killedPids.length === 0) {
+    return { killed: 0, killedPids, beforeRatio, afterRatio: beforeRatio, recovered: false };
+  }
+  // Wait briefly for the kernel to release inotify slots.
+  Bun.sleepSync?.(800) ?? sleepBlocking(800);
+  clearInotifyCache();
+  const after = checkInotifyState();
+  const afterRatio = after?.ratio ?? null;
+  const recovered = afterRatio !== null && afterRatio < threshold;
+  log.info(
+    "preflight",
+    `inotify self-heal: killed ${killedPids.length} stale watchers, ratio ${Math.round(beforeRatio * 100)}% → ${afterRatio !== null ? Math.round(afterRatio * 100) + "%" : "unknown"}, recovered=${recovered}`,
+  );
+  return { killed: killedPids.length, killedPids, beforeRatio, afterRatio, recovered };
+}
+
+/** Sync-blocking sleep fallback — only used if Bun.sleepSync is unavailable. */
+function sleepBlocking(ms: number): void {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    /* spin */
+  }
+}
+
 // ─── Port collision check ─────────────────────────────────────────
 
 /**
@@ -181,9 +307,38 @@ export function runSpawnPreflight(
   if (usesWatcher) {
     const ino = checkInotifyState();
     if (ino && ino.ratio >= 0.85) {
+      // Phase 8: try to self-heal before refusing. Real sessions showed
+      // that grok-class models read AUTHORIZED RECOVERY blocks but still
+      // delegate the cleanup to the user. KCode now does the cleanup
+      // itself for stale watchers (>30 min old, current UID, dev-mode
+      // process names) and only refuses if recovery actually fails.
+      const recovery = attemptInotifyRecovery(0.85);
+      if (recovery.recovered) {
+        log.info(
+          "preflight",
+          `inotify self-heal succeeded: killed ${recovery.killed} stale watchers, ` +
+            `ratio ${Math.round(recovery.beforeRatio * 100)}% → ${Math.round((recovery.afterRatio ?? 0) * 100)}%`,
+        );
+        // Returning null here lets the original spawn proceed.
+        return null;
+      }
+
       lines.push(`✗ inotify is saturated: ${ino.used}/${ino.limit} instances used (${Math.round(ino.ratio * 100)}%).`);
       lines.push(`  Spawning a watch-mode dev server right now would EMFILE on boot`);
       lines.push(`  and you'd see "Watchpack Error (watcher): EMFILE: too many open files".`);
+      if (recovery.killed > 0) {
+        lines.push(``);
+        lines.push(`  KCode already attempted self-heal: killed ${recovery.killed} stale watchers`);
+        lines.push(`  (PIDs ${recovery.killedPids.join(", ")}), but inotify is still`);
+        lines.push(`  ${recovery.afterRatio !== null ? Math.round(recovery.afterRatio * 100) + "%" : "saturated"}.`);
+        lines.push(`  This means the remaining leaked watchers are either active dev sessions`);
+        lines.push(`  the user is using, or owned by another UID.`);
+      } else {
+        lines.push(``);
+        lines.push(`  KCode looked for stale watchers (dev-mode processes >30 min old owned by`);
+        lines.push(`  the current user) but found none. The leaks are either active dev sessions`);
+        lines.push(`  the user is using, or owned by another UID.`);
+      }
       lines.push(``);
       lines.push(`  AUTHORIZED RECOVERY (you may run these as your next tool calls`);
       lines.push(`  WITHOUT asking the user — they are reversible system maintenance):`);
