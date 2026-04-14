@@ -28,8 +28,13 @@ describe("oauth/flow", () => {
     tempDir = await mkdtemp(join(tmpdir(), "kcode-oauth-flow-test-"));
     origEnv = {
       KCODE_HOME: process.env.KCODE_HOME,
+      KCODE_OAUTH_NO_BROWSER: process.env.KCODE_OAUTH_NO_BROWSER,
     };
     process.env.KCODE_HOME = tempDir;
+    // Block the integration test from spawning xdg-open and flashing
+    // a real browser tab on the developer's desktop every time the
+    // suite runs. flow.ts respects this env var.
+    process.env.KCODE_OAUTH_NO_BROWSER = "1";
     await clearTokens();
   });
 
