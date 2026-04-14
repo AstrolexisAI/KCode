@@ -3,10 +3,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildClaimMismatchReminder,
+  buildContentMismatchReminder,
   buildRealityCheckReminder,
   checkClaimReality,
+  checkContentMismatch,
+  collectTurnToolActivity,
   countSuccessfulMutations,
   extractClaims,
+  extractProseUrls,
 } from "./claim-reality-check";
 import type { Message } from "./types";
 
@@ -402,5 +406,209 @@ describe("phase 18: claim/mutation mismatch", () => {
     expect(reminder).toMatch(/a\)/);
     expect(reminder).toMatch(/b\)/);
     expect(reminder).toContain("Updated star-bg");
+  });
+});
+
+// ─── Phase 20: content-level mismatch ────────────────────────────
+
+describe("extractProseUrls", () => {
+  test("extracts URLs from markdown code blocks and prose", () => {
+    const text = `
+      I updated the array:
+      url: 'https://picsum.photos/id/1015/600/380'
+      url: 'https://picsum.photos/id/133/600/380'
+
+      More info at https://example.com/docs.
+    `;
+    const urls = extractProseUrls(text);
+    expect(urls).toContain("https://picsum.photos/id/1015/600/380");
+    expect(urls).toContain("https://picsum.photos/id/133/600/380");
+    expect(urls).toContain("https://example.com/docs");
+  });
+
+  test("strips trailing punctuation", () => {
+    const text = `See https://example.com/foo, and then https://bar.com/baz.`;
+    const urls = extractProseUrls(text);
+    expect(urls).toContain("https://example.com/foo");
+    expect(urls).toContain("https://bar.com/baz");
+  });
+
+  test("deduplicates", () => {
+    const text = `https://a.com/x and https://a.com/x again`;
+    const urls = extractProseUrls(text);
+    expect(urls.length).toBe(1);
+  });
+
+  test("returns empty on text with no URLs", () => {
+    expect(extractProseUrls("no urls here").length).toBe(0);
+  });
+});
+
+describe("collectTurnToolActivity", () => {
+  test("includes tool_use inputs and tool_result content", () => {
+    const messages: Message[] = [
+      { role: "user", content: "do work" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Edit",
+            input: {
+              file_path: "/tmp/f.html",
+              old_string: "old",
+              new_string: "https://real.example.com/a.jpg",
+            },
+          } as unknown as never,
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            is_error: false,
+            content: "Edited f.html (1 replacement, +1 lines)",
+          } as unknown as never,
+        ],
+      },
+    ];
+    const blob = collectTurnToolActivity(messages);
+    expect(blob).toContain("https://real.example.com/a.jpg");
+    expect(blob).toContain("Edited f.html");
+  });
+});
+
+describe("phase 20: checkContentMismatch", () => {
+  function buildMessagesWithEditedUrl(urlInEdit: string): Message[] {
+    return [
+      { role: "user", content: "fix the images" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "e1",
+            name: "Edit",
+            input: {
+              file_path: "/tmp/orbital.html",
+              old_string: "url: 'https://old.com/a.jpg'",
+              new_string: `url: '${urlInEdit}'`,
+            },
+          } as unknown as never,
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "e1",
+            is_error: false,
+            content: `Edited orbital.html (1 replacement, +0 lines)`,
+          } as unknown as never,
+        ],
+      },
+    ];
+  }
+
+  test("fires on Orbital/Mars session: prose picsum URLs, Edit had photojournal URLs", () => {
+    const messages = buildMessagesWithEditedUrl(
+      "https://photojournal.jpl.nasa.gov/jpeg/PIA26090.jpg",
+    );
+    // The model's final text claims it used picsum URLs — which were
+    // never in any tool call
+    const text = `
+      Cambios realizados:
+      url: 'https://picsum.photos/id/1015/600/380'
+      url: 'https://picsum.photos/id/133/600/380'
+      url: 'https://picsum.photos/id/160/600/380'
+      url: 'https://picsum.photos/id/201/600/380'
+    `;
+    const v = checkContentMismatch(text, messages);
+    expect(v.isContentMismatch).toBe(true);
+    expect(v.missingLiterals.length).toBeGreaterThanOrEqual(2);
+    expect(
+      v.missingLiterals.some((u) => u.includes("picsum.photos/id/1015")),
+    ).toBe(true);
+  });
+
+  test("does NOT fire when prose URLs match what was in the Edit", () => {
+    const messages = buildMessagesWithEditedUrl("https://real.example.com/a.jpg");
+    const text = `
+      I updated the image:
+      Now using https://real.example.com/a.jpg
+      and https://real.example.com/b.jpg
+    `;
+    const v = checkContentMismatch(text, messages);
+    // Only 1 URL is missing (b.jpg), which is below the 2-missing threshold
+    expect(v.isContentMismatch).toBe(false);
+  });
+
+  test("does NOT fire with fewer than 2 URLs in prose", () => {
+    const messages = buildMessagesWithEditedUrl("https://real.example.com/a.jpg");
+    const text = `See https://some-other.com/fake for more info.`;
+    const v = checkContentMismatch(text, messages);
+    expect(v.isContentMismatch).toBe(false);
+  });
+
+  test("does NOT fire when all prose URLs are found in failed tool inputs", () => {
+    // Even if the Edit failed, the URL was legitimately attempted
+    const messages: Message[] = [
+      { role: "user", content: "fix" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "e1",
+            name: "Edit",
+            input: {
+              file_path: "/tmp/f.html",
+              old_string: "nomatch",
+              new_string:
+                "url: 'https://attempted1.com/a.jpg' and 'https://attempted2.com/b.jpg'",
+            },
+          } as unknown as never,
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "e1",
+            is_error: true,
+            content: "Edit failed: old_string not found",
+          } as unknown as never,
+        ],
+      },
+    ];
+    const text = `
+      I attempted to set https://attempted1.com/a.jpg and
+      https://attempted2.com/b.jpg but the edit failed.
+    `;
+    const v = checkContentMismatch(text, messages);
+    expect(v.isContentMismatch).toBe(false);
+  });
+
+  test("reminder names missing URLs and offers resolutions", () => {
+    const reminder = buildContentMismatchReminder({
+      isContentMismatch: true,
+      missingLiterals: [
+        "https://picsum.photos/id/1015/600/380",
+        "https://picsum.photos/id/133/600/380",
+        "https://picsum.photos/id/160/600/380",
+      ],
+      foundLiterals: [],
+    });
+    expect(reminder).toContain("CONTENT MISMATCH");
+    expect(reminder).toContain("picsum.photos/id/1015");
+    expect(reminder).toContain("picsum.photos/id/133");
+    expect(reminder).toMatch(/a\)/);
+    expect(reminder).toMatch(/b\)/);
+    expect(reminder).toMatch(/Retract/i);
   });
 });
