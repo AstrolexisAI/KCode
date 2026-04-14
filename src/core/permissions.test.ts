@@ -354,10 +354,12 @@ describe("validateFileWritePath", () => {
     expect(result.allowed).toBe(true);
   });
 
-  test("blocks relative path", () => {
+  test("resolves relative path against the working directory", () => {
+    // Previously relative paths were hard-rejected. They now resolve
+    // against the passed workingDirectory and run through the normal
+    // bounds / sensitive-dir / symlink checks.
     const result = validateFileWritePath("relative/path.txt", "/home/user/project");
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("must be absolute");
+    expect(result.allowed).toBe(true);
   });
 
   test("blocks write outside working directory", () => {
@@ -473,12 +475,16 @@ describe("PermissionManager", () => {
       expect(result.allowed).toBe(true);
     });
 
-    test("blocks file write to relative path", async () => {
+    test("resolves relative file write against the working directory", async () => {
+      // Previously relative paths were hard-rejected. They now resolve
+      // against the passed workingDirectory (/tmp/test) and run through
+      // the normal bounds check. /tmp/test/relative.txt is inside
+      // /tmp/test, so the write is allowed.
       const pm = new PermissionManager("auto", "/tmp/test");
       const result = await pm.checkPermission(
-        makeToolUse("Write", { file_path: "relative.txt", content: "bad" }),
+        makeToolUse("Write", { file_path: "relative.txt", content: "hello" }),
       );
-      expect(result.allowed).toBe(false);
+      expect(result.allowed).toBe(true);
     });
   });
 
@@ -523,15 +529,17 @@ describe("PermissionManager", () => {
       expect(result.reason).toContain("No permission prompt function");
     });
 
-    test("still blocks relative file paths even in ask mode", async () => {
+    test("resolves relative file paths in ask mode (bounds still apply after resolve)", async () => {
+      // Previously this asserted that ask-mode hard-rejected relative paths.
+      // The new behavior resolves /tmp/test/relative.txt against the cwd
+      // and prompts normally; the prompt fn grants, so the result is allowed.
       const pm = new PermissionManager("ask", "/tmp/test");
       pm.setPromptFn(async () => ({ granted: true }));
 
       const result = await pm.checkPermission(
         makeToolUse("Edit", { file_path: "relative.txt", old_string: "a", new_string: "b" }),
       );
-      expect(result.allowed).toBe(false);
-      expect(result.reason).toContain("must be absolute");
+      expect(result.allowed).toBe(true);
     });
   });
 
