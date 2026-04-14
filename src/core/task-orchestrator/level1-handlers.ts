@@ -291,11 +291,29 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
   // kcode dev-server port range.
   const port = requestedPort ?? findFreePort(KCODE_PORT_FLOOR, KCODE_PORT_CEILING);
 
-  // If no project in cwd, check common project subdirectory names
+  // Phase 22 Bug #6 fix: before running the subdirectory scan / early
+  // return, check whether cwd already contains an HTML file at its
+  // root. If it does, fall through to the static-HTML branch below so
+  // `orbital.html` / `dashboard.html` / any single-file site without a
+  // package.json gets picked up. Pre-fix: `!existsSync(".../index.html")`
+  // caused us to enter the subdir scan, find nothing, and return null,
+  // skipping the extended static-HTML detection entirely.
+  let cwdHasRootHtml = false;
+  try {
+    const entries = readdirSync(cwd, { withFileTypes: true });
+    cwdHasRootHtml = entries.some(
+      (e) => e.isFile() && e.name.toLowerCase().endsWith(".html"),
+    );
+  } catch {
+    /* unreadable — treat as no html, fall through to subdir scan */
+  }
+
+  // If no project in cwd AND no root HTML file, check common project
+  // subdirectory names.
   if (!existsSync(join(cwd, "package.json")) && !existsSync(join(cwd, "go.mod")) &&
       !existsSync(join(cwd, "Cargo.toml")) && !existsSync(join(cwd, "pyproject.toml")) &&
       !existsSync(join(cwd, "mix.exs")) && !existsSync(join(cwd, "docker-compose.yml")) &&
-      !existsSync(join(cwd, "index.html"))) {
+      !cwdHasRootHtml) {
     // Check well-known project directory names first (fast)
     const commonNames = ["my-site", "my-app", "app", "web", "frontend", "backend", "api", "server", "project", "site"];
     for (const name of commonNames) {

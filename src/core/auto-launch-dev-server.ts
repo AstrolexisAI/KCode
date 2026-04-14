@@ -201,6 +201,24 @@ export interface AutoLaunchResult {
   url?: string;
 }
 
+/**
+ * Extract an explicit port number from the user's text. Matches shapes
+ * like "en el puerto 24564", "on port 3000", "puerto: 8080". Returns
+ * the first valid port found, or undefined.
+ */
+export function extractRequestedPort(userTexts: readonly string[]): number | undefined {
+  const re = /\b(?:puerto|port)\s*[:=]?\s*(\d{2,5})\b/i;
+  for (const text of userTexts) {
+    if (!text) continue;
+    const m = text.match(re);
+    if (m?.[1]) {
+      const n = parseInt(m[1], 10);
+      if (n >= 1024 && n <= 65535) return n;
+    }
+  }
+  return undefined;
+}
+
 export async function maybeAutoLaunchDevServer(
   cwd: string,
   messages: Message[],
@@ -219,8 +237,11 @@ export async function maybeAutoLaunchDevServer(
       return null;
     }
 
-    // Guard 3: a runnable project must exist in cwd
-    const srv = detectDevServer(cwd);
+    // Guard 3: a runnable project must exist in cwd. If the user's
+    // prompt mentioned an explicit port (e.g. "en el puerto 24564"),
+    // honor it by passing to detectDevServer.
+    const requestedPort = extractRequestedPort(userTexts);
+    const srv = detectDevServer(cwd, requestedPort);
     if (!srv) {
       log.debug("auto-launch", "skipped: detectDevServer returned null");
       return null;
