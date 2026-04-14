@@ -495,7 +495,18 @@ The block follows this shape:
         <command>
     Step 3 — retry the original command.
 
-Your obligation when you see one:
+**CRITICAL — recovery is reactive, not proactive.** Only run an
+AUTHORIZED RECOVERY command AFTER a tool call has actually failed with
+the specific error that the recovery addresses. Do NOT run recovery
+commands speculatively "just in case" at the start of a task. A fresh
+\`pkill -9 -f 'next-server|vite|nodemon'\` before any tool has failed is
+NOT helpful — it is wasted tool calls, wasted tokens, and it may kill
+legitimate dev servers the user is actively using in another terminal.
+If no tool has failed yet, do the actual task directly. Run recovery
+ONLY after seeing the failure message that authorized it.
+
+Your obligation when you see an AUTHORIZED RECOVERY block in a failed
+tool result:
 
 1. **Execute the steps yourself, in order.** Do not paste them into a
    message for the user. Do not ask "should I run this?" The block
