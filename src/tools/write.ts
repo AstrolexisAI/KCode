@@ -391,6 +391,43 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     }
   }
 
+  // Phase 17: skeleton + sibling proliferation guards.
+  // Run AFTER audit guards (audit reports are allowed to be long prose
+  // with their own content validation) but BEFORE sensitive-file /
+  // symlink checks so a real write attempt never has placeholder
+  // content land on disk.
+  if (!isAuditFilename(file_path)) {
+    const {
+      detectSiblingProliferation,
+      buildProliferationReport,
+      detectSkeletonContent,
+      buildSkeletonReport,
+      checkDegradation,
+    } = await import("../core/write-guards.js");
+
+    const proliferation = detectSiblingProliferation(file_path);
+    if (proliferation.isProliferation) {
+      return {
+        tool_use_id: "",
+        content: buildProliferationReport(file_path, proliferation),
+        is_error: true,
+      };
+    }
+
+    const skeleton = detectSkeletonContent(content);
+    if (skeleton.isSkeleton) {
+      let report = buildSkeletonReport(file_path, skeleton);
+      const degradation = checkDegradation(file_path, content);
+      if (degradation) {
+        report +=
+          `\n\nDegradation detected: "${degradation.original}" has ` +
+          `${degradation.originalLines} lines; your new content has ` +
+          `${degradation.newLines}. You are shrinking a working file into a stub.`;
+      }
+      return { tool_use_id: "", content: report, is_error: true };
+    }
+  }
+
   // Block writes to sensitive files
   const isSensitive = SENSITIVE_PATTERNS.some((p) => p.test(file_path));
   if (isSensitive) {
