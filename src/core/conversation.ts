@@ -1897,6 +1897,34 @@ export class ConversationManager {
         guardState.consecutiveDenials = 0;
       }
 
+      // Phase 22: if the model just finished its final response AND the
+      // user's original prompt had runtime intent AND a Write just
+      // completed, proactively launch the dev server and tell the user
+      // how to stop it. Fires only on "end_turn" — never during
+      // tool_use continuation, so we don't launch mid-reasoning.
+      if (stopReason === "end_turn") {
+        try {
+          const { maybeAutoLaunchDevServer } = await import(
+            "./auto-launch-dev-server.js"
+          );
+          const { getUserTexts } = await import("./session-tracker.js");
+          const launchResult = await maybeAutoLaunchDevServer(
+            this.config.workingDirectory,
+            this.state.messages,
+            getUserTexts(),
+          );
+          if (launchResult) {
+            this.state.messages.push({
+              role: "assistant",
+              content: launchResult.notice,
+            });
+            yield { type: "text", text: launchResult.notice };
+          }
+        } catch (err) {
+          log.debug("auto-launch", `hook failed (non-fatal): ${err}`);
+        }
+      }
+
       yield { type: "turn_end", stopReason };
       // Loop continues for next agent turn
     }

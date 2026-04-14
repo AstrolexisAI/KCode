@@ -222,12 +222,19 @@ function generateCommitMessage(cwd: string): { message: string; files: string } 
 
 // ── Dev Server Detection ──────────────────────────────────────
 
-interface DevServer {
+export interface DevServer {
   name: string;
   command: string;
   port: number;
   installCmd?: string;
   needsInstall: boolean;
+  /**
+   * When the dev-server is a static-HTML server, this is the filename
+   * that should be linked in the "open at" URL. Used so the auto-launch
+   * hook can point the user at http://localhost:PORT/orbital.html
+   * instead of the bare directory listing.
+   */
+  htmlFile?: string;
 }
 
 /**
@@ -278,7 +285,7 @@ function findFreePort(start: number, end: number): number {
 const KCODE_PORT_FLOOR = 11000;
 const KCODE_PORT_CEILING = 11999;
 
-function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
+export function detectDevServer(cwd: string, requestedPort?: number): DevServer | null {
   // If the caller gave a specific port, honor it (even if below 11000 —
   // the user knows what they want). Otherwise find a free one in the
   // kcode dev-server port range.
@@ -396,18 +403,41 @@ function detectDevServer(cwd: string, requestedPort?: number): DevServer | null 
   // (a) CLAUDE.md says "Always use Bun" and (b) bunx serve starts
   // faster and supports live reload with --single. Falls back to
   // python3 only if bunx is not on PATH.
-  if (existsSync(join(cwd, "index.html")) && !existsSync(join(cwd, "package.json"))) {
+  if (!existsSync(join(cwd, "package.json"))) {
+    // Prefer index.html if present, otherwise fall back to any single
+    // .html file in the directory root. This handles the Orbital-style
+    // case where the model creates orbital.html instead of index.html.
+    let htmlFile: string | null = null;
     try {
-      const size = statSync(join(cwd, "index.html")).size;
-      if (size >= 500) {
-        const hasBunx = tryWhich("bunx");
-        const command = hasBunx
-          ? `bunx serve -l ${port} .`
-          : `python3 -m http.server ${port}`;
-        return { name: "Static", command, port, needsInstall: false };
+      if (existsSync(join(cwd, "index.html"))) {
+        htmlFile = "index.html";
+      } else {
+        const entries = readdirSync(cwd, { withFileTypes: true });
+        const htmlFiles = entries
+          .filter((e) => e.isFile() && e.name.toLowerCase().endsWith(".html"))
+          .map((e) => e.name);
+        // Only auto-serve when there's EXACTLY one HTML file — multiple
+        // HTML files are ambiguous and would need a user hint.
+        if (htmlFiles.length === 1) htmlFile = htmlFiles[0]!;
+      }
+      if (htmlFile) {
+        const size = statSync(join(cwd, htmlFile)).size;
+        if (size >= 500) {
+          const hasBunx = tryWhich("bunx");
+          const command = hasBunx
+            ? `bunx serve -l ${port} .`
+            : `python3 -m http.server ${port}`;
+          return {
+            name: "Static",
+            command,
+            port,
+            needsInstall: false,
+            htmlFile,
+          };
+        }
       }
     } catch {
-      /* ignore stat errors */
+      /* ignore stat/readdir errors */
     }
   }
 
@@ -424,7 +454,7 @@ function tryWhich(bin: string): boolean {
   }
 }
 
-function startDevServer(srv: DevServer, cwd: string): Level1Result {
+export function startDevServer(srv: DevServer, cwd: string): Level1Result {
   // Step 1: Install dependencies if needed
   if (srv.needsInstall && srv.installCmd) {
     const installResult = run(srv.installCmd, cwd, 120_000);
@@ -468,7 +498,8 @@ function startDevServer(srv: DevServer, cwd: string): Level1Result {
       // Non-fatal: the server is started; only last-project write failed.
     }
 
-    const portInfo = srv.port > 0 ? `\n  🌐 http://localhost:${srv.port}` : "";
+    const urlPath = srv.htmlFile && srv.htmlFile !== "index.html" ? `/${srv.htmlFile}` : "";
+    const portInfo = srv.port > 0 ? `\n  🌐 http://localhost:${srv.port}${urlPath}` : "";
     // Show explicit shell commands so the user can copy them into
     // another terminal (or their notes) to manage the server manually.
     // The `kill` command uses the child PID directly — that's the
