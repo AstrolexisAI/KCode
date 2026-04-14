@@ -24,7 +24,8 @@ export const grepReplaceDefinition: ToolDefinition = {
       },
       path: {
         type: "string",
-        description: "Directory or file to search in (default: current working directory)",
+        description:
+          "File or directory to scope the replace to. Pass an absolute path to a single file to edit just that file (no extension filter applies). Pass a directory to walk it with the glob filter. Default: current working directory.",
       },
       glob: {
         type: "string",
@@ -67,22 +68,52 @@ const DEFAULT_EXTENSIONS = new Set([
   ".kt",
   ".swift",
   ".c",
+  ".cc",
   ".cpp",
+  ".cxx",
   ".h",
+  ".hh",
   ".hpp",
   ".cs",
   ".rb",
+  ".php",
+  ".pl",
+  ".pm",
+  ".lua",
   ".vue",
   ".svelte",
+  ".astro",
   ".json",
+  ".jsonc",
   ".yaml",
   ".yml",
   ".toml",
+  ".ini",
+  ".env",
   ".md",
+  ".mdx",
+  ".rst",
   ".txt",
   ".html",
+  ".htm",
+  ".xml",
+  ".xhtml",
+  ".svg",
   ".css",
   ".scss",
+  ".sass",
+  ".less",
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".fish",
+  ".ps1",
+  // Note: this list was missing .html and .htm, which caused
+  // GrepReplace to report "No matching files found" in real sessions
+  // when the user had asked it to edit a bare HTML file at the root
+  // of the project. Grep worked (different tool) but GrepReplace
+  // silently ignored the file, so the model got a false negative
+  // and hallucinated success claims on "changes" that never applied.
 ]);
 
 const IGNORE_DIRS = new Set([
@@ -224,12 +255,41 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
     }
   }
 
-  // Collect files
+  // Collect files. If path points at a single file, use it directly
+  // (this is the common case when the model wants to scope the
+  // replacement to one known file like `nasa-explorer.html`). Otherwise
+  // walk the directory with the extension filter.
   const files: string[] = [];
-  collectFiles(resolvedPath, allowedExts, maxFiles, files);
+  let singleFileMode = false;
+  try {
+    const stat = statSync(resolvedPath);
+    if (stat.isFile()) {
+      files.push(resolvedPath);
+      singleFileMode = true;
+    }
+  } catch {
+    /* path doesn't exist — fall through to directory walk which will
+       return empty and produce the friendly error below */
+  }
+  if (!singleFileMode) {
+    collectFiles(resolvedPath, allowedExts, maxFiles, files);
+  }
 
   if (files.length === 0) {
-    return { tool_use_id: "", content: "No matching files found." };
+    // Phase 15.5: make the error actionable. When Grep finds the same
+    // pattern but GrepReplace doesn't, the most common cause is an
+    // extension filter excluding the file. Tell the model how to fix it.
+    return {
+      tool_use_id: "",
+      content:
+        `No matching files found under ${resolvedPath}. ` +
+        `The default extension allowlist is restricted to common source and ` +
+        `config files. If you are trying to edit a specific file, pass its ` +
+        `absolute path in the \`path\` argument (GrepReplace now accepts file ` +
+        `paths, not just directories). If you need other extensions scanned, ` +
+        `pass an explicit \`glob\` like \`".html,.htm"\`.`,
+      is_error: true,
+    };
   }
 
   // Process files
