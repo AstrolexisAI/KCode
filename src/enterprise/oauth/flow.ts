@@ -112,14 +112,22 @@ export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthTokens |
   });
   const authUrl = `${config.authUrl}?${authParams.toString()}`;
 
-  // Open browser
-  try {
-    const openCmd =
-      process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-    Bun.spawn([openCmd, authUrl], { stdout: "ignore", stderr: "ignore" });
-  } catch (err) {
-    log.warn("config", `Failed to open browser for OAuth: ${err}`);
-    console.error(`Please open this URL in your browser:\n${authUrl}`);
+  // Open browser — unless KCODE_OAUTH_NO_BROWSER=1 is set, which tests
+  // (and headless CI) use to prevent this function from spawning xdg-open
+  // and flashing a real browser window on the user's desktop. The
+  // fallback path below prints the URL to stderr, so manual flows still
+  // work in that mode.
+  if (process.env.KCODE_OAUTH_NO_BROWSER === "1") {
+    log.info("oauth", `KCODE_OAUTH_NO_BROWSER=1 — not opening browser. URL:\n${authUrl}`);
+  } else {
+    try {
+      const openCmd =
+        process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+      Bun.spawn([openCmd, authUrl], { stdout: "ignore", stderr: "ignore" });
+    } catch (err) {
+      log.warn("config", `Failed to open browser for OAuth: ${err}`);
+      console.error(`Please open this URL in your browser:\n${authUrl}`);
+    }
   }
 
   // Wait for callback
