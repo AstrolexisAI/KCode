@@ -49,6 +49,73 @@ export function isRateLimitError(err: unknown): err is RateLimitError {
   return err instanceof Error && (err as RateLimitError).isRateLimit === true;
 }
 
+// ─── API error message formatting ────────────────────────────────
+
+/**
+ * Classify an HTTP error response and return an actionable hint
+ * string (with leading space), or an empty string if no hint applies.
+ * Pure — no I/O, safe to unit-test.
+ */
+export function classifyApiErrorHint(status: number, errorText: string): string {
+  const errLower = errorText.toLowerCase();
+  if (
+    errLower.includes("credit") ||
+    errLower.includes("balance") ||
+    errLower.includes("billing") ||
+    errLower.includes("payment") ||
+    status === 402
+  ) {
+    return " (hint: check your API billing/credits at the provider's dashboard)";
+  }
+  if (
+    status === 401 ||
+    status === 403 ||
+    errLower.includes("missing_scope") ||
+    errLower.includes("unauthorized")
+  ) {
+    return " (hint: check API key permissions — ensure it has the required scopes)";
+  }
+  if (
+    status === 400 &&
+    (errLower.includes("too long") ||
+      errLower.includes("too many tokens") ||
+      errLower.includes("context") ||
+      errLower.includes("maximum"))
+  ) {
+    return " (hint: request may exceed model context window — try /compact or reduce conversation length)";
+  }
+  if (status >= 500 && status < 600) {
+    // 5xx from an upstream provider is almost always transient. The
+    // user needs to know retry / model switch is the fix.
+    return " (hint: provider returned a server error — transient, retry in a moment or /toggle to another model)";
+  }
+  return "";
+}
+
+/**
+ * Build the API error message shown to the user. Includes the origin
+ * of the failing endpoint so dual local+cloud setups make it obvious
+ * whether the failure was localhost or a cloud provider (e.g. api.x.ai).
+ * Pure — no I/O, safe to unit-test.
+ */
+export function formatApiErrorMessage(opts: {
+  status: number;
+  statusText: string;
+  errorText: string;
+  url: string;
+  hint: string;
+}): string {
+  let originLabel = "";
+  try {
+    const parsed = new URL(opts.url);
+    originLabel = ` from ${parsed.origin}${parsed.pathname}`;
+  } catch {
+    /* non-URL input — skip origin label */
+  }
+  const body = opts.errorText ? ` - ${opts.errorText}` : "";
+  return `API request failed: ${opts.status} ${opts.statusText}${originLabel}${body}${opts.hint}`;
+}
+
 // ─── Tool Token Estimation ───────────────────────────────────────
 
 import { CHARS_PER_TOKEN } from "./token-budget";
@@ -717,18 +784,16 @@ export async function executeModelRequest(
       updateRateLimitUsage(response.headers);
       throw err;
     } else {
-      // Classify error and provide actionable hint
-      const errLower = errorText.toLowerCase();
-      if (errLower.includes("credit") || errLower.includes("balance") || errLower.includes("billing") || errLower.includes("payment") || response.status === 402) {
-        hint = " (hint: check your API billing/credits at the provider's dashboard)";
-      } else if (response.status === 401 || response.status === 403 || errLower.includes("missing_scope") || errLower.includes("unauthorized")) {
-        hint = " (hint: check API key permissions — ensure it has the required scopes)";
-      } else if (response.status === 400 && (errLower.includes("too long") || errLower.includes("too many tokens") || errLower.includes("context") || errLower.includes("maximum"))) {
-        hint = " (hint: request may exceed model context window — try /compact or reduce conversation length)";
-      }
+      hint = classifyApiErrorHint(response.status, errorText);
     }
     throw new Error(
-      `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}${hint}`,
+      formatApiErrorMessage({
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+        url: req.url,
+        hint,
+      }),
     );
   }
 
