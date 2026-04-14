@@ -370,25 +370,34 @@ export async function* executeToolsSequential(
       turnHadDenial = true;
       // Smart routing: if a Bash command was denied but it was trying to
       // create a file via shell redirection, suggest the Write tool instead
-      // of telling the model to give up entirely. This prevents the failure
-      // mode where the model stops trying to create a file after Bash safety
+      // of telling the model to give up. This prevents the failure mode
+      // where the model stops trying to create a file after Bash safety
       // blocks a heredoc, instead of routing to the proper tool.
-      let suggestion = "STOP: Do not retry this tool or any other tools. Respond to the user with text only.";
+      //
+      // For all OTHER denials we stay silent about retry strategy — the
+      // denial reason itself is enough for the model to decide whether
+      // to recover. Previously this branch used an aggressive
+      // "STOP: Do not retry... respond with text only" suffix that
+      // prevented the model from trying legitimate recovery paths
+      // (e.g. passing an absolute path instead of a relative one), and
+      // induced it to hallucinate success in user-facing text. We
+      // never want that on recoverable denials.
+      let suggestion = "";
       if (call.name === "Bash" && typeof call.input?.command === "string") {
         try {
           const { extractRedirectionTargets } = await import("./audit-guards.js");
           const targets = extractRedirectionTargets(call.input.command as string);
           if (targets.length > 0) {
             suggestion =
-              `STOP using Bash for this. To CREATE a file, call the Write tool: ` +
+              ` STOP using Bash for this. To CREATE a file, call the Write tool: ` +
               `Write(file_path="${targets[0]}", content="..."). ` +
               `Do NOT retry the Bash command.`;
           }
         } catch {
-          /* fallback to default message */
+          /* fallback: no suggestion */
         }
       }
-      const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}. ${suggestion}`;
+      const deniedContent = `Permission denied: ${permResult.reason ?? "blocked by permission system"}.${suggestion}`;
       yield {
         type: "tool_result",
         name: call.name,

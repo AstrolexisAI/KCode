@@ -482,9 +482,36 @@ describe("validateFileWritePath", () => {
     expect(result.allowed).toBe(true);
   });
 
-  test("denies relative path", () => {
+  test("resolves relative path against the working directory", () => {
+    // Previously this rejected all relative paths with a refusal that
+    // broke the most common usage pattern. The resolver now combines
+    // the relative path with cwd and lets the normal downstream checks
+    // (working-directory bounds, sensitive dirs, etc.) run against
+    // the resolved absolute path.
     const result = validateFileWritePath("relative/path.txt", cwd);
+    expect(result.allowed).toBe(true);
+  });
+
+  test("resolves bare filename against the working directory", () => {
+    const result = validateFileWritePath("nasa-explorer.html", cwd);
+    expect(result.allowed).toBe(true);
+  });
+
+  test("resolves relative path that escapes with ../", () => {
+    // "/home/user/project" + "../../etc/passwd" resolves to "/etc/passwd",
+    // which is a protected system directory → still denied (but via the
+    // protected-dir check, not the absolute-path check).
+    const result = validateFileWritePath("../../etc/passwd", cwd);
     expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/protected|outside/i);
+  });
+
+  test("relative path outside the working directory is denied", () => {
+    // "../other-project/file.txt" from /home/user/project resolves to
+    // /home/user/other-project/file.txt — outside the cwd subtree.
+    const result = validateFileWritePath("../other-project/file.txt", cwd);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/outside working directory/i);
   });
 
   test("denies outside working directory", () => {
