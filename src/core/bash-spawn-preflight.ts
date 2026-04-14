@@ -17,9 +17,39 @@
 // `ls` are unaffected).
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readlinkSync } from "node:fs";
 import { detectServerSpawn, extractDeclaredPort } from "./bash-spawn-verifier.js";
 import { log } from "./logger.js";
+
+// ─── Phase 10: process cwd lookup for smart port-collision resolution
+
+/**
+ * Look up a process's working directory via /proc/<pid>/cwd.
+ * Returns null on permission denied / dead process / non-Linux.
+ */
+export function getProcessCwd(pid: number): string | null {
+  if (pid <= 0) return null;
+  try {
+    return readlinkSync(`/proc/${pid}/cwd`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decide whether two cwds belong to the "same project" — i.e. one is
+ * a subdirectory of the other or they are identical. Conservative:
+ * returns false if either path is empty or the relationship can't be
+ * determined.
+ */
+export function cwdsAreSameProject(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  // Normalize trailing slash
+  const na = a.endsWith("/") ? a : a + "/";
+  const nb = b.endsWith("/") ? b : b + "/";
+  return na.startsWith(nb) || nb.startsWith(na);
+}
 
 // ─── Phase 8: stale-watcher self-heal ─────────────────────────────
 
@@ -273,17 +303,60 @@ export function runSpawnPreflight(
     const occupant = findListeningPid(port);
     if (occupant !== null) {
       const occupantName = occupant > 0 ? processNameFor(occupant) : null;
+      // Phase 10: look up the occupant's working directory so we can
+      // tell the model whether the colliding server is the SAME project
+      // (same cwd subtree → file edits will hot-reload through it,
+      // task can proceed without spawning) or a DIFFERENT project
+      // (must kill or pick a different port).
+      const occupantCwd = occupant > 0 ? getProcessCwd(occupant) : null;
+      const sameProject = cwdsAreSameProject(cwd, occupantCwd);
+
       lines.push(`✗ Port ${port} is already in use.`);
       if (occupant > 0) {
         lines.push(`  occupant: PID ${occupant}${occupantName ? ` (${occupantName})` : ""}`);
+        if (occupantCwd) {
+          lines.push(`  occupant cwd: ${occupantCwd}`);
+        }
       } else {
         lines.push(`  occupant: detected by ss but PID hidden (insufficient privileges)`);
       }
       lines.push(`  Spawning ${detection.framework} on this port would race and fail.`);
       lines.push(``);
-      lines.push(`  AUTHORIZED RECOVERY (you may run these as your next tool calls`);
-      lines.push(`  WITHOUT asking the user — they are reversible system maintenance):`);
-      if (occupant > 0) {
+
+      if (sameProject) {
+        // Same project — the occupant is almost certainly a dev server
+        // started by an earlier session for THIS project. Hot-reload
+        // will pick up the file edits we just made. The model should
+        // treat the task as already-served, not as a failure.
+        lines.push(`  ✓ The occupant's cwd is inside YOUR current working directory.`);
+        lines.push(`  This is almost always a dev server from an earlier session for the`);
+        lines.push(`  same project. Watch-mode frameworks (Next.js, Vite, etc.) hot-reload`);
+        lines.push(`  on file changes, so the edits you just made are already being served`);
+        lines.push(`  by PID ${occupant}.`);
+        lines.push(``);
+        lines.push(`  RECOMMENDED: Treat this as a success, not a failure.`);
+        lines.push(`    1. Verify by curling http://localhost:${port}/ — you should see your`);
+        lines.push(`       new content already.`);
+        lines.push(`    2. Tell the user the project is live at http://localhost:${port}.`);
+        lines.push(`    3. Do NOT spawn another server. Do NOT kill PID ${occupant} unless`);
+        lines.push(`       there is a config-level change Next.js cannot hot-reload`);
+        lines.push(`       (next.config.js / package.json / tailwind.config — edits to`);
+        lines.push(`       components/pages always hot-reload fine).`);
+        lines.push(``);
+        lines.push(`  AUTHORIZED RECOVERY (only if hot-reload truly is not enough,`);
+        lines.push(`  e.g. you changed next.config.js or installed new dependencies):`);
+        lines.push(`    Step 1 — kill the occupant:  kill ${occupant}`);
+        lines.push(`    Step 2 — wait for release:   sleep 1`);
+        lines.push(`    Step 3 — retry the original command.`);
+      } else if (occupant > 0) {
+        // Different project — model should kill or pick a different port
+        if (occupantCwd) {
+          lines.push(`  ⚠ The occupant's cwd (${occupantCwd}) is OUTSIDE your current`);
+          lines.push(`  working directory (${cwd}). It belongs to a different project.`);
+          lines.push(``);
+        }
+        lines.push(`  AUTHORIZED RECOVERY (you may run these as your next tool calls`);
+        lines.push(`  WITHOUT asking the user — they are reversible system maintenance):`);
         lines.push(`    Step 1 — kill the occupant:`);
         lines.push(`        kill ${occupant}`);
         lines.push(`    Step 2 — wait for the port to release:`);
@@ -293,6 +366,9 @@ export function runSpawnPreflight(
         lines.push(`  ALTERNATIVE: pick a different port (PORT=N or --port N) if you suspect`);
         lines.push(`  the occupant is a dev server the user is actively using elsewhere.`);
       } else {
+        // PID hidden by ss
+        lines.push(`  AUTHORIZED RECOVERY (you may run these as your next tool calls`);
+        lines.push(`  WITHOUT asking the user — they are reversible system maintenance):`);
         lines.push(`    Step 1 — pick a different port: change PORT=N or --port N in the command.`);
         lines.push(`    Step 2 — retry the spawn with the new port.`);
       }

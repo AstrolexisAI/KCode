@@ -83,7 +83,14 @@ describe("runSpawnPreflight", () => {
 
   test("port refusal includes AUTHORIZED RECOVERY block (phase 6)", () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("hi") });
-    const r = runSpawnPreflight(`next dev --port ${server.port}`, process.cwd());
+    // Phase 10: pass a fake cwd that does NOT match the test process's
+    // real cwd, so the smart resolver picks the different-project
+    // branch (which is the one with the "WITHOUT asking the user"
+    // language and the ALTERNATIVE clause).
+    const r = runSpawnPreflight(
+      `next dev --port ${server.port}`,
+      "/tmp/some-other-project-9f3e2",
+    );
     expect(r!.report).toContain("AUTHORIZED RECOVERY");
     expect(r!.report).toContain("WITHOUT asking the user");
     expect(r!.report).toMatch(/Step 1[\s\S]*kill/);
