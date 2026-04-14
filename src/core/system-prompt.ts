@@ -23,6 +23,7 @@ import {
   buildCodeGuidelines,
   buildCoordinatorInstructions,
   buildGitInstructions,
+  buildAntiFabricationGuidance,
   buildIdentity,
   buildMetacognition,
   buildOperatorRecoveryGuidance,
@@ -161,6 +162,11 @@ RULES:
       content: buildOperatorRecoveryGuidance(),
       priority: SectionPriority.HIGH,
       label: "operator-recovery",
+    });
+    sections.push({
+      content: buildAntiFabricationGuidance(),
+      priority: SectionPriority.HIGH,
+      label: "anti-fabrication",
     });
     if (config.thinking) {
       sections.push({
