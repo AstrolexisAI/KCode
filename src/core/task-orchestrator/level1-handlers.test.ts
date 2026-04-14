@@ -8,10 +8,10 @@
 // file locks down the exact boundaries so we don't regress.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { tryLevel1 } from "./level1-handlers";
+import { detectDevServer, tryLevel1 } from "./level1-handlers";
 
 describe("tryLevel1 — start-verb boundaries", () => {
   let cwd: string;
@@ -101,5 +101,66 @@ describe("tryLevel1 — other verb anchors (regression guards)", () => {
   test("'git status for the branch' is NOT intercepted", () => {
     const r = tryLevel1("git status for the branch", cwd);
     expect(r.handled).toBe(false);
+  });
+});
+
+// ─── Phase 22 Bug #6 regression — single-HTML detection ─────────
+
+describe("detectDevServer — static HTML files", () => {
+  let cwd: string;
+
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), "kcode-detect-html-"));
+  });
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  test("detects orbital.html (single non-index .html at cwd root) — Bug #6 regression", () => {
+    // Pre-fix: cwd with orbital.html but no index.html and no
+    // package.json hit the early-return subdirectory-scan block
+    // and returned null without reaching the static-HTML branch.
+    const content = "<!DOCTYPE html><html><head><title>Orbital</title></head><body>" +
+      "x".repeat(600) + "</body></html>";
+    writeFileSync(join(cwd, "orbital.html"), content);
+    const srv = detectDevServer(cwd);
+    expect(srv).not.toBeNull();
+    expect(srv!.name).toBe("Static");
+    expect(srv!.htmlFile).toBe("orbital.html");
+  });
+
+  test("detects index.html at cwd root (existing behavior)", () => {
+    const content = "<!DOCTYPE html><html><body>" + "x".repeat(600) + "</body></html>";
+    writeFileSync(join(cwd, "index.html"), content);
+    const srv = detectDevServer(cwd);
+    expect(srv).not.toBeNull();
+    expect(srv!.htmlFile).toBe("index.html");
+  });
+
+  test("returns null when cwd has multiple .html files (ambiguous)", () => {
+    // Multiple HTML files without a clear entry point should be
+    // ambiguous — we don't want to pick one at random.
+    const content = "<!DOCTYPE html><html><body>" + "x".repeat(600) + "</body></html>";
+    writeFileSync(join(cwd, "foo.html"), content);
+    writeFileSync(join(cwd, "bar.html"), content);
+    const srv = detectDevServer(cwd);
+    expect(srv).toBeNull();
+  });
+
+  test("returns null when orbital.html is too small (< 500 bytes)", () => {
+    writeFileSync(join(cwd, "orbital.html"), "<!DOCTYPE html>placeholder");
+    expect(detectDevServer(cwd)).toBeNull();
+  });
+
+  test("returns null on empty cwd", () => {
+    expect(detectDevServer(cwd)).toBeNull();
+  });
+
+  test("honors requestedPort argument", () => {
+    const content = "<!DOCTYPE html><html><body>" + "x".repeat(600) + "</body></html>";
+    writeFileSync(join(cwd, "orbital.html"), content);
+    const srv = detectDevServer(cwd, 24564);
+    expect(srv).not.toBeNull();
+    expect(srv!.port).toBe(24564);
   });
 });
