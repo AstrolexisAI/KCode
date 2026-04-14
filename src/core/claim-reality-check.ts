@@ -238,6 +238,23 @@ export interface RealityVerdict {
   mutatingToolNames: string[];
 }
 
+/**
+ * Phase 20: content-level mismatch — the assistant prose references
+ * specific URLs (or other distinctive literals) that never appear in
+ * ANY tool call this turn, whether as input, successful output, or
+ * failed output. Different from phase 15/18 which both reason about
+ * mutation counts. Phase 20 catches the case where the model wrote a
+ * fabricated diff in prose while having made a legitimate but DIFFERENT
+ * edit to the file.
+ */
+export interface ContentMismatchVerdict {
+  isContentMismatch: boolean;
+  /** Literals mentioned in prose that don't appear in any tool activity this turn. */
+  missingLiterals: string[];
+  /** Literals mentioned in prose that DO appear somewhere in tool activity. */
+  foundLiterals: string[];
+}
+
 export function checkClaimReality(
   assistantText: string,
   messages: Message[],
@@ -395,6 +412,188 @@ export function buildClaimMismatchReminder(verdict: RealityVerdict): string {
   );
   lines.push(
     `of the same hallucination phase 15 catches. The user checks the file.`,
+  );
+  return lines.join("\n");
+}
+
+// ─── Phase 20: content-claim vs content-reality ───────────────────
+
+/**
+ * Extract distinctive URL literals from assistant prose. We deliberately
+ * focus on URLs because they're specific, easy to verify substring-wise,
+ * and the most common fabrication target (NASA image URLs, CDN links,
+ * API endpoints, etc.). Returns deduplicated URLs with trailing
+ * punctuation stripped.
+ */
+export function extractProseUrls(text: string): string[] {
+  if (!text) return [];
+  const urls = new Set<string>();
+  const re = /https?:\/\/[^\s\])"'<>,;|`]+/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    let url = m[0];
+    // Strip trailing punctuation that's clearly sentence-level, not part of the URL
+    url = url.replace(/[.,;:!?)\]]+$/, "");
+    if (url.length >= 12) urls.add(url);
+  }
+  return Array.from(urls);
+}
+
+/**
+ * Collect every string the model ACTUALLY interacted with through tools
+ * in the current turn: tool_use inputs (Write/Edit content) AND
+ * tool_result content (both successful and failed — we're checking
+ * whether the URL was in the conversation ground truth, not whether
+ * the edit succeeded). Returns a single concatenated blob for
+ * substring matching.
+ */
+export function collectTurnToolActivity(messages: Message[]): string {
+  let i = messages.length - 1;
+  while (i >= 0) {
+    const msg = messages[i];
+    if (!msg) {
+      i--;
+      continue;
+    }
+    if (msg.role !== "user") {
+      i--;
+      continue;
+    }
+    if (typeof msg.content === "string") break;
+    if (Array.isArray(msg.content)) {
+      const onlyToolResults = msg.content.every(
+        (b) => (b as { type?: string }).type === "tool_result",
+      );
+      if (!onlyToolResults) break;
+    }
+    i--;
+  }
+  const turnMessages = messages.slice(i + 1);
+  const parts: string[] = [];
+
+  for (const msg of turnMessages) {
+    if (!Array.isArray(msg.content)) continue;
+    for (const block of msg.content) {
+      const b = block as {
+        type?: string;
+        input?: unknown;
+        content?: unknown;
+      };
+      if (b.type === "tool_use" && b.input) {
+        // Serialize tool_use input so URLs inside Edit old_string /
+        // new_string / Write content are visible in the blob.
+        try {
+          parts.push(JSON.stringify(b.input));
+        } catch {
+          /* skip unserializable */
+        }
+      }
+      if (b.type === "tool_result") {
+        const contentStr =
+          typeof b.content === "string"
+            ? b.content
+            : Array.isArray(b.content)
+              ? b.content
+                  .map((sub) => {
+                    const s = sub as { type?: string; text?: string };
+                    return s.type === "text" && s.text ? s.text : "";
+                  })
+                  .join("\n")
+              : "";
+        if (contentStr) parts.push(contentStr);
+      }
+    }
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Phase 20 check: extract URLs from assistant text, check whether
+ * each one appears anywhere in the turn's tool activity. Fires when
+ * ≥2 URLs are missing — the model is describing a diff that never
+ * happened.
+ */
+export function checkContentMismatch(
+  assistantText: string,
+  messages: Message[],
+): ContentMismatchVerdict {
+  const proseUrls = extractProseUrls(assistantText);
+  if (proseUrls.length < 2) {
+    return { isContentMismatch: false, missingLiterals: [], foundLiterals: [] };
+  }
+  const toolBlob = collectTurnToolActivity(messages);
+  const missing: string[] = [];
+  const found: string[] = [];
+  for (const url of proseUrls) {
+    if (toolBlob.includes(url)) {
+      found.push(url);
+    } else {
+      missing.push(url);
+    }
+  }
+  // Require at least 2 missing URLs to fire. A single off-topic URL
+  // (e.g. the model mentioning docs.example.com in passing) should
+  // not trip the guard.
+  return {
+    isContentMismatch: missing.length >= 2,
+    missingLiterals: missing,
+    foundLiterals: found,
+  };
+}
+
+export function buildContentMismatchReminder(
+  verdict: ContentMismatchVerdict,
+): string {
+  const lines: string[] = [];
+  lines.push(`[CONTENT MISMATCH]`);
+  lines.push(``);
+  lines.push(
+    `Your summary references ${verdict.missingLiterals.length} URL(s) that do NOT`,
+  );
+  lines.push(
+    `appear in ANY tool call this turn — not in any Edit/Write input, and`,
+  );
+  lines.push(`not in any tool result (successful OR failed):`);
+  lines.push(``);
+  for (const lit of verdict.missingLiterals.slice(0, 6)) {
+    lines.push(`  • ${lit}`);
+  }
+  if (verdict.missingLiterals.length > 6) {
+    lines.push(`  • ...and ${verdict.missingLiterals.length - 6} more`);
+  }
+  lines.push(``);
+  lines.push(
+    `You cannot claim you "updated the code to use X" when X was never in`,
+  );
+  lines.push(
+    `a tool_use.input and was never written to the file. The user will`,
+  );
+  lines.push(
+    `open the file and see completely different URLs. This is the`,
+  );
+  lines.push(
+    `failure mode that showed up in the Orbital/Mars session: the model`,
+  );
+  lines.push(
+    `wrote a markdown code block showing picsum.photos URLs while the`,
+  );
+  lines.push(`actual file still had the photojournal.jpl.nasa.gov ones.`);
+  lines.push(``);
+  lines.push(`You MUST do ONE of:`);
+  lines.push(
+    `  a) Actually make the change now — call Edit or Write with the exact`,
+  );
+  lines.push(
+    `     URL(s) you described, then verify with a Read of the file.`,
+  );
+  lines.push(
+    `  b) Retract the claim clearly: "my previous summary described URLs`,
+  );
+  lines.push(
+    `     that were never actually written. The file still contains [the`,
+  );
+  lines.push(
+    `     real URLs]." Then ask the user how to proceed.`,
   );
   return lines.join("\n");
 }
