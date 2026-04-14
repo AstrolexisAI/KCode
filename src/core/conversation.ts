@@ -447,6 +447,24 @@ export class ConversationManager {
       log.debug("operator-dashboard", `probe failed (non-fatal): ${err}`);
     }
 
+    // Find the most recent assistant message text once — shared by
+    // plan reconciliation (phase 12) and claim-vs-reality check (phase 15).
+    let lastAssistantText = "";
+    for (let i = this.state.messages.length - 1; i >= 0; i--) {
+      const m = this.state.messages[i];
+      if (m?.role !== "assistant") continue;
+      if (typeof m.content === "string") {
+        lastAssistantText = m.content;
+      } else if (Array.isArray(m.content)) {
+        for (const block of m.content) {
+          if ((block as { type?: string }).type === "text") {
+            lastAssistantText += (block as { text?: string }).text ?? "";
+          }
+        }
+      }
+      break;
+    }
+
     // Operator-mind phase 12: plan reconciliation check. If the previous
     // assistant turn declared the task complete (via phrases like "Task
     // completed", "Delivered", "Summary of changes") but the active plan
@@ -457,23 +475,6 @@ export class ConversationManager {
       const { detectAbandonedPlan, buildPlanReconciliationReminder } = await import(
         "../tools/plan.js"
       );
-      // Find the most recent assistant message text to check for
-      // completion phrases.
-      let lastAssistantText = "";
-      for (let i = this.state.messages.length - 1; i >= 0; i--) {
-        const m = this.state.messages[i];
-        if (m?.role !== "assistant") continue;
-        if (typeof m.content === "string") {
-          lastAssistantText = m.content;
-        } else if (Array.isArray(m.content)) {
-          for (const block of m.content) {
-            if ((block as { type?: string }).type === "text") {
-              lastAssistantText += (block as { text?: string }).text ?? "";
-            }
-          }
-        }
-        break;
-      }
       if (lastAssistantText) {
         const verdict = detectAbandonedPlan(lastAssistantText);
         if (verdict.abandoned && verdict.completionPhrase) {
@@ -490,6 +491,33 @@ export class ConversationManager {
       }
     } catch (err) {
       log.debug("plan", `reconciliation check failed (non-fatal): ${err}`);
+    }
+
+    // Operator-mind phase 15: claim-vs-reality check. If the previous
+    // assistant turn made concrete change claims ("Updated X", "Replaced Y")
+    // but no mutating tool call (Write/Edit/MultiEdit/GrepReplace/Rename/
+    // GitCommit) actually succeeded in that turn, inject a [REALITY CHECK]
+    // reminder forcing the model to either make the changes for real or
+    // retract the false claims. Most corrosive hallucination pattern —
+    // session evidence: model wrote "Updated version v2.1 → v2.3" while
+    // the file still had v2.1 untouched.
+    try {
+      const { checkClaimReality, buildRealityCheckReminder } = await import(
+        "./claim-reality-check.js"
+      );
+      if (lastAssistantText) {
+        const verdict = checkClaimReality(lastAssistantText, this.state.messages);
+        if (verdict.isHallucinatedCompletion) {
+          const reminder = buildRealityCheckReminder(verdict);
+          this.state.messages.push({ role: "user", content: reminder });
+          log.info(
+            "reality-check",
+            `hallucinated completion detected: ${verdict.claims.length} claims, ${verdict.successfulMutations} real mutations`,
+          );
+        }
+      }
+    } catch (err) {
+      log.debug("reality-check", `check failed (non-fatal): ${err}`);
     }
 
     // Auto-detect theoretical/formal prompts (delegated to conversation-message-prep)
