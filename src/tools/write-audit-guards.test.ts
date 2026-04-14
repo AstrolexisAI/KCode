@@ -460,10 +460,12 @@ Found: \`HidDevice.cpp\`: \`int x = buggy_code();\`
   });
 
   test("non-audit files bypass audit guards entirely", async () => {
-    // Recording no reads, creating a normal file with fake checklist-like content
+    // Recording no reads, creating a normal source file with fake
+    // checklist-like content. Filename intentionally non-doc-like so
+    // phase 21 (unsolicited-doc guard) also doesn't fire.
     const result = await executeWrite({
-      file_path: join(tmp, "notes.md"),
-      content: "## Files read in full (proof of work)\n1. fake.cpp — 100 lines\n",
+      file_path: join(tmp, "scratch.cpp"),
+      content: "// Files read in full (proof of work)\n// 1. fake.cpp — 100 lines\n",
     });
 
     expect(result.is_error).toBeUndefined();

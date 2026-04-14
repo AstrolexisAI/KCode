@@ -15,6 +15,9 @@ let _auditIntent = false;
 // (buffer indexing, network I/O, resource lifecycle). These are high-risk
 // files the model found but may not have opened.
 const _grepHitFiles = new Set<string>();
+// Phase 21: user-authored text messages in the current session. Used by
+// write-guards to decide whether the user granted doc-creation permission.
+const _userTexts: string[] = [];
 
 // Source-code file extensions. Only files with these extensions count
 // toward the audit read-minimum (so README.md, CMakeLists.txt, LICENSE
@@ -245,6 +248,24 @@ export function unreadGrepHits(): string[] {
 }
 
 /**
+ * Phase 21: record a user-authored text message. Called from conversation.ts
+ * on every sendMessage. write-guards uses this to determine whether the
+ * user's original request granted documentation-creation permission.
+ */
+export function recordUserText(text: string): void {
+  if (!text || typeof text !== "string") return;
+  _userTexts.push(text);
+}
+
+/**
+ * Return all user-authored text messages recorded so far in this session,
+ * in order. Read-only — callers should not mutate the array.
+ */
+export function getUserTexts(): readonly string[] {
+  return _userTexts;
+}
+
+/**
  * Reset the tracker. Used by tests and session restarts.
  */
 export function resetReads(): void {
@@ -252,4 +273,5 @@ export function resetReads(): void {
   _grepCount = 0;
   _grepHitFiles.clear();
   _auditIntent = false;
+  _userTexts.length = 0;
 }
