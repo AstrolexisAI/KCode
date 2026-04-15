@@ -60,9 +60,175 @@ const QUOTED_ID_REGEX = /[`"']([A-Za-z_$][A-Za-z0-9_$]{4,})[`"']/g;
 // ordinary English / Spanish words.
 const BARE_LONG_IDENT_REGEX =
   /\b([a-z][a-zA-Z0-9_$]*[A-Z][a-zA-Z0-9_$]*|[A-Z][a-zA-Z0-9_$]*[A-Z][a-zA-Z0-9_$]*)\b/g;
-// File mentions with extensions: orbital.html, server.js, app.tsx
+// File mentions with extensions. Matches bare filenames ("server.js")
+// and path-prefixed ones ("src/chart.js", "./app/page.tsx") so the
+// CDN filter can distinguish user-project files (has path) from
+// third-party dependencies (bare library name).
 const FILE_REGEX =
-  /\b([A-Za-z0-9_\-.]+\.(?:html|htm|js|jsx|ts|tsx|mjs|cjs|py|rs|go|java|rb|php|cs|swift|kt|scala|vue|svelte|astro|md|json|yml|yaml|toml|css|scss|sass|less))\b/g;
+  /(?:\b|\.{0,2}\/)([A-Za-z0-9_\-./\\]*[A-Za-z0-9_\-]+\.(?:html|htm|js|jsx|ts|tsx|mjs|cjs|py|rs|go|java|rb|php|cs|swift|kt|scala|vue|svelte|astro|md|json|yml|yaml|toml|css|scss|sass|less))\b/g;
+
+/**
+ * Extensions that can legitimately be CDN-delivered third-party
+ * libraries. HTML/Python/Rust/Go/etc. are ALWAYS project files —
+ * never subject to the CDN filter.
+ */
+const CDN_CAPABLE_EXTENSIONS = new Set([
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "ts",
+  "tsx",
+  "css",
+  "scss",
+  "sass",
+  "less",
+]);
+
+/**
+ * CDN library / framework names that look like file paths but are
+ * actually third-party dependencies mentioned in user prompts
+ * ("uses Chart.js via CDN"). These must NOT be treated as file
+ * hints for the edit-location check.
+ *
+ * The v2.10.71 Nexus Telemetry session fired phase 27 false
+ * positives on every Edit because the initial prompt mentioned
+ * "Chart.js vía CDN" and the model was editing nexus-telemetry.html —
+ * the file-mismatch path treated Chart.js as the target file.
+ *
+ * Matching is case-insensitive against the full filename.
+ */
+const CDN_LIBRARY_BLOCKLIST = new Set<string>([
+  // Charting / visualization
+  "chart.js",
+  "chartjs.js",
+  "d3.js",
+  "d3.min.js",
+  "plotly.js",
+  "echarts.js",
+  "highcharts.js",
+  // Frontend frameworks
+  "react.js",
+  "react-dom.js",
+  "vue.js",
+  "angular.js",
+  "svelte.js",
+  "ember.js",
+  "backbone.js",
+  "preact.js",
+  "solid.js",
+  "alpine.js",
+  "htmx.js",
+  // Utility libraries
+  "jquery.js",
+  "jquery.min.js",
+  "lodash.js",
+  "underscore.js",
+  "moment.js",
+  "dayjs.js",
+  "axios.js",
+  "rxjs.js",
+  // CSS frameworks
+  "tailwind.css",
+  "tailwindcss.css",
+  "bootstrap.css",
+  "bootstrap.min.css",
+  "bulma.css",
+  "foundation.css",
+  // Animation / UI
+  "gsap.js",
+  "anime.js",
+  "three.js",
+  "threejs.js",
+  "p5.js",
+  "lottie.js",
+  "framer-motion.js",
+  // Icons
+  "lucide.js",
+  "lucide-react.js",
+  "heroicons.js",
+  "feather.js",
+  // Maps
+  "leaflet.js",
+  "mapbox-gl.js",
+  "cesium.js",
+  // Build tools mentioned in prose
+  "vite.js",
+  "webpack.js",
+  "rollup.js",
+  "esbuild.js",
+  "parcel.js",
+  "turbo.js",
+  "bun.js",
+  // Backend / Node
+  "express.js",
+  "fastify.js",
+  "koa.js",
+  "hapi.js",
+  "next.js",
+  "nuxt.js",
+  "remix.js",
+  "astro.js",
+  // Data / state
+  "redux.js",
+  "mobx.js",
+  "zustand.js",
+  "valtio.js",
+  "jotai.js",
+  // Testing
+  "jest.js",
+  "mocha.js",
+  "vitest.js",
+  "cypress.js",
+  "playwright.js",
+]);
+
+/**
+ * Heuristic: a file mention looks like a CDN library dependency
+ * rather than a user-referenced project file.
+ *
+ * Rules:
+ *   1. HTML / Python / Rust / Go / Java / etc. files are NEVER
+ *      CDN libraries — they're always project files. Skip the
+ *      filter entirely for non-JS/CSS extensions.
+ *   2. Path-prefixed mentions (`src/chart.js`, `./app.js`) are
+ *      always project files, even if the basename matches a
+ *      known library.
+ *   3. Exact blocklist match (case-insensitive): `chart.js`,
+ *      `react.js`, `tailwind.css`, etc. → CDN library, filter out.
+ *   4. If the filename is BARE (no path) AND the ±40-char
+ *      surrounding text contains CDN-indicator words, filter out.
+ *      Narrower window than before (was ±80) to avoid catching
+ *      ambient prose like "uses Chart.js vía CDN" tainting a
+ *      nearby `orbital.html` mention.
+ */
+function isCdnLibraryMention(file: string, context: string): boolean {
+  // Extract extension
+  const extMatch = file.match(/\.([a-z]+)$/i);
+  if (!extMatch) return false;
+  const ext = extMatch[1]!.toLowerCase();
+  // Rule 1: non-JS/CSS extensions are always real files
+  if (!CDN_CAPABLE_EXTENSIONS.has(ext)) return false;
+  // Rule 2: path-prefixed mentions are always real files
+  if (file.includes("/") || file.includes("\\")) return false;
+  // Rule 3: explicit blocklist (bare basename)
+  const lowered = file.toLowerCase();
+  if (CDN_LIBRARY_BLOCKLIST.has(lowered)) return true;
+  // Rule 4: narrow surround check (±40 chars, not ±80)
+  const idx = context.indexOf(file);
+  if (idx === -1) return false;
+  const before = context.slice(Math.max(0, idx - 40), idx).toLowerCase();
+  const after = context.slice(idx + file.length, idx + file.length + 40).toLowerCase();
+  const surround = before + " " + after;
+  if (
+    /\bcdn\b|\bcdnjs\b|\bunpkg\b|\bjsdelivr\b|\blibrary\b|\bframework\b/.test(
+      surround,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Noise-filter: identifiers that are too generic to be useful
@@ -219,10 +385,14 @@ export function extractLocationHints(
       });
     }
 
-    // File paths
+    // File paths — skip CDN library mentions (Chart.js, React.js,
+    // tailwind.css, etc.) that look like filenames but are
+    // dependencies, not project files
     FILE_REGEX.lastIndex = 0;
     while ((m = FILE_REGEX.exec(text)) !== null) {
-      fileHints.add(m[1]!);
+      const fileName = m[1]!;
+      if (isCdnLibraryMention(fileName, text)) continue;
+      fileHints.add(fileName);
     }
   }
 
