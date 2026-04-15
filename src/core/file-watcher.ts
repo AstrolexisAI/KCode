@@ -375,6 +375,16 @@ export class FileChangeSuggester {
 
     if (newSuggestions.length > 0) {
       this.suggestions.push(...newSuggestions);
+      // Cap the suggestions buffer. Without this, if nothing ever
+      // drains via getSuggestions (e.g. the callback is broken or
+      // the UI stops consuming them), the array grows unbounded
+      // under high-churn scenarios like node_modules reinstalls.
+      // v2.10.82 audit flagged this as a memory-pressure risk —
+      // keeping the most recent 200 is more than the UI can show
+      // anyway.
+      if (this.suggestions.length > 200) {
+        this.suggestions = this.suggestions.slice(-200);
+      }
       if (this.onSuggestion) {
         try {
           this.onSuggestion(newSuggestions);
