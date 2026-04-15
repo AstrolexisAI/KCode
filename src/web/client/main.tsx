@@ -206,11 +206,12 @@ function App() {
     const text = input.trim();
     if (!text || streaming) return;
 
-    const localId = `local-user-${Date.now()}`;
-    setMessages((prev) => [
-      ...prev,
-      { id: localId, role: "user", content: text, timestamp: Date.now() },
-    ]);
+    // Intentionally no optimistic push. The server echoes `message.new`
+    // with its own `msg-N` id within milliseconds; pushing a local
+    // `local-user-*` entry here meant dedupe-by-id never matched and the
+    // user saw their message twice. Letting the server be the single
+    // source of truth removes the duplicate without adding latency that
+    // matters in practice — the WebSocket round-trip is same-host.
     send({ type: "message.send", content: text });
     setInput("");
   };

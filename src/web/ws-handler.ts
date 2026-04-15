@@ -24,6 +24,19 @@ const messageQueue: Array<{ content: string; id: string }> = [];
 // Broadcast callback (set by server.ts)
 type BroadcastFn = (event: ServerEvent) => void;
 
+// Module-level broadcast reference. Set the first time server.ts hands us
+// one (on WebSocket connect / first client message). enqueueMessage uses
+// this to drain the queue even when the REST endpoint fires before any
+// WebSocket has connected — otherwise POST /api/v1/messages would enqueue
+// and never process, because processQueue only ran from inside
+// handleMessageSend.finally().
+let storedBroadcast: BroadcastFn | null = null;
+
+/** Register the broadcast function so REST enqueue can drain the queue. */
+export function setBroadcastFn(fn: BroadcastFn): void {
+  storedBroadcast = fn;
+}
+
 // ─── Public API ─────────────────────────────────────────────────
 
 /** Initialize or return session context */
@@ -54,7 +67,12 @@ export function handleClientMessage(
 export function enqueueMessage(content: string): string {
   const id = `msg-${++sessionContext.messageIdCounter}`;
   messageQueue.push({ content, id });
-  // Processing will be triggered when a broadcast function is available
+  // Drain immediately if we have a broadcast and nothing is running. Without
+  // this a POST /api/v1/messages made before any WebSocket has connected
+  // would queue the message and wait forever.
+  if (storedBroadcast && !isProcessing) {
+    processQueue(storedBroadcast);
+  }
   return id;
 }
 
