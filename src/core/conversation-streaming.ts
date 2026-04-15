@@ -15,6 +15,24 @@ import type { ContentBlock, StreamEvent, TokenUsage, ToolUseBlock } from "./type
 
 const REPETITION_CHECK_INTERVAL = 500; // check every N chars of new content
 const MAX_OUTPUT_CHARS = 200_000; // hard cap: 200K chars (~50K tokens)
+
+// Phase 33 — reasoning-channel repetition guard.
+//
+// The output-channel detectors (phase 15 / 23) only run when content
+// deltas arrive. Reasoning/thinking deltas pass through untouched,
+// which let grok-code-fast-1 burn ~45,600 reasoning tokens on a loop
+// of identical "Boosting user engagement" / "Fostering user satisfaction"
+// meta-paragraphs before anything user-visible came back (kcode.log
+// session, v2.10.79, line ~432: "Reasoned (45.6K tok, 2331 lines)").
+//
+// Phase 33 runs the same detectors on the accumulated thinking buffer
+// at a coarser interval (thinking is naturally more verbose than
+// output so we don't want to scan every 500 chars) and enforces a
+// hard cap slightly below the output cap, since runaway reasoning
+// with zero output is a stronger failure signal than a long but
+// useful answer.
+const THINKING_REPETITION_INTERVAL = 1500; // check every ~400 tokens
+const MAX_THINKING_CHARS = 160_000; // hard cap: ~40K tokens of reasoning
 const REPETITION_MIN_PERIOD = 15; // shortest repeating unit to detect
 const REPETITION_MAX_PERIOD = 500; // longest repeating unit to detect
 const REPETITION_MIN_TEXT = 200; // minimum text length before checking
@@ -210,6 +228,88 @@ export function detectCompletionMarkerLoop(text: string): string | null {
   return null;
 }
 
+// ─── Phase 33: low-entropy thinking loop detector ───────────────
+//
+// The existing detectors all rely on byte-identical or near-byte-
+// identical repetition. The grok-code-fast-1 reasoning loop from
+// the v2.10.79 session fooled them because each paragraph had a
+// different heading ("Boosting user engagement", "Fostering user
+// satisfaction", "Strengthening user autonomy", ...) but all five
+// bullet points in each paragraph said essentially the same thing
+// using the same ~30 vocabulary words ("user", "engagement",
+// "Info-level messaging", "check-ins", "prompts", "control",
+// "maintain", "foster", etc.).
+//
+// Lexical-entropy detection catches this class: if ≥35% of the
+// tokens in a 150+ word buffer are repeats of tokens already seen
+// in the same buffer, the model is almost certainly stuck. A
+// legitimate thinking trace on a hard problem has ~10-15% repeats
+// at most, because each paragraph introduces new topic words.
+//
+// Runs alongside the other detectors on the thinking channel.
+
+/** Minimum filtered-word count before the detector runs. */
+const LOW_ENTROPY_MIN_WORDS = 150;
+/** Ratio of repeated non-stopword tokens above which we flag a loop. */
+const LOW_ENTROPY_REPEAT_THRESHOLD = 0.35;
+
+// Common function words that legitimate text repeats freely. Keep
+// this list short — aggressive stop-word removal hides signal.
+const LOW_ENTROPY_STOP_WORDS = new Set([
+  // English
+  "the", "and", "that", "this", "for", "with", "are", "from", "have",
+  "has", "will", "not", "can", "but", "out", "more", "some", "what",
+  "you", "your", "they", "their", "them", "also", "into", "over",
+  "than", "then", "when", "which", "who", "how", "why", "where",
+  "while", "each", "both", "most", "such", "just", "like", "much",
+  "very", "only", "other", "another", "first", "next", "many", "few",
+  "own", "made", "make", "way", "our", "its", "been", "being", "were",
+  "was", "there", "here", "would", "could", "should", "may", "might",
+  "must", "one", "two", "three", "all", "any", "new", "get", "use",
+  // Spanish
+  "para", "con", "los", "las", "que", "son", "por", "una", "pero",
+  "como", "esta", "este", "tiene", "ser", "desde", "más", "mas",
+  "hacer", "sobre", "entre", "hasta", "donde", "cuando", "porque",
+  "muy", "ya", "también", "todo", "toda", "todos", "todas", "sin",
+  "hay", "han", "fue", "son", "será", "sería", "podría", "debería",
+]);
+
+/**
+ * Detect a low-entropy thinking loop — a block of text whose
+ * non-stopword tokens are predominantly repeats of earlier tokens.
+ *
+ * Returns a short diagnostic string (most common word + count) if a
+ * loop is detected, or null.
+ */
+export function detectLowEntropyLoop(text: string): string | null {
+  // Extract words (Latin + Spanish-accented letters, 3+ chars)
+  const words = text.toLowerCase().match(/[a-záéíóúñü]{3,}/g);
+  if (!words) return null;
+
+  const filtered = words.filter((w) => !LOW_ENTROPY_STOP_WORDS.has(w));
+  if (filtered.length < LOW_ENTROPY_MIN_WORDS) return null;
+
+  const counts = new Map<string, number>();
+  for (const w of filtered) counts.set(w, (counts.get(w) ?? 0) + 1);
+
+  let totalRepeats = 0;
+  let topWord = "";
+  let topCount = 0;
+  for (const [w, count] of counts) {
+    if (count > 1) totalRepeats += count - 1;
+    if (count > topCount) {
+      topCount = count;
+      topWord = w;
+    }
+  }
+
+  const ratio = totalRepeats / filtered.length;
+  if (ratio >= LOW_ENTROPY_REPEAT_THRESHOLD) {
+    return `low-entropy loop (${Math.round(ratio * 100)}% repeated non-stopword tokens; "${topWord}" ×${topCount} in ${filtered.length} words)`;
+  }
+  return null;
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface StreamAccumulator {
@@ -255,6 +355,9 @@ export async function* processSSEStream(
   const textChunks: string[] = [];
   let streamedOutputChars = 0;
   let charsSinceRepCheck = 0;
+  // Phase 33: independent counter for the thinking channel so phase 15
+  // on content doesn't compete with the reasoning-loop detector.
+  let thinkingCharsSinceRepCheck = 0;
   let repetitionAborted = false;
   const streamStartMs = Date.now();
 
@@ -269,7 +372,72 @@ export async function* processSSEStream(
         if (chunk.thinking) {
           thinkingChunks.push(chunk.thinking);
           streamedOutputChars += chunk.thinking.length;
+          thinkingCharsSinceRepCheck += chunk.thinking.length;
           yield { type: "thinking_delta", thinking: chunk.thinking };
+
+          // Phase 33 — reasoning-channel runaway / repetition guard.
+          // Mirrors the content-channel logic below but runs on the
+          // thinking buffer, which was previously unguarded. Without
+          // this, a model stuck in a reasoning loop emits nothing to
+          // the content stream, so phase 15/23 never fires and the
+          // user just watches 45K reasoning tokens tick by (see
+          // kcode.log from v2.10.79 grok-code-fast-1 session).
+          if (thinkingCharsSinceRepCheck >= THINKING_REPETITION_INTERVAL) {
+            thinkingCharsSinceRepCheck = 0;
+            const thinkingSoFar = thinkingChunks.join("");
+
+            // Hard cap on reasoning length. 160K chars is well past
+            // what legitimate extended-thinking needs (Claude extended
+            // thinking rarely exceeds 80K chars for hard problems),
+            // so anything longer is almost certainly a loop.
+            if (thinkingSoFar.length >= MAX_THINKING_CHARS) {
+              log.warn(
+                "llm",
+                `Reasoning exceeded ${MAX_THINKING_CHARS} chars with zero output — aborting generation`,
+              );
+              repetitionAborted = true;
+              stopReason = "end_turn";
+              const capMsg =
+                `\n\n[Generation stopped: reasoning exceeded ${MAX_THINKING_CHARS} chars\n` +
+                `without producing any output. The model is stuck in a thinking\n` +
+                `loop. Try: /compact (reduce history), /clear (start fresh), or\n` +
+                `/toggle (switch to a different model).]`;
+              yield { type: "text_delta", text: capMsg };
+              textChunks.push(capMsg);
+              break;
+            }
+
+            // Run the four detectors against the reasoning buffer:
+            // - detectRepetitionLoop: short consecutive blocks
+            // - detectLargeBlockRepetition: byte-identical long blocks
+            // - detectCompletionMarkerLoop: semantic completion markers
+            // - detectLowEntropyLoop: near-duplicate paragraphs with
+            //   different headings but the same vocabulary (THE
+            //   grok-code-fast-1 failure mode — the other three
+            //   didn't catch this because headings differed).
+            const repeated =
+              detectRepetitionLoop(thinkingSoFar) ||
+              detectLargeBlockRepetition(thinkingSoFar) ||
+              detectCompletionMarkerLoop(thinkingSoFar) ||
+              detectLowEntropyLoop(thinkingSoFar);
+            if (repeated) {
+              const tokensSoFar = Math.round(thinkingSoFar.length / CHARS_PER_TOKEN);
+              log.warn(
+                "llm",
+                `Reasoning-channel loop detected after ~${tokensSoFar} tokens: "${repeated}" — aborting generation`,
+              );
+              repetitionAborted = true;
+              stopReason = "end_turn";
+              const msg =
+                `\n\n[Generation stopped: reasoning loop detected after ~${tokensSoFar} tokens.\n` +
+                `The model was stuck repeating the same thinking block without\n` +
+                `producing output. Try: /compact (reduce history), /clear (start\n` +
+                `fresh), or /toggle (switch model).]`;
+              yield { type: "text_delta", text: msg };
+              textChunks.push(msg);
+              break;
+            }
+          }
         }
         break;
       }
