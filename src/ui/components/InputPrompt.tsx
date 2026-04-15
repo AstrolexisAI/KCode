@@ -11,6 +11,52 @@ import { setPasteHandler } from "../paste-handler.js";
 import { isPasting } from "../paste-stream.js";
 import { useTheme } from "../ThemeContext.js";
 
+// ─── Multiline cursor helpers (phase 29 paste editing) ─────────
+//
+// The cursor state is a single integer offset into the full value
+// string. When the content is multiline, we need to translate back
+// and forth between offset ↔ (row, col) to render the cursor
+// highlight on the right line and to implement up/down navigation.
+
+/**
+ * Convert a flat string offset into (row, col) coordinates.
+ * Row and col are both 0-based.
+ *
+ * `col` is measured in UTF-16 code units matching JavaScript's
+ * String.length semantics — same basis as the cursor state.
+ */
+export function offsetToRowCol(
+  text: string,
+  offset: number,
+): { row: number; col: number } {
+  const clamped = Math.max(0, Math.min(offset, text.length));
+  let row = 0;
+  let lineStart = 0;
+  for (let i = 0; i < clamped; i++) {
+    if (text[i] === "\n") {
+      row++;
+      lineStart = i + 1;
+    }
+  }
+  return { row, col: clamped - lineStart };
+}
+
+/**
+ * Convert (row, col) back into a flat string offset. If col exceeds
+ * the target line length, the offset clamps to end-of-line.
+ */
+export function rowColToOffset(text: string, row: number, col: number): number {
+  const lines = text.split("\n");
+  const safeRow = Math.max(0, Math.min(row, lines.length - 1));
+  let offset = 0;
+  for (let i = 0; i < safeRow; i++) {
+    offset += (lines[i]?.length ?? 0) + 1; // +1 for the newline
+  }
+  const lineLen = lines[safeRow]?.length ?? 0;
+  offset += Math.max(0, Math.min(col, lineLen));
+  return offset;
+}
+
 // ─── Persistent Input History ──────────────────────────────────
 
 const HISTORY_FILE = kcodePath("input_history");
@@ -602,29 +648,64 @@ export default function InputPrompt({
         return;
       }
 
-      // History navigation (when dropdown is not visible)
+      // Up/Down: in multiline mode, navigate between lines of the
+      // pasted/typed content. Fall back to history navigation ONLY
+      // when the cursor is already at the top line (Up) or bottom
+      // line (Down) — that way the user can still access history
+      // but won't accidentally lose their multiline edit.
+      const multilineForNav = value.includes("\n");
       if (key.upArrow) {
+        if (multilineForNav) {
+          const lines = value.split("\n");
+          const { row, col } = offsetToRowCol(value, cursor);
+          if (row > 0) {
+            // Move to previous line, preserving column when possible
+            const prevLine = lines[row - 1] ?? "";
+            const newCol = Math.min(col, prevLine.length);
+            const newCursor = rowColToOffset(value, row - 1, newCol);
+            setCursor(newCursor);
+            cursorRef.current = newCursor;
+            return;
+          }
+          // Already at top line — fall through to history
+        }
         if (history.length > 0 && historyIndex < history.length - 1) {
           const newIndex = historyIndex + 1;
           setHistoryIndex(newIndex);
           const histEntry = history[newIndex] ?? "";
           setValue(histEntry);
           setCursor(histEntry.length);
+          cursorRef.current = histEntry.length;
         }
         return;
       }
 
       if (key.downArrow) {
+        if (multilineForNav) {
+          const lines = value.split("\n");
+          const { row, col } = offsetToRowCol(value, cursor);
+          if (row < lines.length - 1) {
+            const nextLine = lines[row + 1] ?? "";
+            const newCol = Math.min(col, nextLine.length);
+            const newCursor = rowColToOffset(value, row + 1, newCol);
+            setCursor(newCursor);
+            cursorRef.current = newCursor;
+            return;
+          }
+          // Already at bottom line — fall through to history
+        }
         if (historyIndex > 0) {
           const newIndex = historyIndex - 1;
           setHistoryIndex(newIndex);
           const histEntry = history[newIndex] ?? "";
           setValue(histEntry);
           setCursor(histEntry.length);
+          cursorRef.current = histEntry.length;
         } else if (historyIndex === 0) {
           setHistoryIndex(-1);
           setValue("");
           setCursor(0);
+          cursorRef.current = 0;
         }
         return;
       }
@@ -807,8 +888,33 @@ export default function InputPrompt({
   const queueHint =
     isQueuing && queueSize > 0 ? ` [${queueSize} queued]` : isQueuing ? " [will queue]" : "";
 
-  // Paste compact summary
-  const pasteFirstLine = isMultiline ? (value.split("\n")[0] || "").slice(0, 50) : "";
+  // Phase 29: full multiline rendering with cursor-aware viewport.
+  // Previously we showed `📋 N lines, N chars` + a 50-char preview of
+  // the first line — that hid paste errors until after sending. Now
+  // we render the actual lines so the user can see and edit them.
+  //
+  // Viewport caps the visible region to MULTILINE_VIEWPORT_LINES,
+  // centered on the cursor. Very large pastes (1000+ lines) stay
+  // navigable without overwhelming the terminal. Ellipsis markers
+  // above/below indicate hidden content.
+  const MULTILINE_VIEWPORT_LINES = 20;
+  const multiLines = isMultiline ? value.split("\n") : [];
+  const cursorRowCol = isMultiline
+    ? offsetToRowCol(value, cursor)
+    : { row: 0, col: 0 };
+  let viewportStart = 0;
+  let viewportEnd = multiLines.length;
+  if (isMultiline && multiLines.length > MULTILINE_VIEWPORT_LINES) {
+    const half = Math.floor(MULTILINE_VIEWPORT_LINES / 2);
+    viewportStart = Math.max(0, cursorRowCol.row - half);
+    viewportEnd = Math.min(
+      multiLines.length,
+      viewportStart + MULTILINE_VIEWPORT_LINES,
+    );
+    if (viewportEnd - viewportStart < MULTILINE_VIEWPORT_LINES) {
+      viewportStart = Math.max(0, viewportEnd - MULTILINE_VIEWPORT_LINES);
+    }
+  }
   const pasteSummary = isMultiline
     ? `${lineCount} lines, ${value.length.toLocaleString()} chars`
     : "";
@@ -829,7 +935,8 @@ export default function InputPrompt({
             <Text color={theme.dimmed} italic>
               {pasteSummary}
             </Text>
-            <Text color={promptColor}>{" — ↵ send"}</Text>
+            <Text color={promptColor}>{" — Alt+↵ send"}</Text>
+            {queueHint && <Text color={theme.warning}>{queueHint}</Text>}
           </Text>
         ) : (
           <Text>
@@ -867,13 +974,56 @@ export default function InputPrompt({
         </Box>
       )}
 
-      {/* ─── Paste preview (compact) ──────────────────────── */}
+      {/* ─── Phase 29: full multiline paste/input render ──── */}
       {isMultiline && (
-        <Box marginLeft={4}>
-          <Text color={theme.dimmed}>
-            {pasteFirstLine}
-            {pasteFirstLine.length < (value.split("\n")[0] || "").length ? "…" : ""}
-          </Text>
+        <Box flexDirection="column" marginLeft={2}>
+          {viewportStart > 0 && (
+            <Text color={theme.dimmed}>
+              {`  ↑ ${viewportStart} line${viewportStart === 1 ? "" : "s"} above`}
+            </Text>
+          )}
+          {multiLines.slice(viewportStart, viewportEnd).map((line, idx) => {
+            const row = viewportStart + idx;
+            const isCursorLine = row === cursorRowCol.row;
+            const lineNumLabel = (row + 1).toString().padStart(4);
+            if (!isCursorLine) {
+              // Non-cursor line: render flat. Empty lines get a visible
+              // space so the terminal doesn't collapse the row.
+              const display = line.length === 0 ? " " : line;
+              return (
+                <Box key={row} gap={1}>
+                  <Text color={theme.dimmed}>{lineNumLabel}</Text>
+                  <Text>{display}</Text>
+                </Box>
+              );
+            }
+            // Cursor line: split at col and render inverse highlight on
+            // the character under the cursor (or a space if the cursor
+            // is past end-of-line).
+            const col = Math.min(cursorRowCol.col, line.length);
+            const before = line.slice(0, col);
+            const cursorCh = line[col] ?? " ";
+            const after = line.slice(col + 1);
+            return (
+              <Box key={row} gap={1}>
+                <Text color={theme.accent} bold>
+                  {lineNumLabel}
+                </Text>
+                <Text>
+                  {before}
+                  <Text inverse>{cursorCh}</Text>
+                  {after}
+                </Text>
+              </Box>
+            );
+          })}
+          {viewportEnd < multiLines.length && (
+            <Text color={theme.dimmed}>
+              {`  ↓ ${multiLines.length - viewportEnd} line${
+                multiLines.length - viewportEnd === 1 ? "" : "s"
+              } below`}
+            </Text>
+          )}
         </Box>
       )}
 
