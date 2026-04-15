@@ -491,6 +491,30 @@ export function startDevServer(srv: DevServer, cwd: string): Level1Result {
     });
     child.unref();
 
+    // Register in the persistent dev-server registry so future kcode
+    // sessions can reap this process if it outlives its usefulness.
+    // Fix for the v2.10.81 forensic audit P0 finding — 5 orphan
+    // `bun --watch run src/index.ts` processes from the KCode repo
+    // were still running 29 hours later because nothing persisted
+    // what startDevServer had spawned.
+    if (child.pid !== undefined) {
+      try {
+        // Lazy require to avoid circular import risk if the registry
+        // module ever grows a dep that pulls back into level1-handlers.
+        const { registerSpawnedServer } = require("../dev-server-registry");
+        registerSpawnedServer({
+          pid: child.pid,
+          cwd,
+          command: srv.command,
+          port: srv.port,
+          name: srv.name,
+        });
+      } catch {
+        // Non-fatal: the server is running fine, we just won't be
+        // able to auto-reap it in a future session.
+      }
+    }
+
     // Wait a moment for the server to start. Use the top-level
     // execSync import — this file used to have three duplicated
     // require("child_process") calls for the same module, cleaned
