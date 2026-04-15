@@ -176,6 +176,39 @@ export class ConversationManager {
     this.config = { ...config }; // shallow copy to avoid mutating caller's config
     this.tools = tools;
 
+    // Phase-stack session-state reset (P1 audit fix).
+    // Several modules maintain module-level mutable state that survives
+    // across ConversationManager instances in the same process (audit
+    // read tracker, file-edit retry history, auto-launch session flag,
+    // response-session tracker). Without resetting them here, starting
+    // a new conversation in a long-running kcode process (daemon, /clear,
+    // /resume, tmux splits) inherits state from the previous conversation
+    // and produces false positives in the phase-17/21/22 guards.
+    try {
+      const { resetReads } = require("./session-tracker") as typeof import("./session-tracker");
+      resetReads();
+    } catch {
+      /* module not loaded */
+    }
+    try {
+      const { clearEditHistory } = require("./file-edit-history") as typeof import("./file-edit-history");
+      clearEditHistory();
+    } catch {
+      /* module not loaded */
+    }
+    try {
+      const { resetAutoLaunchState } = require("./auto-launch-dev-server") as typeof import("./auto-launch-dev-server");
+      resetAutoLaunchState();
+    } catch {
+      /* module not loaded */
+    }
+    try {
+      const { resetSessionState } = require("./response-session") as typeof import("./response-session");
+      resetSessionState();
+    } catch {
+      /* module not loaded */
+    }
+
     // Apply model profile adjustments for small models
     try {
       const { getModelProfile } = require("./model-profile") as typeof import("./model-profile");
