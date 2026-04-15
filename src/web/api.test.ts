@@ -228,6 +228,29 @@ describe("API Endpoints", () => {
     expect(res.status).toBe(403);
   });
 
+  test("GET /api/v1/files/:path prevents sibling-directory bypass (prefix attack)", async () => {
+    // Regression: "/tmp/test-other/secret.txt" resolves outside
+    // "/tmp/test" but naive startsWith("/tmp/test") would pass.
+    // The fix requires cwd + path separator or exact equality.
+    bridge.setWorkingDirectory("/tmp/test");
+    const res = await handleApiRequest(
+      new Request("http://localhost/api/v1/files/..%2Ftest-other%2Fsecret.txt"),
+      "/api/v1/files/..%2Ftest-other%2Fsecret.txt",
+    );
+    expect(res.status).toBe(403);
+  });
+
+  test("GET /api/v1/files/:path still allows legitimate relative paths", async () => {
+    // Sanity check: the fix should not break normal file reads.
+    // We expect 404 (file doesn't exist), not 403 (denied).
+    bridge.setWorkingDirectory("/tmp/test");
+    const res = await handleApiRequest(
+      new Request("http://localhost/api/v1/files/subdir/file.txt"),
+      "/api/v1/files/subdir/file.txt",
+    );
+    expect(res.status).toBe(404);
+  });
+
   test("GET /api/v1/files/:path returns 404 for nonexistent file", async () => {
     bridge.setWorkingDirectory("/tmp/test");
     const res = await handleApiRequest(
