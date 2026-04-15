@@ -25,7 +25,7 @@ function timingSafeTokenEqual(supplied: string | null | undefined, expected: str
 import { handleApiRequest } from "./api";
 import type { ServerEvent, WebServerConfig } from "./types";
 import { DEFAULT_WEB_CONFIG, MIME_TYPES } from "./types";
-import { handleClientMessage, setSessionContext } from "./ws-handler";
+import { handleClientMessage, setBroadcastFn, setSessionContext } from "./ws-handler";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -58,6 +58,11 @@ export class WebServer {
 
     const self = this;
     const config = this.config;
+
+    // Register the broadcast callback so REST enqueue can drain the queue
+    // even when no WebSocket has connected yet. Without this the POST
+    // /api/v1/messages path would enqueue and hang forever.
+    setBroadcastFn((evt) => self.broadcast(evt));
 
     this.server = Bun.serve<WebSocketData>({
       port: config.port,
