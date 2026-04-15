@@ -239,6 +239,24 @@ export async function maybeAutoLaunchDevServer(
   userTexts: readonly string[],
 ): Promise<AutoLaunchResult | null> {
   try {
+    // House-keeping: reap dead PIDs and kill stale orphans in this
+    // cwd from prior kcode sessions before we consider launching
+    // anything new. Fix for the v2.10.81 forensic audit P0 finding.
+    // Best-effort: errors are swallowed so cleanup can never block
+    // a legitimate launch.
+    try {
+      const { cleanupStaleDevServers } = await import("./dev-server-registry.js");
+      const result = cleanupStaleDevServers(cwd);
+      if (result.removedDead > 0 || result.killedStale > 0) {
+        log.info(
+          "auto-launch",
+          `dev-server registry cleanup: removed ${result.removedDead} dead, killed ${result.killedStale} stale, ${result.remaining} remaining`,
+        );
+      }
+    } catch (err) {
+      log.debug("auto-launch", `registry cleanup failed (non-fatal): ${err}`);
+    }
+
     // Guard 1: user's prompts must have runtime intent
     if (!hasRuntimeIntent(userTexts)) {
       log.debug("auto-launch", "skipped: no runtime intent in user text");
