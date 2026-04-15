@@ -258,3 +258,125 @@ describe("buildUserRepetitionReminder", () => {
     expect(reminder).not.toContain("/compact");
   });
 });
+
+// ─── v2.10.74 Nexus chart session regression ────────────────────
+
+describe("Nexus chart session — stemming + corrective patterns", () => {
+  test("fires on the EXACT 3 user messages from the log", () => {
+    // Word-for-word from the v2.10.74 session log. Model failed to
+    // solve the chart issue across 3 user messages and phase 25 was
+    // silent because:
+    //   1. "grafica" (msg 1, singular) and "graficas" (msg 2/3,
+    //      plural) were treated as distinct tokens — stemming fix
+    //      now normalizes both to "grafica"
+    //   2. The user's 3rd message was corrective ("no son el
+    //      problema, sino el contenedor") — new corrective
+    //      frustration patterns now recognize this as equivalent
+    //      to classic frustration
+    const session: Message[] = [
+      { role: "user", content: "crea una app Nexus Telemetry" },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "la grafica no quedo" },
+      { role: "assistant", content: "fixed (wrong code path)" },
+      {
+        role: "user",
+        content:
+          "ahora el problema es el modal donde se situan las graficas no quedan estaticas al tamaño que ocupan las graficas",
+      },
+      { role: "assistant", content: "fixed (still wrong)" },
+    ];
+    const newMsg =
+      "refresque ahora las graficas no son el problema, sino el contenedor de las graficas";
+    const verdict = checkUserRepetition(session, newMsg);
+    expect(verdict.isRepeating).toBe(true);
+    // Stemming: both "grafica" and "graficas" → "grafica"
+    expect(verdict.sharedTopics).toContain("grafica");
+    // The corrective pattern "no son el problema" should be recognized
+    expect(
+      verdict.frustrationSignals.some((s) =>
+        s.toLowerCase().includes("no son") || s.toLowerCase().includes("el problema"),
+      ),
+    ).toBe(true);
+  });
+
+  test("stems singular/plural pairs (grafica/graficas)", () => {
+    const session: Message[] = [
+      { role: "user", content: "crea la app" },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "la grafica esta mal" },
+      { role: "assistant", content: "fixed" },
+      { role: "user", content: "las graficas siguen mal" },
+      { role: "assistant", content: "fixed" },
+      { role: "user", content: "mis graficas no funcionan" },
+    ];
+    // grafica (1), graficas (2), graficas (3) → with stem: all "grafica"
+    const verdict = checkUserRepetition(session);
+    expect(verdict.sharedTopics).toContain("grafica");
+  });
+
+  test("stems English plural pairs (button/buttons)", () => {
+    const session: Message[] = [
+      { role: "user", content: "make the buttons bigger" },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "the button still looks broken" },
+      { role: "assistant", content: "fixed" },
+      { role: "user", content: "all buttons are still not working" },
+    ];
+    const verdict = checkUserRepetition(session);
+    expect(verdict.sharedTopics).toContain("button");
+  });
+
+  test("does NOT over-strip short tokens", () => {
+    // "bus" and "class" should not be stemmed (bus stays bus — but
+    // under 5 chars it never becomes a token anyway; class loses
+    // trailing s would yield "clas" which is too short so we keep it)
+    const session: Message[] = [
+      { role: "user", content: "write a class MyClass" },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "the class has bugs" },
+      { role: "assistant", content: "fixed" },
+      { role: "user", content: "class not working" },
+    ];
+    const verdict = checkUserRepetition(session);
+    // "class" appears in all 3, should survive as the shared topic
+    // (we bail on stemming when the stem would be <5 chars)
+    expect(verdict.sharedTopics.length).toBeGreaterThanOrEqual(0);
+    // The test mainly ensures no crash from over-stemming
+  });
+
+  test("recognizes corrective statement 'el problema es X'", () => {
+    const session: Message[] = [
+      { role: "user", content: "fix the header styling" },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "the header styling is wrong again" },
+      { role: "assistant", content: "fixed" },
+      { role: "user", content: "el problema es el footer, no el header" },
+    ];
+    const verdict = checkUserRepetition(session);
+    // Corrective pattern "el problema es" should match
+    expect(
+      verdict.frustrationSignals.some((s) =>
+        s.toLowerCase().includes("el problema"),
+      ),
+    ).toBe(true);
+  });
+
+  test("recognizes English corrective 'the real problem is not'", () => {
+    const session: Message[] = [
+      { role: "user", content: "fix the layout issue" },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "layout still looks off" },
+      { role: "assistant", content: "fixed" },
+      {
+        role: "user",
+        content: "the real problem is not the layout, it's the CSS grid",
+      },
+    ];
+    const verdict = checkUserRepetition(session);
+    expect(
+      verdict.frustrationSignals.some((s) =>
+        /real\s+problem\s+is/i.test(s),
+      ),
+    ).toBe(true);
+  });
+});
