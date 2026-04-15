@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { kcodePath } from "../../core/paths";
+import type { FineTuneConfig } from "../../core/training/fine-tuner";
 
 export function registerTeachCommand(program: Command): void {
   const teachCmd = program
