@@ -335,6 +335,23 @@ export class LoopGuardState {
     { reason: string; callIndex: number }
   >();
 
+  /**
+   * Phase 32: active phantom-typo claim detected in the current turn's
+   * assistant text. Set by the conversation loop right after the
+   * assistant finishes streaming, checked by the tool executor before
+   * any Edit/MultiEdit runs, and cleared at the end of the tool-result
+   * push so it doesn't leak across turns.
+   *
+   * Canonical trigger: NEXUS Telemetry mark6 wrote "setProperty en
+   * lugar de setProperty" in its reasoning, then tried to fix the
+   * "bug". Phase 31 caught the byte-identical Edit; phase 32 catches
+   * the semantic claim even when old_string / new_string differ.
+   *
+   * Stores just the offending phrase and repeated token — null when
+   * no phantom claim is active.
+   */
+  activePhantomClaim: { phrase: string; token: string } | null = null;
+
   // Pre-computed tool filter sets
   readonly managedDisallowedSet: Set<string>;
   readonly allowedToolsSet: Set<string> | null;
