@@ -519,6 +519,23 @@ describe("validateFileWritePath", () => {
     expect(result.allowed).toBe(false);
   });
 
+  test("outside-cwd denial includes explicit RETRY hint with corrected path", () => {
+    // Regression for v2.10.80 NEXUS session where grok-code-fast-1
+    // tried to Write to /home/user/NEXUS_Telemetry.html and, on
+    // denial, asked the user for the correct path instead of
+    // auto-correcting with the obvious alternative. The denial
+    // message now names the exact cwd-relocated path and tells the
+    // model not to defer to the user.
+    const result = validateFileWritePath(
+      "/home/user/NEXUS_Telemetry.html",
+      "/home/curly/projects",
+    );
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("RETRY NOW");
+    expect(result.reason).toContain("/home/curly/projects/NEXUS_Telemetry.html");
+    expect(result.reason).toContain("Do NOT ask the user");
+  });
+
   test("denies protected .ssh directory", () => {
     const home = process.env.HOME ?? "/root";
     const result = validateFileWritePath(`${home}/.ssh/id_rsa`, cwd);

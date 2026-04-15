@@ -553,9 +553,20 @@ export function validateFileWritePath(
   // Block writes outside the working directory (unless explicitly to /tmp or an additional dir)
   const inAdditionalDir = additionalDirs?.some((d) => resolved.startsWith(d)) ?? false;
   if (!resolved.startsWith(workingDirectory) && !resolved.startsWith("/tmp") && !inAdditionalDir) {
+    // Construct the corrected path (cwd + basename of the offending
+    // path) so the error message can tell the model EXACTLY what to
+    // retry with. Without this hint, grok-code-fast-1 (v2.10.80
+    // NEXUS session) treated the denial as "ask user" and gave up,
+    // passing the buck to the user instead of auto-correcting.
+    const offendingBase = resolved.split("/").pop() ?? "file";
+    const suggestedPath = `${workingDirectory}/${offendingBase}`;
     return {
       allowed: false,
-      reason: `Write blocked: path "${resolved}" is outside working directory "${workingDirectory}"`,
+      reason:
+        `Write blocked: path "${resolved}" is outside working directory "${workingDirectory}". ` +
+        `RETRY NOW with file_path="${suggestedPath}". Do NOT ask the user to specify the path — ` +
+        `you already have enough information to fix this yourself. Just call Write again with the ` +
+        `corrected file_path.`,
     };
   }
 
