@@ -68,6 +68,62 @@ describe("extractLocationHints", () => {
     expect(hints.fileHints).toContain("server.js");
   });
 
+  // ─── Phase 27 audit fix: CDN library filter ───
+
+  test("ignores CDN library mentions (Chart.js via CDN)", () => {
+    const nexusPrompt =
+      "Crea una aplicación que use Chart.js vía CDN para los gráficos " +
+      "y Tailwind CSS vía CDN para el estilo. Genera orbital.html.";
+    const hints = extractLocationHints([nexusPrompt]);
+    // orbital.html is a real file mention, Chart.js is a library
+    expect(hints.fileHints).toContain("orbital.html");
+    expect(hints.fileHints).not.toContain("Chart.js");
+  });
+
+  test("ignores React.js, Vue.js, jQuery, etc. from blocklist", () => {
+    const hints = extractLocationHints([
+      "build it with react.js and jquery.js, avoid vue.js",
+    ]);
+    expect(hints.fileHints).not.toContain("react.js");
+    expect(hints.fileHints).not.toContain("jquery.js");
+    expect(hints.fileHints).not.toContain("vue.js");
+  });
+
+  test("ignores library mentions with 'via CDN' context even if not in blocklist", () => {
+    const hints = extractLocationHints([
+      "load some-obscure-lib.js via CDN from unpkg",
+    ]);
+    expect(hints.fileHints).not.toContain("some-obscure-lib.js");
+  });
+
+  test("DOES treat path-prefixed mentions as real files even if name matches a library", () => {
+    // `./chart.js` or `src/chart.js` are user's own files — not CDN
+    const hints = extractLocationHints([
+      "the bug is in src/chart.js line 42",
+    ]);
+    expect(hints.fileHints.some((f) => f.endsWith("chart.js"))).toBe(true);
+  });
+
+  test("Nexus Telemetry false-positive regression check", () => {
+    // This is the EXACT v2.10.71 failure: user prompt mentions Chart.js
+    // as a library; model edits nexus-telemetry.html; phase 27 should
+    // NOT fire a file mismatch warning.
+    const nexusPrompt =
+      "Tecnologías: HTML5 + Tailwind CSS (vía CDN), Chart.js vía CDN, " +
+      "Lucide icons vía CDN. Crea nexus-telemetry.html.";
+    const hints = extractLocationHints([nexusPrompt]);
+    expect(hints.fileHints).toContain("nexus-telemetry.html");
+    expect(hints.fileHints).not.toContain("Chart.js");
+    // Edit the real file → no file mismatch
+    const verdict = checkEditLocationMismatch(
+      hints,
+      500,
+      "/tmp/nexus-telemetry.html",
+      "//".repeat(2000),
+    );
+    expect(verdict.fileMismatch).toBeNull();
+  });
+
   test("respects lookback window", () => {
     const texts = [
       "first says line 10",
