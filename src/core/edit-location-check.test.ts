@@ -124,6 +124,74 @@ describe("extractLocationHints", () => {
     expect(verdict.fileMismatch).toBeNull();
   });
 
+  // v2.10.72 regression — brand/acronym filter
+  test("ignores short all-caps brand names in quotes (NEXUS, APOD, NASA, ISS)", () => {
+    // Nexus Telemetry v2 session: user prompt had `Logo "NEXUS" con icono`
+    // which my QUOTED_ID_REGEX was capturing as a code symbol. Every Edit
+    // then fired "User mentioned NEXUS at line 6 but Edit is 1000 lines away"
+    // because NEXUS appeared in the <title> tag.
+    const hints = extractLocationHints([
+      'Logo "NEXUS" con icono de satélite. Secciones: "APOD", "ISS", "NASA".',
+    ]);
+    const names = hints.symbolHints.map((h) => h.value);
+    expect(names).not.toContain("NEXUS");
+    expect(names).not.toContain("APOD");
+    expect(names).not.toContain("NASA");
+    expect(names).not.toContain("ISS");
+  });
+
+  test("still keeps quoted identifiers with ≥6 chars (Dashboard, renderChart)", () => {
+    const hints = extractLocationHints([
+      '`Dashboard` and "renderChart" are broken',
+    ]);
+    const names = hints.symbolHints.map((h) => h.value);
+    expect(names).toContain("Dashboard");
+    expect(names).toContain("renderChart");
+  });
+
+  // v2.10.72 Nexus Telemetry regression — API key filter
+  test("ignores high-digit-ratio tokens (API keys, UUIDs, hashes)", () => {
+    // The user's NASA API key from the session log. 40 chars, 20% digits.
+    // Previously was captured as a bare long identifier and fired
+    // location mismatches on every Edit near the input element.
+    const nasaKey = "MggS1tgGe29s9KTnR10fCPanURyxOy3QkDpHZsO0";
+    const hints = extractLocationHints([
+      `esta es la api de la nasa: ${nasaKey}`,
+    ]);
+    expect(hints.symbolHints.map((h) => h.value)).not.toContain(nasaKey);
+  });
+
+  test("still keeps bare long identifiers with few digits (updateMarsChartWithRealData)", () => {
+    const hints = extractLocationHints([
+      "updateMarsChartWithRealData is broken",
+    ]);
+    expect(hints.symbolHints.map((h) => h.value)).toContain(
+      "updateMarsChartWithRealData",
+    );
+  });
+
+  test("keeps legit identifiers that happen to contain a single digit (render3DScene)", () => {
+    // 1/14 = 7% digit ratio, below 15% threshold
+    const hints = extractLocationHints([
+      "the bug is in render3DSceneAsync",
+    ]);
+    expect(hints.symbolHints.map((h) => h.value)).toContain(
+      "render3DSceneAsync",
+    );
+  });
+
+  test("ignores hex hashes and UUIDs (≥20 chars with digit heavy)", () => {
+    const hints = extractLocationHints([
+      "commit 5f3e2a1b4c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f is broken",
+      "uuid 550e8400e29b41d4a716446655440000",
+    ]);
+    const names = hints.symbolHints.map((h) => h.value);
+    // These high-digit tokens should not be treated as symbols
+    expect(
+      names.some((n) => n.includes("5f3e2a") || n.includes("550e8400")),
+    ).toBe(false);
+  });
+
   test("respects lookback window", () => {
     const texts = [
       "first says line 10",
