@@ -241,6 +241,126 @@ describe("convertToAnthropicMessages", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.role).toBe("user");
   });
+
+  // ─── Orphan tool_use sanitization ─────────────────────────────
+  //
+  // Regression tests for the v2.10.76 bug where phase-20 (pkill guard)
+  // blocked a bash call and some code path failed to emit the synthetic
+  // tool_result, sending the orphan to Anthropic and hitting
+  //   400 "tool_use ids were found without tool_result blocks
+  //        immediately after: toolu_..."
+  // Both claude-opus-4-6 and claude-sonnet-4-6 died on the same bug
+  // during the NEXUS Telemetry session. The sanitizer is a serialization-
+  // layer safety net that synthesizes a tool_result for any orphan.
+
+  test("synthesizes tool_result for orphan tool_use when next message is missing", () => {
+    const messages: Message[] = [
+      { role: "user", content: "run pkill" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "ok" },
+          { type: "tool_use", id: "toolu_orphan1", name: "Bash", input: { command: "pkill -9 node" } },
+        ],
+      },
+    ];
+    const result = convertToAnthropicMessages(messages);
+    // Should have inserted a user message with synthetic tool_result
+    expect(result).toHaveLength(3);
+    const injected = result[2]!;
+    expect(injected.role).toBe("user");
+    expect(Array.isArray(injected.content)).toBe(true);
+    const blocks = injected.content as Array<{ type: string; tool_use_id?: string; is_error?: boolean }>;
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]!.type).toBe("tool_result");
+    expect(blocks[0]!.tool_use_id).toBe("toolu_orphan1");
+    expect(blocks[0]!.is_error).toBe(true);
+  });
+
+  test("synthesizes tool_result when next message is plain user text (no tool_result)", () => {
+    const messages: Message[] = [
+      { role: "user", content: "first" },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_X", name: "Bash", input: { command: "ls" } }],
+      },
+      // User typed a follow-up before the tool result arrived — orphan
+      { role: "user", content: "wait, stop" },
+    ];
+    const result = convertToAnthropicMessages(messages);
+    // Sanitizer should inject synthetic tool_result BEFORE the user's
+    // follow-up text, keeping the assistant tool_use paired.
+    expect(result.length).toBeGreaterThanOrEqual(3);
+    // Find the message right after the assistant with tool_use
+    const assistantIdx = result.findIndex(
+      (m) => m.role === "assistant" && Array.isArray(m.content),
+    );
+    const next = result[assistantIdx + 1];
+    expect(next).toBeDefined();
+    expect(next!.role).toBe("user");
+    const blocks = next!.content as Array<{ type: string; tool_use_id?: string }>;
+    const toolResults = blocks.filter((b) => b.type === "tool_result");
+    expect(toolResults.length).toBeGreaterThanOrEqual(1);
+    expect(toolResults[0]!.tool_use_id).toBe("toolu_X");
+  });
+
+  test("appends missing tool_result when next message has partial pairing", () => {
+    const messages: Message[] = [
+      { role: "user", content: "do two things" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "toolu_A", name: "Read", input: { file_path: "/a" } },
+          { type: "tool_use", id: "toolu_B", name: "Read", input: { file_path: "/b" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          // Only B has a result, A is an orphan
+          { type: "tool_result", tool_use_id: "toolu_B", content: "b data" },
+        ],
+      },
+    ];
+    const result = convertToAnthropicMessages(messages);
+    expect(result).toHaveLength(3);
+    const toolResultMsg = result[2]!;
+    const blocks = toolResultMsg.content as Array<{ type: string; tool_use_id?: string }>;
+    const ids = blocks
+      .filter((b) => b.type === "tool_result")
+      .map((b) => b.tool_use_id);
+    // Both A and B must be present; order is implementation-defined but
+    // the important invariant is both ids appear.
+    expect(ids).toContain("toolu_A");
+    expect(ids).toContain("toolu_B");
+  });
+
+  test("leaves correctly-paired tool_use/tool_result alone", () => {
+    const messages: Message[] = [
+      { role: "user", content: "read a file" },
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "toolu_ok", name: "Read", input: { file_path: "/x" } },
+        ],
+      },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "toolu_ok", content: "x contents" }],
+      },
+    ];
+    const before = JSON.stringify(convertToAnthropicMessages(messages));
+    // Re-running should not mutate — convertToAnthropicMessages must be idempotent
+    const after = JSON.stringify(convertToAnthropicMessages(messages));
+    expect(before).toBe(after);
+    // Structure should have exactly 3 messages, no synthetic injection
+    const result = convertToAnthropicMessages(messages);
+    expect(result).toHaveLength(3);
+    const tr = (result[2]!.content as Array<{ type: string }>).filter(
+      (b) => b.type === "tool_result",
+    );
+    expect(tr).toHaveLength(1);
+  });
 });
 
 // ─── Anthropic Tool Conversion ──────────────────────────────────

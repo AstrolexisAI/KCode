@@ -224,7 +224,85 @@ export function convertToAnthropicMessages(messages: Message[]): AnthropicMessag
     result.unshift({ role: "user", content: "Hello." });
   }
 
+  // Sanitize orphan tool_use blocks. Anthropic enforces that every tool_use
+  // in an assistant message must be immediately followed by a matching
+  // tool_result in the next user message — or the request 400s with
+  // "tool_use ids were found without tool_result blocks immediately after".
+  // This was catastrophic on the NEXUS Telemetry session where Opus 4.6 and
+  // Sonnet 4.6 both died after phase-20 blocked a pkill and some code path
+  // failed to emit the synthetic tool_result (either an early-return in the
+  // stop-condition handlers with updatedContent undefined, or a partial
+  // stream that crashed before the executor ran). Rather than track down
+  // every possible source of orphans, we sanitize at the serialization
+  // boundary: any orphan tool_use gets a synthetic "(execution not
+  // completed)" tool_result wedged in right after. Grok/OpenAI-compatible
+  // APIs are more lenient but running this for all providers keeps the
+  // invariant airtight.
+  sanitizeOrphanToolUses(result);
+
   return result;
+}
+
+/**
+ * Walk an Anthropic-format message array and ensure every assistant tool_use
+ * has a matching tool_result in the next user message. Mutates the array.
+ *
+ * Behavior:
+ * - If the next message is user + content-array, append synthetic tool_result
+ *   blocks for any missing tool_use_ids at the front (order-stable).
+ * - If the next message is missing, user+string, or assistant, insert a new
+ *   user message containing the synthetic tool_results right after.
+ * - Every injected block is_error=true with a short diagnostic so the model
+ *   sees why its tool didn't run.
+ */
+function sanitizeOrphanToolUses(messages: AnthropicMessage[]): void {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+    if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue;
+
+    const toolUseIds: string[] = [];
+    for (const block of msg.content as Array<{ type: string; id?: string }>) {
+      if (block.type === "tool_use" && typeof block.id === "string") {
+        toolUseIds.push(block.id);
+      }
+    }
+    if (toolUseIds.length === 0) continue;
+
+    const next = messages[i + 1];
+    const matched = new Set<string>();
+    if (next && next.role === "user" && Array.isArray(next.content)) {
+      for (const block of next.content as Array<{ type: string; tool_use_id?: string }>) {
+        if (block.type === "tool_result" && typeof block.tool_use_id === "string") {
+          matched.add(block.tool_use_id);
+        }
+      }
+    }
+
+    const orphans = toolUseIds.filter((id) => !matched.has(id));
+    if (orphans.length === 0) continue;
+
+    const synthetic = orphans.map((id) => ({
+      type: "tool_result" as const,
+      tool_use_id: id,
+      content: "(execution not completed: tool run was interrupted before a result could be produced)",
+      is_error: true,
+    }));
+
+    if (next && next.role === "user" && Array.isArray(next.content)) {
+      // Prepend so synthetic results come before any unrelated user text
+      // blocks — Anthropic only requires they be in the message, not first.
+      // Prepending keeps it visually clear what kcode injected.
+      (next.content as unknown[]).unshift(...synthetic);
+    } else {
+      messages.splice(i + 1, 0, {
+        role: "user",
+        content: synthetic as unknown as AnthropicContentBlock[],
+      });
+      // Don't advance past the inserted message — the outer for-loop
+      // increment will skip it naturally since the next assistant message
+      // is now at i+2.
+    }
+  }
 }
 
 /**

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     // Environment setup & latest features
-    "lib": ["ESNext"],
+    // DOM lib is required because src/web/client/main.tsx targets the browser
+    // (window, document, WebSocket, HTMLDivElement, etc.). The rest of the
+    // codebase is Node/Bun and doesn't use DOM APIs, so including DOM here
+    // costs nothing for them and unblocks typecheck for the web client.
+    "lib": ["ESNext", "DOM"],
     "target": "ESNext",
     "module": "Preserve",
     "moduleDetection": "force",
