@@ -543,6 +543,20 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
       // File doesn't exist yet — safe to create
     }
 
+    // Phase 27.5 (P4-lite): snapshot old content for declaration-loss
+    // comparison AFTER the write. Read here so we capture the pre-write
+    // state; the comparison itself runs in the success path.
+    let oldContentForDeclCheck: string | null = null;
+    if (existsSync(file_path)) {
+      try {
+        const { readFileSync } =
+          require("node:fs") as typeof import("node:fs");
+        oldContentForDeclCheck = readFileSync(file_path, "utf-8");
+      } catch {
+        /* can't read — skip declaration loss check */
+      }
+    }
+
     mkdirSync(dirname(file_path), { recursive: true });
 
     // Atomic TOCTOU-safe write: O_NOFOLLOW rejects symlinks at kernel level,
@@ -583,13 +597,33 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     // Phase 26 (non-blocking): append a debug-statement warning if
     // the file contains leftover console.log / debugger / print() /
     // dbg! / println! outside of test/example/script paths.
+    //
+    // Phase 27.5 (non-blocking): append a declaration-loss warning
+    // when the Write replaces an existing file with significantly
+    // fewer top-level declarations (functions, classes, types). Fills
+    // the gap between phase 19 (line shrinkage) and phase 17 (skeleton
+    // stubs): a silent refactor that drops 4 of 10 functions but
+    // keeps the file size via added comments/CSS doesn't trip either.
     try {
-      const { detectDebugStatements, buildDebugWarning } = await import(
-        "../core/write-content-scanner.js"
-      );
+      const {
+        detectDebugStatements,
+        buildDebugWarning,
+        detectDeclarationLoss,
+        buildDeclarationLossWarning,
+      } = await import("../core/write-content-scanner.js");
       const debug = detectDebugStatements(file_path, content);
       if (debug.hasDebug) {
         warning += buildDebugWarning(debug);
+      }
+      if (oldContentForDeclCheck !== null) {
+        const decl = detectDeclarationLoss(
+          oldContentForDeclCheck,
+          content,
+          file_path,
+        );
+        if (decl.hasLoss) {
+          warning += buildDeclarationLossWarning(decl);
+        }
       }
     } catch {
       /* non-fatal */

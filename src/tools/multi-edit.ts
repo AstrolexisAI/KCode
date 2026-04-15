@@ -255,6 +255,35 @@ async function _executeMultiEditInner(input: Record<string, unknown>): Promise<T
     for (const op of ops) {
       results.push(miniDiff(op.old_string, op.new_string));
     }
+
+    // Phase 27 for MultiEdit: run location-mismatch check against the
+    // FIRST edit in this file. If the first edit is far from user
+    // hints, subsequent edits are likely in the same region and the
+    // single warning covers them all. Non-blocking — appended to the
+    // results list so it shows up in the success message.
+    try {
+      const firstOp = ops[0];
+      if (firstOp) {
+        const firstEditLine =
+          plan.original.slice(0, plan.original.indexOf(firstOp.old_string))
+            .split("\n").length;
+        const { getUserTexts } = await import("../core/session-tracker.js");
+        const { extractLocationHints, checkEditLocationMismatch, buildLocationWarning } =
+          await import("../core/edit-location-check.js");
+        const hints = extractLocationHints(getUserTexts());
+        const verdict = checkEditLocationMismatch(
+          hints,
+          firstEditLine,
+          filePath,
+          plan.original,
+        );
+        if (verdict.isMismatch) {
+          results.push(buildLocationWarning(verdict));
+        }
+      }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   return {
