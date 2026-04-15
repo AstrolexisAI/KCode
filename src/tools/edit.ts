@@ -301,9 +301,35 @@ async function _executeEditInner(input: Record<string, unknown>): Promise<ToolRe
     const linesDelta =
       linesChanged > 0 ? `+${linesChanged}` : linesChanged === 0 ? "±0" : `${linesChanged}`;
 
+    // Phase 27: edit location mismatch warning (non-blocking). If the
+    // user's recent messages mentioned a specific line range, symbol
+    // name, or different file, and the Edit target doesn't match, we
+    // append a warning to the success message so the model can
+    // course-correct before declaring "fixed". Catches the Orbital
+    // chart-fix scenario where Edits mechanically succeeded on random
+    // CSS while the real bug was in a function 500 lines away.
+    let locationWarning = "";
+    try {
+      const { getUserTexts } = await import("../core/session-tracker.js");
+      const { extractLocationHints, checkEditLocationMismatch, buildLocationWarning } =
+        await import("../core/edit-location-check.js");
+      const hints = extractLocationHints(getUserTexts());
+      const verdict = checkEditLocationMismatch(
+        hints,
+        lineNumber,
+        file_path,
+        content,
+      );
+      if (verdict.isMismatch) {
+        locationWarning = buildLocationWarning(verdict);
+      }
+    } catch {
+      /* non-fatal */
+    }
+
     return {
       tool_use_id: "",
-      content: `Edited ${file_path}:${lineNumber} (${replacements} replacement${replacements > 1 ? "s" : ""}, ${linesDelta} lines)\n${diff}`,
+      content: `Edited ${file_path}:${lineNumber} (${replacements} replacement${replacements > 1 ? "s" : ""}, ${linesDelta} lines)\n${diff}${locationWarning}`,
     };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
