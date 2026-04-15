@@ -464,6 +464,26 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
       }
       return { tool_use_id: "", content: report, is_error: true };
     }
+
+    // Phase 26: hardcoded secrets scan. Blocks the Write when the
+    // content contains a plausible API key / access token / bearer
+    // credential that isn't a known placeholder. Docs, .env.example,
+    // and README.md are exempt. See write-content-scanner.ts.
+    try {
+      const { detectSecrets, buildSecretReport } = await import(
+        "../core/write-content-scanner.js"
+      );
+      const secrets = detectSecrets(file_path, content);
+      if (secrets.hasSecret) {
+        return {
+          tool_use_id: "",
+          content: buildSecretReport(file_path, secrets),
+          is_error: true,
+        };
+      }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   // Block writes to sensitive files
@@ -558,6 +578,21 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     if (hasInlineHTML) {
       warning =
         "\n⚠️ Warning: This file contains HTML inside TypeScript. Consider moving HTML/CSS/JS to separate files in public/ to avoid template literal issues.";
+    }
+
+    // Phase 26 (non-blocking): append a debug-statement warning if
+    // the file contains leftover console.log / debugger / print() /
+    // dbg! / println! outside of test/example/script paths.
+    try {
+      const { detectDebugStatements, buildDebugWarning } = await import(
+        "../core/write-content-scanner.js"
+      );
+      const debug = detectDebugStatements(file_path, content);
+      if (debug.hasDebug) {
+        warning += buildDebugWarning(debug);
+      }
+    } catch {
+      /* non-fatal */
     }
 
     // Include the complete file content with line numbers for professional display.
