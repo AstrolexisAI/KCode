@@ -311,6 +311,30 @@ export class LoopGuardState {
   /** Set of "burned" fingerprints that should not be retried */
   readonly burnedFingerprints = new Set<string>();
 
+  /**
+   * Phase 31: track files with a recent failed Edit so we can block
+   * "rewrite the whole file" escape via Write.
+   *
+   * Canonical trigger: NEXUS Telemetry session v2.10.76, mark6 (Gemma
+   * abliterated local model). User reported "no se inicia el servicio,
+   * aparece como caído". Model invented three phantom typos ("setProperty
+   * en lugar de setProperty", "getContext en lugar de getContext",
+   * "reverse en lugar de reverse" — literally X instead of X), tried an
+   * Edit with old_string === new_string, kcode correctly blocked the
+   * no-op Edit, and the model escaped by rewriting the entire 850-line
+   * file as 627 lines via Write — strictly worse. The phase 31 guard
+   * blocks that escape path: Write on a file with a recent failed Edit
+   * requires the model to re-read and produce a surgical Edit instead.
+   *
+   * Key is the absolute file_path; value is the reason from the Edit
+   * failure + the tool call index so we can expire stale entries.
+   * Cleared by a subsequent successful Edit on the same file.
+   */
+  readonly recentEditFailures = new Map<
+    string,
+    { reason: string; callIndex: number }
+  >();
+
   // Pre-computed tool filter sets
   readonly managedDisallowedSet: Set<string>;
   readonly allowedToolsSet: Set<string> | null;
@@ -415,6 +439,52 @@ export class LoopGuardState {
       }
     }
     this.inlineWarningCount = 0;
+  }
+
+  /**
+   * Phase 31: record a failed Edit so a subsequent Write on the same
+   * file can be blocked (escape-by-rewrite prevention).
+   *
+   * `callIndex` is the current tool-call counter snapshot at record
+   * time — used to expire entries that are more than ~6 tool calls
+   * old so long sessions don't keep stale blocks forever.
+   */
+  recordEditFailure(filePath: string, reason: string, callIndex: number): void {
+    if (!filePath) return;
+    this.recentEditFailures.set(filePath, { reason, callIndex });
+    // Bound the map so pathological sessions can't eat memory
+    if (this.recentEditFailures.size > 50) {
+      const firstKey = this.recentEditFailures.keys().next().value;
+      if (firstKey) this.recentEditFailures.delete(firstKey);
+    }
+  }
+
+  /**
+   * Phase 31: check whether a Write on this file should be blocked
+   * as a "rewrite after failed Edit" escape. Returns the failure
+   * reason if blocked, null otherwise. Expires entries older than 6
+   * tool calls so the guard doesn't outlive its usefulness.
+   */
+  getRecentEditFailure(filePath: string, currentCallIndex: number): string | null {
+    if (!filePath) return null;
+    const entry = this.recentEditFailures.get(filePath);
+    if (!entry) return null;
+    // Expire if too many tool calls have passed — model may have
+    // legitimately investigated and decided to rewrite.
+    if (currentCallIndex - entry.callIndex > 6) {
+      this.recentEditFailures.delete(filePath);
+      return null;
+    }
+    return entry.reason;
+  }
+
+  /**
+   * Phase 31: clear a file's failed-Edit record after a successful
+   * Edit on it. Called from tool-executor after the Edit path succeeds.
+   */
+  clearEditFailure(filePath: string): void {
+    if (!filePath) return;
+    this.recentEditFailures.delete(filePath);
   }
 }
 

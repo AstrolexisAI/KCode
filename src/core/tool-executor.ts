@@ -445,6 +445,61 @@ export async function* executeToolsSequential(
       }
     }
 
+    // Phase 31 — rewrite-after-failed-Edit escape block
+    //
+    // When a model's Edit fails (especially from the phantom-typo
+    // detector where old_string === new_string), the common failure
+    // mode is to escape by rewriting the whole file via Write. That
+    // wipes the 850 lines of already-working code and typically
+    // produces a strictly worse version (NEXUS Telemetry mark6 session,
+    // 850 → 627 lines). This guard catches a Write on a file that has
+    // a recent Edit failure recorded against it, blocks the call, and
+    // redirects the model to re-read and produce a surgical fix.
+    //
+    // Expires after ~6 tool calls (inside getRecentEditFailure) so the
+    // guard doesn't outlive its usefulness — if the model legitimately
+    // investigated and concluded that a rewrite is needed, they can
+    // still do it after some intervening tool activity.
+    if (call.name === "Write" && typeof effectiveInput.file_path === "string") {
+      const fp = effectiveInput.file_path as string;
+      const failureReason = guardState.getRecentEditFailure(fp, ctx.toolUseCount);
+      if (failureReason) {
+        if (ctx.debugTracer?.isEnabled()) {
+          ctx.debugTracer.traceGuard(
+            "phase-31-rewrite-escape",
+            true,
+            `Blocked Write on ${fp} — recent Edit failed: ${failureReason.slice(0, 80)}`,
+          );
+        }
+        const blockedContent =
+          `REWRITE_ESCAPE_BLOCKED: You just failed an Edit on ${fp} (reason: ${failureReason.slice(0, 200)}). ` +
+          `Do NOT escape by rewriting the whole file with Write — that destroys information and typically produces a strictly worse version. ` +
+          `Instead: (1) Read the current file state again, (2) identify the REAL problem based on observable behavior (not imagined typos), ` +
+          `(3) produce a surgical Edit targeting only the broken section. ` +
+          `If the user reported a runtime issue, open the ACTUAL runtime output (browser console, server log, test output) ` +
+          `before touching the source again. This block expires after ~6 more tool calls, but you should only proceed to Write ` +
+          `after you've genuinely investigated — not as an escape.`;
+        log.warn(
+          "tool",
+          `phase 31 blocked rewrite-after-failed-Edit on ${fp}`,
+        );
+        yield {
+          type: "tool_result",
+          name: call.name,
+          toolUseId: call.id,
+          result: blockedContent,
+          isError: true,
+        };
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: call.id,
+          content: blockedContent,
+          is_error: true,
+        });
+        continue;
+      }
+    }
+
     // 3a. Auto-checkpoint conversation state before file modifications
     // (checkpoint saving is handled by the caller — we just yield an event marker)
 
@@ -596,6 +651,45 @@ export async function* executeToolsSequential(
         }
       } catch (err) {
         log.debug("lsp", "Failed to get LSP diagnostics after file change: " + err);
+      }
+    }
+
+    // Phase 31 — track Edit failures and clear on success. Write on a
+    // file with a recent failed Edit is blocked upstream (rewrite-
+    // escape guard) but we can't catch phantom-typo Edits there
+    // because the failure happens inside the tool. Record it here and
+    // clear on a successful Edit/Write.
+    if (call.name === "Edit" && typeof effectiveInput.file_path === "string") {
+      const fp = effectiveInput.file_path as string;
+      if (result.is_error) {
+        // Record the failure with the actual error message so the
+        // block message can quote it back to the model.
+        guardState.recordEditFailure(fp, result.content, ctx.toolUseCount);
+      } else {
+        // Successful Edit — clear any prior failure on this file.
+        guardState.clearEditFailure(fp);
+      }
+    } else if (
+      call.name === "Write" &&
+      !result.is_error &&
+      typeof effectiveInput.file_path === "string"
+    ) {
+      // Successful Write also clears (model wrote something and it
+      // stuck, so the prior failure is no longer load-bearing).
+      guardState.clearEditFailure(effectiveInput.file_path as string);
+    } else if (call.name === "MultiEdit" && Array.isArray(effectiveInput.edits)) {
+      // Phase 31 extends to MultiEdit: on failure, every file in the
+      // edits array inherits the failure so a subsequent Write on any
+      // of them is still blocked. On success, all cleared.
+      const edits = effectiveInput.edits as Array<{ file_path?: string }>;
+      for (const edit of edits) {
+        const fp = edit.file_path;
+        if (typeof fp !== "string" || !fp) continue;
+        if (result.is_error) {
+          guardState.recordEditFailure(fp, result.content, ctx.toolUseCount);
+        } else {
+          guardState.clearEditFailure(fp);
+        }
       }
     }
 
