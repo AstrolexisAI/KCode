@@ -362,3 +362,207 @@ export function buildDebugWarning(verdict: DebugVerdict): string {
   lines.push(`   are exempt from this check.`);
   return lines.join("\n");
 }
+
+// ─── Phase 27.5 (P4-lite): declaration loss detector ────────────
+//
+// Phase 19 (detectInPlaceShrinkage) catches ≥35% line-count drops.
+// Phase 17 (detectSkeletonContent) catches placeholder stubs. The
+// gap: a "refactor" that drops 5 functions but keeps the file size
+// via added CSS / comments. No placeholders, shrinkage ratio sits
+// above 65%, both existing guards stay silent while the model
+// silently removed features.
+//
+// This heuristic counts top-level declarations in both old and new
+// content. If the new content has ≥3 fewer declarations AND lost
+// ≥30% of what was there, append a non-blocking warning so the
+// model can retract or re-add.
+//
+// Non-blocking because:
+//   - merge/consolidation refactors are legitimate use cases
+//   - a pure regex is not authoritative about whether "fewer decls
+//     means less functionality"
+//   - warning + Edit retry is strictly better than incorrectly
+//     blocking a legit refactor
+
+interface DeclarationPattern {
+  name: string;
+  regex: RegExp;
+  extensions: string[];
+}
+
+const DECLARATION_PATTERNS: DeclarationPattern[] = [
+  // JavaScript / TypeScript
+  {
+    name: "js-function",
+    regex: /^\s*(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+[A-Za-z_$][A-Za-z0-9_$]*/gm,
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+  },
+  {
+    name: "js-class",
+    regex: /^\s*(?:export\s+(?:default\s+)?)?(?:abstract\s+)?class\s+[A-Za-z_$][A-Za-z0-9_$]*/gm,
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+  },
+  {
+    name: "ts-interface",
+    regex: /^\s*(?:export\s+)?interface\s+[A-Za-z_$][A-Za-z0-9_$]*/gm,
+    extensions: [".ts", ".tsx"],
+  },
+  {
+    name: "ts-type-alias",
+    regex: /^\s*(?:export\s+)?type\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=/gm,
+    extensions: [".ts", ".tsx"],
+  },
+  // Inline HTML-embedded JS: function decls inside <script> tags.
+  // For HTML files we count the same JS patterns but also arrow
+  // function consts assigned at module level, since model-generated
+  // HTML often uses `const foo = () => {}` as top-level handlers.
+  {
+    name: "html-script-function",
+    regex: /^\s*(?:export\s+)?function\s+[A-Za-z_$][A-Za-z0-9_$]*/gm,
+    extensions: [".html", ".htm"],
+  },
+  {
+    name: "html-script-arrow",
+    regex:
+      /^\s*(?:const|let|var)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$])\s*=>/gm,
+    extensions: [".html", ".htm", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+  },
+  // Python
+  {
+    name: "py-def",
+    regex: /^\s*def\s+[A-Za-z_][A-Za-z0-9_]*/gm,
+    extensions: [".py"],
+  },
+  {
+    name: "py-class",
+    regex: /^\s*class\s+[A-Za-z_][A-Za-z0-9_]*/gm,
+    extensions: [".py"],
+  },
+  // Go
+  {
+    name: "go-func",
+    regex: /^\s*func\s+(?:\([^)]+\)\s+)?[A-Za-z_][A-Za-z0-9_]*/gm,
+    extensions: [".go"],
+  },
+  {
+    name: "go-type",
+    regex: /^\s*type\s+[A-Za-z_][A-Za-z0-9_]*/gm,
+    extensions: [".go"],
+  },
+  // Rust
+  {
+    name: "rust-fn",
+    regex: /^\s*(?:pub\s+(?:\([^)]+\)\s+)?)?(?:async\s+)?fn\s+[A-Za-z_][A-Za-z0-9_]*/gm,
+    extensions: [".rs"],
+  },
+  {
+    name: "rust-struct",
+    regex: /^\s*(?:pub\s+(?:\([^)]+\)\s+)?)?(?:struct|enum|trait)\s+[A-Za-z_][A-Za-z0-9_]*/gm,
+    extensions: [".rs"],
+  },
+];
+
+function getExt(filePath: string): string {
+  const i = filePath.lastIndexOf(".");
+  return i >= 0 ? filePath.slice(i).toLowerCase() : "";
+}
+
+/**
+ * Count top-level declarations (functions, classes, interfaces,
+ * types, structs, etc.) in the given content, based on the file
+ * extension. Returns 0 for unknown extensions so we don't warn
+ * on file types we can't parse cheaply.
+ */
+export function countDeclarations(
+  content: string,
+  filePath: string,
+): number {
+  const ext = getExt(filePath);
+  let total = 0;
+  for (const { regex, extensions } of DECLARATION_PATTERNS) {
+    if (!extensions.includes(ext)) continue;
+    const global = new RegExp(
+      regex.source,
+      regex.flags.includes("g") ? regex.flags : regex.flags + "g",
+    );
+    const matches = content.match(global);
+    if (matches) total += matches.length;
+  }
+  return total;
+}
+
+export interface DeclarationLossVerdict {
+  hasLoss: boolean;
+  oldCount: number;
+  newCount: number;
+  lost: number;
+  lossRatio: number;
+}
+
+/**
+ * Compare declaration counts between old and new content. Returns
+ * hasLoss=true when:
+ *   - old file had ≥5 declarations (skip tiny files)
+ *   - new file has ≥3 fewer declarations
+ *   - ratio lost/old ≥ 0.3 (dropped ≥30% of declarations)
+ *
+ * These thresholds are deliberately conservative — a pure
+ * rename/consolidation that drops 1-2 functions should NOT warn.
+ */
+export function detectDeclarationLoss(
+  oldContent: string,
+  newContent: string,
+  filePath: string,
+): DeclarationLossVerdict {
+  const oldCount = countDeclarations(oldContent, filePath);
+  const newCount = countDeclarations(newContent, filePath);
+  const lost = oldCount - newCount;
+  const lossRatio = oldCount > 0 ? lost / oldCount : 0;
+  const hasLoss = oldCount >= 5 && lost >= 3 && lossRatio >= 0.3;
+  return { hasLoss, oldCount, newCount, lost, lossRatio };
+}
+
+export function buildDeclarationLossWarning(
+  verdict: DeclarationLossVerdict,
+): string {
+  const lines: string[] = [];
+  const pct = Math.round(verdict.lossRatio * 100);
+  lines.push("");
+  lines.push(
+    `⚠️  DECLARATION LOSS (non-blocking warning)`,
+  );
+  lines.push(
+    `   Old file had ${verdict.oldCount} top-level declarations` +
+      ` (functions, classes, types, structs).`,
+  );
+  lines.push(
+    `   New file has ${verdict.newCount}. You dropped ${verdict.lost}` +
+      ` declarations (${pct}%).`,
+  );
+  lines.push("");
+  lines.push(
+    `   This could be a legitimate consolidation — merging 5 helpers`,
+  );
+  lines.push(
+    `   into 3 is fine if behavior is preserved. But it could also`,
+  );
+  lines.push(
+    `   mean silently dropped features. Phase 19 didn't fire because`,
+  );
+  lines.push(
+    `   line count is within range; phase 17 didn't fire because there`,
+  );
+  lines.push(`   are no placeholder stubs. That's the gap this warns about.`);
+  lines.push("");
+  lines.push(
+    `   Before claiming "refactor complete" or "behavior is identical",`,
+  );
+  lines.push(
+    `   either (a) list every function/class that was merged into a`,
+  );
+  lines.push(
+    `   replacement so the user can verify, or (b) re-add the dropped`,
+  );
+  lines.push(`   declarations.`);
+  return lines.join("\n");
+}

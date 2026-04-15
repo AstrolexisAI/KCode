@@ -3,8 +3,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildDebugWarning,
+  buildDeclarationLossWarning,
   buildSecretReport,
+  countDeclarations,
   detectDebugStatements,
+  detectDeclarationLoss,
   detectSecrets,
 } from "./write-content-scanner";
 
@@ -289,5 +292,187 @@ describe("buildDebugWarning", () => {
     expect(warning).toContain("debugger");
     expect(warning).toContain("non-blocking");
     expect(warning).toMatch(/tests,\s*examples/i);
+  });
+});
+
+// ─── Declaration loss (P4-lite) ──────────────────────────────────
+
+describe("countDeclarations", () => {
+  test("counts JS functions and classes", () => {
+    const code = `
+      function a() {}
+      function b() {}
+      class C {}
+      export function d() {}
+      export class E {}
+    `;
+    expect(countDeclarations(code, "/tmp/app.js")).toBe(5);
+  });
+
+  test("counts TS interfaces and types", () => {
+    const code = `
+      export interface Foo { x: number; }
+      export type Bar = string;
+      function baz() {}
+    `;
+    expect(countDeclarations(code, "/tmp/app.ts")).toBe(3);
+  });
+
+  test("counts Python defs and classes", () => {
+    const code = `
+      def foo():
+          pass
+      def bar():
+          pass
+      class Baz:
+          pass
+    `;
+    expect(countDeclarations(code, "/tmp/app.py")).toBe(3);
+  });
+
+  test("counts Rust fns and structs/enums/traits", () => {
+    const code = `
+      pub fn foo() {}
+      async fn bar() {}
+      struct Baz;
+      enum Qux { A, B }
+      trait Corge {}
+    `;
+    expect(countDeclarations(code, "/tmp/main.rs")).toBe(5);
+  });
+
+  test("counts Go funcs and types", () => {
+    const code = `
+      func foo() {}
+      func (r *Receiver) bar() {}
+      type Baz struct {}
+    `;
+    expect(countDeclarations(code, "/tmp/main.go")).toBe(3);
+  });
+
+  test("counts HTML-embedded script functions and arrow consts", () => {
+    const code = `
+<html><body>
+<script>
+function setup() {}
+const renderFoo = () => {};
+const handleBar = async () => {};
+</script>
+</body></html>
+    `;
+    expect(countDeclarations(code, "/tmp/app.html")).toBe(3);
+  });
+
+  test("returns 0 for unknown extension", () => {
+    expect(countDeclarations("anything", "/tmp/x.txt")).toBe(0);
+  });
+});
+
+describe("detectDeclarationLoss", () => {
+  test("fires on Orbital-style silent refactor (8 → 4 functions)", () => {
+    const oldContent = `
+<script>
+function renderMissionControl() {}
+function renderApod() {}
+function renderMars() {}
+function renderAsteroids() {}
+function renderEarth() {}
+function renderLaunches() {}
+function animateVoyager() {}
+function simulateIss() {}
+</script>
+    `;
+    // "Refactor" keeps the file similar size but drops half the render funcs
+    const newContent = `
+<script>
+function renderMissionControl() {}
+function renderMars() {}
+function animateVoyager() {}
+function simulateIss() {}
+// CSS refinements
+// ${"x".repeat(300)}
+</script>
+    `;
+    const v = detectDeclarationLoss(oldContent, newContent, "/tmp/orbital.html");
+    expect(v.hasLoss).toBe(true);
+    expect(v.oldCount).toBe(8);
+    expect(v.newCount).toBe(4);
+    expect(v.lost).toBe(4);
+    expect(v.lossRatio).toBe(0.5);
+  });
+
+  test("does NOT fire on small consolidation (drop 1-2 helpers)", () => {
+    const oldContent = `
+function a() {}
+function b() {}
+function c() {}
+function d() {}
+function e() {}
+function f() {}
+    `;
+    const newContent = `
+function a() {}
+function b() {}
+function c() {}
+function d() {}
+function merged() {}
+    `;
+    const v = detectDeclarationLoss(oldContent, newContent, "/tmp/app.js");
+    // Lost 1, below the 3-declaration minimum
+    expect(v.hasLoss).toBe(false);
+  });
+
+  test("does NOT fire on tiny files (<5 declarations total)", () => {
+    const oldContent = `function a() {} function b() {} function c() {}`;
+    const newContent = `function a() {}`;
+    const v = detectDeclarationLoss(oldContent, newContent, "/tmp/app.js");
+    // Old had 3, below the ≥5 minimum
+    expect(v.hasLoss).toBe(false);
+  });
+
+  test("does NOT fire when new file has MORE declarations", () => {
+    const oldContent = Array.from({ length: 10 }, (_, i) => `function a${i}() {}`).join("\n");
+    const newContent =
+      oldContent + "\n" + Array.from({ length: 5 }, (_, i) => `function b${i}() {}`).join("\n");
+    const v = detectDeclarationLoss(oldContent, newContent, "/tmp/app.js");
+    expect(v.hasLoss).toBe(false);
+  });
+
+  test("does NOT fire when loss ratio is below 30%", () => {
+    const oldContent = Array.from({ length: 20 }, (_, i) => `function a${i}() {}`).join("\n");
+    const newContent = Array.from({ length: 17 }, (_, i) => `function a${i}() {}`).join("\n");
+    const v = detectDeclarationLoss(oldContent, newContent, "/tmp/app.js");
+    // Lost 3 out of 20 = 15%, below threshold
+    expect(v.hasLoss).toBe(false);
+  });
+
+  test("fires when loss is ≥3 and ratio ≥30%", () => {
+    const oldContent = Array.from({ length: 10 }, (_, i) => `function a${i}() {}`).join("\n");
+    const newContent = Array.from({ length: 6 }, (_, i) => `function a${i}() {}`).join("\n");
+    const v = detectDeclarationLoss(oldContent, newContent, "/tmp/app.js");
+    // Lost 4 out of 10 = 40%
+    expect(v.hasLoss).toBe(true);
+  });
+});
+
+describe("buildDeclarationLossWarning", () => {
+  test("includes old/new counts, loss percentage, and guidance", () => {
+    const warning = buildDeclarationLossWarning({
+      hasLoss: true,
+      oldCount: 10,
+      newCount: 4,
+      lost: 6,
+      lossRatio: 0.6,
+    });
+    expect(warning).toContain("DECLARATION LOSS");
+    expect(warning).toContain("non-blocking");
+    expect(warning).toContain("10 top-level");
+    expect(warning).toContain("4");
+    expect(warning).toContain("dropped 6");
+    expect(warning).toContain("60%");
+    expect(warning).toContain("consolidation");
+    expect(warning).toMatch(/phase 19/i);
+    expect(warning).toMatch(/phase 17/i);
+    expect(warning).toMatch(/list every function|re-add/);
   });
 });
