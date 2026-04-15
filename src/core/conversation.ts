@@ -527,6 +527,35 @@ export class ConversationManager {
       log.debug("user-repetition", `check failed (non-fatal): ${err}`);
     }
 
+    // Phase 30: semantic-correction detector. Complements phase 25
+    // by detecting EXPLICIT re-targeting statements ("no es X, sino
+    // Y" / "the problem is not X, it's Y"). Where phase 25 needs
+    // 3+ repetitions + frustration signal, phase 30 fires on a
+    // SINGLE corrective message. The reminder points the model at
+    // the correct noun so it stops iterating on the wrong target.
+    //
+    // Catches the v2.10.74 Nexus chart session where the user said
+    // "las graficas no son el problema, sino el contenedor" and the
+    // model kept applying chart-config CSS fixes instead of container
+    // CSS. Phase 25 missed it (singular/plural + corrective phrasing
+    // — both of which are now also patched — but phase 30 is the
+    // direct, single-message guard).
+    try {
+      const { checkSemanticCorrection, buildSemanticCorrectionReminder } =
+        await import("./semantic-correction-check.js");
+      const verdict = checkSemanticCorrection(this.state.messages, userMessage);
+      if (verdict.isCorrection) {
+        const reminder = buildSemanticCorrectionReminder(verdict);
+        this.state.messages.push({ role: "user", content: reminder });
+        log.info(
+          "semantic-correction",
+          `injected reminder: wrong="${verdict.wrongTarget.slice(0, 40)}" right="${verdict.rightTarget.slice(0, 40)}"`,
+        );
+      }
+    } catch (err) {
+      log.debug("semantic-correction", `check failed (non-fatal): ${err}`);
+    }
+
     // Find the most recent assistant message text once — shared by
     // plan reconciliation (phase 12) and claim-vs-reality check (phase 15).
     let lastAssistantText = "";

@@ -28,13 +28,13 @@ import type { Message } from "./types.js";
 // ─── Frustration signal patterns ─────────────────────────────────
 
 const FRUSTRATION_PATTERNS: RegExp[] = [
-  // Spanish
-  /\bsigue\s+igual\b/i,
-  /\bsigue\s+(?:sin|roto|mal|el\s+mismo|fallando)/i,
+  // Spanish — classic frustration
+  /\bsigue(?:n)?\s+igual\b/i,
+  /\bsigue(?:n)?\s+(?:sin|roto|mal|el\s+mismo|fallando)/i,
   /\btodav[íi]a\s+(?:sigue|no|est[aá]|tiene|tengo)\b/i,
   /\botra\s+vez\b/i,
   /\bde\s+nuevo\b/i,
-  /\bno\s+funciona(?:ba|ron)?\b/i,
+  /\bno\s+funciona(?:ba|ron|n)?\b/i,
   /\bno\s+anda\b/i,
   /\bno\s+cambi[oó]\b/i,
   /\bnada\s+(?:anda|funciona|cambi[oó]|arregla)/i,
@@ -43,7 +43,18 @@ const FRUSTRATION_PATTERNS: RegExp[] = [
   /\bmismo\s+(?:problema|error|bug|issue|fallo)\b/i,
   /\bel\s+problema\s+(?:sigue|persiste|continua)/i,
   /\baudita(?:lo|r)?\b/i,
-  // English
+  /\bno\s+qued[oó]\b/i,
+  // Spanish — corrective statements (added after v2.10.74 Nexus
+  // session). The user was re-explaining that the bug was in the
+  // MODAL CONTAINER, not the chart config. Phase 25 needs to treat
+  // these redirects as frustration equivalents because the meaning
+  // is "you're still not understanding — fix your target".
+  /\bno\s+(?:es|era|son|eran)\s+(?:el\s+)?problema\b/i,
+  /\bel\s+problema\s+(?:no\s+)?es\b/i,
+  /\bel\s+problema\s+son\b/i,
+  /\bno\s+entend(?:iste|[ií]o|[ií]an)/i,
+  /\ba[uú]n\s+(?:sigue|no|tiene)/i,
+  // English — classic + corrective
   /\bstill\s+(?:broken|not\s+working|the\s+same|doesn'?t|failing)\b/i,
   /\bnot\s+(?:fixed|working)\b/i,
   /\bsame\s+(?:problem|issue|error|bug)\b/i,
@@ -51,6 +62,9 @@ const FRUSTRATION_PATTERNS: RegExp[] = [
   /\bfix\s+(?:it\s+)?again\b/i,
   /\bdidn'?t\s+(?:work|fix)\b/i,
   /\bstill\s+breaks?\b/i,
+  /\b(?:it'?s|its)\s+not\s+(?:the|about)\b/i,
+  /\bthe\s+(?:real\s+)?problem\s+(?:is|was)\s+not\b/i,
+  /\byou'?re\s+(?:missing|not\s+getting)/i,
 ];
 
 // ─── Stop words ──────────────────────────────────────────────────
@@ -138,9 +152,38 @@ const STOPWORDS = new Set<string>([
 // ─── Tokenization ────────────────────────────────────────────────
 
 /**
+ * Basic stemming for Spanish/English plurals. Strips a trailing `s`
+ * or `es` from tokens long enough to have a meaningful stem.
+ *
+ * Evidence: v2.10.74 Nexus chart session had the user say "grafica"
+ * (singular) once and "graficas" (plural) twice. My old tokenizer
+ * treated them as distinct tokens, so the shared-topic count never
+ * reached the phase 25 threshold of 3. With stemming, all three
+ * normalize to "grafica" and phase 25 fires correctly.
+ *
+ * Rules are intentionally simple — no true linguistic stemming, just
+ * trailing-s removal. Ships with these caveats:
+ *   - "class" / "bus" / "process" stay as-is (len<=5 for "bus",
+ *     and -s removal yields nonsense "clas"/"proces"). Guard: only
+ *     strip if the stem would still be ≥5 chars.
+ *   - English gerunds ("working") and verb tenses stay unchanged.
+ *   - Doesn't handle irregular plurals ("children" → "child").
+ */
+function stem(token: string): string {
+  if (token.length < 6) return token;
+  // "graficas" → "grafica", "problemas" → "problema"
+  if (token.endsWith("s") && !token.endsWith("ss")) {
+    const stripped = token.slice(0, -1);
+    if (stripped.length >= 5) return stripped;
+  }
+  return token;
+}
+
+/**
  * Split a user message into significant content-word tokens.
- * Keeps words of length ≥5, excludes known stopwords, lowercases.
- * Normalizes common accented chars so "gráfica" and "grafica" match.
+ * Keeps words of length ≥5, excludes known stopwords, lowercases,
+ * normalizes accents, and applies basic stemming so singular/plural
+ * forms match.
  */
 function significantTokens(text: string): Set<string> {
   const normalized = text
@@ -152,7 +195,9 @@ function significantTokens(text: string): Set<string> {
     .replace(/[^a-z0-9\s]/g, " ");
   const tokens = normalized
     .split(/\s+/)
-    .filter((t) => t.length >= 5 && !STOPWORDS.has(t));
+    .filter((t) => t.length >= 5 && !STOPWORDS.has(t))
+    .map(stem)
+    .filter((t) => !STOPWORDS.has(t));
   return new Set(tokens);
 }
 
