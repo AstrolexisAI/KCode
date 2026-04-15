@@ -244,7 +244,7 @@ async function _executeEditInner(input: Record<string, unknown>): Promise<ToolRe
       return {
         tool_use_id: "",
         content:
-          "Error: old_string and new_string are identical. STOP: Do NOT retry this Edit. If the file already contains the desired content, no edit is needed. Move on to the next task.",
+          "PHANTOM_TYPO_BLOCKED: old_string and new_string are byte-identical. This means the 'bug' you think you see in the file does NOT exist — your diagnosis was a hallucinated typo. STOP guessing at code. If the user reported a runtime problem (\"service is down\", \"chart doesn't render\", \"no funciona\"), the fix is NOT in the source — it's visible in the runtime output. Do one of: (1) open the browser console / server log / test output to see the ACTUAL error, (2) Read the file again carefully and diff against expected behavior, (3) ask the user what they see. Do NOT retry this Edit and do NOT rewrite the whole file with Write as an escape — that will destroy information.",
         is_error: true,
       };
     }
