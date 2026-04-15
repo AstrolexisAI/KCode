@@ -1450,6 +1450,28 @@ export class ConversationManager {
         streamResult);
       const fullText = textChunks.join("");
 
+      // Phase 32 — scan the assistant's prose for phantom-typo claims
+      // ("X en lugar de X") and stash the result on guardState so the
+      // tool executor can block any Edit/MultiEdit that follows. Reset
+      // at the top of each turn below so claims from one turn don't
+      // leak into the next.
+      try {
+        const { detectPhantomTypoClaim } = await import("./phantom-typo-detector.js");
+        const phantomMatch = detectPhantomTypoClaim(fullText);
+        if (phantomMatch) {
+          guardState.activePhantomClaim = phantomMatch;
+          log.warn(
+            "phase-32",
+            `phantom-typo claim detected: "${phantomMatch.phrase.slice(0, 80)}" (token="${phantomMatch.token}")`,
+          );
+        } else {
+          guardState.activePhantomClaim = null;
+        }
+      } catch (err) {
+        log.debug("phase-32", `detector failed (non-fatal): ${err}`);
+        guardState.activePhantomClaim = null;
+      }
+
       // Store assistant message in conversation history
       this.state.messages.push({ role: "assistant", content: assistantContent });
 
