@@ -1,6 +1,6 @@
 {
   "name": "kcode",
-  "version": "2.10.75",
+  "version": "2.10.76",
   "description": "AI-powered coding assistant for the terminal - by Astrolexis",
   "author": "Astrolexis",
   "module": "src/index.ts",
@@ -58,8 +58,10 @@
     "@biomejs/biome": "^2.4.10",
     "@types/bun": "latest",
     "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.2",
     "ink-testing-library": "^4.0.0",
-    "react-devtools-core": "^7.0.1"
+    "react-devtools-core": "^7.0.1",
+    "vite": "^6.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -69,6 +71,7 @@
     "commander": "^14.0.3",
     "ink": "^6.8.0",
     "ora": "^9.3.0",
-    "react": "^19.2.4"
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }

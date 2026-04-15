@@ -4,17 +4,24 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { WebServer } from "./server";
 import type { WebServerConfig } from "./types";
 
-const TEST_PORT = 19399;
-
+// Port 0 lets the OS pick a free port at bind time. Each test reads
+// the actual assigned port via `server.port` after `start()` resolves.
+// This avoids the v2.10.74 EADDRINUSE flake where a hardcoded 19399
+// collided with parallel test runs and left 16 tests failing.
 function testConfig(overrides?: Partial<WebServerConfig>): Partial<WebServerConfig> {
   return {
-    port: TEST_PORT,
+    port: 0,
     host: "127.0.0.1",
     auth: { enabled: true, token: "test-token-12345" },
     cors: false,
     openBrowser: false,
     ...overrides,
   };
+}
+
+/** URL helper: returns the base URL for the currently-running server. */
+function base(server: WebServer): string {
+  return `http://127.0.0.1:${server.port}`;
 }
 
 describe("WebServer", () => {
@@ -32,7 +39,8 @@ describe("WebServer", () => {
 
   test("starts and stops", async () => {
     const result = await server.start();
-    expect(result.url).toContain(String(TEST_PORT));
+    expect(result.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(server.port).toBeGreaterThan(0);
     expect(result.token).toBe("test-token-12345");
     expect(server.isRunning).toBe(true);
 
@@ -47,7 +55,7 @@ describe("WebServer", () => {
 
   test("serves index.html for root path", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/?token=test-token-12345`);
+    const res = await fetch(`${base(server)}/?token=test-token-12345`);
     expect(res.status).toBe(200);
     const text = await res.text();
     expect(text).toContain("KCode Web UI");
@@ -56,14 +64,14 @@ describe("WebServer", () => {
 
   test("serves CSS with correct MIME type", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/styles.css?token=test-token-12345`);
+    const res = await fetch(`${base(server)}/styles.css?token=test-token-12345`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/css");
   });
 
   test("serves JS with correct MIME type", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/app.js?token=test-token-12345`);
+    const res = await fetch(`${base(server)}/app.js?token=test-token-12345`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("javascript");
   });
@@ -71,7 +79,7 @@ describe("WebServer", () => {
   test("returns 404 for nonexistent files", async () => {
     // SPA fallback means unknown paths return index.html
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/nonexistent.xyz?token=test-token-12345`);
+    const res = await fetch(`${base(server)}/nonexistent.xyz?token=test-token-12345`);
     // Falls back to index.html due to SPA routing
     expect(res.status).toBe(200);
   });
@@ -79,7 +87,7 @@ describe("WebServer", () => {
   test("prevents path traversal in static files", async () => {
     await server.start();
     const res = await fetch(
-      `http://127.0.0.1:${TEST_PORT}/..%2F..%2Fetc%2Fpasswd?token=test-token-12345`,
+      `${base(server)}/..%2F..%2Fetc%2Fpasswd?token=test-token-12345`,
     );
     // Path traversal dots are stripped, so it won't escape static dir
     expect(res.status).not.toBe(500);
@@ -87,7 +95,7 @@ describe("WebServer", () => {
 
   test("rejects WebSocket upgrade without token", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/ws`, {
+    const res = await fetch(`${base(server)}/ws`, {
       headers: { Upgrade: "websocket" },
     });
     expect(res.status).toBe(401);
@@ -95,13 +103,13 @@ describe("WebServer", () => {
 
   test("rejects API requests without auth", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/api/v1/session`);
+    const res = await fetch(`${base(server)}/api/v1/session`);
     expect(res.status).toBe(401);
   });
 
   test("accepts API requests with Bearer token", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/api/v1/health`, {
+    const res = await fetch(`${base(server)}/api/v1/health`, {
       headers: { Authorization: "Bearer test-token-12345" },
     });
     expect(res.status).toBe(200);
@@ -111,7 +119,7 @@ describe("WebServer", () => {
 
   test("accepts API requests with query token", async () => {
     await server.start();
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/api/v1/health?token=test-token-12345`);
+    const res = await fetch(`${base(server)}/api/v1/health?token=test-token-12345`);
     expect(res.status).toBe(200);
   });
 
@@ -120,7 +128,7 @@ describe("WebServer", () => {
     server = new WebServer(testConfig({ cors: true }));
     await server.start();
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/api/v1/health?token=test-token-12345`);
+    const res = await fetch(`${base(server)}/api/v1/health?token=test-token-12345`);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 
@@ -129,7 +137,7 @@ describe("WebServer", () => {
     server = new WebServer(testConfig({ cors: true }));
     await server.start();
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/api/v1/health`, {
+    const res = await fetch(`${base(server)}/api/v1/health`, {
       method: "OPTIONS",
     });
     expect(res.status).toBe(204);
@@ -140,7 +148,7 @@ describe("WebServer", () => {
     server = new WebServer(testConfig({ auth: { enabled: false, token: "" } }));
     await server.start();
 
-    const res = await fetch(`http://127.0.0.1:${TEST_PORT}/api/v1/health`);
+    const res = await fetch(`${base(server)}/api/v1/health`);
     expect(res.status).toBe(200);
   });
 
@@ -157,14 +165,16 @@ describe("WebServer", () => {
 
   test("getConfig returns config copy", () => {
     const config = server.getConfig();
-    expect(config.port).toBe(TEST_PORT);
+    // Config.port is 0 (requested), server.port holds the actual
+    // OS-assigned port only after start()
+    expect(config.port).toBe(0);
     expect(config.auth.token).toBe("test-token-12345");
   });
 
   test("WebSocket connects with valid token", async () => {
     await server.start();
 
-    const ws = new WebSocket(`ws://127.0.0.1:${TEST_PORT}/ws?token=test-token-12345`);
+    const ws = new WebSocket(`${base(server).replace("http","ws")}/ws?token=test-token-12345`);
 
     const connected = await new Promise<boolean>((resolve) => {
       ws.onopen = () => resolve(true);

@@ -1,7 +1,7 @@
 // KCode - Web UI REST API
 // Endpoint handlers for /api/v1/* routes
 
-import { join, normalize, resolve } from "node:path";
+import { join, normalize, resolve, sep } from "node:path";
 import { log } from "../core/logger";
 import { getActiveModel, getConversationManager, getWorkingDirectory } from "./session-bridge";
 import type { ServerEvent } from "./types";
@@ -189,10 +189,17 @@ async function handleReadFile(encodedPath: string): Promise<Response> {
   const cwd = getWorkingDirectory();
   const requestedPath = decodeURIComponent(encodedPath);
 
-  // Resolve against cwd and ensure no path traversal
+  // Resolve against cwd and ensure no path traversal.
+  //
+  // Security fix: plain startsWith comparison is INSUFFICIENT because
+  // "/home/curly/KCode-other/secret.txt" startsWith "/home/curly/KCode"
+  // returns true and bypasses the check. The requested path must
+  // either equal the cwd exactly or be prefixed with cwd + path
+  // separator so sibling-directory traversal is impossible.
   const resolved = resolve(cwd, requestedPath);
-  const normalizedCwd = normalize(cwd);
-  if (!resolved.startsWith(normalizedCwd)) {
+  const normalizedCwd = normalize(cwd).replace(new RegExp(`${sep.replace(/[/\\]/g, "\\$&")}+$`), "");
+  const cwdWithSep = normalizedCwd + sep;
+  if (resolved !== normalizedCwd && !resolved.startsWith(cwdWithSep)) {
     return error("Path traversal denied", 403);
   }
 

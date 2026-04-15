@@ -154,7 +154,11 @@ export class WebServer {
       },
     });
 
-    const baseUrl = `http://${config.host}:${config.port}`;
+    // Use the actual port Bun assigned (may differ from config.port
+    // when config.port === 0 for OS-assigned random ports, which the
+    // test suite relies on to run in parallel without EADDRINUSE).
+    const actualPort = this.server.port;
+    const baseUrl = `http://${config.host}:${actualPort}`;
     const uiUrl = `${baseUrl}?token=${config.auth.token}`;
 
     log.info("web", `Web UI server started at ${baseUrl}`);
@@ -166,6 +170,15 @@ export class WebServer {
     }
 
     return { url: baseUrl, token: config.auth.token };
+  }
+
+  /**
+   * Actual TCP port the server is listening on. Returns 0 when the
+   * server is stopped. Useful when config.port was 0 and Bun picked
+   * a random free port — tests use this to avoid hardcoded ports.
+   */
+  get port(): number {
+    return this.server?.port ?? 0;
   }
 
   /** Stop the server */
