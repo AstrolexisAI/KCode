@@ -445,6 +445,86 @@ export async function* executeToolsSequential(
       }
     }
 
+    // Phase 32 — semantic phantom-typo claim block
+    //
+    // The conversation loop scanned the current turn's assistant text
+    // for "X en lugar de X" / "X instead of X" patterns and stored
+    // any hit on guardState.activePhantomClaim. If one is active AND
+    // the model is now trying an Edit/MultiEdit, the entire Edit is
+    // suspicious: the model declared a phantom bug in its own prose
+    // and is acting on it. Block the call and force the model to
+    // re-investigate.
+    //
+    // Precision guard: we only block when the claimed token actually
+    // appears in the Edit's old_string or new_string. An Edit on a
+    // completely different part of the file is allowed through —
+    // even if the prose happened to contain a phantom phrase, it's
+    // unrelated to this particular surgical change.
+    if (
+      (call.name === "Edit" || call.name === "MultiEdit") &&
+      guardState.activePhantomClaim
+    ) {
+      const claim = guardState.activePhantomClaim;
+      let editTouchesToken = false;
+
+      if (call.name === "Edit") {
+        const oldStr = String((effectiveInput as Record<string, unknown>).old_string ?? "");
+        const newStr = String((effectiveInput as Record<string, unknown>).new_string ?? "");
+        editTouchesToken = oldStr.includes(claim.token) || newStr.includes(claim.token);
+      } else {
+        // MultiEdit: scan every sub-edit
+        const edits = (effectiveInput as Record<string, unknown>).edits;
+        if (Array.isArray(edits)) {
+          for (const edit of edits) {
+            const e = edit as Record<string, unknown>;
+            const o = String(e.old_string ?? "");
+            const n = String(e.new_string ?? "");
+            if (o.includes(claim.token) || n.includes(claim.token)) {
+              editTouchesToken = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (editTouchesToken) {
+        if (ctx.debugTracer?.isEnabled()) {
+          ctx.debugTracer.traceGuard(
+            "phase-32-phantom-typo",
+            true,
+            `Blocked ${call.name} — phantom-typo claim "${claim.phrase.slice(0, 80)}" touches token "${claim.token}"`,
+          );
+        }
+        const blockedContent =
+          `PHANTOM_TYPO_CLAIM_BLOCKED: your reasoning contained the phrase "${claim.phrase}" — ` +
+          `a self-referential "X in place of X" claim where both sides of the replacement are the ` +
+          `same identifier ("${claim.token}"). This is a hallucinated bug; "${claim.token}" does NOT ` +
+          `need to be renamed to "${claim.token}". STOP. Do NOT retry this Edit. ` +
+          `If the user reported a runtime symptom (service down, chart broken, no funciona), the real ` +
+          `fix is visible in the actual runtime output (browser console, server log, test output) — ` +
+          `not in imagined typography. Re-read the file carefully or ask the user what they actually see. ` +
+          `Respond with text only until you have evidence of the real bug.`;
+        log.warn(
+          "tool",
+          `phase 32 blocked ${call.name} on phantom-typo claim (token="${claim.token}")`,
+        );
+        yield {
+          type: "tool_result",
+          name: call.name,
+          toolUseId: call.id,
+          result: blockedContent,
+          isError: true,
+        };
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: call.id,
+          content: blockedContent,
+          is_error: true,
+        });
+        continue;
+      }
+    }
+
     // Phase 31 — rewrite-after-failed-Edit escape block
     //
     // When a model's Edit fails (especially from the phantom-typo
