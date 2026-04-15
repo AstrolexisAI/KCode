@@ -1623,6 +1623,63 @@ export class ConversationManager {
         for (const msg of postTurnResult.injectMessages) this.state.messages.push(msg);
 
         if (postTurnResult.action === "break") {
+          // Phase 28: USER-VISIBLE reality check. Runs against the
+          // CURRENT turn's assistant text before we exit the loop.
+          // Difference from phase 15 (which runs at the START of the
+          // next turn as a reminder to the model): this fires IN-TURN
+          // and emits a text_delta the user sees right after the
+          // assistant's false claim. No trust damage — the user
+          // reads the warning before deciding to believe the claim.
+          //
+          // The v2.10.72 Nexus Telemetry chart session was the
+          // canonical trigger: model claimed "✅ AUDIT & FIX APLICADO"
+          // with zero successful mutations while the chart bug
+          // remained. Phase 15 would have flagged it on the NEXT
+          // turn, but the user had already seen the false green
+          // checkmark and lost confidence in kcode.
+          try {
+            const { checkClaimReality, countSuccessfulMutations } =
+              await import("./claim-reality-check.js");
+            // Build the current turn's assistant text from textChunks
+            // (collected during streaming) rather than walking the
+            // message history, since the assistant message hasn't
+            // been pushed yet when postTurn fires.
+            const currentAssistantText = textChunks.join("");
+            if (currentAssistantText) {
+              const verdict = checkClaimReality(
+                currentAssistantText,
+                this.state.messages,
+              );
+              if (verdict.isHallucinatedCompletion) {
+                const warning =
+                  `\n\n⚠️  REALITY CHECK (shown to user)\n` +
+                  `   The assistant claimed a fix was applied but ZERO mutation\n` +
+                  `   tools (Write/Edit/MultiEdit/GrepReplace) succeeded in this\n` +
+                  `   turn. ${verdict.claims.length} completion claim(s) detected in the\n` +
+                  `   assistant's text. The file was NOT modified.\n` +
+                  `   \n` +
+                  `   Before trusting the fix, re-prompt with "show me the Read\n` +
+                  `   output first" or verify the file contents directly.`;
+                yield { type: "text_delta", text: warning };
+                log.info(
+                  "reality-check",
+                  `phase 28 fired: ${verdict.claims.length} claims, 0 mutations in current turn`,
+                );
+              } else {
+                // Compute the count for logging visibility into near-fires
+                const { successful } = countSuccessfulMutations(
+                  this.state.messages,
+                );
+                log.debug(
+                  "reality-check",
+                  `phase 28 skipped: ${verdict.claims.length} claims, ${successful} mutations`,
+                );
+              }
+            }
+          } catch (err) {
+            log.debug("reality-check", `phase 28 failed (non-fatal): ${err}`);
+          }
+
           // Phase 22: the model has finished its final response and the
           // agent loop is about to exit. The inner hasRuntimeIntent +
           // hasRunnableWriteInTurn guards inside maybeAutoLaunchDevServer

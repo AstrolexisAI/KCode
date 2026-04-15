@@ -53,7 +53,11 @@ const SPANISH_LINE_REGEX = /\bl[ií]nea\s+(\d{1,5})\b/gi;
 const SYMBOL_REGEX =
   /\b(?:function|def|fn|class|const|let|var|method|component|m[oó]dulo|module)\s+([A-Za-z_$][A-Za-z0-9_$]{2,})/g;
 // Backtick-quoted or double-quoted identifiers: `renderMarsGallery` / "Dashboard"
-const QUOTED_ID_REGEX = /[`"']([A-Za-z_$][A-Za-z0-9_$]{4,})[`"']/g;
+// Minimum 6 chars to exclude short brand/product names like "NEXUS",
+// "APOD", "NASA", "ISS" that live in prose as quoted labels. Legit
+// code symbols tend to be longer (function names are rarely ≤5 chars
+// in practice and almost never in ≥5-char all-caps form).
+const QUOTED_ID_REGEX = /[`"']([A-Za-z_$][A-Za-z0-9_$]{5,})[`"']/g;
 // Bare long camelCase/PascalCase identifiers (≥14 chars). Catches
 // things like `updateMarsChartWithRealData is broken` where the
 // user didn't quote or prefix the name. 14+ chars avoids matching
@@ -377,6 +381,18 @@ export function extractLocationHints(
       const name = m[1]!;
       if (name.length < 14) continue;
       if (GENERIC_IDENTIFIERS.has(name)) continue;
+      // Skip high-entropy random-looking tokens (API keys, UUIDs,
+      // JWTs, hex hashes). Heuristic: if digits make up ≥15% of the
+      // identifier, or there are ≥5 case transitions, treat it as
+      // a credential/value, not a code symbol.
+      //
+      // v2.10.72 Nexus Telemetry session regression: the user's NASA
+      // API key "MggS1tgGe29s9KTnR10fCPanURyxOy3QkDpHZsO0" (40 chars,
+      // 20% digits) was captured as a bare long identifier, then every
+      // Edit far from line 381 (where the key lived in an input value
+      // attribute) fired a false-positive location-mismatch warning.
+      const digitCount = (name.match(/\d/g) ?? []).length;
+      if (digitCount / name.length >= 0.15) continue;
       pushSymbol({
         kind: "symbol",
         value: name,
