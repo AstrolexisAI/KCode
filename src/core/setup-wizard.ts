@@ -287,7 +287,38 @@ export async function runSetup(options?: {
   stepHeader(2, "Selecting the best model for your system");
   console.log();
 
-  const recommended = recommendModel(hw);
+  // Check LIVE VRAM availability, not just total. If another process
+  // (another LLM server, Blender, game, etc.) is already using part
+  // of the VRAM, we recommend based on what's actually free.
+  let usableVramMB: number | undefined;
+  if (hw.totalVramMB > 0) {
+    try {
+      const { detectGpuAvailability, effectiveUsableVramMB } = await import(
+        "./gpu-availability.js"
+      );
+      const avail = await detectGpuAvailability(hw.platform, hw.totalVramMB);
+      usableVramMB = effectiveUsableVramMB(avail, hw.totalVramMB);
+
+      if (avail.freeMB !== null && avail.usedMB !== null && avail.usedMB > 500) {
+        // Something is already using significant VRAM — tell the user
+        const usedGB = (avail.usedMB / 1024).toFixed(1);
+        const freeGB = (avail.freeMB / 1024).toFixed(1);
+        const totalGB = (avail.totalMB / 1024).toFixed(0);
+        console.log(
+          `    ${C.yellow}⚠${C.reset} Live VRAM check: ${C.bold}${usedGB} GB in use${C.reset} by other processes ` +
+            `(${freeGB} GB free of ${totalGB} GB total)`,
+        );
+        console.log(
+          `    ${C.dim}Recommending based on FREE VRAM, not total. Close other GPU apps for a larger model.${C.reset}`,
+        );
+        console.log();
+      }
+    } catch (err) {
+      log.debug("setup", `live VRAM detection failed: ${err}`);
+    }
+  }
+
+  const recommended = recommendModel(hw, { usableVramMB });
   const targetCodename = options?.model ?? recommended.codename;
   const entry = findCatalogEntry(targetCodename) ?? recommended;
 
@@ -487,6 +518,53 @@ export async function runSetup(options?: {
 
   stepHeader(4, `Downloading ${entry.codename}`);
   console.log();
+
+  // Ask before large / slow downloads. Skip the prompt when:
+  //   - user passed --yes or --model explicitly (they know what they want)
+  //   - model is already downloaded (not re-downloading anything)
+  //   - KCODE_SKIP_DOWNLOAD_CONFIRM=1 is set (CI / scripted installs)
+  const modelAlreadyDownloaded =
+    !useMlx && isModelDownloaded(entry.codename) && !options?.force;
+  const skipConfirm =
+    options?.yes ||
+    options?.model ||
+    modelAlreadyDownloaded ||
+    process.env.KCODE_SKIP_DOWNLOAD_CONFIRM === "1";
+
+  if (!skipConfirm) {
+    const { createInterface } = await import("node:readline");
+    const willUseMmap =
+      hw.totalVramMB > 0 && entry.sizeGB * 1024 > hw.totalVramMB * 0.9;
+    const warnLine = willUseMmap
+      ? `    ${C.yellow}⚠${C.reset} This model (${entry.sizeGB} GB) exceeds your VRAM (${(hw.totalVramMB / 1024).toFixed(0)} GB). It will run via partial GPU + SSD streaming — noticeably slower than a fully-in-VRAM model.`
+      : null;
+    if (warnLine) {
+      console.log(warnLine);
+      console.log(
+        `    ${C.dim}Consider a smaller model (e.g. mark5-nano, deepseek-coder-v2) with ${C.reset}${C.bold}--model <codename>${C.reset}${C.dim}, or run ${C.reset}${C.bold}kcode cloud${C.reset}${C.dim} for cloud instead.${C.reset}`,
+      );
+      console.log();
+    }
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(
+        `    Download ${entry.codename} (${entry.sizeGB} GB)? [Y/n]: `,
+        (a) => {
+          rl.close();
+          resolve(a.trim().toLowerCase());
+        },
+      );
+    });
+    if (answer && !(answer.startsWith("y") || answer === "s" || answer === "si")) {
+      console.log();
+      console.log(
+        `    ${C.yellow}Download cancelled.${C.reset} Re-run ${C.bold}setup${C.reset} with ${C.bold}--model <codename>${C.reset} to pick a different one, or ${C.bold}kcode cloud${C.reset} for cloud setup.`,
+      );
+      console.log();
+      return;
+    }
+    console.log();
+  }
 
   let modelPath: string;
 
