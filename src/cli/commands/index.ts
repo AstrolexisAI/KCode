@@ -9,6 +9,7 @@ export { registerDistillCommand } from "./distill";
 export { registerDoctorCommand } from "./doctor";
 export { registerHistoryCommand } from "./history";
 export { registerInitCommand } from "./init";
+export { registerLicenseCommand } from "./license";
 export { registerMcpCommand } from "./mcp";
 export { registerMeshCommand } from "./mesh";
 export { registerModelsCommand } from "./models";

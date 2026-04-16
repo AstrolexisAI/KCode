@@ -88,6 +88,7 @@ import {
   registerDoctorCommand,
   registerHistoryCommand,
   registerInitCommand,
+  registerLicenseCommand,
   registerMcpCommand,
   registerMeshCommand,
   registerModelsCommand,
@@ -363,6 +364,7 @@ registerDoctorCommand(program);
 registerTeachCommand(program);
 registerStatsCommand(program);
 registerInitCommand(program);
+registerLicenseCommand(program);
 registerNewCommand(program);
 registerResumeCommand(program);
 registerSearchCommand(program);
