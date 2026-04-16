@@ -193,6 +193,94 @@ export async function runSetup(options?: {
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
+  //  Step 1b: Hardware Tier Check → Cloud-First for Weak Hardware
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // If the user's hardware can't run local at usable speed, route
+  // straight to cloud setup instead of downloading a giant model
+  // that'll crawl at 1 tok/s. User can still pick local as a
+  // fallback inside runCloudSetup if they want.
+  //
+  // Skip this branch when:
+  //   - options.model is explicit (they know what they want)
+  //   - KCODE_FORCE_LOCAL env is set (escape hatch)
+
+  const forceLocal = process.env.KCODE_FORCE_LOCAL === "1";
+  if (!options?.model && !forceLocal) {
+    const { classifyHardware } = await import("./hardware-tier.js");
+    const tier = classifyHardware(hw);
+
+    if (tier.primary === "cloud") {
+      console.log(
+        `    ${C.yellow}⚡${C.reset} Hardware tier: ${C.bold}${tier.tier}${C.reset} — ${tier.reason}`,
+      );
+      console.log(`    ${C.dim}Local inference would be slow on this hardware. Routing to cloud setup.${C.reset}`);
+      console.log();
+
+      const { runCloudSetup } = await import("./cloud-setup.js");
+      const cloudResult = await runCloudSetup({ tierReason: tier.reason });
+
+      if (!cloudResult.declined) {
+        // Cloud path succeeded — record as default model and finish.
+        try {
+          const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
+          await addM({
+            name: cloudResult.defaultModel,
+            baseUrl:
+              cloudResult.providerId === "anthropic"
+                ? "https://api.anthropic.com"
+                : cloudResult.providerId === "openai"
+                  ? "https://api.openai.com"
+                  : cloudResult.providerId === "groq"
+                    ? "https://api.groq.com/openai"
+                    : cloudResult.providerId === "deepseek"
+                      ? "https://api.deepseek.com"
+                      : "https://api.together.xyz",
+            provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
+            description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
+          });
+          await setDef(cloudResult.defaultModel);
+        } catch (err) {
+          log.warn("setup", `failed to register cloud model: ${err}`);
+        }
+
+        // Mark setup complete
+        try {
+          const { writeFileSync, mkdirSync } = await import("node:fs");
+          const { dirname } = await import("node:path");
+          mkdirSync(dirname(SETUP_MARKER), { recursive: true });
+          writeFileSync(SETUP_MARKER, new Date().toISOString());
+        } catch {
+          /* non-fatal */
+        }
+
+        console.log();
+        console.log(
+          `    ${C.green}✓${C.reset} ${C.bold}Setup complete (cloud mode)${C.reset}`,
+        );
+        console.log(`    Default model: ${C.cyan}${cloudResult.defaultModel}${C.reset}`);
+        console.log(`    Run ${C.bold}kcode${C.reset} to start.`);
+        console.log();
+        return;
+      }
+
+      // User declined cloud → fall through to local path with
+      // whatever mark5-pico / nano fits. Print a note explaining.
+      console.log(
+        `    ${C.dim}Cloud skipped. Proceeding with local setup (expect slow inference).${C.reset}`,
+      );
+      console.log();
+    } else if (tier.offerAlternative) {
+      // Strong/medium hardware: still mention cloud is available as a
+      // secondary path. One-liner, not a full menu.
+      console.log(
+        `    ${C.dim}Tip: run ${C.reset}${C.bold}kcode cloud${C.dim} to also configure a cloud provider as fallback.${C.reset}`,
+      );
+      console.log();
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   //  Step 2: Model Selection
   // ═══════════════════════════════════════════════════════════════
 
