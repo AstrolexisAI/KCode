@@ -298,6 +298,40 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
     /* best-effort tracking */
   }
 
+  // Guard: auto-rewrite recursive `ls` on project directories to avoid
+  // context-window bombs. Gemma 4 (v2.10.84 session) ran `ls -R /home/
+  // curly/KCode` on a 900+ file project, producing a listing that bloated
+  // the prompt to 244K tokens against a 65K context window, instantly
+  // killing the session with a 400 error. The model wanted a directory
+  // overview — give it a sane one via `find` with depth limit, heavy-
+  // directory exclusions, and a head cap.
+  //
+  // Matches: any command starting with `ls` that contains -R or --recursive.
+  // Rewrites to: find <dir> -maxdepth 3 -not -path '*/node_modules/*' ...
+  // Does NOT block — the model gets its listing, just filtered.
+  const isRecursiveLs =
+    /^\s*ls\b/.test(command) &&
+    (/\s-\w*R/.test(command) || /--recursive/.test(command));
+  if (isRecursiveLs) {
+    // Extract target directory: split on whitespace, pick the first
+    // token that isn't `ls` and doesn't start with `-`.
+    const parts = command.trim().split(/\s+/);
+    const targetDir = parts.find((p, i) => i > 0 && !p.startsWith("-"))?.replace(/\/+$/, "") || ".";
+    const HEAVY_DIRS = [
+      "node_modules", ".git", "dist", "build", ".next", "vendor",
+      "__pycache__", ".cache", "coverage", ".turbo", ".nuxt", "out",
+      "target", ".svelte-kit",
+    ];
+    const excludes = HEAVY_DIRS.map((d) => `-not -path '*/${d}/*'`).join(" ");
+    const safeCmd = `find ${targetDir} -maxdepth 3 ${excludes} | sort | head -300`;
+    log.info(
+      "tool",
+      `Rewrote recursive ls to safe find: "${command.slice(0, 60)}" → "${safeCmd.slice(0, 80)}"`,
+    );
+    (input as Record<string, unknown>).command = safeCmd;
+    return _executeBashInner(input);
+  }
+
   // Guard: block shell-redirection writes to audit report filenames.
   // Prevents the model from bypassing the Write tool's audit guards by
   // using `cat > AUDIT_REPORT.md << EOF`, `echo ... > FIXES_SUMMARY.txt`,
