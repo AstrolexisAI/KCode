@@ -39,6 +39,8 @@ export interface PostTurnContext {
   emptyEndTurnCount: number;
   truncationRetries: number;
   lastEmptyType: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" | undefined;
+  /** Phase 35: whether the action-defer nudge already fired this session. */
+  actionNudgeUsed: boolean;
 
   /** Debug tracer (optional) */
   debugTracer?: {
@@ -66,6 +68,7 @@ export interface PostTurnResult {
   lastEmptyType: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" | undefined;
   previousTurnTail: string;
   turnsSinceLastExtraction: number;
+  actionNudgeUsed: boolean;
 }
 
 // ─── Main Post-Turn Handler ─────────────────────────────────────
@@ -81,6 +84,11 @@ export interface PostTurnResult {
 export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResult> {
   const events: StreamEvent[] = [];
   const injectMessages: Message[] = [];
+  // Phase 35 nudge flag — propagates the input value and only gets
+  // set to true in the nudge path. All other return paths inherit
+  // this value unchanged, avoiding the need to add actionNudgeUsed
+  // to every single return statement.
+  let actionNudgeUsed = ctx.actionNudgeUsed;
   let {
     maxTokensContinuations,
     emptyEndTurnCount,
@@ -89,6 +97,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     previousTurnTail,
     turnsSinceLastExtraction,
   } = ctx;
+
+  // Compute text-output flag early — used by phase 35 and empty-response retry.
+  const hasTextOutput = ctx.textChunks.join("").trim().length > 0;
 
   // Auto-continue on max_tokens
   if (ctx.stopReason === "max_tokens" && maxTokensContinuations < 3) {
@@ -121,6 +132,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       lastEmptyType,
       previousTurnTail,
       turnsSinceLastExtraction,
+      actionNudgeUsed,
     };
   }
 
@@ -149,6 +161,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       lastEmptyType,
       previousTurnTail,
       turnsSinceLastExtraction,
+      actionNudgeUsed,
     };
   }
 
@@ -170,7 +183,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   if (
     ctx.toolCalls.length === 0 &&
     ctx.stopReason === "end_turn" &&
-    ctx.turnCount === 0 &&
+    !ctx.actionNudgeUsed &&
     hasTextOutput
   ) {
     const fullText = ctx.textChunks.join("");
@@ -247,6 +260,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         lastEmptyType,
         previousTurnTail,
         turnsSinceLastExtraction,
+        actionNudgeUsed: true,
       };
     }
   }
@@ -293,7 +307,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   }
 
   // Safety net: classify empty responses and retry with context-aware prompts
-  const hasTextOutput = ctx.textChunks.join("").trim().length > 0;
+  // (hasTextOutput already computed at the top of the function)
   const hasThinkingOutput =
     ctx.thinkingChunks.length > 0 ||
     (ctx.messages.at(-1) as Record<string, unknown> | undefined)?.thinkingContent;
@@ -367,6 +381,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       lastEmptyType,
       previousTurnTail,
       turnsSinceLastExtraction,
+      actionNudgeUsed,
     };
   }
 

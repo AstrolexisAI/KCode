@@ -1171,6 +1171,7 @@ export class ConversationManager {
     // across loop iterations. A future refactor of runAgentLoop into smaller
     // functions should encapsulate this state (see L5 audit finding).
     let previousTurnTail = "";
+    let actionNudgeUsed = false; // Phase 35: fire once per session
 
     while (true) {
       // Hard break after force-stop allowed one final text turn
@@ -1658,6 +1659,7 @@ export class ConversationManager {
           lastEmptyType: guardState.lastEmptyType,
           debugTracer: this.debugTracer,
           collectSessionData: () => this.collectSessionData(),
+          actionNudgeUsed,
         });
 
         // Apply state updates from post-turn handler
@@ -1667,6 +1669,7 @@ export class ConversationManager {
         guardState.lastEmptyType = postTurnResult.lastEmptyType;
         previousTurnTail = postTurnResult.previousTurnTail;
         this.turnsSinceLastExtraction = postTurnResult.turnsSinceLastExtraction;
+        actionNudgeUsed = postTurnResult.actionNudgeUsed;
 
         // Emit events
         for (const evt of postTurnResult.events) yield evt;
