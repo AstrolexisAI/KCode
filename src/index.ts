@@ -546,7 +546,14 @@ async function runMain(
               const resp = await fetch(`${externalServerUrl}${endpoint}`, {
                 signal: AbortSignal.timeout(2000),
               });
-              if (resp.ok) {
+              // Any HTTP response means the server is reachable — even
+              // 401/403/404. Cloud providers (Anthropic, OpenAI) require
+              // auth on /v1/models so they return 401, and their root /
+              // returns 404. Only a true network failure (timeout,
+              // ECONNREFUSED) means "not reachable". The original
+              // resp.ok check flagged Anthropic as unreachable despite
+              // the API being perfectly up.
+              if (resp.status < 500) {
                 ready = true;
                 break;
               }
