@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
   ALL_PROVIDERS,
   type DiscoveryResult,
+  _resetForTest,
   collectProviderKeys,
   discoverFromProvider,
   fetchProviderModels,
@@ -35,6 +36,7 @@ beforeEach(() => {
   process.env.KCODE_HOME = testHome;
   testModelsPath = join(testHome, "models.json");
   _setModelsPathForTest(testModelsPath);
+  _resetForTest(); // clear in-flight discovery promise
 });
 
 afterEach(() => {
