@@ -61,7 +61,271 @@ function migrate(db: Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_webhook_stripe_id ON webhook_events(stripe_event_id);
+
+    -- ─── OAuth: human users (login/signup) ────────────────────────
+    -- Distinct from customers table (which is Stripe-centric). A user
+    -- may exist without an active customer (free tier) and vice
+    -- versa. Linked by email.
+    CREATE TABLE IF NOT EXISTS users (
+      id            TEXT PRIMARY KEY,
+      email         TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+    -- ─── OAuth: browser session cookies ───────────────────────────
+    -- Server-side sessions for the astrolexis.space web UI (login /
+    -- signup / dashboard / consent). Distinct from OAuth access
+    -- tokens which go to kcode CLI.
+    CREATE TABLE IF NOT EXISTS sessions (
+      id            TEXT PRIMARY KEY,
+      user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      expires_at    TEXT NOT NULL,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+    -- ─── OAuth: short-lived authorization codes ───────────────────
+    -- Issued by /oauth/authorize after user consent; redeemed via
+    -- /oauth/token within ~10 min. PKCE code_challenge is bound to
+    -- this row so only the original client can exchange it.
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      code             TEXT PRIMARY KEY,
+      user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      client_id        TEXT NOT NULL,
+      redirect_uri     TEXT NOT NULL,
+      code_challenge   TEXT NOT NULL,
+      code_challenge_method TEXT NOT NULL DEFAULT 'S256',
+      scope            TEXT NOT NULL DEFAULT '',
+      expires_at       TEXT NOT NULL,
+      used             INTEGER NOT NULL DEFAULT 0,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- ─── OAuth: access + refresh tokens ───────────────────────────
+    -- Storing hashes so a DB leak doesn't give usable tokens. The
+    -- raw tokens are only known to kcode CLI (stored in its keychain).
+    CREATE TABLE IF NOT EXISTS oauth_tokens (
+      id                TEXT PRIMARY KEY,
+      user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      access_hash       TEXT UNIQUE NOT NULL,
+      refresh_hash      TEXT UNIQUE,
+      client_id         TEXT NOT NULL,
+      scope             TEXT NOT NULL DEFAULT '',
+      expires_at        TEXT NOT NULL,
+      refresh_expires_at TEXT,
+      revoked           INTEGER NOT NULL DEFAULT 0,
+      created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tokens_access ON oauth_tokens(access_hash);
+    CREATE INDEX IF NOT EXISTS idx_tokens_refresh ON oauth_tokens(refresh_hash);
+    CREATE INDEX IF NOT EXISTS idx_tokens_user ON oauth_tokens(user_id);
   `);
+}
+
+// ─── User queries ─────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  email: string;
+  password_hash: string;
+  email_verified: number;
+  created_at: string;
+}
+
+export function findUserByEmail(email: string): User | null {
+  const db = getDb();
+  return db.query("SELECT * FROM users WHERE email = ?").get(email.toLowerCase()) as User | null;
+}
+
+export function findUserById(id: string): User | null {
+  const db = getDb();
+  return db.query("SELECT * FROM users WHERE id = ?").get(id) as User | null;
+}
+
+export function insertUser(email: string, passwordHash: string): User {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  db.query(
+    "INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)",
+  ).run(id, email.toLowerCase(), passwordHash);
+  return findUserById(id)!;
+}
+
+// ─── Session queries ──────────────────────────────────────────
+
+export function createSession(userId: string, ttlSec: number = 30 * 24 * 3600): string {
+  const db = getDb();
+  const sessionId = randomToken(32);
+  const expiresAt = new Date(Date.now() + ttlSec * 1000).toISOString();
+  db.query("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)").run(
+    sessionId,
+    userId,
+    expiresAt,
+  );
+  return sessionId;
+}
+
+export function findSessionUser(sessionId: string): User | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT users.* FROM sessions
+       JOIN users ON users.id = sessions.user_id
+       WHERE sessions.id = ? AND sessions.expires_at > datetime('now')`,
+    )
+    .get(sessionId) as User | null;
+  return row;
+}
+
+export function deleteSession(sessionId: string): void {
+  const db = getDb();
+  db.query("DELETE FROM sessions WHERE id = ?").run(sessionId);
+}
+
+// ─── OAuth code queries ───────────────────────────────────────
+
+export interface OAuthCode {
+  code: string;
+  user_id: string;
+  client_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  code_challenge_method: string;
+  scope: string;
+  expires_at: string;
+  used: number;
+}
+
+export function insertOAuthCode(row: {
+  code: string;
+  userId: string;
+  clientId: string;
+  redirectUri: string;
+  codeChallenge: string;
+  codeChallengeMethod: string;
+  scope: string;
+  ttlSec: number;
+}): void {
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + row.ttlSec * 1000).toISOString();
+  db.query(
+    `INSERT INTO oauth_codes
+     (code, user_id, client_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    row.code,
+    row.userId,
+    row.clientId,
+    row.redirectUri,
+    row.codeChallenge,
+    row.codeChallengeMethod,
+    row.scope,
+    expiresAt,
+  );
+}
+
+export function consumeOAuthCode(code: string): OAuthCode | null {
+  const db = getDb();
+  const row = db
+    .query(
+      `SELECT * FROM oauth_codes
+       WHERE code = ? AND used = 0 AND expires_at > datetime('now')`,
+    )
+    .get(code) as OAuthCode | null;
+  if (!row) return null;
+  db.query("UPDATE oauth_codes SET used = 1 WHERE code = ?").run(code);
+  return row;
+}
+
+// ─── OAuth token queries ──────────────────────────────────────
+
+export interface OAuthTokenRow {
+  id: string;
+  user_id: string;
+  access_hash: string;
+  refresh_hash: string | null;
+  client_id: string;
+  scope: string;
+  expires_at: string;
+  refresh_expires_at: string | null;
+  revoked: number;
+}
+
+export function insertOAuthToken(row: {
+  userId: string;
+  accessHash: string;
+  refreshHash: string | null;
+  clientId: string;
+  scope: string;
+  expiresSec: number;
+  refreshExpiresSec: number | null;
+}): void {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + row.expiresSec * 1000).toISOString();
+  const refreshExpiresAt = row.refreshExpiresSec
+    ? new Date(Date.now() + row.refreshExpiresSec * 1000).toISOString()
+    : null;
+  db.query(
+    `INSERT INTO oauth_tokens
+     (id, user_id, access_hash, refresh_hash, client_id, scope, expires_at, refresh_expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    row.userId,
+    row.accessHash,
+    row.refreshHash,
+    row.clientId,
+    row.scope,
+    expiresAt,
+    refreshExpiresAt,
+  );
+}
+
+export function findTokenByAccessHash(accessHash: string): OAuthTokenRow | null {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT * FROM oauth_tokens
+       WHERE access_hash = ? AND revoked = 0 AND expires_at > datetime('now')`,
+    )
+    .get(accessHash) as OAuthTokenRow | null;
+}
+
+export function findTokenByRefreshHash(refreshHash: string): OAuthTokenRow | null {
+  const db = getDb();
+  return db
+    .query(
+      `SELECT * FROM oauth_tokens
+       WHERE refresh_hash = ? AND revoked = 0
+         AND (refresh_expires_at IS NULL OR refresh_expires_at > datetime('now'))`,
+    )
+    .get(refreshHash) as OAuthTokenRow | null;
+}
+
+export function revokeTokensByUser(userId: string): void {
+  const db = getDb();
+  db.query("UPDATE oauth_tokens SET revoked = 1 WHERE user_id = ?").run(userId);
+}
+
+export function revokeToken(accessHash: string): void {
+  const db = getDb();
+  db.query("UPDATE oauth_tokens SET revoked = 1 WHERE access_hash = ?").run(accessHash);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+function randomToken(bytes: number): string {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // ─── Customer queries ─────────────────────────────────────────
