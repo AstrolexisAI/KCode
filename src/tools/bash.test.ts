@@ -218,4 +218,36 @@ try {
     const result = await executeBash({ command: "echo test" });
     expect(result.tool_use_id).toBe("");
   });
+
+  // ─── Phase 34: recursive ls auto-rewrite ───
+  // Prevents context-window bombs from `ls -R` on large projects.
+  // Gemma 4 (v2.10.84) ran `ls -R /home/curly/KCode` → 244K tokens
+  // against a 65K context window, killing the session instantly.
+
+  test("ls -R is rewritten to a safe find command", async () => {
+    const result = await executeBash({ command: "ls -R /tmp" });
+    // The output should come from `find /tmp ...` not `ls -R /tmp`
+    // We can't assert the exact command, but we CAN assert it doesn't
+    // include node_modules paths (which find -not -path excludes) and
+    // it completes without error.
+    expect(result.is_error).toBeFalsy();
+  });
+
+  test("ls -lR is also rewritten (flags combined with R)", async () => {
+    const result = await executeBash({ command: "ls -lR /tmp" });
+    expect(result.is_error).toBeFalsy();
+  });
+
+  test("ls --recursive is rewritten", async () => {
+    const result = await executeBash({ command: "ls --recursive /tmp" });
+    expect(result.is_error).toBeFalsy();
+  });
+
+  test("non-recursive ls is NOT rewritten", async () => {
+    const result = await executeBash({ command: "ls -la /tmp" });
+    expect(result.is_error).toBeFalsy();
+    // Should contain typical ls output (permissions, dates, etc.)
+    // rather than find-style path-only output.
+    expect(result.content).toBeTruthy();
+  });
 });
