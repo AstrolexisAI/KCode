@@ -189,11 +189,19 @@ export function hasRunnableWriteInTurn(messages: Message[]): boolean {
  */
 function portInUse(port: number): boolean {
   try {
-    const { execSync } = require("node:child_process") as typeof import("node:child_process");
-    const out = execSync(`ss -tlnp state listening "( sport = :${port} )"`, {
-      timeout: 1000,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).toString();
+    // Use spawnSync with args array instead of execSync with template
+    // string. Although `port` is always a validated number (1024-65535)
+    // so shell injection is impossible in practice, defense-in-depth
+    // says: never interpolate into a shell string if you can avoid it.
+    // Gemma 4 audit (v2.10.83) correctly flagged this pattern.
+    const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
+    const result = spawnSync(
+      "ss",
+      ["-tlnp", "state", "listening", `( sport = :${port} )`],
+      { timeout: 1000, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    if (result.status !== 0) return false;
+    const out = result.stdout?.toString() ?? "";
     return out.trim().split("\n").length > 1;
   } catch {
     return false;
