@@ -393,9 +393,17 @@ export class SkillManager {
     this.load();
     const lines: string[] = ["\n  Commands"];
 
-    // Built-in non-skill commands
-    lines.push("  /exit, /quit   Exit KCode");
-    lines.push("  /status        Show conversation stats");
+    // Built-in non-skill commands. Must be kept in sync with the
+    // slashCompletions set in src/ui/App.tsx — otherwise a command
+    // works but doesn't show in /help (silent omission).
+    lines.push("  /exit, /quit                  Exit KCode");
+    lines.push("  /status                       Show conversation stats");
+    lines.push("  /model, /toggle, /switch      Switch between local and cloud models");
+    lines.push("  /cloud, /api-key, /provider   Configure cloud API providers");
+    lines.push("  /auth                         OAuth login/status/logout for cloud providers");
+    lines.push("  /plugin, /plugins             Install, list, or remove plugins");
+    lines.push("  /marketplace                  Browse and install plugins from the marketplace");
+    lines.push("  /hookify                      Manage dynamic hookify rules");
     lines.push("");
 
     // Skill commands
