@@ -217,7 +217,18 @@ export function getAvailableModels(): {
 }
 
 /** Recommend the best model for the detected hardware */
-export function recommendModel(hw: HardwareInfo): CatalogEntry {
+export function recommendModel(
+  hw: HardwareInfo,
+  opts?: {
+    /**
+     * Override the VRAM budget used for "fits in VRAM" calculations.
+     * When set, this replaces hw.totalVramMB * 0.9. Pass the live free
+     * VRAM (minus overhead) so recommendations match what's actually
+     * available, not marketing specs.
+     */
+    usableVramMB?: number;
+  },
+): CatalogEntry {
   // ── macOS Apple Silicon: unified memory + SSD offloading ──────
   // On Apple Silicon, RAM = VRAM (unified memory). Models larger than RAM
   // can still run via mlx_lm's disk offloading — Apple's fast NVMe SSDs
@@ -240,20 +251,44 @@ export function recommendModel(hw: HardwareInfo): CatalogEntry {
     if (best) return best;
   }
 
-  // ── Discrete GPU: pick largest model that can run ─────────────
-  // Priority: full VRAM fit > partial GPU offload (GPU + CPU/RAM via mmap)
-  // With mmap, llama.cpp streams layers that don't fit in VRAM from SSD/RAM.
-  // We allow models up to VRAM + 70% of system RAM (mmap handles the rest).
+  // ── Discrete GPU: pick largest model that fits FULLY in VRAM ──
+  // Priority: usable speed > max size. Previously we'd pick the
+  // largest model that technically fits via mmap (VRAM + 70% of
+  // RAM), but that hit the common failure mode where a 12GB card
+  // got recommended a 20GB model running at ~5 tok/s via SSD
+  // streaming. Users canceled the download every time. Fix:
+  //
+  //   Step 1: find the largest model that fits in VRAM × 0.9
+  //           (leaving 10% headroom for KV cache + overhead).
+  //   Step 2: only fall back to mmap-fits if NO model fits in VRAM.
+  //
+  // This produces faster models at the cost of slightly smaller
+  // ones. Users who want the biggest can still pass --model
+  // explicitly.
   if (hw.totalVramMB > 0) {
-    let best: CatalogEntry | null = null;
-    const totalCapacityMB = hw.totalVramMB + hw.ramMB * 0.7;
+    // Use live usable VRAM if provided (caller detected via nvidia-smi
+    // memory.free), otherwise fall back to 90% of total.
+    const vramFitMB = opts?.usableVramMB ?? hw.totalVramMB * 0.9;
+    let vramBest: CatalogEntry | null = null;
     for (const entry of MODEL_CATALOG) {
       const modelMB = entry.sizeGB * 1024;
-      if (modelMB <= totalCapacityMB && (!best || entry.sizeGB > best.sizeGB)) {
-        best = entry;
+      if (modelMB <= vramFitMB && (!vramBest || entry.sizeGB > vramBest.sizeGB)) {
+        vramBest = entry;
       }
     }
-    if (best) return best;
+    if (vramBest) return vramBest;
+
+    // No model fits fully — fall back to mmap (old behavior, but
+    // only reached when the GPU is too small for any listed model).
+    const totalCapacityMB = hw.totalVramMB + hw.ramMB * 0.7;
+    let mmapBest: CatalogEntry | null = null;
+    for (const entry of MODEL_CATALOG) {
+      const modelMB = entry.sizeGB * 1024;
+      if (modelMB <= totalCapacityMB && (!mmapBest || entry.sizeGB > mmapBest.sizeGB)) {
+        mmapBest = entry;
+      }
+    }
+    if (mmapBest) return mmapBest;
   }
 
   // ── CPU mode: model runs in system RAM via mmap ────────────────
