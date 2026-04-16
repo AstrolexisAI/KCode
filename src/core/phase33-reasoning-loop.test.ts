@@ -166,13 +166,31 @@ Let me remember to check for memo usage in the code the user shares.
     // detectors in order (detectRepetitionLoop ||
     // detectLargeBlockRepetition || detectCompletionMarkerLoop ||
     // detectLowEntropyLoop) and fires on the first non-null result.
-    // Verifies that the grok fixture trips at least one.
+    // This applies to BOTH the thinking channel and the content
+    // channel — the grok failure mode in kcode.log (v2.10.79)
+    // streamed the loop into regular text output, not thinking,
+    // so the content-channel wiring must include phase 33 too.
     const repeated =
       detectRepetitionLoop(GROK_REASONING_LOOP) ||
       detectLargeBlockRepetition(GROK_REASONING_LOOP) ||
       detectCompletionMarkerLoop(GROK_REASONING_LOOP) ||
       detectLowEntropyLoop(GROK_REASONING_LOOP);
     expect(repeated).not.toBeNull();
+  });
+
+  test("low-entropy detector catches content-channel loop much earlier than byte-identical detectors", () => {
+    // Regression for the v2.10.79 kcode.log session: the three
+    // byte-identical detectors (RepetitionLoop, LargeBlockRepetition,
+    // CompletionMarkerLoop) waited until ~7303 output tokens before
+    // tripping on the grok "Fostering user empowerment / Promoting
+    // user autonomy / ..." loop, because each paragraph had a
+    // different heading. detectLowEntropyLoop catches it in ≤1KB
+    // because the vocabulary in the bullet points barely changes.
+    const earlyPrefix = GROK_REASONING_LOOP.slice(0, 2000);
+    expect(detectRepetitionLoop(earlyPrefix)).toBeNull();
+    expect(detectLargeBlockRepetition(earlyPrefix)).toBeNull();
+    expect(detectCompletionMarkerLoop(earlyPrefix)).toBeNull();
+    expect(detectLowEntropyLoop(earlyPrefix)).not.toBeNull();
   });
 
   test("legitimate repetitive-but-distinct prose is not flagged", () => {

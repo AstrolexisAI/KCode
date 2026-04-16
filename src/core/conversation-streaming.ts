@@ -472,20 +472,24 @@ export async function* processSSEStream(
               break;
             }
 
-            // Repetition loop detection. Three complementary detectors:
+            // Repetition loop detection. Four complementary detectors:
             //   1. detectRepetitionLoop — short consecutive blocks (≤500 chars)
             //   2. detectLargeBlockRepetition — long byte-identical blocks
             //      (catches "✅ Refactor Final" 20x loop)
             //   3. detectCompletionMarkerLoop — semantic variant of (2)
             //      catches the case where the model re-emits a completion
             //      summary with slightly different wording each time
-            //      ("✅ ¡Orbital completada!" / "✅ Aplicación completada
-            //      con éxito!" etc.)
+            //   4. detectLowEntropyLoop — near-duplicate paragraphs with
+            //      different headings but the same vocabulary (catches
+            //      the grok-code-fast-1 "Fostering user empowerment /
+            //      Promoting user autonomy / ..." failure mode in ≤1KB
+            //      instead of waiting ~7K tokens for (2) to trip).
             const fullSoFar = textChunks.join("");
             const repeated =
               detectRepetitionLoop(fullSoFar) ||
               detectLargeBlockRepetition(fullSoFar) ||
-              detectCompletionMarkerLoop(fullSoFar);
+              detectCompletionMarkerLoop(fullSoFar) ||
+              detectLowEntropyLoop(fullSoFar);
             if (repeated) {
               const tokensSoFar = Math.round(fullSoFar.length / 4);
               log.warn(

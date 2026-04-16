@@ -58,6 +58,35 @@ export class AuthSessionManager {
     return session.tokens.accessToken;
   }
 
+  /**
+   * Force a refresh using the stored refresh_token, ignoring the
+   * expires-soon heuristic in getAccessToken. Used when the server
+   * has rejected an access_token (401) — the server's verdict is
+   * authoritative, so we trust it and refresh immediately.
+   *
+   * Returns the new access_token, or null if refresh failed
+   * (no refresh_token stored, provider returned an error, etc.).
+   * On failure the session is cleared.
+   */
+  async forceRefresh(provider: string, config: OAuthConfig): Promise<string | null> {
+    let session = this.sessions.get(provider);
+    if (!session) {
+      session = (await this.loadSession(provider)) ?? undefined;
+      if (!session) return null;
+    }
+    if (!session.tokens.refreshToken) return null;
+    try {
+      const newTokens = await refreshAccessToken(config, session.tokens.refreshToken);
+      session.tokens = newTokens;
+      session.lastRefreshed = Date.now();
+      await storeTokens(provider, newTokens);
+      return newTokens.accessToken;
+    } catch {
+      this.sessions.delete(provider);
+      return null;
+    }
+  }
+
   /** Check if we have any valid auth for a provider */
   hasAuth(provider: string): boolean {
     const session = this.sessions.get(provider);
