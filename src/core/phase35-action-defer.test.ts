@@ -19,6 +19,11 @@ const DEFERRAL_PATTERNS = [
   /\b(?:Would you like|Do you want|Shall I|Should I|How would you like)\b/i,
   /\b(?:¿(?:Empiezo|Procedo|Continúo|Inicio))\b/i,
   /\b(?:Let me know|Dime cómo|Dime si)\b/i,
+  // v2.10.86b: intention-without-execution patterns
+  /\b(?:Próximos\s+(?:Pasos|pasos)|Next\s+Steps)\b/i,
+  /\b(?:Voy\s+a\s+(?:proceder|realizar|ejecutar|analizar|leer|revisar))\b/i,
+  /\b(?:I(?:'ll| will)\s+(?:start|begin|proceed|analyze|read|review|examine))\b/i,
+  /(?:Leeré|Analizaré|Revisaré|Evaluaré|Inspeccionaré)/i,
 ];
 
 const ACTION_INTENT =
@@ -90,6 +95,28 @@ describe("Phase 35 — deferral detection", () => {
     expect(hasDeferral("The fix has been applied successfully.")).toBe(false);
     expect(hasDeferral("Done. All tests pass.")).toBe(false);
   });
+
+  // v2.10.86b: intention-without-execution patterns
+  test("detects Spanish intention declarations (Gemma 4 pattern)", () => {
+    expect(hasDeferral("Leeré src/core/permissions.ts para entender el modelo")).toBe(true);
+    expect(hasDeferral("Analizaré la jerarquía de configuración")).toBe(true);
+    expect(hasDeferral("Revisaré el flujo de datos")).toBe(true);
+    expect(hasDeferral("Voy a proceder con el análisis")).toBe(true);
+    expect(hasDeferral("Voy a realizar las siguientes acciones")).toBe(true);
+    expect(hasDeferral("Voy a leer los archivos principales")).toBe(true);
+  });
+
+  test("detects English intention declarations", () => {
+    expect(hasDeferral("I'll start by reading the core module")).toBe(true);
+    expect(hasDeferral("I will proceed with the security analysis")).toBe(true);
+    expect(hasDeferral("I'll analyze the permission system")).toBe(true);
+    expect(hasDeferral("I will review the configuration flow")).toBe(true);
+  });
+
+  test("detects 'Próximos Pasos' / 'Next Steps' headers", () => {
+    expect(hasDeferral("Próximos Pasos Inmediatos:\n1. Leer el código")).toBe(true);
+    expect(hasDeferral("Next Steps:\n- Read the source")).toBe(true);
+  });
 });
 
 describe("Phase 35 — combined (NEXUS mark6 canonical case)", () => {
@@ -109,11 +136,21 @@ Voy a proceder en fases:
     expect(hasDeferral(assistantText)).toBe(true);
   });
 
-  test("Model that acts immediately → should NOT trigger nudge", () => {
+  test("Model that declares intent with 0 tool calls IS a deferral", () => {
     const userMsg = "audita todo este proyecto";
     const assistantText = `Voy a leer los archivos principales del proyecto para comenzar la auditoría.`;
-    // This response doesn't defer — it's about to act. Phase 35
-    // should only fire on deferral questions, not action statements.
+    // If the model said "Voy a leer" but has ZERO tool calls, that's
+    // a plan-without-action — phase 35 should nudge. In the runtime,
+    // if the model actually called Read, toolCalls.length > 0 and
+    // phase 35 never enters this path.
+    expect(hasActionIntent(userMsg)).toBe(true);
+    expect(hasDeferral(assistantText)).toBe(true);
+  });
+
+  test("Model that produces findings → should NOT trigger nudge", () => {
+    const userMsg = "audita todo este proyecto";
+    const assistantText = `He analizado el código y encontré 3 vulnerabilidades:\n1. SQL injection en login.ts:45\n2. Path traversal en api.ts:92\n3. Missing auth check en admin.ts:12`;
+    // Actual findings text (no intention declarations, no questions)
     expect(hasActionIntent(userMsg)).toBe(true);
     expect(hasDeferral(assistantText)).toBe(false);
   });
@@ -124,6 +161,28 @@ Voy a proceder en fases:
     // User asked an informational question, so even though the model
     // deferred, the user didn't have action intent — no nudge.
     expect(hasActionIntent(userMsg)).toBe(false);
+    expect(hasDeferral(assistantText)).toBe(true);
+  });
+
+  test("Gemma 4 v2.10.86 canonical failure — plan + 'Próximos Pasos' no question", () => {
+    const userMsg = "audita todo este proyecto";
+    const assistantText = `Para realizar una auditoría exhaustiva de este proyecto...
+
+🛡️ 1. Auditoría de Seguridad (Security Audit)
+...
+⚙️ 2. Auditoría de Robustez y Estabilidad
+...
+
+🚀 Próximos Pasos Inmediatos
+Para empezar la ejecución, voy a realizar las siguientes acciones técnicas:
+ 1. Análisis de la herramienta Bash: Leeré src/tools/index.ts
+ 2. Revisión de Permisos: Analizaré src/core/permissions.ts
+ 3. Inspección de Configuración: Revisaré src/core/config.ts`;
+
+    expect(hasActionIntent(userMsg)).toBe(true);
+    // MUST trigger — this was the v2.10.86 failure where phase 35
+    // didn't fire because the model used intention declarations
+    // instead of question-based deferrals.
     expect(hasDeferral(assistantText)).toBe(true);
   });
 
