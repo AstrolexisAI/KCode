@@ -475,6 +475,121 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         return;
       }
 
+      // /license — status | activate <path> | deactivate
+      if (lower.startsWith("/license")) {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        const parts = userInput.trim().split(/\s+/);
+        const subcmd = parts[1]?.toLowerCase() || "status";
+        const arg = parts.slice(2).join(" ").trim();
+
+        try {
+          if (subcmd === "activate") {
+            if (!arg) {
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "system",
+                  text:
+                    "\n  Usage: /license activate <path-to-file.jwt>\n  Example: /license activate ~/Downloads/license.jwt\n",
+                },
+              ]);
+              return;
+            }
+            const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import(
+              "node:fs"
+            );
+            const { resolve, dirname } = await import("node:path");
+            const { kcodePath } = await import("../../core/paths");
+            const { verifyLicenseJwt } = await import("../../core/license");
+
+            // Expand ~ if present
+            const home = process.env.HOME ?? "";
+            const expanded = arg.startsWith("~/") ? home + arg.slice(1) : arg;
+            const absPath = resolve(expanded);
+
+            if (!existsSync(absPath)) {
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "system", text: `\n  \u2717 File not found: ${absPath}\n` },
+              ]);
+              return;
+            }
+
+            const token = readFileSync(absPath, "utf-8").trim();
+            const result = verifyLicenseJwt(token);
+            if (!result.valid || !result.claims) {
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "system",
+                  text: `\n  \u2717 License invalid: ${result.error}\n`,
+                },
+              ]);
+              return;
+            }
+
+            const targetPath = kcodePath("license.jwt");
+            mkdirSync(dirname(targetPath), { recursive: true });
+            writeFileSync(targetPath, token, "utf-8");
+
+            const c = result.claims;
+            const daysLeft = Math.floor(
+              (c.exp - Math.floor(Date.now() / 1000)) / 86400,
+            );
+            const lines = [
+              "\n  \u2713 License activated.",
+              `  Subject:  ${c.sub}`,
+              `  Tier:     ${c.tier ?? "pro"}`,
+              `  Seats:    ${c.seats}`,
+              `  Features: ${c.features.join(", ")}`,
+              `  Expires:  ${daysLeft} days (${new Date(c.exp * 1000).toISOString().slice(0, 10)})`,
+            ];
+            if (c.hardware) lines.push("  Hardware-bound to this machine");
+            lines.push("");
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "system", text: lines.join("\n") },
+            ]);
+            return;
+          }
+
+          if (subcmd === "deactivate") {
+            const { existsSync, unlinkSync } = await import("node:fs");
+            const { kcodePath } = await import("../../core/paths");
+            const path = kcodePath("license.jwt");
+            if (!existsSync(path)) {
+              setCompleted((prev) => [
+                ...prev,
+                { kind: "text", role: "system", text: `\n  No license file found at ${path}\n` },
+              ]);
+              return;
+            }
+            unlinkSync(path);
+            setCompleted((prev) => [
+              ...prev,
+              { kind: "text", role: "system", text: "\n  \u2713 License removed from this machine.\n" },
+            ]);
+            return;
+          }
+
+          // Default: status
+          const { formatLicenseStatus } = await import("../../core/license");
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "system", text: "\n" + formatLicenseStatus() + "\n" },
+          ]);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "system", text: `\n  \u2717 License command failed: ${msg}\n` },
+          ]);
+        }
+        return;
+      }
+
       // /auth — OAuth login/status/logout for cloud providers
       if (lower.startsWith("/auth")) {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);

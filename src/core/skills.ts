@@ -401,6 +401,7 @@ export class SkillManager {
     lines.push("  /model, /toggle, /switch      Switch between local and cloud models");
     lines.push("  /cloud, /api-key, /provider   Configure cloud API providers");
     lines.push("  /auth                         OAuth login/status/logout for cloud providers");
+    lines.push("  /license                      License status / activate <path> / deactivate");
     lines.push("  /plugin, /plugins             Install, list, or remove plugins");
     lines.push("  /marketplace                  Browse and install plugins from the marketplace");
     lines.push("  /hookify                      Manage dynamic hookify rules");
