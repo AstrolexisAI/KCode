@@ -105,8 +105,9 @@ function writeDiskCache(sub: Subscription): void {
 /**
  * Fetch subscription from astrolexis.space using the stored OAuth
  * access token. Throws on network failures or if no token is
- * available. 401 is translated into a free-tier Subscription object
- * (token expired/revoked; caller should try a refresh separately).
+ * available. On 401, attempts a refresh (via AuthSessionManager)
+ * and retries once — only falls through to free-tier if refresh
+ * itself fails or the retry also 401s.
  */
 async function fetchFromServer(): Promise<Subscription> {
   const { getAuthSessionManager } = await import("./auth/session.js");
@@ -119,22 +120,51 @@ async function fetchFromServer(): Promise<Subscription> {
     throw new Error("Not logged in to Astrolexis. Run /login in the TUI.");
   }
 
+  const doFetch = async (bearerToken: string): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    try {
+      return await fetch(SUBSCRIPTION_ENDPOINT, {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${bearerToken}`,
+          accept: "application/json",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(SUBSCRIPTION_ENDPOINT, {
-      method: "GET",
-      headers: {
-        authorization: `Bearer ${token}`,
-        accept: "application/json",
-      },
-      signal: controller.signal,
-    });
+    let res = await doFetch(token);
+
+    if (res.status === 401 && cfg) {
+      // Server rejected the stored access token. Force a refresh
+      // via the session manager (bypasses its "expires within 60s"
+      // heuristic — the server's verdict is authoritative) and
+      // retry once before giving up to free tier.
+      log.debug("subscription", "401 from API — forcing refresh + retry");
+      const refreshed = await manager.forceRefresh("astrolexis", cfg).catch(
+        (err) => {
+          log.debug("subscription", `refresh failed: ${err}`);
+          return null;
+        },
+      );
+      if (refreshed) {
+        res = await doFetch(refreshed);
+      }
+    }
 
     if (res.status === 401) {
-      // Token expired/revoked. Return free-tier as a default; caller
-      // can trigger a refresh if it wants.
-      log.debug("subscription", "401 from API — token expired or revoked");
+      // Refresh also failed or returned 401. Fall through to free tier.
+      log.debug(
+        "subscription",
+        "401 persists after refresh — token revoked or expired",
+      );
       return {
         tier: "free",
         features: [],

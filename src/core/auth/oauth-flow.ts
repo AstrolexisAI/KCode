@@ -25,8 +25,8 @@ export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
     // token is later used to hit GET /api/subscription for tier +
     // feature + seat info — see src/core/subscription.ts.
     provider: "astrolexis",
-    authorizationUrl: "https://astrolexis.space/oauth/authorize",
-    tokenUrl: "https://astrolexis.space/oauth/token",
+    authorizationUrl: "https://astrolexis.space/api/oauth/authorize",
+    tokenUrl: "https://astrolexis.space/api/oauth/token",
     clientId: "kcode-cli",
     scopes: ["subscription:read"],
     label: "Astrolexis",
