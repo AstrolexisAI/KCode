@@ -5,7 +5,7 @@
 
 import { Box, Text } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { KodiAnimState, KodiEvent, KodiMood } from "../kodi-animation.js";
+import type { KodiAnimState, KodiEvent, KodiMood, KodiTier } from "../kodi-animation.js";
 import { KodiAnimEngine, SPEECH_CHIPS } from "../kodi-animation.js";
 import { useTheme } from "../ThemeContext.js";
 
@@ -39,6 +39,16 @@ interface KodiProps {
   subscriptionUsage5h?: number;
   /** Subscription rate limit usage (0.0-1.0) for 7-day window */
   subscriptionUsage7d?: number;
+  /**
+   * Subscription tier. Drives Kodi's permanent badge (★ ♛ ✦),
+   * tier-aware speech, entrance flourish on first detection, and a
+   * periodic flex while idle. Optional — undefined / "free" means
+   * no flourish, no badge (fully backwards compatible with sessions
+   * that never called getSubscription).
+   */
+  tier?: KodiTier;
+  /** Feature flags from the subscription (pro, audit, rag, swarm, …). */
+  tierFeatures?: string[];
 }
 
 // ─── LLM Reaction Generator ────────────────────────────────────
@@ -195,6 +205,8 @@ export default function KodiCompanion({
   sessionStartTime,
   subscriptionUsage5h,
   subscriptionUsage7d,
+  tier,
+  tierFeatures,
 }: KodiProps) {
   const { theme } = useTheme();
   const engineRef = useRef<KodiAnimEngine | null>(null);
@@ -236,6 +248,39 @@ export default function KodiCompanion({
     engine.contextPressure =
       contextWindowSize && contextWindowSize > 0 ? Math.min(1, tokenCount / contextWindowSize) : 0;
   }, [tokenCount, contextWindowSize]);
+
+  // Tier sync — entrance flourish fires automatically inside the
+  // engine the first time we transition away from "free". Subsequent
+  // re-mounts or polling refreshes are silent.
+  useEffect(() => {
+    if (tier) engine.setTier(tier);
+  }, [tier]);
+
+  // Periodic tier flex while idle — only fires for paid tiers, only
+  // while Kodi is actually idle (no active tool, no thinking). Picks
+  // a random interval between 75-105s so it doesn't feel mechanical.
+  // Free tier skips this entirely.
+  useEffect(() => {
+    if (!tier || tier === "free") return;
+    let cancelled = false;
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = 75_000 + Math.random() * 30_000;
+      setTimeout(() => {
+        if (cancelled) return;
+        // Only flex when we're actually idle — no point breaking a
+        // thinking animation with a sparkle.
+        if (engine.phase === "idle" && engine.mood === "idle") {
+          engine.react({ type: "tier_flex" });
+        }
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => {
+      cancelled = true;
+    };
+  }, [tier, engine]);
 
   // React to events
   const handleEvent = useCallback(
@@ -373,7 +418,9 @@ export default function KodiCompanion({
       paddingX={1}
       width={process.stdout.columns || 80}
     >
-      {/* Kodi sprite — pre-composed, fixed-width lines */}
+      {/* Kodi sprite — pre-composed, fixed-width lines. The tier
+          badge (★ ♛ ✦) renders as a small overlay column to the
+          right of the head for paid tiers; free users see nothing. */}
       <Box flexDirection="column" width={15}>
         {lines.map((line, i) => (
           <Text key={i} color={moodColor}>
@@ -381,9 +428,32 @@ export default function KodiCompanion({
           </Text>
         ))}
       </Box>
+      {frame?.tierBadge && frame.tier !== "free" && (
+        <Box flexDirection="column" width={2} marginRight={1}>
+          {/* Badge floats next to the face line. The other rows stay
+              blank so the badge reads as a single cosmetic flourish
+              rather than confetti down the whole sprite. */}
+          <Text> </Text>
+          <Text
+            bold
+            color={
+              frame.tier === "enterprise"
+                ? theme.accent
+                : frame.tier === "team"
+                  ? "#ffd700"
+                  : theme.warning
+            }
+          >
+            {frame.tierBadge}
+          </Text>
+          <Text> </Text>
+          <Text> </Text>
+          <Text> </Text>
+        </Box>
+      )}
       {/* Info panel */}
       <Box flexDirection="column" flexGrow={1} marginLeft={1}>
-        {/* Line 1: Brand */}
+        {/* Line 1: Brand + tier badge */}
         <Box gap={1}>
           <Text bold color={theme.primary}>
             KCode
@@ -391,6 +461,27 @@ export default function KodiCompanion({
           <Text color={theme.dimmed}>v{version}</Text>
           <Text color={theme.dimmed}>—</Text>
           <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
+          {tier && tier !== "free" && (
+            <>
+              <Text color={theme.dimmed}>•</Text>
+              <Text
+                bold
+                color={
+                  tier === "enterprise"
+                    ? theme.accent
+                    : tier === "team"
+                      ? "#ffd700"
+                      : theme.warning
+                }
+              >
+                {tier === "enterprise"
+                  ? "✦ Enterprise"
+                  : tier === "team"
+                    ? "♛ Team"
+                    : "★ Pro"}
+              </Text>
+            </>
+          )}
         </Box>
         {/* Line 2: Model + mode + cwd */}
         <Box gap={1}>
