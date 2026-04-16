@@ -76,6 +76,16 @@ export function registerMcpCommand(program: Command): void {
 
       if (!data.mcpServers) data.mcpServers = {};
 
+      // Block prototype-polluting keys (CWE-1321). The core MCP loader
+      // at src/core/mcp.ts:167 already has this guard, but the CLI
+      // command path was unprotected — kcode mcp add __proto__ "cmd"
+      // would pollute Object.prototype.
+      const UNSAFE_KEYS = ["__proto__", "constructor", "prototype"];
+      if (UNSAFE_KEYS.includes(name)) {
+        console.log(`\u2717 Invalid server name: "${name}" is a reserved key.`);
+        return;
+      }
+
       if (data.mcpServers[name]) {
         console.log(
           `\u2717 MCP server "${name}" already exists. Remove it first with: kcode mcp remove ${name}`,
