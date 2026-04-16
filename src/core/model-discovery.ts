@@ -21,9 +21,11 @@
 // TODO — Gemini uses https://generativelanguage.googleapis.com with
 // a ?key=KEY auth instead of bearer tokens.
 
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { log } from "./logger";
 import type { ModelEntry, ModelsConfig } from "./models";
 import { loadModelsConfig, saveModelsConfig } from "./models";
+import { kcodePath } from "./paths";
 
 // ─── Provider adapters ──────────────────────────────────────────
 
@@ -372,4 +374,92 @@ export async function runModelDiscovery(opts?: {
   }
 
   return results;
+}
+
+// ─── Throttle state ─────────────────────────────────────────────
+//
+// Auto-discovery runs at TUI mount, but we don't want every single
+// `kcode` invocation hammering 5 provider APIs every time. Record
+// the last-run timestamp and skip if < MIN_INTERVAL_MS has passed.
+//
+// Storage: ~/.kcode/discovery-state.json — tiny JSON blob kept
+// separate from models.json so discovery bookkeeping doesn't clutter
+// the model registry shape.
+
+const DISCOVERY_STATE_FILE = "discovery-state.json";
+const DEFAULT_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+interface DiscoveryState {
+  lastRunAt: number;
+}
+
+function readDiscoveryState(): DiscoveryState | null {
+  try {
+    const path = kcodePath(DISCOVERY_STATE_FILE);
+    if (!existsSync(path)) return null;
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.lastRunAt === "number") return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDiscoveryState(state: DiscoveryState): void {
+  try {
+    writeFileSync(
+      kcodePath(DISCOVERY_STATE_FILE),
+      JSON.stringify(state, null, 2),
+      "utf-8",
+    );
+  } catch {
+    // Non-fatal: next run will just re-run discovery.
+  }
+}
+
+/**
+ * Auto-discovery hook for the TUI. Fires in the background at mount.
+ * Skips the actual API calls if we ran discovery recently (default:
+ * within the last 6 hours) so opening kcode 20 times in one session
+ * doesn't make 100 API requests.
+ *
+ * Returns a promise that resolves with the list of newly-added model
+ * IDs (empty array if throttled or nothing new). Never throws — any
+ * failure is swallowed so the TUI can't be held up by network issues.
+ */
+export async function maybeAutoDiscover(opts?: {
+  /** Override the minimum interval between runs. Used by tests. */
+  minIntervalMs?: number;
+  /** Force-run ignoring the throttle. */
+  force?: boolean;
+}): Promise<string[]> {
+  const minInterval = opts?.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
+  try {
+    if (!opts?.force) {
+      const state = readDiscoveryState();
+      if (state && Date.now() - state.lastRunAt < minInterval) {
+        log.debug(
+          "model-discovery",
+          `skipped (last run ${Math.round((Date.now() - state.lastRunAt) / 60000)}m ago)`,
+        );
+        return [];
+      }
+    }
+
+    const results = await runModelDiscovery();
+    writeDiscoveryState({ lastRunAt: Date.now() });
+
+    const added = results.flatMap((r) => r.added);
+    if (added.length > 0) {
+      log.info(
+        "model-discovery",
+        `auto-discovered ${added.length} new model(s): ${added.slice(0, 5).join(", ")}${added.length > 5 ? ", ..." : ""}`,
+      );
+    }
+    return added;
+  } catch (err) {
+    log.debug("model-discovery", `auto-discovery failed: ${err}`);
+    return [];
+  }
 }

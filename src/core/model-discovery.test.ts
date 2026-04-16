@@ -6,7 +6,7 @@
 // orchestrator.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import {
   discoverFromProvider,
   fetchProviderModels,
   guessContextSize,
+  maybeAutoDiscover,
   runModelDiscovery,
 } from "./model-discovery";
 import { _setModelsPathForTest, type ModelsConfig } from "./models";
@@ -331,5 +332,88 @@ describe("runModelDiscovery", () => {
     });
     expect(results).toHaveLength(1);
     expect(results[0]!.provider).toBe("anthropic");
+  });
+});
+
+// ─── maybeAutoDiscover (throttle) ──────────────────────────────
+
+describe("maybeAutoDiscover throttle", () => {
+  test("skips when last run was recent (within interval)", async () => {
+    // Pre-seed the discovery-state file with a very recent timestamp
+    const statePath = join(testHome, "discovery-state.json");
+    writeFileSync(
+      statePath,
+      JSON.stringify({ lastRunAt: Date.now() - 1000 }), // 1s ago
+      "utf-8",
+    );
+    writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
+
+    // Fetch should NOT be called since we're within the interval
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls++;
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    };
+
+    const added = await maybeAutoDiscover({ minIntervalMs: 60_000 });
+    expect(added).toEqual([]);
+    expect(fetchCalls).toBe(0);
+  });
+
+  test("runs when no previous state exists", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
+
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("anthropic.com")) {
+        return new Response(
+          JSON.stringify({ data: [{ id: "claude-opus-4-7" }] }),
+          { status: 200 },
+        );
+      }
+      return new Response("not mocked", { status: 404 });
+    };
+
+    const added = await maybeAutoDiscover();
+    expect(added).toContain("claude-opus-4-7");
+
+    // State file should have been created with a fresh timestamp
+    const statePath = join(testHome, "discovery-state.json");
+    expect(existsSync(statePath)).toBe(true);
+    const state = JSON.parse(readFileSync(statePath, "utf-8"));
+    expect(state.lastRunAt).toBeGreaterThan(Date.now() - 10_000);
+  });
+
+  test("force=true bypasses the throttle", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
+    const statePath = join(testHome, "discovery-state.json");
+    writeFileSync(
+      statePath,
+      JSON.stringify({ lastRunAt: Date.now() - 1000 }), // 1s ago — would normally skip
+      "utf-8",
+    );
+
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls++;
+      return new Response(JSON.stringify({ data: [{ id: "fresh-model" }] }), { status: 200 });
+    };
+
+    const added = await maybeAutoDiscover({ force: true });
+    expect(fetchCalls).toBeGreaterThan(0); // at least one provider queried
+    expect(added).toContain("fresh-model");
+  });
+
+  test("network failure returns empty array instead of throwing", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
+    globalThis.fetch = async () => {
+      throw new Error("network down");
+    };
+    // Should not throw
+    const added = await maybeAutoDiscover({ force: true });
+    expect(added).toEqual([]);
   });
 });
