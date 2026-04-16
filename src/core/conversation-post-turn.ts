@@ -177,12 +177,30 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
 
     // Deferral detection: model ends with a question asking the user
     // what to do next, instead of just doing it.
+    //
+    // v2.10.86 update: Gemma 4 doesn't always ask a question. It
+    // also produces "Próximos Pasos Inmediatos" / "Next Steps" lists
+    // with declarative intentions ("Leeré...", "Analizaré...") that
+    // it never executes. Added intention-without-execution patterns
+    // alongside the original question-based deferral patterns.
     const DEFERRAL_PATTERNS = [
       /\?[\s\n]*$/,                                          // ends with ?
       /¿(?:Deseas|Quieres|Prefieres|Cómo quieres|Te gustaría)\b/i,
       /\b(?:Would you like|Do you want|Shall I|Should I|How would you like)\b/i,
       /\b(?:¿(?:Empiezo|Procedo|Continúo|Inicio))\b/i,
       /\b(?:Let me know|Dime cómo|Dime si)\b/i,
+      // Intention-without-execution: model declares what it WILL do
+      // without actually calling any tools. These patterns fire only
+      // when toolCalls.length === 0 (already checked above), so a
+      // model that says "I'll read the file" AND then calls Read
+      // won't match this path.
+      /\b(?:Próximos\s+(?:Pasos|pasos)|Next\s+Steps)\b/i,
+      /\b(?:Voy\s+a\s+(?:proceder|realizar|ejecutar|analizar|leer|revisar))\b/i,
+      /\b(?:I(?:'ll| will)\s+(?:start|begin|proceed|analyze|read|review|examine))\b/i,
+      // No \b wrappers: accented chars (é) aren't \w in JS regex
+      // without the u flag, so \b breaks between r and é. These
+      // conjugations are distinctive enough to not need word boundaries.
+      /(?:Leeré|Analizaré|Revisaré|Evaluaré|Inspeccionaré)/i,
     ];
     const hasDeferral = DEFERRAL_PATTERNS.some((p) => p.test(fullText));
 
