@@ -152,6 +152,87 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     };
   }
 
+  // Phase 35: action-defer nudge for local models.
+  //
+  // Canonical trigger: v2.10.85 sessions with Gemma 4 (mark6-31b).
+  // User says "audita todo este proyecto". Model produces a 30-line
+  // plan organized into 4 "vectors", reads zero files, calls zero
+  // tools, and ends with "¿Deseas que me enfoque en algún vector en
+  // particular?" — passing the buck back to the user who already
+  // gave a clear instruction.
+  //
+  // Detection: text-only response (0 tool calls) + the user's last
+  // message has action intent + the model's text ends with a deferral
+  // question. Fires ONCE (turnCount === 0) to avoid infinite loops.
+  //
+  // The nudge is bilingual (es/en) since the user and models switch
+  // between both languages.
+  if (
+    ctx.toolCalls.length === 0 &&
+    ctx.stopReason === "end_turn" &&
+    ctx.turnCount === 0 &&
+    hasTextOutput
+  ) {
+    const fullText = ctx.textChunks.join("");
+
+    // Deferral detection: model ends with a question asking the user
+    // what to do next, instead of just doing it.
+    const DEFERRAL_PATTERNS = [
+      /\?[\s\n]*$/,                                          // ends with ?
+      /¿(?:Deseas|Quieres|Prefieres|Cómo quieres|Te gustaría)\b/i,
+      /\b(?:Would you like|Do you want|Shall I|Should I|How would you like)\b/i,
+      /\b(?:¿(?:Empiezo|Procedo|Continúo|Inicio))\b/i,
+      /\b(?:Let me know|Dime cómo|Dime si)\b/i,
+    ];
+    const hasDeferral = DEFERRAL_PATTERNS.some((p) => p.test(fullText));
+
+    // Action intent in the user's last message
+    const lastUserMsg = ctx.messages
+      .filter((m) => m.role === "user" && typeof m.content === "string")
+      .at(-1);
+    const userText = typeof lastUserMsg?.content === "string" ? lastUserMsg.content : "";
+    const ACTION_INTENT =
+      /\b(audit[ae]?|crea|create|build|fix|arregl[ae]|implement[ae]?|haz|make|run|test|review|revis[ae]|analiz[ae]|genera|deploy|install[ae]?|configur[ae]|escrib[ae]|write|refactor|debug|soluciona|resuelv[ae]|ejecut[ae]|lanz[ae]|compil[ae])\b/i;
+    const hasActionIntent = ACTION_INTENT.test(userText);
+
+    if (hasDeferral && hasActionIntent) {
+      log.info(
+        "phase-35",
+        `action-defer nudge: model deferred with "${fullText.slice(-60).trim()}" on action-intent "${userText.slice(0, 40)}"`,
+      );
+      if (ctx.debugTracer?.isEnabled()) {
+        ctx.debugTracer.trace(
+          "phase-35",
+          "action-defer-nudge",
+          `Model deferred instead of acting. Nudging once.`,
+          { turn: ctx.turnCount },
+        );
+      }
+      injectMessages.push({
+        role: "user",
+        content:
+          "[SYSTEM] You just described a plan and asked the user for confirmation. " +
+          "The user already gave you a clear instruction — execute it NOW. " +
+          "Do NOT re-plan, do NOT ask for confirmation, do NOT describe what you would do. " +
+          "Call tools immediately: Read files, Grep for patterns, run Bash commands. " +
+          "Produce actual findings from actual code, not outlines of what you'd look for. " +
+          "START by reading the most important source files.",
+      });
+      events.push({ type: "turn_end", stopReason: "action_defer_nudge" });
+      return {
+        action: "continue",
+        events,
+        injectMessages,
+        maxTokensContinuations,
+        emptyEndTurnCount,
+        truncationRetries,
+        lastEmptyType,
+        previousTurnTail,
+        turnsSinceLastExtraction,
+      };
+    }
+  }
+
   // Cache text-only responses (delegated to post-turn)
   cacheResponseIfEligible(
     ctx.cacheKey,
