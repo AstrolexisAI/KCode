@@ -383,6 +383,31 @@ registerDashboardCommand(program);
 registerTemplateCommand(program);
 registerWebCommand(program);
 
+// ─── Optional background model discovery ────────────────────────
+//
+// Opt-in via KCODE_AUTO_DISCOVER_MODELS=1. Runs discovery in the
+// background so it can't slow startup — failures and results just
+// get logged. Useful for "Opus 4.7 just shipped, I want it without
+// running `kcode models discover` every time."
+if (process.env.KCODE_AUTO_DISCOVER_MODELS === "1") {
+  void (async () => {
+    try {
+      const { runModelDiscovery } = await import("./core/model-discovery");
+      const results = await runModelDiscovery();
+      const added = results.flatMap((r) => r.added);
+      if (added.length > 0) {
+        const { log } = await import("./core/logger");
+        log.info(
+          "model-discovery",
+          `auto-discovered ${added.length} new model(s): ${added.slice(0, 5).join(", ")}${added.length > 5 ? ", ..." : ""}`,
+        );
+      }
+    } catch {
+      // Best-effort — never break startup.
+    }
+  })();
+}
+
 // ─── Parse ──────────────────────────────────────────────────────
 
 profileCheckpoint("cli_defined");
