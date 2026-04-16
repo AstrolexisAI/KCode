@@ -237,26 +237,46 @@ describe("discoverFromProvider", () => {
 // ─── collectProviderKeys ───────────────────────────────────────
 
 describe("collectProviderKeys", () => {
-  test("picks up standard env var names", () => {
+  test("picks up standard env var names", async () => {
     process.env.ANTHROPIC_API_KEY = "a-key";
     process.env.OPENAI_API_KEY = "o-key";
     process.env.GROQ_API_KEY = "g-key";
-    const keys = collectProviderKeys();
+    const keys = await collectProviderKeys();
     expect(keys.get("anthropic")).toBe("a-key");
     expect(keys.get("openai")).toBe("o-key");
     expect(keys.get("groq")).toBe("g-key");
   });
 
-  test("falls back to KCODE-prefixed names", () => {
+  test("falls back to KCODE-prefixed names", async () => {
     process.env.KCODE_ANTHROPIC_API_KEY = "k-a-key";
-    const keys = collectProviderKeys();
+    const keys = await collectProviderKeys();
     expect(keys.get("anthropic")).toBe("k-a-key");
   });
 
-  test("omits providers without a key", () => {
-    const keys = collectProviderKeys();
+  test("omits providers without a key", async () => {
+    const keys = await collectProviderKeys();
     expect(keys.has("anthropic")).toBe(false);
     expect(keys.has("openai")).toBe(false);
+  });
+});
+
+describe("Anthropic headers auto-switch on OAuth vs API key", () => {
+  test("sk-ant-oat01-* uses Authorization: Bearer + oauth-beta", () => {
+    const anthropic = ALL_PROVIDERS.find((p) => p.id === "anthropic")!;
+    const h = anthropic.headers("sk-ant-oat01-testtoken123");
+    expect(h.authorization).toBe("Bearer sk-ant-oat01-testtoken123");
+    expect(h["anthropic-beta"]).toBe("oauth-2025-04-20");
+    expect(h["anthropic-version"]).toBe("2023-06-01");
+    expect(h["x-api-key"]).toBeUndefined();
+  });
+
+  test("sk-ant-api03-* uses x-api-key (no OAuth beta)", () => {
+    const anthropic = ALL_PROVIDERS.find((p) => p.id === "anthropic")!;
+    const h = anthropic.headers("sk-ant-api03-testkey456");
+    expect(h["x-api-key"]).toBe("sk-ant-api03-testkey456");
+    expect(h.authorization).toBeUndefined();
+    expect(h["anthropic-beta"]).toBeUndefined();
+    expect(h["anthropic-version"]).toBe("2023-06-01");
   });
 });
 
