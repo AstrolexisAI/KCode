@@ -37,11 +37,17 @@ curl -fsSL https://bun.sh/install | bash
 git clone https://github.com/AstrolexisAI/KCode.git
 cd KCode && bun install
 
-# 3. Run the setup wizard (auto-detects GPU, downloads model)
+# 3. Run the setup wizard
 bun run src/index.ts setup
 ```
 
-That's it. The wizard detects your hardware, downloads an optimized model, and launches the interactive TUI. You can also build a standalone binary with `bun run build` (~101 MB).
+The wizard detects your hardware and picks the best path:
+
+- **Strong HW** (GPU ≥ 20GB VRAM, or Apple Silicon ≥ 32GB) → downloads a large local model
+- **Medium HW** (GPU 8-20GB, or ≥ 32GB RAM) → downloads a balanced local model
+- **Weak HW** (small GPU or CPU-only) → **cloud-first setup**: prompts for an API key from Anthropic, OpenAI, Groq, DeepSeek, or Together AI. No gigabyte-sized download.
+
+Build a standalone binary with `bun run build` (~101 MB). Override the auto-detection with `KCODE_FORCE_LOCAL=1` or `--model <codename>`.
 
 ---
 
@@ -58,10 +64,13 @@ That's it. The wizard detects your hardware, downloads an optimized model, and l
 ### Cloud API Support
 
 - **6 providers**: Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI
-- **Easy setup**: `/cloud` command to configure, `/toggle` to switch between local and cloud
+- **Cloud-first setup** for weak hardware -- the wizard skips the model download and walks you through picking a provider
+- **Auto-discovery of new models**: `kcode models discover` queries each provider's `/v1/models` and registers anything new (e.g. Opus 4.7 the day it ships). Also runs in the background at TUI startup (throttled to 6h)
+- **Flexible auth**: OAuth session (`/auth`), API key in `settings.json` (`/cloud`), or env vars (`ANTHROPIC_API_KEY`, etc.) -- discovery and requests resolve from any of these
+- **Easy switching**: `/cloud` to configure, `/model` or `/toggle` to switch
 - **Auto-routing**: automatically sends queries to the best model based on task type
 
-### 46 Built-in Tools
+### 48 Built-in Tools
 
 - **File operations**: Read, Write, Edit, MultiEdit, Glob, Grep, GrepReplace, Rename, DiffView, LS
 - **Shell**: Bash with safety analysis and permission controls
@@ -195,11 +204,15 @@ kcode --print --json-schema '{"type":"object","properties":{"bugs":{"type":"arra
 ### Model Management
 
 ```bash
-kcode models list
+kcode models list                                                # List registered models
 kcode models add gpt4 https://api.openai.com --context 128000 --default
 kcode models default mymodel
 kcode models rm oldmodel
+kcode models discover                                            # Auto-discover new cloud models
+kcode models discover --provider anthropic,openai                # Limit to specific providers
 ```
+
+**Auto-discovery** runs in the background at TUI startup (throttled to 6h) and picks up newly-released models from each provider's `/v1/models` endpoint. You don't need to manually `kcode models add` when a new Claude / GPT / Llama drops.
 
 ### Pro Management
 
@@ -224,13 +237,13 @@ KCode works with any OpenAI-compatible API endpoint and native Anthropic API.
 | Ollama | All platforms | Connect via `KCODE_API_BASE` |
 | vLLM | Linux | High-throughput serving |
 
-The setup wizard auto-detects your hardware and recommends models. The bundled mnemo models are curated, optimized Qwen variants that work well across different VRAM sizes (8 GB to 48+ GB).
+The setup wizard auto-detects your hardware and picks the right path: strong/medium HW gets a local model download, weak/CPU-only HW gets routed to cloud setup. The bundled mnemo models are curated, optimized Qwen variants that work well across different VRAM sizes (8 GB to 48+ GB).
 
 ### Cloud Providers
 
 | Provider | Setup | Models |
 |----------|-------|--------|
-| Anthropic | `ANTHROPIC_API_KEY` or `/cloud` | Claude 4, Claude 3.5 Sonnet, etc. |
+| Anthropic | `ANTHROPIC_API_KEY`, `/cloud`, or `/auth` (OAuth) | Claude 4.7 Opus, 4.6 Sonnet, 4.5 Haiku, 3.x family |
 | OpenAI | `OPENAI_API_KEY` or `/cloud` | GPT-4o, GPT-4, etc. |
 | Google Gemini | `GEMINI_API_KEY` or `/cloud` | Gemini 2.5 Pro, Flash, etc. |
 | Groq | `GROQ_API_KEY` or `/cloud` | Llama, Mixtral (fast inference) |
