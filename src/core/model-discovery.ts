@@ -56,11 +56,26 @@ const ANTHROPIC: ProviderSpec = {
   id: "anthropic",
   label: "Anthropic",
   endpoint: "https://api.anthropic.com/v1/models",
-  headers: (apiKey) => ({
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-    "content-type": "application/json",
-  }),
+  headers: (apiKey) => {
+    // OAuth access tokens (sk-ant-oat01-*) use Authorization: Bearer
+    // + the oauth beta header. Real API keys (sk-ant-api03-*) use
+    // x-api-key. Detecting by prefix matches what request-builder.ts
+    // does for the /v1/messages endpoint.
+    if (apiKey.startsWith("sk-ant-oat01-")) {
+      return {
+        authorization: `Bearer ${apiKey}`,
+        "anthropic-beta": "oauth-2025-04-20",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "x-app": "cli",
+      };
+    }
+    return {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    };
+  },
   parse: parseDataIdArray,
   provider: "anthropic",
   baseUrl: "https://api.anthropic.com",
@@ -260,14 +275,47 @@ export async function discoverFromProvider(
 }
 
 /**
- * Figure out which API key to use for each provider. Reads from
- * environment variables first (standard names), then falls back to
- * a generic KCODE_API_KEY. Returns a map of provider id → key.
- * Providers without a key are omitted from the map.
+ * Figure out which credential to use for each provider, in priority:
+ *   1. KCode OAuth session (keychain-stored access token)
+ *   2. Standard env var API key (ANTHROPIC_API_KEY, OPENAI_API_KEY, ...)
+ *   3. KCODE_-prefixed env var fallback
+ *
+ * Returns a map of provider id → credential. Providers with no
+ * credential at all are omitted. The credential may be either an
+ * OAuth bearer token or an API key — the per-provider `headers`
+ * function in ProviderSpec handles the distinction.
  */
-export function collectProviderKeys(): Map<string, string> {
+export async function collectProviderKeys(): Promise<Map<string, string>> {
   const keys = new Map<string, string>();
+
+  // Try OAuth sessions first. If the user ran `/auth` to log in to
+  // Anthropic or OpenAI via browser, we have an access token in the
+  // keychain and don't need an API key.
+  try {
+    const { getAuthSessionManager } = await import("./auth/session.js");
+    const { resolveProviderConfig } = await import("./auth/oauth-flow.js");
+    const manager = getAuthSessionManager();
+    for (const oauthProvider of ["anthropic", "openai"]) {
+      try {
+        const cfg = resolveProviderConfig(oauthProvider);
+        const token = await manager.getAccessToken(
+          oauthProvider,
+          cfg ?? undefined,
+        );
+        if (token) {
+          keys.set(oauthProvider, token);
+          log.debug("model-discovery", `using OAuth token for ${oauthProvider}`);
+        }
+      } catch {
+        // Provider not configured for OAuth — fall through to env vars
+      }
+    }
+  } catch {
+    // Auth module not available — skip OAuth, use env vars only
+  }
+
   const pick = (id: string, envs: string[]): void => {
+    if (keys.has(id)) return; // OAuth already set it
     for (const env of envs) {
       const v = process.env[env];
       if (v && v.length > 0) {
@@ -293,7 +341,7 @@ export async function runModelDiscovery(opts?: {
   providerFilter?: string[];
   apiKeys?: Map<string, string>;
 }): Promise<DiscoveryResult[]> {
-  const keys = opts?.apiKeys ?? collectProviderKeys();
+  const keys = opts?.apiKeys ?? (await collectProviderKeys());
   const config = await loadModelsConfig();
   const results: DiscoveryResult[] = [];
   let anyAdded = false;
