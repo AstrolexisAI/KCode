@@ -419,6 +419,30 @@ function writeDiscoveryState(state: DiscoveryState): void {
 }
 
 /**
+ * Shared handle to the currently-running auto-discovery, so UI
+ * surfaces (like ModelToggle) can await it with a short timeout
+ * before showing the model list — ensures newly-discovered models
+ * appear on the same /model open that triggered discovery.
+ *
+ * Set by maybeAutoDiscover() on entry, cleared on resolve.
+ */
+let _inFlightDiscovery: Promise<string[]> | null = null;
+
+/**
+ * Returns the in-flight discovery promise if one is running, or null
+ * if discovery isn't currently active. Callers can await the promise
+ * with their own timeout.
+ */
+export function getInFlightDiscovery(): Promise<string[]> | null {
+  return _inFlightDiscovery;
+}
+
+/** Reset module state for tests. Not for production use. */
+export function _resetForTest(): void {
+  _inFlightDiscovery = null;
+}
+
+/**
  * Auto-discovery hook for the TUI. Fires in the background at mount.
  * Skips the actual API calls if we ran discovery recently (default:
  * within the last 6 hours) so opening kcode 20 times in one session
@@ -435,31 +459,42 @@ export async function maybeAutoDiscover(opts?: {
   force?: boolean;
 }): Promise<string[]> {
   const minInterval = opts?.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS;
-  try {
-    if (!opts?.force) {
-      const state = readDiscoveryState();
-      if (state && Date.now() - state.lastRunAt < minInterval) {
-        log.debug(
-          "model-discovery",
-          `skipped (last run ${Math.round((Date.now() - state.lastRunAt) / 60000)}m ago)`,
-        );
-        return [];
+
+  // If a previous call is still in flight, return its promise so
+  // concurrent callers don't kick off duplicate API requests.
+  if (_inFlightDiscovery) return _inFlightDiscovery;
+
+  const runPromise = (async (): Promise<string[]> => {
+    try {
+      if (!opts?.force) {
+        const state = readDiscoveryState();
+        if (state && Date.now() - state.lastRunAt < minInterval) {
+          log.debug(
+            "model-discovery",
+            `skipped (last run ${Math.round((Date.now() - state.lastRunAt) / 60000)}m ago)`,
+          );
+          return [];
+        }
       }
+      const results = await runModelDiscovery();
+      writeDiscoveryState({ lastRunAt: Date.now() });
+      const added = results.flatMap((r) => r.added);
+      if (added.length > 0) {
+        log.info(
+          "model-discovery",
+          `auto-discovered ${added.length} new model(s): ${added.slice(0, 5).join(", ")}${added.length > 5 ? ", ..." : ""}`,
+        );
+      }
+      return added;
+    } catch (err) {
+      log.debug("model-discovery", `auto-discovery failed: ${err}`);
+      return [];
+    } finally {
+      _inFlightDiscovery = null;
     }
+  })();
 
-    const results = await runModelDiscovery();
-    writeDiscoveryState({ lastRunAt: Date.now() });
-
-    const added = results.flatMap((r) => r.added);
-    if (added.length > 0) {
-      log.info(
-        "model-discovery",
-        `auto-discovered ${added.length} new model(s): ${added.slice(0, 5).join(", ")}${added.length > 5 ? ", ..." : ""}`,
-      );
-    }
-    return added;
-  } catch (err) {
-    log.debug("model-discovery", `auto-discovery failed: ${err}`);
-    return [];
-  }
+  _inFlightDiscovery = runPromise;
+  return runPromise;
 }
+

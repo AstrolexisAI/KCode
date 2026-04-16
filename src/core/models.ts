@@ -69,6 +69,16 @@ export async function saveModelsConfig(config: ModelsConfig): Promise<void> {
 }
 
 /**
+ * Invalidate the in-process models cache. Forces the next
+ * loadModelsConfig() call to re-read from disk. Used by ModelToggle
+ * and other UI surfaces that want to pick up discovery results
+ * immediately instead of waiting for the next kcode restart.
+ */
+export function invalidateModelsCache(): void {
+  cachedConfig = null;
+}
+
+/**
  * Normalize a stored baseUrl at load time. KCode's request builder
  * appends /v1/chat/completions to the baseUrl, so the stored value
  * MUST NOT already contain a trailing /v1. If it does (e.g., from an

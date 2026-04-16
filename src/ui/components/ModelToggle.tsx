@@ -31,7 +31,32 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
 
   useEffect(() => {
     (async () => {
-      const { listModels } = await import("../../core/models.js");
+      // If auto-discovery is still running in the background (fired
+      // at TUI mount), wait up to 2s for it to finish so freshly-
+      // added models appear on this same /model open. Beyond 2s we
+      // show the current list anyway — the user shouldn't be stuck
+      // waiting on network to see their existing models.
+      try {
+        const { getInFlightDiscovery } = await import("../../core/model-discovery.js");
+        const inFlight = getInFlightDiscovery();
+        if (inFlight) {
+          await Promise.race([
+            inFlight,
+            new Promise((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        }
+      } catch {
+        /* discovery module absent — safe to skip */
+      }
+
+      // Invalidate the in-process cache so we re-read from disk.
+      // Auto-discovery writes new models to ~/.kcode/models.json
+      // via saveModelsConfig which also updates the cache — but
+      // invalidating here is belt-and-suspenders for any path that
+      // might have updated the file without going through that
+      // function.
+      const { invalidateModelsCache, listModels } = await import("../../core/models.js");
+      invalidateModelsCache();
       const all = await listModels();
       setModels(
         all.map((m) => ({
