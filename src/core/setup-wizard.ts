@@ -193,22 +193,40 @@ export async function runSetup(options?: {
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
-  //  Step 1b: Hardware Tier Check → Cloud-First for Weak Hardware
+  //  Step 1b: Live VRAM check + Hardware Tier Classification
   // ═══════════════════════════════════════════════════════════════
   //
-  // If the user's hardware can't run local at usable speed, route
-  // straight to cloud setup instead of downloading a giant model
-  // that'll crawl at 1 tok/s. User can still pick local as a
-  // fallback inside runCloudSetup if they want.
+  // Query nvidia-smi BEFORE tier classification so the tier reflects
+  // what's actually free right now, not what's physically installed.
+  // A 12GB card with only 1GB free (Blender/other LLM holding it)
+  // should be classified as "weak/unusable", not "medium".
   //
   // Skip this branch when:
   //   - options.model is explicit (they know what they want)
   //   - KCODE_FORCE_LOCAL env is set (escape hatch)
 
   const forceLocal = process.env.KCODE_FORCE_LOCAL === "1";
+
+  // Pre-compute live usable VRAM so both tier classification (here)
+  // and model recommendation (below) use the same figure.
+  let wizardUsableVramMB: number | undefined;
+  let wizardVramAvailability: { usedMB: number | null; freeMB: number | null; totalMB: number } | null = null;
+  if (hw.totalVramMB > 0) {
+    try {
+      const { detectGpuAvailability, effectiveUsableVramMB } = await import(
+        "./gpu-availability.js"
+      );
+      const avail = await detectGpuAvailability(hw.platform, hw.totalVramMB);
+      wizardUsableVramMB = effectiveUsableVramMB(avail, hw.totalVramMB);
+      wizardVramAvailability = avail;
+    } catch (err) {
+      log.debug("setup", `live VRAM detection failed: ${err}`);
+    }
+  }
+
   if (!options?.model && !forceLocal) {
     const { classifyHardware } = await import("./hardware-tier.js");
-    const tier = classifyHardware(hw);
+    const tier = classifyHardware(hw, { liveUsableVramMB: wizardUsableVramMB });
 
     if (tier.primary === "cloud") {
       console.log(
@@ -271,12 +289,74 @@ export async function runSetup(options?: {
       );
       console.log();
     } else if (tier.offerAlternative) {
-      // Strong/medium hardware: still mention cloud is available as a
-      // secondary path. One-liner, not a full menu.
+      // Strong/medium hardware: ASK the user whether they want local
+      // or cloud, don't assume local. A 12GB VRAM card can run
+      // local but cloud might be preferable for quality/speed
+      // reasons. Default = local (preserves local-first philosophy).
       console.log(
-        `    ${C.dim}Tip: run ${C.reset}${C.bold}kcode cloud${C.dim} to also configure a cloud provider as fallback.${C.reset}`,
+        `    ${C.dim}Hardware tier: ${C.reset}${C.bold}${tier.tier}${C.reset} ${C.dim}— ${tier.reason}${C.reset}`,
       );
       console.log();
+      const { createInterface } = await import("node:readline");
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const choice = await new Promise<string>((resolve) => {
+        rl.question(
+          `    Setup path: ${C.bold}[L]${C.reset}ocal model (recommended for your HW) or ${C.bold}[C]${C.reset}loud provider? [L/c]: `,
+          (a) => {
+            rl.close();
+            resolve(a.trim().toLowerCase());
+          },
+        );
+      });
+      console.log();
+
+      if (choice.startsWith("c")) {
+        // User picked cloud even on medium HW — run cloud setup
+        const { runCloudSetup } = await import("./cloud-setup.js");
+        const cloudResult = await runCloudSetup({ tierReason: tier.reason });
+
+        if (!cloudResult.declined) {
+          try {
+            const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
+            await addM({
+              name: cloudResult.defaultModel,
+              baseUrl:
+                cloudResult.providerId === "anthropic"
+                  ? "https://api.anthropic.com"
+                  : cloudResult.providerId === "openai"
+                    ? "https://api.openai.com"
+                    : cloudResult.providerId === "groq"
+                      ? "https://api.groq.com/openai"
+                      : cloudResult.providerId === "deepseek"
+                        ? "https://api.deepseek.com"
+                        : "https://api.together.xyz",
+              provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
+              description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
+            });
+            await setDef(cloudResult.defaultModel);
+          } catch (err) {
+            log.warn("setup", `failed to register cloud model: ${err}`);
+          }
+
+          try {
+            const { writeFileSync, mkdirSync } = await import("node:fs");
+            const { dirname } = await import("node:path");
+            mkdirSync(dirname(SETUP_MARKER), { recursive: true });
+            writeFileSync(SETUP_MARKER, new Date().toISOString());
+          } catch {
+            /* non-fatal */
+          }
+
+          console.log(
+            `    ${C.green}✓${C.reset} ${C.bold}Setup complete (cloud mode)${C.reset}`,
+          );
+          console.log(`    Default model: ${C.cyan}${cloudResult.defaultModel}${C.reset}`);
+          console.log();
+          return;
+        }
+        // Declined cloud too → fall through to local
+      }
+      // Default or 'L' → continue with local path below
     }
   }
 
@@ -287,38 +367,28 @@ export async function runSetup(options?: {
   stepHeader(2, "Selecting the best model for your system");
   console.log();
 
-  // Check LIVE VRAM availability, not just total. If another process
-  // (another LLM server, Blender, game, etc.) is already using part
-  // of the VRAM, we recommend based on what's actually free.
-  let usableVramMB: number | undefined;
-  if (hw.totalVramMB > 0) {
-    try {
-      const { detectGpuAvailability, effectiveUsableVramMB } = await import(
-        "./gpu-availability.js"
-      );
-      const avail = await detectGpuAvailability(hw.platform, hw.totalVramMB);
-      usableVramMB = effectiveUsableVramMB(avail, hw.totalVramMB);
-
-      if (avail.freeMB !== null && avail.usedMB !== null && avail.usedMB > 500) {
-        // Something is already using significant VRAM — tell the user
-        const usedGB = (avail.usedMB / 1024).toFixed(1);
-        const freeGB = (avail.freeMB / 1024).toFixed(1);
-        const totalGB = (avail.totalMB / 1024).toFixed(0);
-        console.log(
-          `    ${C.yellow}⚠${C.reset} Live VRAM check: ${C.bold}${usedGB} GB in use${C.reset} by other processes ` +
-            `(${freeGB} GB free of ${totalGB} GB total)`,
-        );
-        console.log(
-          `    ${C.dim}Recommending based on FREE VRAM, not total. Close other GPU apps for a larger model.${C.reset}`,
-        );
-        console.log();
-      }
-    } catch (err) {
-      log.debug("setup", `live VRAM detection failed: ${err}`);
-    }
+  // Reuse the wizardUsableVramMB / wizardVramAvailability computed
+  // in Step 1b above — no second nvidia-smi call.
+  if (
+    wizardVramAvailability &&
+    wizardVramAvailability.freeMB !== null &&
+    wizardVramAvailability.usedMB !== null &&
+    wizardVramAvailability.usedMB > 500
+  ) {
+    const usedGB = (wizardVramAvailability.usedMB / 1024).toFixed(1);
+    const freeGB = (wizardVramAvailability.freeMB / 1024).toFixed(1);
+    const totalGB = (wizardVramAvailability.totalMB / 1024).toFixed(0);
+    console.log(
+      `    ${C.yellow}⚠${C.reset} Live VRAM check: ${C.bold}${usedGB} GB in use${C.reset} by other processes ` +
+        `(${freeGB} GB free of ${totalGB} GB total)`,
+    );
+    console.log(
+      `    ${C.dim}Recommending based on FREE VRAM, not total. Close other GPU apps for a larger model.${C.reset}`,
+    );
+    console.log();
   }
 
-  const recommended = recommendModel(hw, { usableVramMB });
+  const recommended = recommendModel(hw, { usableVramMB: wizardUsableVramMB });
   const targetCodename = options?.model ?? recommended.codename;
   const entry = findCatalogEntry(targetCodename) ?? recommended;
 
