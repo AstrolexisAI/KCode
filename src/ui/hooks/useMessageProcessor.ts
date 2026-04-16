@@ -491,7 +491,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                   kind: "text",
                   role: "system",
                   text:
-                    "\n  Usage: /license activate <path-to-file.jwt>\n  Example: /license activate ~/Downloads/license.jwt\n",
+                    "\n  Usage:\n    /license activate <path>                — from a .jwt file\n    /license activate eyJhbGci...xyz        — paste the JWT directly\n",
                 },
               ]);
               return;
@@ -503,20 +503,39 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             const { kcodePath } = await import("../../core/paths");
             const { verifyLicenseJwt } = await import("../../core/license");
 
-            // Expand ~ if present
-            const home = process.env.HOME ?? "";
-            const expanded = arg.startsWith("~/") ? home + arg.slice(1) : arg;
-            const absPath = resolve(expanded);
+            // Autodetect: is this the JWT itself, or a path?
+            // JWTs are 3 dot-separated base64url chunks, start with "eyJ",
+            // contain no path separators or whitespace, and are long.
+            const looksLikeJwt =
+              arg.trim().length >= 50 &&
+              arg.trim().startsWith("eyJ") &&
+              arg.trim().split(".").length === 3 &&
+              !arg.includes("/") &&
+              !arg.includes("\\") &&
+              !arg.includes(" ");
 
-            if (!existsSync(absPath)) {
-              setCompleted((prev) => [
-                ...prev,
-                { kind: "text", role: "system", text: `\n  \u2717 File not found: ${absPath}\n` },
-              ]);
-              return;
+            let token: string;
+            if (looksLikeJwt) {
+              token = arg.trim();
+            } else {
+              // Expand ~ if present
+              const home = process.env.HOME ?? "";
+              const expanded = arg.startsWith("~/") ? home + arg.slice(1) : arg;
+              const absPath = resolve(expanded);
+
+              if (!existsSync(absPath)) {
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "system",
+                    text: `\n  \u2717 File not found: ${absPath}\n  (If you meant to paste the JWT directly, make sure it starts with \"eyJ\" and has no spaces.)\n`,
+                  },
+                ]);
+                return;
+              }
+              token = readFileSync(absPath, "utf-8").trim();
             }
-
-            const token = readFileSync(absPath, "utf-8").trim();
             const result = verifyLicenseJwt(token);
             if (!result.valid || !result.claims) {
               setCompleted((prev) => [

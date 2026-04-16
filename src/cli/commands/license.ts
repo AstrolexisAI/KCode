@@ -19,6 +19,22 @@
 
 import type { Command } from "commander";
 
+/**
+ * Cheap heuristic: does this look like a JWT string rather than a
+ * file path? JWTs are three dot-separated base64url chunks with a
+ * deterministic header prefix (eyJ = {"al...). Anything else is
+ * treated as a path.
+ */
+function looksLikeJwt(s: string): boolean {
+  const t = s.trim();
+  if (t.length < 50) return false; // shortest plausible JWT still > 50 chars
+  if (t.includes("/") || t.includes("\\")) return false; // path separator → it's a path
+  if (t.includes(" ") || t.includes("\n")) return false; // whitespace → not a JWT arg
+  const parts = t.split(".");
+  if (parts.length !== 3) return false;
+  return t.startsWith("eyJ"); // all base64url-encoded {"alg":...} headers start with this
+}
+
 /** True if this machine has a private signing key configured. */
 function hasPrivateSigningKey(): boolean {
   const { existsSync } = require("node:fs") as typeof import("node:fs");
@@ -65,9 +81,11 @@ export function registerLicenseCommand(program: Command): void {
   // ─── activate (end-user primary flow) ────────────────────────
 
   licenseCmd
-    .command("activate <jwt-file>")
-    .description("Activate a license from a .jwt file provided by Astrolexis")
-    .action(async (jwtFile: string) => {
+    .command("activate [jwt-or-file]")
+    .description(
+      "Activate a license — accepts a .jwt file path OR the raw JWT string pasted directly. Omit argument for interactive paste prompt.",
+    )
+    .action(async (jwtOrFile: string | undefined) => {
       const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import(
         "node:fs"
       );
@@ -75,13 +93,44 @@ export function registerLicenseCommand(program: Command): void {
       const { kcodePath } = await import("../../core/paths");
       const { verifyLicenseJwt } = await import("../../core/license");
 
-      const absPath = resolve(jwtFile);
-      if (!existsSync(absPath)) {
-        console.error(`\x1b[31m✗\x1b[0m File not found: ${absPath}`);
+      let token: string;
+
+      if (!jwtOrFile) {
+        // Interactive: prompt for paste. User pastes JWT, Enter.
+        const { createInterface } = await import("node:readline");
+        const rl = createInterface({ input: process.stdin, output: process.stdout });
+        token = await new Promise<string>((r) => {
+          rl.question(
+            "Paste your license JWT (press Enter when done):\n> ",
+            (a) => {
+              rl.close();
+              r(a.trim());
+            },
+          );
+        });
+      } else if (looksLikeJwt(jwtOrFile)) {
+        // User pasted the JWT directly as the argument.
+        token = jwtOrFile.trim();
+      } else {
+        // Treat as file path (supports ~ expansion).
+        const home = process.env.HOME ?? "";
+        const expanded = jwtOrFile.startsWith("~/") ? home + jwtOrFile.slice(1) : jwtOrFile;
+        const absPath = resolve(expanded);
+        if (!existsSync(absPath)) {
+          console.error(`\x1b[31m✗\x1b[0m File not found: ${absPath}`);
+          console.error(
+            `  \x1b[2mTip: if you meant to paste the JWT directly, wrap it in quotes.\x1b[0m`,
+          );
+          process.exit(1);
+        }
+        token = readFileSync(absPath, "utf-8").trim();
+      }
+
+      if (!token) {
+        console.error(`\x1b[31m✗\x1b[0m No license token provided.`);
         process.exit(1);
       }
 
-      const token = readFileSync(absPath, "utf-8").trim();
       const result = verifyLicenseJwt(token);
       if (!result.valid || !result.claims) {
         console.error(`\x1b[31m✗\x1b[0m License invalid: ${result.error}`);
