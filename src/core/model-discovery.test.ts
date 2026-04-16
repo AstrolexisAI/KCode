@@ -261,6 +261,32 @@ describe("collectProviderKeys", () => {
     expect(keys.has("anthropic")).toBe(false);
     expect(keys.has("openai")).toBe(false);
   });
+
+  test("falls back to settings.json keys (the /cloud flow stores them here)", async () => {
+    // Simulate a user who ran /cloud and has anthropicApiKey saved
+    // in ~/.kcode/settings.json but no env var exported.
+    writeFileSync(
+      join(testHome, "settings.json"),
+      JSON.stringify({
+        anthropicApiKey: "sk-ant-api03-from-settings",
+        xaiApiKey: "xai-some-key",
+      }),
+      "utf-8",
+    );
+    const keys = await collectProviderKeys();
+    expect(keys.get("anthropic")).toBe("sk-ant-api03-from-settings");
+  });
+
+  test("env var wins over settings.json when both are present", async () => {
+    process.env.ANTHROPIC_API_KEY = "env-wins";
+    writeFileSync(
+      join(testHome, "settings.json"),
+      JSON.stringify({ anthropicApiKey: "settings-loses" }),
+      "utf-8",
+    );
+    const keys = await collectProviderKeys();
+    expect(keys.get("anthropic")).toBe("env-wins");
+  });
 });
 
 describe("Anthropic headers auto-switch on OAuth vs API key", () => {

@@ -331,6 +331,34 @@ export async function collectProviderKeys(): Promise<Map<string, string>> {
   pick("groq", ["GROQ_API_KEY", "KCODE_GROQ_API_KEY"]);
   pick("deepseek", ["DEEPSEEK_API_KEY", "KCODE_DEEPSEEK_API_KEY"]);
   pick("together", ["TOGETHER_API_KEY", "TOGETHER_AI_API_KEY", "KCODE_TOGETHER_API_KEY"]);
+
+  // Final fallback: keys stored in ~/.kcode/settings.json. The /cloud
+  // command saves API keys here (anthropicApiKey, xaiApiKey, etc.)
+  // instead of env vars, so users who configured via /cloud need this
+  // fallback or discovery will wrongly report "no API key configured".
+  try {
+    const settingsPath = kcodePath("settings.json");
+    if (existsSync(settingsPath)) {
+      const raw = readFileSync(settingsPath, "utf-8");
+      const settings = JSON.parse(raw);
+      const fallback = (id: string, field: string): void => {
+        if (keys.has(id)) return;
+        const v = settings[field];
+        if (typeof v === "string" && v.length > 0) {
+          keys.set(id, v);
+          log.debug("model-discovery", `using settings.${field} for ${id}`);
+        }
+      };
+      fallback("anthropic", "anthropicApiKey");
+      fallback("openai", "openaiApiKey");
+      fallback("groq", "groqApiKey");
+      fallback("deepseek", "deepseekApiKey");
+      fallback("together", "togetherApiKey");
+    }
+  } catch {
+    // settings.json unreadable or malformed — skip, not fatal
+  }
+
   return keys;
 }
 
