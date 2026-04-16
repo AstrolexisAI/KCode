@@ -1,18 +1,56 @@
 // KCode — License Management CLI
 //
-// Subcommands:
-//   kcode license status        → show current license (verification only)
-//   kcode license deactivate    → remove license from this machine
-//   kcode license serve         → launch Web UI for generating licenses
-//   kcode license init-keypair  → generate a fresh RSA signing keypair
-//   kcode license generate      → CLI-mode quick-gen (for scripting)
+// End-user commands (visible in help):
+//   kcode license                → equivalent to `status`
+//   kcode license status         → show current license state
+//   kcode license activate <jwt> → activate a license from a .jwt file
+//   kcode license deactivate     → remove license from this machine
+//
+// Admin-only commands (HIDDEN from --help, and refuse to run unless a
+// private signing key is present on this machine):
+//   kcode license serve          → launch Web UI for generating licenses
+//   kcode license init-keypair   → generate a fresh RSA signing keypair
+//   kcode license generate       → CLI-mode quick-gen (for scripting)
+//
+// Gating: admin commands check for ~/.kcode/license-signing.pem (or
+// KCODE_LICENSE_PRIVATE_KEY env). End users never have that key, so
+// those commands are unreachable for them regardless of whether they
+// know the subcommand name.
 
 import type { Command } from "commander";
+
+/** True if this machine has a private signing key configured. */
+function hasPrivateSigningKey(): boolean {
+  const { existsSync } = require("node:fs") as typeof import("node:fs");
+  const envPath = process.env.KCODE_LICENSE_PRIVATE_KEY;
+  if (envPath && existsSync(envPath)) return true;
+  const home = process.env.KCODE_HOME ?? `${process.env.HOME ?? ""}/.kcode`;
+  return existsSync(`${home}/license-signing.pem`);
+}
+
+function refuseIfNotAdmin(cmd: string): boolean {
+  if (hasPrivateSigningKey()) return false;
+  console.error(
+    `\x1b[31m✗\x1b[0m \`kcode license ${cmd}\` is admin-only and requires a private signing key.`,
+  );
+  console.error(
+    `  No signing key found at \x1b[2m~/.kcode/license-signing.pem\x1b[0m or $KCODE_LICENSE_PRIVATE_KEY.`,
+  );
+  console.error(
+    `  If you're an end user trying to activate a license, use: \x1b[1mkcode license activate <file.jwt>\x1b[0m`,
+  );
+  return true;
+}
 
 export function registerLicenseCommand(program: Command): void {
   const licenseCmd = program
     .command("license")
-    .description("Manage your KCode license");
+    .description("Manage your KCode license (status / activate / deactivate)")
+    .action(async () => {
+      // `kcode license` with no subcommand → show status (most common case)
+      const { formatLicenseStatus } = await import("../../core/license");
+      console.log(formatLicenseStatus());
+    });
 
   // ─── status ──────────────────────────────────────────────────
 
@@ -22,6 +60,55 @@ export function registerLicenseCommand(program: Command): void {
     .action(async () => {
       const { formatLicenseStatus } = await import("../../core/license");
       console.log(formatLicenseStatus());
+    });
+
+  // ─── activate (end-user primary flow) ────────────────────────
+
+  licenseCmd
+    .command("activate <jwt-file>")
+    .description("Activate a license from a .jwt file provided by Astrolexis")
+    .action(async (jwtFile: string) => {
+      const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import(
+        "node:fs"
+      );
+      const { resolve, dirname } = await import("node:path");
+      const { kcodePath } = await import("../../core/paths");
+      const { verifyLicenseJwt } = await import("../../core/license");
+
+      const absPath = resolve(jwtFile);
+      if (!existsSync(absPath)) {
+        console.error(`\x1b[31m✗\x1b[0m File not found: ${absPath}`);
+        process.exit(1);
+      }
+
+      const token = readFileSync(absPath, "utf-8").trim();
+      const result = verifyLicenseJwt(token);
+      if (!result.valid || !result.claims) {
+        console.error(`\x1b[31m✗\x1b[0m License invalid: ${result.error}`);
+        process.exit(1);
+      }
+
+      // Install
+      const targetPath = kcodePath("license.jwt");
+      try {
+        mkdirSync(dirname(targetPath), { recursive: true });
+        writeFileSync(targetPath, token, "utf-8");
+      } catch (err) {
+        console.error(`\x1b[31m✗\x1b[0m Failed to save license: ${err}`);
+        process.exit(1);
+      }
+
+      const c = result.claims;
+      const daysLeft = Math.floor((c.exp - Math.floor(Date.now() / 1000)) / 86400);
+      console.log(`\x1b[32m✓\x1b[0m License activated.`);
+      console.log(`  Subject:  ${c.sub}`);
+      console.log(`  Tier:     ${c.tier ?? "pro"}`);
+      console.log(`  Seats:    ${c.seats}`);
+      console.log(`  Features: ${c.features.join(", ")}`);
+      console.log(`  Expires:  ${daysLeft} days (${new Date(c.exp * 1000).toISOString().slice(0, 10)})`);
+      if (c.hardware) {
+        console.log(`  \x1b[2mHardware-bound\x1b[0m`);
+      }
     });
 
   // ─── deactivate ──────────────────────────────────────────────
@@ -41,16 +128,18 @@ export function registerLicenseCommand(program: Command): void {
       console.log("✓ License removed from this machine.");
     });
 
-  // ─── serve (Web UI) ──────────────────────────────────────────
+  // ─── serve (Web UI) — ADMIN-ONLY, hidden from help ───────────
 
   licenseCmd
-    .command("serve")
-    .description("Launch the license generator Web UI on localhost")
+    .command("serve", { hidden: true })
+    .description("[ADMIN] Launch the license generator Web UI on localhost")
     .option("-p, --port <port>", "Port to bind", "11200")
     .option("--host <host>", "Host to bind (default: 127.0.0.1)", "127.0.0.1")
     .option("--open", "Open in browser after starting", false)
     .action(
       async (opts: { port: string; host: string; open: boolean }) => {
+        if (refuseIfNotAdmin("serve")) process.exit(1);
+
         const port = parseInt(opts.port, 10);
         if (!Number.isFinite(port) || port < 1024 || port > 65535) {
           console.error(`Invalid port: ${opts.port} (must be 1024-65535)`);
@@ -84,11 +173,18 @@ export function registerLicenseCommand(program: Command): void {
       },
     );
 
-  // ─── init-keypair ────────────────────────────────────────────
+  // ─── init-keypair ── ADMIN-ONLY, hidden from help ────────────
+  //
+  // Special case: init-keypair is the ONE admin command that can run
+  // without a pre-existing private key — because it creates one.
+  // But it still shouldn't appear in --help for end users. Any user
+  // who runs it gets a keypair but that alone doesn't help them
+  // generate licenses because the public key in their kcode binary
+  // won't match, so verifications of any JWTs they'd sign would fail.
 
   licenseCmd
-    .command("init-keypair")
-    .description("Generate a fresh RSA signing keypair (one-time setup)")
+    .command("init-keypair", { hidden: true })
+    .description("[ADMIN] Generate a fresh RSA signing keypair (one-time setup)")
     .option("--force", "Overwrite existing keypair (invalidates all prior licenses!)", false)
     .action(async (opts: { force: boolean }) => {
       const { generateKeypair } = await import("../../core/license-signer");
@@ -108,11 +204,11 @@ export function registerLicenseCommand(program: Command): void {
       console.log(result.publicKeyPem);
     });
 
-  // ─── generate (CLI-mode quick-gen) ───────────────────────────
+  // ─── generate (CLI-mode quick-gen) — ADMIN-ONLY, hidden ──────
 
   licenseCmd
-    .command("generate")
-    .description("Generate a signed license JWT from CLI flags (for scripts)")
+    .command("generate", { hidden: true })
+    .description("[ADMIN] Generate a signed license JWT from CLI flags (for scripts)")
     .requiredOption("--sub <email>", "Subject (customer email)")
     .option("--tier <tier>", "pro | team | enterprise", "pro")
     .option("--seats <n>", "Number of seats", "1")
@@ -140,6 +236,7 @@ export function registerLicenseCommand(program: Command): void {
         offline: boolean;
         output?: string;
       }) => {
+        if (refuseIfNotAdmin("generate")) process.exit(1);
         const { signLicenseWithSummary } = await import("../../core/license-signer");
         const expiresAt = opts.expires
           ? opts.expires
