@@ -94,6 +94,8 @@ export default function App({ config, conversationManager, tools, initialSession
     names.add("/model");
     names.add("/switch");
     names.add("/license");
+    names.add("/login");
+    names.add("/logout");
     names.add("/plugin");
     names.add("/plugins");
     names.add("/hookify");
@@ -119,7 +121,9 @@ export default function App({ config, conversationManager, tools, initialSession
     descs["/toggle"] = "Switch between local and cloud models";
     descs["/model"] = "Switch between local and cloud models";
     descs["/switch"] = "Switch between local and cloud models";
-    descs["/license"] = "Show license status or activate a license (/license activate <path>)";
+    descs["/license"] = "Show license status or activate a license";
+    descs["/login"] = "Log in to Astrolexis (opens browser — PKCE OAuth)";
+    descs["/logout"] = "Log out of Astrolexis and clear cached subscription";
     descs["/plugin"] = "Install, list, or remove plugins";
     descs["/plugins"] = "Install, list, or remove plugins";
     descs["/hookify"] = "Manage dynamic hookify rules (create, list, toggle, delete, test)";

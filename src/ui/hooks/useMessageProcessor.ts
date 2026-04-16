@@ -475,6 +475,119 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         return;
       }
 
+      // /login — OAuth PKCE flow against astrolexis.space.
+      // Generates a state + code verifier, opens the browser to
+      // astrolexis.space/oauth/authorize, starts a local callback
+      // server, exchanges the returned code for tokens, saves to
+      // keychain, invalidates the subscription cache so the next
+      // isPro() call re-fetches.
+      if (lower === "/login" || lower === "/login astrolexis") {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        try {
+          const { loginProvider } = await import("../../core/auth/oauth-flow");
+          setCompleted((prev) => [
+            ...prev,
+            {
+              kind: "text",
+              role: "system",
+              text:
+                "\n  \u26A1 Opening browser for Astrolexis login...\n  A tab will open at astrolexis.space. Authorize the request there and the TUI will pick up the session automatically.\n",
+            },
+          ]);
+          const result = await loginProvider("astrolexis", {
+            onAuthUrl: (url) => {
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "system",
+                  text: `\n  If the browser didn't open, visit: ${url}\n`,
+                },
+              ]);
+              // Best-effort: open the URL with the OS default handler
+              try {
+                const opener =
+                  process.platform === "darwin"
+                    ? ["open", url]
+                    : process.platform === "win32"
+                      ? ["cmd", "/c", "start", url]
+                      : ["xdg-open", url];
+                const proc = Bun.spawn(opener, { stdout: "ignore", stderr: "ignore" });
+                proc.unref();
+              } catch {
+                /* user will click the fallback URL */
+              }
+            },
+          });
+
+          // Fresh login → invalidate subscription cache so next
+          // isPro() actually hits the server for the new token.
+          try {
+            const { invalidateSubscriptionCache, getSubscription, formatSubscription } =
+              await import("../../core/subscription");
+            invalidateSubscriptionCache();
+            const sub = await getSubscription({ forceRefresh: true });
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "system",
+                text: `\n  \u2713 Logged in to ${result.provider}.\n  ${formatSubscription(sub)}\n`,
+              },
+            ]);
+          } catch (err) {
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "system",
+                text: `\n  \u2713 Logged in to ${result.provider}, but subscription fetch failed: ${err instanceof Error ? err.message : err}\n`,
+              },
+            ]);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "system", text: `\n  \u2717 Login failed: ${msg}\n` },
+          ]);
+        }
+        return;
+      }
+
+      // /logout — clear Astrolexis OAuth session + subscription cache
+      if (lower === "/logout") {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        try {
+          const { getAuthSessionManager } = await import("../../core/auth/session");
+          const { invalidateSubscriptionCache } = await import(
+            "../../core/subscription"
+          );
+          const manager = getAuthSessionManager();
+          await manager.logout("astrolexis");
+          invalidateSubscriptionCache();
+          const { existsSync, unlinkSync } = await import("node:fs");
+          const { kcodePath } = await import("../../core/paths");
+          const cachePath = kcodePath("subscription-cache.json");
+          if (existsSync(cachePath)) unlinkSync(cachePath);
+          setCompleted((prev) => [
+            ...prev,
+            {
+              kind: "text",
+              role: "system",
+              text: "\n  \u2713 Logged out of Astrolexis. Cached subscription cleared.\n",
+            },
+          ]);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "system", text: `\n  \u2717 Logout failed: ${msg}\n` },
+          ]);
+        }
+        return;
+      }
+
       // /license — status | activate <path> | deactivate
       if (lower.startsWith("/license")) {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
