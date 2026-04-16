@@ -6,12 +6,17 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import {
+  createSession,
+  deleteSession,
   findCustomerByKey,
   findCustomerByEmail,
   findCustomerByStripeId,
+  findSessionUser,
   findTrialByEmail,
   findTrialByKey,
+  findUserByEmail,
   insertTrial,
+  insertUser,
   isWebhookProcessed,
   markTrialConverted,
   recordWebhookEvent,
@@ -20,6 +25,19 @@ import {
 } from "./db";
 import { sendProKeyEmail, sendTrialKeyEmail } from "./email";
 import { generateProKey, generateTrialKey, validateKeyChecksum } from "./keys";
+import {
+  authenticateBearer,
+  handleAuthorize,
+  handleAuthorizeConsent,
+  handleToken,
+} from "./oauth";
+import {
+  renderConsent,
+  renderDashboard,
+  renderHome,
+  renderLogin,
+  renderSignup,
+} from "./pages";
 import {
   createCheckoutSession,
   createPortalSession,
@@ -458,6 +476,203 @@ function successPage(proKey: string | null, message: string | null): string {
 </body>
 </html>`;
 }
+
+// ─── Web pages + auth ────────────────────────────────────────
+//
+// The astrolexis.space website: landing, login, signup, dashboard.
+// Session cookies (kcode_sess) are HttpOnly+SameSite=Lax, scoped to
+// the root. Bearer tokens for the API live in a separate table.
+
+const SESSION_COOKIE = "kcode_sess";
+const SESSION_TTL_DAYS = 30;
+
+function setSessionCookie(
+  c: import("hono").Context,
+  sessionId: string,
+): void {
+  const maxAge = SESSION_TTL_DAYS * 86400;
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`,
+  );
+}
+
+function clearSessionCookie(c: import("hono").Context): void {
+  c.header(
+    "Set-Cookie",
+    `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+  );
+}
+
+function readSessionCookie(c: import("hono").Context): string | null {
+  const cookie = c.req.header("cookie") ?? "";
+  const m = cookie.match(new RegExp(`${SESSION_COOKIE}=([^;]+)`));
+  return m ? m[1] ?? null : null;
+}
+
+function currentUser(c: import("hono").Context) {
+  const sessionId = readSessionCookie(c);
+  if (!sessionId) return null;
+  return findSessionUser(sessionId);
+}
+
+function isValidEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+app.get("/", (c) => {
+  const user = currentUser(c);
+  return c.html(renderHome({ loggedIn: !!user }));
+});
+
+// ── Signup ─────────────────────────────────────────────────
+
+app.get("/signup", (c) => {
+  const next = c.req.query("next");
+  return c.html(renderSignup({ next }));
+});
+
+app.post("/signup", async (c) => {
+  const form = await c.req.formData();
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const password = String(form.get("password") ?? "");
+  const next = String(form.get("next") ?? "");
+
+  if (!isValidEmail(email)) {
+    return c.html(renderSignup({ error: "Invalid email address.", next }), 400);
+  }
+  if (password.length < 10) {
+    return c.html(renderSignup({ error: "Password must be at least 10 characters.", next }), 400);
+  }
+  if (findUserByEmail(email)) {
+    return c.html(
+      renderSignup({ error: "An account with that email already exists.", next }),
+      400,
+    );
+  }
+
+  const passwordHash = await Bun.password.hash(password, {
+    algorithm: "argon2id",
+    memoryCost: 19456, // 19 MiB (OWASP 2023)
+    timeCost: 2,
+  });
+  const user = insertUser(email, passwordHash);
+  const sessionId = createSession(user.id);
+  setSessionCookie(c, sessionId);
+  return c.redirect(next || "/dashboard");
+});
+
+// ── Login ──────────────────────────────────────────────────
+
+app.get("/login", (c) => {
+  const next = c.req.query("next");
+  return c.html(renderLogin({ next }));
+});
+
+app.post("/login", async (c) => {
+  const form = await c.req.formData();
+  const email = String(form.get("email") ?? "").trim().toLowerCase();
+  const password = String(form.get("password") ?? "");
+  const next = String(form.get("next") ?? "");
+
+  const user = findUserByEmail(email);
+  if (!user) {
+    return c.html(renderLogin({ error: "Invalid email or password.", next }), 401);
+  }
+  const ok = await Bun.password.verify(password, user.password_hash);
+  if (!ok) {
+    return c.html(renderLogin({ error: "Invalid email or password.", next }), 401);
+  }
+  const sessionId = createSession(user.id);
+  setSessionCookie(c, sessionId);
+  return c.redirect(next || "/dashboard");
+});
+
+// ── Logout ─────────────────────────────────────────────────
+
+app.post("/logout", (c) => {
+  const sessionId = readSessionCookie(c);
+  if (sessionId) deleteSession(sessionId);
+  clearSessionCookie(c);
+  return c.redirect("/");
+});
+
+// ── Dashboard ──────────────────────────────────────────────
+
+app.get("/dashboard", (c) => {
+  const user = currentUser(c);
+  if (!user) return c.redirect("/login?next=/dashboard");
+  const customer = findCustomerByEmail(user.email);
+  return c.html(
+    renderDashboard({
+      email: user.email,
+      tier: customer?.plan ?? "free",
+      status: customer?.status ?? "none",
+      seats: 1, // TODO: team plans
+      features: customer ? ["pro", "audit", "rag", "swarm"] : [],
+      expiresAt: customer?.expires_at ?? null,
+      checkoutUrl: null,
+      portalUrl: null,
+    }),
+  );
+});
+
+// ── OAuth 2.0 PKCE endpoints for kcode CLI ────────────────
+
+app.get("/oauth/authorize", async (c) => handleAuthorize(c));
+app.post("/oauth/authorize/consent", async (c) => handleAuthorizeConsent(c));
+app.post("/oauth/token", async (c) => handleToken(c));
+
+// ── /api/subscription (Bearer-auth, called by kcode CLI) ──
+//
+// This is the single endpoint kcode's src/core/subscription.ts hits
+// after login. Returns the user's current tier + features + status.
+// 401 → token expired/revoked; 403 → authenticated but no active sub.
+
+app.get("/api/subscription", async (c) => {
+  const authed = await authenticateBearer(c);
+  if (!authed) return c.json({ error: "invalid_token" }, 401);
+
+  const { findUserById } = await import("./db");
+  const user = findUserById(authed.userId);
+  if (!user) return c.json({ error: "user_not_found" }, 404);
+
+  const customer = findCustomerByEmail(user.email);
+  if (!customer) {
+    // No active subscription — free tier.
+    return c.json({
+      tier: "free",
+      features: [],
+      seats: 0,
+      status: "none",
+      expiresAt: 0,
+      customer: { email: user.email },
+    });
+  }
+
+  // Active (or recently-canceled) Stripe-backed customer.
+  // Features granted per tier are hardcoded here; a future rev could
+  // store them per-customer in the DB for enterprise custom bundles.
+  const tier = customer.plan as "pro" | "team" | "enterprise";
+  const featuresByTier: Record<string, string[]> = {
+    pro: ["pro", "audit", "rag", "swarm"],
+    team: ["pro", "audit", "rag", "swarm", "team-sync"],
+    enterprise: ["pro", "audit", "rag", "swarm", "team-sync", "enterprise"],
+  };
+  const expiresAt = customer.expires_at
+    ? Math.floor(new Date(customer.expires_at).getTime() / 1000)
+    : 0;
+
+  return c.json({
+    tier,
+    features: featuresByTier[tier] ?? ["pro"],
+    seats: 1,
+    status: customer.status,
+    expiresAt,
+    customer: { email: user.email },
+  });
+});
 
 // ─── Start server ─────────────────────────────────────────────
 
