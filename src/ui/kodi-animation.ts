@@ -19,7 +19,18 @@ export type KodiMood =
   | "mischievous"
   | "crazy"
   | "angry"
-  | "smug";
+  | "smug"
+  | "flex"
+  | "dance"
+  | "waving";
+
+/**
+ * Subscription tier — drives cosmetics (accessories, aura) and behavioral
+ * flourishes (entrance mood, periodic flex, tier-aware speech). Kept
+ * decoupled from KodiMood so the tier affects presentation regardless
+ * of what Kodi happens to be doing at the moment.
+ */
+export type KodiTier = "free" | "pro" | "team" | "enterprise";
 
 export type AnimPhase = "idle" | "anticipation" | "performing" | "settling" | "cooldown";
 
@@ -42,7 +53,12 @@ export interface KodiEvent {
     | "test_pass"
     | "test_fail"
     | "commit"
-    | "error";
+    | "error"
+    // Tier-driven: fired once when the subscription tier is first
+    // detected (entrance flourish) or when the component decides to
+    // trigger a periodic flex (roughly every 90s of idle).
+    | "tier_entrance"
+    | "tier_flex";
   detail?: string;
   /** Live agent statuses for the Kodi panel */
   agentStatuses?: Array<{
@@ -62,6 +78,10 @@ export interface KodiAnimState {
   bubble: string;
   moodColor: string;
   intensity: number; // 0-1
+  /** Current tier. Free = plain; paid tiers drive badge + flourishes. */
+  tier: KodiTier;
+  /** The 1-char tier badge for this frame (cycles). Empty string on free. */
+  tierBadge: string;
 }
 
 // ─── Fixed-Width Helpers ────────────────────────────────────────
@@ -83,57 +103,118 @@ const LINE_WIDTH = 14;
 // All eye sprites use only ASCII + box-drawing (no ambiguous-width Unicode).
 // This guarantees stable column alignment across all terminals and locales.
 const EYES: Record<KodiMood, string[]> = {
-  idle: ["o  .o", "o  _o", "o  .o", "o   o"],
-  happy: ["^  .^", "^  _^", "^  -^"],
-  excited: ["* . *", "* v *", "o . o"],
-  thinking: ["o  _ o", "o  -o", "o  -o"],
-  reasoning: ["O   O", "O  _O", "O   O"],
-  working: ["o  :o", "o  :o", "-  :-"],
-  worried: ["o  ~o", "o  ~o", ";  _;"],
-  sleeping: ["-  _-", "_  __", "-  _-"],
-  celebrating: ["* v *", "^ v ^", "^ v ^"],
-  curious: ["o  .o", "o  -o", "o  .o"],
-  mischievous: [">  ->", "<  -<", ">  -~"],
-  crazy: ["@  .o", "* v @", "o . O"],
-  angry: ["># <#", ">  _<", ">  ^<"],
-  smug: ["~  -~", "- -- ", "^ -^ "],
+  // Idle is now a richer cycle: open, half-open, looking left, looking
+  // right, open again — gives Kodi a "looking around the room" feel
+  // instead of a static stare when nothing is happening.
+  idle: [
+    "o  .o",
+    "o  _o",
+    "o  .o",
+    "o   o",
+    "<   o",
+    "o   >",
+    "o  .o",
+    "O  .o",
+    "o  .O",
+    "-  _-",
+  ],
+  happy: ["^  .^", "^  _^", "^  -^", "^ _ ^", "^  v^", "^  .^"],
+  excited: ["* . *", "* v *", "o . o", "* o *", "* _ *", "o v o"],
+  thinking: ["o  _ o", "o  -o", "o  -o", "o . o", "O   o"],
+  reasoning: ["O   O", "O  _O", "O   O", "O . O", "@   O", "O  @@"],
+  working: ["o  :o", "o  :o", "-  :-", "o  :o", "O  :O"],
+  worried: ["o  ~o", "o  ~o", ";  _;", "o . o"],
+  sleeping: ["-  _-", "_  __", "-  _-", "z  zz", "_  __"],
+  celebrating: ["* v *", "^ v ^", "^ v ^", "* _ *", "^ v *", "* v ^"],
+  curious: ["o  .o", "o  -o", "o  .o", "O . o", "o . O"],
+  mischievous: [">  ->", "<  -<", ">  -~", ">  ^<", "<  ^>"],
+  crazy: ["@  .o", "* v @", "o . O", "@  _@", "*  .*"],
+  angry: ["># <#", ">  _<", ">  ^<", ">< _<", ">  v<"],
+  smug: ["~  -~", "- -- ", "^ -^ ", "~ v - ", "^ -- "],
+  // Flex: confident squint + wink cycle. Reads as "look at me."
+  flex: ["^  -^", "^ v ^", "-  _^", "^ _ -", "^ -- ^"],
+  // Dance: eyes bounce and roll.
+  dance: ["^  v^", "v  ^v", "^  v^", "v  ^v", "* v *", "^  v^"],
+  // Waving — big cheerful eyes with an arm gesture handled in BODY.
+  waving: ["^  .^", "^  _^", "^  -^", "^ _ ^"],
 };
 
 // Body sprites: the `|` (torso) must be at position 5 to align under `┬`.
 // Head: " ╭───────╮" → ┬ at pos 5.  So body: "    /|\\" puts | at pos 5.
 const BODY: Record<KodiMood, string[]> = {
-  idle: ["    /|\\  ", "    /|\\  ", "    /|\\  "],
-  happy: ["    \\|/  ", "    /|\\  ", "    /|\\  "],
-  excited: ["   \\(|)/ ", "    \\|/  ", "   \\(|)/ "],
-  thinking: ["    /|   ", "     |\\  ", "    /|   "],
-  reasoning: ["    /|\\  ", "     |\\  ", "    /|   "],
-  working: ["    /|\\ |", "    /|\\ |", "    /|\\  "],
-  worried: ["    /|\\  ", "   .-|-. ", "    \\|   "],
+  // Idle cycles through a gentle sway (arms lifting + dropping) plus
+  // an occasional hand-on-hip pose. Breathing still advances the
+  // frame pointer, so the sway reads as a natural idle breath.
+  idle: [
+    "    /|\\  ",
+    "    /|\\  ",
+    "    \\|\\  ",
+    "    /|/  ",
+    "    /|\\  ",
+    "   _/|\\_ ",
+    "    /|\\  ",
+    "    \\|/  ",
+  ],
+  happy: ["    \\|/  ", "    /|\\  ", "    /|\\  ", "   \\(|)/ ", "    \\|/  "],
+  excited: ["   \\(|)/ ", "    \\|/  ", "   \\(|)/ ", "   \\(|)- ", "   -(|)/ "],
+  thinking: ["    /|   ", "     |\\  ", "    /|   ", "    /|?  "],
+  reasoning: ["    /|\\  ", "     |\\  ", "    /|   ", "    /|@  "],
+  working: ["    /|\\ |", "    /|\\ |", "    /|\\  ", "    /|> |", "    <|\\ |"],
+  worried: ["    /|\\  ", "   .-|-. ", "    \\|   ", "    /|~  "],
   sleeping: ["    /|\\  ", "    \\|   ", "   __|__ "],
-  celebrating: ["   \\(|)/ ", "   \\(|)/ ", "   \\(|)/ "],
-  curious: ["    /|   ", "     |\\  ", "    /|   "],
-  mischievous: ["    /|-- ", "   .-|/  ", "   _/|\\  "],
-  crazy: ["  ~\\(|)/~", "   /(|)\\ ", "  ~\\(|)/~"],
-  angry: ["   =/|\\= ", "   [/|\\] ", "   =/|\\= "],
-  smug: ["   _/|\\  ", "    /|-- ", "   _/|\\  "],
+  celebrating: [
+    "   \\(|)/ ",
+    "   \\(|)/ ",
+    "   \\(|)/ ",
+    "   *(|)* ",
+    "   \\(|)- ",
+    "   -(|)/ ",
+  ],
+  curious: ["    /|   ", "     |\\  ", "    /|   ", "    /|?  "],
+  mischievous: ["    /|-- ", "   .-|/  ", "   _/|\\  ", "    /|~~ "],
+  crazy: ["  ~\\(|)/~", "   /(|)\\ ", "  ~\\(|)/~", "  *\\(|)/*"],
+  angry: ["   =/|\\= ", "   [/|\\] ", "   =/|\\= ", "   X/|\\X "],
+  smug: ["   _/|\\  ", "    /|-- ", "   _/|\\  ", "   _/|-- "],
+  // Flex: arm-curl alternation (left then right) framed by a sparkly
+  // chest. Works as a short burst on pro/team/enterprise flexes.
+  flex: ["   <(|)> ", "   <(|)/ ", "   \\(|)> ", "   <(|)> ", "   *<|>* "],
+  // Dance: a Lindy-hop-ish sway — left-right-left-right with arms up.
+  dance: [
+    "    \\|/  ",
+    "   <(|)> ",
+    "    /|\\  ",
+    "   /(|)\\ ",
+    "   \\(|)/ ",
+    "   <(|)> ",
+  ],
+  // Waving — one arm stuck up, the other bouncing side-to-side.
+  waving: ["    /|\\\\ ", "    /|/  ", "    /|\\\\ ", "    /|/  "],
 };
 
 // Legs: `/ \` should center under `|` at pos 5 → `/` at 4, `\` at 6.
 const LEGS: Record<KodiMood, string[]> = {
-  idle: ["    / \\  "],
-  happy: ["    / \\  "],
-  excited: ["   _/ \\_ ", "    / \\  "],
+  // Idle leg cycle: normal stance → weight shift left → normal →
+  // weight shift right → tiny hop. Combined with the body sway this
+  // produces a subtle "I'm alive" loop.
+  idle: ["    / \\  ", "   </ \\  ", "    / \\  ", "    / \\> ", "   _/ \\_ "],
+  happy: ["    / \\  ", "   _/ \\  ", "    / \\_ "],
+  excited: ["   _/ \\_ ", "    / \\  ", "  __/ \\__"],
   thinking: ["    / \\  "],
   reasoning: ["    / \\  "],
-  working: ["    / \\  "],
+  working: ["    / \\  ", "    /_\\  "],
   worried: ["   </ \\> ", "    / \\  "],
   sleeping: ["    / \\  "],
-  celebrating: ["   _/ \\_ ", "    / \\  "],
+  celebrating: ["   _/ \\_ ", "    / \\  ", "  __/ \\__", "   _/ \\_ "],
   curious: ["    / \\  "],
   mischievous: ["    / \\  ", "   // \\\\  "],
   crazy: ["   </ \\> ", "  ~/   \\~", "  _/   \\_"],
   angry: ["    / \\  ", "   _/ \\_ "],
   smug: ["    / \\  "],
+  // Flex: planted stance with alternating knee-pop.
+  flex: ["   _/ \\_ ", "   _/_\\_ ", "   _/ \\_ "],
+  // Dance: left-right shuffle. Each frame a different foot forward.
+  dance: ["   _/ \\  ", "    / \\_ ", "   _/ \\  ", "    / \\_ "],
+  waving: ["    / \\  ", "    / \\  ", "   _/ \\  "],
 };
 
 // Accessories — all entries must be 1-2 chars; padded to W_ACC in output
@@ -152,6 +233,27 @@ const ACCESSORIES: Record<KodiMood, string[]> = {
   crazy: ["! ", "?!", "!!"],
   angry: ["  ", "! ", "!!"],
   smug: ["  ", "* ", "~ "],
+  flex: ["* ", "! ", "+ ", "* "],
+  dance: ["~ ", "* ", "~ ", "! "],
+  waving: ["hi", "  ", "hi"],
+};
+
+// ─── Tier badge (permanent cosmetic overlay) ────────────────────
+//
+// Runs alongside the mood-based accessory and appears to the right
+// of the head. Free users see nothing extra; paid tiers get an
+// ASCII badge that cycles to feel alive. The badge is rendered in
+// its own 2-char slot so it never collides with mood accessories.
+//
+// Keep badges ≤2 characters — the header layout has a fixed LINE_WIDTH
+// and the mood accessory already consumes the column to the right of
+// the face. The tier badge sits further right (rendered separately by
+// Kodi.tsx). Emoji are avoided to keep widths predictable.
+const TIER_BADGES: Record<KodiTier, string[]> = {
+  free: ["", "", "", ""],
+  pro: ["★", "*", "★", "+"],
+  team: ["♛", "+", "♛", "*"],
+  enterprise: ["✦", "✧", "✦", "✧"],
 };
 
 // Effect particles
@@ -190,6 +292,31 @@ export const SPEECH_CHIPS: Record<string, string[]> = {
   test_fail: ["red!", "tests!", "bugs"],
 };
 
+/**
+ * Tier-aware speech. When Kodi does an entrance flex or a periodic
+ * "look at me" burst, these are pulled instead of the generic chips
+ * so the personality matches the subscription level. Free never
+ * flexes (badge is empty anyway) but keeps the key for symmetry.
+ */
+export const TIER_SPEECH: Record<KodiTier, { entrance: string[]; flex: string[] }> = {
+  free: {
+    entrance: ["hey!", "let's code"],
+    flex: ["...", "ready"],
+  },
+  pro: {
+    entrance: ["pro mode", "let's ship", "star power", "upgraded!"],
+    flex: ["★ pro", "flex", "shine", "nice ★"],
+  },
+  team: {
+    entrance: ["team up!", "♛ crew", "synced", "all hands"],
+    flex: ["♛ crown", "team!", "crew", "all good"],
+  },
+  enterprise: {
+    entrance: ["enterprise!", "full power", "✦ elite", "max mode"],
+    flex: ["✦ elite", "ultra", "max", "sparkle"],
+  },
+};
+
 // ─── Mood Rhythm ────────────────────────────────────────────────
 
 const MOOD_RHYTHM: Record<KodiMood, AnimRhythm> = {
@@ -207,6 +334,9 @@ const MOOD_RHYTHM: Record<KodiMood, AnimRhythm> = {
   crazy: "fast",
   worried: "medium",
   angry: "fast",
+  flex: "fast",
+  dance: "fast",
+  waving: "medium",
 };
 
 // ─── Phase durations (ms, consumed by tick accumulator) ─────────
@@ -290,6 +420,10 @@ export class KodiAnimEngine {
   // Context
   runningAgents = 0;
   contextPressure = 0;
+
+  // Tier (subscription level) — drives the tier badge + tier-aware
+  // entrance / flex flourishes. Default free until setTier() is called.
+  tier: KodiTier = "free";
 
   /** Advance engine by deltaMs. Pure — no setTimeout, no Date.now(). */
   tick(deltaMs: number): KodiAnimState {
@@ -398,6 +532,11 @@ export class KodiAnimEngine {
       padFixed(`${legsStr}`, LINE_WIDTH), // legs (/ \ centered under |)
     ];
 
+    // Tier badge — cycles independently of mood frames so it always
+    // feels alive even when Kodi is holding a static pose.
+    const badgeVariants = TIER_BADGES[this.tier];
+    const tierBadge = badgeVariants[this.frameIndex % badgeVariants.length] ?? "";
+
     return {
       mood: displayMood,
       phase: this.transitioning ? "anticipation" : this.phase,
@@ -405,6 +544,8 @@ export class KodiAnimEngine {
       bubble: this.bubble,
       moodColor: displayMood,
       intensity: this.intensity,
+      tier: this.tier,
+      tierBadge,
     };
   }
 
@@ -452,6 +593,20 @@ export class KodiAnimEngine {
     } else {
       this.mood = target;
       this.enterPhase("performing");
+    }
+  }
+
+  /**
+   * Swap subscription tier. The very first tier change from free to
+   * anything else triggers an entrance flex; subsequent changes are
+   * silent so re-mounts or refresh cycles don't produce confetti
+   * spam.
+   */
+  setTier(tier: KodiTier): void {
+    const previous = this.tier;
+    this.tier = tier;
+    if (previous === "free" && tier !== "free") {
+      this.react({ type: "tier_entrance" });
     }
   }
 
@@ -539,6 +694,46 @@ export class KodiAnimEngine {
         this.setMood("idle");
         this.intensity = 0.2;
         break;
+      case "tier_entrance": {
+        // Bigger entrance the higher the tier. Enterprise gets a
+        // full celebrate→dance combo, team dances, pro flexes, free
+        // just waves hi (it still feels welcoming without promising
+        // anything users aren't paying for).
+        const speech = TIER_SPEECH[this.tier].entrance;
+        const line = speech[Math.floor(Math.random() * speech.length)] ?? "hi!";
+        if (this.tier === "enterprise") {
+          this.setMood("celebrating");
+          this.say(line, 4000);
+          this.intensity = 1;
+        } else if (this.tier === "team") {
+          this.setMood("dance");
+          this.say(line, 3500);
+          this.intensity = 0.9;
+        } else if (this.tier === "pro") {
+          this.setMood("flex");
+          this.say(line, 3500);
+          this.intensity = 0.85;
+        } else {
+          this.setMood("waving");
+          this.say(line, 3000);
+          this.intensity = 0.6;
+        }
+        break;
+      }
+      case "tier_flex": {
+        // Periodic "look at me" while idle. Free stays silent.
+        if (this.tier === "free") break;
+        const speech = TIER_SPEECH[this.tier].flex;
+        const line = speech[Math.floor(Math.random() * speech.length)] ?? "";
+        // Enterprise gets dance; team flexes; pro waves — decreasing
+        // hype proportional to tier.
+        if (this.tier === "enterprise") this.setMood("dance");
+        else if (this.tier === "team") this.setMood("flex");
+        else this.setMood("waving");
+        this.say(line, 2500);
+        this.intensity = 0.7;
+        break;
+      }
     }
 
     if (this.runningAgents > 0) this.intensity = Math.min(1, this.intensity + 0.15);

@@ -5,6 +5,7 @@ import { Box, Text, useApp } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
 import { getRateLimitUsage } from "../core/request-builder.js";
+import { getSubscription, type SubscriptionTier } from "../core/subscription.js";
 import { SkillManager } from "../core/skills.js";
 import { CHARS_PER_TOKEN } from "../core/token-budget.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
@@ -154,6 +155,36 @@ export default function App({ config, conversationManager, tools, initialSession
   const [selectedTabIndex, setSelectedTabIndex] = useState(0);
   const [sessionStart] = useState(() => Date.now());
   const [sessionNotes, setSessionNotes] = useState<Array<{ time: string; text: string }>>([]);
+
+  // Subscription tier — fetched once at mount so Kodi can render the
+  // tier badge, trigger the entrance flex, and gate tier-aware
+  // speech. Refreshes silently in the background every 15 min in case
+  // the user upgrades mid-session. Runs against the 1h memory/disk
+  // cache inside getSubscription(), so the cost is at most one
+  // /api/subscription HTTP call per quarter hour.
+  const [subscriptionTier, setSubscriptionTier] = useState<SubscriptionTier | undefined>(undefined);
+  const [subscriptionFeatures, setSubscriptionFeatures] = useState<string[] | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const sub = await getSubscription();
+        if (cancelled) return;
+        setSubscriptionTier(sub.tier);
+        setSubscriptionFeatures(sub.features);
+      } catch {
+        // Not logged in / offline / no cache → fall through to free
+        // without surfacing an error in the UI.
+      }
+    };
+    load();
+    const interval = setInterval(load, 15 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const [watcherSuggestions, setWatcherSuggestions] = useState<string[]>([]);
   const [sessionName, setSessionName] = useState<string>(initialSessionName ?? "");
   const [sessionTags, setSessionTags] = useState<string[]>([]);
@@ -1009,6 +1040,8 @@ export default function App({ config, conversationManager, tools, initialSession
           sessionStartTime={sessionStart}
           subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
           subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
+          tier={subscriptionTier}
+          tierFeatures={subscriptionFeatures}
         />
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
