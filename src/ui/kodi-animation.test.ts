@@ -307,6 +307,77 @@ describe("KodiAnimEngine — no ambiguous-width Unicode", () => {
   });
 });
 
+// ─── Tier & new moods ───────────────────────────────────────────
+
+describe("KodiAnimEngine — tier flourishes", () => {
+  test("default tier is free with empty badge", () => {
+    const frame = new KodiAnimEngine().tick(200);
+    expect(frame.tier).toBe("free");
+    expect(frame.tierBadge).toBe("");
+  });
+
+  test("setTier to pro emits non-empty badge and triggers entrance flex", () => {
+    const e = new KodiAnimEngine();
+    e.setTier("pro");
+    const frame = e.tick(50);
+    expect(frame.tier).toBe("pro");
+    expect(frame.tierBadge).not.toBe("");
+    // pro entrance → flex mood with speech bubble
+    expect(frame.mood === "flex" || frame.bubble.length > 0).toBe(true);
+  });
+
+  test("enterprise entrance mood is celebrating", () => {
+    const e = new KodiAnimEngine();
+    e.setTier("enterprise");
+    const frame = e.tick(50);
+    expect(frame.mood).toBe("celebrating");
+    expect(frame.tier).toBe("enterprise");
+  });
+
+  test("tier_entrance does not refire on re-setting the same tier", () => {
+    const e = new KodiAnimEngine();
+    e.setTier("pro");
+    advance(e, 10_000); // let the entrance settle
+    e.setMood("idle");
+    advance(e, 2000);
+    e.setTier("pro"); // idempotent
+    const frame = e.tick(50);
+    expect(frame.mood).toBe("idle");
+  });
+
+  test("tier_flex on free tier is a no-op", () => {
+    const e = new KodiAnimEngine();
+    // tier defaults to free; flex should not change mood
+    e.react({ type: "tier_flex" });
+    const frame = e.tick(50);
+    expect(frame.mood).toBe("idle");
+  });
+
+  test("tier_flex on enterprise kicks Kodi into dance", () => {
+    const e = new KodiAnimEngine();
+    e.setTier("enterprise");
+    advance(e, 5000); // clear entrance
+    e.setMood("idle");
+    advance(e, 1000);
+    e.react({ type: "tier_flex" });
+    const frame = e.tick(50);
+    expect(frame.mood).toBe("dance");
+  });
+
+  test("new moods produce valid 5-line output with correct width", () => {
+    const e = new KodiAnimEngine();
+    for (const mood of ["flex", "dance", "waving"] as const) {
+      e.setMood(mood);
+      const frame = e.tick(50);
+      expect(frame.lines).toHaveLength(5);
+      // All lines same width as the existing sprite (LINE_WIDTH = 14)
+      for (const line of frame.lines) {
+        expect([...line].length).toBe(14);
+      }
+    }
+  });
+});
+
 // ─── Determinism ────────────────────────────────────────────────
 
 describe("KodiAnimEngine — determinism", () => {
