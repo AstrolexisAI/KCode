@@ -55,6 +55,23 @@ export default function App({ config, conversationManager, tools, initialSession
     return sm;
   });
 
+  // Auto-discover new cloud models on TUI startup. Fires in the
+  // background so it never blocks the UI mount — a 6-hour throttle
+  // inside maybeAutoDiscover prevents hammering provider APIs across
+  // back-to-back kcode launches. New models (e.g. Opus 4.7 the day it
+  // ships) land in ~/.kcode/models.json and become available in the
+  // `/model` switcher after the next kcode restart.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { maybeAutoDiscover } = await import("../core/model-discovery.js");
+        await maybeAutoDiscover();
+      } catch {
+        // Best-effort: never surface discovery failures to the user.
+      }
+    })();
+  }, []);
+
   // Build completions list from skills (slash commands + aliases)
   // Uses a Set to guarantee no duplicates regardless of source
   const [slashCompletions] = useState(() => {
