@@ -18,6 +18,19 @@ export const PROVIDER_CONFIGS: Record<string, Partial<OAuthConfig>> = {
     scopes: ["api", "sync"],
     label: "KCode Cloud",
   },
+  astrolexis: {
+    // Astrolexis licensing: OAuth PKCE against astrolexis.space.
+    // The site handles login/signup, binds the kcode install to the
+    // user's subscription, and returns an access_token. The access
+    // token is later used to hit GET /api/subscription for tier +
+    // feature + seat info — see src/core/subscription.ts.
+    provider: "astrolexis",
+    authorizationUrl: "https://astrolexis.space/oauth/authorize",
+    tokenUrl: "https://astrolexis.space/oauth/token",
+    clientId: "kcode-cli",
+    scopes: ["subscription:read"],
+    label: "Astrolexis",
+  },
   anthropic: {
     provider: "anthropic",
     authorizationUrl: "https://console.anthropic.com/oauth/authorize",

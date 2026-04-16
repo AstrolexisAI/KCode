@@ -174,8 +174,27 @@ export async function isPro(): Promise<boolean> {
 
 async function _doValidation(): Promise<boolean> {
   try {
+    // ── Priority 0: Astrolexis OAuth subscription ─────────────────
+    // The new canonical path: user ran /login in the TUI, we have
+    // an OAuth access token for astrolexis.space, and the server
+    // says their subscription is active. Cached for 1h to avoid
+    // hammering the API. Falls through to the offline/key paths
+    // below if no token is configured (e.g., air-gapped installs).
+    try {
+      const { hasProSubscription } = await import("./subscription.js");
+      const active = await hasProSubscription();
+      if (active) {
+        log.debug("pro", "Activated via Astrolexis OAuth subscription");
+        return true;
+      }
+    } catch (err) {
+      // Subscription module unavailable or threw — silently fall
+      // through. We don't want isPro() to throw under any condition.
+      log.debug("pro", `subscription check skipped: ${err}`);
+    }
+
     // ── Priority 1: Offline license file (JWT) ──────────────────
-    // Check for a signed license file first — this never requires network.
+    // Check for a signed license file next — this never requires network.
     // Supports air-gapped/on-prem deployments with permanent offline Pro.
     const licenseResult = checkOfflineLicense();
     if (licenseResult.valid) {
