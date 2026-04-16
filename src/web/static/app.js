@@ -356,7 +356,11 @@
       if (window.DOMPurify) {
         body.innerHTML = window.DOMPurify.sanitize(rendered);
       } else {
-        body.innerHTML = rendered;
+        // CWE-79 fix: never assign unsanitized HTML to innerHTML.
+        // If DOMPurify failed to load, fall back to safe textContent
+        // which escapes all HTML. The user loses markdown rendering
+        // but gains XSS protection — correct trade-off.
+        body.textContent = msg.content;
       }
     }
 

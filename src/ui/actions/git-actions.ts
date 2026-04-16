@@ -19,17 +19,22 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
     case "blame": {
       if (!args?.trim()) return "  Usage: /blame <file path>";
 
-      const { execSync } = await import("node:child_process");
+      const { execFileSync } = await import("node:child_process");
       const { resolve: resolvePath, relative } = await import("node:path");
       const cwd = appConfig.workingDirectory;
       const filePath = resolvePath(cwd, args.trim());
       const relPath = relative(cwd, filePath);
 
       try {
-        const shortOutput = execSync(`git blame --date=short "${relPath}" 2>&1`, {
-          cwd,
-          timeout: 10000,
-        })
+        // Use execFileSync with array args to prevent shell injection.
+        // The old execSync template literal was CWE-78 — relPath comes
+        // from user input and $() or backticks inside double quotes
+        // still execute in shell mode.
+        const shortOutput = execFileSync(
+          "git",
+          ["blame", "--date=short", relPath],
+          { cwd, timeout: 10000, stdio: ["pipe", "pipe", "pipe"] },
+        )
           .toString()
           .trim();
         const rawLines = shortOutput.split("\n");
