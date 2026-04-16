@@ -95,6 +95,63 @@ describe("classifyHardware — CPU only", () => {
   });
 });
 
+describe("classifyHardware with live VRAM override", () => {
+  test("12GB card with 1GB free → unusable (no model fits)", () => {
+    const r = classifyHardware(
+      hw({ totalVramMB: 12 * 1024 }),
+      { liveUsableVramMB: 1024 },
+    );
+    expect(r.tier).toBe("unusable");
+    expect(r.primary).toBe("cloud");
+    expect(r.offerAlternative).toBe(false);
+    expect(r.reason).toContain("1.0GB free");
+  });
+
+  test("12GB card with 2GB free → weak (can still force local)", () => {
+    const r = classifyHardware(
+      hw({ totalVramMB: 12 * 1024 }),
+      { liveUsableVramMB: 2 * 1024 },
+    );
+    expect(r.tier).toBe("weak");
+    expect(r.primary).toBe("cloud");
+    expect(r.offerAlternative).toBe(true);
+  });
+
+  test("24GB card with only 6GB free → weak (downgraded from strong)", () => {
+    const r = classifyHardware(
+      hw({ totalVramMB: 24 * 1024 }),
+      { liveUsableVramMB: 6 * 1024 },
+    );
+    expect(r.tier).toBe("weak");
+    expect(r.primary).toBe("cloud");
+    expect(r.reason).toContain("6GB free of 24GB");
+  });
+
+  test("12GB card with 9.5GB free → medium (healthy local)", () => {
+    const r = classifyHardware(
+      hw({ totalVramMB: 12 * 1024 }),
+      { liveUsableVramMB: 9.5 * 1024 },
+    );
+    expect(r.tier).toBe("medium");
+    expect(r.primary).toBe("local");
+  });
+
+  test("24GB card with 22GB free → strong (confirmed by live)", () => {
+    const r = classifyHardware(
+      hw({ totalVramMB: 24 * 1024 }),
+      { liveUsableVramMB: 22 * 1024 },
+    );
+    expect(r.tier).toBe("strong");
+    expect(r.primary).toBe("local");
+  });
+
+  test("no liveUsableVramMB → falls back to total VRAM logic (backwards compat)", () => {
+    const r = classifyHardware(hw({ totalVramMB: 12 * 1024 }));
+    // Without live override, 12GB total = medium
+    expect(r.tier).toBe("medium");
+  });
+});
+
 describe("tierLabel", () => {
   test("returns human-readable labels", () => {
     expect(tierLabel("strong")).toContain("local-first");
