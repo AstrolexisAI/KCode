@@ -276,4 +276,45 @@ export function registerModelsCommand(program: Command): void {
       console.log(`  Generation speed:           ${tokensPerSec.toFixed(1)} tokens/sec`);
       console.log(`  Total time:                 ${(totalMs / 1000).toFixed(2)} s`);
     });
+
+  modelsCmd
+    .command("discover")
+    .description("Query cloud provider /v1/models endpoints and register new models")
+    .option(
+      "--provider <ids>",
+      "Comma-separated provider IDs (anthropic,openai,groq,deepseek,together). Default: all with keys.",
+    )
+    .action(async (opts: { provider?: string }) => {
+      const { runModelDiscovery } = await import("../../core/model-discovery");
+      const providerFilter = opts.provider
+        ? opts.provider.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+
+      console.log("Discovering models from cloud providers...\n");
+      const results = await runModelDiscovery({ providerFilter });
+
+      let totalAdded = 0;
+      for (const r of results) {
+        const label = r.provider.padEnd(10);
+        if (r.error) {
+          console.log(`  ${label} — skipped (${r.error})`);
+          continue;
+        }
+        if (r.added.length === 0) {
+          console.log(`  ${label} — up to date (${r.skipped.length} known)`);
+          continue;
+        }
+        totalAdded += r.added.length;
+        console.log(`  ${label} — \x1b[32m+${r.added.length} new\x1b[0m:`);
+        for (const id of r.added) {
+          console.log(`      ${id}`);
+        }
+      }
+
+      if (totalAdded === 0) {
+        console.log("\nNo new models to add.");
+      } else {
+        console.log(`\n\x1b[32m✓\x1b[0m Added ${totalAdded} new model(s) to the registry.`);
+      }
+    });
 }
