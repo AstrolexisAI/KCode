@@ -328,7 +328,14 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "SQL query with string formatting (injection risk)",
     severity: "high",
     languages: ["python"],
-    regex: /\b(?:execute|executemany|raw)\s*\(\s*(?:f["']|["'].*%|["'].*\.format\()/g,
+    // `%\s` (not bare `%`) so `"... %s"` / `"... %d"` / `"... %i"`
+    // parameterized-query placeholders don't accidentally match as
+    // if they were `%`-format operators. The Python `%`-format
+    // operator is always written with a space (`"x" % var`) or
+    // with a paren (`"x" %(dict)s`); never adjacent to the format
+    // specifier letter. Found by the Phase 3 fixture harness
+    // (tests/patterns/py-004-sql-injection/negative-pct-placeholder.py).
+    regex: /\b(?:execute|executemany|raw)\s*\(\s*(?:f["']|["'].*%[\s(]|["'].*\.format\()/g,
     explanation:
       "SQL queries built with f-strings, % formatting, or .format() are vulnerable to SQL injection. Use parameterized queries instead.",
     verify_prompt:
