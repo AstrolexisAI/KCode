@@ -13,6 +13,22 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.128] — 2026-04-17
+
+### Security / docs
+- GitGuardian-false-positive prevention on the embedded license
+  public key (`src/core/license.ts:52`). The PEM block is RSA
+  **PUBLIC** key material — used to VERIFY signed JWTs offline —
+  and is intentionally committed so every install can verify
+  licenses without a network call. Replaced the brief comment
+  with a prominent `!!! PUBLIC KEY — NOT A SECRET !!!` docblock
+  explicitly telling scanners / reviewers this is asymmetric-
+  crypto verification material, not a credential. [#98]
+- Audit confirmed no PRIVATE key or JWT token is embedded
+  anywhere in the repo. `license-signer.ts` reads the private
+  key from an external path (`$KCODE_LICENSE_PRIVATE_KEY` env
+  or `~/.kcode/license-signing.pem`), never embeds it.
+
 ## [2.10.127] — 2026-04-17
 
 ### Security
