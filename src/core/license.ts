@@ -45,9 +45,22 @@ export interface LicenseValidationResult {
 }
 
 // ─── Embedded Public Key ────────────────────────────────────────
-// This is the Kulvex license-signing public key (RS256).
-// The corresponding private key is held by the Kulvex licensing server.
-// Customers receive signed JWTs; KCode verifies them locally with this key.
+//
+// !!! PUBLIC KEY — NOT A SECRET !!!
+//
+// This is RSA PUBLIC KEY material used to VERIFY JWTs signed by
+// the Kulvex licensing server. It is intentionally embedded in
+// source so every KCode install can verify licenses offline.
+//
+// The corresponding PRIVATE key lives on the licensing server
+// and never touches this repo. Anyone can read this public key;
+// that's the whole point of asymmetric crypto.
+//
+// If a secret-scanner (GitGuardian, gitleaks, TruffleHog, etc.)
+// flags this block, it's a false positive — the scanner is
+// reading "BEGIN … KEY" without distinguishing PUBLIC from
+// PRIVATE. Mark as "false positive — public key" in your
+// scanner's UI and move on.
 
 const KULVEX_LICENSE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z1qR3kJxRKMsz8LWaF1
