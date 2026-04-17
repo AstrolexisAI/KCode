@@ -205,12 +205,12 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
 
     const oauthName = OAUTH_PROVIDER_MAP[provider.id] ?? provider.id;
 
-    // Check if user already has CLI auth (Claude Code / Codex)
+    // Check if user already has CLI auth (Anthropic / Codex)
     try {
       const bridge = await import("../../core/auth/claude-code-bridge.js");
       if (oauthName === "anthropic" && bridge.isClaudeCodeAuthenticated()) {
         const info = bridge.getClaudeCodeAuthInfo();
-        setCliDetail(`Claude Code (${info.subscriptionType ?? "active"} plan)`);
+        setCliDetail(`Anthropic CLI (${info.subscriptionType ?? "active"} plan)`);
         setStage("cli-detected");
         return;
       }

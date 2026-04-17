@@ -61,7 +61,7 @@ Requires: Xcode 15+ on a Mac
 On first launch, tap ⋯ → Settings:
 
 - **Server URL**: `http://192.168.1.42:10100` (LAN) or `http://100.64.0.5:10100` (Tailscale)
-- **Model**: `claude-opus-4-6` (or sonnet/haiku)
+- **Model**: any model ID your KCode server has configured (run `kcode models list`)
 - **Working Directory**: `/home/curly/projects/myproject` (absolute path)
 
 Tap "Test Connection" to verify.

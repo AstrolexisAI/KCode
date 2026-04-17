@@ -92,7 +92,7 @@ export function registerAuthCommand(program: Command): void {
         const icon = status.authenticated ? "\u2713" : "\u2717";
         const methodLabel =
           status.method === "claude-code"
-            ? `Claude Code${status.detail ? ` (${status.detail})` : ""}`
+            ? `Anthropic CLI${status.detail ? ` (${status.detail})` : ""}`
             : status.method === "oauth"
               ? "OAuth"
               : status.method === "api_key"

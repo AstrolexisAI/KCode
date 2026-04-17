@@ -13,6 +13,32 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.130] — 2026-04-17
+
+### Changed (branding — KCode is its own product)
+- Removed Claude/Claude Code branding references from all public
+  surfaces: README comparison tables, site/src/pages/compare.astro
+  (column dropped, "vs Claude Code" scenario removed), blog excerpt,
+  HN post draft, iOS companion (Settings picker + README + default
+  model), docstring in `src/tools/plan.ts`, comment in `Kodi.tsx`,
+  help text in `session-actions.ts`, test fixtures in Header /
+  InputPrompt / ModelToggle / Kodi render tests, comment in
+  `system-prompt.ts` and `audit-engine/patterns.ts`.
+- Anthropic stays supported as a cloud provider in `/cloud` —
+  OAuth bridge, pricing table, model-discovery, request formatting,
+  rate-limit cascade, and config key are unchanged. The literal
+  `claude-*` model identifiers in `CloudMenu.tsx` and provider-
+  detection plumbing are Anthropic's API IDs, not KCode branding;
+  they remain.
+- Default audit model flipped from `claude-opus-4-6` /
+  `api.anthropic.com` → `gpt-4o` / `api.openai.com` (only affects
+  users who have neither `--model` nor `settings.model` configured).
+
+### Added (distribution)
+- Binaries 2.10.129 published on GitHub Releases + kulvex.ai CDN
+  (see v2.10.129 entry). This version is branding-only; identical
+  runtime behavior except for the audit-default fallback note above.
+
 ## [2.10.129] — 2026-04-17
 
 ### Added (licensing framework — dual license)

@@ -216,10 +216,10 @@ export function parseKodiAdvisorJson(raw: string): KodiReaction | null {
 
 async function generateReaction(context: string): Promise<KodiReaction | null> {
   // Advisor is Kodi-server-only. No fallback to the main coding
-  // model: using the user's expensive Claude/Opus tokens to produce
-  // a single bubble hint would be a pointless cost. If the Kodi
-  // server isn't running, the deterministic engine (engine.react
-  // + SPEECH_CHIPS) handles everything.
+  // model: burning expensive cloud-API tokens to produce a single
+  // bubble hint would be a pointless cost. If the Kodi server
+  // isn't running, the deterministic engine (engine.react +
+  // SPEECH_CHIPS) handles everything.
   const kodiUrl = await resolveKodiBaseUrl();
   if (!kodiUrl) return null;
 

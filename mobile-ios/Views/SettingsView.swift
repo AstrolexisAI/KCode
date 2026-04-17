@@ -41,11 +41,9 @@ struct SettingsView: View {
                 }
 
                 Section("Model") {
-                    Picker("Model", selection: $settings.model) {
-                        Text("Claude Opus 4.6").tag("claude-opus-4-6")
-                        Text("Claude Sonnet 4.6").tag("claude-sonnet-4-6")
-                        Text("Claude Haiku 4.5").tag("claude-haiku-4-5")
-                    }
+                    TextField("e.g. mnemo:mark6-mid, gpt-4o, or any model your server has", text: $settings.model)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 }
 
                 Section {

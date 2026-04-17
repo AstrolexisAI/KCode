@@ -52,7 +52,7 @@ The machine does the discovery (0 tokens). The LLM only verifies (small, focused
 - Open source: AGPL-3.0
 
 GitHub: https://github.com/AstrolexisAI/KCode
-Compare with Claude Code/Cursor/Aider: https://kulvex.ai/kcode/compare
+Compare with Cursor/Aider: https://kulvex.ai/kcode/compare
 
 ---
 

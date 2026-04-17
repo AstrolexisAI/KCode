@@ -18,7 +18,7 @@ const baseProps = {
   runningAgents: 0,
   sessionElapsedMs: 0,
   lastEvent: null,
-  model: "claude-opus-4-6",
+  model: "gpt-4o",
   version: "2.6.16",
   workingDirectory: "/home/user/proj",
 };
@@ -41,7 +41,7 @@ describe("Kodi render", () => {
 
   test("shows model name", () => {
     instance = renderWithTheme(<KodiCompanion {...baseProps} />);
-    expect(instance.lastFrame()).toContain("claude-opus-4-6");
+    expect(instance.lastFrame()).toContain("gpt-4o");
   });
 
   test("shows working directory (shortened)", () => {

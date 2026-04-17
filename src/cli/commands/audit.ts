@@ -88,14 +88,14 @@ export function registerAuditCommand(program: Command): void {
       } else {
         const settings = await loadSettings(projectRoot);
         llmCallback = makeAuditLlmCallback({
-          model: opts.model ?? settings.model ?? "claude-opus-4-6",
-          apiBase: opts.apiBase ?? settings.apiBase ?? "https://api.anthropic.com/v1",
+          model: opts.model ?? settings.model ?? "gpt-4o",
+          apiBase: opts.apiBase ?? settings.apiBase ?? "https://api.openai.com/v1",
           apiKey: opts.apiKey ?? settings.apiKey,
         });
         if (opts.fallbackModel) {
           fallbackCallback = makeAuditLlmCallback({
             model: opts.fallbackModel,
-            apiBase: opts.fallbackApiBase ?? "https://api.anthropic.com/v1",
+            apiBase: opts.fallbackApiBase ?? "https://api.openai.com/v1",
             apiKey: opts.fallbackApiKey,
           });
           console.log(
