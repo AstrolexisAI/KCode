@@ -100,6 +100,9 @@ export interface KodiAnimState {
   side: "left" | "right";
   /** True during a door teleport; renderer uses to suppress walk offset. */
   inDoor: boolean;
+  /** Internal urges — the autonomy layer polls these to decide
+   * when Kodi wants to act. 1.0 = wants to act now. */
+  urges: { boredom: number; curiosity: number; wanderlust: number };
 }
 
 /**
@@ -552,9 +555,29 @@ export class KodiAnimEngine {
   private doorTimer = 0;
   private doorFlipped = false;
 
+  // Urges — Kodi's internal free-will state. These build up
+  // ambiently based on what's happening (or not) in the modal,
+  // and drain when the corresponding action fires. The autonomy
+  // layer in Kodi.tsx reads these instead of polling a wall clock,
+  // so Kodi acts when he's "in the mood", not on a cron schedule.
+  //
+  // All urges are in [0, 1]. 1.0 = the action wants to fire right
+  // now. Buildup rates are calibrated so free-tier-like activity
+  // produces roughly organic cadence (boredom ~90s pure idle,
+  // curiosity ~3min, wanderlust ~7min).
+  urges = {
+    /** Drives autonomous idle actions (yawn, stretch, read...). */
+    boredom: 0,
+    /** Drives musings (passing thoughts spoken out loud). */
+    curiosity: 0,
+    /** Drives door teleports across the info panel. */
+    wanderlust: 0,
+  };
+
   /** Advance engine by deltaMs. Pure — no setTimeout, no Date.now(). */
   tick(deltaMs: number): KodiAnimState {
     this.tickCount++;
+    this.stepUrges(deltaMs);
     const rhythm = this.getEffectiveRhythm();
 
     // ── Door teleport ──
@@ -699,6 +722,7 @@ export class KodiAnimEngine {
       tierBadge,
       side: this.side,
       inDoor,
+      urges: { ...this.urges },
     };
   }
 
@@ -714,6 +738,13 @@ export class KodiAnimEngine {
     this.doorTimer = 1500;
     this.doorFlipped = false;
     this.say("poof!", 1500);
+  }
+
+  /** True while Kodi is inside the door frame (mid-teleport). The
+   * autonomy loop uses this to hold off firing other actions while
+   * the teleport animation is running. */
+  inDoorAnimation(): boolean {
+    return this.doorTimer > 0;
   }
 
   // ── Phase Machine ──
@@ -775,6 +806,40 @@ export class KodiAnimEngine {
     this.personality = p;
   }
 
+  /**
+   * Advance the internal urges. Pure buildup based on current mood
+   * — boredom grows faster when Kodi is idle, curiosity grows
+   * always (Kodi is always looking around), wanderlust grows even
+   * slower because traveling is a big deal. No wall-clock reads;
+   * deltaMs is the only time signal.
+   */
+  private stepUrges(deltaMs: number): void {
+    const dtSec = deltaMs / 1000;
+    const isIdle = this.mood === "idle" && this.phase === "idle";
+    // Boredom: 0 → 1 over ~90s of pure idle; drains gently when Kodi
+    // is in any non-idle mood (events already give Kodi something to
+    // do, so no need to act from boredom).
+    if (isIdle) {
+      this.urges.boredom = Math.min(1, this.urges.boredom + 0.011 * dtSec);
+    } else {
+      this.urges.boredom = Math.max(0, this.urges.boredom - 0.02 * dtSec);
+    }
+    // Curiosity: 0 → 1 over ~3 min, always-on trickle.
+    this.urges.curiosity = Math.min(1, this.urges.curiosity + 0.0055 * dtSec);
+    // Wanderlust: 0 → 1 over ~7 min, the slowest build.
+    this.urges.wanderlust = Math.min(1, this.urges.wanderlust + 0.0024 * dtSec);
+  }
+
+  /**
+   * Drain an urge. Called by the autonomy layer after firing the
+   * associated action. Clamped to [0, 1]. amount is how much of the
+   * urge is spent — typically 0.5-1.0 for a full action, less for
+   * partial satisfactions.
+   */
+  drainUrge(urge: "boredom" | "curiosity" | "wanderlust", amount: number): void {
+    this.urges[urge] = Math.max(0, this.urges[urge] - amount);
+  }
+
   setTier(tier: KodiTier): void {
     const previous = this.tier;
     this.tier = tier;
@@ -791,6 +856,21 @@ export class KodiAnimEngine {
 
   /** React to an event with appropriate mood + speech. */
   react(event: KodiEvent): void {
+    // Any real event means "something is happening" — dial boredom
+    // way down so Kodi doesn't interrupt with an autonomous action
+    // mid-activity. Curiosity and wanderlust only nudge slightly
+    // (the user being active makes Kodi less restless, but Kodi is
+    // always a bit curious and sometimes wants to wander).
+    if (
+      event.type !== "idle" &&
+      event.type !== "tier_entrance" &&
+      event.type !== "tier_flex"
+    ) {
+      this.drainUrge("boredom", 0.4);
+      this.drainUrge("curiosity", 0.05);
+      this.drainUrge("wanderlust", 0.02);
+    }
+
     // Prefer personality-flavored chips when the personality has an
     // entry for this event type; else fall back to the generic table.
     // Keeps behavior graceful for sparse personalities.
