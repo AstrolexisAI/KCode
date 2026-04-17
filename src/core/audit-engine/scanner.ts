@@ -418,6 +418,99 @@ function getLanguageForFile(path: string): Language | null {
 }
 
 /**
+ * Languages that use C-style double-slash line comments and
+ * slash-star block comments. Found by Phase 3's fixture harness:
+ * cpp-001 happily matched `(&var)[n]` inside a line comment
+ * because the scanner had no comment-awareness at all.
+ */
+const C_STYLE_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
+  "c",
+  "cpp",
+  "javascript",
+  "typescript",
+  "go",
+  "rust",
+  "java",
+  "swift",
+  "php",
+]);
+
+/** Languages that use `#` for line comments. */
+const HASH_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
+  "python",
+  "ruby",
+  "bash",
+]);
+
+/**
+ * Return the 0-based [start, end) ranges of every comment in the
+ * source for the given language. Computed once per file and reused
+ * across all patterns — O(n) in the content length regardless of
+ * how many patterns run.
+ *
+ * First-pass heuristic: handles line comments (double-slash or
+ * hash) and block comments (slash-star). Does NOT try to
+ * understand comments inside strings (a line-comment marker inside
+ * a string literal will be treated as a comment). Good enough to
+ * kill the common fixture regression without requiring a full
+ * lexer for every supported language.
+ */
+export function computeCommentRanges(
+  content: string,
+  language: Language,
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const cStyle = C_STYLE_COMMENT_LANGS.has(language);
+  const hash = HASH_COMMENT_LANGS.has(language);
+  if (!cStyle && !hash) return ranges;
+
+  let i = 0;
+  while (i < content.length) {
+    const ch = content[i]!;
+    // Line comment starters
+    if (cStyle && ch === "/" && content[i + 1] === "/") {
+      const end = content.indexOf("\n", i + 2);
+      const stop = end === -1 ? content.length : end;
+      ranges.push([i, stop]);
+      i = stop;
+      continue;
+    }
+    if (hash && ch === "#") {
+      const end = content.indexOf("\n", i + 1);
+      const stop = end === -1 ? content.length : end;
+      ranges.push([i, stop]);
+      i = stop;
+      continue;
+    }
+    // Block comment
+    if (cStyle && ch === "/" && content[i + 1] === "*") {
+      const end = content.indexOf("*/", i + 2);
+      const stop = end === -1 ? content.length : end + 2;
+      ranges.push([i, stop]);
+      i = stop;
+      continue;
+    }
+    i++;
+  }
+  return ranges;
+}
+
+/** True when `matchIndex` falls inside any comment range. O(log n)
+ * — binary search to stay fast on long files. */
+export function isInsideComment(
+  ranges: Array<[number, number]>,
+  matchIndex: number,
+): boolean {
+  // Linear scan is fine for typical comment counts; if we see
+  // hot-path issues on huge files, swap for binary search.
+  for (const [start, end] of ranges) {
+    if (matchIndex >= start && matchIndex < end) return true;
+    if (start > matchIndex) return false; // ranges are ordered
+  }
+  return false;
+}
+
+/**
  * Apply a single pattern to a file, producing a list of candidate findings.
  */
 /**
@@ -439,6 +532,11 @@ function applyPattern(pattern: BugPattern, path: string, content: string): Candi
   if (!lang || !pattern.languages.includes(lang)) return [];
 
   const candidates: Candidate[] = [];
+  // Pre-compute comment ranges once per file. Kills a whole class
+  // of false positives where the pattern regex matches example
+  // code inside a `// ...` or `/* ... */` or `#` comment.
+  const commentRanges = computeCommentRanges(content, lang);
+
   // Ensure regex has global flag for iterative matching
   const rex = pattern.regex.global
     ? pattern.regex
@@ -447,6 +545,11 @@ function applyPattern(pattern: BugPattern, path: string, content: string): Candi
 
   let m: RegExpExecArray | null;
   while ((m = rex.exec(content)) !== null) {
+    // Drop matches that fall inside a comment for this language.
+    if (isInsideComment(commentRanges, m.index)) {
+      if (m.index === rex.lastIndex) rex.lastIndex++;
+      continue;
+    }
     // Compute the line number of the match
     const before = content.slice(0, m.index);
     const line = before.split("\n").length;
