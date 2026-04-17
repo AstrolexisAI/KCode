@@ -40,6 +40,11 @@ export function registerAuditCommand(program: Command): void {
     .option("--max-files <n>", "Max files to scan (default 500)", "500")
     .option("--skip-verify", "Skip model verification (static-only output)", false)
     .option("--json", "Also write AUDIT_REPORT.json alongside the markdown", false)
+    .option(
+      "--sarif",
+      "Also write AUDIT.sarif (SARIF v2.1.0, for GitHub Advanced Security / Azure DevOps / SonarQube)",
+      false,
+    )
     .action(async (path: string, opts: {
       output?: string;
       model?: string;
@@ -51,6 +56,7 @@ export function registerAuditCommand(program: Command): void {
       maxFiles: string;
       skipVerify: boolean;
       json: boolean;
+      sarif: boolean;
     }) => {
       const projectRoot = pathResolve(path);
       const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
@@ -139,6 +145,18 @@ export function registerAuditCommand(program: Command): void {
         const jsonPath = outputPath.replace(/\.md$/, ".json");
         writeFileSync(jsonPath, JSON.stringify(result, null, 2));
         console.log(`${ICONS.phase} JSON data:     ${jsonPath}`);
+      }
+
+      if (opts.sarif) {
+        const { buildSarif } = await import("../../core/audit-engine/sarif-exporter");
+        const { version } = await import("../../../package.json");
+        const sarifDoc = buildSarif(result, {
+          toolVersion: String(version),
+          projectRoot,
+        });
+        const sarifPath = outputPath.replace(/\.md$/, ".sarif");
+        writeFileSync(sarifPath, JSON.stringify(sarifDoc, null, 2));
+        console.log(`${ICONS.phase} SARIF report:  ${sarifPath}`);
       }
 
       console.log("");
