@@ -32,17 +32,37 @@ than a 4,380-line file that nobody double-checks when they edit it.
 
 ## Coverage status
 
-Initial coverage: 7 patterns (out of 257 in the library). Expand
-incrementally — one extra fixture per PR is better than a 250-file
-batch once.
+Current coverage: **18 patterns out of 257** in the library.
+Expand incrementally — one extra fixture per PR is better than a
+250-file batch once.
 
-- `cpp-001-ptr-address-index`
+### C / C++
+- `cpp-001-ptr-address-index` (NASA IDF pointer bug)
+- `cpp-006-strcpy-family` (unbounded string primitives)
+- `cpp-008-memcpy-untrusted-len` (attacker-controlled length)
+
+### Python
 - `py-001-eval-exec`
 - `py-002-shell-injection`
 - `py-003-pickle-deserialize`
+- `py-005-yaml-unsafe-load`
+- `py-008-path-traversal`
+
+### JavaScript / TypeScript
 - `js-001-eval`
 - `js-002-innerhtml`
+- `js-003-prototype-pollution`
+- `js-005-regex-dos`
+- `js-007-command-injection`
 - `js-008-prototype-pollution-bracket`
+
+### Go
+- `go-001-sql-injection`
+- `go-003-command-injection`
+
+### Java
+- `java-001-sql-injection`
+- `java-003-xxe`
 
 ## Out of scope (for now)
 
