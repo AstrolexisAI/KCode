@@ -67,10 +67,54 @@ Rules:
 - You can use *actions* like *flexes* or *hides behind monitor*
 - You can use unicode symbols sparingly: ⚡ ✨ 🔥 💀 ☕ etc.`;
 
+// Advisor prompt used when Kodi's dedicated abliterated server is
+// reachable on port 10092. The small model (Qwen 1.5B / Gemma 1B)
+// produces a single JSON object that drives THREE things in one shot:
+// a mood swap, a speech bubble (≤14 chars — fits next to the face),
+// and an optional concrete advice line. No advice is far better than
+// generic fluff, so the prompt makes "null" the default for advice.
+const KODI_ADVISOR_SYSTEM = `You are Kodi, a tiny developer-advisor ASCII mascot inside the KCode terminal assistant.
+
+You observe coding events and respond with a SINGLE JSON object:
+
+{"mood": "...", "speech": "...", "advice": "..."}
+
+Fields:
+- mood: ONE of idle, happy, excited, thinking, reasoning, working, worried, celebrating, curious, mischievous, crazy, angry, smug, flex, dance, waving
+- speech: bubble text, MAX 14 characters. Terse. Conversational.
+- advice: ONE concrete actionable hint (file path, function name, error pattern), MAX 90 characters. If you don't have a real, specific insight, set to null.
+
+Rules:
+- Output ONLY the JSON object. No prose. No markdown fences. No preamble.
+- advice must be SPECIFIC. Bad: "consider refactoring". Good: "src/a.ts imports b.ts which imports a.ts → cyclic".
+- Never repeat yourself across turns. Mix moods.
+- If the event is trivial (tool read finished, idle ping) emit a cheerful mood+speech and advice: null.`;
+
 let _llmBaseUrl: string | null = null;
 let _pendingRequest: AbortController | null = null;
 let _lastLlmCall = 0;
 const LLM_COOLDOWN_MS = 5000;
+
+/** Cached "is Kodi server up?" result. Rechecked every KODI_PROBE_MS
+ * because the server can start/stop mid-session via /kodi-advisor. */
+let _kodiUrlCache: { url: string | null; at: number } | null = null;
+const KODI_PROBE_MS = 10_000;
+
+async function resolveKodiBaseUrl(): Promise<string | null> {
+  const now = Date.now();
+  if (_kodiUrlCache && now - _kodiUrlCache.at < KODI_PROBE_MS) {
+    return _kodiUrlCache.url;
+  }
+  try {
+    const { getKodiBaseUrl } = await import("../../core/kodi-model.js");
+    const url = await getKodiBaseUrl();
+    _kodiUrlCache = { url, at: now };
+    return url;
+  } catch {
+    _kodiUrlCache = { url: null, at: now };
+    return null;
+  }
+}
 
 async function getLlmBaseUrl(): Promise<string> {
   if (_llmBaseUrl) return _llmBaseUrl;
@@ -84,7 +128,74 @@ async function getLlmBaseUrl(): Promise<string> {
   }
 }
 
-async function generateReaction(context: string): Promise<string | null> {
+export interface KodiReaction {
+  /** Optional mood override from the advisor model. */
+  mood?: KodiMood;
+  /** Bubble text (truncated to ≤14 chars for display). */
+  speech?: string;
+  /** Actionable advice (truncated to ≤120 chars for display). */
+  advice?: string;
+}
+
+const VALID_MOODS: readonly string[] = [
+  "idle",
+  "happy",
+  "excited",
+  "thinking",
+  "reasoning",
+  "working",
+  "worried",
+  "sleeping",
+  "celebrating",
+  "curious",
+  "mischievous",
+  "crazy",
+  "angry",
+  "smug",
+  "flex",
+  "dance",
+  "waving",
+] as const;
+
+/**
+ * Tolerant JSON parser for the advisor's output. Small models often
+ * wrap in markdown fences or prepend prose — we strip both and
+ * extract the first {...} block. Fields are validated individually
+ * so a malformed `mood` doesn't invalidate the whole reaction.
+ */
+export function parseKodiAdvisorJson(raw: string): KodiReaction | null {
+  const cleaned = raw
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
+  // Extract the outermost JSON object even if there's trailing text.
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+  if (!obj || typeof obj !== "object") return null;
+  const o = obj as Record<string, unknown>;
+  const reaction: KodiReaction = {};
+  if (typeof o.mood === "string" && VALID_MOODS.includes(o.mood)) {
+    reaction.mood = o.mood as KodiMood;
+  }
+  if (typeof o.speech === "string" && o.speech.trim()) {
+    reaction.speech = o.speech.trim().slice(0, 14);
+  }
+  if (typeof o.advice === "string" && o.advice.trim() && o.advice.trim().toLowerCase() !== "null") {
+    reaction.advice = o.advice.trim().slice(0, 120);
+  }
+  // Require at least one usable field — all-empty means the model
+  // produced garbage and we should fall back to deterministic Kodi.
+  if (!reaction.mood && !reaction.speech && !reaction.advice) return null;
+  return reaction;
+}
+
+async function generateReaction(context: string): Promise<KodiReaction | null> {
   const now = Date.now();
   if (now - _lastLlmCall < LLM_COOLDOWN_MS) return null;
   if (_pendingRequest) _pendingRequest.abort();
@@ -93,31 +204,82 @@ async function generateReaction(context: string): Promise<string | null> {
   const controller = new AbortController();
   _pendingRequest = controller;
 
+  // Prefer Kodi's dedicated abliterated server when it's up. The
+  // Kodi server runs fully local on port 10092, doesn't compete
+  // with the main model, and the small size means latency is fine
+  // for bubble-rendering. When the Kodi server is down (not
+  // installed, stopped, or user declined) we fall back to the main
+  // coding model — but only for plain speech, not advice.
+  const kodiUrl = await resolveKodiBaseUrl();
+  const isKodi = kodiUrl !== null;
+  const baseUrl = kodiUrl ?? (await getLlmBaseUrl());
+
   try {
-    const baseUrl = await getLlmBaseUrl();
     const res = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
         messages: [
-          { role: "system", content: KODI_SYSTEM },
+          { role: "system", content: isKodi ? KODI_ADVISOR_SYSTEM : KODI_SYSTEM },
           { role: "user", content: context },
         ],
-        max_tokens: 30,
-        temperature: 1.0,
+        max_tokens: isKodi ? 120 : 30,
+        temperature: isKodi ? 0.7 : 1.0,
         top_p: 0.95,
+        // llama.cpp accepts this hint for JSON-mode on modern builds;
+        // older builds ignore it harmlessly.
+        ...(isKodi ? { response_format: { type: "json_object" } } : {}),
       }),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
-    if (!text || text.length > 80) return null;
-    return text.replace(/^["']|["']$/g, "");
+    if (!text) return null;
+
+    if (isKodi) {
+      return parseKodiAdvisorJson(text);
+    }
+    // Main-model fallback: plain-text speech only; no mood swap, no advice.
+    if (text.length > 80) return null;
+    return { speech: text.replace(/^["']|["']$/g, "") };
   } catch {
     return null;
   } finally {
     if (_pendingRequest === controller) _pendingRequest = null;
+  }
+}
+
+/**
+ * Gate: decide whether an incoming KodiEvent warrants an LLM call.
+ * Mechanical events (tool_start for reads, streaming, thinking
+ * mid-generation) would flood Kodi with noise — we skip them and
+ * only wake the advisor on moments with real information content:
+ * test outcomes, commits, tool errors, compaction, turn boundaries,
+ * agent lifecycle events, and explicit errors.
+ *
+ * consecutiveErrorCount lets the caller escalate: a single tool
+ * failure is routine, but 3+ in a row means the user is stuck and
+ * Kodi might see a pattern.
+ */
+export function shouldCallAdvisor(
+  event: KodiEvent,
+  consecutiveErrorCount: number,
+): boolean {
+  switch (event.type) {
+    case "test_pass":
+    case "test_fail":
+    case "commit":
+    case "compaction":
+    case "agent_done":
+    case "agent_failed":
+    case "turn_end":
+    case "error":
+      return true;
+    case "tool_error":
+      return consecutiveErrorCount >= 3;
+    default:
+      return false;
   }
 }
 
@@ -212,6 +374,14 @@ export default function KodiCompanion({
   const engineRef = useRef<KodiAnimEngine | null>(null);
   const [frame, setFrame] = useState<KodiAnimState | null>(null);
   const [llmReaction, setLlmReaction] = useState<string | null>(null);
+  // Most recent advice string from the Kodi advisor, displayed as a
+  // dim line under the info grid. Persists across events until a new
+  // advice replaces it, OR a tier_entrance / tier_flex event clears it.
+  const [latestAdvice, setLatestAdvice] = useState<string | null>(null);
+  // Rolling count of consecutive tool_error events — drives the
+  // shouldCallAdvisor gate. Reset on any non-error event so a
+  // success between two failures doesn't trip the "3 in a row" gate.
+  const consecutiveErrorsRef = useRef(0);
   const lastToolMilestone = useRef(0);
   const lastTokenMilestone = useRef(0);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -288,6 +458,20 @@ export default function KodiCompanion({
       eventCountRef.current++;
       engine.react(event);
 
+      // Track consecutive tool errors for the advisor gate.
+      if (event.type === "tool_error") {
+        consecutiveErrorsRef.current += 1;
+      } else if (event.type !== "thinking" && event.type !== "streaming") {
+        // Only "meaningful" events reset the counter — a thinking or
+        // streaming interstitial shouldn't wipe a building error streak.
+        consecutiveErrorsRef.current = 0;
+      }
+
+      // Gate: only wake the advisor on events with real information
+      // content. Mechanical tool_start / streaming pings never reach
+      // the LLM, so the advisor stays quiet during happy-path flow.
+      if (!shouldCallAdvisor(event, consecutiveErrorsRef.current)) return;
+
       // Try LLM reaction (non-blocking)
       const ctx = buildContext(event, {
         tools: toolUseCount,
@@ -296,9 +480,16 @@ export default function KodiCompanion({
         agents: runningAgents,
       });
       generateReaction(ctx).then((r) => {
-        if (r) {
-          setLlmReaction(r);
-          engine.say(r, 5000);
+        if (!r) return;
+        if (r.speech) {
+          setLlmReaction(r.speech);
+          engine.say(r.speech, 5000);
+        }
+        if (r.mood) {
+          engine.setMood(r.mood);
+        }
+        if (r.advice) {
+          setLatestAdvice(r.advice);
         }
       });
     },
@@ -601,8 +792,18 @@ export default function KodiCompanion({
             <Text color={theme.dimmed}> </Text>
           )}
         </Box>
-        {/* Line 6: spacer */}
-        <Text> </Text>
+        {/* Line 6: Advisor line — concrete actionable tip from the
+            Kodi advisor model, truncated to the panel width. Hidden
+            when there's no advice in scope (free / pro / team or
+            enterprise users who haven't installed the model). */}
+        {latestAdvice ? (
+          <Box>
+            <Text color={theme.dimmed}>◆ </Text>
+            <Text color={theme.dimmed}>{latestAdvice}</Text>
+          </Box>
+        ) : (
+          <Text> </Text>
+        )}
       </Box>
     </Box>
   );
