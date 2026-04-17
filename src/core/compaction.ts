@@ -1,4 +1,10 @@
 // KCode - Conversation Compaction
+//
+// STATUS: Auxiliary (see docs/architecture/modules.md).
+// Context-window management — the audit engine runs shorter
+// turns and doesn't depend on this path. Removable without
+// breaking core audit flow.
+//
 // Summarizes pruned messages via LLM instead of discarding them
 
 import { log } from "./logger.js";

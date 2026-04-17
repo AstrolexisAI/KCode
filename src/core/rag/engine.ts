@@ -1,6 +1,12 @@
 // KCode - Local RAG Engine
-// Orchestrates embedding, chunking, vector storage, and semantic search.
-// Runs entirely locally — no external APIs required (TF-IDF fallback).
+//
+// STATUS: Auxiliary (see docs/architecture/modules.md).
+// Useful for agentic dev workflows; NOT required by the audit
+// engine. Safe to disable / remove without breaking core audit.
+//
+// Orchestrates embedding, chunking, vector storage, and semantic
+// search. Runs entirely locally — no external APIs required
+// (TF-IDF fallback).
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";

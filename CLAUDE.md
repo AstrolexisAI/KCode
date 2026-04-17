@@ -34,6 +34,10 @@ bash scripts/test-batched.sh 15    # Run tests in batches (avoids OOM on large s
 
 **CLI Flags**: `--model`, `--api-key`, `--api-base`, `--max-turns`, `--no-tools`, `--print`, `--verbose`, `--effort` (low/medium/high), `--system-prompt`, `--append-system-prompt`, `--name`, `--allowed-tools`, `--disallowed-tools`, `--session-id`, `--agent`, `--agents` (multi-agent swarm), `--no-session-persistence`, `--mcp-config`, `--tmux`, `--file`, `--from-pr`.
 
+### Module classification
+
+For the honest map of what's **core product** vs **auxiliary** (RAG, compaction, distillation, voice, world-model, etc.), see `docs/architecture/modules.md`. When editing any of the files listed as "Auxiliary" there, they already carry a header comment confirming status; PRs that promote them into the critical path should update both that comment and the doc.
+
 ### Core Engine (`src/core/`)
 
 - **`conversation.ts`** (~1430 lines) — Main conversation loop orchestrator. Delegates to extracted modules: `conversation-state.ts` (state access, usage tracking), `conversation-message-prep.ts` (budget checks, theoretical/checkpoint mode, RAG/skills injection), `conversation-streaming.ts` (SSE stream processing, tool call extraction), `conversation-post-turn.ts` (empty response retry, truncation, auto-memory, notifications), `conversation-retry.ts` (retry logic), `conversation-checkpoint.ts`, `conversation-session.ts`.
