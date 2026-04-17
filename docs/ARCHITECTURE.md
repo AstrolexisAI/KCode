@@ -1,6 +1,6 @@
 # KCode Architecture
 
-This document describes the high-level architecture of KCode v1.8.0. For the full module-by-module reference, see [CLAUDE.md](../CLAUDE.md).
+This document describes the high-level architecture of KCode.
 
 ## Entry Point Flow
 

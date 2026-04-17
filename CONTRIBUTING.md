@@ -115,7 +115,7 @@ src/
   utils/        # Shared utilities
 ```
 
-For the full architecture reference, see [CLAUDE.md](./CLAUDE.md) and [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+For the full architecture reference, see [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ## How to Add a New Tool
 

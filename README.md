@@ -427,7 +427,6 @@ Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+S
 - [CONTRIBUTING.md](./CONTRIBUTING.md) -- How to contribute, development setup, code style
 - [CHANGELOG.md](./CHANGELOG.md) -- Version history and release notes
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) -- System architecture reference
-- [CLAUDE.md](./CLAUDE.md) -- Detailed codebase reference (conventions, module descriptions)
 - [SECURITY.md](./SECURITY.md) -- Security policy and vulnerability reporting
 
 ---
