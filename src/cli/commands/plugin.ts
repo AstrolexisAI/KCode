@@ -44,43 +44,18 @@ export function registerPluginCommand(program: Command): void {
     });
 
   pluginCmd
-    .command("update")
-    .description("Check for updates on installed plugins")
+    .command("list")
+    .description("List installed plugins")
     .action(async () => {
-      const { checkPluginUpdates } = await import("../../core/plugin-marketplace");
-      const updates = await checkPluginUpdates();
-      if (updates.length === 0) {
-        console.log("\u2713 All plugins are up to date.");
+      const { fetchRegistry } = await import("../../core/plugin-registry");
+      const entries = await fetchRegistry();
+      if (entries.length === 0) {
+        console.log("No plugins installed.");
         return;
       }
-      console.log(`\n${updates.length} update(s) available:\n`);
-      for (const u of updates) {
-        console.log(`  ${u.name}: ${u.currentVersion} \u2192 ${u.latestVersion}`);
-      }
-    });
-
-  pluginCmd
-    .command("list")
-    .description("List installed or available plugins")
-    .option("--remote", "List all available plugins from marketplace")
-    .action(async (opts: { remote?: boolean }) => {
-      if (opts.remote) {
-        const { listRemotePlugins, formatMarketplaceResults } = await import(
-          "../../core/plugin-marketplace"
-        );
-        const plugins = await listRemotePlugins();
-        console.log(formatMarketplaceResults(plugins));
-      } else {
-        const { fetchRegistry } = await import("../../core/plugin-registry");
-        const entries = await fetchRegistry();
-        if (entries.length === 0) {
-          console.log("No plugins installed.");
-          return;
-        }
-        console.log(`\nInstalled plugins:\n`);
-        for (const p of entries) {
-          console.log(`  ${p.name} v${p.version} \u2014 ${p.description}`);
-        }
+      console.log(`\nInstalled plugins:\n`);
+      for (const p of entries) {
+        console.log(`  ${p.name} v${p.version} \u2014 ${p.description}`);
       }
     });
 
