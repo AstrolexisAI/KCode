@@ -291,7 +291,14 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "Shell command execution with potential injection",
     severity: "critical",
     languages: ["python"],
-    regex: /\b(?:os\.system|os\.popen|subprocess\.call|subprocess\.run|subprocess\.Popen)\s*\([^)]*(?:shell\s*=\s*True|f["']|\.format\(|%\s)/g,
+    // `(?<!["'\w])f["']` requires the `f` to NOT be preceded by a
+    // quote or word character — so literal strings like "-rf",
+    // "rm -rf", or "f" (single-letter string literal) don't
+    // accidentally match the f-string prefix check. Found by the
+    // Phase 3 fixture harness. Legit f-strings always start after
+    // whitespace, paren, comma, equals, etc. — never after a
+    // quote or another letter.
+    regex: /\b(?:os\.system|os\.popen|subprocess\.call|subprocess\.run|subprocess\.Popen)\s*\([^)]*(?:shell\s*=\s*True|(?<!["'\w])f["']|\.format\(|%\s)/g,
     explanation:
       "Running shell commands with shell=True, f-strings, .format(), or % interpolation allows command injection if any part of the command comes from external input.",
     verify_prompt:
@@ -613,7 +620,23 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "innerHTML/outerHTML with dynamic content (XSS)",
     severity: "high",
     languages: ["javascript", "typescript"],
-    regex: /\.(innerHTML|outerHTML)\s*=\s*(?!["'`]\s*$)/g,
+    // Skip only clearly-benign empty-literal assignments:
+    // `= ""`, `= ''`, `= ` `` `` (template) — optionally followed by
+    // `;` and end-of-line. `m` flag makes `$` mean end-of-line
+    // (not end-of-input), so benign empty-literal lines don't get
+    // flagged just because more code follows them in the file.
+    //
+    // Before Phase 3b the lookahead was `(?!["'`]\s*$)` — matched a
+    // single quote char, not a paired literal, and used `$` without
+    // `m`. Every multi-line file with `innerHTML = "";` tripped the
+    // fixture harness.
+    // `(?=\S)` pins position to the first non-whitespace char of
+    // the RHS so the `\s*` before it can't backtrack to zero chars
+    // (which would slip past the paired-literal check). `[ \t]*`
+    // in the inner stops the lookahead from crossing a newline
+    // before hitting `$`. Together they correctly skip assignments
+    // of empty literal strings without false-negating real XSS.
+    regex: /\.(innerHTML|outerHTML)\s*=\s*(?=\S)(?!(?:""|''|``)[ \t]*;?[ \t]*$)/gm,
     explanation: "Setting innerHTML with dynamic content enables XSS. Use textContent or a sanitizer.",
     verify_prompt: "Is the assigned value from user input or external data? If hardcoded HTML, respond FALSE_POSITIVE.",
     cwe: "CWE-79",
