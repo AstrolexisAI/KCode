@@ -6,7 +6,6 @@ import { formatPlanForPrompt, loadLatestPlan } from "../tools/plan";
 import { formatPinnedForPrompt } from "./context-pin";
 import { loadDistilledExamples } from "./distillation";
 import { log } from "./logger";
-import { getNarrativeManager } from "./narrative";
 import { getCurrentStyle, getStyleInstructions } from "./output-styles";
 import { getRulesManager } from "./rules";
 import {
@@ -32,7 +31,6 @@ import {
 } from "./system-prompt-layers";
 import { type PromptSection, SectionPriority, TokenBudgetManager } from "./token-budget";
 import type { KCodeConfig } from "./types";
-import { getUserModel } from "./user-model";
 import { getWorldModel } from "./world-model";
 
 // ─── System Prompt Builder ──────────────────────────────────────
@@ -346,30 +344,6 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
         log.debug("world-model", "Failed to load recent discrepancies: " + err);
       }
 
-      // Inner Narrative — session continuity
-      try {
-        const narrative = getNarrativeManager().loadNarrative(3);
-        if (narrative) {
-          sections.push({ content: narrative, priority: SectionPriority.LOW, label: "narrative" });
-        }
-      } catch (err) {
-        log.debug("narrative", "Failed to load session narrative: " + err);
-      }
-
-      // ─── Optional (dropped first) ──────────────────────────────
-      // User Model — dynamic profiling
-      try {
-        const userPrompt = getUserModel().formatForPrompt();
-        if (userPrompt) {
-          sections.push({
-            content: userPrompt,
-            priority: SectionPriority.OPTIONAL,
-            label: "user-model",
-          });
-        }
-      } catch (err) {
-        log.debug("user-model", "Failed to load user model for prompt: " + err);
-      }
     }
 
     // Path-specific rules
