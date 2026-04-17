@@ -409,6 +409,18 @@ export default function KodiCompanion({
     return () => clearInterval(timer);
   }, [engine]);
 
+  // Abort any in-flight advisor LLM request on unmount. Without this,
+  // /quit can hang for seconds waiting for a 80-token completion
+  // that's already irrelevant (the TUI is gone).
+  useEffect(() => {
+    return () => {
+      if (_pendingRequest) {
+        _pendingRequest.abort();
+        _pendingRequest = null;
+      }
+    };
+  }, []);
+
   // Update elapsed time every 10s
   useEffect(() => {
     if (!sessionStartTime) return;
@@ -436,13 +448,20 @@ export default function KodiCompanion({
   // while Kodi is actually idle (no active tool, no thinking). Picks
   // a random interval between 75-105s so it doesn't feel mechanical.
   // Free tier skips this entirely.
+  //
+  // Load-bearing: we clearTimeout on unmount, not just flip a
+  // cancelled flag. An unfired setTimeout keeps Bun's event loop
+  // alive until it triggers — a pending flex scheduled 90s out was
+  // the biggest contributor to /quit taking seconds to exit.
   useEffect(() => {
     if (!tier || tier === "free") return;
     let cancelled = false;
+    let pendingTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleNext = () => {
       if (cancelled) return;
       const delay = 75_000 + Math.random() * 30_000;
-      setTimeout(() => {
+      pendingTimer = setTimeout(() => {
+        pendingTimer = null;
         if (cancelled) return;
         // Only flex when we're actually idle — no point breaking a
         // thinking animation with a sparkle.
@@ -455,6 +474,10 @@ export default function KodiCompanion({
     scheduleNext();
     return () => {
       cancelled = true;
+      if (pendingTimer) {
+        clearTimeout(pendingTimer);
+        pendingTimer = null;
+      }
     };
   }, [tier, engine]);
 
