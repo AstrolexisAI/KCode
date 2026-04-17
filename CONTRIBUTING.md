@@ -27,6 +27,63 @@ bun run dev
 bun run src/index.ts
 ```
 
+## Versioning + Changelog contract
+
+KCode follows [Semantic Versioning 2.0.0](https://semver.org/):
+
+- **MAJOR** — incompatible CLI/config breakages, pattern catalog
+  restructuring, public audit-engine / SDK API changes. Rare.
+  Pre-announce in CHANGELOG at least one minor version ahead.
+- **MINOR** — new features, new patterns, new CLI flags,
+  backwards-compatible additions.
+- **PATCH** — bug fixes, pattern-precision improvements, internal
+  refactors with no observable behavior change.
+
+Current phase (2.10.x) is patch-level iteration on the
+enterprise-maturity refactor. Every shipped PR bumps patch.
+
+Versions are single-source-of-truth in `package.json`. The build
+script and CLI both read from there.
+
+### Release checklist (every PR)
+
+1. **Update `CHANGELOG.md`**. Put new entries under `[Unreleased]`,
+   or create a new version header if the PR bumps the version.
+2. **Bump `package.json`** version.
+3. **Test** the appropriate subset:
+   - Pattern catalog edit → `bun test tests/pattern-fixtures.test.ts`
+   - Audit engine core → `bun test src/core/audit-engine/`
+   - UI → `bun test src/ui/`
+   - Full → `bun test src/core/` + `bun test src/ui/`
+4. **Build** via `bun run build`.
+5. **PR body** includes the CHANGELOG entry verbatim so reviewers
+   see user-visible impact without context-switching.
+
+### Changelog style
+
+- Sections in order: **Added**, **Changed**, **Deprecated**,
+  **Removed**, **Fixed**, **Security**.
+- One line per change. Verbose rationale belongs in commit
+  messages, not the changelog.
+- Link each entry to its merged PR `[#NN]`.
+- Entries stay under `[Unreleased]` until a version bump promotes
+  them into a numbered section.
+
+### Pattern catalog changes
+
+Any edit to `src/core/audit-engine/patterns.ts` **must** come with:
+
+- At least one **positive fixture** in
+  `tests/patterns/<pattern-id>/` — code the regex MUST match.
+- At least one **negative fixture** — code the regex MUST NOT
+  match.
+- A fixture-harness run (`bun test tests/pattern-fixtures.test.ts`)
+  proving both invariants.
+
+The harness is the contract that keeps the pattern library from
+silently degrading across refactors. Skipping fixtures for a new
+pattern means the regression-safety net has a hole.
+
 ## Architecture Overview
 
 KCode is a terminal-based AI coding assistant built with Bun, TypeScript, and React/Ink. The codebase is organized as follows:
