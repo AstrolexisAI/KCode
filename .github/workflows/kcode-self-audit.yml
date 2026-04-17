@@ -1,0 +1,38 @@
+# KCode — Self Audit
+#
+# Runs KCode's own audit engine against this repository every push
+# to main + every PR. Dog-fooding proves the tool works on real
+# TypeScript / Bun code, and catches regressions in the pattern
+# library before they ship.
+#
+# Uses the local action.yml (./) instead of a pinned tag so changes
+# to the action or the audit engine are tested together.
+
+name: KCode Self Audit
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # required by upload-sarif
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run KCode audit
+        uses: ./
+        with:
+          path: .
+          # Dog-food configuration: skip LLM verification on CI because
+          # the self-audit is a sanity check, not a full audit. If the
+          # static stage passes, the pattern library is consistent.
+          skip-verify: "true"
+          # Still fail the build on critical findings — anything less
+          # and we'd miss real bugs sneaking in.
+          fail-on-severity: "critical"

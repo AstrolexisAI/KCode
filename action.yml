@@ -1,0 +1,145 @@
+# KCode GitHub Action
+#
+# Runs `kcode audit` against the repository and uploads SARIF
+# results to GitHub's code scanning dashboard.
+#
+# Usage in a consumer's workflow:
+#
+#   - uses: AstrolexisAI/KCode@v1
+#     with:
+#       path: .
+#
+# The action installs Bun, pulls KCode from npm (once published)
+# or from git (interim), runs the audit with --sarif, and uploads
+# the result to GitHub via github/codeql-action/upload-sarif.
+#
+# Permissions needed on the caller side:
+#   permissions:
+#     contents: read
+#     security-events: write   # required to upload SARIF
+
+name: "KCode Audit"
+description: "Run KCode's deterministic security audit and upload SARIF to GitHub code scanning."
+author: "Astrolexis"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  path:
+    description: "Path to audit (repo root by default)"
+    required: false
+    default: "."
+  model:
+    description: "Override the verification model (default: reads from settings)"
+    required: false
+  api-key:
+    description: "API key for the verification model (if not set, uses env/settings)"
+    required: false
+  skip-verify:
+    description: "Skip LLM verification — static regex stage only. Faster but higher FP rate."
+    required: false
+    default: "false"
+  max-files:
+    description: "Maximum files to scan"
+    required: false
+    default: "500"
+  fail-on-severity:
+    description: "Fail the action if any finding at or above this severity is CONFIRMED (none|low|medium|high|critical)"
+    required: false
+    default: "high"
+
+outputs:
+  sarif-path:
+    description: "Path to the generated .sarif file (relative to GITHUB_WORKSPACE)"
+    value: ${{ steps.run-audit.outputs.sarif-path }}
+  confirmed-findings:
+    description: "Number of CONFIRMED findings produced by the audit"
+    value: ${{ steps.run-audit.outputs.confirmed-findings }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Install KCode
+      shell: bash
+      run: |
+        # Source-install from the action's own checkout (tagged releases
+        # ensure the binary matches the action version). Published-to-npm
+        # path is a future option.
+        cd "$GITHUB_ACTION_PATH"
+        bun install --frozen-lockfile
+        bun run build --profile=full
+        echo "$GITHUB_ACTION_PATH/release" >> "$GITHUB_PATH"
+
+    - name: Run audit
+      id: run-audit
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      env:
+        KCODE_API_KEY: ${{ inputs.api-key }}
+        KCODE_MODEL: ${{ inputs.model }}
+      run: |
+        set -o pipefail
+        FLAGS=(--sarif --json --max-files "${{ inputs.max-files }}")
+        if [ "${{ inputs.skip-verify }}" = "true" ]; then
+          FLAGS+=(--skip-verify)
+        fi
+        if [ -n "${{ inputs.model }}" ]; then
+          FLAGS+=(--model "${{ inputs.model }}")
+        fi
+
+        kcode audit . "${FLAGS[@]}" | tee kcode-audit.log
+
+        SARIF_PATH="AUDIT.sarif"
+        if [ ! -f "$SARIF_PATH" ]; then
+          # Fallback: the audit command writes alongside the markdown
+          # output. If --output was not used, the default md is
+          # AUDIT_REPORT.md, so the .sarif is AUDIT_REPORT.sarif.
+          SARIF_PATH="AUDIT_REPORT.sarif"
+        fi
+
+        echo "sarif-path=$SARIF_PATH" >> "$GITHUB_OUTPUT"
+
+        # Parse the JSON companion for the confirmed-findings output.
+        if [ -f "AUDIT_REPORT.json" ]; then
+          CONFIRMED=$(jq -r '.confirmed_findings // 0' AUDIT_REPORT.json)
+          echo "confirmed-findings=$CONFIRMED" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Upload SARIF to GitHub code scanning
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.run-audit.outputs.sarif-path }}
+        category: kcode
+
+    - name: Enforce fail-on-severity gate
+      if: inputs.fail-on-severity != 'none'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      run: |
+        THRESHOLD="${{ inputs.fail-on-severity }}"
+        if [ ! -f "AUDIT_REPORT.json" ]; then
+          echo "::warning::AUDIT_REPORT.json not found — skipping gate"
+          exit 0
+        fi
+        # severity ranking: critical(4) > high(3) > medium(2) > low(1)
+        declare -A rank=([critical]=4 [high]=3 [medium]=2 [low]=1)
+        MIN_RANK=${rank[$THRESHOLD]:-3}
+
+        OFFENDERS=$(jq -r --argjson min "$MIN_RANK" '
+          ($._severity_rank // {"critical":4,"high":3,"medium":2,"low":1}) as $r
+          | [.findings[] | select(($r[.severity] // 0) >= $min)] | length
+        ' AUDIT_REPORT.json)
+
+        if [ "$OFFENDERS" -gt 0 ]; then
+          echo "::error::KCode found $OFFENDERS finding(s) at severity '$THRESHOLD' or above."
+          exit 1
+        fi
+        echo "No findings at or above '$THRESHOLD'."
