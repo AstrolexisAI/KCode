@@ -68,27 +68,40 @@ Rules:
 - You can use unicode symbols sparingly: ⚡ ✨ 🔥 💀 ☕ etc.`;
 
 // Advisor prompt used when Kodi's dedicated abliterated server is
-// reachable on port 10092. The small model (Qwen 1.5B / Gemma 1B)
-// produces a single JSON object that drives THREE things in one shot:
-// a mood swap, a speech bubble (≤14 chars — fits next to the face),
-// and an optional concrete advice line. No advice is far better than
-// generic fluff, so the prompt makes "null" the default for advice.
-const KODI_ADVISOR_SYSTEM = `You are Kodi, a tiny developer-advisor ASCII mascot inside the KCode terminal assistant.
+// reachable on port 10092. Kept SHORT — small models (Qwen 1.5B,
+// Gemma 1B) degrade sharply with long system prompts.
+//
+// Scope decision (from smoke-testing Qwen 2.5 Coder 1.5B abliterated
+// against real events): the advisor ONLY generates `advice`. Mood
+// stays deterministic in the engine (engine.react(event) already
+// picks a well-tuned mood per event type), and the existing
+// SPEECH_CHIPS for the bubble are more coherent than anything a
+// 1.5B model will produce in ≤14 chars. Narrowing the advisor to
+// a single field also means smaller schema, faster generation,
+// and fewer token budget knobs to tune.
+const KODI_ADVISOR_SYSTEM = `You are Kodi, a dev advisor mascot.
+Output ONE JSON object: {"advice": "..."}.
+advice: ONE specific actionable tip with exact file/fn/error pattern, ≤90 chars. If nothing specific to say, advice must be null.
+PROHIBITED in advice: "consider", "maybe", "should", "recommended", "ensure", "might want to". These produce fluff — emit null instead.`;
 
-You observe coding events and respond with a SINGLE JSON object:
-
-{"mood": "...", "speech": "...", "advice": "..."}
-
-Fields:
-- mood: ONE of idle, happy, excited, thinking, reasoning, working, worried, celebrating, curious, mischievous, crazy, angry, smug, flex, dance, waving
-- speech: bubble text, MAX 14 characters. Terse. Conversational.
-- advice: ONE concrete actionable hint (file path, function name, error pattern), MAX 90 characters. If you don't have a real, specific insight, set to null.
-
-Rules:
-- Output ONLY the JSON object. No prose. No markdown fences. No preamble.
-- advice must be SPECIFIC. Bad: "consider refactoring". Good: "src/a.ts imports b.ts which imports a.ts → cyclic".
-- Never repeat yourself across turns. Mix moods.
-- If the event is trivial (tool read finished, idle ping) emit a cheerful mood+speech and advice: null.`;
+/**
+ * JSON schema used for constrained generation on the Kodi server.
+ * llama.cpp's response_format + json_schema rejects tokens that
+ * violate the schema at generation time, so `advice` is guaranteed
+ * to be string|null when we parse. Small, fast, predictable.
+ */
+const KODI_ADVISOR_SCHEMA = {
+  name: "kodi_reaction",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["advice"],
+    properties: {
+      advice: { type: ["string", "null"] },
+    },
+  },
+};
 
 let _llmBaseUrl: string | null = null;
 let _pendingRequest: AbortController | null = null;
@@ -129,39 +142,35 @@ async function getLlmBaseUrl(): Promise<string> {
 }
 
 export interface KodiReaction {
-  /** Optional mood override from the advisor model. */
-  mood?: KodiMood;
-  /** Bubble text (truncated to ≤14 chars for display). */
-  speech?: string;
   /** Actionable advice (truncated to ≤120 chars for display). */
   advice?: string;
 }
 
-const VALID_MOODS: readonly string[] = [
-  "idle",
-  "happy",
-  "excited",
-  "thinking",
-  "reasoning",
-  "working",
-  "worried",
-  "sleeping",
-  "celebrating",
-  "curious",
-  "mischievous",
-  "crazy",
-  "angry",
-  "smug",
-  "flex",
-  "dance",
-  "waving",
-] as const;
+/** Anti-fluff filter. If the model ignores the PROHIBITED instruction
+ * and still emits "consider X" or "maybe check Y" we treat it as no
+ * advice — those lines never help a developer and they crowd out
+ * legitimate signal. Case-insensitive match against a handful of
+ * hedge words that reliably correlate with generic content. */
+const FLUFF_PATTERNS: readonly RegExp[] = [
+  /\bconsider\b/i,
+  /\bmaybe\b/i,
+  /\bshould\b/i,
+  /\brecommended?\b/i,
+  /\bmight want to\b/i,
+  /\bensure\b/i,
+  /\btry to\b/i,
+];
+
+function isFluff(advice: string): boolean {
+  return FLUFF_PATTERNS.some((re) => re.test(advice));
+}
 
 /**
  * Tolerant JSON parser for the advisor's output. Small models often
  * wrap in markdown fences or prepend prose — we strip both and
- * extract the first {...} block. Fields are validated individually
- * so a malformed `mood` doesn't invalidate the whole reaction.
+ * extract the first {...} block. Advice that smells like generic
+ * fluff (consider X, maybe Y) is dropped even if the model bypassed
+ * the PROHIBITED clause in the prompt.
  */
 export function parseKodiAdvisorJson(raw: string): KodiReaction | null {
   const cleaned = raw
@@ -179,23 +188,27 @@ export function parseKodiAdvisorJson(raw: string): KodiReaction | null {
   }
   if (!obj || typeof obj !== "object") return null;
   const o = obj as Record<string, unknown>;
-  const reaction: KodiReaction = {};
-  if (typeof o.mood === "string" && VALID_MOODS.includes(o.mood)) {
-    reaction.mood = o.mood as KodiMood;
+  if (
+    typeof o.advice !== "string" ||
+    !o.advice.trim() ||
+    o.advice.trim().toLowerCase() === "null"
+  ) {
+    return null;
   }
-  if (typeof o.speech === "string" && o.speech.trim()) {
-    reaction.speech = o.speech.trim().slice(0, 14);
-  }
-  if (typeof o.advice === "string" && o.advice.trim() && o.advice.trim().toLowerCase() !== "null") {
-    reaction.advice = o.advice.trim().slice(0, 120);
-  }
-  // Require at least one usable field — all-empty means the model
-  // produced garbage and we should fall back to deterministic Kodi.
-  if (!reaction.mood && !reaction.speech && !reaction.advice) return null;
-  return reaction;
+  const cleanedAdvice = o.advice.trim();
+  if (isFluff(cleanedAdvice)) return null;
+  return { advice: cleanedAdvice.slice(0, 120) };
 }
 
 async function generateReaction(context: string): Promise<KodiReaction | null> {
+  // Advisor is Kodi-server-only. No fallback to the main coding
+  // model: using the user's expensive Claude/Opus tokens to produce
+  // a single bubble hint would be a pointless cost. If the Kodi
+  // server isn't running, the deterministic engine (engine.react
+  // + SPEECH_CHIPS) handles everything.
+  const kodiUrl = await resolveKodiBaseUrl();
+  if (!kodiUrl) return null;
+
   const now = Date.now();
   if (now - _lastLlmCall < LLM_COOLDOWN_MS) return null;
   if (_pendingRequest) _pendingRequest.abort();
@@ -204,45 +217,38 @@ async function generateReaction(context: string): Promise<KodiReaction | null> {
   const controller = new AbortController();
   _pendingRequest = controller;
 
-  // Prefer Kodi's dedicated abliterated server when it's up. The
-  // Kodi server runs fully local on port 10092, doesn't compete
-  // with the main model, and the small size means latency is fine
-  // for bubble-rendering. When the Kodi server is down (not
-  // installed, stopped, or user declined) we fall back to the main
-  // coding model — but only for plain speech, not advice.
-  const kodiUrl = await resolveKodiBaseUrl();
-  const isKodi = kodiUrl !== null;
-  const baseUrl = kodiUrl ?? (await getLlmBaseUrl());
-
   try {
-    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+    const res = await fetch(`${kodiUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
         messages: [
-          { role: "system", content: isKodi ? KODI_ADVISOR_SYSTEM : KODI_SYSTEM },
+          { role: "system", content: KODI_ADVISOR_SYSTEM },
           { role: "user", content: context },
         ],
-        max_tokens: isKodi ? 120 : 30,
-        temperature: isKodi ? 0.7 : 1.0,
+        max_tokens: 80,
+        // Low temperature: smoke-tested against Qwen 2.5 Coder 1.5B
+        // abliterated — at 0.7 the model drifts into generic "maybe
+        // check" advice; at 0.3 it stays anchored to the actual
+        // context and produces concrete file/error references.
+        temperature: 0.3,
         top_p: 0.95,
-        // llama.cpp accepts this hint for JSON-mode on modern builds;
-        // older builds ignore it harmlessly.
-        ...(isKodi ? { response_format: { type: "json_object" } } : {}),
+        // json_schema is enforced token-by-token on modern llama.cpp,
+        // so `advice` is guaranteed string|null downstream. Older
+        // builds ignore the schema and fall back to json_object mode,
+        // which the parser still handles fine.
+        response_format: {
+          type: "json_schema",
+          json_schema: KODI_ADVISOR_SCHEMA,
+        },
       }),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text) return null;
-
-    if (isKodi) {
-      return parseKodiAdvisorJson(text);
-    }
-    // Main-model fallback: plain-text speech only; no mood swap, no advice.
-    if (text.length > 80) return null;
-    return { speech: text.replace(/^["']|["']$/g, "") };
+    return parseKodiAdvisorJson(text);
   } catch {
     return null;
   } finally {
@@ -480,17 +486,11 @@ export default function KodiCompanion({
         agents: runningAgents,
       });
       generateReaction(ctx).then((r) => {
-        if (!r) return;
-        if (r.speech) {
-          setLlmReaction(r.speech);
-          engine.say(r.speech, 5000);
-        }
-        if (r.mood) {
-          engine.setMood(r.mood);
-        }
-        if (r.advice) {
-          setLatestAdvice(r.advice);
-        }
+        if (!r || !r.advice) return;
+        // Mood + speech stay on the deterministic engine path —
+        // r only carries advice. Keeps the 1.5B advisor in its lane
+        // and the bubble coherent regardless of LLM quality.
+        setLatestAdvice(r.advice);
       });
     },
     [engine, toolUseCount, tokenCount, sessionElapsedMs, runningAgents],
