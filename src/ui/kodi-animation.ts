@@ -96,7 +96,24 @@ export interface KodiAnimState {
   tier: KodiTier;
   /** The 1-char tier badge for this frame (cycles). Empty string on free. */
   tierBadge: string;
+  /** Which side of the info panel Kodi is on. Flips via teleport. */
+  side: "left" | "right";
+  /** True during a door teleport; renderer uses to suppress walk offset. */
+  inDoor: boolean;
 }
+
+/**
+ * Door frame — rendered during a teleport. Keeps the 14-char
+ * LINE_WIDTH so the rest of the layout doesn't reflow mid-animation.
+ * Small Kodi face peeking out of the door.
+ */
+const DOOR_FRAME: [string, string, string, string, string] = [
+  " ╔═══════╗   ",
+  " ║ ^. .^ ║   ",
+  " ║       ║   ",
+  " ║   o   ║   ",
+  " ╚═══════╝   ",
+];
 
 // ─── Fixed-Width Helpers ────────────────────────────────────────
 
@@ -522,10 +539,41 @@ export class KodiAnimEngine {
   // for the whole session. Default "focused" stays out of the way.
   personality: KodiPersonality = "focused";
 
+  // Panel side — "left" is the normal position (sprite left, info
+  // right). "right" flips via flexDirection=row-reverse so Kodi
+  // appears on the OTHER side of the info text. Autonomy can flip
+  // this via teleportThroughDoor() for a playful "tamagotchi left
+  // the room" moment.
+  side: "left" | "right" = "left";
+
+  // Door animation timer. When >0, the tick() output swaps the
+  // normal sprite for a door frame, disables breathing / blink /
+  // frame-cycling, and flips `side` the moment it hits zero.
+  private doorTimer = 0;
+  private doorFlipped = false;
+
   /** Advance engine by deltaMs. Pure — no setTimeout, no Date.now(). */
   tick(deltaMs: number): KodiAnimState {
     this.tickCount++;
     const rhythm = this.getEffectiveRhythm();
+
+    // ── Door teleport ──
+    // When doorTimer is active, Kodi is "in the door". At the
+    // halfway point we flip side so the second half of the animation
+    // already renders from the new side. At zero we finalize.
+    if (this.doorTimer > 0) {
+      this.doorTimer -= deltaMs;
+      if (!this.doorFlipped && this.doorTimer <= 750) {
+        this.side = this.side === "left" ? "right" : "left";
+        this.doorFlipped = true;
+      }
+      if (this.doorTimer <= 0) {
+        this.doorTimer = 0;
+        this.doorFlipped = false;
+      }
+      // Short-circuit: return the door frame directly; other timers
+      // are still decremented below by falling through.
+    }
 
     // ── Phase timer ──
     if (this.phaseTimer !== Infinity) {
@@ -634,16 +682,38 @@ export class KodiAnimEngine {
     const badgeVariants = TIER_BADGES[this.tier];
     const tierBadge = badgeVariants[this.frameIndex % badgeVariants.length] ?? "";
 
+    // During a door teleport, swap the composed body lines for the
+    // door frame. Everything else (mood / tier badge / bubble) keeps
+    // its own semantics — the door is purely visual.
+    const inDoor = this.doorTimer > 0;
+    const finalLines = inDoor ? [...DOOR_FRAME] : lines;
+
     return {
       mood: displayMood,
       phase: this.transitioning ? "anticipation" : this.phase,
-      lines,
+      lines: finalLines as [string, string, string, string, string],
       bubble: this.bubble,
       moodColor: displayMood,
       intensity: this.intensity,
       tier: this.tier,
       tierBadge,
+      side: this.side,
+      inDoor,
     };
+  }
+
+  /**
+   * Trigger a door teleport. Kodi freezes into the door frame for
+   * 1.5s, flips to the other side of the info panel at the halfway
+   * mark (so the second half of the animation already renders from
+   * the new side), and emerges. Useful for autonomy ("open a door
+   * and appear on the other side of the info text").
+   */
+  teleportThroughDoor(): void {
+    if (this.doorTimer > 0) return; // already mid-teleport
+    this.doorTimer = 1500;
+    this.doorFlipped = false;
+    this.say("poof!", 1500);
   }
 
   // ── Phase Machine ──
