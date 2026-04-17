@@ -1,4 +1,9 @@
 // KCode - Voice Input (STT)
+//
+// STATUS: Auxiliary (see docs/architecture/modules.md).
+// Skeletal — speech-to-text workflow for accessibility / hands-
+// free use. Not required by the audit engine. Safe to disable.
+//
 // Provides speech-to-text input for KCode using:
 // 1. Kulvex voice pipeline (localhost:9100) if available
 // 2. Local faster-whisper / whisper.cpp if installed
