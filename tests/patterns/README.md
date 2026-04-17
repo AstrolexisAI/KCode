@@ -32,7 +32,7 @@ than a 4,380-line file that nobody double-checks when they edit it.
 
 ## Coverage status
 
-Current coverage: **18 patterns out of 257** in the library.
+Current coverage: **28 patterns out of 257** in the library.
 Expand incrementally — one extra fixture per PR is better than a
 250-file batch once.
 
@@ -40,29 +40,39 @@ Expand incrementally — one extra fixture per PR is better than a
 - `cpp-001-ptr-address-index` (NASA IDF pointer bug)
 - `cpp-006-strcpy-family` (unbounded string primitives)
 - `cpp-008-memcpy-untrusted-len` (attacker-controlled length)
+- `cpp-010-malloc-mul-overflow` (integer overflow in size calc)
 
 ### Python
 - `py-001-eval-exec`
 - `py-002-shell-injection`
 - `py-003-pickle-deserialize`
+- `py-004-sql-injection`
 - `py-005-yaml-unsafe-load`
 - `py-008-path-traversal`
+- `py-009-pickle-untrusted`
+- `py-015-os-system-user-input`
 
 ### JavaScript / TypeScript
 - `js-001-eval`
 - `js-002-innerhtml`
 - `js-003-prototype-pollution`
+- `js-004-nosql-injection`
 - `js-005-regex-dos`
 - `js-007-command-injection`
 - `js-008-prototype-pollution-bracket`
+- `js-009-redos-nested-quantifier`
 
 ### Go
 - `go-001-sql-injection`
+- `go-002-unsafe-pointer`
 - `go-003-command-injection`
 
 ### Java
 - `java-001-sql-injection`
+- `java-002-deserialization`
 - `java-003-xxe`
+- `java-004-path-traversal`
+- `java-010-hardcoded-creds`
 
 ## Out of scope (for now)
 
