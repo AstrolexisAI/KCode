@@ -3,7 +3,7 @@
 // Tests loadProCache + HMAC integrity by backup/restore of cache files.
 // Mock-free: does not use mock.module() to avoid contaminating other test files.
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHmac, pbkdf2Sync } from "node:crypto";
 import {
   copyFileSync,
@@ -15,7 +15,27 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-// ── Resolve the REAL paths pro.ts uses ──────────────────────────
+
+// ── Isolate from the real ~/.kcode ───────────────────────────────
+// Set KCODE_HOME to a unique temp dir *before* importing pro.ts so
+// every call to kcodePath() lands inside this sandbox. Previously
+// this file and pro-e2e.test.ts both wrote to ~/.kcode/pro-cache.json
+// in parallel and raced each other.
+//
+// `process.env` is process-global, and Bun's test runner can pack
+// several test files into the same worker. So we must restore the
+// previous value in an afterAll hook (see bottom of file) to avoid
+// leaking the tmp-dir path into unrelated tests (e.g. ModelToggle
+// which reads ~/.kcode/models.json via listModels()).
+const _ORIG_KCODE_HOME = process.env.KCODE_HOME;
+const TEST_KCODE_HOME = join(tmpdir(), `kcode-pro-test-${process.pid}-${Date.now()}`);
+mkdirSync(TEST_KCODE_HOME, { recursive: true });
+process.env.KCODE_HOME = TEST_KCODE_HOME;
+afterAll(() => {
+  if (_ORIG_KCODE_HOME === undefined) delete process.env.KCODE_HOME;
+  else process.env.KCODE_HOME = _ORIG_KCODE_HOME;
+});
+
 import { kcodePath } from "./paths";
 import {
   clearProCache,
@@ -25,10 +45,18 @@ import {
   validateKeyChecksum,
 } from "./pro.ts";
 
-const PRO_CACHE_FILE = kcodePath("pro-cache.json");
-const PRO_CACHE_SALT_FILE = kcodePath(".pro-cache-salt");
+// Lazy getters so if any future test mutates KCODE_HOME the path
+// resolution follows it.
+const proCacheFile = () => kcodePath("pro-cache.json");
+const proCacheSaltFile = () => kcodePath(".pro-cache-salt");
+// Back-compat aliases for the rest of the file.
+const PRO_CACHE_FILE = proCacheFile();
+const PRO_CACHE_SALT_FILE = proCacheSaltFile();
 
-// ── Backup/restore helpers ──────────────────────────────────────
+// ── Backup/restore helpers (now a no-op in the sandbox, kept for
+//    symmetry — the sandbox is already isolated, but backup/restore
+//    guards against one test leaving state that another expects to
+//    be clean).
 const BACKUP_DIR = join(tmpdir(), `kcode-pro-backup-${process.pid}-${Date.now()}`);
 mkdirSync(BACKUP_DIR, { recursive: true });
 

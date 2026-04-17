@@ -47,9 +47,13 @@ describe("ModelToggle render", () => {
         }}
       />,
     );
-    await new Promise((r) => setTimeout(r, 200));
+    // ModelToggle's useEffect can wait up to 2s for in-flight model
+    // discovery before it flips `loading` to false and starts accepting
+    // keys. Under parallel test load that 2s is effectively a hard
+    // lower bound, so we wait 3s before pressing Esc.
+    await new Promise((r) => setTimeout(r, 3000));
     instance.stdin.write("\x1b");
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 250));
     expect(result).toBe(null);
   });
 

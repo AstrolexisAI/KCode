@@ -2,7 +2,7 @@
 // End-to-end tests for Pro feature gating: free user blocking, valid key access,
 // expired cache handling, HMAC rejection, and grace period expiry
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHmac, pbkdf2Sync } from "node:crypto";
 import {
   copyFileSync,
@@ -14,6 +14,23 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+
+// ── Isolate from the real ~/.kcode before importing pro.ts ───────
+// Both this file and pro.test.ts touch the same cache/salt files; if
+// Bun runs them in parallel workers sharing the user's home, they
+// race. Pinning KCODE_HOME to a per-process tmp dir eliminates the
+// race. See pro.test.ts for the detailed explanation — afterAll
+// restores the original value so the tmp dir doesn't leak into tests
+// that run later in the same worker.
+const _ORIG_KCODE_HOME = process.env.KCODE_HOME;
+const TEST_KCODE_HOME = join(tmpdir(), `kcode-pro-e2e-test-${process.pid}-${Date.now()}`);
+mkdirSync(TEST_KCODE_HOME, { recursive: true });
+process.env.KCODE_HOME = TEST_KCODE_HOME;
+afterAll(() => {
+  if (_ORIG_KCODE_HOME === undefined) delete process.env.KCODE_HOME;
+  else process.env.KCODE_HOME = _ORIG_KCODE_HOME;
+});
+
 import { kcodePath } from "./paths";
 import { clearProCache, FREE_LIMITS, loadProCache, PRO_FEATURES, validateKeyChecksum } from "./pro";
 

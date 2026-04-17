@@ -218,24 +218,31 @@ describe("Resilience: Huge response", () => {
   });
 
   test("provider sends 100KB of text — streams without OOM", async () => {
-    // Generate ~100KB of text. Must be non-repetitive: the conversation
-    // streaming pipeline runs a repetition-loop detector
-    // (conversation-streaming.ts detectRepetitionLoop) that aborts any
-    // output where the tail is N consecutive identical blocks of period
-    // 15..500 chars. We build the payload by suffixing each word with its
-    // own unique index so no substring ever repeats.
-    const bag = [
-      "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
-      "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho",
-      "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega", "aurora",
-      "borealis", "cascade", "denali", "everest", "fjord", "glacier",
-      "horizon", "island", "juniper", "kestrel", "lagoon", "meadow",
-      "nebula", "oasis", "plateau", "quarry", "river", "summit", "tundra",
-    ];
+    // Generate ~100KB of text. Must be non-repetitive to survive all
+    // four repetition-loop detectors in conversation-streaming.ts:
+    //   1. detectRepetitionLoop — consecutive identical blocks
+    //   2. detectLargeBlockRepetition — long byte-identical blocks
+    //   3. detectCompletionMarkerLoop — semantic completion summaries
+    //   4. detectLowEntropyLoop — scans Latin letter runs only; a
+    //      bag-of-words with numeric suffixes strips back to a tiny
+    //      vocabulary and trips at 35% repetition.
+    // So every word must be alphabetically unique. We encode the index
+    // as a base-26 letter sequence so the regex-matched token differs
+    // for every entry in the stream.
+    const encode = (n: number): string => {
+      let s = "";
+      n += 1;
+      while (n > 0) {
+        n -= 1;
+        s = String.fromCharCode(97 + (n % 26)) + s;
+        n = Math.floor(n / 26);
+      }
+      return s;
+    };
     const parts: string[] = [];
     let total = 0;
     for (let i = 0; total < 100_000; i++) {
-      const w = `${bag[i % bag.length]!}${i}`;
+      const w = `word${encode(i)}`;
       parts.push(w);
       total += w.length + 1;
     }

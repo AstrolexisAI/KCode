@@ -12,9 +12,11 @@ import { checkOfflineLicense, hasLicenseFeature } from "./license";
 import { log } from "./logger";
 import { kcodeHome, kcodePath } from "./paths";
 
-const KCODE_HOME = kcodeHome();
-const PRO_CACHE_FILE = kcodePath("pro-cache.json");
-const PRO_CACHE_SALT_FILE = kcodePath(".pro-cache-salt");
+// Resolve lazily: tests set kcodeHome() after import, and pro.ts paths
+// must pick that up. Previous `const X = kcodePath(...)` at import time
+// captured the real user home and caused parallel-test pollution.
+const proCacheFile = () => kcodePath("pro-cache.json");
+const proCacheSaltFile = () => kcodePath(".pro-cache-salt");
 const VALIDATE_URL = process.env.KCODE_PRO_VALIDATE_URL ?? "https://kulvex.ai/api/pro/validate";
 const RECHECK_DAYS = 1;
 const GRACE_PERIOD_HOURS = 24; // Max offline grace for non-server-validated cache
@@ -95,16 +97,16 @@ export function getTrialDaysRemaining(key: string): number {
 // HMAC key derived via PBKDF2 with a persistent random salt — NOT guessable from public info
 function getOrCreateCacheSalt(): string {
   try {
-    if (existsSync(PRO_CACHE_SALT_FILE)) {
-      return readFileSync(PRO_CACHE_SALT_FILE, "utf-8").trim();
+    if (existsSync(proCacheSaltFile())) {
+      return readFileSync(proCacheSaltFile(), "utf-8").trim();
     }
   } catch (err) {
     log.debug("pro", `Failed to read cache salt file, regenerating: ${err}`);
   }
   const salt = randomBytes(32).toString("hex");
   try {
-    mkdirSync(KCODE_HOME, { recursive: true });
-    writeFileSync(PRO_CACHE_SALT_FILE, salt + "\n", { mode: 0o600 });
+    mkdirSync(kcodeHome(), { recursive: true });
+    writeFileSync(proCacheSaltFile(), salt + "\n", { mode: 0o600 });
   } catch (err) {
     log.debug("pro", `Failed to write cache salt file: ${err}`);
   }
@@ -260,23 +262,23 @@ function computeHmac(key: string, validatedAt: string, valid: boolean, hwFp?: st
 
 export function loadProCache(): ProCache | null {
   try {
-    if (!existsSync(PRO_CACHE_FILE)) return null;
+    if (!existsSync(proCacheFile())) return null;
 
     // Verify file permissions — reject world-readable cache files
     const { statSync } = require("node:fs") as typeof import("node:fs");
-    const stat = statSync(PRO_CACHE_FILE);
+    const stat = statSync(proCacheFile());
     const mode = stat.mode & 0o777;
     if ((mode & 0o077) !== 0) {
       // File is readable by group/others — could be tampered. Reset permissions.
       const { chmodSync } = require("node:fs") as typeof import("node:fs");
       try {
-        chmodSync(PRO_CACHE_FILE, 0o600);
+        chmodSync(proCacheFile(), 0o600);
       } catch (err) {
         log.debug("pro", `Failed to chmod pro-cache file: ${err}`);
       }
     }
 
-    const raw = JSON.parse(readFileSync(PRO_CACHE_FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync(proCacheFile(), "utf-8"));
     if (!raw.key || !raw.validatedAt || typeof raw.valid !== "boolean") return null;
 
     // Verify hardware fingerprint — reject cache from different machines
@@ -316,11 +318,11 @@ function saveProCache(
   serverValidated: boolean,
 ): void {
   try {
-    mkdirSync(KCODE_HOME, { recursive: true });
+    mkdirSync(kcodeHome(), { recursive: true });
     const hwFingerprint = getHardwareFingerprint();
     const hmac = computeHmac(key, validatedAt, valid, hwFingerprint);
     const cache: ProCache = { key, validatedAt, valid, serverValidated, hwFingerprint, hmac };
-    writeFileSync(PRO_CACHE_FILE, JSON.stringify(cache, null, 2) + "\n", { mode: 0o600 });
+    writeFileSync(proCacheFile(), JSON.stringify(cache, null, 2) + "\n", { mode: 0o600 });
   } catch (err) {
     log.debug("pro", `Failed to save pro cache: ${err}`);
   }
@@ -510,7 +512,7 @@ export async function getTranscriptSearchHoursLimit(): Promise<number | null> {
 /** Count sessions this month from transcript directory. */
 export async function getSessionCountThisMonth(): Promise<number> {
   try {
-    const transcriptDir = join(KCODE_HOME, "transcripts");
+    const transcriptDir = join(kcodeHome(), "transcripts");
     const { readdirSync, statSync } = await import("node:fs");
     if (!existsSync(transcriptDir)) return 0;
     const files = readdirSync(transcriptDir);
