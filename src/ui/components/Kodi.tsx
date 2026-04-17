@@ -394,6 +394,18 @@ export default function KodiCompanion({
   const [elapsed, setElapsed] = useState(0);
   const eventCountRef = useRef(0);
 
+  // Autonomy state — Phase 3.
+  // Walking: position drifts inside the 14-char sprite box so Kodi
+  // looks alive during long idle stretches. Pure deterministic step.
+  const walkStateRef = useRef<{ position: number; direction: -1 | 0 | 1 }>({
+    position: 0,
+    direction: 0,
+  });
+  const [walkPosition, setWalkPosition] = useState(0);
+  // Idle-action history for LLM variety + timestamps for scheduling.
+  const recentActionsRef = useRef<string[]>([]);
+  const lastActivityRef = useRef(Date.now());
+
   // Initialize engine once
   if (!engineRef.current) {
     engineRef.current = new KodiAnimEngine();
@@ -420,6 +432,127 @@ export default function KodiCompanion({
       }
     };
   }, []);
+
+  // ── Phase 3d — session personality ──
+  // One LLM call at startup picks a personality that biases Kodi's
+  // chips for the whole session. Falls back to random on any error.
+  // Fires only when the Kodi server is up (paid tiers who installed
+  // the advisor model). Free / declined users keep "focused".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { pickSessionPersonality } = await import("../kodi-autonomy.js");
+        const p = await pickSessionPersonality();
+        if (!cancelled) engine.setPersonality(p);
+      } catch {
+        /* stay on default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [engine]);
+
+  // ── Phase 3b — walking ──
+  // Walk step runs every 4s — visible but gentle. State is on a ref,
+  // but we push to React state so the sprite re-renders with the new
+  // horizontal offset. Cleaned up with clearInterval on unmount.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      const { stepWalk } = await import("../kodi-autonomy.js");
+      const next = stepWalk(walkStateRef.current);
+      walkStateRef.current = next;
+      setWalkPosition(next.position);
+    }, 4000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── Phase 3a — autonomous idle actions ──
+  // Every 30-60s of true idle (no active agent, no running tool),
+  // ask the LLM to pick an action from the palette. Falls back to
+  // random pick when the server is down. Cancels cleanly on unmount.
+  useEffect(() => {
+    let cancelled = false;
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = 30_000 + Math.random() * 30_000;
+      pending = setTimeout(async () => {
+        pending = null;
+        if (cancelled) return;
+        // Skip when Kodi is clearly doing something — leave
+        // foreground animations alone.
+        if (engine.phase !== "idle" || engine.mood !== "idle") {
+          scheduleNext();
+          return;
+        }
+        try {
+          const { askForIdleAction, pickRandomIdleAction } = await import(
+            "../kodi-autonomy.js"
+          );
+          const dispatch =
+            (await askForIdleAction(
+              engine.personality,
+              (Date.now() - lastActivityRef.current) / 1000,
+              recentActionsRef.current as any,
+            )) ?? pickRandomIdleAction(recentActionsRef.current as any);
+          if (cancelled) return;
+          engine.setMood(dispatch.mood);
+          engine.say(dispatch.speech, 3000);
+          recentActionsRef.current = [
+            ...recentActionsRef.current.slice(-4),
+            dispatch.action,
+          ];
+        } catch {
+          /* never surface autonomy errors to the UI */
+        }
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (pending) {
+        clearTimeout(pending);
+        pending = null;
+      }
+    };
+  }, [engine]);
+
+  // ── Phase 3c — proactive observations ──
+  // Every 60s, snapshot session signals and check thresholds. If any
+  // observation tripped (with per-type cooldown), ask the LLM to
+  // phrase it — otherwise show the raw detail. Sets latestAdvice so
+  // the existing advice render line picks it up.
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const { collectObservations, renderObservation } = await import(
+          "../kodi-autonomy.js"
+        );
+        const signals = {
+          idleMs: Date.now() - lastActivityRef.current,
+          sessionMs: sessionStartTime ? Date.now() - sessionStartTime : 0,
+          contextPressure:
+            contextWindowSize && contextWindowSize > 0
+              ? Math.min(1, tokenCount / contextWindowSize)
+              : 0,
+          toolUses: toolUseCount,
+          msSinceCommit: Number.POSITIVE_INFINITY, // no commit signal yet
+        };
+        const obs = collectObservations(signals);
+        if (obs.length === 0) return;
+        // Render the first observation; if multiple fire in the same
+        // tick, the next one will show on the next cycle.
+        const line = await renderObservation(obs[0]!);
+        setLatestAdvice(line);
+      } catch {
+        /* swallow */
+      }
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [sessionStartTime, contextWindowSize, tokenCount, toolUseCount]);
 
   // Update elapsed time every 10s
   useEffect(() => {
@@ -486,6 +619,10 @@ export default function KodiCompanion({
     (event: KodiEvent) => {
       eventCountRef.current++;
       engine.react(event);
+      // Any incoming event counts as "user is active" — resets the
+      // idle clock used by Phase 3a/3c to decide when to wake up
+      // autonomous behaviors.
+      lastActivityRef.current = Date.now();
 
       // Track consecutive tool errors for the advisor gate.
       if (event.type === "tool_error") {
@@ -634,10 +771,17 @@ export default function KodiCompanion({
     >
       {/* Kodi sprite — pre-composed, fixed-width lines. The tier
           badge (★ ♛ ✦) renders as a small overlay column to the
-          right of the head for paid tiers; free users see nothing. */}
-      <Box flexDirection="column" width={15}>
+          right of the head for paid tiers; free users see nothing.
+          walkPosition (Phase 3b) shifts the sprite horizontally via
+          a left-pad spacer so Kodi visibly drifts inside its box
+          during long idle stretches. walkPosition is in
+          [-WALK_RANGE, +WALK_RANGE], we render with an offset of
+          `walkPosition + WALK_RANGE` columns of leading whitespace
+          so the sprite traverses a 2·WALK_RANGE-wide lane. */}
+      <Box flexDirection="column" width={15 + 6}>
         {lines.map((line, i) => (
           <Text key={i} color={moodColor}>
+            {" ".repeat(Math.max(0, walkPosition + 3))}
             {line}
           </Text>
         ))}

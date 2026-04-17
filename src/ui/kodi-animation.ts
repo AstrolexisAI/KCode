@@ -32,6 +32,20 @@ export type KodiMood =
  */
 export type KodiTier = "free" | "pro" | "team" | "enterprise";
 
+/**
+ * Personality of the session — picked once at startup. Biases
+ * speech-chip selection so Kodi feels like a distinct character
+ * across the whole session instead of random mood-flips. Does not
+ * affect moods or sprites — purely cosmetic through chips.
+ */
+export type KodiPersonality =
+  | "sarcastic"
+  | "hyped"
+  | "tired"
+  | "curious"
+  | "focused"
+  | "mischievous";
+
 export type AnimPhase = "idle" | "anticipation" | "performing" | "settling" | "cooldown";
 
 export type AnimRhythm = "slow" | "medium" | "fast";
@@ -317,6 +331,84 @@ export const TIER_SPEECH: Record<KodiTier, { entrance: string[]; flex: string[] 
   },
 };
 
+/**
+ * Personality-flavored speech chips. When engine.personality is set,
+ * react() prefers a matching chip from this table over the generic
+ * SPEECH_CHIPS. If a personality doesn't have an entry for a given
+ * event type, falls back to the generic chip. Keeps everything
+ * graceful when the personality table is sparse.
+ *
+ * Each chip still respects the ≤12-char soft budget of the bubble.
+ */
+export const PERSONALITY_CHIPS: Record<
+  KodiPersonality,
+  Partial<Record<string, string[]>>
+> = {
+  sarcastic: {
+    tool_start: ["fine.", "ok...", "sure"],
+    tool_done: ["obv", "wow", "shocking", "no way"],
+    tool_error: ["ugh", "typical", "of course", "cute"],
+    test_pass: ["finally", "shocked", "barely"],
+    test_fail: ["called it", "mhm", "predictable"],
+    commit: ["brave", "bold", "we'll see"],
+    idle: ["...", "still?", "waiting"],
+    turn_end: ["done.", "next.", "mhm"],
+  },
+  hyped: {
+    tool_start: ["GO GO GO", "let's gooo", "yeehaw"],
+    tool_done: ["FIRE", "LETSGO", "epic!", "yes!"],
+    tool_error: ["retry!", "again!", "c'mon!"],
+    test_pass: ["LETSGOO", "green!!", "hype!"],
+    test_fail: ["fight!", "no way!", "try2!"],
+    commit: ["SHIPPED", "yesss", "legit!"],
+    idle: ["ready!", "let's!", "bring it"],
+    turn_end: ["done!!", "next up!", "more?"],
+  },
+  tired: {
+    tool_start: ["ok...", "zzz", "yawn"],
+    tool_done: ["phew", "ok", "mk"],
+    tool_error: ["ugh", "noo", "tired"],
+    test_pass: ["ok...", "fine", "ish"],
+    test_fail: ["ugh", "noo", "tomorrow"],
+    commit: ["saved", "rest?", "ok"],
+    idle: ["zzz", "yawn", "nap?"],
+    turn_end: ["ok", "rest", "done"],
+  },
+  curious: {
+    tool_start: ["ooh?", "look!", "what?"],
+    tool_done: ["huh", "nice", "interesting"],
+    tool_error: ["why?", "hm?", "odd"],
+    test_pass: ["cool!", "ok!", "nice"],
+    test_fail: ["why?", "odd", "hm..."],
+    commit: ["oh!", "cool", "saved!"],
+    idle: ["what if", "ponder", "hmm"],
+    turn_end: ["more?", "next?", "ok"],
+  },
+  focused: {
+    // Minimal personality — essentially the baseline chips. Kept in
+    // the table explicitly so a focused user doesn't silently "lose"
+    // the bubble personality — it just stays crisp.
+    tool_start: ["working", "on it"],
+    tool_done: ["done", "ok"],
+    tool_error: ["retry", "hmm"],
+    test_pass: ["green", "ok"],
+    test_fail: ["red", "fix"],
+    commit: ["saved", "ok"],
+    idle: ["ready", "..."],
+    turn_end: ["done", "ok"],
+  },
+  mischievous: {
+    tool_start: ["hehe", "heh", "sneaky"],
+    tool_done: ["👀", "nice...", "got it"],
+    tool_error: ["lol", "oops", "hehe"],
+    test_pass: ["hehe", "got away", "slick"],
+    test_fail: ["lol", "fix it!", "caught"],
+    commit: ["shh", "🤫", "hidden"],
+    idle: ["plot?", "hehe", "~"],
+    turn_end: ["heh", "next?", "spicy"],
+  },
+};
+
 // ─── Mood Rhythm ────────────────────────────────────────────────
 
 const MOOD_RHYTHM: Record<KodiMood, AnimRhythm> = {
@@ -424,6 +516,11 @@ export class KodiAnimEngine {
   // Tier (subscription level) — drives the tier badge + tier-aware
   // entrance / flex flourishes. Default free until setTier() is called.
   tier: KodiTier = "free";
+
+  // Personality — picked once per session (LLM or random). Biases
+  // chip selection in react() so Kodi reads as a distinct character
+  // for the whole session. Default "focused" stays out of the way.
+  personality: KodiPersonality = "focused";
 
   /** Advance engine by deltaMs. Pure — no setTimeout, no Date.now(). */
   tick(deltaMs: number): KodiAnimState {
@@ -602,6 +699,12 @@ export class KodiAnimEngine {
    * silent so re-mounts or refresh cycles don't produce confetti
    * spam.
    */
+  /** Update the session personality. Does not trigger any transition
+   * — it just influences future chip picks. Safe to call mid-session. */
+  setPersonality(p: KodiPersonality): void {
+    this.personality = p;
+  }
+
   setTier(tier: KodiTier): void {
     const previous = this.tier;
     this.tier = tier;
@@ -618,7 +721,11 @@ export class KodiAnimEngine {
 
   /** React to an event with appropriate mood + speech. */
   react(event: KodiEvent): void {
-    const chips = SPEECH_CHIPS[event.type] ?? SPEECH_CHIPS.idle!;
+    // Prefer personality-flavored chips when the personality has an
+    // entry for this event type; else fall back to the generic table.
+    // Keeps behavior graceful for sparse personalities.
+    const personalityChips = PERSONALITY_CHIPS[this.personality]?.[event.type];
+    const chips = personalityChips ?? SPEECH_CHIPS[event.type] ?? SPEECH_CHIPS.idle!;
     const chip = chips[Math.floor(Math.random() * chips.length)]!;
 
     switch (event.type) {
