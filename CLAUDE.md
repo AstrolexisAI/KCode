@@ -60,8 +60,6 @@ bash scripts/test-batched.sh 15    # Run tests in batches (avoids OOM on large s
 - **`analytics.ts`** — Session analytics tracking: tool usage frequency, token consumption, timing, and cost breakdowns.
 - **`transcript-search.ts`** — Full-text search across past conversation transcripts for finding previous solutions and context.
 - **`tool-cache.ts`** — Caches tool results (e.g., file reads, grep) within a session to avoid redundant I/O operations.
-- **`gpu-orchestrator.ts`** — Multi-GPU detection (NVIDIA/Apple), VRAM monitoring, temperature alerts, tensor-split calculation.
-- **`plugin-marketplace.ts`** — Plugin marketplace client: search, install, update, create plugins. 8 bundled seed plugins.
 - **`payments.ts`** — Stripe integration: checkout sessions, webhook verification, subscription management, pro activation.
 - **`auto-update.ts`** — Self-update via GitHub releases: version check, download, semver comparison, 24h cache.
 

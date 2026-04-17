@@ -44,10 +44,6 @@ async function lazyGetLspManager(cwd: string) {
   const { getLspManager } = await import("./core/lsp");
   return getLspManager(cwd);
 }
-async function lazyGetNarrativeManager() {
-  const { getNarrativeManager } = await import("./core/narrative");
-  return getNarrativeManager();
-}
 async function lazyRegisterBuiltinTools() {
   const { registerBuiltinTools } = await import("./tools");
   return registerBuiltinTools();
@@ -1470,16 +1466,6 @@ async function runMain(
   // Stop file watcher
   fileWatcher?.stop();
 
-  // Layer 10: Save session narrative before exiting (lazy)
-  try {
-    const sessionData = conversationManager.collectSessionData();
-    if (sessionData.messagesCount > 1) {
-      const narrativeManager = await lazyGetNarrativeManager();
-      narrativeManager.updateNarrative(sessionData);
-    }
-  } catch (err) {
-    log.debug("index", `Failed to save session narrative: ${err}`);
-  }
 
   log.info("session", "Session ended");
   await lazyShutdownLsp();

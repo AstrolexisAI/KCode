@@ -712,6 +712,20 @@ export async function handleToolAction(action: string, ctx: ActionContext): Prom
 
       if (!prompt) return "  Provide a task prompt for the swarm.";
 
+      // Swarm is experimental and hidden behind an env flag. The
+      // feature works but lacks end-to-end tests (0 coverage on
+      // core/swarm.ts as of Phase 1 pruning), so it stays off by
+      // default until that gap is closed. Users can opt in with:
+      //   KCODE_EXPERIMENTAL_SWARM=1 kcode
+      if (!process.env.KCODE_EXPERIMENTAL_SWARM) {
+        return [
+          "  /swarm is experimental and disabled by default.",
+          "",
+          "  Enable with: KCODE_EXPERIMENTAL_SWARM=1 kcode",
+          "  Tracking: tests + stability before default-on.",
+        ].join("\n");
+      }
+
       const { runSwarm, runSwarmOnFiles, formatSwarmResult } = await import("../../core/swarm");
       const cwd = appConfig.workingDirectory;
 

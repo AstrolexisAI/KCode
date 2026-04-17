@@ -83,7 +83,6 @@ import type {
   TurnCostEntry,
 } from "./types";
 import { UndoManager } from "./undo";
-import { getUserModel } from "./user-model";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -855,7 +854,16 @@ export class ConversationManager {
           || /\b(?:cli|terminal|tui|curses|textual|rich|typer|click|ink|tauri)\b/i.test(userMessage)
           || /\b(?:pip\s+install|pyinstaller|cargo|gradle|maven|gem\s+install)\b/i.test(userMessage);
 
-        const isWebRequest = !isModification && !mentionsNonWebStack && /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
+        // Web-engine auto-scaffold is experimental and hidden behind
+        // an env flag in Phase 1. Too many ways it can misfire: the
+        // Python+textual "btctop" prompt triggered a Next.js scaffold
+        // earlier because detection was pattern-based without a real
+        // understanding of the user's stack. Staying off by default
+        // protects users from unsolicited 17-file Next.js dumps.
+        // Opt-in with: KCODE_EXPERIMENTAL_SCAFFOLD=1 kcode
+        const webEngineEnabled = !!process.env.KCODE_EXPERIMENTAL_SCAFFOLD;
+
+        const isWebRequest = webEngineEnabled && !isModification && !mentionsNonWebStack && /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
 
         if (task.type === "implement" && !isModification) {
           const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
@@ -1060,13 +1068,6 @@ export class ConversationManager {
     }
 
     this.state.messages.push({ role: "user", content: orchestratedMessage });
-
-    // Layer 7: Update user model from message signals
-    try {
-      getUserModel().updateFromMessage(userMessage);
-    } catch (err) {
-      log.debug("user-model", "Failed to update user model from message: " + err);
-    }
 
     // Layer 9: Reset intention engine for new turn
     try {
