@@ -89,7 +89,7 @@ export const KODI_CANDIDATES: readonly KodiCandidate[] = [
     url:
       "https://huggingface.co/bartowski/Qwen2.5-Coder-1.5B-Instruct-abliterated-GGUF/" +
       "resolve/main/Qwen2.5-Coder-1.5B-Instruct-abliterated-Q4_K_M.gguf",
-    sizeMB: 1147, // ≈1.12 GB
+    sizeMB: 1120, // HF UI shows "1.12 GB" (decimal); informational only
     ramMB: 1500,
     note: "Default — code-specialized, uncensored, best for advising on code.",
   },
@@ -229,20 +229,24 @@ export async function downloadKodiModel(
   ensureDir(KODI_MODEL_DIR);
   const dest = candidatePath(c);
 
-  // Early-out if already downloaded at full size — avoids a pointless
-  // HEAD/Range roundtrip if the user reopened the menu by mistake.
+  // Early-out if the final file already exists. downloadFile handles
+  // partial downloads via <dest>.partial with HTTP Range resume, so
+  // if we see the non-partial path it's from a completed run. We
+  // intentionally don't size-check here — HF's UI displays decimal
+  // GB while the on-disk bytes use binary MiB, so any tolerance we
+  // pick is an arbitrary guess. If the user suspects corruption,
+  // they can delete the model via the menu.
   if (existsSync(dest)) {
-    const sizeMB = Math.round(statSync(dest).size / (1024 * 1024));
-    // Allow a 2% tolerance — filesystem block rounding, mirror size
-    // differences, etc.
-    if (Math.abs(sizeMB - c.sizeMB) < c.sizeMB * 0.02) {
-      onProgress("Already downloaded.");
-      return;
-    }
+    onProgress("Already downloaded.");
+    return;
   }
 
   log.info("kodi-model", `Downloading ${c.id} from ${c.url}`);
-  await downloadFile(c.url, dest, onProgress, c.sizeMB * 1024 * 1024);
+  // Pass no expectedSizeBytes: mirror sizes can drift (re-quantized
+  // uploads, different mirror) and a byte-exact mismatch shouldn't
+  // fail a functional download. Integrity is handled by llama.cpp
+  // on load (it'll reject malformed GGUF files).
+  await downloadFile(c.url, dest, onProgress);
   log.info("kodi-model", `Download complete: ${dest}`);
 }
 
