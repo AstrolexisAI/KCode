@@ -13,6 +13,17 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.125] — 2026-04-17
+
+### Added
+- `docs/architecture/modules.md` — honest core-vs-auxiliary
+  classification of the codebase. Each auxiliary module
+  (RAG, compaction, distillation, voice, world-model) carries a
+  top-of-file STATUS comment pointing to the doc. [#93]
+- `CLAUDE.md` now references the module classification doc so
+  future edits stay anchored to the "core product = audit engine"
+  framing.
+
 ## [2.10.123] — 2026-04-17
 
 ### Added
