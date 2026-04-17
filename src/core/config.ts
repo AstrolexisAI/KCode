@@ -73,6 +73,15 @@ export interface Settings {
   autoUpdate?: boolean; // Enable/disable automatic update checks (default true)
   updateCheckIntervalDays?: number; // Days between update checks (default 7)
   proKey?: string; // KCode Pro license key (kcode_pro_xxxxx)
+  // Kodi Advisor — dedicated small abliterated LLM that powers the
+  // mascot's autonomous movement / advisory speech. Enterprise-only.
+  // `declined` means the user said No at the first-run prompt and
+  // shouldn't be asked again. Reset with `/kodi-advisor reset`.
+  kodiAdvisor?: {
+    modelId?: string; // id from KODI_CANDIDATES
+    declined?: boolean;
+    autoStart?: boolean; // start server on TUI mount (default true)
+  };
   marketplace?: MarketplaceSettings; // Plugin marketplace CDN config
   offline?: OfflineSettings; // Offline mode configuration
   ensemble?: EnsembleSettings; // Multi-model ensemble configuration

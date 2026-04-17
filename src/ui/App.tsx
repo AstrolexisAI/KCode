@@ -13,6 +13,7 @@ import type { KCodeConfig } from "../core/types.js";
 import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 import ActivePlanPanel from "./components/ActivePlanPanel.js";
 import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
+import KodiAdvisorMenu, { type KodiAdvisorMenuResult } from "./components/KodiAdvisorMenu.js";
 import ContextGrid from "./components/ContextGrid.js";
 import Header from "./components/Header.js";
 import InputPrompt from "./components/InputPrompt.js";
@@ -44,7 +45,14 @@ interface AppProps {
   initialSessionName?: string;
 }
 
-type AppMode = "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle";
+type AppMode =
+  | "input"
+  | "responding"
+  | "permission"
+  | "sudo-password"
+  | "cloud"
+  | "toggle"
+  | "kodi-advisor";
 
 export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
   const { exit } = useApp();
@@ -97,6 +105,7 @@ export default function App({ config, conversationManager, tools, initialSession
     names.add("/license");
     names.add("/login");
     names.add("/logout");
+    names.add("/kodi-advisor");
     names.add("/plugin");
     names.add("/plugins");
     names.add("/hookify");
@@ -125,6 +134,7 @@ export default function App({ config, conversationManager, tools, initialSession
     descs["/license"] = "Show license status or activate a license";
     descs["/login"] = "Log in to Astrolexis (opens browser — PKCE OAuth)";
     descs["/logout"] = "Log out of Astrolexis and clear cached subscription";
+    descs["/kodi-advisor"] = "Manage the Kodi Advisor model (download/start/stop/delete)";
     descs["/plugin"] = "Install, list, or remove plugins";
     descs["/plugins"] = "Install, list, or remove plugins";
     descs["/hookify"] = "Manage dynamic hookify rules (create, list, toggle, delete, test)";
@@ -183,6 +193,65 @@ export default function App({ config, conversationManager, tools, initialSession
       cancelled = true;
       clearInterval(interval);
     };
+  }, []);
+
+  // Kodi advisor first-run prompt. Enterprise users get asked once,
+  // the first time they start the TUI, whether they want the Kodi
+  // Advisor model downloaded. A decline (`n` in the menu) writes
+  // kodiAdvisor.declined = true and we never ask again until they
+  // run `/kodi-advisor reset`. Users on any other tier never see
+  // the prompt — the current deterministic Kodi stays as-is.
+  const [firstRunKodiAdvisor, setFirstRunKodiAdvisor] = useState(false);
+  useEffect(() => {
+    if (subscriptionTier !== "enterprise") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { loadUserSettingsRaw } = await import("../core/config.js");
+        const { getInstalledKodiCandidate } = await import("../core/kodi-model.js");
+        const raw = loadUserSettingsRaw();
+        const alreadyDeclined = Boolean(raw.kodiAdvisor?.declined);
+        const alreadyInstalled = Boolean(getInstalledKodiCandidate());
+        if (cancelled) return;
+        if (!alreadyDeclined && !alreadyInstalled) {
+          setFirstRunKodiAdvisor(true);
+          setMode("kodi-advisor");
+        }
+      } catch {
+        // Settings read failure shouldn't block the UI.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [subscriptionTier]);
+
+  const handleKodiAdvisorMenuDone = useCallback(async (result: KodiAdvisorMenuResult) => {
+    setMode("input");
+    setFirstRunKodiAdvisor(false);
+    if (result.action === "declined") {
+      try {
+        const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../core/config.js");
+        const raw = loadUserSettingsRaw();
+        raw.kodiAdvisor = { ...(raw.kodiAdvisor ?? {}), declined: true };
+        saveUserSettingsRaw(raw);
+      } catch {
+        /* best effort */
+      }
+    } else if (result.action === "downloaded") {
+      try {
+        const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../core/config.js");
+        const raw = loadUserSettingsRaw();
+        raw.kodiAdvisor = {
+          ...(raw.kodiAdvisor ?? {}),
+          modelId: result.candidateId,
+          declined: false,
+        };
+        saveUserSettingsRaw(raw);
+      } catch {
+        /* best effort */
+      }
+    }
   }, []);
 
   const [watcherSuggestions, setWatcherSuggestions] = useState<string[]>([]);
@@ -906,6 +975,13 @@ export default function App({ config, conversationManager, tools, initialSession
           />
         )}
 
+        {mode === "kodi-advisor" && (
+          <KodiAdvisorMenu
+            firstRun={firstRunKodiAdvisor}
+            onClose={handleKodiAdvisorMenuDone}
+          />
+        )}
+
         {/* Background scan/pr progress bar */}
         {scanProgress && scanProgress.active && (
           <Box marginLeft={2} marginBottom={0} flexDirection="column">
@@ -1068,6 +1144,7 @@ export default function App({ config, conversationManager, tools, initialSession
             mode !== "sudo-password" &&
             mode !== "cloud" &&
             mode !== "toggle" &&
+            mode !== "kodi-advisor" &&
             mode !== ("escalation" as any)
           }
           isQueuing={mode === "responding"}

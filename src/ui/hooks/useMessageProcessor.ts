@@ -27,7 +27,14 @@ export interface UseMessageProcessorParams {
   switchTheme: (theme: string) => void;
   exit: () => void;
   setMode: (
-    mode: "input" | "responding" | "permission" | "sudo-password" | "cloud" | "toggle",
+    mode:
+      | "input"
+      | "responding"
+      | "permission"
+      | "sudo-password"
+      | "cloud"
+      | "toggle"
+      | "kodi-advisor",
   ) => void;
   setCompleted: (updater: (prev: MessageEntry[]) => MessageEntry[]) => void;
   setStreamingText: (text: string) => void;
@@ -472,6 +479,44 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       ) {
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         setMode("cloud");
+        return;
+      }
+
+      // /kodi-advisor — open the Kodi Advisor management menu.
+      // Subcommand `reset` clears the "don't ask again" flag so the
+      // first-run prompt will fire again on the next enterprise
+      // session. No arguments → open the menu directly.
+      if (lower === "/kodi-advisor" || lower === "/kodi" || lower === "/kodi-advisor reset") {
+        setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
+        if (lower === "/kodi-advisor reset") {
+          try {
+            const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../../core/config");
+            const raw = loadUserSettingsRaw();
+            if (raw.kodiAdvisor) {
+              raw.kodiAdvisor.declined = false;
+              saveUserSettingsRaw(raw);
+            }
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: "  Kodi Advisor decline flag cleared. Run `/kodi-advisor` to open the menu.",
+              },
+            ]);
+          } catch (err) {
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  Failed to reset: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ]);
+          }
+          return;
+        }
+        setMode("kodi-advisor");
         return;
       }
 
