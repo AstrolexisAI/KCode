@@ -1,89 +1,114 @@
-// Phase 2 — advisor-mode parsers and trigger filter.
+// Phase 2 — advisor parser and trigger filter.
 //
-// Covers parseKodiAdvisorJson's tolerance to messy small-model
-// outputs (code fences, trailing prose, missing fields) and
-// shouldCallAdvisor's event filtering so the advisor stays quiet
-// during mechanical tool flow.
+// The advisor only emits `advice` (mood + speech stay on the
+// deterministic engine path). parseKodiAdvisorJson must:
+//   - tolerate markdown fences and preamble prose from small models,
+//   - drop null / "null" / fluff advice,
+//   - truncate to 120 chars,
+//   - return null when nothing usable remains.
+//
+// shouldCallAdvisor gates LLM calls to events with real info content.
 
 import { describe, expect, test } from "bun:test";
-import { parseKodiAdvisorJson, shouldCallAdvisor, type KodiReaction } from "./Kodi";
+import { parseKodiAdvisorJson, shouldCallAdvisor } from "./Kodi";
 
 describe("parseKodiAdvisorJson — happy path", () => {
-  test("parses a clean JSON object", () => {
-    const raw = '{"mood":"worried","speech":"cyclic?","advice":"a.ts imports b.ts imports a.ts"}';
-    const r = parseKodiAdvisorJson(raw) as KodiReaction;
-    expect(r).not.toBeNull();
-    expect(r.mood).toBe("worried");
-    expect(r.speech).toBe("cyclic?");
-    expect(r.advice).toBe("a.ts imports b.ts imports a.ts");
-  });
-
-  test("truncates speech to 14 chars", () => {
-    const raw = '{"mood":"happy","speech":"wayyyyyy too long for the bubble","advice":null}';
+  test("parses a specific actionable advice", () => {
+    const raw = '{"advice":"src/core/models.ts: missing import of Opus 4.7 constant"}';
     const r = parseKodiAdvisorJson(raw);
     expect(r).not.toBeNull();
-    expect(r!.speech!.length).toBeLessThanOrEqual(14);
+    expect(r!.advice).toBe("src/core/models.ts: missing import of Opus 4.7 constant");
   });
 
   test("truncates advice to 120 chars", () => {
-    const long = "x".repeat(500);
-    const raw = `{"mood":"happy","speech":"ok","advice":"${long}"}`;
+    const raw = `{"advice":"${"x".repeat(500)}"}`;
     const r = parseKodiAdvisorJson(raw);
     expect(r).not.toBeNull();
     expect(r!.advice!.length).toBeLessThanOrEqual(120);
   });
+
+  test("trims leading/trailing whitespace", () => {
+    const raw = '{"advice":"   src/a.ts line 42   "}';
+    const r = parseKodiAdvisorJson(raw);
+    expect(r!.advice).toBe("src/a.ts line 42");
+  });
 });
 
 describe("parseKodiAdvisorJson — tolerant to small-model messiness", () => {
-  test("strips markdown fences", () => {
-    const raw = '```json\n{"mood":"excited","speech":"lgtm","advice":null}\n```';
+  test("strips labeled markdown fences", () => {
+    const raw = '```json\n{"advice":"test file expects Opus 4.7"}\n```';
     const r = parseKodiAdvisorJson(raw);
     expect(r).not.toBeNull();
-    expect(r!.mood).toBe("excited");
-    expect(r!.speech).toBe("lgtm");
+    expect(r!.advice).toBe("test file expects Opus 4.7");
   });
 
   test("strips unlabeled fences", () => {
-    const raw = '```\n{"mood":"happy","speech":"ok"}\n```';
+    const raw = '```\n{"advice":"check src/a.ts import order"}\n```';
     const r = parseKodiAdvisorJson(raw);
-    expect(r!.mood).toBe("happy");
+    expect(r!.advice).toBe("check src/a.ts import order");
   });
 
   test("extracts JSON from preamble prose", () => {
-    const raw = 'Sure! Here is my response: {"mood":"smug","speech":"nice","advice":null}';
+    const raw = 'Sure! Here is my response: {"advice":"Qwen tokenizer mismatch in models.ts:42"}';
     const r = parseKodiAdvisorJson(raw);
-    expect(r!.mood).toBe("smug");
+    expect(r!.advice).toBe("Qwen tokenizer mismatch in models.ts:42");
+  });
+});
+
+describe("parseKodiAdvisorJson — fluff filter", () => {
+  test("rejects 'consider X' hedge", () => {
+    const raw = '{"advice":"consider refactoring src/core/kodi.ts"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
   });
 
-  test("null advice is dropped (not included as a string)", () => {
-    const raw = '{"mood":"happy","speech":"ok","advice":null}';
-    const r = parseKodiAdvisorJson(raw);
-    expect(r!.advice).toBeUndefined();
+  test("rejects 'maybe check' hedge", () => {
+    const raw = '{"advice":"maybe check if the file exists"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
   });
 
-  test('string "null" as advice is also dropped', () => {
-    // Small models sometimes emit the literal word
-    const raw = '{"mood":"happy","speech":"ok","advice":"null"}';
-    const r = parseKodiAdvisorJson(raw);
-    expect(r!.advice).toBeUndefined();
+  test("rejects 'should X' hedge", () => {
+    const raw = '{"advice":"you should split conversation.ts"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
   });
 
-  test("invalid mood falls through — advisor keeps using current mood", () => {
-    const raw = '{"mood":"bogus_mood_name","speech":"ok","advice":null}';
-    const r = parseKodiAdvisorJson(raw);
-    expect(r!.mood).toBeUndefined();
-    expect(r!.speech).toBe("ok");
+  test("rejects 'ensure' hedge", () => {
+    const raw = '{"advice":"ensure everything works as expected"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
   });
 
-  test("new moods (flex, dance, waving) are accepted", () => {
-    for (const m of ["flex", "dance", "waving"]) {
-      const r = parseKodiAdvisorJson(`{"mood":"${m}","speech":"hi"}`);
-      expect(r!.mood).toBe(m);
-    }
+  test("rejects 'might want to' hedge", () => {
+    const raw = '{"advice":"you might want to run tests"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
+  });
+
+  test("rejects 'try to' hedge", () => {
+    const raw = '{"advice":"try to check the import"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
+  });
+
+  test("rejects 'recommended' hedge", () => {
+    const raw = '{"advice":"it is recommended to split the file"}';
+    expect(parseKodiAdvisorJson(raw)).toBeNull();
   });
 });
 
 describe("parseKodiAdvisorJson — rejection", () => {
+  test("null advice is rejected", () => {
+    expect(parseKodiAdvisorJson('{"advice":null}')).toBeNull();
+  });
+
+  test("string 'null' advice is rejected", () => {
+    expect(parseKodiAdvisorJson('{"advice":"null"}')).toBeNull();
+  });
+
+  test("empty advice string is rejected", () => {
+    expect(parseKodiAdvisorJson('{"advice":""}')).toBeNull();
+  });
+
+  test("whitespace-only advice is rejected", () => {
+    expect(parseKodiAdvisorJson('{"advice":"   "}')).toBeNull();
+  });
+
   test("returns null on non-JSON garbage", () => {
     expect(parseKodiAdvisorJson("I don't know how to respond.")).toBeNull();
   });
@@ -92,13 +117,12 @@ describe("parseKodiAdvisorJson — rejection", () => {
     expect(parseKodiAdvisorJson("")).toBeNull();
   });
 
-  test("returns null when all fields are missing or invalid", () => {
-    const raw = '{"mood":"invalid","speech":"","advice":null}';
-    expect(parseKodiAdvisorJson(raw)).toBeNull();
+  test("returns null on malformed JSON", () => {
+    expect(parseKodiAdvisorJson("{unbalanced")).toBeNull();
   });
 
-  test("returns null on malformed JSON even if text contains braces", () => {
-    expect(parseKodiAdvisorJson("{unbalanced")).toBeNull();
+  test("returns null when advice field is missing", () => {
+    expect(parseKodiAdvisorJson('{"other":"field"}')).toBeNull();
   });
 });
 
