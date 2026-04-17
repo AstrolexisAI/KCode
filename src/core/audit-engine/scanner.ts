@@ -514,20 +514,28 @@ export function isInsideComment(
  * Apply a single pattern to a file, producing a list of candidate findings.
  */
 /**
- * Test-friendly wrapper: run a single pattern against in-memory content
- * as if it lived at `path`. Identical semantics to the per-file loop in
- * scanProject(), but exposed so the pattern-fixtures harness in
- * tests/patterns/ can assert "this fixture must / must not match".
+ * Test-friendly wrapper: run a single pattern against in-memory
+ * content as if it lived at `path`. The `bypassPathFilters` flag
+ * lets the pattern-fixtures harness in tests/patterns/ assert the
+ * regex invariant directly, without applyPattern's
+ * test-file / config-file / low-severity suppressions (those are
+ * valid in production — and would hide fixture breakage in tests).
  */
 export function scanPatternAgainstContent(
   pattern: BugPattern,
   path: string,
   content: string,
+  opts: { bypassPathFilters?: boolean } = {},
 ): Candidate[] {
-  return applyPattern(pattern, path, content);
+  return applyPattern(pattern, path, content, opts.bypassPathFilters ?? false);
 }
 
-function applyPattern(pattern: BugPattern, path: string, content: string): Candidate[] {
+function applyPattern(
+  pattern: BugPattern,
+  path: string,
+  content: string,
+  bypassPathFilters = false,
+): Candidate[] {
   const lang = getLanguageForFile(path);
   if (!lang || !pattern.languages.includes(lang)) return [];
 
@@ -562,14 +570,20 @@ function applyPattern(pattern: BugPattern, path: string, content: string): Candi
       .slice(startCtx, endCtx)
       .map((l, i) => `${startCtx + i + 1}: ${l}`)
       .join("\n");
-    // Pre-filter: skip obvious false positives in web framework code
-    const isTestFile = path.includes("test") || path.includes("spec") || path.includes("__tests__");
-    const isConfig = path.includes("config") || path.includes(".config.");
-    const isGenerated = path.includes(".next/") || path.includes("dist/") || path.includes("build/");
-    // Skip low-severity findings in test/config/generated files
-    if ((isTestFile || isConfig || isGenerated) && pattern.severity === "low") continue;
-    // Skip hardcoded-secret patterns if the value looks like a placeholder
-    if (pattern.id.includes("hardcoded") && /changeme|placeholder|example|xxx|YOUR_|TODO/i.test(matched_text)) continue;
+    // Pre-filter: skip obvious false positives in web framework code.
+    // bypassPathFilters=true is set only by the pattern-fixtures
+    // harness — fixtures intentionally live under tests/ and fire
+    // low-severity patterns, so the test-file suppression would
+    // hide regressions we want to catch.
+    if (!bypassPathFilters) {
+      const isTestFile = path.includes("test") || path.includes("spec") || path.includes("__tests__");
+      const isConfig = path.includes("config") || path.includes(".config.");
+      const isGenerated = path.includes(".next/") || path.includes("dist/") || path.includes("build/");
+      // Skip low-severity findings in test/config/generated files
+      if ((isTestFile || isConfig || isGenerated) && pattern.severity === "low") continue;
+      // Skip hardcoded-secret patterns if the value looks like a placeholder
+      if (pattern.id.includes("hardcoded") && /changeme|placeholder|example|xxx|YOUR_|TODO/i.test(matched_text)) continue;
+    }
 
     // Skip matches inside JSX className attributes (Tailwind utility strings
     // like "bg-red-500 p-4 text-white" trigger several patterns as false
