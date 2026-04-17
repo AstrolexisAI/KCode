@@ -482,56 +482,85 @@ export default function KodiCompanion({
     return () => clearInterval(id);
   }, []);
 
-  // ── Phase 3a — autonomous idle actions ──
-  // Every 30-60s of true idle (no active agent, no running tool),
-  // ask the LLM to pick an action from the palette. Falls back to
-  // random pick when the server is down. Cancels cleanly on unmount.
+  // ── Free-will loop — urge-driven autonomy ──
+  // Kodi acts on his OWN impulses (engine.urges), not on wall-clock
+  // schedules. Every 5s this loop polls the current urges and fires
+  // whichever action is ripest:
+  //
+  //   boredom    → autonomous idle action (yawn, stretch, flip, ...)
+  //   curiosity  → musing (passing thought in bubble)
+  //   wanderlust → door teleport (appear on the other side of info)
+  //
+  // Urges build ambiently in engine.stepUrges() and drain on any
+  // event via engine.react(). Net behavior: when the user is active,
+  // Kodi stays quiet. When left alone, Kodi acts — not because a
+  // timer said so, but because he's accumulated the impulse.
+  //
+  // This replaces three separate setTimeout-based schedulers (idle
+  // action / musing / teleport) with a single impulse-polling loop.
   useEffect(() => {
-    let cancelled = false;
-    let pending: ReturnType<typeof setTimeout> | null = null;
-    const scheduleNext = () => {
-      if (cancelled) return;
-      const delay = 30_000 + Math.random() * 30_000;
-      pending = setTimeout(async () => {
-        pending = null;
-        if (cancelled) return;
-        // Skip when Kodi is clearly doing something — leave
-        // foreground animations alone.
-        if (engine.phase !== "idle" || engine.mood !== "idle") {
-          scheduleNext();
-          return;
-        }
-        try {
+    const inFlightRef = { current: false };
+    const id = setInterval(async () => {
+      // Never step on a foreground mood / event animation.
+      if (engine.phase !== "idle" || engine.mood !== "idle") return;
+      if (inFlightRef.current) return;
+
+      // Pick the most-built urge above its threshold. Thresholds
+      // are tuned so the slowest-building urge (wanderlust) still
+      // fires eventually even when the others are always being
+      // drained by activity.
+      const u = engine.urges;
+      const ready = [
+        { name: "boredom" as const, value: u.boredom, threshold: 0.9 },
+        { name: "curiosity" as const, value: u.curiosity, threshold: 0.95 },
+        { name: "wanderlust" as const, value: u.wanderlust, threshold: 0.98 },
+      ]
+        .filter((r) => r.value >= r.threshold)
+        .sort((a, b) => b.value - a.value);
+      if (ready.length === 0) return;
+
+      inFlightRef.current = true;
+      const pick = ready[0]!;
+      try {
+        if (pick.name === "boredom") {
           const { askForIdleAction, pickRandomIdleAction } = await import(
             "../kodi-autonomy.js"
           );
           const dispatch =
             (await askForIdleAction(
               engine.personality,
-              (Date.now() - lastActivityRef.current) / 1000,
+              0, // urges, not elapsed-seconds, drive the decision now
               recentActionsRef.current as any,
             )) ?? pickRandomIdleAction(recentActionsRef.current as any);
-          if (cancelled) return;
           engine.setMood(dispatch.mood);
           engine.say(dispatch.speech, 3000);
           recentActionsRef.current = [
             ...recentActionsRef.current.slice(-4),
             dispatch.action,
           ];
-        } catch {
-          /* never surface autonomy errors to the UI */
+          engine.drainUrge("boredom", 1.0);
+        } else if (pick.name === "curiosity") {
+          const { askForMusing } = await import("../kodi-autonomy.js");
+          const thought = await askForMusing(engine.personality);
+          if (thought) {
+            engine.setMood("thinking");
+            engine.say(thought, 5500);
+          }
+          // Drain whether or not the thought passed the filter —
+          // the urge was spent looking for a thought, even if the
+          // LLM returned fluff and we dropped it.
+          engine.drainUrge("curiosity", 0.7);
+        } else if (pick.name === "wanderlust") {
+          engine.teleportThroughDoor();
+          engine.drainUrge("wanderlust", 1.0);
         }
-        scheduleNext();
-      }, delay);
-    };
-    scheduleNext();
-    return () => {
-      cancelled = true;
-      if (pending) {
-        clearTimeout(pending);
-        pending = null;
+      } catch {
+        /* swallow — autonomy never bubbles errors to the UI */
+      } finally {
+        inFlightRef.current = false;
       }
-    };
+    }, 5000);
+    return () => clearInterval(id);
   }, [engine]);
 
   // ── Phase 3c — proactive observations ──
@@ -567,79 +596,6 @@ export default function KodiCompanion({
     }, 60_000);
     return () => clearInterval(id);
   }, [sessionStartTime, contextWindowSize, tokenCount, toolUseCount]);
-
-  // ── Musings — passing thoughts ──
-  // Every 3-5 min of continuous idle, ask the LLM for a short
-  // thought and show it as a bubble. Not tied to any event. This is
-  // what makes Kodi feel like an independent tamagotchi instead of
-  // just an event-reactor. Hard-gated on Kodi server availability,
-  // so free/declined users see nothing here.
-  useEffect(() => {
-    let cancelled = false;
-    let pending: ReturnType<typeof setTimeout> | null = null;
-    const scheduleNext = () => {
-      if (cancelled) return;
-      const delay = 180_000 + Math.random() * 120_000; // 3-5 min
-      pending = setTimeout(async () => {
-        pending = null;
-        if (cancelled) return;
-        // Only muse when Kodi is actually idle — never step on a
-        // reaction or advisor line in flight.
-        if (engine.phase !== "idle" || engine.mood !== "idle") {
-          scheduleNext();
-          return;
-        }
-        try {
-          const { askForMusing } = await import("../kodi-autonomy.js");
-          const thought = await askForMusing(engine.personality);
-          if (cancelled) return;
-          if (thought) {
-            engine.setMood("thinking");
-            engine.say(thought, 5500);
-          }
-        } catch {
-          /* swallow */
-        }
-        scheduleNext();
-      }, delay);
-    };
-    scheduleNext();
-    return () => {
-      cancelled = true;
-      if (pending) {
-        clearTimeout(pending);
-        pending = null;
-      }
-    };
-  }, [engine]);
-
-  // ── Door teleport — swap panel sides ──
-  // Every 5-8 min, Kodi plays the "I went through a door and came
-  // out on the other side of the info panel" trick. Pure deterministic
-  // trigger (no LLM needed) — the engine's teleportThroughDoor()
-  // handles the whole animation + side flip.
-  useEffect(() => {
-    let cancelled = false;
-    let pending: ReturnType<typeof setTimeout> | null = null;
-    const scheduleNext = () => {
-      if (cancelled) return;
-      const delay = 300_000 + Math.random() * 180_000; // 5-8 min
-      pending = setTimeout(() => {
-        pending = null;
-        if (cancelled) return;
-        engine.teleportThroughDoor();
-        scheduleNext();
-      }, delay);
-    };
-    scheduleNext();
-    return () => {
-      cancelled = true;
-      if (pending) {
-        clearTimeout(pending);
-        pending = null;
-      }
-    };
-  }, [engine]);
 
   // Update elapsed time every 10s
   useEffect(() => {

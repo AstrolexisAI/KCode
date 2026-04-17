@@ -378,6 +378,82 @@ describe("KodiAnimEngine — tier flourishes", () => {
   });
 });
 
+// ─── Urges (free-will impulses) ─────────────────────────────────
+
+describe("KodiAnimEngine — urges", () => {
+  test("initial urges are zero", () => {
+    const frame = new KodiAnimEngine().tick(0);
+    expect(frame.urges.boredom).toBe(0);
+    expect(frame.urges.curiosity).toBe(0);
+    expect(frame.urges.wanderlust).toBe(0);
+  });
+
+  test("boredom builds when idle and drains on events", () => {
+    const engine = new KodiAnimEngine();
+    // Drive 60s of pure idle — should build substantial boredom
+    advance(engine, 60_000);
+    const idleFrame = engine.tick(0);
+    expect(idleFrame.urges.boredom).toBeGreaterThan(0.5);
+    // Now fire a meaningful event — should drain
+    engine.react({ type: "tool_done", detail: "Read" });
+    // Give it a tick so stepUrges runs too
+    const afterFrame = engine.tick(0);
+    expect(afterFrame.urges.boredom).toBeLessThan(idleFrame.urges.boredom);
+  });
+
+  test("curiosity builds over time regardless of mood", () => {
+    const engine = new KodiAnimEngine();
+    engine.setMood("working");
+    advance(engine, 60_000);
+    const frame = engine.tick(0);
+    // Still builds even in working mood, just slower
+    expect(frame.urges.curiosity).toBeGreaterThan(0);
+  });
+
+  test("wanderlust builds slowest of the three", () => {
+    const engine = new KodiAnimEngine();
+    // Keep Kodi idle so boredom and curiosity both build
+    advance(engine, 120_000);
+    const frame = engine.tick(0);
+    expect(frame.urges.wanderlust).toBeLessThan(frame.urges.boredom);
+    expect(frame.urges.wanderlust).toBeLessThan(frame.urges.curiosity);
+  });
+
+  test("boredom is capped at 1.0", () => {
+    const engine = new KodiAnimEngine();
+    // Drive 20 minutes of idle — far past saturation
+    advance(engine, 1_200_000);
+    expect(engine.tick(0).urges.boredom).toBeLessThanOrEqual(1.0);
+  });
+
+  test("drainUrge clamps at zero", () => {
+    const engine = new KodiAnimEngine();
+    advance(engine, 60_000);
+    engine.drainUrge("boredom", 99.0);
+    expect(engine.tick(0).urges.boredom).toBe(0);
+  });
+
+  test("react with non-event types (tier_entrance) does not drain urges", () => {
+    const engine = new KodiAnimEngine();
+    advance(engine, 60_000);
+    const before = engine.tick(0).urges.boredom;
+    engine.react({ type: "tier_entrance" });
+    const after = engine.tick(0).urges.boredom;
+    // Tier events shouldn't count as "user activity" for boredom.
+    // (Small step up from the tick that ran between is fine.)
+    expect(after).toBeGreaterThanOrEqual(before - 0.01);
+  });
+
+  test("boredom doesn't build when mood is not idle", () => {
+    const engine = new KodiAnimEngine();
+    engine.setMood("happy");
+    advance(engine, 30_000);
+    const frame = engine.tick(0);
+    // Should have drained toward zero since mood !== idle
+    expect(frame.urges.boredom).toBeLessThan(0.1);
+  });
+});
+
 // ─── Door teleport ──────────────────────────────────────────────
 
 describe("KodiAnimEngine — door teleport", () => {
