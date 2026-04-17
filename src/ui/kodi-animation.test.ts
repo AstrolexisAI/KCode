@@ -378,6 +378,61 @@ describe("KodiAnimEngine — tier flourishes", () => {
   });
 });
 
+// ─── Door teleport ──────────────────────────────────────────────
+
+describe("KodiAnimEngine — door teleport", () => {
+  test("default side is left, not in door", () => {
+    const frame = new KodiAnimEngine().tick(0);
+    expect(frame.side).toBe("left");
+    expect(frame.inDoor).toBe(false);
+  });
+
+  test("teleportThroughDoor flips side at halfway", () => {
+    const engine = new KodiAnimEngine();
+    expect(engine.side).toBe("left");
+    engine.teleportThroughDoor();
+    // Shortly after: still left, in door
+    advance(engine, 500);
+    expect(engine.tick(0).inDoor).toBe(true);
+    expect(engine.side).toBe("left");
+    // Past halfway: side flipped, still in door
+    advance(engine, 400);
+    expect(engine.side).toBe("right");
+    expect(engine.tick(0).inDoor).toBe(true);
+    // After full 1500ms: out of door, right side
+    advance(engine, 800);
+    expect(engine.tick(0).inDoor).toBe(false);
+    expect(engine.side).toBe("right");
+  });
+
+  test("double teleport is a no-op when one is already running", () => {
+    const engine = new KodiAnimEngine();
+    engine.teleportThroughDoor();
+    advance(engine, 100);
+    const sideAtStart = engine.side;
+    engine.teleportThroughDoor(); // should be ignored
+    advance(engine, 2000);
+    // Exactly one flip happened.
+    expect(engine.side).not.toBe(sideAtStart);
+  });
+
+  test("door frame has uniform width across all 5 lines", () => {
+    const engine = new KodiAnimEngine();
+    engine.teleportThroughDoor();
+    const frame = engine.tick(100);
+    expect(frame.inDoor).toBe(true);
+    const widths = frame.lines.map((l) => [...l].length);
+    expect(new Set(widths).size).toBe(1);
+  });
+
+  test("teleport shows 'poof!' bubble", () => {
+    const engine = new KodiAnimEngine();
+    engine.teleportThroughDoor();
+    const frame = engine.tick(50);
+    expect(frame.bubble).toBe("poof!");
+  });
+});
+
 // ─── Determinism ────────────────────────────────────────────────
 
 describe("KodiAnimEngine — determinism", () => {
