@@ -31,7 +31,15 @@ const SITE_RULES: SiteRule[] = [
   {
     type: "trading-dashboard",
     patterns: [
-      /\b(?:trading|stock|wallstreet|wall\s*street|candlestick|ticker|financial\s+dashboard|market\s+(?:dashboard|heatmap)|portfolio\s+tracker|order\s*book)\b/i,
+      // Bare `trading` and `stock` matched too broadly — prompts like
+      // "NON-GOALS: no trading" or "a photo portfolio site" falsely
+      // tripped the Next.js trading template. Now requires a compound
+      // with a web-indicator noun so only actual trading-web prompts
+      // pick this up. `ticker` same story — needs a currency qualifier.
+      /\b(?:trading|stock)\s+(?:dashboard|platform|app|site|web|system|tool)\b/i,
+      /\b(?:wallstreet|wall\s*street|candlestick|financial\s+dashboard|market\s+(?:dashboard|heatmap)|order\s*book)\b/i,
+      /\b(?:stock|crypto|forex|currency)\s+ticker\b/i,
+      /\b(?:portfolio\s+(?:tracker|dashboard|manager))\b/i,
       /\b(?:bolsa|acciones|mercado\s+(?:financiero|de\s+valores))\b/i,
     ],
     defaultStack: "nextjs",

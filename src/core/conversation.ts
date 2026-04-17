@@ -845,7 +845,17 @@ export class ConversationManager {
         const isModification = /\b(?:make|hazlo|fix|arregla|change|cambia|update|actualiza|add|agrega|remove|quita|improve|mejora|refactor|move|mueve|delete|borra|resize|collaps|expand|drag)\b/i.test(userMessage)
           && !/\b(?:create|crea|build|construye|scaffold|genera|new|nueva?o?)\b/i.test(userMessage);
 
-        const isWebRequest = !isModification && /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
+        // Explicit non-web stack mention nukes the web-engine path even
+        // if keywords like "dashboard" or "monitor" appear elsewhere
+        // in the prompt. A prompt that says "Python 3.11+ terminal
+        // dashboard" or "Rust CLI monitor" should always go to the LLM
+        // — the Next.js auto-scaffold would be user-hostile noise.
+        // Checked BEFORE isWebRequest so nothing downstream fires.
+        const mentionsNonWebStack = /\b(?:python|rust|go(?:lang)?|c\+\+|ruby|elixir|erlang|zig|haskell|scala)\b/i.test(userMessage)
+          || /\b(?:cli|terminal|tui|curses|textual|rich|typer|click|ink|tauri)\b/i.test(userMessage)
+          || /\b(?:pip\s+install|pyinstaller|cargo|gradle|maven|gem\s+install)\b/i.test(userMessage);
+
+        const isWebRequest = !isModification && !mentionsNonWebStack && /\b(?:website|web\s*(?:site|app|page)|landing|dashboard|blog|portfolio|store|shop|tienda|sitio\s*web|p[aá]gina\s*web|saas|e-?commerce|trading|social|chat|crm|kanban|lms|course|education|iot|monitor|analytics|admin\s*panel|feed|board|panel|platform)\b/i.test(userMessage);
 
         if (task.type === "implement" && !isModification) {
           const { detectCodeEngine, runCodeEngine } = await import("./code-engine-router.js");
