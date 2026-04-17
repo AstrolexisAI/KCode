@@ -330,7 +330,7 @@ export async function handleSessionAction(
     }
     case "compare": {
       if (!args?.trim())
-        return "  Usage: /compare <model1> <model2> <prompt>\n  Example: /compare gpt-4o claude-sonnet-4-6 explain this code";
+        return "  Usage: /compare <model1> <model2> <prompt>\n  Example: /compare gpt-4o gemini-2.5-pro explain this code";
 
       const parts = args.trim().split(/\s+/);
       if (parts.length < 3) return "  Usage: /compare <model1> <model2> <prompt>";

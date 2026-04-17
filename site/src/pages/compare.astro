@@ -2,12 +2,12 @@
 import Base from "../layouts/Base.astro";
 ---
 
-<Base title="KCode vs Claude Code, Cursor, Codex — Compare AI Coding Assistants">
+<Base title="KCode vs Cursor, Codex, Aider — Compare AI Coding Assistants">
   <!-- Hero -->
   <section class="hero container">
     <h1>The only AI coding assistant<br />that runs on your hardware.</h1>
     <p class="subtitle">
-      Compare KCode with Claude Code, Cursor, Codex CLI, Aider, and Continue.
+      Compare KCode with Cursor, Codex CLI, Aider, and Continue.
       Local LLMs first. Multi-provider second. Cloud optional.
     </p>
   </section>
@@ -61,7 +61,6 @@ import Base from "../layouts/Base.astro";
           <tr>
             <th class="feature-col">Feature</th>
             <th class="kcode-col">KCode</th>
-            <th>Claude Code</th>
             <th>Cursor</th>
             <th>Codex CLI</th>
             <th>Aider</th>
@@ -69,11 +68,10 @@ import Base from "../layouts/Base.astro";
           </tr>
         </thead>
         <tbody>
-          <tr class="section-row"><td colspan="7">Pricing</td></tr>
+          <tr class="section-row"><td colspan="6">Pricing</td></tr>
           <tr>
             <td>Base price</td>
             <td class="kcode-col"><strong>Free</strong> (AGPL)</td>
-            <td>$20–$200/mo</td>
             <td>$20/mo</td>
             <td>$20/mo (ChatGPT Plus)</td>
             <td>Free</td>
@@ -84,16 +82,14 @@ import Base from "../layouts/Base.astro";
             <td class="kcode-col">AGPL-3.0</td>
             <td>Proprietary</td>
             <td>Proprietary</td>
-            <td>Proprietary</td>
             <td>Apache 2.0</td>
             <td>Apache 2.0</td>
           </tr>
 
-          <tr class="section-row"><td colspan="7">Models & providers</td></tr>
+          <tr class="section-row"><td colspan="6">Models & providers</td></tr>
           <tr>
             <td>Local LLMs (llama.cpp, Ollama, vLLM, MLX)</td>
             <td class="kcode-col">✓</td>
-            <td>—</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
@@ -102,7 +98,6 @@ import Base from "../layouts/Base.astro";
           <tr>
             <td>Multi-provider (6+ cloud APIs)</td>
             <td class="kcode-col">✓ Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together</td>
-            <td>Anthropic only</td>
             <td>Cursor only</td>
             <td>OpenAI only</td>
             <td>✓</td>
@@ -113,25 +108,22 @@ import Base from "../layouts/Base.astro";
             <td class="kcode-col">✓</td>
             <td>—</td>
             <td>—</td>
-            <td>—</td>
             <td>✓</td>
             <td>✓</td>
           </tr>
           <tr>
             <td>Privacy (data never leaves machine)</td>
             <td class="kcode-col">✓ with local model</td>
-            <td>— (Anthropic cloud)</td>
             <td>— (OpenAI cloud)</td>
             <td>— (OpenAI cloud)</td>
             <td>— (API key)</td>
             <td>✓ local option</td>
           </tr>
 
-          <tr class="section-row"><td colspan="7">Interface</td></tr>
+          <tr class="section-row"><td colspan="6">Interface</td></tr>
           <tr>
             <td>Terminal-native UI</td>
             <td class="kcode-col">✓ Ink + Kodi companion</td>
-            <td>✓</td>
             <td>— (IDE)</td>
             <td>✓</td>
             <td>✓</td>
@@ -140,7 +132,6 @@ import Base from "../layouts/Base.astro";
           <tr>
             <td>IDE integration (VS Code, JetBrains)</td>
             <td class="kcode-col">✓</td>
-            <td>Web + CLI</td>
             <td>✓ native</td>
             <td>—</td>
             <td>✓ plugin</td>
@@ -153,7 +144,6 @@ import Base from "../layouts/Base.astro";
             <td>—</td>
             <td>—</td>
             <td>—</td>
-            <td>—</td>
           </tr>
           <tr>
             <td>Voice input</td>
@@ -162,14 +152,12 @@ import Base from "../layouts/Base.astro";
             <td>—</td>
             <td>—</td>
             <td>—</td>
-            <td>—</td>
           </tr>
 
-          <tr class="section-row"><td colspan="7">Tools & agents</td></tr>
+          <tr class="section-row"><td colspan="6">Tools & agents</td></tr>
           <tr>
             <td>Built-in tools</td>
             <td class="kcode-col"><strong>46</strong></td>
-            <td>~25</td>
             <td>~15</td>
             <td>~10</td>
             <td>~10</td>
@@ -178,7 +166,6 @@ import Base from "../layouts/Base.astro";
           <tr>
             <td>MCP server support</td>
             <td class="kcode-col">✓</td>
-            <td>✓</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
@@ -187,7 +174,6 @@ import Base from "../layouts/Base.astro";
           <tr>
             <td>Plugin marketplace</td>
             <td class="kcode-col">✓ + 8 bundled</td>
-            <td>✓ skills</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
@@ -196,7 +182,6 @@ import Base from "../layouts/Base.astro";
           <tr>
             <td>Auto-spawn background agents</td>
             <td class="kcode-col"><strong>✓ unique</strong></td>
-            <td>Manual only</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
@@ -209,23 +194,20 @@ import Base from "../layouts/Base.astro";
             <td>—</td>
             <td>—</td>
             <td>—</td>
-            <td>—</td>
           </tr>
           <tr>
             <td>Swarm mode (parallel agents)</td>
             <td class="kcode-col">✓</td>
-            <td>✓</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
           </tr>
 
-          <tr class="section-row"><td colspan="7">Performance & context</td></tr>
+          <tr class="section-row"><td colspan="6">Performance & context</td></tr>
           <tr>
             <td>Codebase RAG indexing</td>
             <td class="kcode-col">✓ local SQLite</td>
-            <td>—</td>
             <td>✓</td>
             <td>—</td>
             <td>✓</td>
@@ -233,8 +215,7 @@ import Base from "../layouts/Base.astro";
           </tr>
           <tr>
             <td>Prompt caching</td>
-            <td class="kcode-col">✓ ported from Claude Code</td>
-            <td>✓</td>
+            <td class="kcode-col">✓</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
@@ -244,7 +225,6 @@ import Base from "../layouts/Base.astro";
             <td>Session persistence + resume</td>
             <td class="kcode-col">✓</td>
             <td>✓</td>
-            <td>✓</td>
             <td>Partial</td>
             <td>✓</td>
             <td>✓</td>
@@ -252,18 +232,16 @@ import Base from "../layouts/Base.astro";
           <tr>
             <td>Microcompact (auto context mgmt)</td>
             <td class="kcode-col">✓</td>
-            <td>✓</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
             <td>—</td>
           </tr>
 
-          <tr class="section-row"><td colspan="7">Reliability</td></tr>
+          <tr class="section-row"><td colspan="6">Reliability</td></tr>
           <tr>
             <td>Test coverage</td>
             <td class="kcode-col">✓ 5,555 tests</td>
-            <td>?</td>
             <td>?</td>
             <td>?</td>
             <td>✓</td>
@@ -276,12 +254,10 @@ import Base from "../layouts/Base.astro";
             <td>?</td>
             <td>?</td>
             <td>?</td>
-            <td>?</td>
           </tr>
           <tr>
             <td>Open source</td>
             <td class="kcode-col">✓ AGPL</td>
-            <td>—</td>
             <td>—</td>
             <td>—</td>
             <td>✓ Apache</td>
@@ -298,23 +274,6 @@ import Base from "../layouts/Base.astro";
     <p class="section-desc">Not every tool fits every workflow. Here's the honest breakdown.</p>
 
     <div class="scenario-grid">
-      <div class="scenario-card">
-        <h3>vs Claude Code</h3>
-        <p><strong>Choose KCode if:</strong></p>
-        <ul>
-          <li>You want local LLM support (no Anthropic lock-in)</li>
-          <li>You need multi-provider flexibility</li>
-          <li>You want self-hosted + mobile remote control</li>
-          <li>You need auto-spawning background agents</li>
-        </ul>
-        <p><strong>Stick with Claude Code if:</strong></p>
-        <ul>
-          <li>You want Anthropic's official tooling</li>
-          <li>You need Max subscription tier</li>
-          <li>You value polished docs + enterprise support</li>
-        </ul>
-      </div>
-
       <div class="scenario-card">
         <h3>vs Cursor</h3>
         <p><strong>Choose KCode if:</strong></p>

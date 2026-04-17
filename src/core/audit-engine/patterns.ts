@@ -4,7 +4,7 @@
 // that catch real bugs in production code — NOT the patterns LLMs hallucinate.
 //
 // Each pattern was derived from either:
-//   - Bugs found by Claude Code in NASA IDF (network I/O, USB decoders)
+//   - Real bugs found during NASA IDF audits (network I/O, USB decoders)
 //   - CWE/OWASP classics that keep appearing in C code
 //   - Language-specific footguns the compiler doesn't catch
 //

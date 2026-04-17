@@ -190,9 +190,8 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
     });
 
     // Lean prompt mode: skip descriptive layers that add noise without
-    // operational value. Moves KCode closer to Claude Code's tight,
-    // operational prompt structure. Toggle with KCODE_LEAN_PROMPT=1.
-    // Default: off (existing behavior preserved).
+    // operational value — tighter, more operational prompt structure.
+    // Toggle with KCODE_LEAN_PROMPT=1. Default: off.
     const leanPrompt = process.env.KCODE_LEAN_PROMPT === "1";
 
     // ─── Medium priority ───────────────────────────────────────

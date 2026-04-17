@@ -1,5 +1,5 @@
 // KCode - Plan Tool
-// Structured planning system for multi-step tasks, inspired by Claude Code's TodoWrite
+// Structured planning system for multi-step tasks
 // Plans are displayed visually in the TUI and persisted to SQLite
 
 import { getDb } from "../core/db";

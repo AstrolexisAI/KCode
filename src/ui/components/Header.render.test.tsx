@@ -20,13 +20,13 @@ describe("Header render", () => {
   test("shows model name", () => {
     instance = renderWithTheme(
       <Header
-        model="claude-opus-4-6"
+        model="gpt-4o"
         workingDirectory="/home/user/project"
         tokenCount={0}
         toolUseCount={0}
       />,
     );
-    expect(instance.lastFrame()).toContain("claude-opus-4-6");
+    expect(instance.lastFrame()).toContain("gpt-4o");
   });
 
   test("shows token count", () => {

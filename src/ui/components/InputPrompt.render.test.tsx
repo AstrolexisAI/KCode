@@ -35,12 +35,12 @@ describe("InputPrompt render", () => {
       <InputPrompt
         onSubmit={() => {}}
         isActive={true}
-        model="claude-opus-4-6"
+        model="gpt-4o"
         cwd="/home/user/project"
       />,
     );
     const out = instance.lastFrame()!;
-    expect(out).toContain("claude-opus-4-6");
+    expect(out).toContain("gpt-4o");
   });
 
   test("shows queueing indicator when isQueuing", () => {

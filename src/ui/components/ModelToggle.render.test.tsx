@@ -19,7 +19,7 @@ describe("ModelToggle render", () => {
 
   test("shows loading state initially", () => {
     instance = renderWithTheme(
-      <ModelToggle isActive={true} currentModel="claude-opus-4-6" onDone={() => {}} />,
+      <ModelToggle isActive={true} currentModel="gpt-4o" onDone={() => {}} />,
     );
     const out = instance.lastFrame()!;
     // Will either show loading or the model list
@@ -28,7 +28,7 @@ describe("ModelToggle render", () => {
 
   test("eventually renders model list", async () => {
     instance = renderWithTheme(
-      <ModelToggle isActive={true} currentModel="claude-opus-4-6" onDone={() => {}} />,
+      <ModelToggle isActive={true} currentModel="gpt-4o" onDone={() => {}} />,
     );
     // Wait for useEffect to load models
     await new Promise((r) => setTimeout(r, 200));
@@ -41,7 +41,7 @@ describe("ModelToggle render", () => {
     instance = renderWithTheme(
       <ModelToggle
         isActive={true}
-        currentModel="claude-opus-4-6"
+        currentModel="gpt-4o"
         onDone={(r) => {
           result = r;
         }}
