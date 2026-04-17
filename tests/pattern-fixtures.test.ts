@@ -85,6 +85,7 @@ describe("pattern fixture harness — regex-stage invariants", () => {
           pattern,
           join(FIXTURES_ROOT, patternId, fixture),
           content,
+          { bypassPathFilters: true },
         );
         if (candidates.length === 0) {
           throw new Error(
@@ -110,6 +111,7 @@ describe("pattern fixture harness — regex-stage invariants", () => {
           pattern,
           join(FIXTURES_ROOT, patternId, fixture),
           content,
+          { bypassPathFilters: true },
         );
         if (candidates.length > 0) {
           const snippets = candidates
