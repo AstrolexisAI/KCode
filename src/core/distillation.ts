@@ -1,6 +1,13 @@
 // KCode - Knowledge Distillation (RAG-based)
-// Captures successful interaction patterns and replays them as few-shot context.
-// No fine-tuning required — the model "learns" from better examples in its prompt.
+//
+// STATUS: Auxiliary (see docs/architecture/modules.md).
+// Specialized agentic-dev workflow. Not required by the audit
+// engine. Safe to remove — distilled examples just won't be
+// injected into the system prompt.
+//
+// Captures successful interaction patterns and replays them as
+// few-shot context. No fine-tuning required — the model "learns"
+// from better examples in its prompt.
 
 import { getDb } from "./db";
 import { log } from "./logger";

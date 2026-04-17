@@ -1,6 +1,13 @@
 // KCode - Layer 6: World Model
-// Heuristic prediction engine — predicts outcomes before actions and compares after
-// Discrepancies become learnings that improve future predictions
+//
+// STATUS: Auxiliary (see docs/architecture/modules.md).
+// Experimental predictive layer — not on the audit critical
+// path. Failures are silently try/catch'd elsewhere. Can be
+// removed without breaking core.
+//
+// Heuristic prediction engine — predicts outcomes before actions
+// and compares after. Discrepancies become learnings that improve
+// future predictions.
 
 import { getDb } from "./db";
 import { log } from "./logger";
