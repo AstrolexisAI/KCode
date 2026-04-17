@@ -420,6 +420,20 @@ function getLanguageForFile(path: string): Language | null {
 /**
  * Apply a single pattern to a file, producing a list of candidate findings.
  */
+/**
+ * Test-friendly wrapper: run a single pattern against in-memory content
+ * as if it lived at `path`. Identical semantics to the per-file loop in
+ * scanProject(), but exposed so the pattern-fixtures harness in
+ * tests/patterns/ can assert "this fixture must / must not match".
+ */
+export function scanPatternAgainstContent(
+  pattern: BugPattern,
+  path: string,
+  content: string,
+): Candidate[] {
+  return applyPattern(pattern, path, content);
+}
+
 function applyPattern(pattern: BugPattern, path: string, content: string): Candidate[] {
   const lang = getLanguageForFile(path);
   if (!lang || !pattern.languages.includes(lang)) return [];
