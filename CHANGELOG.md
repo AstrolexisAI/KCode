@@ -13,6 +13,29 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.126] — 2026-04-17
+
+### Fixed
+- `py-004-sql-injection` regex false positive on `%s` / `%d` /
+  `%i` parameterized placeholders. The branch `["'].*%` now
+  requires `%[\s(]` — the actual Python `%`-format operator
+  syntax (`"x" % var`, `"x" %(dict)s`), never adjacent to a
+  format-specifier letter. Negative fixture
+  `py-004-sql-injection/negative-pct-placeholder.py` pins the
+  regression. [#95]
+
+### Added
+- Pattern fixture harness expanded **28 → 38 patterns**, **11
+  languages**. First-time coverage for **Rust** (rs-001),
+  **Swift** (swift-001), **PHP** (php-001), **Ruby** (rb-001),
+  **Kotlin** (kt-001), **C#** (cs-001). [#95]
+- `scanPatternAgainstContent` gains `{bypassPathFilters}` option
+  so the fixture harness can assert pattern-regex invariants on
+  fixtures in `tests/` without tripping the scanner's
+  production-time test-file / config-file / low-severity
+  suppressions. Production scanner behavior unchanged —
+  bypass is opt-in only.
+
 ## [2.10.125] — 2026-04-17
 
 ### Added
