@@ -13,6 +13,32 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.127] — 2026-04-17
+
+### Security
+- Untracked `data/kcode.db*` — integration-test SQLite DB was
+  committed to the repo with ~100 test rows (customers / trials /
+  webhook_events with `@test.com` emails). No real customer data
+  leaked, but the DB was growing on every test run and polluting
+  git history. Now `.gitignore`'d; `data/.gitkeep` keeps the
+  directory present for tests that expect it. [#97]
+- Untracked `AUDIT_REPORT.md`, `AUDIT_REPORT.json`,
+  `AUDIT_REPORT.sarif` — output artifacts regenerated on every
+  `kcode audit` run. Not secrets themselves, but noise that
+  shouldn't be source-of-truth. [#97]
+
+### Audit results
+- Full-repo grep for real-shaped secrets (`sk_live_`, `AKIA...`,
+  `ghp_`, `xoxb-`, `re_...`, `whsec_...`, etc.) across both
+  working tree and all git history — **no real credentials
+  leaked**. Every hit was either a test fixture (clearly marked
+  with `FAKE` / `TEST` / `EXAMPLE`), a secret-detection regex
+  pattern, or a well-known documentation example
+  (`AKIAIOSFODNN7EXAMPLE`).
+- Cloudflare D1 `database_id` in `wrangler.toml` is present but
+  is not a secret per Cloudflare docs — it identifies the DB,
+  not authenticates to it.
+
 ## [2.10.126] — 2026-04-17
 
 ### Fixed

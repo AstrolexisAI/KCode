@@ -47,6 +47,19 @@ awareness.db-wal
 awareness.db-shm
 pro-cache.json
 
+# Integration-test database state (contains @test.com fixtures, not
+# real customer data — but still shouldn't be committed because it
+# grows on every test run and pollutes git history).
+data/
+!data/.gitkeep
+
+# Audit reports are output artifacts, regenerated every `kcode audit`
+# run. Not secrets, but not source-of-truth either.
+AUDIT_REPORT.md
+AUDIT_REPORT.json
+AUDIT_REPORT.sarif
+AUDIT.sarif
+
 # Release binaries (use GitHub Releases instead)
 release/
 backend/data/
