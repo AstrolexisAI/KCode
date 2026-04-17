@@ -21,7 +21,15 @@
 // which is the sweet spot for small models (≈1 byte/param).
 
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { freemem } from "node:os";
 import { join } from "node:path";
 import { log } from "./logger";
@@ -355,16 +363,25 @@ export async function startKodiServer(): Promise<{ port: number; pid: number }> 
 
   log.info("kodi-model", `Starting Kodi server: ${binary} ${args.join(" ")}`);
 
-  const logFd = Bun.file(KODI_LOG_FILE).writer();
+  // Open the log file as a raw fd and hand it directly to stdio.
+  // This is load-bearing: earlier versions used
+  //   stdio: ["ignore", "pipe", "pipe"]
+  //   child.stdout?.on("data", ...)
+  // which kept Bun's event loop alive with pipe readers even after
+  // child.unref() — so /quit in the TUI would hang until the Kodi
+  // server exited. With file descriptors passed in, stdout/stderr
+  // are never plumbed through the parent's event loop and the TUI
+  // can exit cleanly while the Kodi server keeps running.
+  const outFd = openSync(KODI_LOG_FILE, "a");
   const child = spawn(binary, args, {
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", outFd, outFd],
   });
-  child.stdout?.on("data", (d) => logFd.write(d));
-  child.stderr?.on("data", (d) => logFd.write(d));
   child.on("error", (err) => {
     log.warn("kodi-model", `spawn error: ${err}`);
   });
+  // Close our fd handle — the child now owns it.
+  closeSync(outFd);
   child.unref();
 
   if (!child.pid) {
