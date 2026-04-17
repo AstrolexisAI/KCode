@@ -91,6 +91,9 @@ export function parseFrontmatter(content: string): { meta: Record<string, unknow
       const key = kvMatch[1]!;
       const value = kvMatch[2]!.trim();
 
+      // Block __proto__ / constructor / prototype before any bracket
+      // assignment — prevents prototype pollution from attacker-
+      // crafted hookify rule files (plugins, marketplace, etc.).
       if (RESERVED_META_KEYS.has(key)) continue;
 
       if (value === "") {
@@ -99,6 +102,8 @@ export function parseFrontmatter(content: string): { meta: Record<string, unknow
         continue;
       }
 
+      // Safe: `key` guaranteed not in {__proto__, constructor, prototype}
+      // by the RESERVED_META_KEYS guard above.
       meta[key] = parseYamlValue(value);
     }
   }
