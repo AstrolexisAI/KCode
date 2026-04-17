@@ -40,7 +40,14 @@ function ruleFilePath(name: string): string {
 
 // ─── YAML Frontmatter Parsing ───────────────────────────────────
 
-function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } | null {
+// Reserved keys blocked during YAML frontmatter parse. A malicious
+// hookify rule file could write `__proto__: {…}` in frontmatter and,
+// because `meta[key]` uses bracket assignment on a plain object,
+// pollute Object.prototype for the whole process. Rules can come
+// from plugins or the marketplace so the input is not fully trusted.
+const RESERVED_META_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+export function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } | null {
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return null;
 
@@ -72,7 +79,9 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
     if (currentItem && currentArray && !/^\s/.test(trimmed)) {
       currentArray.push(currentItem);
       currentItem = null;
-      meta[currentKey!] = currentArray;
+      if (currentKey && !RESERVED_META_KEYS.has(currentKey)) {
+        meta[currentKey] = currentArray;
+      }
       currentArray = null;
       currentKey = null;
     }
@@ -81,6 +90,8 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
     if (kvMatch) {
       const key = kvMatch[1]!;
       const value = kvMatch[2]!.trim();
+
+      if (RESERVED_META_KEYS.has(key)) continue;
 
       if (value === "") {
         currentKey = key;
@@ -94,7 +105,7 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
 
   if (currentItem && currentArray) {
     currentArray.push(currentItem);
-    if (currentKey) meta[currentKey] = currentArray;
+    if (currentKey && !RESERVED_META_KEYS.has(currentKey)) meta[currentKey] = currentArray;
   }
 
   return { meta, body };
