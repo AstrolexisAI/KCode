@@ -13,6 +13,38 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.129] — 2026-04-17
+
+### Added (licensing framework — dual license)
+- `LICENSE-COMMERCIAL.md` — framework for the commercial
+  license path. Explains when you need it vs. when AGPL-3.0
+  covers you, the scope of what's included (indemnification,
+  support SLA, air-gapped deployment, custom patterns), and
+  the inquiry process at `contact@astrolexis.space`. Not a
+  legally binding contract — that's negotiated per customer
+  — but the public framing enterprise evaluators expect. [#99]
+- `CLA.md` — Developer Certificate of Origin (DCO) v1.1 for
+  contributions. Every commit needs `-s`/`--signoff` so the
+  dual-license structure stays enforceable as new code
+  lands. Same mechanism the Linux kernel, Docker, GitLab use. [#99]
+- README: new "License — dual licensed" section replacing the
+  flat "AGPL-3.0-only" one-liner. Clear guidance on which
+  license applies per use case. [#99]
+- CONTRIBUTING: new "Dual license + DCO sign-off" section
+  ahead of the existing versioning contract. [#99]
+
+### Notes
+- `LICENSE` (AGPL-3.0 text) is **unchanged**. Community users
+  see no change — they still use the same free, open-source
+  license they always did.
+- No code changes in this PR — documentation + legal framework
+  only. Binary installs of v2.10.129 behave identically to
+  v2.10.128.
+- Commercial license terms above are the INTENDED scope,
+  subject to legal review before going live. Astrolexis should
+  have a lawyer review LICENSE-COMMERCIAL.md + CLA.md before
+  using them in a signed contract.
+
 ## [2.10.128] — 2026-04-17
 
 ### Security / docs

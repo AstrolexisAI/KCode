@@ -27,6 +27,23 @@ bun run dev
 bun run src/index.ts
 ```
 
+## Dual license + DCO sign-off
+
+KCode is dual-licensed (AGPL-3.0 + commercial — see
+[README](./README.md#license--dual-licensed)).
+
+**Every commit must be signed off** under the Developer
+Certificate of Origin so contributions can land under both
+licenses. Sign-off is automatic when you pass `-s` to
+`git commit`:
+
+```bash
+git commit -s -m "your commit message"
+```
+
+Unsigned commits will be asked to amend before merge. Full
+DCO text and rationale in [CLA.md](./CLA.md).
+
 ## Versioning + Changelog contract
 
 KCode follows [Semantic Versioning 2.0.0](https://semver.org/):

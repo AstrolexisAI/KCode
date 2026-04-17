@@ -436,8 +436,32 @@ Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+S
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines. Report security issues to contact@astrolexis.space (see [SECURITY.md](./SECURITY.md)).
 
-## License
+## License — dual licensed
 
-**AGPL-3.0-only** -- Copyright (c) 2026 Astrolexis. See [LICENSE](./LICENSE) for details.
+KCode is available under **two licenses**. Pick the one that
+fits how you use it:
 
-Core functionality is fully open source. Some features require [KCode Pro](https://kulvex.ai/pro) ($19/mo).
+### Open source: AGPL-3.0-only
+
+Run KCode as a CLI, in CI pipelines, in GitHub Actions, in
+your own fork — free of charge, no strings attached, under
+the terms of the GNU Affero General Public License v3.
+See [LICENSE](./LICENSE).
+
+Most users are covered by this.
+
+### Commercial: for proprietary SaaS / embedding / indemnification
+
+If your use case triggers AGPL's network-use clause (§13) or
+if you need to embed KCode into a proprietary product, you
+need a commercial license. Contact `contact@astrolexis.space`.
+See [LICENSE-COMMERCIAL.md](./LICENSE-COMMERCIAL.md) for the
+framework, scope, and inquiry process.
+
+Copyright © 2026 Astrolexis.
+
+### Contributing
+
+Every commit needs a DCO sign-off (`git commit -s -m "..."`)
+so the dual-license structure stays clean. Details in
+[CLA.md](./CLA.md).
