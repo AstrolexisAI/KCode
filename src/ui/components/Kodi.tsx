@@ -146,12 +146,17 @@ export interface KodiReaction {
   advice?: string;
 }
 
-/** Anti-fluff filter. If the model ignores the PROHIBITED instruction
- * and still emits "consider X" or "maybe check Y" we treat it as no
- * advice — those lines never help a developer and they crowd out
- * legitimate signal. Case-insensitive match against a handful of
- * hedge words that reliably correlate with generic content. */
+/** Anti-fluff filter. Two categories of reject:
+ *   1. Hedge words — generic advice ("consider X", "maybe check Y")
+ *   2. Meta-chatter — model-as-chatbot babble ("please provide more
+ *      context", "I don't have enough information"). These surface
+ *      when the advisor LLM falls back on its assistant persona
+ *      instead of observing the event, and are spectacularly useless
+ *      as a mascot bubble. Observed live from Qwen 2.5 Coder 1.5B
+ *      abliterated on sparse contexts.
+ */
 const FLUFF_PATTERNS: readonly RegExp[] = [
+  // Hedge words
   /\bconsider\b/i,
   /\bmaybe\b/i,
   /\bshould\b/i,
@@ -159,6 +164,15 @@ const FLUFF_PATTERNS: readonly RegExp[] = [
   /\bmight want to\b/i,
   /\bensure\b/i,
   /\btry to\b/i,
+  // Meta-chatter / assistant persona leakage
+  /\bplease (?:provide|clarify|specify|share)\b/i,
+  /\bi don'?t have (?:enough|any|sufficient)\b/i,
+  /\bcould you (?:clarify|specify|provide)\b/i,
+  /\bi (?:can|would) (?:help|assist|be happy)\b/i,
+  /\bmore (?:context|information|details) (?:or|please|would)\b/i,
+  /\bspecific question\b/i,
+  /\bfeel free to\b/i,
+  /\blet me know\b/i,
 ];
 
 function isFluff(advice: string): boolean {
@@ -554,6 +568,79 @@ export default function KodiCompanion({
     return () => clearInterval(id);
   }, [sessionStartTime, contextWindowSize, tokenCount, toolUseCount]);
 
+  // ── Musings — passing thoughts ──
+  // Every 3-5 min of continuous idle, ask the LLM for a short
+  // thought and show it as a bubble. Not tied to any event. This is
+  // what makes Kodi feel like an independent tamagotchi instead of
+  // just an event-reactor. Hard-gated on Kodi server availability,
+  // so free/declined users see nothing here.
+  useEffect(() => {
+    let cancelled = false;
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = 180_000 + Math.random() * 120_000; // 3-5 min
+      pending = setTimeout(async () => {
+        pending = null;
+        if (cancelled) return;
+        // Only muse when Kodi is actually idle — never step on a
+        // reaction or advisor line in flight.
+        if (engine.phase !== "idle" || engine.mood !== "idle") {
+          scheduleNext();
+          return;
+        }
+        try {
+          const { askForMusing } = await import("../kodi-autonomy.js");
+          const thought = await askForMusing(engine.personality);
+          if (cancelled) return;
+          if (thought) {
+            engine.setMood("thinking");
+            engine.say(thought, 5500);
+          }
+        } catch {
+          /* swallow */
+        }
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (pending) {
+        clearTimeout(pending);
+        pending = null;
+      }
+    };
+  }, [engine]);
+
+  // ── Door teleport — swap panel sides ──
+  // Every 5-8 min, Kodi plays the "I went through a door and came
+  // out on the other side of the info panel" trick. Pure deterministic
+  // trigger (no LLM needed) — the engine's teleportThroughDoor()
+  // handles the whole animation + side flip.
+  useEffect(() => {
+    let cancelled = false;
+    let pending: ReturnType<typeof setTimeout> | null = null;
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const delay = 300_000 + Math.random() * 180_000; // 5-8 min
+      pending = setTimeout(() => {
+        pending = null;
+        if (cancelled) return;
+        engine.teleportThroughDoor();
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      if (pending) {
+        clearTimeout(pending);
+        pending = null;
+      }
+    };
+  }, [engine]);
+
   // Update elapsed time every 10s
   useEffect(() => {
     if (!sessionStartTime) return;
@@ -761,9 +848,17 @@ export default function KodiCompanion({
   ];
   const bubble = frame?.bubble ?? "";
 
+  // Side drives which end of the panel Kodi sits on. The engine
+  // flips this at the midpoint of a door-teleport animation so the
+  // second half of the door frame already shows on the new side —
+  // creating the "Kodi went through a door and came out on the
+  // other side of the info text" effect the user asked for.
+  const panelSide: "row" | "row-reverse" =
+    frame?.side === "right" ? "row-reverse" : "row";
+
   return (
     <Box
-      flexDirection="row"
+      flexDirection={panelSide}
       borderStyle="round"
       borderColor={theme.dimmed}
       paddingX={1}
@@ -781,7 +876,9 @@ export default function KodiCompanion({
       <Box flexDirection="column" width={15 + 6}>
         {lines.map((line, i) => (
           <Text key={i} color={moodColor}>
-            {" ".repeat(Math.max(0, walkPosition + 3))}
+            {frame?.inDoor
+              ? ""
+              : " ".repeat(Math.max(0, walkPosition + 3))}
             {line}
           </Text>
         ))}

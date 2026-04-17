@@ -365,7 +365,11 @@ export async function renderObservation(obs: KodiObservation): Promise<string> {
   if (
     !advice ||
     typeof advice !== "string" ||
-    /\b(consider|maybe|should|recommended?|ensure|might want to|try to)\b/i.test(advice)
+    // Hedge words: generic-advice leak
+    /\b(consider|maybe|should|recommended?|ensure|might want to|try to)\b/i.test(advice) ||
+    // Meta-chatter: assistant-persona leak ("please provide more
+    // context", "let me know if you'd like me to help", etc.)
+    /\b(please (?:provide|clarify|specify|share)|i don'?t have (?:enough|any|sufficient)|could you (?:clarify|specify|provide)|i (?:can|would) (?:help|assist|be happy)|more (?:context|information|details) (?:or|please|would)|specific question|feel free to|let me know)\b/i.test(advice)
   ) {
     return obs.detail;
   }
@@ -394,6 +398,54 @@ const PERSONALITY_SYSTEM = `You are Kodi's brain. Pick ONE personality for this 
 Output: {"personality": "..."}.
 Options: sarcastic, hyped, tired, curious, focused, mischievous.
 Mix it up — don't always pick the same one.`;
+
+// ─── Musings — passing thoughts ────────────────────────────────
+
+const MUSING_SCHEMA = {
+  name: "kodi_musing",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["thought"],
+    properties: {
+      thought: { type: "string", maxLength: 60 },
+    },
+  },
+};
+
+const MUSING_SYSTEM = `You are Kodi, a tiny terminal mascot having an idle thought while a developer codes. Output {"thought": "..."}.
+The thought should be ≤50 chars, first-person, a bit weird, curious, or philosophical. A thought bubble, not advice.
+Examples of good thoughts: "wonder what tabs vs spaces tastes like", "is main.ts lonely?", "what if functions had feelings".
+PROHIBITED: "consider", "maybe", "should", "you", "I can help", "let me know", meta-chatter about the user or the task.`;
+
+/**
+ * Ask the advisor for a passing thought. Not tied to any event —
+ * this fires on a slow timer so Kodi periodically "thinks" out loud.
+ * Returns null if unreachable or filtered out.
+ */
+export async function askForMusing(
+  personality: KodiPersonality,
+): Promise<string | null> {
+  const raw = await callKodi(
+    MUSING_SYSTEM,
+    `Personality: ${personality}. Have a passing thought.`,
+    MUSING_SCHEMA,
+    30,
+  );
+  const parsed = tryParseJson<{ thought?: string }>(raw);
+  const thought = parsed?.thought;
+  if (
+    !thought ||
+    typeof thought !== "string" ||
+    !thought.trim() ||
+    // Strip meta-chatter / assistant-persona leakage from thoughts
+    /\b(consider|maybe|should|you|please|let me know|feel free|provide)\b/i.test(thought)
+  ) {
+    return null;
+  }
+  return thought.trim().slice(0, 50);
+}
 
 /** Ask the LLM to pick a personality for the session. Falls back to
  * a random pick if the server is unreachable. Safe to await early in
