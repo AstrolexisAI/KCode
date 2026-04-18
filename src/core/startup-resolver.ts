@@ -82,16 +82,69 @@ export async function checkLocalCapability(): Promise<HardwareCheck> {
 }
 
 /**
- * Check which cloud providers are configured.
+ * Check which cloud providers are configured. Looks at BOTH the
+ * environment and `~/.kcode/settings.json` — the setup wizard saves
+ * API keys to settings.json (fields `anthropicApiKey`, `openaiApiKey`,
+ * etc.), so checking only `process.env.*` would miss every user who
+ * pasted their key interactively instead of exporting it. Result was
+ * the resolver falling through to "no cloud configured → start local
+ * llama.cpp" even after a successful `kcode setup` run.
  */
 export function checkCloudProviders(): Array<{ name: string; envVar: string; configured: boolean }> {
+  // Read settings.json once. Failures (file missing, malformed JSON,
+  // permission errors) fall back to an empty object — the subsequent
+  // checks will just rely on env vars.
+  let settings: Record<string, unknown> = {};
+  try {
+    const settingsPath = kcodePath("settings.json");
+    if (existsSync(settingsPath)) {
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    }
+  } catch {
+    /* malformed or unreadable — skip, env-only fallback */
+  }
+  const has = (envVars: string[], settingsFields: string[]): boolean => {
+    for (const v of envVars) if (process.env[v]) return true;
+    for (const f of settingsFields) {
+      const val = settings[f];
+      if (typeof val === "string" && val.length > 0) return true;
+    }
+    return false;
+  };
   return [
-    { name: "Anthropic", envVar: "ANTHROPIC_API_KEY", configured: !!(process.env.ANTHROPIC_API_KEY || process.env.KCODE_ANTHROPIC_KEY) },
-    { name: "OpenAI", envVar: "OPENAI_API_KEY", configured: !!process.env.OPENAI_API_KEY },
-    { name: "Google Gemini", envVar: "GOOGLE_API_KEY", configured: !!(process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY) },
-    { name: "Groq", envVar: "GROQ_API_KEY", configured: !!process.env.GROQ_API_KEY },
-    { name: "DeepSeek", envVar: "DEEPSEEK_API_KEY", configured: !!process.env.DEEPSEEK_API_KEY },
-    { name: "Together AI", envVar: "TOGETHER_API_KEY", configured: !!process.env.TOGETHER_API_KEY },
+    {
+      name: "Anthropic",
+      envVar: "ANTHROPIC_API_KEY",
+      configured: has(
+        ["ANTHROPIC_API_KEY", "KCODE_ANTHROPIC_KEY"],
+        ["anthropicApiKey"],
+      ),
+    },
+    {
+      name: "OpenAI",
+      envVar: "OPENAI_API_KEY",
+      configured: has(["OPENAI_API_KEY"], ["openaiApiKey", "apiKey"]),
+    },
+    {
+      name: "Google Gemini",
+      envVar: "GOOGLE_API_KEY",
+      configured: has(["GOOGLE_API_KEY", "GEMINI_API_KEY"], ["geminiApiKey"]),
+    },
+    {
+      name: "Groq",
+      envVar: "GROQ_API_KEY",
+      configured: has(["GROQ_API_KEY"], ["groqApiKey"]),
+    },
+    {
+      name: "DeepSeek",
+      envVar: "DEEPSEEK_API_KEY",
+      configured: has(["DEEPSEEK_API_KEY"], ["deepseekApiKey"]),
+    },
+    {
+      name: "Together AI",
+      envVar: "TOGETHER_API_KEY",
+      configured: has(["TOGETHER_API_KEY"], ["togetherApiKey"]),
+    },
   ];
 }
 
