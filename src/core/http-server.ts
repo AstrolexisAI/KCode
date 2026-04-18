@@ -454,6 +454,24 @@ export async function handleRoute(
     return Response.json({ tools: defs }, { headers: corsHeaders });
   }
 
+  // ── GET /api/models ──────────────────────────────────────────
+  // Returns the registry of models this server can talk to — local
+  // (mnemo:*), cloud (registered via /cloud), and anything the user
+  // added via `kcode models add`. Used by the iOS companion to build
+  // a dynamic Settings picker instead of hardcoding model IDs.
+  if (pathname === "/api/models" && method === "GET") {
+    log.info("http", "GET /api/models");
+    const { listModels } = await import("./models.js");
+    const entries = await listModels();
+    const models = entries.map((m) => ({
+      name: m.name,
+      provider: m.provider ?? (m.name.startsWith("claude") ? "anthropic" : "openai"),
+      description: m.description,
+      gpu: m.gpu,
+    }));
+    return Response.json({ models }, { headers: corsHeaders });
+  }
+
   // ── GET /api/sessions ────────────────────────────────────────
   if (pathname === "/api/sessions" && method === "GET") {
     log.info("http", "GET /api/sessions");

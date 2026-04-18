@@ -58,6 +58,17 @@ export interface TaskRoutingDeps {
 export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRoutingResult> {
   const { state, config, userMessage } = deps;
 
+  // Pre-LLM event buffer. Populated by non-terminating passes (agent
+  // intent detection) and prepended to ANY handled-branch events so
+  // the dispatch summary survives even when a later level-1 / engine
+  // path claims the turn. Level-0 chain detection returns before this
+  // is populated, so its handled() calls don't need the prepend.
+  const preLlmEvents: StreamEvent[] = [];
+  const handled = (events: StreamEvent[]): TaskRoutingResult => ({
+    action: "handled",
+    events: [...preLlmEvents, ...events],
+  });
+
   // ── Level 0: multi-step workflow chain ────────────────────────
   // Detect "audita y arregla y commitea" / "benchmark then deploy"
   // and run the deterministic chain. 0 tokens.
@@ -96,7 +107,6 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
       );
       return {
         action: "handled",
-        // biome-ignore format: readable one-per-line
         events: [
           { type: "text", text: output } as unknown as StreamEvent,
           { type: "turn_end", inputTokens: 0, outputTokens: 0 } as unknown as StreamEvent,
@@ -111,7 +121,6 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
   // "liberemos 3 agentes para auditar backend" → spawn via pool.
   // Does NOT end the turn — the LLM still responds, just with the
   // dispatch summary already rendered.
-  const preLlmEvents: StreamEvent[] = [];
   try {
     const { detectAgentIntent } = await import("./agents/intent.js");
     const intent = detectAgentIntent(userMessage, config.workingDirectory);
@@ -164,9 +173,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
           state.messages.push({ role: "user", content: userMessage });
           state.messages.push({ role: "assistant", content: l1.output });
           log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
-          return {
-            action: "handled",
-            events: [
+          return handled([
               { type: "turn_start" } as unknown as StreamEvent,
               { type: "text_delta", text: l1.output } as unknown as StreamEvent,
               {
@@ -175,8 +182,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
                 outputTokens: 0,
                 stopReason: "end_turn",
               } as unknown as StreamEvent,
-            ],
-          };
+            ]);
         }
         engineState.active = false;
       } else {
@@ -185,9 +191,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
           state.messages.push({ role: "user", content: userMessage });
           state.messages.push({ role: "assistant", content: l1.output });
           log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
-          return {
-            action: "handled",
-            events: [
+          return handled([
               { type: "turn_start" } as unknown as StreamEvent,
               { type: "text_delta", text: l1.output } as unknown as StreamEvent,
               {
@@ -196,8 +200,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
                 outputTokens: 0,
                 stopReason: "end_turn",
               } as unknown as StreamEvent,
-            ],
-          };
+            ]);
         }
       }
     } catch (err) {
@@ -268,9 +271,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
                   "orchestrator",
                   `Engine handled 100% machine: ${engineMatch.engine} (0 tokens)`,
                 );
-                return {
-                  action: "handled",
-                  events: [
+                return handled([
                     { type: "turn_start" } as unknown as StreamEvent,
                     { type: "text_delta", text: result } as unknown as StreamEvent,
                     {
@@ -279,8 +280,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
                       outputTokens: 0,
                       stopReason: "end_turn",
                     } as unknown as StreamEvent,
-                  ],
-                };
+                  ]);
               }
               orchestratedMessage = result;
               engineHandled = true;
@@ -301,7 +301,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
             userMessage,
             preLlmEvents,
           });
-          if (webResult.action === "handled") return webResult;
+          if (webResult.action === "handled") return handled(webResult.events);
           if (webResult.action === "delegate-to-llm") {
             orchestratedMessage = webResult.orchestratedMessage;
             engineHandled = true;
