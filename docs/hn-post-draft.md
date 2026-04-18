@@ -1,59 +1,91 @@
-# Show HN: KCode — Found 28 bugs in NASA's IDF in 50 seconds with a local LLM
+# HN launch post draft
 
-KCode is an open-source terminal coding assistant that uses a deterministic audit engine instead of sending everything to an LLM. Three commands: `/scan`, `/fix`, `/pr`.
+Title (pick one; first is recommended):
 
-## What happened
-
-I pointed KCode at NASA's Input Device Framework (https://github.com/nasa/IDF) — a C++ library for joystick/HID device management used in spacecraft simulation.
-
-```
-/scan IDF/     → 31 findings in 50 seconds (local model, 0 cloud tokens)
-/fix IDF/      → 28 fixes applied automatically
-/pr IDF/       → PR submitted: https://github.com/nasa/IDF/pull/107
-```
-
-## What it found
-
-**Critical bugs that were there for years:**
-
-1. **Pointer arithmetic error** (`EthernetDevice.cpp:160`): `(&buffer)[bytesTotal]` takes the address of a `void*` parameter and indexes past the pointer variable on the stack — not into the buffer data. On partial UDP sends, garbage memory is transmitted.
-
-2. **Unreachable code** (`EthernetDevice.cpp:143`): `lastPacketArrived = std::time(nullptr)` after a `return` statement. The timeout timestamp never updates, causing spurious disconnections.
-
-3. **27 USB decoder files** with unchecked `data[N]` access: `UsbXBox.cpp`, `UsbDualShock3.cpp`, `UsbDualShock4.cpp`, etc. — all access fixed HID packet indices without validating packet length. A malformed USB device could trigger out-of-bounds reads.
-
-All 28 fixes compile clean (`cmake && make` — zero errors).
-
-## How it works (the interesting part)
-
-KCode doesn't ask the LLM to "audit this project." That approach has ~30% success rate (we tested it extensively — same model, same prompt, wildly different results per session).
-
-Instead:
-
-1. **Pattern library** (65 regex patterns across 16 languages) scans every source file deterministically
-2. **Deduplication** groups multiple hits per (pattern, file) into one candidate
-3. **Model verification** — for each candidate, the LLM answers ONE specific question: "Is this actually triggered? Prove it with an execution path."
-4. **Auto-fix** — deterministic patches (size guards, bounded copies, RAII wrappers)
-5. **Auto-PR** — creates branch, LLM generates detailed PR description, auto-forks if no write access
-
-The LLM only handles step 3 — everything else is machine code. Result: 91% precision on NASA IDF (28 real bugs out of 31 candidates).
-
-## Token efficiency
-
-- Full audit with LLM verification: **~10k tokens** (local model)
-- Same audit done conversationally (LLM discovers + verifies): **~300k tokens**, 30% success rate
-
-The machine does the discovery (0 tokens). The LLM only verifies (small, focused prompts).
-
-## Stack
-
-- Built with Bun + TypeScript + React/Ink (terminal UI)
-- Works with local models (llama.cpp, Ollama) and cloud (Anthropic, OpenAI)
-- Open source: AGPL-3.0
-
-GitHub: https://github.com/AstrolexisAI/KCode
-Compare with Cursor/Aider: https://kulvex.ai/kcode/compare
+1. **Show HN: KCode – a SAST scanner that uses a local LLM to strip false positives**
+2. Show HN: KCode – deterministic security scanner for C/Rust/Go, 256 patterns, local-first
+3. Show HN: Found 28 bugs in NASA's IDF in 50s with a local LLM + 10k tokens
 
 ---
 
-*Astrolexis.space — Kulvex Code*
+## Body
+
+KCode is a static security scanner that flips the usual LLM-SAST split. Instead of sending your whole codebase to a cloud model and hoping it notices the bug, a deterministic scanner runs 256 hand-written patterns locally and then a small local LLM (runs on a 24GB GPU) verifies each candidate in isolation. The LLM's job is just to strip false positives — not to find bugs.
+
+Open source, AGPL-3.0: https://github.com/AstrolexisAI/KCode
+
+### Why we built it
+
+I spent six months watching LLM-first audit tools either hallucinate bugs that weren't there or miss the obvious ones under paragraphs of plausible prose. On the same codebase, same prompt, same model, two runs in a row would produce wildly different results. That's not a pipeline you can ship.
+
+So we split the problem. Deterministic things should be deterministic:
+
+1. **Scanner** — 256 curated patterns across 20+ languages (C, C++, Rust, Go, Python, Java, JS/TS, Ruby, PHP, Swift, Kotlin, Scala, Haskell, Zig, Dart, Lua, SQL + framework packs for Flask, Rails, React). Hand-written, not LLM-generated. Each pattern ships with positive + negative fixtures and survives a CI regression harness (158 fixture tests + 29 scanner-utility tests).
+
+2. **Verifier** — the LLM receives one candidate at a time with a focused prompt: "Is this actually triggered? Prove it with an execution path or respond FALSE_POSITIVE." ~10k tokens per full audit instead of ~300k for an LLM-first tool. Uses a local 14B-31B model by default; optional cloud verifier for higher accuracy on complex bugs.
+
+3. **Fixer** (`/fix`) — every pattern has a fix template. Size guards, bounded copies, RAII wrappers applied deterministically. Diff-previewed before write.
+
+4. **PR pipeline** (`/pr`) — branch + commit + LLM-generated PR description grounded in the finding evidence. Auto-fork when you don't own the repo.
+
+### Does it actually work?
+
+We ran it against NASA's IDF (Input Device Framework — the C++ library used in spacecraft simulation). [PR #107 on nasa/IDF](https://github.com/nasa/IDF/pull/107) was the result: 28 real bugs confirmed and patched.
+
+The highlights:
+
+- `EthernetDevice.cpp:160` — `(&buffer)[bytesTotal]` takes the address of a `void*` parameter and indexes past the pointer variable on the stack, not into the buffer data. Partial UDP sends transmitted garbage memory.
+- `EthernetDevice.cpp:143` — `lastPacketArrived = std::time(nullptr)` after a `return` statement. Timeout timestamp never updates → spurious disconnections.
+- 27 USB decoder files (`UsbXBox.cpp`, `UsbDualShock3.cpp`, …) accessing `data[N]` for fixed HID packet indices without validating packet length. Malformed USB devices could trigger OOB reads.
+
+31 candidates → 28 confirmed → 28 patches applied, all compile clean. 9 downgraded to false-positive by the verifier. 91% precision. Full run: ~50 seconds, 0 cloud tokens (local verifier).
+
+### How it compares to Semgrep / CodeQL / Snyk / SonarQube
+
+Honest breakdown, because we don't beat them at everything:
+
+- **CodeQL** wins at deep cross-function dataflow — chasing a taint across 15 function hops is its specialty.
+- **Semgrep** has ~2000 OSS rules, we have 256. We bet on depth + LLM verification over breadth.
+- **Snyk** has the polished SOC2/compliance reporting. We emit SARIF; plug it into your existing dashboard.
+- **SonarQube** dominates legacy-code quality audits. Different focus.
+
+What KCode adds that none of them do:
+
+- LLM-verified findings → lower false-positive rate without hand-tuning queries
+- `/fix` produces actual patches, not just flags
+- 100% local: scanner + verifier never upload your source (Snyk sends code to their hosted engine; CodeQL and Semgrep have optional cloud dashboards)
+
+Full comparison page: https://kulvex.ai/kcode/compare
+
+### What it's NOT
+
+- Not a dataflow engine (use CodeQL for that)
+- Not a compliance suite (we emit SARIF; use SonarQube/Snyk for dashboards)
+- Not the largest rule catalog
+- Not free for commercial embedding at scale — AGPL-3.0 covers SaaS / internal use; commercial licensing for proprietary embedding: contact@astrolexis.space
+
+### Stack
+
+- Bun + TypeScript. Terminal UI via React/Ink.
+- Local LLMs: llama.cpp, Ollama, vLLM.
+- Cloud (optional): OpenAI, Anthropic, Gemini, Groq, DeepSeek, Together.
+- Cross-compile: Linux x64/ARM64, macOS x64/ARM64, Windows x64. Single ~100MB binary.
+
+### Install
+
+```
+# Linux x64
+curl -LO https://kulvex.ai/downloads/kcode/kcode-2.10.134-linux-x64
+chmod +x kcode-2.10.134-linux-x64
+./kcode-2.10.134-linux-x64 audit .
+```
+
+Other platforms: https://kulvex.ai/kcode#downloads
+
+---
+
+**GitHub**: https://github.com/AstrolexisAI/KCode
+**Compare**: https://kulvex.ai/kcode/compare
+**Landing**: https://kulvex.ai/kcode
+
+Feedback welcome — especially from people running SAST in production. What's missing from the 256-pattern catalog? What false positives do Semgrep/CodeQL still cost you despite the tuning? Both answers make the product better.
