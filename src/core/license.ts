@@ -314,3 +314,46 @@ export function formatLicenseStatus(): string {
 
   return lines.join("\n");
 }
+
+/**
+ * Format an actionable error block for a license failure.
+ *
+ * When a license token fails to verify (expired, signature invalid,
+ * hardware-bound to a different machine, revoked server-side, …),
+ * we never want to leave the user at a dead-end like
+ * "Contact support to transfer". This helper produces the set of
+ * concrete moves the user can take RIGHT NOW — OAuth login, device
+ * transfer URL, new JWT drop-in, trial fallback, free-tier mode —
+ * formatted for terminal output (two-space indent, ANSI colors
+ * optional via the `color` flag).
+ *
+ * Callers: `kcode license activate`, `kcode license status`, the
+ * startup banner in src/index.ts, and any `requirePro()` path that
+ * wants to surface "your license is gone, here's how to fix it".
+ */
+export function formatLicenseFailureGuide(
+  reason: string,
+  opts: { color?: boolean } = {},
+): string {
+  const color = opts.color !== false;
+  const red = color ? "\x1b[31m" : "";
+  const cyan = color ? "\x1b[36m" : "";
+  const dim = color ? "\x1b[2m" : "";
+  const bold = color ? "\x1b[1m" : "";
+  const reset = color ? "\x1b[0m" : "";
+
+  // Strip trailing punctuation so we can add our own.
+  const cleaned = reason.replace(/[.!\s]+$/, "");
+
+  return [
+    `${red}✗${reset} License error: ${cleaned}.`,
+    ``,
+    `  ${bold}To restore Pro access, pick one:${reset}`,
+    `    ${dim}·${reset} Log in via browser:   ${cyan}kcode auth login astrolexis${reset}`,
+    `    ${dim}·${reset} Transfer license:     ${cyan}https://kulvex.ai/account/devices${reset}`,
+    `    ${dim}·${reset} Drop in a new JWT:    ${cyan}~/.kcode/license.jwt${reset}`,
+    `    ${dim}·${reset} Start a 14-day trial: ${cyan}kcode pro trial${reset}`,
+    ``,
+    `  ${dim}KCode keeps working in free mode in the meantime — no Pro features, no interruption.${reset}`,
+  ].join("\n");
+}

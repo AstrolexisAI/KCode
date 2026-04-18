@@ -275,6 +275,43 @@ import("./core/update-notifier")
     log.debug("update", `Update notifier failed: ${e}`);
   });
 
+// Non-blocking license health banner. Runs only when a license.jwt
+// is actually present — we don't want to nag free-tier users who
+// never had a license. If the file exists but fails to verify
+// (expired / wrong signature / hardware mismatch / revoked), we
+// surface the actionable fix list once at startup instead of
+// hard-failing later when the user tries to use a Pro feature.
+//
+// Suppressed when the user is already running a license subcommand
+// (`kcode license ...`) — those commands print the guide themselves
+// as part of their output, so the banner would be a duplicate.
+// Also suppressed for `--version` / `--help` / raw subcommand
+// queries that want clean stdout, and during piped/non-TTY runs
+// that should stay machine-readable.
+const _firstArg = process.argv[2];
+const _licenseBannerSuppressed =
+  _firstArg === "license" ||
+  _firstArg === "-v" ||
+  _firstArg === "--version" ||
+  _firstArg === "-h" ||
+  _firstArg === "--help" ||
+  !process.stderr.isTTY;
+if (!_licenseBannerSuppressed) {
+  import("./core/license")
+    .then(({ loadLicenseFile, checkOfflineLicense, formatLicenseFailureGuide }) => {
+      // Cheap short-circuit: no file → nothing to warn about.
+      if (!loadLicenseFile()) return;
+      const result = checkOfflineLicense();
+      if (result.valid) return;
+      process.stderr.write(
+        "\n" + formatLicenseFailureGuide(result.error ?? "License invalid") + "\n\n",
+      );
+    })
+    .catch((e) => {
+      log.debug("license", `Startup license banner failed: ${e}`);
+    });
+}
+
 const program = new Command()
   .name("kcode")
   .description("Kulvex Code - AI-powered coding assistant by Astrolexis")

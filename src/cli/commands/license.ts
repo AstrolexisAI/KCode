@@ -74,8 +74,18 @@ export function registerLicenseCommand(program: Command): void {
     .command("status")
     .description("Show current license status")
     .action(async () => {
-      const { formatLicenseStatus } = await import("../../core/license");
+      const { formatLicenseStatus, checkOfflineLicense, formatLicenseFailureGuide } =
+        await import("../../core/license");
       console.log(formatLicenseStatus());
+      // If a license file exists but failed to verify, surface the
+      // actionable fix list below the one-line status. If no file is
+      // present at all, we stay silent — not every install needs a
+      // license (free tier works fine without one).
+      const check = checkOfflineLicense();
+      if (!check.valid && check.error && check.error !== "No license file found") {
+        console.log();
+        console.log(formatLicenseFailureGuide(check.error));
+      }
     });
 
   // ─── activate (end-user primary flow) ────────────────────────
@@ -133,7 +143,8 @@ export function registerLicenseCommand(program: Command): void {
 
       const result = verifyLicenseJwt(token);
       if (!result.valid || !result.claims) {
-        console.error(`\x1b[31m✗\x1b[0m License invalid: ${result.error}`);
+        const { formatLicenseFailureGuide } = await import("../../core/license");
+        console.error(formatLicenseFailureGuide(result.error ?? "License invalid"));
         process.exit(1);
       }
 
