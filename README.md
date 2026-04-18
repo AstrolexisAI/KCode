@@ -31,16 +31,15 @@ Full side-by-side: https://kulvex.ai/kcode/compare
 
 ## Install
 
-**Fastest path — single binary, no dependencies:**
+**One-line install (Linux / macOS, x64 or ARM64):**
 
 ```bash
-# Linux x64
-curl -LO https://kulvex.ai/downloads/kcode/kcode-2.10.134-linux-x64
-chmod +x kcode-2.10.134-linux-x64
-./kcode-2.10.134-linux-x64 audit .
+curl -fsSL https://kulvex.ai/kcode/install.sh | sh
 ```
 
-Other platforms (Linux ARM64, macOS x64/ARM64, Windows x64): [kulvex.ai/kcode#downloads](https://kulvex.ai/kcode#downloads) or [GitHub Releases](https://github.com/AstrolexisAI/KCode/releases).
+The script detects your OS + arch, fetches the latest pre-built binary from the KCode CDN, installs it to the first writable dir on `$PATH` (`~/.local/bin` by default), and prints a PATH hint if needed. No telemetry, no shell-config edits, no sudo prompts — [audit the script here](https://kulvex.ai/kcode/install.sh).
+
+**Manual download** (Linux ARM64 / Windows / specific version): [kulvex.ai/kcode#downloads](https://kulvex.ai/kcode#downloads) or [GitHub Releases](https://github.com/AstrolexisAI/KCode/releases).
 
 **From source (Bun):**
 
