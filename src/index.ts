@@ -554,11 +554,22 @@ async function runMain(
         process.stderr.write(`\x1b[36mℹ\x1b[0m ${startup.message}\n`);
       }
 
-      // Check if the selected model has a registered baseUrl (external server)
+      // Check if the selected model has a registered baseUrl (external server).
+      //
+      // modelName resolution: CLI flag → env → registry default. The
+      // third fallback matters: when the user ran `kcode setup`,
+      // picked Anthropic, and the wizard set claude-sonnet-4-6 as
+      // the default in models.json, we MUST read that default here
+      // — otherwise modelName is "" and the detection below fails,
+      // causing llama-server.ts to throw "Server not configured"
+      // even though cloud is perfectly set up.
       let externalServerUrl: string | null = null;
       try {
-        const { getModelBaseUrl, getModelProvider } = await import("./core/models");
-        const modelName = opts.model || process.env.KCODE_MODEL || "";
+        const { getModelBaseUrl, getModelProvider, getDefaultModel } = await import(
+          "./core/models"
+        );
+        const modelName =
+          opts.model || process.env.KCODE_MODEL || (await getDefaultModel()) || "";
         const modelBase = await getModelBaseUrl(modelName);
         const provider = await getModelProvider(modelName);
         // If the model has a non-default baseUrl or a non-openai provider, it's external
@@ -569,7 +580,25 @@ async function runMain(
         /* fallback to normal server management */
       }
 
-      if (externalServerUrl) {
+      // Resolver said cloud but we didn't find an external URL?
+      // Could be an unregistered model or a misconfigured registry.
+      // Either way, do NOT try to start a local llama-server — it
+      // would throw "Server not configured" and crash the user right
+      // after a successful `kcode setup`. Skip the whole reachability
+      // check and let the TUI boot; the conversation layer picks the
+      // right cloud endpoint from the provider config / API key it
+      // already has in settings.json.
+      const skipServerCheck = !externalServerUrl && startup.mode === "cloud";
+
+      if (skipServerCheck) {
+        // Cloud mode with no registered base URL yet. Conversation
+        // layer will route requests via the provider in the config
+        // directly. Nothing to wait for; boot the TUI.
+        profileCheckpoint("server_ready");
+        process.stderr.write(
+          `\x1b[32m✓\x1b[0m Cloud mode — requests route directly to the configured provider\x1b[K\n`,
+        );
+      } else if (externalServerUrl) {
         // External server: just check it's reachable, don't try to start llama.cpp
         const maxWait = 15_000;
         const start = Date.now();
