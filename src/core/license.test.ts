@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   checkOfflineLicense,
   clearLicenseCache,
+  formatLicenseFailureGuide,
   formatLicenseStatus,
   getLicenseDaysRemaining,
   getLicenseTier,
@@ -313,6 +314,49 @@ describe("license", () => {
     test("shows no license when invalid", () => {
       const status = formatLicenseStatus();
       expect(status).toContain("none");
+    });
+  });
+
+  describe("formatLicenseFailureGuide", () => {
+    test("includes the reason, plain", () => {
+      const out = formatLicenseFailureGuide(
+        "License is bound to a different machine",
+        { color: false },
+      );
+      expect(out).toContain("License is bound to a different machine");
+      expect(out).toContain("✗ License error:");
+    });
+
+    test("lists all four recovery paths", () => {
+      const out = formatLicenseFailureGuide("Expired on 2099-01-01", { color: false });
+      expect(out).toContain("kcode auth login astrolexis");
+      expect(out).toContain("https://kulvex.ai/account/devices");
+      expect(out).toContain("~/.kcode/license.jwt");
+      expect(out).toContain("kcode pro trial");
+    });
+
+    test("reassures user that free mode still works", () => {
+      const out = formatLicenseFailureGuide("any reason", { color: false });
+      expect(out).toContain("KCode keeps working in free mode");
+    });
+
+    test("strips trailing punctuation from the reason so we can add our own", () => {
+      // "Expired." + "." from the format string would read "Expired.."
+      const out = formatLicenseFailureGuide("Expired.", { color: false });
+      expect(out).toContain("License error: Expired.");
+      expect(out).not.toContain("Expired..");
+    });
+
+    test("color=false omits ANSI escape codes", () => {
+      const out = formatLicenseFailureGuide("Invalid signature", { color: false });
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes on purpose
+      expect(out).not.toMatch(/\x1b\[/);
+    });
+
+    test("color=true (default) includes ANSI escape codes", () => {
+      const out = formatLicenseFailureGuide("Invalid signature");
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes on purpose
+      expect(out).toMatch(/\x1b\[/);
     });
   });
 });
