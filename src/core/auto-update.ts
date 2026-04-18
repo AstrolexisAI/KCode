@@ -11,7 +11,7 @@ import { kcodePath } from "./paths";
 
 // ─── Constants ──────────────────────────────────────────────────
 
-const GITHUB_REPO = "astrolexis/kcode";
+const GITHUB_REPO = "AstrolexisAI/KCode";
 const DEFAULT_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function getUpdateCheckFile(): string {
