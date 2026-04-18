@@ -1,53 +1,63 @@
 # KCode -- Kulvex Code by Astrolexis
 
-> AI-powered coding assistant for the terminal. Local-first, privacy-first, deterministic code auditor.
+> **Deterministic security audit for C, Rust, Go, Python, and 20+ other languages.** 256 curated patterns. A small local LLM verifies each finding to strip false positives. Source never leaves your machine.
 
-KCode is a terminal-based AI coding agent that connects to local LLMs (llama.cpp, Ollama, vLLM) and cloud APIs (Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI). Built with Bun and TypeScript, featuring a React/Ink TUI with 48 built-in tools, 160+ slash commands, and a **deterministic audit engine** that finds real bugs, fixes them, and opens PRs — all from three commands.
+KCode is an open-source SAST scanner with a twist: the pattern scanner does the bug-finding deterministically, then a small local LLM (runs on a 24GB GPU) verifies each candidate in isolation. The LLM's job is only to downgrade false positives, never to find bugs. Result: ~10k tokens per audit instead of the ~300k an LLM-first tool would burn, and your source never leaves the machine.
 
-### Audit in 3 Commands
+Validated on real code: **28 real bugs found and patched in [NASA IDF](https://github.com/nasa/IDF)** (pointer arithmetic, unreachable code, USB decoder OOB reads). PR: [nasa/IDF#107](https://github.com/nasa/IDF/pull/107). 91% precision (28/31 candidates confirmed). Full run: ~50 seconds, 0 cloud tokens.
+
+### From code to PR in three commands
 
 ```bash
 kcode
-/scan project/     # 65 patterns, 16 languages, model-verified
-/fix project/      # deterministic auto-fixes
-/pr project/       # branch + commit + PR (auto-forks if needed)
+/scan project/     # 256 patterns, 20+ languages, LLM-verified findings
+/fix project/      # deterministic patches (size guards, bounded copies, RAII)
+/pr project/       # branch + commit + LLM-written PR grounded in evidence
 ```
 
-**Validated on NASA projects:** Found and fixed 28 real bugs in [NASA IDF](https://github.com/nasa/IDF) (buffer overflows, pointer arithmetic, resource leaks). PR submitted: [nasa/IDF#107](https://github.com/nasa/IDF/pull/107).
+Output is SARIF v2.1.0 — drop-in with GitHub Code Scanning.
 
-### Task Orchestrator
+### Honest comparison
 
-KCode translates human language → machine pipelines. The LLM receives pre-filtered context, not raw "figure it out" requests:
+KCode is not trying to beat [Semgrep](https://semgrep.dev) on rule volume (~2000), [CodeQL](https://codeql.github.com) on dataflow depth, or [Snyk](https://snyk.io) on compliance dashboards. It occupies a narrower niche:
 
-```
-"fix the login bug" → grep errors → read files → git history → focused LLM prompt
-"add REST endpoint" → detect framework → find patterns → scaffold → LLM review
-"audit this"        → pattern scan → dedup → model verify → report
-```
+- **LLM-verified findings** → lower false-positive rate without query tuning
+- **`/fix` ships patches**, not just flags
+- **Source truly never leaves the machine** — the verifier is a local model, not a hosted API
+
+Full side-by-side: https://kulvex.ai/kcode/compare
 
 ---
 
-## Quick Start
+## Install
+
+**Fastest path — single binary, no dependencies:**
 
 ```bash
-# 1. Install Bun (if you don't have it)
-curl -fsSL https://bun.sh/install | bash
-
-# 2. Clone and install
-git clone https://github.com/AstrolexisAI/KCode.git
-cd KCode && bun install
-
-# 3. Run the setup wizard
-bun run src/index.ts setup
+# Linux x64
+curl -LO https://kulvex.ai/downloads/kcode/kcode-2.10.134-linux-x64
+chmod +x kcode-2.10.134-linux-x64
+./kcode-2.10.134-linux-x64 audit .
 ```
 
-The wizard detects your hardware and picks the best path:
+Other platforms (Linux ARM64, macOS x64/ARM64, Windows x64): [kulvex.ai/kcode#downloads](https://kulvex.ai/kcode#downloads) or [GitHub Releases](https://github.com/AstrolexisAI/KCode/releases).
 
-- **Strong HW** (GPU ≥ 20GB VRAM, or Apple Silicon ≥ 32GB) → downloads a large local model
-- **Medium HW** (GPU 8-20GB, or ≥ 32GB RAM) → downloads a balanced local model
-- **Weak HW** (small GPU or CPU-only) → **cloud-first setup**: prompts for an API key from Anthropic, OpenAI, Groq, DeepSeek, or Together AI. No gigabyte-sized download.
+**From source (Bun):**
 
-Build a standalone binary with `bun run build` (~101 MB). Override the auto-detection with `KCODE_FORCE_LOCAL=1` or `--model <codename>`.
+```bash
+curl -fsSL https://bun.sh/install | bash   # if needed
+git clone https://github.com/AstrolexisAI/KCode.git
+cd KCode && bun install
+bun run src/index.ts audit .
+```
+
+The setup wizard (`bun run src/index.ts setup` or `kcode setup`) auto-detects your hardware and picks the best verifier:
+
+- **Strong HW** (GPU ≥ 20GB VRAM, or Apple Silicon ≥ 32GB) → downloads a local 31B model
+- **Medium HW** (GPU 8-20GB, or ≥ 32GB RAM) → downloads a local 14B model
+- **Weak HW** (small GPU or CPU-only) → cloud verifier; prompts for an API key from OpenAI, Anthropic, Gemini, Groq, DeepSeek, or Together AI. No gigabyte-sized download.
+
+Override with `KCODE_FORCE_LOCAL=1` or `--model <codename>`. Build a standalone binary yourself with `bun run build` (~101 MB).
 
 ---
 
@@ -70,7 +80,7 @@ Build a standalone binary with `bun run build` (~101 MB). Override the auto-dete
 - **Easy switching**: `/cloud` to configure, `/model` or `/toggle` to switch
 - **Auto-routing**: automatically sends queries to the best model based on task type
 
-### 48 Built-in Tools
+### 46 Built-in Tools
 
 - **File operations**: Read, Write, Edit, MultiEdit, Glob, Grep, GrepReplace, Rename, DiffView, LS
 - **Shell**: Bash with safety analysis and permission controls
@@ -94,12 +104,14 @@ Build a standalone binary with `bun run build` (~101 MB). Override the auto-dete
 
 ### Deterministic Audit Engine
 
-- **65 bug patterns** across 16 languages (C, C++, Python, JS, TS, Go, Java, Rust, Swift, Kotlin, C#, PHP, Ruby, Dart, SQL, Scala)
-- **Pattern library** based on real bugs found in NASA codebases (buffer overflow, pointer arithmetic, shell injection, SQL injection, XSS, deserialization, etc.)
-- **Model verification** -- each candidate is verified by the LLM with a focused prompt, not open-ended discovery
-- **Hybrid local+cloud** -- local model handles most verifications, cloud escalates ambiguous cases (with user consent)
+- **256 hand-written patterns** across 20+ languages (C, C++, Python, JS, TS, Go, Java, Rust, Swift, Kotlin, C#, PHP, Ruby, Dart, SQL, Scala, Haskell, Zig, Lua, Elixir + framework packs for Flask, Rails, React)
+- **Pattern library** rooted in real production bugs (buffer overflow, pointer arithmetic, shell injection, SQL injection, XSS, deserialization, path traversal, hardcoded secrets, TOCTOU, type confusion, etc.)
+- **Fixture regression harness** -- every pattern ships with positive + negative fixtures; 158 regression tests run on every CI build to catch regex drift before release
+- **Model verification** -- each candidate is verified in isolation with a focused prompt ("confirm or FALSE_POSITIVE, prove it with an execution path"), not open-ended discovery
+- **Hybrid local+cloud** -- local model handles most verifications; cloud escalates ambiguous cases with user consent
 - **Auto-fix** -- deterministic patches for confirmed findings (size guards, bounded copies, RAII wrappers, etc.)
 - **Auto-PR** -- creates branch, generates detailed PR description via LLM, auto-forks if no write access, submits PR
+- **SARIF v2.1.0 output** -- drop-in compatible with GitHub Code Scanning; inline PR comments for each finding
 - **Semantic guards** -- blocks known LLM hallucinations (e.g., strcmp inversion) at the Edit tool level
 
 ### Terminal UI
