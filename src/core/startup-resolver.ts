@@ -216,13 +216,17 @@ export async function resolveStartup(): Promise<StartupDecision> {
   }
 
   // ── Case 4: Has cloud only → use cloud ──
+  // Vendor-neutral message — we don't want the startup banner to
+  // read as free advertising for whichever provider was configured
+  // first. The provider.name is still carried in the returned
+  // decision so downstream code can act on it.
   if (configuredCloud.length > 0) {
     const provider = configuredCloud[0]!;
     return {
       mode: "cloud",
       provider: provider.name,
       needsPrompt: false,
-      message: `No local GPU — using ${provider.name} cloud inference`,
+      message: "No local GPU — using cloud inference",
     };
   }
 
