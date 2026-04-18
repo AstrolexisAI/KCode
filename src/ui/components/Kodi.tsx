@@ -812,13 +812,22 @@ export default function KodiCompanion({
   const panelSide: "row" | "row-reverse" =
     frame?.side === "right" ? "row-reverse" : "row";
 
+  // Narrow-screen breakpoint (Termux on Android typically sits at
+  // ~35–45 cols). The Kodi sprite eats 21 cols and the horizontal
+  // info panel needs ~60 cols to not word-wrap mid-phrase ("KCode
+  // v2.10.135 — Kulvex Code by Astrolexis" shatters into 4 broken
+  // lines at 35 cols). On narrow we hide the sprite, drop the long
+  // subtitle, and let the essential info take the full width.
+  const cols = process.stdout.columns || 80;
+  const isNarrow = cols < 60;
+
   return (
     <Box
       flexDirection={panelSide}
       borderStyle="round"
       borderColor={theme.dimmed}
       paddingX={1}
-      width={process.stdout.columns || 80}
+      width={cols}
     >
       {/* Kodi sprite — pre-composed, fixed-width lines. The tier
           badge (★ ♛ ✦) renders as a small overlay column to the
@@ -828,18 +837,20 @@ export default function KodiCompanion({
           during long idle stretches. walkPosition is in
           [-WALK_RANGE, +WALK_RANGE], we render with an offset of
           `walkPosition + WALK_RANGE` columns of leading whitespace
-          so the sprite traverses a 2·WALK_RANGE-wide lane. */}
-      <Box flexDirection="column" width={15 + 6}>
-        {lines.map((line, i) => (
-          <Text key={i} color={moodColor}>
-            {frame?.inDoor
-              ? ""
-              : " ".repeat(Math.max(0, walkPosition + 3))}
-            {line}
-          </Text>
-        ))}
-      </Box>
-      {frame?.tierBadge && frame.tier !== "free" && (
+          so the sprite traverses a 2·WALK_RANGE-wide lane.
+          Hidden on narrow terminals to free the 21 cols for the
+          info panel. */}
+      {!isNarrow && (
+        <Box flexDirection="column" width={15 + 6}>
+          {lines.map((line, i) => (
+            <Text key={i} color={moodColor}>
+              {frame?.inDoor ? "" : " ".repeat(Math.max(0, walkPosition + 3))}
+              {line}
+            </Text>
+          ))}
+        </Box>
+      )}
+      {!isNarrow && frame?.tierBadge && frame.tier !== "free" && (
         <Box flexDirection="column" width={2} marginRight={1}>
           {/* Badge floats next to the face line. The other rows stay
               blank so the badge reads as a single cosmetic flourish
@@ -863,15 +874,22 @@ export default function KodiCompanion({
         </Box>
       )}
       {/* Info panel */}
-      <Box flexDirection="column" flexGrow={1} marginLeft={1}>
-        {/* Line 1: Brand + tier badge */}
+      <Box flexDirection="column" flexGrow={1} marginLeft={isNarrow ? 0 : 1}>
+        {/* Line 1: Brand + tier badge. On narrow terminals we drop the
+            "— Kulvex Code by Astrolexis" subtitle (redundant with
+            the brand) and collapse the tier badge to its glyph only
+            so the line fits in one row. */}
         <Box gap={1}>
           <Text bold color={theme.primary}>
             KCode
           </Text>
           <Text color={theme.dimmed}>v{version}</Text>
-          <Text color={theme.dimmed}>—</Text>
-          <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
+          {!isNarrow && (
+            <>
+              <Text color={theme.dimmed}>—</Text>
+              <Text color={theme.dimmed}>Kulvex Code by Astrolexis</Text>
+            </>
+          )}
           {tier && tier !== "free" && (
             <>
               <Text color={theme.dimmed}>•</Text>
@@ -885,11 +903,17 @@ export default function KodiCompanion({
                       : theme.warning
                 }
               >
-                {tier === "enterprise"
-                  ? "✦ Enterprise"
-                  : tier === "team"
-                    ? "♛ Team"
-                    : "★ Pro"}
+                {isNarrow
+                  ? tier === "enterprise"
+                    ? "✦"
+                    : tier === "team"
+                      ? "♛"
+                      : "★"
+                  : tier === "enterprise"
+                    ? "✦ Enterprise"
+                    : tier === "team"
+                      ? "♛ Team"
+                      : "★ Pro"}
               </Text>
             </>
           )}
