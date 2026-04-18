@@ -25,6 +25,33 @@ import { kcodeHome, kcodePath } from "./paths";
 const KCODE_HOME = kcodeHome();
 const SETUP_MARKER = kcodePath(".setup-complete");
 
+/**
+ * Map a cloud provider id (from cloud-setup.ts) to the API base URL
+ * used when registering the model in models.json. Kept as a single
+ * source of truth so adding a provider touches one line instead of
+ * two identical conditional chains.
+ *
+ * xAI (Grok) uses an OpenAI-compatible endpoint at api.x.ai/v1, so
+ * the generic OpenAI request builder works out of the box.
+ */
+function providerBaseUrl(providerId: string): string {
+  switch (providerId) {
+    case "anthropic":
+      return "https://api.anthropic.com";
+    case "openai":
+      return "https://api.openai.com";
+    case "groq":
+      return "https://api.groq.com/openai";
+    case "deepseek":
+      return "https://api.deepseek.com";
+    case "xai":
+      return "https://api.x.ai";
+    case "together":
+    default:
+      return "https://api.together.xyz";
+  }
+}
+
 // Forward imports — these are used inside the wizard but defined in model-manager.ts.
 // We import the functions we need from the sibling modules and from model-manager for
 // status checks. To avoid circular deps, we duplicate the small inline helpers here.
@@ -100,19 +127,31 @@ export async function runSetup(options?: {
   process.stdout.write("\x1b[2J\x1b[H");
 
   // ── Banner ──────────────────────────────────────────────────────
-  const banner = [
-    "",
-    `${C.bold}${C.cyan}    ██╗  ██╗ ██████╗ ██████╗ ██████╗ ███████╗`,
-    `    ██║ ██╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝`,
-    `    █████╔╝ ██║     ██║   ██║██║  ██║█████╗  `,
-    `    ██╔═██╗ ██║     ██║   ██║██║  ██║██╔══╝  `,
-    `    ██║  ██╗╚██████╗╚██████╔╝██████╔╝███████╗`,
-    `    ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝${C.reset}`,
-    "",
-    `    ${C.dim}Kulvex Code — AI Coding Assistant by Astrolexis${C.reset}`,
-    `    ${C.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`,
-    "",
-  ];
+  // The ASCII-art KCODE logo is ~44 cols wide plus 4 cols of leading
+  // indent. On Termux / narrow terminals (~35 cols) it wraps into an
+  // unreadable blob. Switch to a compact banner under that threshold.
+  const cols = process.stdout.columns || 80;
+  const isNarrow = cols < 50;
+  const banner = isNarrow
+    ? [
+        "",
+        `  ${C.bold}${C.cyan}KCODE${C.reset}  ${C.dim}— Deterministic Security Audit${C.reset}`,
+        `  ${C.dim}${"━".repeat(Math.max(6, cols - 4))}${C.reset}`,
+        "",
+      ]
+    : [
+        "",
+        `${C.bold}${C.cyan}    ██╗  ██╗ ██████╗ ██████╗ ██████╗ ███████╗`,
+        `    ██║ ██╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝`,
+        `    █████╔╝ ██║     ██║   ██║██║  ██║█████╗  `,
+        `    ██╔═██╗ ██║     ██║   ██║██║  ██║██╔══╝  `,
+        `    ██║  ██╗╚██████╗╚██████╔╝██████╔╝███████╗`,
+        `    ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝${C.reset}`,
+        "",
+        `    ${C.dim}Kulvex Code — Deterministic Security Audit by Astrolexis${C.reset}`,
+        `    ${C.dim}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C.reset}`,
+        "",
+      ];
   console.log(banner.join("\n"));
 
   // ── Spinner helper ──────────────────────────────────────────────
@@ -180,16 +219,25 @@ export async function runSetup(options?: {
   const hw = await detectHardware();
   hwSpinner.succeed("Hardware detected");
 
-  // Display hardware info in a nice box (dynamic width)
+  // Display hardware info. On wide terminals we draw a decorated
+  // box; on narrow (Termux etc.) we skip the box entirely and just
+  // print the lines with a small indent — a 56-col box wraps and
+  // looks worse than plain text on a 35-col screen.
   const hwLines = formatHardware(hw).split("\n");
-  const maxLen = Math.max(...hwLines.map((l) => l.length));
-  const boxWidth = maxLen + 4; // 2 padding each side
   console.log();
-  console.log(`    ${C.dim}┌${"─".repeat(boxWidth)}┐${C.reset}`);
-  for (const line of hwLines) {
-    console.log(`    ${C.dim}│${C.reset}  ${line.padEnd(maxLen + 2)}${C.dim}│${C.reset}`);
+  if (isNarrow) {
+    for (const line of hwLines) {
+      console.log(`  ${line}`);
+    }
+  } else {
+    const maxLen = Math.max(...hwLines.map((l) => l.length));
+    const boxWidth = maxLen + 4; // 2 padding each side
+    console.log(`    ${C.dim}┌${"─".repeat(boxWidth)}┐${C.reset}`);
+    for (const line of hwLines) {
+      console.log(`    ${C.dim}│${C.reset}  ${line.padEnd(maxLen + 2)}${C.dim}│${C.reset}`);
+    }
+    console.log(`    ${C.dim}└${"─".repeat(boxWidth)}┘${C.reset}`);
   }
-  console.log(`    ${C.dim}└${"─".repeat(boxWidth)}┘${C.reset}`);
   console.log();
 
   // ═══════════════════════════════════════════════════════════════
@@ -244,16 +292,7 @@ export async function runSetup(options?: {
           const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
           await addM({
             name: cloudResult.defaultModel,
-            baseUrl:
-              cloudResult.providerId === "anthropic"
-                ? "https://api.anthropic.com"
-                : cloudResult.providerId === "openai"
-                  ? "https://api.openai.com"
-                  : cloudResult.providerId === "groq"
-                    ? "https://api.groq.com/openai"
-                    : cloudResult.providerId === "deepseek"
-                      ? "https://api.deepseek.com"
-                      : "https://api.together.xyz",
+            baseUrl: providerBaseUrl(cloudResult.providerId),
             provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
             description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
           });
@@ -320,16 +359,7 @@ export async function runSetup(options?: {
             const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
             await addM({
               name: cloudResult.defaultModel,
-              baseUrl:
-                cloudResult.providerId === "anthropic"
-                  ? "https://api.anthropic.com"
-                  : cloudResult.providerId === "openai"
-                    ? "https://api.openai.com"
-                    : cloudResult.providerId === "groq"
-                      ? "https://api.groq.com/openai"
-                      : cloudResult.providerId === "deepseek"
-                        ? "https://api.deepseek.com"
-                        : "https://api.together.xyz",
+              baseUrl: providerBaseUrl(cloudResult.providerId),
               provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
               description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
             });

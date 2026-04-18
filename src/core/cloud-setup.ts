@@ -75,6 +75,17 @@ const PROVIDERS: CloudProviderOption[] = [
     suggestedModels: ["deepseek-r1", "deepseek-v3", "deepseek-coder-v2"],
   },
   {
+    id: "xai",
+    label: "xAI (Grok — long context, real-time data, competitive with Claude)",
+    signupUrl: "https://console.x.ai/",
+    settingsField: "xaiApiKey",
+    envVar: "XAI_API_KEY",
+    costNote:
+      "$3/MTok in, $15/MTok out for Grok 4. Grok Code Fast at $0.20/$1.50 for coding.",
+    supportsOAuth: false,
+    suggestedModels: ["grok-4", "grok-3", "grok-code-fast-1"],
+  },
+  {
     id: "together",
     label: "Together AI (many open models, competitive pricing)",
     signupUrl: "https://api.together.xyz/settings/api-keys",

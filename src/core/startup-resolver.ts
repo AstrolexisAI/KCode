@@ -141,6 +141,11 @@ export function checkCloudProviders(): Array<{ name: string; envVar: string; con
       configured: has(["DEEPSEEK_API_KEY"], ["deepseekApiKey"]),
     },
     {
+      name: "xAI (Grok)",
+      envVar: "XAI_API_KEY",
+      configured: has(["XAI_API_KEY"], ["xaiApiKey"]),
+    },
+    {
       name: "Together AI",
       envVar: "TOGETHER_API_KEY",
       configured: has(["TOGETHER_API_KEY"], ["togetherApiKey"]),
