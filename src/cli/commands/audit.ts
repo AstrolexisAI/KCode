@@ -87,15 +87,31 @@ export function registerAuditCommand(program: Command): void {
         llmCallback = async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n";
       } else {
         const settings = await loadSettings(projectRoot);
+        // Pick a default provider based on which API key is actually
+        // present in the environment. Prior to v2.10.130 this hardcoded
+        // Anthropic; the branding-cleanup flip to OpenAI broke users
+        // who had only `ANTHROPIC_API_KEY` set and ran `kcode audit`
+        // with no flags. Now the provider follows the key.
+        const hasOpenAi = !!(opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY);
+        const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+        const defaultModel =
+          hasOpenAi || !hasAnthropic ? "gpt-4o" : "claude-sonnet-4-6";
+        const defaultBase =
+          hasOpenAi || !hasAnthropic
+            ? "https://api.openai.com/v1"
+            : "https://api.anthropic.com/v1";
+        const defaultKey = hasOpenAi
+          ? opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY
+          : process.env.ANTHROPIC_API_KEY;
         llmCallback = makeAuditLlmCallback({
-          model: opts.model ?? settings.model ?? "gpt-4o",
-          apiBase: opts.apiBase ?? settings.apiBase ?? "https://api.openai.com/v1",
-          apiKey: opts.apiKey ?? settings.apiKey,
+          model: opts.model ?? settings.model ?? defaultModel,
+          apiBase: opts.apiBase ?? settings.apiBase ?? defaultBase,
+          apiKey: opts.apiKey ?? settings.apiKey ?? defaultKey,
         });
         if (opts.fallbackModel) {
           fallbackCallback = makeAuditLlmCallback({
             model: opts.fallbackModel,
-            apiBase: opts.fallbackApiBase ?? "https://api.openai.com/v1",
+            apiBase: opts.fallbackApiBase ?? defaultBase,
             apiKey: opts.fallbackApiKey,
           });
           console.log(
