@@ -632,12 +632,13 @@ describe("Migration 004: migrate_legacy_memory", () => {
 // ─── Registry ──────────────────────────────────────────────────
 
 describe("Migration Registry", () => {
-  test("ALL_MIGRATIONS contains 4 migrations in order", () => {
-    expect(ALL_MIGRATIONS).toHaveLength(4);
+  test("ALL_MIGRATIONS contains 5 migrations in order", () => {
+    expect(ALL_MIGRATIONS).toHaveLength(5);
     expect(ALL_MIGRATIONS[0]!.version).toBe("001");
     expect(ALL_MIGRATIONS[1]!.version).toBe("002");
     expect(ALL_MIGRATIONS[2]!.version).toBe("003");
     expect(ALL_MIGRATIONS[3]!.version).toBe("004");
+    expect(ALL_MIGRATIONS[4]!.version).toBe("005");
   });
 
   test("all migrations have unique versions", () => {
@@ -677,7 +678,7 @@ describe("Migration Registry", () => {
     const report = await runner.run();
 
     expect(report.failed).toBeNull();
-    expect(report.applied).toHaveLength(4);
+    expect(report.applied).toHaveLength(5);
 
     // Subsequent run should be a no-op
     const report2 = await runner.run();

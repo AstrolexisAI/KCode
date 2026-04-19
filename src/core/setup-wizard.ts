@@ -290,10 +290,12 @@ export async function runSetup(options?: {
         // Cloud path succeeded — record as default model and finish.
         try {
           const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
+          const { guessContextSize } = await import("./model-context-sizes.js");
           await addM({
             name: cloudResult.defaultModel,
             baseUrl: providerBaseUrl(cloudResult.providerId),
             provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
+            contextSize: guessContextSize(cloudResult.defaultModel),
             description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
           });
           await setDef(cloudResult.defaultModel);
@@ -357,10 +359,12 @@ export async function runSetup(options?: {
         if (!cloudResult.declined) {
           try {
             const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
+            const { guessContextSize } = await import("./model-context-sizes.js");
             await addM({
               name: cloudResult.defaultModel,
               baseUrl: providerBaseUrl(cloudResult.providerId),
               provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
+              contextSize: guessContextSize(cloudResult.defaultModel),
               description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
             });
             await setDef(cloudResult.defaultModel);

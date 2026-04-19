@@ -349,9 +349,34 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       }
     }
 
+    // On the second empty-retry, swap to the configured fallback
+    // model (if any and if we haven't already swapped). Some providers
+    // enter "empty" loops on specific prompt shapes — switching to a
+    // different provider for one turn unblocks the session cleanly
+    // instead of dead-ending at the "(empty response…)" UI message.
+    let switchedModel: string | undefined;
+    if (
+      emptyEndTurnCount === 2 &&
+      ctx.config.fallbackModel &&
+      ctx.config.fallbackModel !== ctx.config.model &&
+      !(ctx.config as { _activeFallback?: unknown })._activeFallback
+    ) {
+      const prev = ctx.config.model;
+      const next = ctx.config.fallbackModel;
+      log.warn(
+        "session",
+        `Empty response persisted on ${prev} — switching to fallback ${next} for one turn`,
+      );
+      ctx.config.model = next;
+      (ctx.config as { _activeFallback?: string })._activeFallback = next;
+      switchedModel = next;
+    }
+
     log.info(
       "session",
-      `Empty response (${lastEmptyType}) on turn ${ctx.turnCount} — retry ${emptyEndTurnCount}/2`,
+      `Empty response (${lastEmptyType}) on turn ${ctx.turnCount} — retry ${emptyEndTurnCount}/2${
+        switchedModel ? ` via fallback ${switchedModel}` : ""
+      }`,
     );
 
     // Context-aware retry prompt — include what was done so the model can summarize
@@ -366,6 +391,13 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
 
     injectMessages.push({ role: "user", content: retryPrompt });
+    // Visible-to-user note when we swap providers so it's not silent.
+    if (switchedModel) {
+      events.push({
+        type: "text_delta",
+        text: `\n\x1b[2m[auto-switch: empty response from primary — trying ${switchedModel}]\x1b[0m\n`,
+      } as StreamEvent);
+    }
     events.push({
       type: "turn_end",
       stopReason: "empty_response_retry",

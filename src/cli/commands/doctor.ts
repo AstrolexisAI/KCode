@@ -12,7 +12,33 @@ export function registerDoctorCommand(program: Command): void {
       "Run extended diagnostics (MCP health, storage, plugins, security, config origin)",
     )
     .option("--legacy", "Use legacy diagnostic format (without health score)")
-    .action(async (opts: { deep?: boolean; legacy?: boolean }) => {
+    .option(
+      "--providers",
+      "Probe every configured cloud provider (auth + content round-trip) to pinpoint which one is behind 'empty response' errors",
+    )
+    .action(async (opts: { deep?: boolean; legacy?: boolean; providers?: boolean }) => {
+      if (opts.providers) {
+        const { probeAllProviders, renderProbeReport } = await import(
+          "../../core/doctor/provider-probe"
+        );
+        console.log("Probing configured cloud providers...\n");
+        const results = await probeAllProviders();
+        console.log(renderProbeReport(results));
+        console.log();
+        const failures = results.filter(
+          (r) => r.configured && (!r.auth.reachable || !r.content.ok),
+        );
+        if (failures.length > 0) {
+          console.log(
+            `\x1b[33m  ${failures.length} provider(s) had issues. See details above.\x1b[0m`,
+          );
+          process.exitCode = 1;
+        } else {
+          const configured = results.filter((r) => r.configured).length;
+          console.log(`\x1b[32m  All ${configured} configured provider(s) responded with content.\x1b[0m`);
+        }
+        return;
+      }
       if (opts.legacy) {
         // Legacy format
         console.log("KCode Doctor\n");
