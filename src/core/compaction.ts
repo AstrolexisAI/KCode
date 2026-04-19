@@ -19,10 +19,44 @@ const SUMMARY_MAX_TOKENS = 1024;
 const SUMMARY_MODEL = "mnemo:mark5"; // Use the local model for summaries
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 
-const SUMMARY_SYSTEM_PROMPT =
-  "You are a conversation summarizer. Produce a concise summary of the conversation context provided. " +
-  "Focus on: key decisions made, files modified, important findings, current task state, and any " +
-  "outstanding questions. Be factual and brief. Output only the summary, no preamble.";
+// Summary prompt rewritten 2026-04-18 because the previous
+// "key decisions, files modified, important findings, task state,
+// outstanding questions" framing was too loose. Real-world summaries
+// kept dropping the user's stated goal and the active plan items,
+// forcing users to re-tell the model what they were working on
+// after every auto-compact. This version locks in the three things
+// the downstream conversation actually needs to resume coherently:
+//
+//   1. the LITERAL original user goal (exact first-message phrasing)
+//   2. the plan state — every item with its current status
+//   3. the CURRENT file being edited and the specific change in flight
+//
+// Everything else (decisions, failed attempts, discarded alternatives)
+// is summarized freeform below the structured header.
+const SUMMARY_SYSTEM_PROMPT = `You are a conversation summarizer. Your output replaces N earlier messages in an ongoing coding session. The model resuming after you MUST be able to continue the task without asking the user to repeat anything.
+
+Output this EXACT structure:
+
+## Goal
+<One sentence paraphrasing the user's original ask. If the first user message stated "X", output "The user asked to X". Do not editorialize.>
+
+## Plan / Active Work
+<If a /plan is active, list every item: "- [status] title". If no plan, list the top 2-3 concrete sub-tasks that were in-flight when compaction hit.>
+
+## Current File / Context
+<The specific file being edited and the specific change in progress — function name, line range, intent of the edit. "none" if pre-edit phase.>
+
+## What's Been Done
+<3-6 bullets. Files created or modified with one-line purpose. Commands run and their outcome. Bugs found or fixed.>
+
+## Open Threads
+<Unresolved questions, failed approaches to avoid repeating, pending user decisions.>
+
+Rules:
+- Every section is required. Use "none" if there's literally nothing.
+- NEVER say "the conversation discussed X". Say what was DECIDED or DONE.
+- Preserve exact file paths, function names, error messages verbatim. Those are pointers the next turn needs to resolve.
+- Output only the summary, no preamble.`;
 
 // ─── Circuit Breaker State ──────────────────────────────────────
 
