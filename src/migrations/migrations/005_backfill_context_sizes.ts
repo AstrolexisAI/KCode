@@ -26,7 +26,7 @@ export const migration: Migration = {
   up: async ({ log }) => {
     const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
     const { kcodePath } = await import("../../core/paths");
-    const { guessContextSize } = await import("../../core/model-context-sizes");
+    const { resolveContextSize } = await import("../../core/model-context-discovery");
 
     const modelsPath = kcodePath("models.json");
     if (!existsSync(modelsPath)) {
@@ -47,6 +47,43 @@ export const migration: Migration = {
       return;
     }
 
+    // Pull API keys out of settings.json so the discovery calls
+    // can hit auth-gated /v1/models endpoints (Groq, Together,
+    // Gemini expose context_window/context_length there).
+    let apiKeys: Record<string, string | undefined> = {};
+    try {
+      const settingsPath = kcodePath("settings.json");
+      if (existsSync(settingsPath)) {
+        const s = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
+        apiKeys = {
+          anthropic:
+            (s.anthropicApiKey as string | undefined) ?? process.env.ANTHROPIC_API_KEY,
+          openai: (s.openaiApiKey as string | undefined) ?? process.env.OPENAI_API_KEY,
+          groq: (s.groqApiKey as string | undefined) ?? process.env.GROQ_API_KEY,
+          deepseek:
+            (s.deepseekApiKey as string | undefined) ?? process.env.DEEPSEEK_API_KEY,
+          xai: (s.xaiApiKey as string | undefined) ?? process.env.XAI_API_KEY,
+          together:
+            (s.togetherApiKey as string | undefined) ?? process.env.TOGETHER_API_KEY,
+          gemini: (s.geminiApiKey as string | undefined) ?? process.env.GEMINI_API_KEY,
+        };
+      }
+    } catch {
+      /* settings malformed — backfill still works, just without discovery */
+    }
+
+    const providerForBase = (base: string): string => {
+      const b = base.toLowerCase();
+      if (b.includes("anthropic.com")) return "anthropic";
+      if (b.includes("openai.com")) return "openai";
+      if (b.includes("x.ai")) return "xai";
+      if (b.includes("groq.com")) return "groq";
+      if (b.includes("deepseek.com")) return "deepseek";
+      if (b.includes("together.xyz")) return "together";
+      if (b.includes("googleapis.com")) return "gemini";
+      return "unknown";
+    };
+
     const config = raw as { models: Array<Record<string, unknown>> };
     let filled = 0;
     let skipped = 0;
@@ -59,15 +96,21 @@ export const migration: Migration = {
         // Already set — respect the user's / previous-migration's value.
         continue;
       }
-      const guessed = guessContextSize(name);
-      if (guessed === undefined) {
+      const base = typeof entry.baseUrl === "string" ? entry.baseUrl : "";
+      const apiKey = base ? apiKeys[providerForBase(base)] : undefined;
+      const resolved = await resolveContextSize({
+        modelName: name,
+        apiBase: base,
+        apiKey,
+      });
+      if (resolved === undefined) {
         skipped++;
         continue;
       }
-      entry.contextSize = guessed;
+      entry.contextSize = resolved;
       filled++;
       if (examples.length < 3) {
-        examples.push(`${name} → ${guessed.toLocaleString()}`);
+        examples.push(`${name} → ${resolved.toLocaleString()}`);
       }
     }
 

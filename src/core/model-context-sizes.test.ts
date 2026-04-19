@@ -5,15 +5,21 @@ import { describe, expect, test } from "bun:test";
 import { guessContextSize } from "./model-context-sizes";
 
 describe("guessContextSize", () => {
-  test("known Anthropic models return 200k", () => {
-    expect(guessContextSize("claude-sonnet-4-6")).toBe(200_000);
-    expect(guessContextSize("claude-opus-4-7")).toBe(200_000);
-    expect(guessContextSize("claude-haiku-4-5")).toBe(200_000);
+  test("Claude 4.x family resolves to 1M (beta tier KCode enables by default)", () => {
+    expect(guessContextSize("claude-sonnet-4-6")).toBe(1_000_000);
+    expect(guessContextSize("claude-opus-4-7")).toBe(1_000_000);
+    expect(guessContextSize("claude-haiku-4-5")).toBe(1_000_000);
   });
 
-  test("unknown claude-* variants fall through to 200k prefix rule", () => {
-    expect(guessContextSize("claude-sonnet-5-0")).toBe(200_000);
+  test("older Claude 3.x remains at 200k (no 1M beta)", () => {
+    expect(guessContextSize("claude-opus-3")).toBe(200_000);
+    expect(guessContextSize("claude-sonnet-3-7")).toBe(200_000);
     expect(guessContextSize("claude-future")).toBe(200_000);
+  });
+
+  test("unknown Claude 4.x variants fall through to 1M prefix rule", () => {
+    expect(guessContextSize("claude-sonnet-4-99")).toBe(1_000_000);
+    expect(guessContextSize("claude-opus-4-future")).toBe(1_000_000);
   });
 
   test("OpenAI flagship + reasoning families", () => {
@@ -23,12 +29,17 @@ describe("guessContextSize", () => {
     expect(guessContextSize("o4-mini")).toBe(200_000);
   });
 
-  test("Grok variants", () => {
-    expect(guessContextSize("grok-4")).toBe(256_000);
+  test("Grok variants — grok-4 gets 2M, grok-3 stays at 131k", () => {
+    expect(guessContextSize("grok-4")).toBe(2_000_000);
     expect(guessContextSize("grok-code-fast-1")).toBe(256_000);
     expect(guessContextSize("grok-3")).toBe(131_072);
     // Unknown grok-* prefix fallback
     expect(guessContextSize("grok-2")).toBe(131_072);
+  });
+
+  test("unknown grok-4 subvariants fall through to 2M prefix rule", () => {
+    expect(guessContextSize("grok-4-mini")).toBe(2_000_000);
+    expect(guessContextSize("grok-4-turbo")).toBe(2_000_000);
   });
 
   test("DeepSeek distinguishes reasoner from chat", () => {

@@ -25,14 +25,21 @@
 // lean conservative so auto-compaction fires slightly earlier
 // rather than later.
 
-/** Known context sizes by exact model id. */
+/** Known context sizes by exact model id.
+ *
+ * Anthropic's current Claude 4.x family supports 1M-token context via
+ * the `context-1m-2025-08-07` beta header — KCode's Anthropic client
+ * sets that header automatically, so we use the 1M figure as the
+ * effective ceiling. If the beta ever gets revoked we fall back
+ * gracefully because the provider caps the request server-side.
+ */
 const EXACT: Record<string, number> = {
-  // ── Anthropic ─────────────────────────────────────────────────
-  "claude-sonnet-4-6": 200_000,
-  "claude-sonnet-4-7": 200_000,
-  "claude-opus-4-6": 200_000,
-  "claude-opus-4-7": 200_000,
-  "claude-haiku-4-5": 200_000,
+  // ── Anthropic (1M with beta header; client sends it) ──────────
+  "claude-sonnet-4-6": 1_000_000,
+  "claude-sonnet-4-7": 1_000_000,
+  "claude-opus-4-6": 1_000_000,
+  "claude-opus-4-7": 1_000_000,
+  "claude-haiku-4-5": 1_000_000,
   "claude-sonnet-3-7": 200_000,
   "claude-opus-3": 200_000,
 
@@ -63,8 +70,8 @@ const EXACT: Record<string, number> = {
   "deepseek-reasoner": 65_536,
   "deepseek-coder-v2": 128_000,
 
-  // ── xAI ───────────────────────────────────────────────────────
-  "grok-4": 256_000,
+  // ── xAI (Grok-4 advertises 2M context) ────────────────────────
+  "grok-4": 2_000_000,
   "grok-3": 131_072,
   "grok-3-mini": 131_072,
   "grok-code-fast-1": 256_000,
@@ -84,14 +91,19 @@ const EXACT: Record<string, number> = {
  * hit wins. Cheaper than enumerating every quantization variant.
  */
 const PREFIXES: Array<{ prefix: string; size: number }> = [
-  // Anthropic family — any "claude-*" defaults to 200k
+  // Anthropic 4.x family gets the 1M beta; older prefixes go to 200k.
+  { prefix: "claude-sonnet-4", size: 1_000_000 },
+  { prefix: "claude-opus-4", size: 1_000_000 },
+  { prefix: "claude-haiku-4", size: 1_000_000 },
   { prefix: "claude-", size: 200_000 },
   // OpenAI reasoning family
   { prefix: "o3", size: 200_000 },
   { prefix: "o4", size: 200_000 },
   // OpenAI flagship
   { prefix: "gpt-4", size: 128_000 },
-  // Grok family
+  // Grok family — any unknown grok-4-* variant gets the 2M ceiling.
+  { prefix: "grok-4", size: 2_000_000 },
+  { prefix: "grok-code", size: 256_000 },
   { prefix: "grok-", size: 131_072 },
   // DeepSeek family
   { prefix: "deepseek-r", size: 65_536 },

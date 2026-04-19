@@ -26,6 +26,41 @@ const KCODE_HOME = kcodeHome();
 const SETUP_MARKER = kcodePath(".setup-complete");
 
 /**
+ * Best-effort lookup of the API key the user just pasted (or that
+ * was already in settings.json) for a given provider. Needed so
+ * the context-size discovery can call the provider's auth-gated
+ * /v1/models endpoint — without the key the Groq / Together /
+ * Gemini lookups 401 and we fall back to the static registry.
+ * Never throws: a missing settings file or malformed JSON returns
+ * undefined and the discovery call still runs (auth-less) before
+ * falling back.
+ */
+function readProviderKeyFromSettings(providerId: string): string | undefined {
+  const fieldByProvider: Record<string, string> = {
+    anthropic: "anthropicApiKey",
+    openai: "openaiApiKey",
+    groq: "groqApiKey",
+    deepseek: "deepseekApiKey",
+    xai: "xaiApiKey",
+    together: "togetherApiKey",
+    gemini: "geminiApiKey",
+  };
+  const field = fieldByProvider[providerId];
+  if (!field) return undefined;
+  try {
+    const path = kcodePath("settings.json");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("node:fs") as typeof import("node:fs");
+    if (!fs.existsSync(path)) return undefined;
+    const raw = JSON.parse(fs.readFileSync(path, "utf-8")) as Record<string, unknown>;
+    const val = raw[field];
+    return typeof val === "string" && val.length > 0 ? val : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Map a cloud provider id (from cloud-setup.ts) to the API base URL
  * used when registering the model in models.json. Kept as a single
  * source of truth so adding a provider touches one line instead of
@@ -290,12 +325,18 @@ export async function runSetup(options?: {
         // Cloud path succeeded — record as default model and finish.
         try {
           const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
-          const { guessContextSize } = await import("./model-context-sizes.js");
+          const { resolveContextSize } = await import("./model-context-discovery.js");
+          const base = providerBaseUrl(cloudResult.providerId);
+          const ctxSize = await resolveContextSize({
+            modelName: cloudResult.defaultModel,
+            apiBase: base,
+            apiKey: readProviderKeyFromSettings(cloudResult.providerId),
+          });
           await addM({
             name: cloudResult.defaultModel,
-            baseUrl: providerBaseUrl(cloudResult.providerId),
+            baseUrl: base,
             provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
-            contextSize: guessContextSize(cloudResult.defaultModel),
+            contextSize: ctxSize,
             description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
           });
           await setDef(cloudResult.defaultModel);
@@ -359,12 +400,18 @@ export async function runSetup(options?: {
         if (!cloudResult.declined) {
           try {
             const { addModel: addM, setDefaultModel: setDef } = await import("./models.js");
-            const { guessContextSize } = await import("./model-context-sizes.js");
+            const { resolveContextSize } = await import("./model-context-discovery.js");
+            const base2 = providerBaseUrl(cloudResult.providerId);
+            const ctxSize2 = await resolveContextSize({
+              modelName: cloudResult.defaultModel,
+              apiBase: base2,
+              apiKey: readProviderKeyFromSettings(cloudResult.providerId),
+            });
             await addM({
               name: cloudResult.defaultModel,
-              baseUrl: providerBaseUrl(cloudResult.providerId),
+              baseUrl: base2,
               provider: cloudResult.providerId === "anthropic" ? "anthropic" : "openai",
-              contextSize: guessContextSize(cloudResult.defaultModel),
+              contextSize: ctxSize2,
               description: `Configured via setup wizard (${new Date().toISOString().slice(0, 10)})`,
             });
             await setDef(cloudResult.defaultModel);
