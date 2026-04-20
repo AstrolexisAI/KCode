@@ -24,6 +24,7 @@ import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./con
 import { handleInlineWarnings } from "./conversation-inline-warnings";
 import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
 import { acquireSseStream } from "./conversation-stream-acquire";
+import { createStreamingToolExecutor } from "./conversation-streaming-executor-setup";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
 import { recordTurnCost } from "./conversation-turn-cost";
 import { checkAborted, enforceTurnLimit } from "./conversation-turn-limits";
@@ -48,7 +49,6 @@ import { processSSEStream, type StreamAccumulator } from "./conversation-streami
 import type { DebugTracer } from "./debug-tracer";
 import { HookManager } from "./hooks";
 import { AutoAgentManager, type AgentStatus } from "./auto-agents";
-import { StreamingToolExecutor } from "./streaming-tool-executor";
 import { getIntentionEngine } from "./intentions";
 import { log } from "./logger";
 import { PermissionManager } from "./permissions";
@@ -759,26 +759,14 @@ export class ConversationManager {
       }
       const sseStream: AsyncGenerator<SSEChunk> = acquired.stream;
 
-      // Streaming tool executor: starts read-only tools while model streams.
-      // Only enabled for OpenAI-format providers where tool blocks arrive during
-      // streaming. For Anthropic, tools finalize post-stream so no early benefit.
-      const isOpenAIFormat = !this.config.apiBase?.includes("anthropic.com") &&
-        !this.config.model.toLowerCase().startsWith("claude");
-      const streamingExecutor = isOpenAIFormat
-        ? new StreamingToolExecutor({
-            tools: this.tools,
-            permissions: this.permissions,
-            config: this.config,
-            abortSignal: this.abortController?.signal,
-            shouldSkip: (tc) => {
-              if (guardState.burnedFingerprints.size === 0) return false;
-              for (const fp of guardState.burnedFingerprints) {
-                if (fp.split("|")[0] === tc.name) return true;
-              }
-              return false;
-            },
-          })
-        : null;
+      // Streaming tool executor (delegated to conversation-streaming-executor-setup.ts)
+      const streamingExecutor = createStreamingToolExecutor({
+        config: this.config,
+        tools: this.tools,
+        permissions: this.permissions,
+        abortSignal: this.abortController?.signal,
+        guardState,
+      });
 
       let streamResult: StreamAccumulator;
       try {
