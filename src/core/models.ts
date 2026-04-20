@@ -160,11 +160,79 @@ export async function getModelBaseUrl(modelName: string, configBase?: string): P
   return fallback;
 }
 
-/** Get the context window size for a model. Returns undefined if not configured. */
+// Known context windows for remote models that callers commonly use
+// without registering them in ~/.kcode/models.json first (e.g. using
+// `--model grok-4.20-0309-reasoning` on a fresh install). Without this
+// fallback, config.ts lands on 32_000 and the Kodi context bar reads
+// 100% after ~30k tokens for a 256k-window model.
+//
+// Sources: provider docs as of 2026-04. Entries are checked after the
+// user's registry — explicit overrides always win.
+const KNOWN_CONTEXT_SIZES: Record<string, number> = {
+  // xAI (https://docs.x.ai/docs/models)
+  "grok-4": 256_000,
+  "grok-4-latest": 256_000,
+  "grok-4-0709": 256_000,
+  "grok-4.20": 256_000,
+  "grok-4.20-reasoning": 256_000,
+  "grok-4.20-0309-reasoning": 256_000,
+  "grok-4.20-non-reasoning": 256_000,
+  "grok-4.20-0309-non-reasoning": 256_000,
+  "grok-4.20-multi-agent": 256_000,
+  "grok-4.20-multi-agent-0309": 256_000,
+  "grok-4-fast-reasoning": 2_000_000,
+  "grok-4-fast-non-reasoning": 2_000_000,
+  "grok-4-1-fast-reasoning": 2_000_000,
+  "grok-4-1-fast-non-reasoning": 2_000_000,
+  "grok-code-fast": 256_000,
+  "grok-code-fast-1": 256_000,
+  "grok-3": 131_072,
+  "grok-3-mini": 131_072,
+  // Anthropic
+  "claude-sonnet-4-6": 200_000,
+  "claude-opus-4-6": 200_000,
+  "claude-haiku-4-5": 200_000,
+  "claude-sonnet-4-5": 200_000,
+  // OpenAI
+  "gpt-4o": 128_000,
+  "gpt-4o-mini": 128_000,
+  "gpt-4.1": 1_000_000,
+  "gpt-4.1-mini": 1_000_000,
+  o3: 200_000,
+  "o4-mini": 200_000,
+  // Google
+  "gemini-2.5-pro": 1_000_000,
+  "gemini-2.5-flash": 1_000_000,
+  // DeepSeek
+  "deepseek-chat": 128_000,
+  "deepseek-reasoner": 128_000,
+};
+
+/**
+ * Get the context window size for a model. Lookup order:
+ *   1. User's ~/.kcode/models.json — explicit override.
+ *   2. KNOWN_CONTEXT_SIZES — built-in table for common cloud models.
+ *   3. Prefix match against the built-in table (e.g. unknown "grok-4-…"
+ *      variant borrows from the closest "grok-4" family entry).
+ * Returns undefined when nothing matches so callers can decide whether
+ * to fall back to a default or hide the context bar.
+ */
 export async function getModelContextSize(modelName: string): Promise<number | undefined> {
   const config = await loadModelsConfig();
   const entry = config.models.find((m) => m.name === modelName);
-  return entry?.contextSize;
+  if (entry?.contextSize) return entry.contextSize;
+
+  if (KNOWN_CONTEXT_SIZES[modelName]) return KNOWN_CONTEXT_SIZES[modelName];
+
+  // Prefix fallback: a name like "grok-4.20-0309-mystery" should match
+  // "grok-4.20-0309-reasoning" via shared prefix → "grok-4.20" etc.
+  // Sort by length so the most specific key wins.
+  const keys = Object.keys(KNOWN_CONTEXT_SIZES).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (modelName.startsWith(key)) return KNOWN_CONTEXT_SIZES[key];
+  }
+
+  return undefined;
 }
 
 /** Get the configured default model name, or "mnemo:code3" if none set. */
