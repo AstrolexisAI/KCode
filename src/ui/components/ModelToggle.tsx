@@ -188,12 +188,14 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           // Single-line format: Ink's <Box> with `gap` wraps long text
           // onto a second line and then inserts the next sibling between
           // the wrapped halves, which destroyed the layout with long
-          // GGUF basenames. Keep everything in one <Text> so the head
-          // line is a single contiguous string that Ink can wrap cleanly.
+          // GGUF basenames. Keep everything in one <Text>.
+          // We intentionally do NOT render the stale `m.name` alias
+          // (e.g. `mnemo:mark6-31b`) when the runtime reports a label —
+          // the alias is an internal config key, not something the user
+          // wants to see next to "Qwen3.6-35B-...". The id is still used
+          // as the key under the hood for selecting the model.
           const headLine =
-            (isSelected ? "▸ " : "  ") +
-            (runtimeLabel ?? m.name) +
-            (runtimeLabel ? ` (${m.name})` : "");
+            (isSelected ? "▸ " : "  ") + (runtimeLabel ?? m.name);
           return (
             <Box key={m.name} flexDirection="column">
               <Box flexDirection="row">
@@ -212,7 +214,10 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          Current: <Text color={theme.primary}>{currentModel}</Text>
+          Current:{" "}
+          <Text color={theme.primary}>
+            {runtimeLabels[currentModel] ?? currentModel}
+          </Text>
         </Text>
       </Box>
     </Box>

@@ -13,6 +13,18 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.148] — 2026-04-20
+
+### Changed
+- Kodi header and `/model` footer now show the runtime-derived GGUF
+  label (via the new `useModelDisplayLabel` hook in
+  `src/ui/hooks/`) instead of the internal alias from
+  `~/.kcode/models.json`. Users no longer see `mnemo:mark6-31b`
+  anywhere in the UI when the server has Qwen3.6-35B-A3B loaded —
+  the alias remains the persistent config key but never renders.
+- `/model` picker drops the `(alias)` in-line text; only the GGUF
+  basename shows in the list when the runtime reports one.
+
 ## [2.10.147] — 2026-04-20
 
 ### Fixed
