@@ -130,20 +130,29 @@ export function evaluateIntentionSuggestions(): {
 
 /**
  * Send a desktop notification (Linux: notify-send, macOS: osascript).
+ *
+ * Uses spawnSync with array args so the shell never parses title/body —
+ * this eliminates shell-injection risk even for hostile Unicode input.
  */
 export function sendDesktopNotification(title: string, body: string): void {
   try {
-    // Strip anything that could break shell quoting
-    const safeTitle = title.replace(/[^a-zA-Z0-9 _.!?-]/g, "");
-    const safeBody = body.replace(/[^a-zA-Z0-9 _.!?:,()-]/g, "");
-    const { execSync } = require("node:child_process");
+    const { spawnSync } = require("node:child_process");
     if (process.platform === "linux") {
-      execSync(`notify-send "${safeTitle}" "${safeBody}" 2>/dev/null`, { timeout: 3000 });
+      spawnSync("notify-send", [title, body], {
+        timeout: 3000,
+        stdio: "ignore",
+        shell: false,
+      });
     } else if (process.platform === "darwin") {
-      execSync(
-        `osascript -e 'display notification "${safeBody}" with title "${safeTitle}"' 2>/dev/null`,
-        { timeout: 3000 },
-      );
+      // osascript still interprets the -e arg as AppleScript, so escape
+      // backslashes and double-quotes inside the AppleScript string literals.
+      const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const script = `display notification "${esc(body)}" with title "${esc(title)}"`;
+      spawnSync("osascript", ["-e", script], {
+        timeout: 3000,
+        stdio: "ignore",
+        shell: false,
+      });
     }
   } catch (err) {
     log.debug("notify", "Failed to send desktop notification: " + err);

@@ -13,6 +13,23 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.144] — 2026-04-20
+
+### Security
+- `src/core/post-turn.ts` — `sendDesktopNotification` now uses
+  `spawnSync` with array-form args (`shell: false`) instead of
+  `execSync` with interpolated backticks. The previous regex
+  sanitizer (`[^a-zA-Z0-9 _.!?-]`) was bypassable with Unicode
+  characters that the allowlist didn't cover. For macOS the
+  inner AppleScript literal is still escaped for `"` and `\`
+  (osascript parses the `-e` arg as AppleScript regardless).
+
+### Docs
+- `bunfig.toml` note for the two skipped RAG tests updated:
+  the `Illegal instruction` crash reproduces on Bun 1.3.13 as
+  well (peak RSS ~44GB), so it is not a Bun-version issue and
+  likely a runaway pattern in `code-chunker.ts`.
+
 ## [2.10.130] — 2026-04-17
 
 ### Changed (branding — KCode is its own product)
