@@ -7,6 +7,7 @@ import { Box, Text } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { KodiAnimState, KodiEvent, KodiMood, KodiTier } from "../kodi-animation.js";
 import { KodiAnimEngine, SPEECH_CHIPS } from "../kodi-animation.js";
+import { useModelDisplayLabel } from "../hooks/useModelDisplayLabel.js";
 import { useTheme } from "../ThemeContext.js";
 
 // Re-export types for external consumers
@@ -391,6 +392,7 @@ export default function KodiCompanion({
   tierFeatures,
 }: KodiProps) {
   const { theme } = useTheme();
+  const displayModel = useModelDisplayLabel(model);
   const engineRef = useRef<KodiAnimEngine | null>(null);
   const [frame, setFrame] = useState<KodiAnimState | null>(null);
   const [llmReaction, setLlmReaction] = useState<string | null>(null);
@@ -920,7 +922,7 @@ export default function KodiCompanion({
         </Box>
         {/* Line 2: Model + mode + cwd */}
         <Box gap={1}>
-          <Text color={theme.success}>{model}</Text>
+          <Text color={theme.success}>{displayModel}</Text>
           {permissionMode && (
             <>
               <Text color={theme.dimmed}>•</Text>
