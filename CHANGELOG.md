@@ -13,6 +13,22 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.146] — 2026-04-20
+
+### Changed
+- `/model` now derives its display label from the GGUF currently
+  loaded by llama.cpp, not from the stale alias in `models.json`.
+  New helper `src/core/model-local-discovery.ts` calls the
+  `/props` endpoint and extracts the basename of `model_path`, so
+  when the weights change (e.g. Kulvex swaps `mark6-31b` Gemma for
+  `Qwen3.6-35B-A3B-Heretic-Q4_K_M`) the model picker reflects the
+  new model on the next open — no hand-edit of `~/.kcode/models.json`
+  needed. The original id stays visible in dim text as an alias hint,
+  so users can still correlate with scripts that reference
+  `mnemo:mark6-31b` directly. 1s cache per `baseUrl`, 1.5s timeout,
+  silent fallback to the raw id when the endpoint is cloud or
+  doesn't respond.
+
 ## [2.10.145] — 2026-04-20
 
 ### Changed (internal refactor — zero user-facing behavior change)
