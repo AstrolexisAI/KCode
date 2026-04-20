@@ -226,15 +226,32 @@ export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo
     }
 
     const suffix = getPlatformSuffix();
-    const asset = data.assets?.find((a) => a.name.includes(suffix));
+
+    // Prefer the versioned tarball (kcode-<version>-<platform>.tar.gz) that
+    // the publish workflow actually emits. Fall back to a bare
+    // kcode-<platform> binary for older releases that predate the tarball
+    // rollout. Skip .sha256 sidecars on both passes.
+    const assets = data.assets ?? [];
+    const tarball = assets.find(
+      (a) => a.name.includes(suffix) && a.name.endsWith(".tar.gz"),
+    );
+    const bareBinary = assets.find(
+      (a) =>
+        a.name.includes(suffix) &&
+        !a.name.endsWith(".sha256") &&
+        !a.name.endsWith(".tar.gz"),
+    );
+    const asset = tarball ?? bareBinary;
     if (!asset) {
       log.warn("auto-update", `No binary found for ${suffix} in release ${tag}`);
     }
 
-    // Look for checksums file
-    const checksumAsset = data.assets?.find(
-      (a) => a.name === "checksums.txt" || a.name === "SHA256SUMS",
-    );
+    // Per-file .sha256 sidecar beats the (never-produced) aggregate
+    // checksums.txt. We look for <asset-name>.sha256 first.
+    const sidecarName = asset ? `${asset.name}.sha256` : "";
+    const checksumAsset =
+      assets.find((a) => a.name === sidecarName) ??
+      assets.find((a) => a.name === "checksums.txt" || a.name === "SHA256SUMS");
 
     return {
       currentVersion,
@@ -254,28 +271,24 @@ export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo
 
 // ─── SHA256 Verification ────────────────────────────────────────
 
-async function fetchExpectedChecksum(
-  checksumUrl: string,
-  assetName: string,
-): Promise<string | null> {
+/**
+ * Fetch a per-file `.sha256` sidecar and return its hash.
+ * Accepts both the sha256sum format ("<hash>  <filename>") and a bare hash.
+ */
+async function fetchSidecarChecksum(checksumUrl: string): Promise<string | null> {
   try {
     const resp = await fetch(checksumUrl, {
       headers: { "User-Agent": "KCode-AutoUpdate" },
       signal: AbortSignal.timeout(10_000),
     });
     if (!resp.ok) return null;
-
-    const text = await resp.text();
-    for (const line of text.split("\n")) {
-      if (line.includes(assetName)) {
-        const hash = line.trim().split(/\s+/)[0];
-        if (hash && hash.length === 64) return hash;
-      }
-    }
+    const text = (await resp.text()).trim();
+    // First whitespace-separated token is the hash in both formats.
+    const hash = text.split(/\s+/)[0];
+    return hash && hash.length === 64 ? hash : null;
   } catch {
-    /* ignore */
+    return null;
   }
-  return null;
 }
 
 async function computeSha256(filePath: string): Promise<string> {
@@ -349,12 +362,12 @@ export async function downloadAndInstall(
       return result;
     }
 
-    // Verify SHA256 checksum if available
+    // Verify SHA256 checksum against the DOWNLOADED file (tarball or bare
+    // binary, whichever was fetched). checksumUrl points to a per-file
+    // .sha256 sidecar whose body is "<hash>  <filename>\n".
+    const isTarball = (info.downloadUrl ?? "").endsWith(".tar.gz");
     if (info.checksumUrl) {
-      const suffix = getPlatformSuffix();
-      const assetName = `kcode-${suffix}`;
-      const expected = await fetchExpectedChecksum(info.checksumUrl, assetName);
-
+      const expected = await fetchSidecarChecksum(info.checksumUrl);
       if (expected) {
         const actual = await computeSha256(tmpPath);
         if (actual !== expected) {
@@ -370,22 +383,50 @@ export async function downloadAndInstall(
       }
     }
 
+    // If the asset is a tarball, extract it and use the extracted `kcode`
+    // as the binary source. Older releases shipped a bare binary, in which
+    // case tmpPath itself is the binary — nothing to extract.
+    let binarySource = tmpPath;
+    let extractDir: string | null = null;
+    if (isTarball) {
+      extractDir = join(tmpDir, `kcode-update-${process.pid}-extract`);
+      require("node:fs").mkdirSync(extractDir, { recursive: true });
+      try {
+        execSync(`tar -xzf "${tmpPath}" -C "${extractDir}"`, {
+          stdio: "pipe",
+          timeout: 60_000,
+        });
+      } catch (err) {
+        try { unlinkSync(tmpPath); } catch { /* ignore */ }
+        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        result.error = `Failed to extract tarball: ${err instanceof Error ? err.message : err}`;
+        return result;
+      }
+      const extractedBinary = join(extractDir, "kcode");
+      if (!existsSync(extractedBinary)) {
+        try { unlinkSync(tmpPath); } catch { /* ignore */ }
+        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        result.error = "Tarball did not contain a 'kcode' binary.";
+        return result;
+      }
+      binarySource = extractedBinary;
+    }
+
     // Make executable
-    chmodSync(tmpPath, 0o755);
+    chmodSync(binarySource, 0o755);
 
     // Find and replace binary
     const binaryPaths = findBinaryPaths();
     if (binaryPaths.length === 0) {
-      try {
-        unlinkSync(tmpPath);
-      } catch {
-        /* ignore */
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      if (extractDir) {
+        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
       }
       result.error = "Could not find KCode binary path to replace.";
       return result;
     }
 
-    // Atomic replace: rename tmp -> dest with backup
+    // Atomic replace: rename binary source -> dest with backup
     const destPath = binaryPaths[0]!;
     const backupPath = destPath + ".old";
 
@@ -396,17 +437,24 @@ export async function downloadAndInstall(
       // rename across filesystems (/tmp → ~/.local/bin is common on Linux
       // when /tmp is tmpfs) throws EXDEV. Fall back to copy+unlink.
       try {
-        renameSync(tmpPath, destPath);
+        renameSync(binarySource, destPath);
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "EXDEV") {
-          copyFileSync(tmpPath, destPath);
+          copyFileSync(binarySource, destPath);
           try {
-            unlinkSync(tmpPath);
+            unlinkSync(binarySource);
           } catch {
             /* ignore */
           }
         } else {
           throw err;
+        }
+      }
+      // Clean up the downloaded tarball and extract dir if we extracted.
+      if (isTarball) {
+        try { unlinkSync(tmpPath); } catch { /* ignore */ }
+        if (extractDir) {
+          try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
         }
       }
       // Clean up backup
@@ -424,10 +472,9 @@ export async function downloadAndInstall(
       } catch {
         /* best effort */
       }
-      try {
-        unlinkSync(tmpPath);
-      } catch {
-        /* ignore */
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      if (extractDir) {
+        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
       }
       result.error = err instanceof Error ? err.message : "Binary replacement failed";
       return result;
