@@ -7,6 +7,7 @@ import { Box, Text, useInput } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { isVimModeEnabled, type VimMode } from "../../core/keybindings.js";
 import { kcodePath } from "../../core/paths.js";
+import { useModelDisplayLabel } from "../hooks/useModelDisplayLabel.js";
 import { setPasteHandler } from "../paste-handler.js";
 import { isPasting } from "../paste-stream.js";
 import { useTheme } from "../ThemeContext.js";
@@ -199,6 +200,7 @@ export default function InputPrompt({
   commandDescriptions = {},
 }: InputPromptProps) {
   const { theme } = useTheme();
+  const displayModel = useModelDisplayLabel(model ?? "");
   const [value, setValue] = useState("");
   const [cursor, setCursor] = useState(0);
 
@@ -923,7 +925,7 @@ export default function InputPrompt({
     <Box flexDirection="column">
       {/* ─── Prompt line ──────────────────────────────────── */}
       <Box gap={1}>
-        {model && <Text color={promptColor}>{model}</Text>}
+        {model && <Text color={promptColor}>{displayModel || model}</Text>}
         {shortCwd && <Text color={theme.dimmed}>{shortCwd}</Text>}
         <Text bold color={promptColor}>
           {vimIndicator}
