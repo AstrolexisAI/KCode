@@ -36,11 +36,20 @@ export function accumulateUsage(
   usage: TokenUsage,
   state: ConversationState,
 ): void {
+  // cumulative is session-wide (used by cost tracking + /cost summary).
   cumulative.inputTokens += usage.inputTokens;
   cumulative.outputTokens += usage.outputTokens;
   cumulative.cacheCreationInputTokens += usage.cacheCreationInputTokens;
   cumulative.cacheReadInputTokens += usage.cacheReadInputTokens;
-  state.tokenCount = cumulative.inputTokens + cumulative.outputTokens;
+
+  // tokenCount drives the context-pressure bar (Kodi modal, status line).
+  // It must reflect the CURRENT context size, not session totals — each
+  // turn's inputTokens already includes the full prior conversation, so
+  // adding them across turns double-counts and inflates the bar 2–3×.
+  // Use the latest turn's snapshot: inputTokens is the prompt the model
+  // just saw; outputTokens is what it produced and what will join the
+  // next prompt. Their sum matches what the next request will carry in.
+  state.tokenCount = usage.inputTokens + usage.outputTokens;
 }
 
 export function getModifiedFiles(messages: Message[]): string[] {
