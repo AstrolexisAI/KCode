@@ -615,6 +615,44 @@ export default function KodiCompanion({
       contextWindowSize && contextWindowSize > 0 ? Math.min(1, tokenCount / contextWindowSize) : 0;
   }, [tokenCount, contextWindowSize]);
 
+  // Balance for the active model's billing provider. Refreshes on every
+  // turn (tokenCount bump) and when the model is switched. Null when the
+  // model has no billing provider (local inference) or the user hasn't
+  // registered a starting credit.
+  const [balance, setBalance] = useState<{
+    label: string;
+    remaining: number | null;
+    starting: number | null;
+    spent: number;
+    fractionRemaining: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getStatusForModel } = await import("../../core/balance/index.js");
+        const status = await getStatusForModel(model);
+        if (cancelled) return;
+        if (!status) {
+          setBalance(null);
+          return;
+        }
+        setBalance({
+          label: status.label,
+          remaining: status.remaining,
+          starting: status.starting,
+          spent: status.spent,
+          fractionRemaining: status.fractionRemaining,
+        });
+      } catch {
+        if (!cancelled) setBalance(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [model, tokenCount]);
+
   // Tier sync — entrance flourish fires automatically inside the
   // engine the first time we transition away from "free". Subsequent
   // re-mounts or polling refreshes are silent.
@@ -957,6 +995,43 @@ export default function KodiCompanion({
               </Text>
             </>
           )}
+          {balance &&
+            (() => {
+              // Show the remaining balance when the user has registered
+              // a starting credit; otherwise fall back to "spent $X" so
+              // they still see the per-provider meter accumulating.
+              if (balance.starting != null && balance.remaining != null) {
+                const pct =
+                  balance.fractionRemaining != null
+                    ? Math.round(balance.fractionRemaining * 100)
+                    : 0;
+                const color =
+                  pct <= 5
+                    ? theme.error
+                    : pct <= 20
+                      ? theme.warning
+                      : theme.success;
+                return (
+                  <>
+                    <Text color={theme.dimmed}>•</Text>
+                    <Text color={color}>
+                      {balance.label}: ${balance.remaining.toFixed(2)} ({pct}%)
+                    </Text>
+                  </>
+                );
+              }
+              if (balance.spent > 0) {
+                return (
+                  <>
+                    <Text color={theme.dimmed}>•</Text>
+                    <Text color={theme.dimmed}>
+                      {balance.label}: spent ${balance.spent.toFixed(2)}
+                    </Text>
+                  </>
+                );
+              }
+              return null;
+            })()}
           {runningAgents > 0 && (
             <>
               <Text color={theme.dimmed}>•</Text>
