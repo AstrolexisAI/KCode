@@ -13,6 +13,15 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.150] — 2026-04-20
+
+### Fixed
+- `InputPrompt` (the `mnemo:mark6-31b ~/KCode ❯` line) now also
+  resolves the model label through `useModelDisplayLabel`, so the
+  canonical mark shows up in the shell prompt too. Previously the
+  hook covered Kodi and `/model` but missed this fourth render
+  site, leaking the raw alias into the prompt.
+
 ## [2.10.149] — 2026-04-20
 
 ### Changed
