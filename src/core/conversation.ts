@@ -22,6 +22,7 @@ import { handleConsecutiveDenials } from "./conversation-denials";
 import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-effort";
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
 import { handleInlineWarnings } from "./conversation-inline-warnings";
+import { autoLaunchDevServerPhase22 } from "./conversation-auto-launch";
 import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
 import { checkRealityPhase28 } from "./conversation-reality-check";
 import { acquireSseStream } from "./conversation-stream-acquire";
@@ -1006,42 +1007,12 @@ export class ConversationManager {
           // Phase 28: user-visible reality check (delegated to conversation-reality-check.ts)
           yield* checkRealityPhase28({ textChunks, messages: this.state.messages });
 
-          // Phase 22: the model has finished its final response and the
-          // agent loop is about to exit. The inner hasRuntimeIntent +
-          // hasRunnableWriteInTurn guards inside maybeAutoLaunchDevServer
-          // are sufficient; we drop the stopReason === "end_turn" gate
-          // because (a) the break path already implies the turn is
-          // ending, and (b) the gate was blocking firing on max_tokens
-          // or other legitimate end states. Safe to call on every break.
-          try {
-            const { maybeAutoLaunchDevServer } = await import(
-              "./auto-launch-dev-server.js"
-            );
-            const { getUserTexts } = await import("./session-tracker.js");
-            const launchResult = await maybeAutoLaunchDevServer(
-              this.config.workingDirectory,
-              this.state.messages,
-              getUserTexts(),
-            );
-            if (launchResult) {
-              this.state.messages.push({
-                role: "assistant",
-                content: launchResult.notice,
-              });
-              yield { type: "text_delta", text: launchResult.notice };
-              log.info(
-                "auto-launch",
-                `phase 22 fired: ${launchResult.url ?? "no url"}`,
-              );
-            } else {
-              log.debug(
-                "auto-launch",
-                `phase 22 skipped at break (stopReason=${stopReason})`,
-              );
-            }
-          } catch (err) {
-            log.debug("auto-launch", `hook failed (non-fatal): ${err}`);
-          }
+          // Phase 22: auto-launch dev server on break (delegated to conversation-auto-launch.ts)
+          yield* autoLaunchDevServerPhase22({
+            workingDirectory: this.config.workingDirectory,
+            state: this.state,
+            stopReason,
+          });
           this.abortController = null;
           break;
         }
