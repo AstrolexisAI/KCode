@@ -347,24 +347,23 @@ export default function App({ config, conversationManager, tools, initialSession
 
   // Recompute running USD cost whenever the token count changes.
   // Looks up the active model's pricing (KNOWN_PRICING + ~/.kcode/pricing.json)
-  // and applies it to the cumulative input/output tokens from the
-  // conversation manager. Local models return null pricing → cost = 0.
+  // Session cost = sum of per-turn costs. Previously this multiplied the
+  // *cumulative* input/output tokens by pricing, but cumulative input
+  // double/triple-counts across turns (each turn's inputTokens already
+  // contains the full prior conversation). The per-turn ledger kept by
+  // recordTurnCost already has the correct price for each turn, so
+  // summing `costUsd` across turnCosts gives the real session spend.
+  // Local models store costUsd=0 — they contribute nothing.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { getModelPricing, calculateCost } = await import("../core/pricing.js");
-        const pricing = await getModelPricing(config.model);
+        const turnCosts = conversationManager.getTurnCosts();
         if (cancelled) return;
-        if (!pricing) {
-          setSessionCostUsd(0);
-          return;
-        }
-        const usage = conversationManager.getUsage();
-        const cost = calculateCost(pricing, usage.inputTokens, usage.outputTokens);
-        setSessionCostUsd(cost);
+        const total = turnCosts.reduce((sum, t) => sum + (t.costUsd ?? 0), 0);
+        setSessionCostUsd(total);
       } catch {
-        // Silent — if pricing lookup fails, show 0 rather than crash.
+        // Silent — if anything fails, show 0 rather than crash.
       }
     })();
     return () => {
