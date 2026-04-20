@@ -169,38 +169,40 @@ export async function getModelBaseUrl(modelName: string, configBase?: string): P
 // Sources: provider docs as of 2026-04. Entries are checked after the
 // user's registry — explicit overrides always win.
 const KNOWN_CONTEXT_SIZES: Record<string, number> = {
-  // xAI (https://docs.x.ai/docs/models)
-  "grok-4": 256_000,
-  "grok-4-latest": 256_000,
-  "grok-4-0709": 256_000,
-  "grok-4.20": 256_000,
-  "grok-4.20-reasoning": 256_000,
-  "grok-4.20-0309-reasoning": 256_000,
-  "grok-4.20-non-reasoning": 256_000,
-  "grok-4.20-0309-non-reasoning": 256_000,
-  "grok-4.20-multi-agent": 256_000,
-  "grok-4.20-multi-agent-0309": 256_000,
+  // xAI Grok 4 family — 2M window (applies to both the fast variants
+  // and the flagship). Grok 3 stays on 128k.
+  "grok-4": 2_000_000,
+  "grok-4-latest": 2_000_000,
+  "grok-4-0709": 2_000_000,
+  "grok-4.20": 2_000_000,
+  "grok-4.20-reasoning": 2_000_000,
+  "grok-4.20-0309-reasoning": 2_000_000,
+  "grok-4.20-non-reasoning": 2_000_000,
+  "grok-4.20-0309-non-reasoning": 2_000_000,
+  "grok-4.20-multi-agent": 2_000_000,
+  "grok-4.20-multi-agent-0309": 2_000_000,
   "grok-4-fast-reasoning": 2_000_000,
   "grok-4-fast-non-reasoning": 2_000_000,
   "grok-4-1-fast-reasoning": 2_000_000,
   "grok-4-1-fast-non-reasoning": 2_000_000,
-  "grok-code-fast": 256_000,
-  "grok-code-fast-1": 256_000,
+  "grok-code-fast": 2_000_000,
+  "grok-code-fast-1": 2_000_000,
   "grok-3": 131_072,
   "grok-3-mini": 131_072,
-  // Anthropic
-  "claude-sonnet-4-6": 200_000,
-  "claude-opus-4-6": 200_000,
-  "claude-haiku-4-5": 200_000,
-  "claude-sonnet-4-5": 200_000,
+  // Anthropic 4.x — 1M with the `context-1m-2025-08-07` beta header.
+  // KCode enables it for these models, so the display matches capacity.
+  "claude-sonnet-4-6": 1_000_000,
+  "claude-opus-4-6": 1_000_000,
+  "claude-haiku-4-5": 1_000_000,
+  "claude-sonnet-4-5": 1_000_000,
   // OpenAI
-  "gpt-4o": 128_000,
-  "gpt-4o-mini": 128_000,
   "gpt-4.1": 1_000_000,
   "gpt-4.1-mini": 1_000_000,
+  "gpt-4o": 128_000,
+  "gpt-4o-mini": 128_000,
   o3: 200_000,
   "o4-mini": 200_000,
-  // Google
+  // Google Gemini 2.5 — 1M input window on both pro and flash.
   "gemini-2.5-pro": 1_000_000,
   "gemini-2.5-flash": 1_000_000,
   // DeepSeek

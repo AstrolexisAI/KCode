@@ -165,8 +165,8 @@ describe("FREE_LIMITS", () => {
   test("transcriptSearchHours is 168 (7 days)", () => {
     expect(FREE_LIMITS.transcriptSearchHours).toBe(168);
   });
-  test("contextWindowCap is 64000", () => {
-    expect(FREE_LIMITS.contextWindowCap).toBe(64_000);
+  test("contextWindowCap is unset (uncapped for self-hosted)", () => {
+    expect(FREE_LIMITS.contextWindowCap).toBeNull();
   });
   test("sessionsPerMonth is 200", () => {
     expect(FREE_LIMITS.sessionsPerMonth).toBe(200);
