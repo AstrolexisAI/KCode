@@ -17,6 +17,8 @@ import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extracto
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
 import { emergencyPrune, estimateContextTokens, microcompactToolResults, pruneMessagesIfNeeded } from "./context-manager";
+import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
+import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
 import {
   checkBudgetLimit,
   detectCheckpointMode,
@@ -574,64 +576,16 @@ export class ConversationManager {
     }
   }
 
+  /** Delegated to conversation-transcript.ts — see module doc. */
   private recordTranscriptEvent(event: StreamEvent): void {
-    switch (event.type) {
-      case "text_delta":
-        // Text deltas are accumulated — we record the final text in turn_end via messages
-        break;
-      case "thinking_delta":
-        break;
-      case "tool_executing":
-        this.transcript.append(
-          "assistant",
-          "tool_use",
-          JSON.stringify({
-            id: event.toolUseId,
-            name: event.name,
-            input: event.input,
-          }),
-        );
-        break;
-      case "tool_result":
-        this.transcript.append(
-          "tool",
-          "tool_result",
-          JSON.stringify({
-            tool_use_id: event.toolUseId,
-            name: event.name,
-            content: (event.result ?? "").slice(0, 2000),
-            is_error: event.isError,
-          }),
-        );
-        // Track error fingerprints for retry discipline
-        if (event.isError && event.result && this._activeGuardState) {
-          const burned = this._activeGuardState.recordToolError(event.name, event.result);
-          if (burned) {
-            log.warn(
-              "session",
-              `Tool error fingerprint burned: ${event.name} — same error seen twice, will block retries`,
-            );
-          }
-        }
-        break;
-      case "error":
-        this.transcript.append("system", "error", event.error.message);
-        break;
-      case "turn_end": {
-        // Record the final assistant text from the last message
-        const lastMsg = this.state.messages[this.state.messages.length - 1];
-        if (lastMsg?.role === "assistant" && Array.isArray(lastMsg.content)) {
-          for (const block of lastMsg.content) {
-            if (block.type === "text") {
-              this.transcript.append("assistant", "assistant_text", block.text);
-            } else if (block.type === "thinking") {
-              this.transcript.append("assistant", "thinking", block.thinking);
-            }
-          }
-        }
-        break;
-      }
-    }
+    _recordTranscriptEvent(
+      {
+        transcript: this.transcript,
+        messages: this.state.messages,
+        activeGuardState: this._activeGuardState,
+      },
+      event,
+    );
   }
 
   /**
@@ -1786,59 +1740,12 @@ export class ConversationManager {
     return _hashString(str);
   }
 
-  /**
-   * Phase 13 anti-fabrication: inspect tool-result blocks for errors
-   * on file-path-bearing tools (Read/Edit/Write/MultiEdit), run the
-   * fabrication heuristic against the reference corpus (user messages
-   * + prior tool results in this.state.messages), and if the path
-   * looks fabricated, append a STOP warning to the result content.
-   *
-   * Mutates the blocks in place and returns the same array for
-   * fluent chaining. Zero-cost on successful tool calls (the
-   * is_error=false short-circuit skips the heuristic entirely).
-   */
+  /** Delegated to conversation-fabrication.ts — see module doc. */
   private augmentFabricationWarnings(
     toolResultBlocks: ContentBlock[],
     toolCalls: ToolUseBlock[],
   ): ContentBlock[] {
-    try {
-      const { collectReferenceTexts, isLikelyFabricated, wrapFabricatedError } =
-        require("./anti-fabrication.js") as typeof import("./anti-fabrication.js");
-      let referenceTexts: string[] | null = null;
-      for (const block of toolResultBlocks) {
-        const b = block as ToolResultBlock;
-        if (b.type !== "tool_result" || !b.is_error) continue;
-        const call = toolCalls.find((tc) => tc.id === b.tool_use_id);
-        if (!call) continue;
-        const name = call.name;
-        if (name !== "Read" && name !== "Edit" && name !== "Write" && name !== "MultiEdit") {
-          continue;
-        }
-        const input = call.input as Record<string, unknown>;
-        const attemptedPath = String(input.file_path ?? "");
-        if (!attemptedPath) continue;
-        const errorText = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
-        if (referenceTexts === null) {
-          referenceTexts = collectReferenceTexts(this.state.messages);
-        }
-        const verdict = isLikelyFabricated(attemptedPath, errorText, referenceTexts);
-        if (verdict.fabricated) {
-          const originalContent = typeof b.content === "string" ? b.content : errorText;
-          b.content = wrapFabricatedError(
-            originalContent,
-            attemptedPath,
-            verdict.unreferencedTokens,
-          );
-          log.info(
-            "anti-fabrication",
-            `fabricated path detected: ${attemptedPath} — unreferenced tokens [${verdict.unreferencedTokens.join(",")}]`,
-          );
-        }
-      }
-    } catch (err) {
-      log.debug("anti-fabrication", `augment failed (non-fatal): ${err}`);
-    }
-    return toolResultBlocks;
+    return _augmentFabricationWarnings(this.state.messages, toolResultBlocks, toolCalls);
   }
 
   /** Get session start time for elapsed time tracking. */
