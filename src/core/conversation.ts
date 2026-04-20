@@ -23,6 +23,7 @@ import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-ef
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
 import { handleInlineWarnings } from "./conversation-inline-warnings";
 import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
+import { acquireSseStream } from "./conversation-stream-acquire";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
 import { recordTurnCost } from "./conversation-turn-cost";
 import { checkAborted, enforceTurnLimit } from "./conversation-turn-limits";
@@ -745,32 +746,18 @@ export class ConversationManager {
         log.debug("ensemble", `Ensemble skipped: ${err}`);
       }
 
-      // Stream the API response with retry logic (delegated to conversation-streaming.ts)
-      let sseStream: AsyncGenerator<SSEChunk>;
-      try {
-        const _tStream = Date.now();
-        await this.rateLimiter.acquire();
-        log.debug("perf", `rateLimiter.acquire: ${Date.now() - _tStream}ms`);
-        const _tFetch = Date.now();
-        sseStream = await this.createStreamWithRetry();
-        log.debug("perf", `createStreamWithRetry (fetch+connect): ${Date.now() - _tFetch}ms`);
-      } catch (error) {
-        this.rateLimiter.release();
-        // If aborted by user (Esc), exit silently — don't show error
-        const errMsg = error instanceof Error ? error.message : String(error);
-        if (errMsg.includes("aborted") || this.abortController?.signal.aborted) {
-          yield { type: "turn_end", stopReason: "aborted" };
-          this.abortController = null;
-          return;
-        }
-        yield {
-          type: "error",
-          error: error instanceof Error ? error : new Error(String(error)),
-          retryable: false,
-        };
-        yield { type: "turn_end", stopReason: "error" };
+      // Stream acquisition (delegated to conversation-stream-acquire.ts)
+      const acquired = await acquireSseStream({
+        rateLimiter: this.rateLimiter,
+        createStream: () => this.createStreamWithRetry(),
+        abortSignal: this.abortController?.signal,
+      });
+      if (acquired.kind === "terminate") {
+        for (const evt of acquired.events) yield evt;
+        this.abortController = null;
         return;
       }
+      const sseStream: AsyncGenerator<SSEChunk> = acquired.stream;
 
       // Streaming tool executor: starts read-only tools while model streams.
       // Only enabled for OpenAI-format providers where tool blocks arrive during
