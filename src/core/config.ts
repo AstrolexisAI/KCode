@@ -860,10 +860,25 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   // Respect locked settings: don't let env vars override policy-locked values
   const lockedApiBase = policy.locked?.apiBase;
   const lockedApiKey = policy.locked?.apiKey;
-  const apiBase = await getModelBaseUrl(
+  // Resolve base URL, with automatic provider routing for known cloud
+  // models when no explicit URL is configured.
+  let apiBase = await getModelBaseUrl(
     model,
     lockedApiBase ?? settings.apiBase ?? process.env.KCODE_API_BASE,
   );
+  // Fix 1: auto-route xAI grok models to api.x.ai when credentials are
+  // present but no explicit URL is configured (avoids silent fallback to
+  // localhost:10091 that produces confusing "connection refused" errors).
+  const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(apiBase);
+  if (isLocalhost && model.toLowerCase().startsWith("grok-")) {
+    const hasXaiKey =
+      process.env.XAI_API_KEY ||
+      (settings as Record<string, unknown>).xaiApiKey;
+    if (hasXaiKey) {
+      apiBase = "https://api.x.ai";
+      log.info("config", `Auto-routing ${model} → api.x.ai (XAI_API_KEY present)`);
+    }
+  }
   const contextSize = await getModelContextSize(model);
 
   const { getContextWindowCap } = await import("./pro.js");

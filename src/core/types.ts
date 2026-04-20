@@ -225,6 +225,11 @@ export type StreamEvent =
   | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }
   | { type: "budget_warning"; costUsd: number; limitUsd: number; pct: number }
   | {
+      type: "api_key_error";
+      /** Short description of which tool/provider hit the auth failure. */
+      detail: string;
+    }
+  | {
       type: "balance_alert";
       provider: string;
       providerLabel: string;

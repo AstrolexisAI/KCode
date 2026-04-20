@@ -1180,6 +1180,39 @@ export class ConversationManager {
       toolResultBlocks.push(...seqToolResults);
 
       this.augmentFabricationWarnings(toolResultBlocks, toolCalls);
+
+      // Fix 3: scan tool results for cloud API key errors. When a tool
+      // (typically Bash) forwards a 400/401 "Incorrect API key" response
+      // from a provider, the model has no way to fix it — it will loop
+      // indefinitely suggesting the user reconfigure. Hard-stop instead:
+      // emit a visible banner and replace the error content so the model
+      // cannot retry the same approach.
+      {
+        const { detectBadKeyError } = await import("./request-builder.js");
+        for (const block of toolResultBlocks) {
+          if (block.type !== "tool_result" || !block.is_error) continue;
+          const text = typeof block.content === "string"
+            ? block.content
+            : Array.isArray(block.content)
+              ? (block.content as Array<{ text?: string }>).map((b) => b.text ?? "").join(" ")
+              : "";
+          const keyErr = detectBadKeyError(400, text) ?? detectBadKeyError(401, text);
+          if (keyErr) {
+            yield {
+              type: "api_key_error",
+              detail: keyErr.slice(0, 200),
+            };
+            // Replace the error content so the model receives a direct
+            // instruction instead of raw provider error text.
+            (block as { content: string }).content =
+              "STOP: The external tool returned an API authentication error — the API key " +
+              "used by that tool is invalid or revoked. Do NOT retry the same command. " +
+              "Tell the user to update their API key for the tool and stop working on this task.";
+            break;
+          }
+        }
+      }
+
       this.state.messages.push({ role: "user", content: toolResultBlocks });
       for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
 
