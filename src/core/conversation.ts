@@ -17,6 +17,7 @@ import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extracto
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
 import { emergencyPrune, estimateContextTokens, microcompactToolResults, pruneMessagesIfNeeded } from "./context-manager";
+import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-effort";
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
 import {
@@ -370,38 +371,9 @@ export class ConversationManager {
     return this.debugTracer;
   }
 
-  /** Get the effective max agent turns based on effort level. */
+  /** Delegated to conversation-effort.ts — see module doc. */
   private getEffectiveMaxTurns(): number {
-    // Use configured effort level, or auto-detect from recent messages
-    let level = this.config.effortLevel;
-    if (!level) {
-      try {
-        const { classifyEffort } =
-          require("./effort-classifier") as typeof import("./effort-classifier");
-        const recentUserMsg =
-          this.state.messages
-            .filter((m) => m.role === "user")
-            .map((m) => (typeof m.content === "string" ? m.content : ""))
-            .pop() ?? "";
-        if (recentUserMsg) {
-          const result = classifyEffort(recentUserMsg);
-          if (result.confidence >= 0.5) level = result.level;
-        }
-      } catch {
-        /* effort-classifier not available, use default */
-      }
-    }
-
-    switch (level) {
-      case "low":
-        return 5;
-      case "high":
-        return 40;
-      case "max":
-        return 60;
-      default:
-        return MAX_AGENT_TURNS; // "medium" or unset = 25
-    }
+    return _getEffectiveMaxTurns(this.config, this.state.messages);
   }
 
   /** Abort the current LLM request / agent loop. */
