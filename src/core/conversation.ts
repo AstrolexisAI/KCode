@@ -16,6 +16,7 @@ import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extracto
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
 import { estimateContextTokens } from "./context-manager";
+import { replayFromCache } from "./conversation-cache-replay";
 import { runContextMaintenance } from "./conversation-context-maintenance";
 import { handleConsecutiveDenials } from "./conversation-denials";
 import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-effort";
@@ -675,16 +676,12 @@ export class ConversationManager {
           );
       const cachedText = cacheKey ? getCachedResponse(cacheKey) : null;
       if (cachedText) {
-        log.info("cache", "Cache hit — replaying response");
-        const words = cachedText.split(" ");
-        for (let wi = 0; wi < words.length; wi++) {
-          const chunk = (wi > 0 ? " " : "") + words[wi];
-          yield { type: "text_delta", text: chunk };
-          textChunks.push(chunk);
-        }
-        assistantContent.push({ type: "text", text: cachedText });
-        this.state.messages.push({ role: "assistant", content: cachedText });
-        yield { type: "turn_end", stopReason: "end_turn" };
+        yield* replayFromCache({
+          state: this.state,
+          cachedText,
+          textChunks,
+          assistantContent,
+        });
         break;
       }
 
