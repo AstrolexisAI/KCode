@@ -28,6 +28,11 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  // Canonical runtime labels, keyed by model.name. Populated async after
+  // the initial list renders — we query each local model's llama.cpp
+  // /props endpoint to read the GGUF currently loaded, since the alias
+  // in models.json can lag behind the actual weights.
+  const [runtimeLabels, setRuntimeLabels] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -71,6 +76,22 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
       const idx = all.findIndex((m) => m.name === currentModel);
       if (idx >= 0) setSelectedIndex(idx);
       setLoading(false);
+
+      // Async: fetch canonical runtime labels for local models so the
+      // list reflects whatever GGUF is actually loaded, not a stale
+      // alias that the launcher baked into models.json.
+      const { getLocalModelLabel } = await import("../../core/model-local-discovery.js");
+      const localOnes = all.filter(
+        (m) => m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1"),
+      );
+      const pairs = await Promise.all(
+        localOnes.map(async (m) => [m.name, await getLocalModelLabel(m.baseUrl)] as const),
+      );
+      const resolved: Record<string, string> = {};
+      for (const [name, label] of pairs) {
+        if (label) resolved[name] = label;
+      }
+      if (Object.keys(resolved).length > 0) setRuntimeLabels(resolved);
     })();
   }, []);
 
@@ -163,12 +184,14 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           const isSelected = item.globalIndex === selectedIndex;
           const isCurrent = m.name === currentModel;
 
+          const runtimeLabel = runtimeLabels[m.name];
           return (
             <Box key={m.name} gap={1}>
               <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
                 {isSelected ? "▸ " : "  "}
-                {m.name}
+                {runtimeLabel ?? m.name}
               </Text>
+              {runtimeLabel && <Text dimColor>({m.name})</Text>}
               {isCurrent && <Text color={theme.success}>●</Text>}
               {isSelected && m.description && <Text dimColor>{m.description}</Text>}
               {isSelected && m.gpu && <Text dimColor>[{m.gpu}]</Text>}
