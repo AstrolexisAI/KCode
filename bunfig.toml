@@ -4,4 +4,6 @@
 workers = 2
 timeout = 30000
 # NOTE: code-chunker.test.ts and rag-engine.test.ts renamed to .skip
-# They crash Bun 1.3.10 with "Illegal instruction" — restore after Bun upgrade
+# They crash with "Illegal instruction" on Bun 1.3.10 AND 1.3.13
+# (peak RSS ~44GB — likely catastrophic regex backtracking in code-chunker.ts,
+# not a Bun-version bug). Needs investigation before restoring.
