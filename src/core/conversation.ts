@@ -16,9 +16,11 @@ import {
 import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extractor";
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
-import { emergencyPrune, estimateContextTokens, microcompactToolResults, pruneMessagesIfNeeded } from "./context-manager";
+import { estimateContextTokens } from "./context-manager";
+import { runContextMaintenance } from "./conversation-context-maintenance";
 import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-effort";
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
+import { handleInlineWarnings } from "./conversation-inline-warnings";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
 import {
   checkBudgetLimit,
@@ -650,34 +652,15 @@ export class ConversationManager {
         this.contextWindowSize = this.config.contextWindowSize;
       }
 
-      // Microcompact: proactively clear old tool results every turn (zero LLM cost)
-      microcompactToolResults(this.state.messages);
-
-      // Prune context if approaching the limit (auto-compacts via LLM when possible)
-      if (this.debugTracer?.isEnabled()) {
-        const preTokens = estimateContextTokens(this.systemPrompt, this.state.messages);
-        const threshold = this.contextWindowSize * this.compactThreshold;
-        if (preTokens >= threshold) {
-          this.debugTracer.trace(
-            "context",
-            "Compaction triggered",
-            `Estimated ${preTokens} tokens >= threshold ${Math.floor(threshold)} (${Math.round(this.compactThreshold * 100)}% of ${this.contextWindowSize})`,
-            { tokens: preTokens, threshold: Math.floor(threshold) },
-          );
-        }
-      }
-      yield* pruneMessagesIfNeeded(
-        this.state,
-        this.systemPrompt,
-        this.contextWindowSize,
-        this.compactThreshold,
-        this.config,
-      );
-
-      // Hard safety: emergency prune if still over 95%
-      for (const evt of emergencyPrune(this.state, this.systemPrompt, this.contextWindowSize)) {
-        yield evt;
-      }
+      // Per-turn context maintenance (delegated to conversation-context-maintenance.ts)
+      yield* runContextMaintenance({
+        state: this.state,
+        systemPrompt: this.systemPrompt,
+        contextWindowSize: this.contextWindowSize,
+        compactThreshold: this.compactThreshold,
+        config: this.config,
+        debugTracer: this.debugTracer,
+      });
 
       yield { type: "turn_start" };
 
@@ -1456,44 +1439,8 @@ export class ConversationManager {
       }
 
       // Layer 9: Inline warning — detect wasted context mid-loop
-      try {
-        const inlineWarning = getIntentionEngine().getInlineWarning();
-        if (inlineWarning) {
-          guardState.inlineWarningCount++;
-          log.warn(
-            "intentions",
-            `Inline warning #${guardState.inlineWarningCount}: ${inlineWarning.slice(0, 100)}`,
-          );
-
-          if (guardState.inlineWarningCount >= 5) {
-            log.warn(
-              "intentions",
-              "Infinite loop detected: forcing agent loop stop after 5 inline warnings",
-            );
-            this.state.messages.push({
-              role: "user",
-              content: `[SYSTEM] FORCE STOP: You have been warned ${guardState.inlineWarningCount} times about repeating the same actions. The agent loop is being terminated. Reply with text only — summarize what you accomplished and what you could not complete.`,
-            });
-            guardState.forceStopLoop = true;
-          } else if (guardState.inlineWarningCount >= 2) {
-            log.warn(
-              "intentions",
-              `Inline warning #${guardState.inlineWarningCount}: model repeating actions, injecting strong redirect`,
-            );
-            this.state.messages.push({
-              role: "user",
-              content: `[SYSTEM] WARNING #${guardState.inlineWarningCount}: You are repeating the same tool calls. The repeated calls are being BLOCKED. MOVE ON to a different task or try a completely different approach. Do NOT keep reading the same file — use offset/limit to read different sections, or use Bash with sed/grep to find what you need.`,
-            });
-          } else {
-            this.state.messages.push({
-              role: "user",
-              content: `\u26a0\ufe0f SYSTEM WARNING: ${inlineWarning}`,
-            });
-          }
-        }
-      } catch (err) {
-        log.debug("intention", "Failed to generate inline warning: " + err);
-      }
+      // (delegated to conversation-inline-warnings.ts)
+      handleInlineWarnings({ state: this.state, guardState });
 
       // Track consecutive permission denials to prevent infinite loops
       if (turnHadDenial) {
