@@ -22,6 +22,7 @@ import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-ef
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
 import { handleInlineWarnings } from "./conversation-inline-warnings";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
+import { checkAborted, enforceTurnLimit } from "./conversation-turn-limits";
 import {
   checkBudgetLimit,
   detectCheckpointMode,
@@ -613,36 +614,25 @@ export class ConversationManager {
         this.turnsSincePromptRebuild = 0;
       }
 
+      // Turn-count guards (delegated to conversation-turn-limits.ts)
       const effectiveMaxTurns = this.getEffectiveMaxTurns();
-      if (turnCount > effectiveMaxTurns + 1) {
-        log.warn("session", `Agent loop hard-killed at turn ${turnCount} — model refused to stop`);
-        yield { type: "turn_end", stopReason: "force_stop" };
+      const turnLimitTermination = enforceTurnLimit({
+        turnCount,
+        effectiveMaxTurns,
+        state: this.state,
+        guardState,
+        config: this.config,
+        debugTracer: this.debugTracer,
+      });
+      if (turnLimitTermination) {
+        yield turnLimitTermination;
         this.abortController = null;
         return;
-      } else if (turnCount > effectiveMaxTurns) {
-        log.warn("session", `Agent loop exceeded ${effectiveMaxTurns} turns, forcing stop`);
-        if (this.debugTracer?.isEnabled()) {
-          this.debugTracer.traceGuard(
-            "max-turns",
-            true,
-            `Turn ${turnCount} exceeds limit of ${effectiveMaxTurns} (effort: ${this.config.effortLevel ?? "medium"})`,
-          );
-        }
-        this.state.messages.push({
-          role: "user",
-          content: `[SYSTEM] STOP. You have used ${turnCount} consecutive tool turns. Summarize what you accomplished and stop. Do NOT make any more tool calls.`,
-        });
-        guardState.forceStopLoop = true;
-      } else if (turnCount === 15) {
-        this.state.messages.push({
-          role: "user",
-          content:
-            "[SYSTEM] You have been running tools for 15 turns. Please wrap up your current task soon and report your progress. Only continue if you are close to finishing.",
-        });
       }
 
-      if (this.abortController?.signal.aborted) {
-        yield { type: "turn_end", stopReason: "aborted" };
+      const abortTermination = checkAborted(this.abortController?.signal);
+      if (abortTermination) {
+        yield abortTermination;
         this.abortController = null;
         return;
       }
