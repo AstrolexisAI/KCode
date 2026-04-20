@@ -13,6 +13,21 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.149] — 2026-04-20
+
+### Changed
+- `/model` picker and Kodi header now show the canonical **mark
+  generation** (`mark5`, `mark6`, `mark7`, …) instead of the raw
+  GGUF basename when the loaded weights belong to a registered
+  family. Mapping lives in `src/core/mark-registry.ts` — a small
+  table of regexes keyed by mark; callers never hardcode the
+  mapping, so adding a new generation is a single entry.
+  - `mark7` → Qwen3.6 family (incl. 35B-A3B and abliterated variants)
+  - `mark6` → Qwen3.5 family + Gemma 3-31B
+  - `mark5` → Qwen3 / Qwen3-Coder-30B-A3B
+  Unregistered families keep the previous behavior and render the
+  GGUF basename verbatim so nothing regresses silently.
+
 ## [2.10.148] — 2026-04-20
 
 ### Changed

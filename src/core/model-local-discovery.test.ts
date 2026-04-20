@@ -45,7 +45,7 @@ describe("getLocalModelLabel", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("derives label from /props model_path", async () => {
+  test("maps a registered GGUF to its canonical mark (Qwen3.6 → mark7)", async () => {
     globalThis.fetch = (async (url: string) => {
       expect(url).toBe("http://localhost:8090/props");
       return new Response(
@@ -58,7 +58,20 @@ describe("getLocalModelLabel", () => {
     }) as unknown as typeof fetch;
 
     const label = await getLocalModelLabel("http://localhost:8090");
-    expect(label).toBe("Qwen3.6-35B-A3B-Heretic-Q4_K_M");
+    expect(label).toBe("mark7");
+  });
+
+  test("falls back to the GGUF basename for unregistered families", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          model_path: "/models/Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )) as unknown as typeof fetch;
+
+    const label = await getLocalModelLabel("http://localhost:8096");
+    expect(label).toBe("Llama-3.1-8B-Instruct-Q4_K_M");
   });
 
   test("trims trailing slashes from baseUrl before building /props URL", async () => {
@@ -107,7 +120,7 @@ describe("getLocalModelLabel", () => {
     let calls = 0;
     globalThis.fetch = (async () => {
       calls++;
-      return new Response(JSON.stringify({ model_path: "/p/Cached-Model.gguf" }), {
+      return new Response(JSON.stringify({ model_path: "/p/Cached-Unknown-Model.gguf" }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -115,8 +128,9 @@ describe("getLocalModelLabel", () => {
 
     const a = await getLocalModelLabel("http://localhost:8094");
     const b = await getLocalModelLabel("http://localhost:8094");
-    expect(a).toBe("Cached-Model");
-    expect(b).toBe("Cached-Model");
+    // Unknown family so the basename falls through.
+    expect(a).toBe("Cached-Unknown-Model");
+    expect(b).toBe("Cached-Unknown-Model");
     expect(calls).toBe(1);
   });
 });

@@ -10,6 +10,7 @@
 // currently serving, not a frozen string from models.json.
 
 import { log } from "./logger";
+import { lookupMarkByGgufBasename } from "./mark-registry";
 
 interface LlamaServerProps {
   model_path?: string;
@@ -66,7 +67,12 @@ export async function getLocalModelLabel(baseUrl: string): Promise<string | null
       if (res.ok) {
         const json = (await res.json()) as LlamaServerProps;
         if (typeof json.model_path === "string" && json.model_path.length > 0) {
-          label = deriveGgufLabel(json.model_path);
+          const basename = deriveGgufLabel(json.model_path);
+          // Prefer the canonical mark ("mark7") when the basename
+          // matches a registered family, so users see a stable short
+          // label across quant/variant swaps. Fall through to the raw
+          // basename for unregistered families — better than nothing.
+          label = lookupMarkByGgufBasename(basename) ?? basename;
         }
       }
     } finally {
