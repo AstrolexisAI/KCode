@@ -225,6 +225,16 @@ export type StreamEvent =
   | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }
   | { type: "budget_warning"; costUsd: number; limitUsd: number; pct: number }
   | {
+      type: "balance_alert";
+      provider: string;
+      providerLabel: string;
+      /** Threshold fraction that fired (e.g. 0.20 = 20% remaining). */
+      fraction: number;
+      /** Remaining balance in the provider's currency. */
+      remaining: number;
+      currency: string;
+    }
+  | {
       type: "tool_progress";
       toolUseId: string;
       name: string;

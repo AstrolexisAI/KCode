@@ -690,6 +690,107 @@ export async function handleModelConfigAction(
       });
       return `  ${all.length} agent(s) available:\n${lines.join("\n")}`;
     }
+    case "balance": {
+      const {
+        getAllStatuses,
+        getStatus,
+        setStarting,
+        resetSpent,
+        setThresholds,
+        providerLabel,
+        KNOWN_PROVIDERS,
+      } = await import("../../core/balance/index.js");
+
+      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      const sub = tokens[0]?.toLowerCase() ?? "show";
+
+      const formatStatus = (
+        s: Awaited<ReturnType<typeof getAllStatuses>>[number],
+      ): string => {
+        const spent = `spent $${s.spent.toFixed(2)}`;
+        if (s.starting == null) return `  ${s.label.padEnd(14)} — ${spent} (no starting credit set)`;
+        const pct = s.fractionRemaining != null
+          ? `${Math.round(s.fractionRemaining * 100)}%`
+          : "—";
+        return `  ${s.label.padEnd(14)} — $${s.remaining!.toFixed(2)} / $${s.starting.toFixed(2)} left (${pct}), ${spent}`;
+      };
+
+      if (sub === "show" || !sub) {
+        const all = await getAllStatuses();
+        if (all.length === 0) {
+          return [
+            "  No balance tracked yet.",
+            "",
+            "  Usage:",
+            "    /balance set <provider> <amount>  — register starting credit",
+            "    /balance show                     — list all providers",
+            "    /balance reset <provider>         — zero the spend counter",
+            "    /balance threshold <pct>[,<pct>]  — alert levels (default 20,5)",
+            "",
+            `  Providers: ${KNOWN_PROVIDERS.join(", ")}`,
+          ].join("\n");
+        }
+        return ["  Balance:", ...all.map(formatStatus)].join("\n");
+      }
+
+      if (sub === "set" && tokens.length >= 3) {
+        const providerArg = tokens[1]!.toLowerCase() as (typeof KNOWN_PROVIDERS)[number];
+        const amountArg = tokens[2]!;
+        if (!KNOWN_PROVIDERS.includes(providerArg)) {
+          return `  Unknown provider '${tokens[1]}'. Valid: ${KNOWN_PROVIDERS.join(", ")}`;
+        }
+        if (amountArg === "off" || amountArg === "none") {
+          await setStarting(providerArg, null);
+          return `  ${providerLabel(providerArg)}: starting credit cleared (spend still tracked).`;
+        }
+        const amount = Number(amountArg);
+        if (!Number.isFinite(amount) || amount < 0) {
+          return `  Amount must be a non-negative number, got '${amountArg}'.`;
+        }
+        await setStarting(providerArg, amount);
+        return `  ${providerLabel(providerArg)}: starting credit set to $${amount.toFixed(2)}.`;
+      }
+
+      if (sub === "reset" && tokens.length >= 2) {
+        const providerArg = tokens[1]!.toLowerCase() as (typeof KNOWN_PROVIDERS)[number];
+        if (!KNOWN_PROVIDERS.includes(providerArg)) {
+          return `  Unknown provider '${tokens[1]}'. Valid: ${KNOWN_PROVIDERS.join(", ")}`;
+        }
+        await resetSpent(providerArg);
+        const status = await getStatus(providerArg);
+        return status
+          ? `  ${status.label}: spend counter reset. ${formatStatus(status).trim()}`
+          : `  ${providerLabel(providerArg)}: spend counter reset.`;
+      }
+
+      if (sub === "threshold" && tokens.length >= 2) {
+        const raw = tokens.slice(1).join(",");
+        const fractions = raw
+          .split(/[,\s]+/)
+          .filter(Boolean)
+          .map((s) => {
+            const n = Number(s);
+            return n > 1 ? n / 100 : n; // accept "20" for 20%
+          });
+        if (fractions.length === 0 || fractions.some((f) => !Number.isFinite(f) || f <= 0 || f >= 1)) {
+          return "  Thresholds must be between 0 and 1 (or 0–100 as percentages).";
+        }
+        await setThresholds(fractions);
+        return `  Alert thresholds set to: ${fractions.map((f) => `${Math.round(f * 100)}%`).join(", ")}`;
+      }
+
+      return [
+        "  Usage:",
+        "    /balance [show]                   — list balances",
+        "    /balance set <provider> <amount>  — register starting credit ($)",
+        "    /balance set <provider> off       — stop computing remaining",
+        "    /balance reset <provider>         — zero the spend counter",
+        "    /balance threshold 20,5           — alert at 20% and 5% remaining",
+        "",
+        `  Providers: ${KNOWN_PROVIDERS.join(", ")}`,
+      ].join("\n");
+    }
+
     default:
       return null;
   }

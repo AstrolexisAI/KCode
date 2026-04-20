@@ -408,6 +408,20 @@ export async function processStreamEvents(
         ]);
         break;
 
+      case "balance_alert": {
+        const pctLeft = Math.round(event.fraction * 100);
+        const critical = event.fraction <= 0.05;
+        setCompleted((prev) => [
+          ...prev,
+          {
+            kind: "banner",
+            title: `${critical ? "⚠ Balance critical" : "Balance low"}: ${event.providerLabel} — ${pctLeft}% left`,
+            subtitle: `$${event.remaining.toFixed(2)} ${event.currency} remaining. Run /balance to review or reload.`,
+          },
+        ]);
+        break;
+      }
+
       case "tool_progress":
         if (event.status === "running" || event.status === "queued") {
           setLoadingMessage(`Parallel: ${event.name} (${event.index + 1}/${event.total})...`);

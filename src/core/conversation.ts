@@ -939,7 +939,7 @@ export class ConversationManager {
       }
 
       // Per-turn cost recording (delegated to conversation-turn-cost.ts)
-      await recordTurnCost({
+      const costResult = await recordTurnCost({
         config: this.config,
         turnCosts: this.turnCosts,
         turnInputTokens,
@@ -947,6 +947,17 @@ export class ConversationManager {
         toolCalls,
         maxTurnCosts: ConversationManager.MAX_TURN_COSTS,
       });
+      if (costResult.balanceAlert) {
+        const a = costResult.balanceAlert;
+        yield {
+          type: "balance_alert",
+          provider: a.provider,
+          providerLabel: a.label,
+          fraction: a.fraction,
+          remaining: a.remaining,
+          currency: a.currency,
+        };
+      }
 
       // Client-side JSON schema validation (delegated to conversation-schema-validation.ts)
       const schemaRetry = validateJsonSchemaForTurn({
