@@ -13,6 +13,19 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.147] — 2026-04-20
+
+### Fixed
+- `/model` — when a runtime-derived label was long (e.g.
+  `Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M`), Ink's `<Box gap>`
+  wrapped the Text to a second line and then rendered the `(alias)`
+  sibling between the two halves of the label, producing a garbled
+  header like "Qwen3.6-35B-A3B-Abliterated-He(mnemo:mark6-retic-Q4_K_M".
+  Rewrote the per-row layout as a single `<Text>` for the head line
+  plus a column of optional `<Text>` children for description and GPU,
+  so the head never splits mid-word. No behavior change — same data,
+  clean rendering.
+
 ## [2.10.146] — 2026-04-20
 
 ### Changed

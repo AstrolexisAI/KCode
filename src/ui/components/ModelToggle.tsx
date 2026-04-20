@@ -185,16 +185,27 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           const isCurrent = m.name === currentModel;
 
           const runtimeLabel = runtimeLabels[m.name];
+          // Single-line format: Ink's <Box> with `gap` wraps long text
+          // onto a second line and then inserts the next sibling between
+          // the wrapped halves, which destroyed the layout with long
+          // GGUF basenames. Keep everything in one <Text> so the head
+          // line is a single contiguous string that Ink can wrap cleanly.
+          const headLine =
+            (isSelected ? "▸ " : "  ") +
+            (runtimeLabel ?? m.name) +
+            (runtimeLabel ? ` (${m.name})` : "");
           return (
-            <Box key={m.name} gap={1}>
-              <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
-                {isSelected ? "▸ " : "  "}
-                {runtimeLabel ?? m.name}
-              </Text>
-              {runtimeLabel && <Text dimColor>({m.name})</Text>}
-              {isCurrent && <Text color={theme.success}>●</Text>}
-              {isSelected && m.description && <Text dimColor>{m.description}</Text>}
-              {isSelected && m.gpu && <Text dimColor>[{m.gpu}]</Text>}
+            <Box key={m.name} flexDirection="column">
+              <Box flexDirection="row">
+                <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
+                  {headLine}
+                </Text>
+                {isCurrent && <Text color={theme.success}>{" ●"}</Text>}
+              </Box>
+              {isSelected && m.description && (
+                <Text dimColor>    {m.description}</Text>
+              )}
+              {isSelected && m.gpu && <Text dimColor>    [{m.gpu}]</Text>}
             </Box>
           );
         })}
