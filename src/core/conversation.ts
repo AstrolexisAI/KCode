@@ -24,6 +24,7 @@ import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./con
 import { handleInlineWarnings } from "./conversation-inline-warnings";
 import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
+import { recordTurnCost } from "./conversation-turn-cost";
 import { checkAborted, enforceTurnLimit } from "./conversation-turn-limits";
 import {
   checkBudgetLimit,
@@ -960,28 +961,15 @@ export class ConversationManager {
         if (toolCalls.length === 0) continue;
       }
 
-      // Record per-turn cost entry
-      if (turnInputTokens > 0 || turnOutputTokens > 0) {
-        try {
-          const { getModelPricing, calculateCost } = await import("./pricing.js");
-          const pricing = await getModelPricing(this.config.model);
-          const costUsd = pricing ? calculateCost(pricing, turnInputTokens, turnOutputTokens) : 0;
-          this.turnCosts.push({
-            turnIndex: this.turnCosts.length + 1,
-            model: this.config.model,
-            inputTokens: turnInputTokens,
-            outputTokens: turnOutputTokens,
-            costUsd,
-            toolCalls: toolCalls.map((tc) => tc.name),
-            timestamp: Date.now(),
-          });
-          if (this.turnCosts.length > ConversationManager.MAX_TURN_COSTS) {
-            this.turnCosts = this.turnCosts.slice(-ConversationManager.MAX_TURN_COSTS);
-          }
-        } catch (err) {
-          log.debug("pricing", "Failed to track turn cost: " + err);
-        }
-      }
+      // Per-turn cost recording (delegated to conversation-turn-cost.ts)
+      await recordTurnCost({
+        config: this.config,
+        turnCosts: this.turnCosts,
+        turnInputTokens,
+        turnOutputTokens,
+        toolCalls,
+        maxTurnCosts: ConversationManager.MAX_TURN_COSTS,
+      });
 
       // Client-side JSON schema validation (delegated to agent-loop-guards)
       if (this.config.jsonSchema && toolCalls.length === 0 && fullText.length > 0) {
