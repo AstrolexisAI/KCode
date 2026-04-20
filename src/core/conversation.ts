@@ -10,7 +10,6 @@ import {
   LOOP_PATTERN_THRESHOLD,
   LoopGuardState,
   MAX_AGENT_TURNS,
-  MAX_CONSECUTIVE_DENIALS,
   validateModelOutput,
 } from "./agent-loop-guards";
 import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extractor";
@@ -18,6 +17,7 @@ import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
 import { estimateContextTokens } from "./context-manager";
 import { runContextMaintenance } from "./conversation-context-maintenance";
+import { handleConsecutiveDenials } from "./conversation-denials";
 import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-effort";
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
 import { handleInlineWarnings } from "./conversation-inline-warnings";
@@ -1442,35 +1442,17 @@ export class ConversationManager {
       // (delegated to conversation-inline-warnings.ts)
       handleInlineWarnings({ state: this.state, guardState });
 
-      // Track consecutive permission denials to prevent infinite loops
-      if (turnHadDenial) {
-        guardState.consecutiveDenials++;
-
-        if (this.config.permissionMode === "deny") {
-          log.info("session", "Deny mode: stopping agent loop after first denial");
-          this.state.messages.push({
-            role: "user",
-            content:
-              "[SYSTEM] Permission mode is 'deny'. All tools are blocked. Do NOT attempt any tool calls. Reply with text only, explaining that you cannot perform this action because all tools are blocked. Suggest using -p auto or -p ask.",
-          });
-          guardState.consecutiveDenials = MAX_CONSECUTIVE_DENIALS - 1;
-        } else if (guardState.consecutiveDenials >= MAX_CONSECUTIVE_DENIALS) {
-          log.warn(
-            "session",
-            `${MAX_CONSECUTIVE_DENIALS} consecutive permission denials, stopping agent loop`,
-          );
-          yield { type: "turn_end", stopReason: "permission_denied" };
-          this.abortController = null;
-          return;
-        } else {
-          this.state.messages.push({
-            role: "user",
-            content:
-              "[SYSTEM] Tool call was denied by the permission system. Do NOT retry the same tool. Reply with a text message explaining what happened.",
-          });
-        }
-      } else {
-        guardState.consecutiveDenials = 0;
+      // Track consecutive permission denials (delegated to conversation-denials.ts)
+      const denialTermination = handleConsecutiveDenials({
+        state: this.state,
+        guardState,
+        config: this.config,
+        turnHadDenial,
+      });
+      if (denialTermination) {
+        yield denialTermination;
+        this.abortController = null;
+        return;
       }
 
       // Phase 22 moved: the correct firing point is inside the
