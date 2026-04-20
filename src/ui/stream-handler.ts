@@ -408,6 +408,17 @@ export async function processStreamEvents(
         ]);
         break;
 
+      case "api_key_error":
+        setCompleted((prev) => [
+          ...prev,
+          {
+            kind: "banner",
+            title: "⛔ API key rejected — cannot continue",
+            subtitle: `The tool received: ${event.detail} — update the API key for the external tool and try again.`,
+          },
+        ]);
+        break;
+
       case "balance_alert": {
         const pctLeft = Math.round(event.fraction * 100);
         const critical = event.fraction <= 0.05;

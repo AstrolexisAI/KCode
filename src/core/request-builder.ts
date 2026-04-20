@@ -98,6 +98,62 @@ export function classifyApiErrorHint(status: number, errorText: string): string 
 }
 
 /**
+ * Detect a "wrong API key" pattern in a 400/401 error body (from any
+ * provider). Returns a human-readable string if the key is the problem,
+ * otherwise null. Used both for user-facing error messages and for the
+ * hard-stop guard in the tool-output scanner.
+ * Pure — no I/O.
+ */
+export function detectBadKeyError(status: number, errorText: string): string | null {
+  const e = errorText.toLowerCase();
+  if (
+    status === 400 &&
+    (e.includes("incorrect api key") ||
+      e.includes("invalid api key") ||
+      e.includes("invalid x-api-key") ||
+      e.includes("api key not found") ||
+      e.includes("authentication_error"))
+  ) {
+    return errorText;
+  }
+  if (status === 401 && (e.includes("api key") || e.includes("authentication"))) {
+    return errorText;
+  }
+  return null;
+}
+
+/**
+ * Validate the format of an API key for a known provider. Returns a
+ * human-readable error string if the format is wrong, null if it looks
+ * valid. Catches typos/truncations before the first API call.
+ * Pure — no I/O.
+ */
+export function validateKeyFormat(
+  providerOrUrl: string,
+  key: string | undefined,
+): string | null {
+  if (!key) return null; // no key configured — not a format error
+  const p = providerOrUrl.toLowerCase();
+  if (p.includes("x.ai") || p.includes("grok") || p.includes("xai")) {
+    if (!key.startsWith("xai-")) {
+      return `xAI key format error: expected 'xai-…' but got '${key.slice(0, 8)}…'. Check console.x.ai.`;
+    }
+    if (key.length < 40) {
+      return `xAI key too short (${key.length} chars) — it may have been truncated.`;
+    }
+  } else if (p.includes("anthropic") || key.startsWith("sk-ant")) {
+    if (!key.startsWith("sk-ant-") && !key.startsWith("sk-ant-oat")) {
+      return `Anthropic key format error: expected 'sk-ant-…' but got '${key.slice(0, 10)}…'.`;
+    }
+  } else if (p.includes("openai") || key.startsWith("sk-")) {
+    if (!key.startsWith("sk-")) {
+      return `OpenAI key format error: expected 'sk-…' but got '${key.slice(0, 6)}…'.`;
+    }
+  }
+  return null;
+}
+
+/**
  * Build the API error message shown to the user. Includes the origin
  * of the failing endpoint so dual local+cloud setups make it obvious
  * whether the failure was localhost or a cloud provider (e.g. api.x.ai).
@@ -672,6 +728,17 @@ export async function executeModelRequest(
   opts?: BuildRequestOptions,
 ): Promise<AsyncGenerator<SSEChunk>> {
   const req = await buildRequestForModel(modelName, config, systemPrompt, messages, tools, opts);
+
+  // Fix 2: pre-flight key format check — surface bad keys immediately
+  // rather than letting the provider return a confusing 400/401 mid-turn.
+  {
+    const authHeader = req.headers["Authorization"] ?? req.headers["x-api-key"] ?? "";
+    const key = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const fmtError = validateKeyFormat(req.url, key);
+    if (fmtError) {
+      throw new Error(`API key format error: ${fmtError}`);
+    }
+  }
 
   // Pre-flight safety: if serialized request exceeds 95% of context window, strip tools
   if (config.contextWindowSize) {
