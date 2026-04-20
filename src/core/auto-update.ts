@@ -3,7 +3,7 @@
 // and replaces the running binary. Respects user settings (autoUpdate: false).
 
 import { execSync } from "node:child_process";
-import { chmodSync, existsSync, renameSync, unlinkSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, renameSync, unlinkSync } from "node:fs";
 import { arch, homedir, platform } from "node:os";
 import { join } from "node:path";
 import { log } from "./logger";
@@ -393,7 +393,22 @@ export async function downloadAndInstall(
       if (existsSync(destPath)) {
         renameSync(destPath, backupPath);
       }
-      renameSync(tmpPath, destPath);
+      // rename across filesystems (/tmp → ~/.local/bin is common on Linux
+      // when /tmp is tmpfs) throws EXDEV. Fall back to copy+unlink.
+      try {
+        renameSync(tmpPath, destPath);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === "EXDEV") {
+          copyFileSync(tmpPath, destPath);
+          try {
+            unlinkSync(tmpPath);
+          } catch {
+            /* ignore */
+          }
+        } else {
+          throw err;
+        }
+      }
       // Clean up backup
       try {
         unlinkSync(backupPath);

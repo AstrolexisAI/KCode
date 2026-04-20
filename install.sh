@@ -9,7 +9,7 @@ set -e
 
 # ─── Constants ──────────────────────────────────────────────────
 
-GITHUB_REPO="astrolexis/kcode"
+GITHUB_REPO="AstrolexisAI/KCode"
 BINARY_NAME="kcode"
 
 # ─── Colors (only when terminal supports it) ────────────────────
