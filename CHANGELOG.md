@@ -13,6 +13,31 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.145] — 2026-04-20
+
+### Changed (internal refactor — zero user-facing behavior change)
+- `src/core/conversation.ts` reduced from 1858 to 1514 LOC (-18.5%)
+  via 15 facade-pattern extractions into new `conversation-*.ts`
+  modules. Public API surface is unchanged — the 20+ importers see
+  the same symbols. Each tanda was committed individually and
+  validated against the full 5261-test core suite.
+
+  New modules: `conversation-fabrication`, `conversation-transcript`,
+  `conversation-effort`, `conversation-context-maintenance`,
+  `conversation-inline-warnings`, `conversation-denials`,
+  `conversation-turn-limits`, `conversation-cache-replay`,
+  `conversation-phantom-typo`, `conversation-turn-cost`,
+  `conversation-stream-acquire`,
+  `conversation-streaming-executor-setup`,
+  `conversation-reality-check`, `conversation-auto-launch`,
+  `conversation-schema-validation`.
+
+  `runAgentLoop` is still the largest remaining method in
+  `conversation.ts`; further extraction of its tool-execution
+  blocks is deferred to a dedicated session so the contracts
+  around the mutable `toolExecCtx` / `guardState` can be
+  designed rather than shaved line by line.
+
 ## [2.10.144] — 2026-04-20
 
 ### Security
