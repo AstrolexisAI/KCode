@@ -10,7 +10,6 @@ import {
   LOOP_PATTERN_THRESHOLD,
   LoopGuardState,
   MAX_AGENT_TURNS,
-  validateModelOutput,
 } from "./agent-loop-guards";
 import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extractor";
 import { parseAutoMemoryConfig } from "./auto-memory/types";
@@ -25,6 +24,7 @@ import { handleInlineWarnings } from "./conversation-inline-warnings";
 import { autoLaunchDevServerPhase22 } from "./conversation-auto-launch";
 import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
 import { checkRealityPhase28 } from "./conversation-reality-check";
+import { validateJsonSchemaForTurn } from "./conversation-schema-validation";
 import { acquireSseStream } from "./conversation-stream-acquire";
 import { createStreamingToolExecutor } from "./conversation-streaming-executor-setup";
 import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
@@ -948,19 +948,17 @@ export class ConversationManager {
         maxTurnCosts: ConversationManager.MAX_TURN_COSTS,
       });
 
-      // Client-side JSON schema validation (delegated to agent-loop-guards)
-      if (this.config.jsonSchema && toolCalls.length === 0 && fullText.length > 0) {
-        const { retryMessage, shouldAccept } = validateModelOutput(
-          fullText,
-          this.config.jsonSchema,
-          guardState.jsonSchemaRetries,
-        );
-        if (!shouldAccept && retryMessage) {
-          guardState.jsonSchemaRetries++;
-          this.state.messages.push({ role: "user", content: retryMessage });
-          yield { type: "turn_end", stopReason: "tool_use" };
-          continue;
-        }
+      // Client-side JSON schema validation (delegated to conversation-schema-validation.ts)
+      const schemaRetry = validateJsonSchemaForTurn({
+        config: this.config,
+        fullText,
+        toolCalls,
+        state: this.state,
+        guardState,
+      });
+      if (schemaRetry) {
+        yield schemaRetry;
+        continue;
       }
 
       // If no tool calls or stop reason is not tool_use — handle post-turn (delegated to conversation-post-turn.ts)
