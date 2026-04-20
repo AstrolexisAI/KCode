@@ -166,55 +166,70 @@ main() {
 
   info "Latest version: ${VERSION}"
 
-  # Determine binary asset name
-  ASSET_NAME="kcode-${PLATFORM}"
+  # Assets are published as kcode-<version>-<platform>.tar.gz + .sha256
+  # sidecar. The version in the filename drops the leading `v` to match
+  # what the publish workflow writes.
+  VERSION_NO_V="${VERSION#v}"
+  TARBALL_NAME="kcode-${VERSION_NO_V}-${PLATFORM}.tar.gz"
+  CHECKSUM_NAME="${TARBALL_NAME}.sha256"
 
-  # Find download URL for the binary
-  DOWNLOAD_URL=$(printf '%s' "$RELEASE_JSON" | sed -n "s|.*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*${ASSET_NAME}[^\"]*\)\".*|\1|p" | head -1)
-  if [ -z "$DOWNLOAD_URL" ]; then
-    error "No binary found for ${PLATFORM} in release ${VERSION}.\nAvailable at: https://github.com/${GITHUB_REPO}/releases"
+  # Find download URLs by exact filename match.
+  TARBALL_URL=$(printf '%s' "$RELEASE_JSON" | sed -n "s|.*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*/${TARBALL_NAME}\)\".*|\1|p" | head -1)
+  if [ -z "$TARBALL_URL" ]; then
+    error "No binary found for ${PLATFORM} in release ${VERSION}.\nExpected asset: ${TARBALL_NAME}\nAvailable at: https://github.com/${GITHUB_REPO}/releases/tag/${VERSION}"
   fi
+  CHECKSUM_URL=$(printf '%s' "$RELEASE_JSON" | sed -n "s|.*\"browser_download_url\"[[:space:]]*:[[:space:]]*\"\([^\"]*/${CHECKSUM_NAME}\)\".*|\1|p" | head -1)
 
-  # Look for checksum file
-  CHECKSUM_URL=$(printf '%s' "$RELEASE_JSON" | sed -n 's|.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*checksums\.txt[^"]*\)".*|\1|p' | head -1)
-
-  # Download binary
+  # Download tarball + checksum to a temp dir.
   TMPDIR="${TMPDIR:-/tmp}"
-  TMP_FILE="${TMPDIR}/kcode-install-$$"
-  trap 'rm -f "$TMP_FILE" "${TMP_FILE}.checksums"' EXIT
+  TMP_DIR=$(mktemp -d "${TMPDIR}/kcode-install-XXXXXX")
+  trap 'rm -rf "$TMP_DIR"' EXIT
 
-  info "Downloading ${ASSET_NAME}..."
-  download "$DOWNLOAD_URL" "$TMP_FILE"
+  TARBALL_PATH="${TMP_DIR}/${TARBALL_NAME}"
+  info "Downloading ${TARBALL_NAME}..."
+  download "$TARBALL_URL" "$TARBALL_PATH"
 
-  # Verify checksum if checksums file is available
+  # Verify tarball checksum if the sidecar is published.
   if [ -n "$CHECKSUM_URL" ]; then
-    info "Downloading checksums..."
-    download "$CHECKSUM_URL" "${TMP_FILE}.checksums"
-    EXPECTED_HASH=$(grep "$ASSET_NAME" "${TMP_FILE}.checksums" | cut -d ' ' -f 1 | head -1)
+    CHECKSUM_PATH="${TMP_DIR}/${CHECKSUM_NAME}"
+    download "$CHECKSUM_URL" "$CHECKSUM_PATH"
+    # sha256sum sidecar format: "<hash>  <filename>"
+    EXPECTED_HASH=$(awk '{print $1}' "$CHECKSUM_PATH" | head -1)
     if [ -n "$EXPECTED_HASH" ]; then
-      verify_sha256 "$TMP_FILE" "$EXPECTED_HASH"
+      verify_sha256 "$TARBALL_PATH" "$EXPECTED_HASH"
     else
-      warn "No checksum found for ${ASSET_NAME} in checksums file. Skipping verification."
+      warn "Checksum file ${CHECKSUM_NAME} was empty. Skipping verification."
     fi
   else
-    warn "No checksums file in release. Skipping checksum verification."
+    warn "No checksum sidecar in release. Skipping verification."
   fi
 
-  # Make executable
-  chmod +x "$TMP_FILE"
+  # Extract. The tarball contains a single file named `kcode`.
+  info "Extracting..."
+  tar -xzf "$TARBALL_PATH" -C "$TMP_DIR"
+  EXTRACTED_BIN="${TMP_DIR}/${BINARY_NAME}"
+  if [ ! -f "$EXTRACTED_BIN" ]; then
+    error "Archive did not contain a '${BINARY_NAME}' binary."
+  fi
+  chmod +x "$EXTRACTED_BIN"
 
   # Determine install directory
   INSTALL_DIR=$(determine_install_dir)
   INSTALL_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 
-  # Install (use sudo if needed for /usr/local/bin)
+  # Install (use sudo if needed for /usr/local/bin).
+  # Use cp+rm instead of mv because mv across filesystems falls back to
+  # copy but on some shells fails if the dest file is in use.
   if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ ! -w "$INSTALL_DIR" ]; then
     info "Installing to ${INSTALL_PATH} (requires sudo)..."
-    sudo mv "$TMP_FILE" "$INSTALL_PATH"
+    sudo cp "$EXTRACTED_BIN" "$INSTALL_PATH"
     sudo chmod +x "$INSTALL_PATH"
   else
     info "Installing to ${INSTALL_PATH}..."
-    mv "$TMP_FILE" "$INSTALL_PATH"
+    # Remove first to avoid "Text file busy" when updating in place.
+    rm -f "$INSTALL_PATH"
+    cp "$EXTRACTED_BIN" "$INSTALL_PATH"
+    chmod +x "$INSTALL_PATH"
   fi
 
   # Ensure PATH includes install dir
