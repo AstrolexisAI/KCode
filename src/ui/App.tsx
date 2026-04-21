@@ -528,6 +528,7 @@ export default function App({ config, conversationManager, tools, initialSession
 
         // If user previously confirmed this model, auto-switch silently
         if (lastModel === confirmedModel) {
+          const prevModel = config.model;
           config.model = lastModel;
           config.modelExplicitlySet = true;
           conversationManager.getConfig().model = lastModel;
@@ -538,6 +539,14 @@ export default function App({ config, conversationManager, tools, initialSession
             config.contextWindowSize = ctxSize;
             conversationManager.getConfig().contextWindowSize = ctxSize;
           }
+          // Fire ModelSwitch hook for the restored preference
+          try {
+            conversationManager.getHooks().fireAndForget("ModelSwitch", {
+              previousModel: prevModel,
+              newModel: lastModel,
+              trigger: "saved-preference",
+            });
+          } catch { /* non-fatal */ }
           setCompleted((prev) => [
             ...prev,
             { kind: "text", role: "assistant", text: `  Using ${lastModel} (saved preference).` },
@@ -871,6 +880,15 @@ export default function App({ config, conversationManager, tools, initialSession
       import("../core/config.js").then(({ saveUserSettingsRaw }) =>
         saveUserSettingsRaw({ lastSessionModel: newModel, confirmedModel: newModel }),
       );
+
+      // Fire ModelSwitch hook (non-blocking)
+      try {
+        conversationManager.getHooks().fireAndForget("ModelSwitch", {
+          previousModel: config.model,
+          newModel,
+          trigger: "user",
+        });
+      } catch { /* non-fatal */ }
 
       const isLocal =
         result.model.baseUrl.includes("localhost") || result.model.baseUrl.includes("127.0.0.1");

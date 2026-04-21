@@ -26,7 +26,7 @@ of them breaks the product for everyone.
 | Configuration | `src/core/config.ts` | Settings hierarchy + validation. |
 | Permissions | `src/core/permissions*` | Security model + audit log. |
 | System prompt assembly | `src/core/system-prompt.ts` | 10-layer prompt composer. |
-| Tools | `src/tools/` | 46 built-in tools (Read/Write/Edit/Bash/etc.). |
+| Tools | `src/tools/` | 48 built-in tools (Read/Write/Edit/Bash/etc.). |
 | CLI router | `src/index.ts`, `src/cli/commands/` | Commander.js entry points. |
 | Daemon / IPC | `src/core/http-server.ts`, bridge/daemon modules | Persistent background mode for IDE integrations. |
 | Backend (reference + Cloudflare) | `backend/`, `~/astrolexis-site/` | OAuth, subscription, /api/subscription. Reference implementation of the SaaS plane. |

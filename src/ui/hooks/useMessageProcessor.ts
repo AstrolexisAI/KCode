@@ -1658,6 +1658,14 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       // Add user message to display
       setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
 
+      // Fire UserPromptSubmit hook (non-blocking)
+      try {
+        conversationManager.getHooks().fireAndForget("UserPromptSubmit", {
+          prompt: userInput,
+          model: conversationManager.getConfig().model,
+        });
+      } catch { /* non-fatal */ }
+
       // Start response
       setMode("responding");
       setStreamingText("");

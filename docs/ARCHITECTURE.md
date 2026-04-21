@@ -86,7 +86,7 @@ Response Complete
 | Models | `src/core/models.ts` | Dynamic model registry, provider detection, URL resolution |
 | Permissions | `src/core/permissions.ts` | 5 permission modes, bash safety analysis, glob pattern rules |
 | Tool Registry | `src/core/tool-registry.ts` | Tool registration, dispatch, and MCP tool integration |
-| Hooks | `src/core/hooks.ts` | 25 lifecycle events for pre/post tool execution, session events |
+| Hooks | `src/core/hooks.ts` | 28 lifecycle events for pre/post tool execution, session events |
 | Memory | `src/core/memory.ts` | Persistent YAML+Markdown memory across sessions |
 | Compaction | `src/core/compaction.ts` | LLM-based conversation summarization when context fills up |
 | Transcript | `src/core/transcript.ts` | JSONL session persistence for resume and search |
@@ -104,7 +104,7 @@ Response Complete
 
 ## Tools
 
-46 built-in tools are registered in `src/tools/index.ts`. Each tool exports a definition object with:
+48 built-in tools are registered in `src/tools/index.ts`. Each tool exports a definition object with:
 
 - `name` -- unique identifier
 - `description` -- used by the LLM to decide when to invoke the tool
@@ -140,7 +140,7 @@ Plugins provide extensibility through three mechanisms:
 ```
 
 - **Skills**: Markdown templates that expand into LLM prompts via `/command` syntax
-- **Hooks**: Shell commands or scripts triggered on 25 lifecycle events (PreToolUse, PostToolUse, SessionStart, SessionEnd, PreCompact, etc.)
+- **Hooks**: Shell commands or scripts triggered on 28 lifecycle events (PreToolUse, PostToolUse, SessionStart, SessionEnd, PreCompact, etc.)
 - **MCP Servers**: External tool servers launched and managed by KCode
 
 Workspace trust is enforced: plugins in a project directory require explicit user approval before hooks can execute.
