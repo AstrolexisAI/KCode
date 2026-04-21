@@ -32,6 +32,8 @@ async function fetchOpenAICompatibleModels(
       const m = item as Record<string, unknown>;
       const id = typeof m.id === "string" ? m.id : null;
       if (!id) return null;
+      // Filter image/video/audio generation models — not useful for coding assistant
+      if (NON_TEXT_PREFIXES.some((p) => id.toLowerCase().startsWith(p))) return null;
       // Different providers use different field names for context window
       const ctx =
         typeof m.context_window === "number"
@@ -40,15 +42,21 @@ async function fetchOpenAICompatibleModels(
             ? m.context_length
             : typeof m.max_context_window === "number"
               ? m.max_context_window
-              : undefined;
+              : typeof m.max_input_tokens === "number"
+                ? m.max_input_tokens
+                : undefined;
       return { id, contextWindow: ctx } satisfies DiscoveredModel;
     })
     .filter((m): m is DiscoveredModel => m !== null);
 }
 
+// Model ID prefixes that indicate image/video/audio generation — not useful
+// for a coding assistant. Filter these out to keep the /model list clean.
+const NON_TEXT_PREFIXES = ["dall-e", "whisper", "tts-", "text-embedding", "grok-imagine"];
+
 /**
  * Fetch the model list from Anthropic's API.
- * Uses x-api-key header and Anthropic's own /v1/models format.
+ * Anthropic uses x-api-key header and returns max_input_tokens (not context_window).
  */
 async function fetchAnthropicModels(apiKey: string): Promise<DiscoveredModel[]> {
   const res = await fetch("https://api.anthropic.com/v1/models", {
@@ -68,8 +76,13 @@ async function fetchAnthropicModels(apiKey: string): Promise<DiscoveredModel[]> 
       const m = item as Record<string, unknown>;
       const id = typeof m.id === "string" ? m.id : null;
       if (!id) return null;
+      // Anthropic returns max_input_tokens, not context_window
       const ctx =
-        typeof m.context_window === "number" ? m.context_window : undefined;
+        typeof m.max_input_tokens === "number"
+          ? m.max_input_tokens
+          : typeof m.context_window === "number"
+            ? m.context_window
+            : undefined;
       return { id, contextWindow: ctx } satisfies DiscoveredModel;
     })
     .filter((m): m is DiscoveredModel => m !== null);
