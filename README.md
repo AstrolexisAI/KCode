@@ -143,7 +143,7 @@ Override with `KCODE_FORCE_LOCAL=1` or `--model <codename>`. Build a standalone 
 - **Plugin system**: directory-based plugins with skills, hooks, and MCP server bundles
 - **MCP support**: connect to external tools via Model Context Protocol
 - **Extension API** for building third-party integrations
-- **Hooks**: 25 lifecycle events for customization (pre/post tool execution, session events, etc.)
+- **Hooks**: 28 lifecycle events for customization (pre/post tool execution, session events, etc.)
 - **Custom themes**: create `~/.kcode/theme.json` with your own colors
 - **Project instructions**: `KCODE.md` files and `.kcode/rules/*.md` for per-project conventions
 
@@ -378,8 +378,8 @@ Use `/plugins` to list installed plugins.
 | NASA-validated findings | **PR #107 on nasa/IDF** | -- | -- |
 | Task orchestrator (intent→pipeline) | **Yes (8 task types)** | No | No |
 | Open source | **Yes (AGPL-3.0)** | No (proprietary) | Yes |
-| Built-in tools | **46 tools** | Many (plugins) | Good (Git focus) |
-| Slash commands | **152+** | IDE commands | ~10 |
+| Built-in tools | **48 tools** | Many (plugins) | Good (Git focus) |
+| Slash commands | **190+** | IDE commands | ~10 |
 | Long-term memory (SQLite FTS5) | **Yes** | Project-based | Limited |
 | Privacy | **Code stays local** | Cloud | Local possible |
 | Multi-GPU inference | **Yes (llama.cpp RPC)** | No | No |

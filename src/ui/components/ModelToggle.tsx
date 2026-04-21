@@ -77,6 +77,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
       if (idx >= 0) setSelectedIndex(idx);
       setLoading(false);
 
+
       // Async: fetch canonical runtime labels for local models so the
       // list reflects whatever GGUF is actually loaded, not a stale
       // alias that the launcher baked into models.json.
@@ -94,6 +95,14 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
       if (Object.keys(resolved).length > 0) setRuntimeLabels(resolved);
     })();
   }, []);
+
+  // Keep selectedIndex in sync if the active model changes while the
+  // toggle is open (e.g. a saved-preference restore fires mid-session).
+  useEffect(() => {
+    if (models.length === 0) return;
+    const idx = models.findIndex((m) => m.name === currentModel);
+    if (idx >= 0) setSelectedIndex(idx);
+  }, [currentModel, models]);
 
   useInput(
     (input, key) => {

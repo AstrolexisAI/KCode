@@ -1523,6 +1523,16 @@ async function runMain(
     printProfileReport();
   }
 
+  // Fire SessionStart hook (fire-and-forget — non-blocking)
+  try {
+    conversationManager.getHooks().fireAndForget("SessionStart", {
+      model: config.model,
+      workingDirectory: config.workingDirectory,
+      sessionId: conversationManager.getSessionId(),
+      version: VERSION,
+    });
+  } catch { /* non-fatal */ }
+
   // Interactive mode: start the Ink-based terminal UI
   profileCheckpoint("ui_rendering");
   const startUI = await lazyGetStartUI();
@@ -1532,6 +1542,15 @@ async function runMain(
   // Stop file watcher
   fileWatcher?.stop();
 
+  // Fire SessionEnd hook (await — give hooks a chance to run before process exits)
+  try {
+    await conversationManager.getHooks().runEventHook("SessionEnd", {
+      model: config.model,
+      workingDirectory: config.workingDirectory,
+      sessionId: conversationManager.getSessionId(),
+      totalTurns: conversationManager.getState().toolUseCount,
+    });
+  } catch { /* non-fatal */ }
 
   log.info("session", "Session ended");
   await lazyShutdownLsp();

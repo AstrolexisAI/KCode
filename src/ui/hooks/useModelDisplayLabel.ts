@@ -12,6 +12,13 @@ export function useModelDisplayLabel(modelName: string): string {
   const [label, setLabel] = useState<string>(modelName);
 
   useEffect(() => {
+    // Reset to raw model name immediately when modelName changes so cloud
+    // models (and any model switch) show the correct name right away.
+    // Without this, switching from a local model to a cloud model leaves
+    // the label stuck on the previous local name because the isLocal guard
+    // below exits before calling setLabel.
+    setLabel(modelName);
+
     let cancelled = false;
     (async () => {
       try {
