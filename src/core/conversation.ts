@@ -38,6 +38,10 @@ import {
   injectSmartContext,
 } from "./conversation-message-prep";
 import { handlePostTurn, type PostTurnContext } from "./conversation-post-turn";
+import {
+  buildErrorRecoveryMessage,
+  runPostEditFeedback,
+} from "./conversation-post-edit-hook";
 import { runPreTurnChecks } from "./conversation-pre-turn-checks";
 import { runTaskRouting } from "./conversation-task-routing";
 // routeToModel moved to conversation-retry.ts
@@ -1214,6 +1218,54 @@ export class ConversationManager {
       }
 
       this.state.messages.push({ role: "user", content: toolResultBlocks });
+
+      // P4b — Error recovery: detect compile/test failures in tool results and inject
+      // a directive that forces the model to fix before proceeding to the next subtask.
+      {
+        const texts = toolResultBlocks
+          .filter((b) => b.type === "tool_result")
+          .map((b) =>
+            typeof b.content === "string"
+              ? b.content
+              : Array.isArray(b.content)
+                ? (b.content as Array<{ text?: string }>).map((x) => x.text ?? "").join(" ")
+                : "",
+          );
+        const recovery = buildErrorRecoveryMessage(texts);
+        if (recovery) {
+          this.state.messages.push({ role: "user", content: recovery });
+        }
+      }
+
+      // P3c — Post-edit feedback: after Write/Edit/MultiEdit, run related tests
+      // (and optionally the project's type-check) and inject failures into context.
+      {
+        const isAudit = (() => {
+          try {
+            const { isAuditSession } =
+              require("./session-tracker") as typeof import("./session-tracker");
+            return isAuditSession();
+          } catch {
+            return false;
+          }
+        })();
+        if (!isAudit) {
+          const feedback = await runPostEditFeedback(
+            toolCalls,
+            this.config.workingDirectory ?? process.cwd(),
+            {
+              runTests: true,
+              runBuild: (this.config as KCodeConfig & { postEditTypeCheck?: boolean })
+                .postEditTypeCheck === true,
+            },
+          );
+          if (feedback) {
+            this.state.messages.push({ role: "user", content: feedback });
+            log.info("post-edit", "Injected post-edit feedback into conversation");
+          }
+        }
+      }
+
       for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
 
       // Auto-agent evaluation: if a Plan was just created/updated with many pending steps,

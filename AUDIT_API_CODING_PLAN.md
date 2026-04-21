@@ -205,12 +205,12 @@ export const PROVIDER_CAPABILITIES: Record<string, ProviderCaps> = {
 
 ## CHECKLIST DE PROGRESO
 
-- [ ] P1: o1/o3 system field fix + tests
-- [ ] P1: ModelProvider enum extendido
-- [ ] P1: reasoning_effort generalizado
-- [ ] P2: provider-capabilities.ts creado e integrado en request-builder.ts
-- [ ] P3a: system prompt actualizado
-- [ ] P3b: MAX_AGENT_TURNS por tipo
+- [x] P1: o1/o3 system field fix + tests
+- [x] P1: ModelProvider enum extendido
+- [x] P1: reasoning_effort generalizado
+- [x] P2: provider-capabilities.ts creado e integrado en request-builder.ts
+- [x] P3a: system prompt actualizado
+- [x] P3b: MAX_AGENT_TURNS por tipo
 - [ ] P3c: post-edit feedback hook
-- [ ] P4a: RAG crash resuelto, tests restaurados
+- [x] P4a: RAG crash resuelto, tests restaurados
 - [ ] P4b: error recovery en agent loop
