@@ -104,39 +104,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     if (idx >= 0) setSelectedIndex(idx);
   }, [currentModel, models]);
 
-  // Navigate using the VISUAL order (items[]) not the raw models[] order.
-  // items[] is sorted: LOCAL → provider headers → sorted models per provider.
-  // Without this, ↓ from claude-opus would jump to a random GPT instead of claude-sonnet.
-  const navigableItems = useMemo(
-    () => items.filter((it): it is { type: "model"; model: ModelInfo; globalIndex: number } => it.type === "model"),
-    [items],
-  );
-  const currentVisualIdx = navigableItems.findIndex((it) => it.globalIndex === selectedIndex);
-
-  useInput(
-    (input, key) => {
-      if (!isActive || loading || navigableItems.length === 0) return;
-
-      if (key.upArrow || input === "k") {
-        const prev = currentVisualIdx > 0 ? currentVisualIdx - 1 : navigableItems.length - 1;
-        setSelectedIndex(navigableItems[prev]!.globalIndex);
-      } else if (key.downArrow || input === "j") {
-        const next = currentVisualIdx < navigableItems.length - 1 ? currentVisualIdx + 1 : 0;
-        setSelectedIndex(navigableItems[next]!.globalIndex);
-      } else if (key.return) {
-        const chosen = models[selectedIndex]!;
-        if (chosen.name === currentModel) {
-          onDone(null);
-        } else {
-          onDone({ model: chosen });
-        }
-      } else if (key.escape || input === "q") {
-        onDone(null);
-      }
-    },
-    { isActive },
-  );
-
+  // ── Pure helpers (no hooks, no closures over hook state) ────────
   const isLocal = (m: ModelInfo): boolean =>
     m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1");
 
@@ -152,7 +120,9 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     return "CLOUD";
   };
 
-  // Build ordered list: LOCAL header → local models, then per-provider headers → sorted cloud models
+  // ── Derived state (hooks must come after all const-function declarations) ──
+
+  // Build ordered list: LOCAL header → per-provider headers → sorted cloud models
   type ListItem =
     | { type: "header"; label: string }
     | { type: "model"; model: ModelInfo; globalIndex: number };
@@ -187,6 +157,36 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     }
     return result;
   }, [models]);
+
+  // Navigate in visual order — arrow keys follow sorted display, not raw array order
+  const navigableItems = useMemo(
+    () => items.filter((it): it is { type: "model"; model: ModelInfo; globalIndex: number } => it.type === "model"),
+    [items],
+  );
+  const currentVisualIdx = navigableItems.findIndex((it) => it.globalIndex === selectedIndex);
+
+  useInput(
+    (input, key) => {
+      if (!isActive || loading || navigableItems.length === 0) return;
+      if (key.upArrow || input === "k") {
+        const prev = currentVisualIdx > 0 ? currentVisualIdx - 1 : navigableItems.length - 1;
+        setSelectedIndex(navigableItems[prev]!.globalIndex);
+      } else if (key.downArrow || input === "j") {
+        const next = currentVisualIdx < navigableItems.length - 1 ? currentVisualIdx + 1 : 0;
+        setSelectedIndex(navigableItems[next]!.globalIndex);
+      } else if (key.return) {
+        const chosen = models[selectedIndex]!;
+        if (chosen.name === currentModel) {
+          onDone(null);
+        } else {
+          onDone({ model: chosen });
+        }
+      } else if (key.escape || input === "q") {
+        onDone(null);
+      }
+    },
+    { isActive },
+  );
 
   const showScrollHint = models.length > 20;
 
