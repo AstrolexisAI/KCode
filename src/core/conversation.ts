@@ -1107,12 +1107,14 @@ export class ConversationManager {
       // Blocking "Read" globally because Read("/a") failed twice would also block Read("/b"), which
       // is a false positive that prevents the model from reading different files.
       if (guardState.burnedFingerprints.size > 0) {
-        const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"]);
-        // For write/exec tools: block by tool name (original behavior)
+        // Read is the only tool where failures are file-specific — ENOENT on /a should not
+        // block Read on /b. All other tools (including Glob, Grep, Bash, Edit) use name-level
+        // blocking: if Glob fails twice with "connection refused", all future Glob calls are blocked.
+        const NAME_EXEMPT_TOOLS = new Set(["Read"]);
         const burnedWriteNames = new Set<string>();
         for (const fp of guardState.burnedFingerprints) {
           const toolName = fp.split("|")[0];
-          if (toolName && !READ_ONLY_TOOLS.has(toolName)) burnedWriteNames.add(toolName);
+          if (toolName && !NAME_EXEMPT_TOOLS.has(toolName)) burnedWriteNames.add(toolName);
         }
         const notBurned: typeof filteredToolCalls = [];
         for (const tc of filteredToolCalls) {
