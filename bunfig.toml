@@ -3,7 +3,5 @@
 # Each worker loads ~7GB+ of module graph. 60GB system RAM = max 2 safe workers.
 workers = 2
 timeout = 30000
-# NOTE: code-chunker.test.ts and rag-engine.test.ts renamed to .skip
-# They crash with "Illegal instruction" on Bun 1.3.10 AND 1.3.13
-# (peak RSS ~44GB — likely catastrophic regex backtracking in code-chunker.ts,
-# not a Bun-version bug). Needs investigation before restoring.
+# RAG tests restored 2026-04-21: infinite loop in chunkLineRange fixed (overlap guard).
+# Root cause: i = lineEnd + 1 - OVERLAP_LINES could regress when trailing block < OVERLAP_LINES lines.

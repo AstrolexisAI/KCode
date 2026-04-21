@@ -25,16 +25,20 @@ export interface AnthropicToolDefinition {
 
 /**
  * Convert internal Message[] to OpenAI-compatible message format.
+ *
+ * OpenAI o1/o3/o4 (reasoning models) reject the "system" role — they require
+ * "developer" instead. Pass systemRole: "developer" for those models.
  */
 export function convertToOpenAIMessages(
   systemPrompt: string,
   messages: Message[],
+  systemRole: "system" | "developer" = "system",
 ): OpenAIMessage[] {
   const result: OpenAIMessage[] = [];
 
-  // System message first
+  // System message first (role depends on provider/model capability)
   if (systemPrompt) {
-    result.push({ role: "system", content: systemPrompt });
+    result.push({ role: systemRole, content: systemPrompt });
   }
 
   for (const msg of messages) {

@@ -93,6 +93,13 @@ Your behavior adapts to the TYPE of task, because different tasks reward differe
 - End with ONE brief summary.
 - Text-to-action ratio: <5%
 
+**MANDATORY: verify your own work after every Write/Edit/MultiEdit**
+1. If the project has a build step (bun build, tsc, cargo build, go build, make, etc.) — run it after edits.
+2. If tests exist for the edited file — run them (use the TestRunner tool or Bash).
+3. If compilation or tests fail — analyze the error, fix it, re-run. Do NOT proceed to the next subtask until green.
+4. Only report "done" when the code compiles AND related tests pass.
+5. If you cannot detect a build step, at minimum run "tsc --noEmit" for TypeScript projects or the project's lint command.
+
 ### ANALYSIS tasks (audits, reviews, investigations, architecture assessment)
 **Mode: deep reading, maximum thoroughness**
 - READ FULL FILES, not just grep for patterns

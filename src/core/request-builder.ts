@@ -12,6 +12,7 @@ import {
 } from "./message-converters";
 import type { ModelProvider } from "./models";
 import { getModelBaseUrl, getModelProvider } from "./models";
+import { getProviderCaps } from "./provider-capabilities";
 import { parseAnthropicSSEStream, parseSSEStream, type SSEChunk } from "./sse-parser";
 import type { ToolRegistry } from "./tool-registry";
 import type { KCodeConfig, Message } from "./types";
@@ -625,7 +626,11 @@ export async function buildRequestForModel(
       headers["Authorization"] = `Bearer ${resolvedKey}`;
     }
 
-    const convertedMessages = convertToOpenAIMessages(systemPrompt, messages);
+    // Determine system message role from provider capability registry.
+    // OpenAI o1/o3/o4 require "developer"; all other providers use "system".
+    const caps = getProviderCaps(provider);
+    const systemRole = isReasoningModel ? caps.systemRoleForReasoning : "system";
+    const convertedMessages = convertToOpenAIMessages(systemPrompt, messages, systemRole);
     let filteredDefs = tools.getDefinitions();
     if (profileToolFilter) filteredDefs = filteredDefs.filter((d) => profileToolFilter!(d.name));
     const toolDefs = includeTools ? convertToOpenAITools(filteredDefs) : [];
@@ -643,24 +648,11 @@ export async function buildRequestForModel(
       body.temperature = finalTemp;
     }
 
-    // The reasoning_effort parameter is only supported by OpenAI's
-    // o-series models (o1, o3, o4). xAI supports it for some models
-    // (grok-3-mini accepts it) but rejects it for others
-    // (grok-4.20-0309-reasoning returns 400 "does not support parameter
-    // reasoningEffort"). Rather than maintain a per-model allowlist,
-    // we skip the parameter entirely for xAI and rely on the
-    // max_tokens floor (32K for reasoning models) to prevent the
-    // empty-response bug.
-    //
-    // For OpenAI o-series, reasoning_effort IS documented and stable,
-    // so we map KCode's effort level to the provider's field.
-    const apiBaseLower = apiBase.toLowerCase();
+    // Send reasoning_effort only to providers that fully support it.
+    // xAI is "selective" (grok-3-mini yes, grok-4.20-reasoning no) — skip to avoid 400s.
+    // OpenAI o-series support is stable and documented.
     const supportsReasoningEffort =
-      isReasoningModel &&
-      apiBaseLower.includes("openai.com") &&
-      (lowerModel.startsWith("o1") ||
-        lowerModel.startsWith("o3") ||
-        lowerModel.startsWith("o4"));
+      isReasoningModel && caps.supportsReasoningEffort === true;
     if (supportsReasoningEffort) {
       const reasoningEffort =
         effort === "low" ? "low" : effort === "high" || effort === "max" ? "high" : "medium";

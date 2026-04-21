@@ -8,7 +8,15 @@ import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
 
-export type ModelProvider = "openai" | "anthropic";
+export type ModelProvider =
+  | "openai"
+  | "anthropic"
+  | "xai"
+  | "google"
+  | "deepseek"
+  | "groq"
+  | "openrouter"
+  | "together";
 
 export interface ModelEntry {
   name: string;
@@ -123,12 +131,11 @@ function parseModelsConfig(raw: any): ModelsConfig {
           capabilities: Array.isArray(entry.capabilities) ? entry.capabilities : undefined,
           gpu: typeof entry.gpu === "string" ? entry.gpu : undefined,
           description: typeof entry.description === "string" ? entry.description : undefined,
-          provider:
-            entry.provider === "anthropic"
-              ? "anthropic"
-              : entry.provider === "openai"
-                ? "openai"
-                : undefined,
+          provider: (
+            ["openai", "anthropic", "xai", "google", "deepseek", "groq", "openrouter", "together"] as const
+          ).includes(entry.provider)
+            ? (entry.provider as ModelProvider)
+            : undefined,
         });
       }
     }
@@ -295,11 +302,19 @@ export async function setDefaultModel(modelName: string): Promise<void> {
 export async function getModelProvider(modelName: string): Promise<ModelProvider> {
   const config = await loadModelsConfig();
   const entry = config.models.find((m) => m.name === modelName);
-  if (entry?.provider) return entry.provider;
 
-  // Name-based detection
+  // Name-based detection always wins for well-known prefixes.
+  // This auto-corrects legacy registry entries where provider was stored as
+  // "openai" for non-OpenAI models (models.json written before ModelProvider
+  // was extended to include "xai", "google", "deepseek", etc.).
   const lower = modelName.toLowerCase();
   if (lower.startsWith("claude-") || lower.startsWith("claude_")) return "anthropic";
+  if (lower.startsWith("grok-")) return "xai";
+  if (lower.startsWith("gemini-") || lower.startsWith("gemini_")) return "google";
+  if (lower.startsWith("deepseek-") || lower.startsWith("deepseek_")) return "deepseek";
+
+  // For names that don't match a known prefix, trust the registry entry.
+  if (entry?.provider) return entry.provider;
 
   return "openai";
 }
