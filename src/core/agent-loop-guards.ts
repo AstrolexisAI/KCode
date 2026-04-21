@@ -308,6 +308,10 @@ export class LoopGuardState {
    *  Reasoning models can enter a "re-analysis loop" where they keep summarizing
    *  without making progress. Reset to 0 whenever a tool_use fires. */
   consecutiveTextOnlyTurns = 0;
+  /** Cumulative read-only tool calls (Read/Grep/Glob/LS) without any
+   *  write tool call. Detects "reconnaissance loops" where the model keeps
+   *  reading files without ever implementing anything. Reset on Write/Edit/MultiEdit. */
+  readOnlyToolCount = 0;
   readonly crossTurnSigs = new Map<string, number>();
   readonly loopPatterns = new Map<string, LoopPatternEntry>();
   /** Track error fingerprints to block retrying the same failing technique */

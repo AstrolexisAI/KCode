@@ -616,17 +616,17 @@ export async function processStreamEvents(
           event.stopReason !== "truncation_retry" &&
           event.stopReason !== "plan_stop_reached"
         ) {
-          // Model returned empty response — show a diagnostic fallback
+          // Model returned empty response — show context-aware diagnostic
           const emptyType = event.emptyType;
-          const hint =
-            emptyType === "thinking_only"
-              ? "(the model reasoned but produced no visible answer — try a different model or disable thinking)"
+          const ctxFull = (event as { contextFull?: boolean }).contextFull;
+          const hint = ctxFull
+            ? "Context window full \u2014 model could not generate output.\n  Run /compact to free space, then continue."
+            : emptyType === "thinking_only"
+              ? "Model reasoned but produced no visible answer.\n  Run /compact if context is large, or rephrase."
               : emptyType === "tools_only"
-                ? "(the model used tools but gave no response — try rephrasing)"
-                : emptyType === "no_output"
-                  ? "(empty response — the model returned no text. Try rephrasing or use a different model.)"
-                  : "(empty response \u2014 the model returned no text. Try rephrasing or use a different model.)";
-          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  ${hint}` }]);
+                ? "Model used tools but gave no text response \u2014 try rephrasing."
+                : "Model returned no output.\n  Run /compact if context is large, or try rephrasing.";
+          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  \u26a0 ${hint}` }]);
         }
         // Show incomplete response banner if the session ended incomplete
         try {
