@@ -131,7 +131,9 @@ describe("Pro E2E: free user feature gating", () => {
     // Free limits should enforce restrictions
     expect(FREE_LIMITS.maxSwarmAgents).toBe(1);
     expect(FREE_LIMITS.transcriptSearchHours).toBe(168);
-    expect(FREE_LIMITS.contextWindowCap).toBe(64_000);
+    // contextWindowCap is null — free users have no hard cap on context display
+    // (removed in df203dd: "remove 64k display cap")
+    expect(FREE_LIMITS.contextWindowCap).toBeNull();
     expect(FREE_LIMITS.sessionsPerMonth).toBe(200);
   });
 
