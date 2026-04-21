@@ -53,12 +53,15 @@ export function convertToOpenAIMessages(
       const textParts: string[] = [];
       const toolCalls: OpenAIToolCall[] = [];
 
+      let reasoningContent: string | undefined;
       for (const block of msg.content) {
         if (block.type === "text") {
           textParts.push(block.text);
         } else if (block.type === "thinking") {
-          // Include thinking as text prefix (local models don't have thinking blocks)
-          textParts.push(`<thinking>${block.thinking}</thinking>`);
+          // Some providers (Kimi/Moonshot, DeepSeek-R1) require reasoning_content as a
+          // separate field in the assistant message — not embedded in text content.
+          // We collect it here; the caller decides whether to use it via includeReasoning.
+          reasoningContent = (reasoningContent ?? "") + block.thinking;
         } else if (block.type === "tool_use") {
           toolCalls.push({
             id: block.id,
@@ -77,6 +80,11 @@ export function convertToOpenAIMessages(
       };
       if (toolCalls.length > 0) {
         assistantMsg.tool_calls = toolCalls;
+      }
+      // Include reasoning_content when present so providers that require it
+      // (Kimi, DeepSeek-R1) don't reject the conversation history with 400.
+      if (reasoningContent) {
+        (assistantMsg as Record<string, unknown>).reasoning_content = reasoningContent;
       }
       result.push(assistantMsg);
     } else if (msg.role === "user") {

@@ -11,6 +11,7 @@ export interface ModelInfo {
   description?: string;
   gpu?: string;
   provider?: string;
+  tags?: string[];
 }
 
 export interface ModelToggleResult {
@@ -70,6 +71,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           description: m.description,
           gpu: m.gpu,
           provider: m.provider ?? (m.name.startsWith("claude") ? "anthropic" : "openai"),
+          tags: m.capabilities ?? (m as Record<string, unknown>).tags as string[] | undefined,
         })),
       );
       // Pre-select the current model
@@ -247,15 +249,16 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           const isSelected = item.globalIndex === selectedIndex;
           const isCurrent = m.name === currentModel;
           const runtimeLabel = runtimeLabels[m.name];
-          const headLine = (isSelected ? "▸ " : "  ") + (runtimeLabel ?? m.name);
+          const tagLine = m.tags && m.tags.length > 0 ? "  " + m.tags.map(t => `[${t}]`).join(" ") : "";
 
           return (
             <Box key={m.name} flexDirection="column">
               <Box flexDirection="row">
                 <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
-                  {headLine}
+                  {(isSelected ? "▸ " : "  ") + (runtimeLabel ?? m.name)}
                 </Text>
                 {isCurrent && <Text color={theme.success}>{" ●"}</Text>}
+                {tagLine && <Text dimColor>{tagLine}</Text>}
               </Box>
               {isSelected && m.description && (
                 <Text dimColor>{"    "}{m.description}</Text>
