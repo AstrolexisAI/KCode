@@ -166,7 +166,18 @@ export function countSuccessfulMutations(messages: Message[]): {
       i--;
       continue;
     }
-    if (typeof m.content === "string") break;
+    if (typeof m.content === "string") {
+      // [SYSTEM] injections from internal guards (reconnaissance, reasoning loop,
+      // post-edit feedback) are NOT the original user prompt — they're internal
+      // directives. Treating them as a boundary would make the REALITY CHECK only
+      // look at the final summary turn, missing all the mutations that happened
+      // in prior sub-turns of the same user request.
+      if (m.content.startsWith("[SYSTEM]") || m.content.startsWith("[KCODE")) {
+        i--;
+        continue;
+      }
+      break;
+    }
     if (Array.isArray(m.content)) {
       // Skip user messages that contain only tool_results — those
       // are part of the turn, not the boundary.
