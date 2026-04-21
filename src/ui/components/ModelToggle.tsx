@@ -104,18 +104,29 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     if (idx >= 0) setSelectedIndex(idx);
   }, [currentModel, models]);
 
+  // Navigate using the VISUAL order (items[]) not the raw models[] order.
+  // items[] is sorted: LOCAL → provider headers → sorted models per provider.
+  // Without this, ↓ from claude-opus would jump to a random GPT instead of claude-sonnet.
+  const navigableItems = useMemo(
+    () => items.filter((it): it is { type: "model"; model: ModelInfo; globalIndex: number } => it.type === "model"),
+    [items],
+  );
+  const currentVisualIdx = navigableItems.findIndex((it) => it.globalIndex === selectedIndex);
+
   useInput(
     (input, key) => {
-      if (!isActive || loading || models.length === 0) return;
+      if (!isActive || loading || navigableItems.length === 0) return;
 
       if (key.upArrow || input === "k") {
-        setSelectedIndex((i) => (i > 0 ? i - 1 : models.length - 1));
+        const prev = currentVisualIdx > 0 ? currentVisualIdx - 1 : navigableItems.length - 1;
+        setSelectedIndex(navigableItems[prev]!.globalIndex);
       } else if (key.downArrow || input === "j") {
-        setSelectedIndex((i) => (i < models.length - 1 ? i + 1 : 0));
+        const next = currentVisualIdx < navigableItems.length - 1 ? currentVisualIdx + 1 : 0;
+        setSelectedIndex(navigableItems[next]!.globalIndex);
       } else if (key.return) {
         const chosen = models[selectedIndex]!;
         if (chosen.name === currentModel) {
-          onDone(null); // already active, just close
+          onDone(null);
         } else {
           onDone({ model: chosen });
         }
@@ -177,18 +188,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     return result;
   }, [models]);
 
-  // Viewport: only render a window of items so the list doesn't overflow the terminal
-  const VIEWPORT_SIZE = Math.max(10, (process.stdout.rows ?? 30) - 8);
-  const selectedItemIdx = items.findIndex(
-    (it) => it.type === "model" && it.globalIndex === selectedIndex,
-  );
-  const viewStart = useMemo(() => {
-    if (selectedItemIdx < 0) return 0;
-    // Keep selected item visible: shift window down/up as needed
-    return Math.max(0, Math.min(selectedItemIdx - Math.floor(VIEWPORT_SIZE / 2), items.length - VIEWPORT_SIZE));
-  }, [selectedItemIdx, items.length, VIEWPORT_SIZE]);
-  const visibleItems = items.slice(viewStart, viewStart + VIEWPORT_SIZE);
-  const showScrollHint = items.length > VIEWPORT_SIZE;
+  const showScrollHint = models.length > 20;
 
   if (loading) {
     return (
@@ -213,8 +213,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
         )}
       </Text>
       <Box flexDirection="column" marginTop={1}>
-        {viewStart > 0 && <Text dimColor>  ↑ {viewStart} more above</Text>}
-        {visibleItems.map((item, i) => {
+        {items.map((item, i) => {
           if (item.type === "header") {
             return (
               <Box key={`hdr-${item.label}-${i}`} marginTop={i > 0 ? 1 : 0}>
@@ -246,9 +245,6 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
             </Box>
           );
         })}
-        {viewStart + VIEWPORT_SIZE < items.length && (
-          <Text dimColor>  ↓ {items.length - viewStart - VIEWPORT_SIZE} more below</Text>
-        )}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
