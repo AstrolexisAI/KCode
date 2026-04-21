@@ -749,7 +749,16 @@ export default function App({ config, conversationManager, tools, initialSession
 
         // Fetch models live from the provider API — no hardcoded names
         const { fetchProviderModels } = await import("../core/cloud-model-discovery.js");
-        const { getModelProvider } = await import("../core/models.js");
+        const { getModelProvider, listModels, removeModel } = await import("../core/models.js");
+
+        // Remove all stale models for this provider before registering fresh ones.
+        // Prevents accumulation of outdated entries across multiple /cloud runs.
+        const existing = await listModels();
+        const stale = existing.filter((m) => m.baseUrl === provider.baseUrl);
+        for (const m of stale) {
+          await removeModel(m.name);
+        }
+
         const discovered = await fetchProviderModels(
           provider.id,
           provider.baseUrl,
