@@ -56,6 +56,7 @@ export interface Settings {
   geminiApiKey?: string; // Gemini API key
   deepseekApiKey?: string; // DeepSeek API key
   togetherApiKey?: string; // Together AI API key
+  kimiApiKey?: string;    // Kimi/Moonshot AI API key
   apiBase?: string;
   systemPromptExtra?: string;
   autoRoute?: boolean;
@@ -227,6 +228,7 @@ function parseSettings(raw: Record<string, unknown> | null): Settings {
     geminiApiKey: typeof raw.geminiApiKey === "string" ? raw.geminiApiKey : undefined,
     deepseekApiKey: typeof raw.deepseekApiKey === "string" ? raw.deepseekApiKey : undefined,
     togetherApiKey: typeof raw.togetherApiKey === "string" ? raw.togetherApiKey : undefined,
+    kimiApiKey: typeof raw.kimiApiKey === "string" ? raw.kimiApiKey : undefined,
     apiBase: typeof raw.apiBase === "string" ? raw.apiBase : undefined,
     systemPromptExtra:
       typeof raw.systemPromptExtra === "string" ? raw.systemPromptExtra : undefined,
@@ -392,6 +394,7 @@ function mergeSettings(...layers: Settings[]): Settings {
     if (layer.geminiApiKey !== undefined) result.geminiApiKey = layer.geminiApiKey;
     if (layer.deepseekApiKey !== undefined) result.deepseekApiKey = layer.deepseekApiKey;
     if (layer.togetherApiKey !== undefined) result.togetherApiKey = layer.togetherApiKey;
+    if (layer.kimiApiKey !== undefined) result.kimiApiKey = layer.kimiApiKey;
     if (layer.apiBase !== undefined) result.apiBase = layer.apiBase;
     if (layer.systemPromptExtra !== undefined) result.systemPromptExtra = layer.systemPromptExtra;
     if (layer.autoRoute !== undefined) result.autoRoute = layer.autoRoute;
@@ -879,6 +882,16 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
       log.info("config", `Auto-routing ${model} → api.x.ai (XAI_API_KEY present)`);
     }
   }
+  const lowerModel = model.toLowerCase();
+  if (isLocalhost && (lowerModel.startsWith("kimi-") || lowerModel.startsWith("moonshot-"))) {
+    const hasKimiKey =
+      process.env.MOONSHOT_API_KEY ||
+      (settings as Record<string, unknown>).kimiApiKey;
+    if (hasKimiKey) {
+      apiBase = "https://api.moonshot.cn";
+      log.info("config", `Auto-routing ${model} → api.moonshot.cn (MOONSHOT_API_KEY present)`);
+    }
+  }
   const contextSize = await getModelContextSize(model);
 
   const { getContextWindowCap } = await import("./pro.js");
@@ -905,6 +918,8 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
       process.env.DEEPSEEK_API_KEY ?? (settings.deepseekApiKey as string | undefined),
     togetherApiKey:
       process.env.TOGETHER_API_KEY ?? (settings.togetherApiKey as string | undefined),
+    kimiApiKey:
+      process.env.MOONSHOT_API_KEY ?? (settings.kimiApiKey as string | undefined),
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,

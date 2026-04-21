@@ -8,7 +8,8 @@ export type BillingProvider =
   | "google"
   | "deepseek"
   | "groq"
-  | "openrouter";
+  | "openrouter"
+  | "kimi";
 
 export const KNOWN_PROVIDERS: readonly BillingProvider[] = [
   "anthropic",
@@ -18,6 +19,7 @@ export const KNOWN_PROVIDERS: readonly BillingProvider[] = [
   "deepseek",
   "groq",
   "openrouter",
+  "kimi",
 ] as const;
 
 /**
@@ -59,6 +61,11 @@ export function providerFromModel(
   }
   if (m.startsWith("gemini-")) return "google";
   if (m.startsWith("deepseek-")) return "deepseek";
+  if (
+    url.includes("api.moonshot.cn") ||
+    m.startsWith("kimi-") ||
+    m.startsWith("moonshot-")
+  ) return "kimi";
 
   return null;
 }
@@ -80,5 +87,7 @@ export function providerLabel(p: BillingProvider): string {
       return "Groq";
     case "openrouter":
       return "OpenRouter";
+    case "kimi":
+      return "Kimi (Moonshot)";
   }
 }

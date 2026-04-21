@@ -150,6 +150,10 @@ export function validateKeyFormat(
     if (!key.startsWith("sk-")) {
       return `OpenAI key format error: expected 'sk-…' but got '${key.slice(0, 6)}…'.`;
     }
+  } else if (p.includes("moonshot") || p.includes("kimi")) {
+    if (!key.startsWith("sk-")) {
+      return `Kimi/Moonshot key format error: expected 'sk-…' but got '${key.slice(0, 6)}…'. Check platform.moonshot.cn.`;
+    }
   }
   return null;
 }
@@ -275,6 +279,13 @@ export function resolveApiKey(
   }
   if (lower.startsWith("grok") || urlLower.includes("x.ai")) {
     return process.env.XAI_API_KEY ?? config.xaiApiKey ?? config.apiKey;
+  }
+  if (
+    lower.startsWith("kimi-") ||
+    lower.startsWith("moonshot-") ||
+    urlLower.includes("moonshot.cn")
+  ) {
+    return process.env.MOONSHOT_API_KEY ?? config.kimiApiKey ?? config.apiKey;
   }
 
   return config.apiKey;
