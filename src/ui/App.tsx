@@ -1139,9 +1139,9 @@ export default function App({ config, conversationManager, tools, initialSession
         {/* Agent pool panel — auto-hides when empty */}
         <AgentPanel />
 
-        {/* Kodi companion — hidden during model-toggle so it doesn't compete
+        {/* Kodi companion — hidden during /model (toggle) so it doesn't compete
             with the picker's re-renders and cause visual flicker on arrow keys */}
-        {mode !== "model-toggle" && <KodiCompanion
+        {mode !== "toggle" && <KodiCompanion
           mode={mode}
           toolUseCount={toolUseCount}
           tokenCount={tokenCount}
