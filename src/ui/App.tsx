@@ -1139,8 +1139,9 @@ export default function App({ config, conversationManager, tools, initialSession
         {/* Agent pool panel — auto-hides when empty */}
         <AgentPanel />
 
-        {/* Kodi companion — pinned above input, always visible */}
-        <KodiCompanion
+        {/* Kodi companion — hidden during model-toggle so it doesn't compete
+            with the picker's re-renders and cause visual flicker on arrow keys */}
+        {mode !== "model-toggle" && <KodiCompanion
           mode={mode}
           toolUseCount={toolUseCount}
           tokenCount={tokenCount}
@@ -1162,7 +1163,7 @@ export default function App({ config, conversationManager, tools, initialSession
           subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
           tier={subscriptionTier}
           tierFeatures={subscriptionFeatures}
-        />
+        />}
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
           <QuestionDialog
