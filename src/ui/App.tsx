@@ -832,7 +832,7 @@ export default function App({ config, conversationManager, tools, initialSession
       if (!result) {
         // Give Ink one tick to unmount ModelToggle's useInput before
         // InputPrompt's useInput re-registers — prevents focus race condition.
-        setTimeout(() => setMode("input"), 0);
+        setTimeout(() => setMode("input"), 50);
         return;
       }
 
