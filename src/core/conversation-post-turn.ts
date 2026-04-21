@@ -330,7 +330,12 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     lastEmptyType = undefined;
   }
 
-  if (!hasTextOutput && ctx.stopReason === "end_turn" && emptyEndTurnCount < 2) {
+  // Reasoning models (kimi, grok-reasoning, o1/o3) need more retries when mid-task:
+  // they produce multiple thinking-only turns while planning before emitting the tool call.
+  const maxEmptyRetries =
+    lastEmptyType === "thinking_only" && ctx.toolUseCount > 0 ? 4 : 2;
+
+  if (!hasTextOutput && ctx.stopReason === "end_turn" && emptyEndTurnCount < maxEmptyRetries) {
     emptyEndTurnCount++;
 
     // If context is near full, emergency compact before retrying — otherwise the retry
@@ -377,21 +382,27 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
 
     log.info(
       "session",
-      `Empty response (${lastEmptyType}) on turn ${ctx.turnCount} — retry ${emptyEndTurnCount}/2${
+      `Empty response (${lastEmptyType}) on turn ${ctx.turnCount} — retry ${emptyEndTurnCount}/${maxEmptyRetries}${
         switchedModel ? ` via fallback ${switchedModel}` : ""
       }`,
     );
 
-    // Context-aware retry prompt — include what was done so the model can summarize
+    // Context-aware retry prompt
     const toolCount = ctx.toolUseCount;
     const retryPrompt =
-      lastEmptyType === "thinking_only"
-        ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
-        : lastEmptyType === "tools_only" || toolCount > 0
-          ? `[SYSTEM] You executed ${toolCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
-          : lastEmptyType === "thinking_and_tools"
-            ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
-            : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
+      lastEmptyType === "thinking_only" && toolCount > 0
+        ? // Reasoning model read/used tools then got stuck thinking — tell it to emit the tool call
+          "[SYSTEM] URGENT: You have been thinking but produced no output and no tool call. " +
+          "You already read the source file. You have enough context. " +
+          "Call the Edit tool NOW with exact old_string and new_string. " +
+          "Stop thinking — emit the Edit tool call immediately."
+        : lastEmptyType === "thinking_only"
+          ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and either call a tool or answer the user directly."
+          : lastEmptyType === "tools_only" || toolCount > 0
+            ? `[SYSTEM] You executed ${toolCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
+            : lastEmptyType === "thinking_and_tools"
+              ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
+              : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
 
     injectMessages.push({ role: "user", content: retryPrompt });
     // Visible-to-user note when we swap providers so it's not silent.
