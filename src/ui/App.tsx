@@ -747,37 +747,46 @@ export default function App({ config, conversationManager, tools, initialSession
           }
         }
 
-        // Fetch models live from the provider API — no hardcoded names
+        // Fetch models live from the provider API — no hardcoded names.
+        // IMPORTANT: discover FIRST, then replace. Never delete before confirming success.
         const { fetchProviderModels } = await import("../core/cloud-model-discovery.js");
         const { getModelProvider, listModels, removeModel } = await import("../core/models.js");
 
-        // Remove all stale models for this provider before registering fresh ones.
-        // Prevents accumulation of outdated entries across multiple /cloud runs.
-        const existing = await listModels();
-        const stale = existing.filter((m) => m.baseUrl === provider.baseUrl);
-        for (const m of stale) {
-          await removeModel(m.name);
+        // For OAuth flows result.apiKey may be empty — get the token from keychain
+        let discoveryKey = result.apiKey ?? "";
+        if (!discoveryKey && provider.id === "anthropic") {
+          try {
+            const { getClaudeCodeToken } = await import("../core/auth/claude-code-bridge.js");
+            discoveryKey = (await getClaudeCodeToken()) ?? "";
+          } catch { /* not available */ }
         }
 
-        const discovered = await fetchProviderModels(
-          provider.id,
-          provider.baseUrl,
-          result.apiKey ?? "",
-        );
-        const modelsToRegister = discovered.length > 0 ? discovered : [];
-        for (const m of modelsToRegister) {
-          const modelProvider = await getModelProvider(m.id);
-          await addModel({
-            name: m.id,
-            baseUrl: provider.baseUrl,
-            provider: modelProvider,
-            contextSize: m.contextWindow,
-            description: `${provider.name} cloud model`,
-          });
-        }
+        const discovered = await fetchProviderModels(provider.id, provider.baseUrl, discoveryKey);
 
-        // Switch active model to the first discovered model
-        const newModel = modelsToRegister[0]?.id ?? provider.id;
+        if (discovered.length > 0) {
+          // Discovery succeeded — now safe to remove stale entries and register fresh ones
+          const existing = await listModels();
+          for (const m of existing.filter((m) => m.baseUrl === provider.baseUrl)) {
+            await removeModel(m.name);
+          }
+          for (const m of discovered) {
+            const modelProvider = await getModelProvider(m.id);
+            await addModel({
+              name: m.id,
+              baseUrl: provider.baseUrl,
+              provider: modelProvider,
+              contextSize: m.contextWindow,
+              description: `${provider.name} cloud model`,
+            });
+          }
+        }
+        // If discovery failed (empty), keep whatever was registered previously — don't break things.
+
+        const modelsToRegister = discovered;
+
+        // Switch active model to the first discovered model, or keep current if nothing found
+        const existingForProvider = (await listModels()).filter((m) => m.baseUrl === provider.baseUrl);
+        const newModel = discovered[0]?.id ?? existingForProvider[0]?.name ?? config.model;
         config.model = newModel;
         config.modelExplicitlySet = true;
         conversationManager.getConfig().model = newModel;
