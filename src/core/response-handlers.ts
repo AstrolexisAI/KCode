@@ -106,13 +106,17 @@ export function handleEmptyResponseRetry(
   );
 
   const retryPrompt =
-    emptyType === "thinking_only"
-      ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and answer the user directly in plain text now."
-      : emptyType === "tools_only" || toolUseCount > 0
-        ? `[SYSTEM] You executed ${toolUseCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
-        : emptyType === "thinking_and_tools"
-          ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
-          : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
+    emptyType === "thinking_only" && toolUseCount > 0
+      ? // Model read files / used tools, then got stuck thinking — nudge to ACT not explain
+        "[SYSTEM] You reasoned after reading files but produced no output and called no tools. " +
+        "You have enough context. Call Write, Edit, or MultiEdit NOW to make the change. Do not produce text — call a tool."
+      : emptyType === "thinking_only"
+        ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and either call a tool or answer the user directly."
+        : emptyType === "tools_only" || toolUseCount > 0
+          ? `[SYSTEM] You executed ${toolUseCount} tools but didn't provide any response text. You MUST now write a brief summary (3-6 sentences) of what you accomplished. Do NOT use any more tools — just respond with text.`
+          : emptyType === "thinking_and_tools"
+            ? "[SYSTEM] You reasoned and used tools but gave no visible answer. Provide a direct response to the user now."
+            : "[SYSTEM] Your previous turn produced no output at all. Respond directly to the user now.";
 
   return {
     action: "continue",

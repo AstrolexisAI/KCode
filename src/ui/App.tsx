@@ -830,7 +830,9 @@ export default function App({ config, conversationManager, tools, initialSession
   const handleToggleDone = useCallback(
     async (result: ModelToggleResult | null) => {
       if (!result) {
-        setMode("input");
+        // Give Ink one tick to unmount ModelToggle's useInput before
+        // InputPrompt's useInput re-registers — prevents focus race condition.
+        setTimeout(() => setMode("input"), 0);
         return;
       }
 
@@ -930,7 +932,7 @@ export default function App({ config, conversationManager, tools, initialSession
         },
       ]);
 
-      setMode("input");
+      setTimeout(() => setMode("input"), 0);
     },
     [config],
   );
