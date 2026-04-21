@@ -396,14 +396,12 @@ export async function* processSSEStream(
                 `Reasoning exceeded ${MAX_THINKING_CHARS} chars with zero output — aborting generation`,
               );
               repetitionAborted = true;
-              stopReason = "end_turn";
-              const capMsg =
-                `\n\n[Generation stopped: reasoning exceeded ${MAX_THINKING_CHARS} chars\n` +
-                `without producing any output. The model is stuck in a thinking\n` +
-                `loop. Try: /compact (reduce history), /clear (start fresh), or\n` +
-                `/toggle (switch to a different model).]`;
-              yield { type: "text_delta", text: capMsg };
-              textChunks.push(capMsg);
+              stopReason = "repetition_aborted";
+              yield {
+                type: "turn_end",
+                stopReason: "repetition_aborted",
+                emptyType: "thinking_only",
+              } as import("./types").StreamEvent;
               break;
             }
 
@@ -499,16 +497,12 @@ export async function* processSSEStream(
                 `Repetition loop detected after ~${tokensSoFar} tokens: "${repeated}" — aborting generation`,
               );
               repetitionAborted = true;
-              stopReason = "end_turn";
-              // Phase 23: actionable abort message so the user knows
-              // exactly what to do (not just "sorry loop detected").
-              const msg =
-                `\n\n[Generation stopped: repetition loop detected after ~${tokensSoFar} tokens.\n` +
-                `The model was repeating the same block — usually means context window\n` +
-                `saturation or provider instability. Try: /compact (reduce history),\n` +
-                `/clear (start fresh), or /toggle (switch model).]`;
-              yield { type: "text_delta", text: msg };
-              textChunks.push(msg);
+              stopReason = "repetition_aborted";
+              yield {
+                type: "turn_end",
+                stopReason: "repetition_aborted",
+                emptyType: undefined,
+              } as import("./types").StreamEvent;
               break;
             }
           }
