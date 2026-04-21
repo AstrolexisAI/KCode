@@ -216,12 +216,14 @@ const KNOWN_CONTEXT_SIZES: Record<string, number> = {
   // DeepSeek
   "deepseek-chat": 128_000,
   "deepseek-reasoner": 128_000,
-  // Kimi (Moonshot AI) — k2 has 128K standard, moonshot-v1 variants up to 128K
+  // Kimi (Moonshot AI) — sizes from api.moonshot.ai/v1/models (context_window field)
+  "kimi-k2.5": 262_144,
+  "kimi-k2.6": 262_144,
   "kimi-k2": 128_000,
-  "kimi-k2-0711": 128_000,
-  "moonshot-v1-8k": 8_000,
-  "moonshot-v1-32k": 32_000,
-  "moonshot-v1-128k": 128_000,
+  "moonshot-v1-auto": 131_072,
+  "moonshot-v1-128k": 131_072,
+  "moonshot-v1-32k": 32_768,
+  "moonshot-v1-8k": 8_192,
 };
 
 /**

@@ -888,8 +888,8 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
       process.env.MOONSHOT_API_KEY ||
       (settings as Record<string, unknown>).kimiApiKey;
     if (hasKimiKey) {
-      apiBase = "https://api.moonshot.cn";
-      log.info("config", `Auto-routing ${model} → api.moonshot.cn (MOONSHOT_API_KEY present)`);
+      apiBase = "https://api.moonshot.ai";
+      log.info("config", `Auto-routing ${model} → api.moonshot.ai (MOONSHOT_API_KEY present)`);
     }
   }
   const contextSize = await getModelContextSize(model);

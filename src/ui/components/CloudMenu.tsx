@@ -121,7 +121,7 @@ const PROVIDERS: CloudProvider[] = [
     name: "Kimi (Moonshot AI)",
     envVar: "MOONSHOT_API_KEY",
     settingsKey: "kimiApiKey",
-    baseUrl: "https://api.moonshot.cn",
+    baseUrl: "https://api.moonshot.ai",
     hint: "sk-...",
     pricing: {
       flagship: { name: "kimi", input: 0.15, output: 2.5 },
