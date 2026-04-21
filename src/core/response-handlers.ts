@@ -98,7 +98,12 @@ export function handleEmptyResponseRetry(
   turnCount: number,
   toolUseCount: number,
 ): ResponseAction | null {
-  if (!emptyType || emptyCount >= 2) return null;
+  // Reasoning models (kimi, grok-reasoning, o1/o3) often produce multiple
+  // thinking-only turns before finally emitting a tool call. Allow more
+  // retries when the model already used tools this session (mid-task),
+  // since it likely has a valid plan and just needs more output budget.
+  const maxRetries = emptyType === "thinking_only" && toolUseCount > 0 ? 4 : 2;
+  if (!emptyType || emptyCount >= maxRetries) return null;
 
   log.info(
     "session",
@@ -107,9 +112,12 @@ export function handleEmptyResponseRetry(
 
   const retryPrompt =
     emptyType === "thinking_only" && toolUseCount > 0
-      ? // Model read files / used tools, then got stuck thinking — nudge to ACT not explain
-        "[SYSTEM] You reasoned after reading files but produced no output and called no tools. " +
-        "You have enough context. Call Write, Edit, or MultiEdit NOW to make the change. Do not produce text — call a tool."
+      ? // Reasoning model read files and is thinking but not emitting the tool call.
+        // Be very explicit about what tool to call and why.
+        "[SYSTEM] URGENT: You have been thinking but have not called any tools. " +
+        "You already read the source file. You know what to change. " +
+        "Call the Edit tool NOW with the exact old_string and new_string. " +
+        "Stop thinking — emit the Edit tool call in your very next token."
       : emptyType === "thinking_only"
         ? "[SYSTEM] You reasoned but produced no visible answer. Stop thinking and either call a tool or answer the user directly."
         : emptyType === "tools_only" || toolUseCount > 0
