@@ -979,26 +979,46 @@ export class ConversationManager {
       // If no tool calls or stop reason is not tool_use — handle post-turn (delegated to conversation-post-turn.ts)
       if (toolCalls.length === 0 || stopReason !== "tool_use") {
         // Reasoning loop guard: detect consecutive turns with text output but no tool calls.
-        // Reasoning models (grok reasoning, o1/o3) can enter a "re-analysis loop" where they
-        // keep producing thinking + summary text without making forward progress.
-        // After 3 consecutive text-only turns, inject a hard directive to act or declare done.
+        // Reasoning models (grok-reasoning, o1/o3/o4) tend to over-analyze and produce
+        // summary text without calling any tools — especially on turn 1 of complex tasks.
+        //
+        // Thresholds:
+        //  - Reasoning model (hasThinkingNow) on turn 1: fire immediately (threshold 1).
+        //    If the model spent tokens thinking about an implementation task and then
+        //    responded with analysis text, it needs a redirect NOW — not after 3 turns.
+        //  - All other cases: fire after 3 consecutive text-only turns (existing behavior).
         const hasTextOutputNow = textChunks.join("").trim().length > 0;
         const hasThinkingNow = streamResult.thinkingChunks.length > 0;
         if (hasTextOutputNow) {
           guardState.consecutiveTextOnlyTurns++;
-          if (guardState.consecutiveTextOnlyTurns >= 3) {
+          const isAudit = (() => {
+            try {
+              const { isAuditSession } =
+                require("./session-tracker") as typeof import("./session-tracker");
+              return isAuditSession();
+            } catch { return false; }
+          })();
+          const threshold =
+            hasThinkingNow && turnCount === 1 && !isAudit ? 1 : 3;
+          if (guardState.consecutiveTextOnlyTurns >= threshold) {
+            const isFirstTurn = turnCount === 1;
             log.warn(
               "session",
-              `Reasoning loop: ${guardState.consecutiveTextOnlyTurns} consecutive text-only turns — injecting break directive`,
+              `Reasoning loop: ${guardState.consecutiveTextOnlyTurns} text-only turn(s) ` +
+                `(threshold ${threshold}) — injecting tool-use directive`,
             );
             this.state.messages.push({
               role: "user",
-              content:
-                `[SYSTEM] You have produced ${guardState.consecutiveTextOnlyTurns} consecutive turns ` +
-                `with${hasThinkingNow ? " reasoning and" : ""} text output but zero tool calls. ` +
-                `Stop re-analyzing. Either: (1) declare the task complete with a final summary, ` +
-                `or (2) call a tool RIGHT NOW to make measurable progress. ` +
-                `Do NOT produce another text-only response.`,
+              content: isFirstTurn && hasThinkingNow
+                ? "[SYSTEM] You reasoned about this task but called ZERO tools. " +
+                  "For implementation tasks you MUST read source files before responding. " +
+                  "Call Read, Grep, or Glob on the relevant files RIGHT NOW. " +
+                  "Do not produce more text without first calling a tool."
+                : `[SYSTEM] You have produced ${guardState.consecutiveTextOnlyTurns} consecutive turns ` +
+                  `with${hasThinkingNow ? " reasoning and" : ""} text output but zero tool calls. ` +
+                  `Stop re-analyzing. Either: (1) declare the task complete with a final summary, ` +
+                  `or (2) call a tool RIGHT NOW to make measurable progress. ` +
+                  `Do NOT produce another text-only response.`,
             });
             guardState.consecutiveTextOnlyTurns = 0;
           }
