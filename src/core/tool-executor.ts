@@ -617,6 +617,27 @@ export async function* executeToolsSequential(
     const toolStartMs = Date.now();
     let result: import("./types").ToolResult;
 
+    // PreBash hook: fires before Bash execution
+    if (call.name === "Bash") {
+      try {
+        await ctx.hooks.runEventHook("PreBash", { command: effectiveInput.command as string });
+      } catch (err) {
+        log.debug("hooks", `PreBash hook failed: ${err}`);
+      }
+    }
+
+    // PreEdit hook: fires before Edit/MultiEdit execution
+    if (call.name === "Edit" || call.name === "MultiEdit") {
+      try {
+        await ctx.hooks.runEventHook("PreEdit", {
+          file_path: effectiveInput.file_path as string,
+          tool_name: call.name,
+        });
+      } catch (err) {
+        log.debug("hooks", `PreEdit hook failed: ${err}`);
+      }
+    }
+
     // Stream Bash output in real-time via tool_stream events
     if (call.name === "Bash" && !(effectiveInput as Record<string, unknown>).run_in_background) {
       const streamQueue: string[] = [];
@@ -668,6 +689,35 @@ export async function* executeToolsSequential(
     }
 
     const toolDurationMs = Date.now() - toolStartMs;
+
+    // PostBash hook: fires after Bash execution
+    if (call.name === "Bash") {
+      try {
+        ctx.hooks.fireAndForget("PostBash", {
+          command: effectiveInput.command as string,
+          exitCode: result.exitCode ?? 0,
+        });
+      } catch (err) {
+        log.debug("hooks", `PostBash hook failed: ${err}`);
+      }
+    }
+
+    // PostEdit hook: fires after successful Edit/MultiEdit/Write execution
+    if (
+      (call.name === "Edit" || call.name === "MultiEdit" || call.name === "Write") &&
+      !result.is_error &&
+      typeof effectiveInput.file_path === "string"
+    ) {
+      try {
+        ctx.hooks.fireAndForget("PostEdit", {
+          file_path: effectiveInput.file_path,
+          tool_name: call.name,
+          success: true,
+        });
+      } catch (err) {
+        log.debug("hooks", `PostEdit hook failed: ${err}`);
+      }
+    }
 
     // Record to persistent analytics
     try {
