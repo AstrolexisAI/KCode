@@ -99,6 +99,15 @@ export const PROVIDER_CAPABILITIES: Record<ModelProvider, ProviderCaps> = {
     toolFormat: "openai",
     streamParser: "openai",
   },
+  kimi: {
+    usesSystemField: true,
+    systemRoleForReasoning: "system",
+    supportsThinking: false,
+    supportsPromptCache: false,
+    supportsReasoningEffort: false,
+    toolFormat: "openai",
+    streamParser: "openai",
+  },
 };
 
 /** Look up capabilities for a provider, falling back to a safe OpenAI-compatible default. */

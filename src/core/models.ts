@@ -16,7 +16,8 @@ export type ModelProvider =
   | "deepseek"
   | "groq"
   | "openrouter"
-  | "together";
+  | "together"
+  | "kimi";
 
 export interface ModelEntry {
   name: string;
@@ -132,7 +133,7 @@ function parseModelsConfig(raw: any): ModelsConfig {
           gpu: typeof entry.gpu === "string" ? entry.gpu : undefined,
           description: typeof entry.description === "string" ? entry.description : undefined,
           provider: (
-            ["openai", "anthropic", "xai", "google", "deepseek", "groq", "openrouter", "together"] as const
+            ["openai", "anthropic", "xai", "google", "deepseek", "groq", "openrouter", "together", "kimi"] as const
           ).includes(entry.provider)
             ? (entry.provider as ModelProvider)
             : undefined,
@@ -215,6 +216,12 @@ const KNOWN_CONTEXT_SIZES: Record<string, number> = {
   // DeepSeek
   "deepseek-chat": 128_000,
   "deepseek-reasoner": 128_000,
+  // Kimi (Moonshot AI) — k2 has 128K standard, moonshot-v1 variants up to 128K
+  "kimi-k2": 128_000,
+  "kimi-k2-0711": 128_000,
+  "moonshot-v1-8k": 8_000,
+  "moonshot-v1-32k": 32_000,
+  "moonshot-v1-128k": 128_000,
 };
 
 /**
@@ -321,6 +328,7 @@ export async function getModelProvider(modelName: string): Promise<ModelProvider
   if (lower.startsWith("grok-")) return "xai";
   if (lower.startsWith("gemini-") || lower.startsWith("gemini_")) return "google";
   if (lower.startsWith("deepseek-") || lower.startsWith("deepseek_")) return "deepseek";
+  if (lower.startsWith("kimi-") || lower.startsWith("moonshot-")) return "kimi";
 
   // For names that don't match a known prefix, trust the registry entry.
   if (entry?.provider) return entry.provider;

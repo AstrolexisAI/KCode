@@ -89,6 +89,7 @@ export interface KCodeConfig {
   geminiApiKey?: string; // Gemini API key (GEMINI_API_KEY env var)
   deepseekApiKey?: string; // DeepSeek API key (DEEPSEEK_API_KEY env var)
   togetherApiKey?: string; // Together AI API key (TOGETHER_API_KEY env var)
+  kimiApiKey?: string;    // Kimi/Moonshot AI API key (MOONSHOT_API_KEY env var)
   apiBase?: string;
   model: string;
   maxTokens: number;
