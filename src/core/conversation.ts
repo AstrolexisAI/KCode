@@ -1005,15 +1005,16 @@ export class ConversationManager {
             log.warn(
               "session",
               `Reasoning loop: ${guardState.consecutiveTextOnlyTurns} text-only turn(s) ` +
-                `(threshold ${threshold}) — injecting tool-use directive`,
+                `(threshold ${threshold}) — injecting tool-use directive and forcing continuation`,
             );
             this.state.messages.push({
               role: "user",
               content: isFirstTurn && hasThinkingNow
                 ? "[SYSTEM] You reasoned about this task but called ZERO tools. " +
-                  "For implementation tasks you MUST read source files before responding. " +
-                  "Call Read, Grep, or Glob on the relevant files RIGHT NOW. " +
-                  "Do not produce more text without first calling a tool."
+                  "You have filesystem tools available: Read (reads a file by path), " +
+                  "Grep (searches code), Glob (finds files). " +
+                  "Call the Read tool NOW on the first relevant source file. " +
+                  "Do NOT write any more text. Your very next action must be a tool call."
                 : `[SYSTEM] You have produced ${guardState.consecutiveTextOnlyTurns} consecutive turns ` +
                   `with${hasThinkingNow ? " reasoning and" : ""} text output but zero tool calls. ` +
                   `Stop re-analyzing. Either: (1) declare the task complete with a final summary, ` +
@@ -1021,6 +1022,12 @@ export class ConversationManager {
                   `Do NOT produce another text-only response.`,
             });
             guardState.consecutiveTextOnlyTurns = 0;
+            // Force continuation: yield a turn_end for the analysis turn, then re-loop
+            // so the model is immediately asked to act on the injected directive.
+            // Without this, handlePostTurn would return break and the directive would
+            // only be seen on the user's NEXT message, not this one.
+            yield { type: "turn_end", stopReason: "reasoning_loop_redirect" };
+            continue;
           }
         } else {
           guardState.consecutiveTextOnlyTurns = 0;
