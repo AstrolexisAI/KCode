@@ -606,6 +606,12 @@ export async function processStreamEvents(
           });
           currentText = "";
           setStreamingText("");
+        } else if (event.stopReason === "repetition_aborted") {
+          // Thinking repetition loop — a retry will be injected automatically.
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: "  \u26a0 Reasoning loop detected \u2014 retrying\u2026" },
+          ]);
         } else if (
           !hadPartialProgress &&
           event.stopReason !== "tool_use" &&

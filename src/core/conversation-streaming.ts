@@ -427,14 +427,16 @@ export async function* processSSEStream(
                 `Reasoning-channel loop detected after ~${tokensSoFar} tokens: "${repeated}" — aborting generation`,
               );
               repetitionAborted = true;
-              stopReason = "end_turn";
-              const msg =
-                `\n\n[Generation stopped: reasoning loop detected after ~${tokensSoFar} tokens.\n` +
-                `The model was stuck repeating the same thinking block without\n` +
-                `producing output. Try: /compact (reduce history), /clear (start\n` +
-                `fresh), or /toggle (switch model).]`;
-              yield { type: "text_delta", text: msg };
-              textChunks.push(msg);
+              // Use a dedicated stopReason so handlePostTurn and stream-handler
+              // don't mistake this for a truncated response and trigger retries.
+              stopReason = "repetition_aborted";
+              // Emit as a warning event (not text_delta) so it doesn't land in
+              // textChunks and won't trigger looksIncomplete / truncation retry.
+              yield {
+                type: "turn_end",
+                stopReason: "repetition_aborted",
+                emptyType: "thinking_only",
+              } as import("./types").StreamEvent;
               break;
             }
           }

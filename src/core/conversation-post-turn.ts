@@ -335,7 +335,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   const maxEmptyRetries =
     lastEmptyType === "thinking_only" && ctx.toolUseCount > 0 ? 4 : 2;
 
-  if (!hasTextOutput && ctx.stopReason === "end_turn" && emptyEndTurnCount < maxEmptyRetries) {
+  if (!hasTextOutput && (ctx.stopReason === "end_turn" || ctx.stopReason === "repetition_aborted") && emptyEndTurnCount < maxEmptyRetries) {
     emptyEndTurnCount++;
 
     // If context is near full, emergency compact before retrying — otherwise the retry
