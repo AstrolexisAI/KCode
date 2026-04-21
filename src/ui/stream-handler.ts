@@ -140,7 +140,20 @@ export async function processStreamEvents(
           const thinking = currentThinking;
           setIsThinking(false);
           setStreamingThinking("");
-          setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
+          setCompleted((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.kind === "thinking") {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                kind: "thinking",
+                text: last.text,
+                blockCount: (last.blockCount ?? 1) + 1,
+                totalChars: (last.totalChars ?? last.text.length) + thinking.length,
+              };
+              return updated;
+            }
+            return [...prev, { kind: "thinking", text: thinking }];
+          });
           currentThinking = "";
         }
         currentText += event.text;
@@ -177,7 +190,20 @@ export async function processStreamEvents(
           const thinking = currentThinking;
           setIsThinking(false);
           setStreamingThinking("");
-          setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
+          setCompleted((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.kind === "thinking") {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                kind: "thinking",
+                text: last.text,
+                blockCount: (last.blockCount ?? 1) + 1,
+                totalChars: (last.totalChars ?? last.text.length) + thinking.length,
+              };
+              return updated;
+            }
+            return [...prev, { kind: "thinking", text: thinking }];
+          });
           currentThinking = "";
         }
         // Finalize any accumulated text.
@@ -459,7 +485,20 @@ export async function processStreamEvents(
           const thinking = currentThinking;
           setIsThinking(false);
           setStreamingThinking("");
-          setCompleted((prev) => [...prev, { kind: "thinking", text: thinking }]);
+          setCompleted((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.kind === "thinking") {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                kind: "thinking",
+                text: last.text,
+                blockCount: (last.blockCount ?? 1) + 1,
+                totalChars: (last.totalChars ?? last.text.length) + thinking.length,
+              };
+              return updated;
+            }
+            return [...prev, { kind: "thinking", text: thinking }];
+          });
           currentThinking = "";
         }
         // Cancel throttle timers and flush pending updates

@@ -304,6 +304,10 @@ export class LoopGuardState {
   emptyEndTurnCount = 0;
   truncationRetries = 0;
   lastEmptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output";
+  /** Turns that produced text (possibly with thinking) but zero tool calls.
+   *  Reasoning models can enter a "re-analysis loop" where they keep summarizing
+   *  without making progress. Reset to 0 whenever a tool_use fires. */
+  consecutiveTextOnlyTurns = 0;
   readonly crossTurnSigs = new Map<string, number>();
   readonly loopPatterns = new Map<string, LoopPatternEntry>();
   /** Track error fingerprints to block retrying the same failing technique */

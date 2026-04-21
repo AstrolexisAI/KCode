@@ -5,10 +5,11 @@
 
 import { Box, Text } from "ink";
 import React, { memo, useCallback, useMemo } from "react";
+import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
 import { useVirtualScroll } from "../hooks/useVirtualScroll.js";
 import { useTheme } from "../ThemeContext.js";
 import MarkdownRenderer from "./MarkdownRenderer.js";
-import type { MessageEntry } from "./MessageList.js";
+import type { MessageEntry, ThinkingEntry } from "./MessageList.js";
 import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
 
@@ -197,7 +198,7 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
         />
       );
     case "thinking":
-      return <ThinkingMessage text={entry.text} />;
+      return <ThinkingMessage text={entry.text} blockCount={entry.blockCount} totalChars={entry.totalChars} />;
     case "banner":
       return <BannerMessage title={entry.title} subtitle={entry.subtitle} />;
     case "learn":
@@ -378,7 +379,20 @@ function ToolResultMessage({
   );
 }
 
-function ThinkingMessage({ text }: { text: string }) {
+function ThinkingMessage({ text, blockCount = 1, totalChars }: ThinkingEntry) {
+  const { theme } = useTheme();
+  const chars = totalChars ?? text.length;
+  const tok = Math.round(chars / CHARS_PER_TOKEN);
+  const tokLabel = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : String(tok);
+  if (blockCount > 1) {
+    return (
+      <Box paddingLeft={2}>
+        <Text color={theme.accent} dimColor>
+          {"🧠 "}{tokLabel}{" tok · "}{blockCount}{" blocks ▸"}
+        </Text>
+      </Box>
+    );
+  }
   return <ThinkingBlockComponent text={text} isStreaming={false} defaultExpanded={false} />;
 }
 
