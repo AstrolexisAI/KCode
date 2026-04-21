@@ -736,20 +736,22 @@ export default function App({ config, conversationManager, tools, initialSession
           process.env[provider.envVar] = result.apiKey;
         }
 
-        // Update current config
+        // Update current config — use the provider-specific key field when available
         if (result.apiKey) {
           if (provider.id === "anthropic") {
             config.anthropicApiKey = result.apiKey;
+          } else if (provider.settingsKey && provider.settingsKey in config) {
+            (config as Record<string, unknown>)[provider.settingsKey] = result.apiKey;
           } else {
             config.apiKey = result.apiKey;
           }
         }
 
-        // Register default models for this provider
-        const modelProvider =
-          provider.id === "anthropic" ? ("anthropic" as const) : ("openai" as const);
+        // Register default models for this provider using the correct ModelProvider type
+        const { getModelProvider } = await import("../core/models.js");
         const modelsToRegister = provider.models.split(",").map((m) => m.trim());
         for (const modelName of modelsToRegister) {
+          const modelProvider = await getModelProvider(modelName);
           await addModel({
             name: modelName,
             baseUrl: provider.baseUrl,

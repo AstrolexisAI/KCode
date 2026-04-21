@@ -130,6 +130,19 @@ const PROVIDERS: CloudProvider[] = [
       cheapest: { name: "grok-code-fast-1", input: 0.2, output: 1.5 },
     },
   },
+  {
+    id: "kimi",
+    name: "Kimi (Moonshot AI)",
+    envVar: "MOONSHOT_API_KEY",
+    settingsKey: "kimiApiKey",
+    baseUrl: "https://api.moonshot.cn",
+    hint: "sk-...",
+    models: "kimi-k2, moonshot-v1-128k, moonshot-v1-32k, moonshot-v1-8k",
+    pricing: {
+      flagship: { name: "kimi-k2", input: 0.15, output: 2.5 },
+      cheapest: { name: "moonshot-v1-8k", input: 0.12, output: 0.12 },
+    },
+  },
 ];
 
 /**
