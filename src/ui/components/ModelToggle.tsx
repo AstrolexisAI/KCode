@@ -2,7 +2,7 @@
 // Interactive model switcher: pick any registered model (local or cloud)
 
 import { Box, Text, useInput } from "ink";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext.js";
 
 export interface ModelInfo {
@@ -126,9 +126,69 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     { isActive },
   );
 
-  const isLocal = (m: ModelInfo): boolean => {
-    return m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1");
+  const isLocal = (m: ModelInfo): boolean =>
+    m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1");
+
+  const providerLabel = (baseUrl: string): string => {
+    if (baseUrl.includes("anthropic.com")) return "ANTHROPIC";
+    if (baseUrl.includes("x.ai")) return "XAI";
+    if (baseUrl.includes("openai.com")) return "OPENAI";
+    if (baseUrl.includes("moonshot")) return "KIMI";
+    if (baseUrl.includes("groq.com")) return "GROQ";
+    if (baseUrl.includes("deepseek.com")) return "DEEPSEEK";
+    if (baseUrl.includes("together.xyz")) return "TOGETHER";
+    if (baseUrl.includes("googleapis.com") || baseUrl.includes("generativelanguage")) return "GEMINI";
+    return "CLOUD";
   };
+
+  // Build ordered list: LOCAL header → local models, then per-provider headers → sorted cloud models
+  type ListItem =
+    | { type: "header"; label: string }
+    | { type: "model"; model: ModelInfo; globalIndex: number };
+
+  const items: ListItem[] = useMemo(() => {
+    const result: ListItem[] = [];
+    const localModels = models.filter(isLocal);
+    const cloudModels = models.filter((m) => !isLocal(m));
+
+    if (localModels.length > 0) {
+      result.push({ type: "header", label: "LOCAL" });
+      for (const m of localModels) {
+        result.push({ type: "model", model: m, globalIndex: models.indexOf(m) });
+      }
+    }
+
+    // Group cloud models by provider, sort within each group
+    const byProvider = new Map<string, ModelInfo[]>();
+    for (const m of cloudModels) {
+      const prov = providerLabel(m.baseUrl);
+      if (!byProvider.has(prov)) byProvider.set(prov, []);
+      byProvider.get(prov)!.push(m);
+    }
+    // Sort providers alphabetically, sort models within each provider
+    const providerOrder = [...byProvider.keys()].sort();
+    for (const prov of providerOrder) {
+      const provModels = byProvider.get(prov)!.sort((a, b) => a.name.localeCompare(b.name));
+      result.push({ type: "header", label: prov });
+      for (const m of provModels) {
+        result.push({ type: "model", model: m, globalIndex: models.indexOf(m) });
+      }
+    }
+    return result;
+  }, [models]);
+
+  // Viewport: only render a window of items so the list doesn't overflow the terminal
+  const VIEWPORT_SIZE = Math.max(10, (process.stdout.rows ?? 30) - 8);
+  const selectedItemIdx = items.findIndex(
+    (it) => it.type === "model" && it.globalIndex === selectedIndex,
+  );
+  const viewStart = useMemo(() => {
+    if (selectedItemIdx < 0) return 0;
+    // Keep selected item visible: shift window down/up as needed
+    return Math.max(0, Math.min(selectedItemIdx - Math.floor(VIEWPORT_SIZE / 2), items.length - VIEWPORT_SIZE));
+  }, [selectedItemIdx, items.length, VIEWPORT_SIZE]);
+  const visibleItems = items.slice(viewStart, viewStart + VIEWPORT_SIZE);
+  const showScrollHint = items.length > VIEWPORT_SIZE;
 
   if (loading) {
     return (
@@ -136,29 +196,6 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
         <Text dimColor>Loading models...</Text>
       </Box>
     );
-  }
-
-  // Group: local first, then cloud
-  const localModels = models.filter(isLocal);
-  const cloudModels = models.filter((m) => !isLocal(m));
-
-  // Build ordered list with section markers
-  type ListItem =
-    | { type: "header"; label: string }
-    | { type: "model"; model: ModelInfo; globalIndex: number };
-  const items: ListItem[] = [];
-
-  if (localModels.length > 0) {
-    items.push({ type: "header", label: "LOCAL" });
-    for (const m of localModels) {
-      items.push({ type: "model", model: m, globalIndex: models.indexOf(m) });
-    }
-  }
-  if (cloudModels.length > 0) {
-    items.push({ type: "header", label: "CLOUD" });
-    for (const m of cloudModels) {
-      items.push({ type: "model", model: m, globalIndex: models.indexOf(m) });
-    }
   }
 
   return (
@@ -171,19 +208,18 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     >
       <Text bold color={theme.primary}>
         {"⚡ Model Switcher"}
+        {showScrollHint && (
+          <Text dimColor>{`  (${models.length} models — ↑↓ / j k to scroll)`}</Text>
+        )}
       </Text>
-      <Box marginTop={1}>
-        <Text dimColor>Arrow keys to navigate, Enter to switch, Esc to cancel</Text>
-      </Box>
       <Box flexDirection="column" marginTop={1}>
-        {items.map((item, i) => {
+        {viewStart > 0 && <Text dimColor>  ↑ {viewStart} more above</Text>}
+        {visibleItems.map((item, i) => {
           if (item.type === "header") {
             return (
-              <Box key={`hdr-${item.label}`} marginTop={i > 0 ? 1 : 0}>
+              <Box key={`hdr-${item.label}-${i}`} marginTop={i > 0 ? 1 : 0}>
                 <Text bold dimColor>
-                  {"─── "}
-                  {item.label}
-                  {" ───"}
+                  {"─── "}{item.label}{" ───"}
                 </Text>
               </Box>
             );
@@ -192,19 +228,9 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           const m = item.model;
           const isSelected = item.globalIndex === selectedIndex;
           const isCurrent = m.name === currentModel;
-
           const runtimeLabel = runtimeLabels[m.name];
-          // Single-line format: Ink's <Box> with `gap` wraps long text
-          // onto a second line and then inserts the next sibling between
-          // the wrapped halves, which destroyed the layout with long
-          // GGUF basenames. Keep everything in one <Text>.
-          // We intentionally do NOT render the stale `m.name` alias
-          // (e.g. `mnemo:mark6-31b`) when the runtime reports a label —
-          // the alias is an internal config key, not something the user
-          // wants to see next to "Qwen3.6-35B-...". The id is still used
-          // as the key under the hood for selecting the model.
-          const headLine =
-            (isSelected ? "▸ " : "  ") + (runtimeLabel ?? m.name);
+          const headLine = (isSelected ? "▸ " : "  ") + (runtimeLabel ?? m.name);
+
           return (
             <Box key={m.name} flexDirection="column">
               <Box flexDirection="row">
@@ -214,19 +240,20 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
                 {isCurrent && <Text color={theme.success}>{" ●"}</Text>}
               </Box>
               {isSelected && m.description && (
-                <Text dimColor>    {m.description}</Text>
+                <Text dimColor>{"    "}{m.description}</Text>
               )}
-              {isSelected && m.gpu && <Text dimColor>    [{m.gpu}]</Text>}
+              {isSelected && m.gpu && <Text dimColor>{"    "}[{m.gpu}]</Text>}
             </Box>
           );
         })}
+        {viewStart + VIEWPORT_SIZE < items.length && (
+          <Text dimColor>  ↓ {items.length - viewStart - VIEWPORT_SIZE} more below</Text>
+        )}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          Current:{" "}
-          <Text color={theme.primary}>
-            {runtimeLabels[currentModel] ?? currentModel}
-          </Text>
+          {"Enter select · Esc cancel · Current: "}
+          <Text color={theme.primary}>{runtimeLabels[currentModel] ?? currentModel}</Text>
         </Text>
       </Box>
     </Box>
