@@ -50,9 +50,30 @@ async function fetchOpenAICompatibleModels(
     .filter((m): m is DiscoveredModel => m !== null);
 }
 
-// Model ID prefixes that indicate image/video/audio generation — not useful
-// for a coding assistant. Filter these out to keep the /model list clean.
-const NON_TEXT_PREFIXES = ["dall-e", "whisper", "tts-", "text-embedding", "grok-imagine"];
+// Model ID prefixes to exclude — image/video/audio generation, legacy completions,
+// and deprecated versions that clutter the /model list for a coding assistant.
+const NON_TEXT_PREFIXES = [
+  "dall-e", "whisper", "tts-", "text-embedding", "grok-imagine",
+  // OpenAI legacy / non-chat
+  "babbage", "davinci", "ada-", "curie", "text-davinci", "text-ada",
+  "text-babbage", "text-curie", "code-davinci", "code-cushman",
+  // Old GPT-3.5 variants (keep base gpt-3.5-turbo if needed but filter specific old versions)
+  "gpt-3.5-turbo-instruct", "gpt-3.5-turbo-0301", "gpt-3.5-turbo-16k-0613",
+  // Fine-tuned model prefixes
+  "ft:",
+  // OpenAI audio / realtime / image / video
+  "gpt-4o-realtime", "gpt-4o-audio", "gpt-4o-mini-realtime", "gpt-4o-mini-audio",
+  "gpt-4o-mini-tts", "gpt-4o-transcribe", "gpt-4o-mini-transcribe",
+  "gpt-audio", "gpt-realtime", "gpt-image", "gpt-image-",
+  "chatgpt-image",
+  // Video generation
+  "sora",
+  // Moderation
+  "omni-moderation",
+  // Code interpreter specific variants (not useful as chat models)
+  "gpt-5-codex", "gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.3-codex", "gpt-5.4-codex",
+  "gpt-5-search-api", "gpt-5.1-search",
+];
 
 /**
  * Fetch the model list from Anthropic's API.
