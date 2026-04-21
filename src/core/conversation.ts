@@ -978,6 +978,34 @@ export class ConversationManager {
 
       // If no tool calls or stop reason is not tool_use — handle post-turn (delegated to conversation-post-turn.ts)
       if (toolCalls.length === 0 || stopReason !== "tool_use") {
+        // Reasoning loop guard: detect consecutive turns with text output but no tool calls.
+        // Reasoning models (grok reasoning, o1/o3) can enter a "re-analysis loop" where they
+        // keep producing thinking + summary text without making forward progress.
+        // After 3 consecutive text-only turns, inject a hard directive to act or declare done.
+        const hasTextOutputNow = textChunks.join("").trim().length > 0;
+        const hasThinkingNow = streamResult.thinkingChunks.length > 0;
+        if (hasTextOutputNow) {
+          guardState.consecutiveTextOnlyTurns++;
+          if (guardState.consecutiveTextOnlyTurns >= 3) {
+            log.warn(
+              "session",
+              `Reasoning loop: ${guardState.consecutiveTextOnlyTurns} consecutive text-only turns — injecting break directive`,
+            );
+            this.state.messages.push({
+              role: "user",
+              content:
+                `[SYSTEM] You have produced ${guardState.consecutiveTextOnlyTurns} consecutive turns ` +
+                `with${hasThinkingNow ? " reasoning and" : ""} text output but zero tool calls. ` +
+                `Stop re-analyzing. Either: (1) declare the task complete with a final summary, ` +
+                `or (2) call a tool RIGHT NOW to make measurable progress. ` +
+                `Do NOT produce another text-only response.`,
+            });
+            guardState.consecutiveTextOnlyTurns = 0;
+          }
+        } else {
+          guardState.consecutiveTextOnlyTurns = 0;
+        }
+
         const postTurnResult = await handlePostTurn({
           config: this.config,
           hooks: this.hooks,
@@ -1106,6 +1134,9 @@ export class ConversationManager {
         continue;
       }
       toolCalls = filteredToolCalls;
+
+      // Tool calls fired — reset reasoning loop counter
+      guardState.consecutiveTextOnlyTurns = 0;
 
       // Parallel fast-path: if ALL tool calls are read-only, execute them concurrently
       const allParallelSafe =

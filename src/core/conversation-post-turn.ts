@@ -41,6 +41,8 @@ export interface PostTurnContext {
   lastEmptyType: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output" | undefined;
   /** Phase 35: whether the action-defer nudge already fired this session. */
   actionNudgeUsed: boolean;
+  /** Consecutive turns with text output but zero tool calls (reasoning loop detection). */
+  consecutiveTextOnlyTurns: number;
 
   /** Debug tracer (optional) */
   debugTracer?: {
@@ -69,6 +71,7 @@ export interface PostTurnResult {
   previousTurnTail: string;
   turnsSinceLastExtraction: number;
   actionNudgeUsed: boolean;
+  consecutiveTextOnlyTurns: number;
 }
 
 // ─── Main Post-Turn Handler ─────────────────────────────────────

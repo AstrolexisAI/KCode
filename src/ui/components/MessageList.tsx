@@ -3,6 +3,7 @@
 
 import { Box, Static, Text } from "ink";
 import React from "react";
+import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
 import { useTheme } from "../ThemeContext.js";
 import MarkdownRenderer from "./MarkdownRenderer.js";
 import Spinner from "./Spinner.js";
@@ -33,6 +34,10 @@ export interface ToolResultEntry {
 export interface ThinkingEntry {
   kind: "thinking";
   text: string;
+  /** Thinking blocks merged into this entry when a reasoning model emits several in sequence. */
+  blockCount?: number;
+  /** Total character count across all merged blocks (may differ from text.length when merged). */
+  totalChars?: number;
 }
 
 export interface BannerEntry {
@@ -379,7 +384,25 @@ function ToolResultMessage({
   );
 }
 
-function ThinkingMessage({ text }: { text: string }) {
+function ThinkingMessage({ text, blockCount = 1, totalChars }: ThinkingEntry) {
+  const { theme } = useTheme();
+  const chars = totalChars ?? text.length;
+  const tok = Math.round(chars / CHARS_PER_TOKEN);
+  const tokLabel = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : String(tok);
+  // Multi-block: inline compact summary — no expansion, all info on one line
+  if (blockCount > 1) {
+    return (
+      <Box paddingLeft={2}>
+        <Text color={theme.accent} dimColor>
+          {"🧠 "}
+          {tokLabel}
+          {" tok · "}
+          {blockCount}
+          {" blocks ▸"}
+        </Text>
+      </Box>
+    );
+  }
   return <ThinkingBlockComponent text={text} isStreaming={false} defaultExpanded={false} />;
 }
 
