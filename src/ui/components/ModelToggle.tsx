@@ -188,7 +188,25 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     { isActive },
   );
 
-  const showScrollHint = models.length > 20;
+  // Viewport: render only what fits on screen, centered on selected item.
+  // terminal rows - 6 (border + header + footer + margin)
+  const VIEWPORT = Math.max(8, (process.stdout.rows ?? 30) - 6);
+
+  // Find position of selected item in the items[] list
+  const selectedItemPos = items.findIndex(
+    (it) => it.type === "model" && it.globalIndex === selectedIndex,
+  );
+
+  // Compute viewport start so selected item stays centered
+  const viewStart = useMemo(() => {
+    if (selectedItemPos < 0) return 0;
+    const ideal = selectedItemPos - Math.floor(VIEWPORT / 2);
+    return Math.max(0, Math.min(ideal, Math.max(0, items.length - VIEWPORT)));
+  }, [selectedItemPos, items.length, VIEWPORT]);
+
+  const visibleItems = items.slice(viewStart, viewStart + VIEWPORT);
+  const aboveCount = viewStart;
+  const belowCount = Math.max(0, items.length - viewStart - VIEWPORT);
 
   if (loading) {
     return (
@@ -207,13 +225,14 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
       marginY={0}
     >
       <Text bold color={theme.primary}>
-        {"⚡ Model Switcher"}
-        {showScrollHint && (
-          <Text dimColor>{`  (${models.length} models — ↑↓ / j k to scroll)`}</Text>
-        )}
+        {"⚡ Model Switcher  "}
+        <Text dimColor>{`${models.length} models · ↑↓ navegar · Enter seleccionar · Esc salir`}</Text>
       </Text>
       <Box flexDirection="column" marginTop={1}>
-        {items.map((item, i) => {
+        {aboveCount > 0 && (
+          <Text dimColor>{`  ↑ ${aboveCount} more above`}</Text>
+        )}
+        {visibleItems.map((item, i) => {
           if (item.type === "header") {
             return (
               <Box key={`hdr-${item.label}-${i}`} marginTop={i > 0 ? 1 : 0}>
@@ -245,10 +264,13 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
             </Box>
           );
         })}
+        {belowCount > 0 && (
+          <Text dimColor>{`  ↓ ${belowCount} more below`}</Text>
+        )}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          {"Enter select · Esc cancel · Current: "}
+          {"Current: "}
           <Text color={theme.primary}>{runtimeLabels[currentModel] ?? currentModel}</Text>
         </Text>
       </Box>
