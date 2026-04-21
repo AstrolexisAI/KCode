@@ -279,8 +279,8 @@ export default function App({ config, conversationManager, tools, initialSession
   } | null>(null);
   const [escalationData, setEscalationData] = useState<{
     count: number;
-    provider: string;
     reason: string;
+    availableModels: Array<{ name: string; provider: string; tags: string[] }>;
   } | null>(null);
   const [showContextGrid, setShowContextGrid] = useState(false);
   const [lastKodiEvent, setLastKodiEvent] = useState<KodiEvent | null>(null);
@@ -389,8 +389,8 @@ export default function App({ config, conversationManager, tools, initialSession
           if (scanState.pendingEscalation && !escalationData) {
             setEscalationData({
               count: scanState.pendingEscalation.count,
-              provider: scanState.pendingEscalation.provider,
               reason: scanState.pendingEscalation.reason,
+              availableModels: scanState.pendingEscalation.availableModels,
             });
             setMode("escalation" as any);
             setLastKodiEvent({ type: "agent_spawn", detail: "☁ second opinion?" });
@@ -675,20 +675,20 @@ export default function App({ config, conversationManager, tools, initialSession
   );
 
   const handleEscalationChoice = useCallback(
-    async (approved: boolean) => {
+    async (modelName: string | null) => {
       try {
         const { scanState } = await import("../core/audit-engine/scan-state.js");
-        scanState.escalationApproved = approved;
+        scanState.escalationModelChoice = modelName;
       } catch { /* ignore */ }
       setEscalationData(null);
-      setMode("input");
+      setTimeout(() => setMode("input"), 50);
       setCompleted((prev) => [
         ...prev,
         {
           kind: "text",
           role: "assistant",
-          text: approved
-            ? "  ☁ Escalating to cloud for second opinion..."
+          text: modelName
+            ? `  ☁ Escalating to ${modelName} for second opinion...`
             : "  ⏭ Skipped cloud verification.",
         },
       ]);
@@ -1081,12 +1081,12 @@ export default function App({ config, conversationManager, tools, initialSession
           </Box>
         )}
 
-        {/* Escalation modal — captures keyboard, hides input */}
+        {/* Escalation model picker — shown after /scan when uncertain findings need cloud review */}
         {mode === ("escalation" as any) && escalationData && (
           <EscalationPrompt
             count={escalationData.count}
-            provider={escalationData.provider}
             reason={escalationData.reason}
+            availableModels={escalationData.availableModels}
             isActive={mode === ("escalation" as any)}
             onChoice={handleEscalationChoice}
           />

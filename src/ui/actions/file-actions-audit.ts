@@ -66,18 +66,12 @@ export async function handleAuditAction(
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
         : buildAuditLlmCallbackFromConfig(appConfig);
 
-      // Auto-detect cloud fallback for hybrid verification
-      // Prefers OAuth bridge (subscription) over API key (per-token)
-      let fallbackCallback: ((prompt: string) => Promise<string>) | undefined;
+      // Detect available audit models (tagged [analysis]/[reasoning] with valid keys)
+      let auditModels: Awaited<ReturnType<typeof import("../../core/audit-engine/cloud-fallback.js")["detectAuditModels"]>>["models"] = [];
       if (!skipVerify) {
-        const { buildCloudFallbackCallback, detectCloudFallback } = await import(
-          "../../core/audit-engine/cloud-fallback.js"
-        );
-        const cloudConfig = await detectCloudFallback(appConfig.apiBase);
-        if (cloudConfig.available) {
-          fallbackCallback = (await buildCloudFallbackCallback(appConfig.apiBase)) ?? undefined;
-          scanState.cloudProvider = cloudConfig.provider;
-        }
+        const { detectAuditModels } = await import("../../core/audit-engine/cloud-fallback.js");
+        const cloudConfig = await detectAuditModels(appConfig.apiBase);
+        auditModels = cloudConfig.models;
       }
 
       // Background async — NOT awaited
@@ -104,29 +98,38 @@ export async function handleAuditAction(
             },
           });
 
-          // Phase 2: if there are FPs or NEEDS_CONTEXT and cloud is available, offer second opinion
+          // Phase 2: if there are FPs or NEEDS_CONTEXT and audit models available, offer escalation
           const fpCount = result.false_positives;
           const ncCount = result.candidates_found - result.confirmed_findings - result.false_positives;
           const reviewable = fpCount + ncCount;
 
-          if (reviewable > 0 && fallbackCallback) {
+          if (reviewable > 0 && auditModels.length > 0) {
             const reason = fpCount > 0
               ? `${fpCount} marked as false positive${ncCount > 0 ? `, ${ncCount} uncertain` : ""}`
               : `${ncCount} need deeper analysis`;
             scanState.phase = reason;
             scanState.pendingEscalation = {
               count: reviewable,
-              provider: scanState.cloudProvider ?? "cloud",
               reason,
+              availableModels: auditModels.map((m) => ({
+                name: m.name,
+                provider: m.provider,
+                tags: m.tags,
+              })),
             };
 
-            // Wait for user to approve/deny (polled by App.tsx)
-            while (scanState.pendingEscalation && scanState.escalationApproved === undefined) {
+            // Wait for user to choose a model (or skip)
+            while (scanState.pendingEscalation && scanState.escalationModelChoice === undefined) {
               await new Promise((r) => setTimeout(r, 200));
             }
 
-            if (scanState.escalationApproved) {
-              scanState.phase = `☁ Re-verifying with ${scanState.cloudProvider}...`;
+            const chosenModelName = scanState.escalationModelChoice;
+            const chosenModel = auditModels.find((m) => m.name === chosenModelName);
+            if (chosenModel) {
+              const { buildAuditCallbackForModel } = await import("../../core/audit-engine/cloud-fallback.js");
+              const fallbackCallback = await buildAuditCallbackForModel(chosenModel);
+              scanState.cloudProvider = chosenModel.provider;
+              scanState.phase = `☁ Re-verifying with ${chosenModel.name}...`;
               scanState.pendingEscalation = undefined;
               scanState.verified = 0;
               scanState.total = 0;
@@ -135,7 +138,7 @@ export async function handleAuditAction(
               // Re-run full scan with cloud as primary
               const cloudResult = await runAudit({
                 projectRoot,
-                llmCallback: fallbackCallback!,
+                llmCallback: fallbackCallback,
                 maxFiles: 500,
                 skipVerification: false,
                 onPhase: (phase, detail) => {
