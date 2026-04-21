@@ -747,21 +747,28 @@ export default function App({ config, conversationManager, tools, initialSession
           }
         }
 
-        // Register default models for this provider using the correct ModelProvider type
+        // Fetch models live from the provider API — no hardcoded names
+        const { fetchProviderModels } = await import("../core/cloud-model-discovery.js");
         const { getModelProvider } = await import("../core/models.js");
-        const modelsToRegister = provider.models.split(",").map((m) => m.trim());
-        for (const modelName of modelsToRegister) {
-          const modelProvider = await getModelProvider(modelName);
+        const discovered = await fetchProviderModels(
+          provider.id,
+          provider.baseUrl,
+          result.apiKey ?? "",
+        );
+        const modelsToRegister = discovered.length > 0 ? discovered : [];
+        for (const m of modelsToRegister) {
+          const modelProvider = await getModelProvider(m.id);
           await addModel({
-            name: modelName,
+            name: m.id,
             baseUrl: provider.baseUrl,
             provider: modelProvider,
+            contextSize: m.contextWindow,
             description: `${provider.name} cloud model`,
           });
         }
 
-        // Switch active model to the first model of this provider
-        const newModel = modelsToRegister[0]!;
+        // Switch active model to the first discovered model
+        const newModel = modelsToRegister[0]?.id ?? provider.id;
         config.model = newModel;
         config.modelExplicitlySet = true;
         conversationManager.getConfig().model = newModel;
@@ -783,7 +790,7 @@ export default function App({ config, conversationManager, tools, initialSession
           {
             kind: "text",
             role: "assistant",
-            text: `  ☁  ${provider.name} configured!${result.viaOAuth ? " (via OAuth)" : ""}\n  ${result.viaOAuth && !result.apiKey ? "OAuth tokens stored in system keychain" : "API key saved to ~/.kcode/settings.json"}\n  Registered models: ${provider.models}\n  Active model switched to: ${newModel}`,
+            text: `  ☁  ${provider.name} configured!${result.viaOAuth ? " (via OAuth)" : ""}\n  ${result.viaOAuth && !result.apiKey ? "OAuth tokens stored in system keychain" : "API key saved to ~/.kcode/settings.json"}\n  Registered models: ${modelsToRegister.length > 0 ? `${modelsToRegister.length} (fetched from API)` : "none — check API key"}\n  Active model switched to: ${newModel}`,
           },
         ]);
       } catch (err) {

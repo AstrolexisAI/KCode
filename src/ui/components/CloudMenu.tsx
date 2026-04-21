@@ -12,7 +12,8 @@ export interface CloudProvider {
   settingsKey: string;
   baseUrl: string;
   hint: string; // example key format
-  models: string; // example models
+  /** Shown in the menu as a hint only. Models are fetched live from the provider API. */
+  modelHint?: string;
   supportsOAuth?: boolean;
   /**
    * Short pricing summary shown next to the provider in the /cloud menu.
@@ -35,11 +36,10 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "anthropicApiKey",
     baseUrl: "https://api.anthropic.com",
     hint: "sk-ant-api03-...",
-    models: "claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5",
     supportsOAuth: true,
     pricing: {
-      flagship: { name: "claude-opus-4-6", input: 15, output: 75 },
-      cheapest: { name: "claude-haiku-4-5", input: 0.8, output: 4 },
+      flagship: { name: "claude-opus", input: 15, output: 75 },
+      cheapest: { name: "claude-haiku", input: 0.8, output: 4 },
     },
   },
   {
@@ -49,7 +49,6 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "apiKey",
     baseUrl: "https://api.openai.com",
     hint: "sk-proj-...",
-    models: "gpt-4o, gpt-4o-mini, o3, o4-mini",
     supportsOAuth: true,
     pricing: {
       flagship: { name: "o3", input: 10, output: 40 },
@@ -63,11 +62,10 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "geminiApiKey",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     hint: "AIza...",
-    models: "gemini-2.5-pro, gemini-2.5-flash",
     supportsOAuth: true,
     pricing: {
-      flagship: { name: "gemini-2.5-pro", input: 1.25, output: 10 },
-      cheapest: { name: "gemini-2.5-flash", input: 0.15, output: 0.6 },
+      flagship: { name: "gemini-pro", input: 1.25, output: 10 },
+      cheapest: { name: "gemini-flash", input: 0.15, output: 0.6 },
     },
   },
   {
@@ -77,7 +75,6 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "groqApiKey",
     baseUrl: "https://api.groq.com/openai",
     hint: "gsk_...",
-    models: "llama-3.3-70b, mixtral-8x7b, gemma2-9b",
     pricing: {
       flagship: { name: "llama-3.3-70b", input: 0.59, output: 0.79 },
       cheapest: { name: "gemma2-9b", input: 0.2, output: 0.2 },
@@ -90,7 +87,6 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "deepseekApiKey",
     baseUrl: "https://api.deepseek.com",
     hint: "sk-...",
-    models: "deepseek-chat, deepseek-reasoner",
     pricing: {
       flagship: { name: "deepseek-reasoner", input: 0.55, output: 2.19 },
       cheapest: { name: "deepseek-chat", input: 0.27, output: 1.1 },
@@ -103,10 +99,9 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "togetherApiKey",
     baseUrl: "https://api.together.xyz",
     hint: "tok_...",
-    models: "meta-llama/Llama-3.3-70B, Qwen/Qwen2.5-Coder-32B",
     pricing: {
-      flagship: { name: "Llama-3.3-70B", input: 0.88, output: 0.88 },
-      cheapest: { name: "Qwen2.5-Coder-32B", input: 0.8, output: 0.8 },
+      flagship: { name: "llama-3.3-70b", input: 0.88, output: 0.88 },
+      cheapest: { name: "qwen-coder", input: 0.8, output: 0.8 },
     },
   },
   {
@@ -114,20 +109,11 @@ const PROVIDERS: CloudProvider[] = [
     name: "xAI (Grok)",
     envVar: "XAI_API_KEY",
     settingsKey: "xaiApiKey",
-    // baseUrl MUST NOT include /v1 — the request builder appends
-    // /v1/chat/completions itself. With /v1 here we'd get
-    // /v1/v1/chat/completions and xAI returns 404.
     baseUrl: "https://api.x.ai",
     hint: "xai-...",
-    // First model in the list becomes the active model after /cloud.
-    // grok-4.20-0309-reasoning is the user's preferred default — it's
-    // the current flagship reasoning model ($2/$6 per 1M tokens, text+image).
-    // Aliases (grok-4.20, grok-4.20-reasoning, grok-4.20-latest) all resolve
-    // to the same model, so any of them work in /model commands.
-    models: "grok-4.20-0309-reasoning, grok-code-fast-1, grok-4-fast-reasoning, grok-4, grok-3-mini",
     pricing: {
-      flagship: { name: "grok-4.20-reasoning", input: 2, output: 6 },
-      cheapest: { name: "grok-code-fast-1", input: 0.2, output: 1.5 },
+      flagship: { name: "grok-flagship", input: 2, output: 6 },
+      cheapest: { name: "grok-fast", input: 0.2, output: 1.5 },
     },
   },
   {
@@ -137,10 +123,9 @@ const PROVIDERS: CloudProvider[] = [
     settingsKey: "kimiApiKey",
     baseUrl: "https://api.moonshot.cn",
     hint: "sk-...",
-    models: "kimi-k2, moonshot-v1-128k, moonshot-v1-32k, moonshot-v1-8k",
     pricing: {
-      flagship: { name: "kimi-k2", input: 0.15, output: 2.5 },
-      cheapest: { name: "moonshot-v1-8k", input: 0.12, output: 0.12 },
+      flagship: { name: "kimi", input: 0.15, output: 2.5 },
+      cheapest: { name: "moonshot-8k", input: 0.12, output: 0.12 },
     },
   },
 ];
