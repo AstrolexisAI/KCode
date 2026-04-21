@@ -317,7 +317,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   const hasToolOutput = ctx.toolCalls.length > 0;
 
   // Classify empty responses — persisted so the final turn_end carries it
-  if (!hasTextOutput && ctx.stopReason === "end_turn") {
+  if (!hasTextOutput && (ctx.stopReason === "end_turn" || ctx.stopReason === "repetition_aborted")) {
     lastEmptyType =
       hasThinkingOutput && !hasToolOutput
         ? "thinking_only"
@@ -481,12 +481,15 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       };
     }
 
-    // After all retries, if still incomplete, notify the user
+    // After all retries, if still incomplete, notify the user via a banner event
+    // (NOT a text_delta — injecting as text contaminates the message history
+    // and makes the model think it produced the banner in future turns).
     if (truncationRetries >= 2 && looksIncomplete(fullText)) {
       log.warn("session", "Response still incomplete after 2 continuation retries");
       events.push({
-        type: "text_delta" as const,
-        text: "\n\n---\n*[Response may be incomplete — model reached output limit]*\n",
+        type: "incomplete_response" as const,
+        continuations: 2,
+        stopReason: ctx.stopReason,
       });
     }
   }

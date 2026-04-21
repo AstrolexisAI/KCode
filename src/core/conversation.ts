@@ -1102,16 +1102,21 @@ export class ConversationManager {
       );
       const toolResultBlocks: ContentBlock[] = [...blockedResults];
 
-      // Check if any burned error fingerprints match — block tools that failed 2+ times with the same error
+      // Check if any burned error fingerprints match — block tools that failed 2+ times with the same error.
+      // Read-only tools (Read, Grep, Glob, LS) are NOT blocked by name — only by exact fingerprint.
+      // Blocking "Read" globally because Read("/a") failed twice would also block Read("/b"), which
+      // is a false positive that prevents the model from reading different files.
       if (guardState.burnedFingerprints.size > 0) {
-        const burnedNames = new Set<string>();
+        const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"]);
+        // For write/exec tools: block by tool name (original behavior)
+        const burnedWriteNames = new Set<string>();
         for (const fp of guardState.burnedFingerprints) {
           const toolName = fp.split("|")[0];
-          if (toolName) burnedNames.add(toolName);
+          if (toolName && !READ_ONLY_TOOLS.has(toolName)) burnedWriteNames.add(toolName);
         }
         const notBurned: typeof filteredToolCalls = [];
         for (const tc of filteredToolCalls) {
-          if (burnedNames.has(tc.name)) {
+          if (burnedWriteNames.has(tc.name)) {
             log.warn("session", `Blocking tool call ${tc.name} — burned error fingerprint`);
             toolResultBlocks.push({
               type: "tool_result",
