@@ -6,6 +6,7 @@ import {
   formatApiErrorMessage,
   resolveApiKey,
 } from "./request-builder.ts";
+import { convertToOpenAIMessages } from "./message-converters.ts";
 import type { KCodeConfig } from "./types.ts";
 
 // ─── resolveApiKey ─────────────────────────────────────────────
@@ -281,5 +282,61 @@ describe("formatApiErrorMessage", () => {
     expect(msg).toBe(
       "API request failed: 502 Bad Gateway from https://api.example.com/v1/foo",
     );
+  });
+});
+
+// ─── convertToOpenAIMessages — system role by model type ───────
+
+describe("convertToOpenAIMessages system role", () => {
+  const msgs = [{ role: "user" as const, content: "hello" }];
+  const systemPrompt = "You are a helpful assistant.";
+
+  test("default role is 'system' for standard models", () => {
+    const result = convertToOpenAIMessages(systemPrompt, msgs);
+    expect(result[0]!.role).toBe("system");
+  });
+
+  test("role 'developer' is used when explicitly requested (o1/o3/o4)", () => {
+    const result = convertToOpenAIMessages(systemPrompt, msgs, "developer");
+    expect(result[0]!.role).toBe("developer");
+    expect(result[0]!.content).toBe(systemPrompt);
+  });
+
+  test("gpt-4o keeps 'system' role (not a reasoning model)", () => {
+    const result = convertToOpenAIMessages(systemPrompt, msgs, "system");
+    expect(result[0]!.role).toBe("system");
+  });
+
+  test("developer role still passes system prompt content unchanged", () => {
+    const result = convertToOpenAIMessages(systemPrompt, msgs, "developer");
+    expect(result[0]!.content).toBe(systemPrompt);
+    expect(result[1]!.role).toBe("user");
+    expect(result[1]!.content).toBe("hello");
+  });
+
+  test("empty system prompt produces no system/developer message", () => {
+    const result = convertToOpenAIMessages("", msgs, "developer");
+    expect(result[0]!.role).toBe("user");
+  });
+});
+
+// ─── ModelProvider enum completeness ───────────────────────────
+
+describe("ModelProvider coverage", () => {
+  test("all expected providers are valid ModelProvider values", async () => {
+    const { getModelProvider } = await import("./models.ts");
+    // These should not throw — they return recognized provider strings
+    const providers = await Promise.all([
+      getModelProvider("claude-3-5-sonnet-20241022"),
+      getModelProvider("grok-4"),
+      getModelProvider("gemini-1.5-pro"),
+      getModelProvider("deepseek-coder"),
+      getModelProvider("gpt-4o"),
+    ]);
+    expect(providers[0]).toBe("anthropic");
+    expect(providers[1]).toBe("xai");
+    expect(providers[2]).toBe("google");
+    expect(providers[3]).toBe("deepseek");
+    expect(providers[4]).toBe("openai");
   });
 });

@@ -16,7 +16,7 @@ function effortLevelToMaxTurns(level: KCodeConfig["effortLevel"]): number {
     case "max":
       return 60;
     default:
-      return MAX_AGENT_TURNS; // "medium" or unset = 25
+      return MAX_AGENT_TURNS; // "medium" or unset → context-dependent below
   }
 }
 
@@ -46,5 +46,20 @@ export function getEffectiveMaxTurns(config: KCodeConfig, messages: Message[]): 
       /* effort-classifier not available, use default */
     }
   }
-  return effortLevelToMaxTurns(level);
+  const turns = effortLevelToMaxTurns(level);
+
+  // When no explicit effort level is set, coding/debug tasks need more turns
+  // than audits. Audits follow a bounded scan→verify→report pipeline; coding
+  // tasks involve iterative edit→compile→test cycles that regularly need 40+.
+  if (!level) {
+    try {
+      const { isAuditSession } =
+        require("./session-tracker") as typeof import("./session-tracker");
+      if (!isAuditSession()) return 40;
+    } catch {
+      /* session-tracker not available */
+    }
+  }
+
+  return turns;
 }

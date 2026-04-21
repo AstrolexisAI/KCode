@@ -39,7 +39,7 @@ export interface Message {
 // ─── OpenAI-Compatible Message Types ─────────────────────────────
 
 export interface OpenAIMessage {
-  role: "system" | "user" | "assistant" | "tool";
+  role: "system" | "developer" | "user" | "assistant" | "tool";
   content?: string | null;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;

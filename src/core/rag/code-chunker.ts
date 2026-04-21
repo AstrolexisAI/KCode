@@ -355,11 +355,12 @@ function chunkLineRange(
         language,
       });
     }
-    // Advance with overlap
+    // Advance with overlap, but always move forward at least 1 line.
+    // Without this guard, small trailing blocks (< OVERLAP_LINES lines)
+    // cause i to regress and loop forever.
+    const prevI = i;
     i = lineEnd + 1 - OVERLAP_LINES;
-    if (i <= (chunks.length > 0 ? lineEnd - OVERLAP_LINES : start)) {
-      i = lineEnd + 1;
-    }
+    if (i <= prevI) i = lineEnd + 1;
   }
   return chunks;
 }
