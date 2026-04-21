@@ -220,6 +220,8 @@ export type StreamEvent =
       type: "turn_end";
       stopReason: string;
       emptyType?: "thinking_only" | "tools_only" | "thinking_and_tools" | "no_output";
+      /** True when the context window is ≥90% full at the time of this turn_end. */
+      contextFull?: boolean;
     }
   | { type: "compaction_start"; messageCount: number; tokensBefore: number }
   | { type: "compaction_end"; tokensAfter: number; method: "llm" | "pruned" | "compressed" }

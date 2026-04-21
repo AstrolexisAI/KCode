@@ -1165,6 +1165,40 @@ export class ConversationManager {
       // Tool calls fired — reset reasoning loop counter
       guardState.consecutiveTextOnlyTurns = 0;
 
+      // Track read-only vs write tool calls for reconnaissance loop guard
+      const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "GitLog", "GitStatus"]);
+      const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "GrepReplace", "Rename", "Bash"]);
+      const hasWriteCall = toolCalls.some((tc) => WRITE_TOOLS.has(tc.name));
+      const hasReadOnlyCall = toolCalls.some((tc) => READ_ONLY_TOOLS.has(tc.name));
+      if (hasWriteCall) {
+        guardState.readOnlyToolCount = 0;
+      } else if (hasReadOnlyCall) {
+        guardState.readOnlyToolCount += toolCalls.filter((tc) => READ_ONLY_TOOLS.has(tc.name)).length;
+        // Reconnaissance loop: if the model has read 20+ files without writing anything,
+        // inject a directive to start implementing. Only for non-audit, coding sessions.
+        if (guardState.readOnlyToolCount >= 20) {
+          const isAuditRecon = (() => {
+            try {
+              const { isAuditSession } =
+                require("./session-tracker") as typeof import("./session-tracker");
+              return isAuditSession();
+            } catch { return false; }
+          })();
+          if (!isAuditRecon) {
+            log.warn("session", `Reconnaissance loop: ${guardState.readOnlyToolCount} read-only tools without any write — injecting implementation directive`);
+            this.state.messages.push({
+              role: "user",
+              content:
+                `[SYSTEM] You have called ${guardState.readOnlyToolCount} read-only tools (Read/Grep/Glob) ` +
+                `without making any changes. You have read enough context. ` +
+                `Stop reading and START WRITING CODE NOW. ` +
+                `Call Write, Edit, or MultiEdit on the first target file immediately.`,
+            });
+            guardState.readOnlyToolCount = 0;
+          }
+        }
+      }
+
       // Parallel fast-path: if ALL tool calls are read-only, execute them concurrently
       const allParallelSafe =
         toolCalls.length > 1 && toolCalls.every((c) => this.tools.isParallelSafe(c.name));

@@ -229,9 +229,18 @@ const KNOWN_CONTEXT_SIZES: Record<string, number> = {
 export async function getModelContextSize(modelName: string): Promise<number | undefined> {
   const config = await loadModelsConfig();
   const entry = config.models.find((m) => m.name === modelName);
-  if (entry?.contextSize) return entry.contextSize;
 
-  if (KNOWN_CONTEXT_SIZES[modelName]) return KNOWN_CONTEXT_SIZES[modelName];
+  // KNOWN_CONTEXT_SIZES takes precedence over the registry when it has a LARGER
+  // value. This auto-corrects stale registry entries that were saved before the
+  // correct context window was known (e.g. grok-4 registered as 131K before
+  // xAI announced the 2M window).
+  const knownExact = KNOWN_CONTEXT_SIZES[modelName];
+  if (entry?.contextSize) {
+    const registrySize = entry.contextSize;
+    return knownExact && knownExact > registrySize ? knownExact : registrySize;
+  }
+
+  if (knownExact) return knownExact;
 
   // Prefix fallback: a name like "grok-4.20-0309-mystery" should match
   // "grok-4.20-0309-reasoning" via shared prefix → "grok-4.20" etc.

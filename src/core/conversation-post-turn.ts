@@ -592,7 +592,17 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);
   }
 
-  events.push({ type: "turn_end", stopReason: ctx.stopReason, emptyType: lastEmptyType });
+  const contextFull =
+    ctx.tokenCount > 0 &&
+    ctx.config.contextWindowSize != null &&
+    ctx.config.contextWindowSize > 0 &&
+    ctx.tokenCount / ctx.config.contextWindowSize >= 0.9;
+  events.push({
+    type: "turn_end",
+    stopReason: ctx.stopReason,
+    emptyType: lastEmptyType,
+    contextFull: contextFull || undefined,
+  });
   return {
     action: "break",
     events,
