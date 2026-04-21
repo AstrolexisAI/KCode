@@ -1,36 +1,48 @@
-// KCode - Cloud Escalation Prompt
-// Modal that captures Y/N/Esc when cloud second opinion is available.
-// Input prompt is hidden while this is active.
+// KCode - Cloud Escalation Model Picker
+// Shown after /scan when uncertain findings need cloud re-verification.
+// User picks from available [analysis]/[reasoning] models, or skips.
 
 import { Box, Text, useInput } from "ink";
-import React from "react";
+import React, { useState } from "react";
 import { useTheme } from "../ThemeContext.js";
+
+export interface EscalationModel {
+  name: string;
+  provider: string;
+  tags: string[];
+}
 
 interface EscalationPromptProps {
   count: number;
-  provider: string;
   reason: string;
+  availableModels: EscalationModel[];
   isActive: boolean;
-  onChoice: (approved: boolean) => void;
+  /** Called with chosen model name, or null to skip */
+  onChoice: (modelName: string | null) => void;
 }
 
 export default function EscalationPrompt({
   count,
-  provider,
   reason,
+  availableModels,
   isActive,
   onChoice,
 }: EscalationPromptProps) {
-  const theme = useTheme();
+  const { theme } = useTheme();
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
   useInput(
     (input, key) => {
       if (!isActive) return;
-      const lower = input.toLowerCase();
-      if (lower === "y" || key.return) {
-        onChoice(true);
-      } else if (lower === "n" || key.escape) {
-        onChoice(false);
+      if (key.upArrow || input === "k") {
+        setSelectedIdx((i) => (i > 0 ? i - 1 : availableModels.length - 1));
+      } else if (key.downArrow || input === "j") {
+        setSelectedIdx((i) => (i < availableModels.length - 1 ? i + 1 : 0));
+      } else if (key.return) {
+        const chosen = availableModels[selectedIdx];
+        onChoice(chosen ? chosen.name : null);
+      } else if (key.escape || input === "n" || input === "N") {
+        onChoice(null);
       }
     },
     { isActive },
@@ -50,28 +62,30 @@ export default function EscalationPrompt({
       paddingY={1}
     >
       <Text color={theme.warning} bold>
-        {"⚠️  Second Opinion Available"}
+        {"☁  Second Opinion Available — "}
+        <Text color={theme.dimmed}>{count} finding{count !== 1 ? "s" : ""} need review</Text>
       </Text>
+      <Text color={theme.dimmed}>{reason}</Text>
       <Text color={theme.dimmed}>{""}</Text>
-      <Text>
-        {"  "}{reason}
-      </Text>
-      <Text color={theme.dimmed}>{""}</Text>
-      <Text>
-        {"  Re-verify with "}
-        <Text color="cyan" bold>{"☁ "}{provider}</Text>
-        {"?"}
-      </Text>
-      <Text color={theme.dimmed}>{""}</Text>
-      <Box gap={2} marginLeft={2}>
-        <Text>
-          <Text bold color="green" inverse>{" Y "}</Text>
-          <Text color={theme.dimmed}>{" Escalate to cloud"}</Text>
-        </Text>
-        <Text>
-          <Text bold color="red" inverse>{" N "}</Text>
-          <Text color={theme.dimmed}>{" Skip (Esc)"}</Text>
-        </Text>
+      <Text dimColor>{"  Choose a model for re-verification (↑↓ navigate · Enter select · Esc skip):"}</Text>
+      <Box flexDirection="column" marginTop={1} marginLeft={2}>
+        {availableModels.map((m, i) => {
+          const isSel = i === selectedIdx;
+          const tagStr = m.tags.length > 0 ? "  " + m.tags.map((t) => `[${t}]`).join(" ") : "";
+          return (
+            <Box key={m.name} flexDirection="row">
+              <Text color={isSel ? theme.primary : undefined} bold={isSel}>
+                {isSel ? "▸ " : "  "}
+                {m.name}
+              </Text>
+              {tagStr && <Text dimColor>{tagStr}</Text>}
+            </Box>
+          );
+        })}
+        <Box marginTop={1}>
+          <Text dimColor>{"  ── "}</Text>
+          <Text color="red">{"Skip (Esc / N)"}</Text>
+        </Box>
       </Box>
     </Box>
   );

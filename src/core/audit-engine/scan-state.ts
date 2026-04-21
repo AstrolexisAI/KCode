@@ -16,9 +16,14 @@ export interface ScanProgress {
   startTime: number;
   cloudProvider?: string; // "anthropic" | "openai" | "" if no fallback
   /** Set when FPs or NEEDS_CONTEXT exist and cloud is available */
-  pendingEscalation?: { count: number; provider: string; reason: string };
-  /** Set by the UI when user responds to escalation prompt */
-  escalationApproved?: boolean;
+  pendingEscalation?: {
+    count: number;
+    reason: string;
+    /** Available models for audit (tagged analysis/reasoning with valid keys) */
+    availableModels: Array<{ name: string; provider: string; tags: string[] }>;
+  };
+  /** Set by the UI: name of the chosen cloud model, or null to skip */
+  escalationModelChoice?: string | null;
   /** Set when audit completes — the handler reads this to push result. */
   result?: {
     outputPath: string;
@@ -56,7 +61,7 @@ export function resetScanState(): void {
   scanState.startTime = 0;
   scanState.cloudProvider = undefined;
   scanState.pendingEscalation = undefined;
-  scanState.escalationApproved = undefined;
+  scanState.escalationModelChoice = undefined;
   scanState.result = undefined;
   scanState.error = undefined;
 }
