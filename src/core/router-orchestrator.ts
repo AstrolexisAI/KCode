@@ -17,6 +17,26 @@ import type { ConversationManager } from "./conversation";
 
 const MAX_SUB_TASK_TURNS = 12;
 const SUMMARY_WARN_TURN = 10; // inject "wrap up" prompt at this turn
+// For complex-edit: after this many read-only tool calls with no write,
+// inject a "stop exploring, edit now" nudge. grok-code-fast-1 regressed
+// into 12-turn reconnaissance loops without this.
+const RECON_NUDGE_THRESHOLD = 5;
+const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"]);
+const WRITE_TOOLS = new Set(["Edit", "MultiEdit", "Write", "Bash"]);
+
+function intentDirective(intent: string): string | null {
+  switch (intent) {
+    case "complex-edit":
+    case "simple-edit":
+      return "YOUR ROLE: make the code change. Use Read once to confirm the target, then Edit/Write. Do not do extensive exploration — the analysis is already given to you above. End with a 1-2 sentence description of what you changed.";
+    case "analysis":
+      return "YOUR ROLE: analyze the specified files and produce a written analysis. Read the relevant files, then write the analysis as text output. Do NOT attempt to edit or fix code — that's a separate sub-task.";
+    case "chat":
+      return "YOUR ROLE: answer the question as plain text. Do NOT use tools unless absolutely necessary. The context from other sub-tasks is given above — use it directly.";
+    default:
+      return null;
+  }
+}
 
 export interface SubTaskResult {
   id: string;
@@ -131,6 +151,12 @@ async function executeSubTask(
     }
   }
 
+  // Intent-specific directive: anchor the model on its actual job so it
+  // doesn't drift into reconnaissance loops (complex-edit) or fabrication
+  // (chat) when the context is heavy.
+  const directive = intentDirective(task.intent);
+  if (directive) prompt = `${prompt}\n\n---\n${directive}`;
+
   const route = await resolveModelForSubTask(task, defaultModel);
   const model = route?.model ?? defaultModel;
   const baseUrl = route?.baseUrl ?? config.apiBase;
@@ -229,8 +255,28 @@ async function runAgentLoopForSubTask(
   // Track actions for synthetic summary if the sub-task runs out of turns
   // without producing text output (e.g. stuck in tool-call loop).
   const toolActionLog: Array<{ name: string; target: string; success: boolean }> = [];
+  // Reconnaissance counter: read-only calls since the last write. Reset
+  // whenever Edit/Write/Bash fires. Used to inject a "stop exploring" nudge
+  // for edit sub-tasks that drift into pure exploration.
+  let readOnlySinceWrite = 0;
+  let reconNudgeFired = false;
 
   for (let turn = 0; turn < MAX_SUB_TASK_TURNS; turn++) {
+    // Anti-reconnaissance nudge: for edit sub-tasks, if the model has only
+    // read/grep/glob/ls for N calls, snap it out of exploration mode.
+    const isEditIntent = task.intent === "complex-edit" || task.intent === "simple-edit";
+    if (
+      isEditIntent &&
+      !reconNudgeFired &&
+      readOnlySinceWrite >= RECON_NUDGE_THRESHOLD &&
+      messages[messages.length - 1]?.role !== "user"
+    ) {
+      messages.push({
+        role: "user",
+        content: `You've done ${readOnlySinceWrite} read-only tool calls but no edit. The analysis is already provided above. Call Edit/Write NOW with your best available understanding, or say "[cannot edit: <reason>]" and stop. Do not call more Read/Grep/Glob/LS tools.`,
+      });
+      reconNudgeFired = true;
+    }
     // At the warn turn, inject a "wrap up" user message so the model knows
     // to stop making tool calls and summarize what it did.
     if (turn === SUMMARY_WARN_TURN && messages[messages.length - 1]?.role !== "user") {
@@ -311,13 +357,19 @@ async function runAgentLoopForSubTask(
     const toolResult = toolGenResult.value;
     toolUseCount += toolCalls.length;
 
-    // Record what tools did for potential synthetic summary
+    // Record what tools did for potential synthetic summary, and update
+    // the reconnaissance counter (reset on any write, increment on read).
     for (let i = 0; i < toolCalls.length; i++) {
       const call = toolCalls[i]!;
       const resultBlock = toolResult.toolResultBlocks[i];
       const target = extractToolTarget(call.name, call.input as Record<string, unknown>);
       const success = !(resultBlock && (resultBlock as { is_error?: boolean }).is_error);
       toolActionLog.push({ name: call.name, target, success });
+      if (WRITE_TOOLS.has(call.name)) {
+        readOnlySinceWrite = 0;
+      } else if (READ_ONLY_TOOLS.has(call.name)) {
+        readOnlySinceWrite++;
+      }
     }
 
     messages.push({ role: "user", content: toolResult.toolResultBlocks });
