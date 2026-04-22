@@ -66,11 +66,12 @@ function detectImageContent(text: string): boolean {
   }
 
   // Only detect image extensions in user-facing image references, not inside
-  // code, config text, or file listings. Require the extension to be preceded
-  // by a typical filename char and followed by a word boundary (whitespace,
-  // end-of-string, quote, paren, bracket, comma).
+  // code, config text, or file listings. Allow the extension to be preceded
+  // by any path-like char (word, slash, dot) so /image.png, ./img.png,
+  // ../pics/shot.jpg and bare image.png all match. End boundary: whitespace,
+  // quote, paren, bracket, comma, colon, or end-of-string.
   for (const ext of IMAGE_EXTENSIONS) {
-    const re = new RegExp(`\\w${ext.replace(".", "\\.")}(?=[\\s"')\\],;:]|$)`, "i");
+    const re = new RegExp(`(?:^|[\\w/.])[\\w.-]*?${ext.replace(".", "\\.")}(?=[\\s"')\\],;:]|$)`, "i");
     if (re.test(text)) {
       // Extra guard: skip if the match is clearly inside a config line
       // (e.g. "VISION_SUPPORTED_FORMATS=png,jpg,jpeg")
@@ -147,6 +148,8 @@ const ANALYSIS_PATTERNS = [
   /\b(complejidad|complexity|algoritm[oa]|big.?o|o\(n|o\(log|tradeoff|trade.?off)\b/i,
   /\b(cu[aá]ndo (usar|evitar|elegir|prefer)|when to (use|avoid|choose))\b/i,
   /\b(diferencia|difference|compar[ae]|pros?\s+(?:y|and)\s+cons?)\b/i,
+  // Vision analysis: screenshots, captures
+  /\b(captura|screenshot|image|foto|pantalla)\b/i,
 ];
 
 const MULTI_STEP_PATTERNS = [
@@ -167,7 +170,10 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
   if (detectImageContent(userMessage)) return "vision";
 
   // Analysis: audit, review, debug, investigate
-  if (ANALYSIS_PATTERNS.some((p) => p.test(userMessage))) return "analysis";
+  if (ANALYSIS_PATTERNS.some((p) => p.test(userMessage))) {
+    if (/\b(captura|screenshot)\b/i.test(userMessage)) return "vision";
+    return "analysis";
+  }
 
   // Multi-step: numbered instructions or structured workflow
   if (MULTI_STEP_PATTERNS.some((p) => p.test(userMessage))) return "multi-step";
@@ -312,6 +318,28 @@ interface RoutingRule {
 }
 
 const MAX_PATTERN_LENGTH = 200;
+
+/**
+ * Detect regex patterns prone to catastrophic backtracking (ReDoS).
+ * Matches nested quantifiers and alternation-over-same-char — the two
+ * classes that produce exponential time on adversarial input.
+ *
+ *   (a+)+         → nested quantifier
+ *   (a|a)*        → alternation over same char
+ *   (a*)*         → nested with *
+ *   ([a-z]+)+     → nested quantifier in char class
+ */
+function isDangerousRegex(pattern: string): boolean {
+  // Nested quantifier: (...<one-or-more-chars>+|*|?){+,*,?}
+  if (/\([^)]*[+*?]\s*\)\s*[+*?]/.test(pattern)) return true;
+  // Alternation over identical branches: (foo|foo) or (a|a|a)
+  const altMatch = pattern.match(/\(([^|()]+)(?:\|\1)+\)/);
+  if (altMatch) return true;
+  // Lots of unbounded quantifiers (more than 5) — practical heuristic
+  if ((pattern.match(/[*+]/g)?.length ?? 0) > 5) return true;
+  return false;
+}
+
 let customRules: RoutingRule[] | null = null;
 let customRulesLoadedAt = 0;
 const RULES_TTL_MS = 30_000; // Re-read settings every 30 seconds
@@ -337,6 +365,14 @@ function loadRoutingRules(): RoutingRule[] {
             typeof rule.pattern === "string" &&
             rule.pattern.length <= MAX_PATTERN_LENGTH
           ) {
+            // Reject patterns with catastrophic backtracking signatures
+            // (nested quantifiers like (a+)+ or (a|a)*) before compiling.
+            // Even compiled, these can hang .test() on crafted input with
+            // exponential time complexity (ReDoS).
+            if (isDangerousRegex(rule.pattern)) {
+              log.warn("router", `Refusing ReDoS-prone pattern: "${rule.pattern}"`);
+              continue;
+            }
             try {
               const compiled = new RegExp(rule.pattern, "i");
               customRules.push({ ...rule, compiled });

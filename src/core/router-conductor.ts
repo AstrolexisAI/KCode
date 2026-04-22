@@ -236,14 +236,46 @@ function validatePlan(parsed: unknown): SubTask[] | null {
   }
   if (tasks.length === 0) return null;
 
-  // Validate deps reference existing ids and no cycles (simple check: deps must be earlier ids)
+  // Validate deps reference existing ids and no self-reference
   for (const task of tasks) {
     for (const dep of task.depends_on) {
       if (!seenIds.has(dep)) return null;
       if (dep === task.id) return null;
     }
   }
+
+  // Proper cycle detection via DFS. LLMs occasionally emit a DAG like
+  // a→b→a which would send the orchestrator into an infinite loop
+  // (ready.length=0, pending>0, while loop doesn't exit).
+  if (hasCycle(tasks)) {
+    log.warn("router/conductor", "Plan has a dependency cycle — rejecting");
+    return null;
+  }
   return tasks;
+}
+
+function hasCycle(tasks: SubTask[]): boolean {
+  const adjacency = new Map<string, string[]>();
+  for (const t of tasks) adjacency.set(t.id, t.depends_on);
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  for (const t of tasks) color.set(t.id, WHITE);
+
+  function dfs(id: string): boolean {
+    const c = color.get(id);
+    if (c === GRAY) return true;   // back edge = cycle
+    if (c === BLACK) return false; // already fully explored
+    color.set(id, GRAY);
+    for (const dep of adjacency.get(id) ?? []) {
+      if (dfs(dep)) return true;
+    }
+    color.set(id, BLACK);
+    return false;
+  }
+  for (const t of tasks) {
+    if (color.get(t.id) === WHITE && dfs(t.id)) return true;
+  }
+  return false;
 }
 
 /**
