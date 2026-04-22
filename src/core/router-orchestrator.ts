@@ -53,9 +53,11 @@ export async function orchestratePlan(
   defaultModel: string,
   onProgress?: (event: OrchestratorProgressEvent) => void,
   manager?: ConversationManager,
+  fileLocks?: Map<string, Promise<unknown>>,
 ): Promise<OrchestrationResult> {
   const start = Date.now();
   const results = new Map<string, SubTaskResult>();
+  const sharedFileLocks = fileLocks || new Map<string, Promise<unknown>>();
   let waveNum = 0;
 
   const pending = new Set(plan.sub_tasks.map((t) => t.id));
@@ -82,7 +84,7 @@ export async function orchestratePlan(
     );
     onProgress?.({ type: "wave-start", wave: waveNum, taskIds: ready.map((t) => t.id) });
 
-    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results, onProgress, manager));
+    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results, onProgress, manager, sharedFileLocks));
     const batchResults = await Promise.all(promises);
 
     for (const r of batchResults) {
@@ -111,6 +113,7 @@ async function executeSubTask(
   completedResults: Map<string, SubTaskResult>,
   onProgress?: (event: OrchestratorProgressEvent) => void,
   manager?: ConversationManager,
+  fileLocks?: Map<string, Promise<unknown>>,
 ): Promise<SubTaskResult> {
   const start = Date.now();
 
@@ -137,7 +140,7 @@ async function executeSubTask(
 
   try {
     const result = manager
-      ? await runAgentLoopForSubTask(task, model, baseUrl, apiKey ?? "", prompt, config, manager)
+      ? await runAgentLoopForSubTask(task, model, baseUrl, apiKey ?? "", prompt, config, manager, fileLocks)
       : await callModel(model, baseUrl, apiKey ?? "", prompt);
     const elapsedMs = Date.now() - start;
     onProgress?.({
@@ -184,6 +187,7 @@ async function runAgentLoopForSubTask(
   initialPrompt: string,
   parentConfig: KCodeConfig,
   manager: ConversationManager,
+  fileLocks?: Map<string, Promise<unknown>>,
 ): Promise<{ output: string; inputTokens?: number; outputTokens?: number }> {
   const { executeModelRequest } = await import("./request-builder");
   const { processSSEStream } = await import("./conversation-streaming");
@@ -297,6 +301,7 @@ async function runAgentLoopForSubTask(
       contextWindowSize: subConfig.contextWindowSize ?? 32_000,
       abortController,
       toolUseCount,
+      fileLocks,
     };
     const toolGen = executeToolsSequential(toolCalls as ToolUseBlock[], toolCtx, guardState);
     let toolGenResult = await toolGen.next();

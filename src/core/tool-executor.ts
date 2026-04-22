@@ -32,12 +32,78 @@ export interface ToolExecutionContext {
   abortController: AbortController | null;
   toolUseCount: number;
   debugTracer?: DebugTracer | null;
+  /** Shared file-level locks to serialize mutations across parallel sub-tasks.
+   *  Keyed by absolute file path; value is the in-flight tool execution
+   *  promise for that file. Orchestrator passes a shared Map so two
+   *  parallel sub-tasks editing the same file queue up instead of racing. */
+  fileLocks?: Map<string, Promise<unknown>>;
 }
 
 export interface ToolExecutionResult {
   toolResultBlocks: ContentBlock[];
   turnHadDenial: boolean;
   toolUseCount: number;
+}
+
+// ─── File Locking Helpers ────────────────────────────────────────
+
+/**
+ * Get the absolute file paths that a tool call will modify. Used by the
+ * orchestrator's file-lock mechanism to serialize writes to the same file
+ * across parallel sub-tasks.
+ *
+ * Returns empty array for tools that don't modify files (Read, Grep, Glob,
+ * Bash where we can't know statically what gets touched).
+ */
+function getModifiedFiles(name: string, input: Record<string, unknown>): string[] {
+  if (name === "Edit" || name === "Write") {
+    const fp = input.file_path;
+    return typeof fp === "string" ? [fp] : [];
+  }
+  if (name === "MultiEdit") {
+    // MultiEdit has a single file_path at the top level (all edits are on the same file)
+    const fp = input.file_path;
+    return typeof fp === "string" ? [fp] : [];
+  }
+  // Bash: can't statically know which files get modified.
+  // Over-locking on every Bash call would defeat parallelism.
+  return [];
+}
+
+/**
+ * Acquire file locks for the given paths. Waits for any in-flight operation
+ * on those files to complete, then returns a "release" function that must be
+ * called after the new operation finishes.
+ *
+ * Safe under concurrent calls: if two sub-tasks race to acquire the same
+ * lock, the second one waits for the first one's promise via `await existing`.
+ */
+async function acquireFileLocks(
+  paths: string[],
+  locks: Map<string, Promise<unknown>>,
+): Promise<{ setLock: (promise: Promise<unknown>) => void; release: () => void }> {
+  // Wait for any existing locks on these paths
+  const existing = paths.map((p) => locks.get(p)).filter((p): p is Promise<unknown> => Boolean(p));
+  if (existing.length > 0) {
+    // settled, not .all, so one rejection doesn't cancel others
+    await Promise.allSettled(existing);
+  }
+
+  let currentPromise: Promise<unknown> | null = null;
+  return {
+    setLock: (promise: Promise<unknown>) => {
+      currentPromise = promise;
+      for (const p of paths) locks.set(p, promise);
+    },
+    release: () => {
+      // Only delete if the lock is still ours. Another caller may have
+      // acquired a fresh lock on the same file after us; in that case
+      // we must not clobber their lock.
+      for (const p of paths) {
+        if (locks.get(p) === currentPromise) locks.delete(p);
+      }
+    },
+  };
 }
 
 // ─── Parallel Execution ──────────────────────────────────────────
@@ -617,6 +683,16 @@ export async function* executeToolsSequential(
     const toolStartMs = Date.now();
     let result: import("./types").ToolResult;
 
+    // File locking: prevent race conditions when parallel sub-tasks
+    // target the same file. Acquire = wait for in-flight operations on
+    // these paths to complete. We get setLock/release callbacks to manage
+    // the lock lifecycle around the actual tool execution below.
+    const modifiedFiles = getModifiedFiles(call.name, effectiveInput);
+    let lockHandle: Awaited<ReturnType<typeof acquireFileLocks>> | null = null;
+    if (modifiedFiles.length > 0 && ctx.fileLocks) {
+      lockHandle = await acquireFileLocks(modifiedFiles, ctx.fileLocks);
+    }
+
     // PreBash hook: fires before Bash execution
     if (call.name === "Bash") {
       try {
@@ -657,12 +733,13 @@ export async function* executeToolsSequential(
       setBashStreamCallback((chunk: string) => {
         streamQueue.push(chunk);
       });
-      const toolPromise = ctx.tools.execute(call.name, effectiveInput);
+      const bashToolPromise = ctx.tools.execute(call.name, effectiveInput);
+      if (lockHandle) lockHandle.setLock(bashToolPromise);
 
       // Poll for stream chunks while the tool is running
       let done = false;
       let toolResult: import("./types").ToolResult | undefined;
-      toolPromise
+      bashToolPromise
         .then((r: import("./types").ToolResult) => {
           toolResult = r;
           done = true;
@@ -697,8 +774,14 @@ export async function* executeToolsSequential(
       setBashStreamCallback(undefined);
       result = toolResult ?? { tool_use_id: call.id, content: "Aborted by user", is_error: true };
     } else {
-      result = await ctx.tools.execute(call.name, effectiveInput);
+      const execPromise = ctx.tools.execute(call.name, effectiveInput);
+      if (lockHandle) lockHandle.setLock(execPromise);
+      result = await execPromise;
     }
+
+    // Release file locks now that the tool has finished (or errored).
+    // Safe against new locks acquired after us: release() checks identity.
+    if (lockHandle) lockHandle.release();
 
     const toolDurationMs = Date.now() - toolStartMs;
 
