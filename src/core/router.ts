@@ -412,6 +412,7 @@ export async function routeToModel(
   }
 
   // Pro: full smart routing with custom rules and task classification
+  const models = await listModels();
   const rules = loadRoutingRules();
   for (const rule of rules) {
     // Skip rules that got disabled in a prior call due to slowness
@@ -427,6 +428,15 @@ export async function routeToModel(
       continue;
     }
     if (matched) {
+      // Validate that the model exists before using it
+      const modelExists = models.some(m => m.name === rule.model);
+      if (!modelExists) {
+        log.warn(
+          "router",
+          `Custom rule matched invalid model: "${rule.description ?? rule.pattern}" → ${rule.model} (model not found, skipping rule)`,
+        );
+        continue;
+      }
       log.info(
         "router",
         `Custom rule matched: "${rule.description ?? rule.pattern}" → ${rule.model}`,
@@ -440,8 +450,6 @@ export async function routeToModel(
   if (taskType === "general") {
     return defaultModel;
   }
-
-  const models = await listModels();
 
   const capabilityMap: Record<string, string[]> = {
     simple: ["fast"],

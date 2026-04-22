@@ -72,12 +72,41 @@ Override with `KCODE_FORCE_LOCAL=1` or `--model <codename>`. Build a standalone 
 
 ### Cloud API Support
 
-- **6 providers**: Anthropic, OpenAI, Gemini, Groq, DeepSeek, Together AI
+- **7 providers**: Anthropic, OpenAI, xAI (Grok), Kimi (Moonshot), Gemini, Groq, DeepSeek, Together AI
 - **Cloud-first setup** for weak hardware -- the wizard skips the model download and walks you through picking a provider
 - **Auto-discovery of new models**: `kcode models discover` queries each provider's `/v1/models` and registers anything new (e.g. Opus 4.7 the day it ships). Also runs in the background at TUI startup (throttled to 6h)
-- **Flexible auth**: OAuth session (`/auth`), API key in `settings.json` (`/cloud`), or env vars (`ANTHROPIC_API_KEY`, etc.) -- discovery and requests resolve from any of these
+- **Flexible auth**: OAuth session (`/auth`), API key in `settings.json` (`/cloud`), or env vars (`ANTHROPIC_API_KEY`, `XAI_API_KEY`, `MOONSHOT_API_KEY`, etc.) -- discovery and requests resolve from any of these
 - **Easy switching**: `/cloud` to configure, `/model` or `/toggle` to switch
-- **Auto-routing**: automatically sends queries to the best model based on task type
+
+### Multi-Model Orchestrator (`/multimodel`)
+
+A conductor-orchestrator architecture that decomposes complex prompts into a DAG of specialized sub-tasks and runs independent ones in parallel on their best-suited models. Enabled with `/multimodel on`.
+
+- **Conductor**: a fast cheap model (claude-haiku, gpt-4o-mini) reads your prompt and returns a JSON DAG like `[a:analysis, b:complex-edit<-a, c:chat<-a,b]` in ~2 seconds
+- **Per-task routing by benchmark tags**: each sub-task picks the best model for its intent
+  - `analysis` → reasoning models (grok-4.20-reasoning, claude-opus)
+  - `complex-edit` / `simple-edit` → coding models (grok-code-fast-1, gpt-4o-mini)
+  - `chat` without deps → local model (free, ~2s)
+  - `chat` with deps → cloud model (synthesis needs more than local can handle)
+- **Parallel execution**: independent sub-tasks run via `Promise.all`; dependent ones wait and receive prior outputs as context
+- **Tool-enabled sub-tasks**: each sub-task gets Read/Edit/Grep/Bash through the shared tool registry, so analysis can actually read files and edit can actually edit them
+- **File-level locking**: parallel sub-tasks editing the same file queue up instead of racing (prevents corruption)
+- **Live progress**: `▶` / `✓` events show per-sub-task start/done with elapsed time and tokens
+- **Anti-hallucination guard**: when an edit sub-task made no successful writes, downstream sub-tasks are explicitly told "no fix was made" so they don't fabricate one
+- **Kodi session economy panel**: per-model cost breakdown + animated mini-Kodis (one per model used in the session) + live balance fetch where providers expose it (Kimi, OpenRouter)
+
+### Task-Type Classification (regex heuristics)
+
+When multi-model is off, a single-intent classifier picks the best model for each request:
+
+- **analysis** → audit / review / debug / "analizá" / "cuándo usar" → reasoning model
+- **complex-edit** → cambiar / modificar / agregar / add / update → coding model
+- **simple-edit** → explicit `old_string` or `línea 42` → fast coding model
+- **multi-step** → numbered instructions → structured model
+- **chat** → short conversational → local or cheap cloud
+- **vision** → image paths / data URIs → vision model
+
+Supports Spanish (with accent handling for `analizá`, `cambiá`, `auditá`) and English patterns.
 
 ### 46 Built-in Tools
 
@@ -98,7 +127,7 @@ Override with `KCODE_FORCE_LOCAL=1` or `--model <codename>`. Build a standalone 
 - **Code analysis**: `/simplify`, `/explain`, `/find-bug`, `/security-review`
 - **Development**: `/test`, `/build`, `/lint`, `/deps`, `/todo`, `/doc`
 - **Session management**: `/compact`, `/rewind`, `/resume`, `/export`, `/stats`
-- **Configuration**: `/cloud`, `/toggle`, `/theme`, `/vim`, `/plugins`
+- **Configuration**: `/cloud`, `/toggle`, `/theme`, `/vim`, `/plugins`, `/multimodel`
 - **Planning**: `/plan`, `/pin`, `/memory`, `/search`, `/batch`
 
 ### Deterministic Audit Engine
