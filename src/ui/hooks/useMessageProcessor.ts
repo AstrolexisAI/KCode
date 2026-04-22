@@ -1666,6 +1666,29 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         });
       } catch { /* non-fatal */ }
 
+      // Multi-model routing: if enabled, auto-select best model for this task
+      try {
+        const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
+          await import("../../core/router.js");
+        if (isMultimodelEnabled()) {
+          const taskType = classifyBenchmarkTask(userInput);
+          const currentModel = conversationManager.getConfig().model;
+          const best = await selectBenchmarkModel(taskType, currentModel);
+          if (best && best !== currentModel) {
+            conversationManager.getConfig().model = best;
+            // Brief dim notification of the switch
+            setCompleted((prev) => [
+              ...prev,
+              {
+                kind: "text",
+                role: "assistant",
+                text: `  \x1b[2m⇄ routing ${taskType} → ${best}\x1b[0m`,
+              },
+            ]);
+          }
+        }
+      } catch { /* non-fatal — routing failure falls back to current model */ }
+
       // Start response
       setMode("responding");
       setStreamingText("");

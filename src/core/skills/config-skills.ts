@@ -39,6 +39,13 @@ export const configSkills: SkillDefinition[] = [
     template: `__builtin_plan__`,
   },
   {
+    name: "multimodel",
+    description: "Toggle multi-model routing — auto-selects best model per task type",
+    aliases: ["mm", "multi"],
+    args: ["on | off (optional — toggles if omitted)"],
+    template: `__builtin_multimodel__`,
+  },
+  {
     name: "hooks",
     description: "Show configured hooks",
     aliases: ["hook"],
