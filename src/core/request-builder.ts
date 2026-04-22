@@ -763,22 +763,31 @@ export async function executeModelRequest(
   // Empty messages can appear when a reasoning loop aborts mid-stream, when a
   // tool call produces no follow-up text, or when retry logic injects a stub.
   if (Array.isArray(req.body.messages)) {
-    const before = req.body.messages.length;
-    req.body.messages = (req.body.messages as Array<{ role: string; content: unknown }>).filter((m) => {
-      if (typeof m.content === "string") return m.content.trim().length > 0;
-      if (Array.isArray(m.content)) {
-        if (m.content.length === 0) return false;
-        // Drop if all blocks are text with empty strings
-        const hasNonEmpty = (m.content as Array<{ type: string; text?: string }>).some((b) => {
-          if (b.type !== "text") return true; // tool_use/tool_result/image are never empty
-          return (b.text ?? "").trim().length > 0;
-        });
-        return hasNonEmpty;
+    const original = req.body.messages as Array<{ role: string; content: unknown }>;
+    const stripped: Array<{ idx: number; role: string; shape: string }> = [];
+    req.body.messages = original.filter((m, idx) => {
+      const isEmpty = (() => {
+        if (typeof m.content === "string") return m.content.trim().length === 0;
+        if (Array.isArray(m.content)) {
+          if (m.content.length === 0) return true;
+          return !(m.content as Array<{ type: string; text?: string }>).some((b) => {
+            if (b.type !== "text") return true;
+            return (b.text ?? "").trim().length > 0;
+          });
+        }
+        return m.content == null;
+      })();
+      if (isEmpty) {
+        const shape = typeof m.content === "string"
+          ? "string" : Array.isArray(m.content)
+          ? `array(${m.content.length})` : "null/other";
+        stripped.push({ idx, role: m.role, shape });
+        return false;
       }
-      return m.content != null;
+      return true;
     });
-    if (req.body.messages.length < before) {
-      log.warn("llm", `Stripped ${before - (req.body.messages as unknown[]).length} empty messages before send`);
+    if (stripped.length > 0) {
+      log.warn("llm", `Stripped ${stripped.length} empty messages: ${stripped.map(s => `#${s.idx}:${s.role}(${s.shape})`).join(" ")}`);
     }
   }
 
