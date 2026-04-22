@@ -1573,11 +1573,13 @@ async function runNonInteractive(
       await import("./core/router.js");
     if (isMultimodelEnabled()) {
       const taskType = classifyBenchmarkTask(prompt);
-      const currentModel = conversationManager.getConfig().model;
-      const best = await selectBenchmarkModel(taskType, currentModel);
-      if (best && best !== currentModel) {
-        conversationManager.getConfig().model = best;
-        process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${best}\x1b[0m\n`);
+      const cfg = conversationManager.getConfig();
+      const route = await selectBenchmarkModel(taskType, cfg.model);
+      if (route) {
+        cfg.model = route.model;
+        cfg.apiBase = route.baseUrl;
+        if (route.apiKey) cfg.apiKey = route.apiKey;
+        process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
       }
     }
   } catch { /* non-fatal */ }
