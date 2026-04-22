@@ -257,7 +257,7 @@ export async function selectBenchmarkModel(
         const { resolveApiKey } = await import("./request-builder.js");
         const { loadUserSettingsRaw } = await import("./config.js");
         let settings: Record<string, unknown> = {};
-        try { settings = loadUserSettingsRaw() as Record<string, unknown>; } catch { /* */ }
+        try { settings = await loadUserSettingsRaw(); } catch { /* */ }
         const fakeConfig = {
           apiKey: String(settings.apiKey ?? ""),
           anthropicApiKey: String(settings.anthropicApiKey ?? ""),
