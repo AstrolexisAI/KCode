@@ -251,7 +251,18 @@ async function runAgentLoopForSubTask(
     finalText = textChunks.join("");
 
     // Append assistant message (with potential tool calls) to history
-    messages.push({ role: "assistant", content: assistantContent });
+    // Guard against undefined/null assistantContent (e.g. when stream
+    // aborts mid-turn from a reasoning loop detection). Without this,
+    // content=null lands in history and gets stripped by the global
+    // sanitizer every subsequent turn, polluting the warn log.
+    const safeContent = Array.isArray(assistantContent) && assistantContent.length > 0
+      ? assistantContent
+      : (textChunks.join("").trim()
+        ? [{ type: "text" as const, text: textChunks.join("") }]
+        : [{ type: "text" as const, text: stopReason === "repetition_aborted"
+              ? "[sub-task response aborted due to repetition loop]"
+              : "[sub-task produced no content]" }]);
+    messages.push({ role: "assistant", content: safeContent });
 
     if (toolCalls.length === 0 || stopReason === "end_turn" || stopReason === "stop") {
       break;
