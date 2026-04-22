@@ -1732,6 +1732,13 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                   }
                 }, conversationManager);
                 const combined = formatOrchestrationOutput(result);
+                // Clear any plan that the sub-task's Plan tool might have
+                // created. Even though we excluded Plan from sub-task tools,
+                // leave this as a safety net in case something else touches it.
+                try {
+                  const { clearActivePlan } = await import("../../core/tools/plan.js");
+                  clearActivePlan();
+                } catch { /* module absent */ }
                 // Record per-model costs so Kodi's session economy reflects
                 // orchestrator usage (bypasses recordTurnCost in sendMessage)
                 let orchestratorTokensTotal = 0;
