@@ -310,7 +310,7 @@ interface RoutingRule {
   /** Regex pattern to match user message */
   pattern: string;
   /** Pre-compiled regex (cached) */
-  compiled: RegExp;
+  compiled: RegExp | null;
   /** Model name to route to */
   model: string;
   /** Optional description for logging */
@@ -414,7 +414,19 @@ export async function routeToModel(
   // Pro: full smart routing with custom rules and task classification
   const rules = loadRoutingRules();
   for (const rule of rules) {
-    if (rule.compiled.test(userMessage)) {
+    // Skip rules that got disabled in a prior call due to slowness
+    if (!rule.compiled) continue;
+    // ReDoS mitigation: cap input to 1000 chars + elapsed-time check.
+    // JS can't interrupt sync regex, but if a rule takes >50ms even on
+    // 1k chars it's definitely adversarial — disable it for this session.
+    const testStart = Date.now();
+    const matched = rule.compiled.test(userMessage.slice(0, 1000));
+    if (Date.now() - testStart > 50) {
+      log.warn("router", `Rule "${rule.description ?? rule.pattern}" took ${Date.now() - testStart}ms — suspected ReDoS, disabling`);
+      (rule as { compiled: RegExp | null }).compiled = null;
+      continue;
+    }
+    if (matched) {
       log.info(
         "router",
         `Custom rule matched: "${rule.description ?? rule.pattern}" → ${rule.model}`,
