@@ -121,6 +121,134 @@ export function classifyTask(userMessage: string): TaskType {
   return "general";
 }
 
+// ─── Multi-model routing (benchmark-based tags) ──────────────────
+
+/**
+ * Extended task classification using benchmark results.
+ * Maps to the tag system: coding, fast, analysis, reasoning, structured, local, cheap.
+ */
+export type BenchmarkTaskType =
+  | "analysis"     // deep analysis, audit, review, debug → [analysis, reasoning]
+  | "complex-edit" // must find location in code → [coding]
+  | "simple-edit"  // old_string given or trivial change → [coding, fast]
+  | "multi-step"   // numbered/structured workflow → [structured, coding]
+  | "chat"         // question, explain, discuss → [fast, cheap, local]
+  | "vision"       // image input → [vision]
+  | "general";     // default
+
+const ANALYSIS_PATTERNS = [
+  /\b(audit|analiz[ae]|revisar|review|debug|diagnos|investig|security|vulnerabil)\b/i,
+  /\b(por qu[eé]|why does|root cause|explain.*code|code.*review)\b/i,
+  /\b(benchmark|performance|profil|bottleneck)\b/i,
+];
+
+const MULTI_STEP_PATTERNS = [
+  /^\s*[1-9]\.\s/m,                    // numbered list: "1. do this"
+  /\b(paso\s+[1-9]|step\s+[1-9])\b/i, // "paso 1", "step 1"
+  /\btarea\s+[1-9]\b/i,               // "tarea 1"
+  /\b(primero|luego|después|finalmente)\b.*\b(luego|después|finalmente)\b/i,
+];
+
+const SIMPLE_EDIT_PATTERNS = [
+  /old_string|new_string/i,            // explicit old/new string
+  /l[ií]nea\s+\d+/i,                  // "línea 42"
+  /line\s+\d+/i,
+  /\bagregá\s+(?:este|esta|el|la)\s+(?:bloque|línea|comentario)\b/i,
+];
+
+export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
+  if (detectImageContent(userMessage)) return "vision";
+
+  // Analysis: audit, review, debug, investigate
+  if (ANALYSIS_PATTERNS.some((p) => p.test(userMessage))) return "analysis";
+
+  // Multi-step: numbered instructions or structured workflow
+  if (MULTI_STEP_PATTERNS.some((p) => p.test(userMessage))) return "multi-step";
+
+  // Simple edit: explicit old_string or line number given
+  if (SIMPLE_EDIT_PATTERNS.some((p) => p.test(userMessage))) return "simple-edit";
+
+  // Complex edit: code modification without exact location
+  if (detectCodeTask(userMessage)) return "complex-edit";
+
+  // Chat/question: short or conversational
+  if (userMessage.length < 150 || detectSimpleTask(userMessage)) return "chat";
+
+  return "general";
+}
+
+/** Tags required per benchmark task type (in priority order) */
+const BENCHMARK_TAG_MAP: Record<BenchmarkTaskType, string[][]> = {
+  "analysis":     [["analysis", "reasoning"], ["reasoning"], ["analysis"]],
+  "complex-edit": [["coding", "fast"], ["coding"]],
+  "simple-edit":  [["coding", "fast"], ["fast"], ["coding"]],
+  "multi-step":   [["structured"], ["coding"]],
+  "chat":         [["local"], ["fast", "cheap"], ["fast"], ["cheap"]],
+  "vision":       [["vision"]],
+  "general":      [["coding"], ["fast"]],
+};
+
+/**
+ * Check if multimodel routing is enabled in settings.
+ */
+export function isMultimodelEnabled(): boolean {
+  try {
+    const settingsPath = kcodePath("settings.json");
+    if (!existsSync(settingsPath)) return false;
+    const data = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    return data?.multimodel === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Select the best model for a task using benchmark tags.
+ * Prefers local model for chat tasks when available.
+ * Returns null if no better model is found (use default).
+ */
+export async function selectBenchmarkModel(
+  taskType: BenchmarkTaskType,
+  defaultModel: string,
+): Promise<string | null> {
+  const models = await listModels();
+  const LOCAL_PATTERNS = /localhost|127\.0\.0\.1/;
+
+  const tagGroups = BENCHMARK_TAG_MAP[taskType] ?? [["coding"]];
+
+  for (const requiredTags of tagGroups) {
+    // For "local" tag, only consider local models
+    if (requiredTags.includes("local")) {
+      const localModel = models.find((m) => LOCAL_PATTERNS.test(m.baseUrl));
+      if (localModel && localModel.name !== defaultModel) {
+        log.info("router/multi", `${taskType} → local: ${localModel.name}`);
+        return localModel.name;
+      }
+      continue;
+    }
+
+    // Find cloud models with ALL required tags
+    const matched = models.filter((m) => {
+      if (LOCAL_PATTERNS.test(m.baseUrl)) return false;
+      const modelTags: string[] = (m as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
+      return requiredTags.every((t) => modelTags.includes(t));
+    });
+
+    if (matched.length > 0) {
+      // Prefer a different model than current if one exists
+      const different = matched.find((m) => m.name !== defaultModel);
+      const chosen = different ?? matched[0]!;
+      if (chosen.name !== defaultModel) {
+        log.info("router/multi", `${taskType} [${requiredTags.join("+")}] → ${chosen.name}`);
+        return chosen.name;
+      }
+      return null; // already on the best model
+    }
+  }
+
+  return null; // no better match
+}
+
 // ─── Router ─────────────────────────────────────────────────────
 
 /**

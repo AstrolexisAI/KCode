@@ -791,6 +791,57 @@ export async function handleModelConfigAction(
       ].join("\n");
     }
 
+    case "multimodel": {
+      // Toggle multi-model routing on/off
+      const { existsSync, readFileSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+      const settingsPath = kcodePath("settings.json");
+      let settings: Record<string, unknown> = {};
+      try {
+        if (existsSync(settingsPath)) settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      } catch { /* ignore */ }
+
+      const current = settings.multimodel === true;
+      const arg = args?.trim().toLowerCase();
+
+      let next: boolean;
+      if (arg === "on" || arg === "enable") {
+        next = true;
+      } else if (arg === "off" || arg === "disable") {
+        next = false;
+      } else {
+        next = !current; // toggle
+      }
+
+      settings.multimodel = next;
+      try {
+        writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+      } catch (e) {
+        return `  Failed to save settings: ${e}`;
+      }
+
+      if (next) {
+        const { listModels } = await import("../../core/models.js");
+        const models = await listModels();
+        const LOCAL = /localhost|127\.0\.0\.1/;
+        const cloudWithTags = models.filter((m) => !LOCAL.test(m.baseUrl) && (m as Record<string,unknown>).tags);
+        const local = models.find((m) => LOCAL.test(m.baseUrl));
+        const lines = [
+          "  ✅ Multi-model routing ENABLED",
+          "  KCode will automatically route each request to the best available model:",
+          "",
+          `  ${local ? `  🖥  Local: ${local.name} → chat, simple questions` : "  (no local model — cloud only)"}`,
+        ];
+        for (const m of cloudWithTags.slice(0, 6)) {
+          const tags: string[] = (m as Record<string,unknown>).tags as string[] ?? [];
+          lines.push(`  ☁  ${m.name} → ${tags.join(", ")}`);
+        }
+        lines.push("", "  Use /multimodel off to disable.");
+        return lines.join("\n");
+      } else {
+        return `  ⬜ Multi-model routing DISABLED — using ${appConfig.model}`;
+      }
+    }
+
     default:
       return null;
   }
