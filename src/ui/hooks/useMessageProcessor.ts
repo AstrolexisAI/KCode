@@ -1726,13 +1726,21 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 const combined = formatOrchestrationOutput(result);
                 // Record per-model costs so Kodi's session economy reflects
                 // orchestrator usage (bypasses recordTurnCost in sendMessage)
+                let orchestratorTokensTotal = 0;
                 for (const sub of result.results) {
+                  const subTokens = (sub.inputTokens ?? 0) + (sub.outputTokens ?? 0);
+                  orchestratorTokensTotal += subTokens;
                   await conversationManager.recordExternalTurnCost({
                     model: sub.model,
                     inputTokens: sub.inputTokens ?? 0,
                     outputTokens: sub.outputTokens ?? 0,
                   });
                 }
+                // Force Kodi session-economy panel to re-read turnCosts by
+                // bumping tokenCount (its useEffect dependency in App.tsx).
+                // Without this the mini-Kodi team doesn't appear until the
+                // next normal turn.
+                setTokenCount((prev) => prev + orchestratorTokensTotal);
                 // Inject into conversation history so next turn has context
                 conversationManager.getState().messages.push(
                   { role: "user", content: userInput },
