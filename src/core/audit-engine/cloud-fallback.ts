@@ -22,26 +22,48 @@ export interface CloudFallbackConfig {
 const AUDIT_TAGS = new Set(["analysis", "reasoning"]);
 const LOCAL_PATTERNS = /localhost|127\.0\.0\.1|0\.0\.0\.0/;
 
-/** Map baseUrl → env var name for API key lookup */
-function resolveApiKey(baseUrl: string, modelName: string): string {
+/** Load saved API keys from settings.json (populated by /cloud) */
+function loadSavedKeys(): Record<string, string> {
+  try {
+    const { loadUserSettingsRaw } = require("../config.js") as typeof import("../config");
+    const s = loadUserSettingsRaw() as Record<string, unknown>;
+    return {
+      anthropic: String(s.anthropicApiKey ?? ""),
+      xai:       String(s.xaiApiKey ?? ""),
+      openai:    String(s.apiKey ?? ""),
+      kimi:      String(s.kimiApiKey ?? ""),
+      groq:      String(s.groqApiKey ?? ""),
+      deepseek:  String(s.deepseekApiKey ?? ""),
+      together:  String(s.togetherApiKey ?? ""),
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Resolve API key: env var takes precedence, then settings.json */
+function resolveApiKey(baseUrl: string, modelName: string, saved: Record<string, string>): string {
   const url = baseUrl.toLowerCase();
   if (url.includes("anthropic.com")) {
-    return process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_ANTHROPIC_KEY ?? "";
+    return process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_ANTHROPIC_KEY ?? saved.anthropic ?? "";
   }
   if (url.includes("api.x.ai") || modelName.toLowerCase().startsWith("grok")) {
-    return process.env.XAI_API_KEY ?? "";
+    return process.env.XAI_API_KEY ?? saved.xai ?? "";
   }
   if (url.includes("openai.com")) {
-    return process.env.OPENAI_API_KEY ?? "";
+    return process.env.OPENAI_API_KEY ?? saved.openai ?? "";
   }
   if (url.includes("moonshot")) {
-    return process.env.MOONSHOT_API_KEY ?? "";
+    return process.env.MOONSHOT_API_KEY ?? saved.kimi ?? "";
   }
   if (url.includes("groq.com")) {
-    return process.env.GROQ_API_KEY ?? "";
+    return process.env.GROQ_API_KEY ?? saved.groq ?? "";
   }
   if (url.includes("deepseek.com")) {
-    return process.env.DEEPSEEK_API_KEY ?? "";
+    return process.env.DEEPSEEK_API_KEY ?? saved.deepseek ?? "";
+  }
+  if (url.includes("together.xyz")) {
+    return process.env.TOGETHER_API_KEY ?? saved.together ?? "";
   }
   return "";
 }
@@ -59,6 +81,7 @@ export async function detectAuditModels(currentApiBase?: string): Promise<CloudF
   try {
     const { listModels } = await import("../models.js");
     const all = await listModels();
+    const savedKeys = loadSavedKeys();
 
     // Also check for Anthropic OAuth token
     let oauthKey = "";
@@ -75,8 +98,8 @@ export async function detectAuditModels(currentApiBase?: string): Promise<CloudF
       const hasAuditTag = rawTags.some((t) => AUDIT_TAGS.has(t));
       if (!hasAuditTag) continue;
 
-      // Resolve API key
-      let apiKey = resolveApiKey(m.baseUrl, m.name);
+      // Resolve API key: env var > settings.json > OAuth token
+      let apiKey = resolveApiKey(m.baseUrl, m.name, savedKeys);
       if (!apiKey && m.baseUrl.includes("anthropic.com") && oauthKey) {
         apiKey = oauthKey;
       }
