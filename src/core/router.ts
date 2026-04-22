@@ -256,9 +256,11 @@ export async function selectBenchmarkModel(
       continue;
     }
 
-    // Find cloud models with ALL required tags
+    // Find cloud models with ALL required tags, excluding session-blacklisted
+    const { isBlacklisted } = await import("./model-reliability.js");
     const matched = models.filter((m) => {
       if (LOCAL_PATTERNS.test(m.baseUrl)) return false;
+      if (isBlacklisted(m.name)) return false;
       const modelTags: string[] = (m as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
       return requiredTags.every((t) => modelTags.includes(t));
     });

@@ -596,6 +596,14 @@ export async function* processSSEStream(
   if (activeToolCalls.size === 0 && fullText.length > 0) {
     const extracted = extractToolCallsFromText(fullText, cfg.tools);
     if (extracted.length > 0) {
+      // Track this as a hallucination: the model emitted tool calls as text
+      // rather than via the native tool_calls API. Useful for session-level
+      // blacklisting of models that do this repeatedly and waste tokens.
+      try {
+        const { recordToolHallucination } = await import("./model-reliability.js");
+        recordToolHallucination();
+      } catch { /* module absent — tracking optional */ }
+
       if (extracted[0]!.prefixText.trim()) {
         assistantContent.push({ type: "text", text: extracted[0]!.prefixText.trim() });
       }

@@ -107,6 +107,114 @@ export function extractToolCallsFromText(text: string, tools: ToolRegistry): Ext
       }
     }
   }
+  if (results.length > 0) return results;
+
+  // Pattern 5: XML-style tool calls (Grok-4-reasoning hallucinates this format)
+  //   <function_call name="Glob">
+  //     <argument name="pattern">**/*.ts</argument>
+  //     <argument name="output_mode">files_with_matches</argument>
+  //   </function_call>
+  const xmlRe = /<function_call\s+name="([^"]+)">([\s\S]*?)<\/function_call>/g;
+  while ((match = xmlRe.exec(text)) !== null) {
+    const rawName = match[1]!;
+    const toolName = toolNameMap.get(rawName.toLowerCase()) ?? rawName;
+    if (!knownTools.has(toolName)) continue;
+
+    // Extract all <argument name="key">value</argument> blocks
+    const argRe = /<argument\s+name="([^"]+)">([\s\S]*?)<\/argument>/g;
+    const args: Record<string, unknown> = {};
+    let argMatch: RegExpExecArray | null;
+    while ((argMatch = argRe.exec(match[2]!)) !== null) {
+      const key = argMatch[1]!;
+      const val = argMatch[2]!.trim();
+      // Coerce obvious types
+      if (val === "true") args[key] = true;
+      else if (val === "false") args[key] = false;
+      else if (/^-?\d+$/.test(val)) args[key] = parseInt(val, 10);
+      else if (/^-?\d+\.\d+$/.test(val)) args[key] = parseFloat(val);
+      else args[key] = val;
+    }
+
+    if (match.index < firstMatchIndex) firstMatchIndex = match.index;
+    results.push({
+      name: toolName,
+      input: args,
+      prefixText: text.slice(0, firstMatchIndex),
+    });
+  }
+  if (results.length > 0) return results;
+
+  // Pattern 6: Python-style function calls on their own line:
+  //   ToolName(key="value", other=42)
+  // Conservative: only match if line starts with a known tool name
+  for (const def of toolDefs) {
+    // Anchor to start-of-line or after whitespace; require (...) on same line
+    const pyRe = new RegExp(`(?:^|\\n)\\s*${escapeRegex(def.name)}\\s*\\(([^)]*)\\)`, "g");
+    while ((match = pyRe.exec(text)) !== null) {
+      const argStr = match[1]!.trim();
+      const args = parsePythonKwargs(argStr);
+      if (args === null) continue;
+      if (match.index < firstMatchIndex) firstMatchIndex = match.index;
+      results.push({
+        name: def.name,
+        input: args,
+        prefixText: text.slice(0, firstMatchIndex),
+      });
+    }
+  }
 
   return results;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Parse Python-style kwargs: `key="value", num=42, flag=true`.
+ * Returns null if the string doesn't look like kwargs (avoids false matches).
+ */
+function parsePythonKwargs(s: string): Record<string, unknown> | null {
+  if (!s.trim()) return {};
+  // Must have at least one `key=value` pattern
+  if (!/\w+\s*=/.test(s)) return null;
+  const args: Record<string, unknown> = {};
+  // Split on commas, respecting quoted strings
+  const parts: string[] = [];
+  let buf = "";
+  let inString: string | null = null;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (inString) {
+      buf += c;
+      if (c === inString && s[i - 1] !== "\\") inString = null;
+    } else if (c === '"' || c === "'") {
+      buf += c;
+      inString = c;
+    } else if (c === ",") {
+      parts.push(buf);
+      buf = "";
+    } else {
+      buf += c;
+    }
+  }
+  if (buf.trim()) parts.push(buf);
+
+  for (const part of parts) {
+    const eq = part.indexOf("=");
+    if (eq < 0) return null;
+    const key = part.slice(0, eq).trim();
+    let val = part.slice(eq + 1).trim();
+    // Strip quotes
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    // Coerce
+    if (val === "true") args[key] = true;
+    else if (val === "false") args[key] = false;
+    else if (/^-?\d+$/.test(val)) args[key] = parseInt(val, 10);
+    else if (/^-?\d+\.\d+$/.test(val)) args[key] = parseFloat(val);
+    else args[key] = val;
+  }
+  return args;
 }
