@@ -18,6 +18,25 @@ export async function runPrintMode(
   prompt: string,
   outputFormat: OutputFormat = "text",
 ): Promise<number> {
+  // Apply multi-model routing before sending
+  try {
+    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
+      await import("../core/router.js");
+    if (isMultimodelEnabled()) {
+      const taskType = classifyBenchmarkTask(prompt);
+      const cfg = conversationManager.getConfig();
+      const route = await selectBenchmarkModel(taskType, cfg.model);
+      if (route) {
+        cfg.model = route.model;
+        cfg.apiBase = route.baseUrl;
+        if (route.apiKey) cfg.apiKey = route.apiKey;
+        process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
+      }
+    }
+  } catch (routeErr) {
+    process.stderr.write(`\x1b[2m[multimodel] error: ${routeErr}\x1b[0m\n`);
+  }
+
   if (outputFormat === "json") {
     return runPrintModeJson(conversationManager, prompt);
   }
