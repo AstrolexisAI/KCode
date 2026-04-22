@@ -372,7 +372,9 @@ export default function App({ config, conversationManager, tools, initialSession
         // Per-model aggregation
         const byModel = new Map<string, { inputTokens: number; outputTokens: number; costUsd: number; turns: number }>();
         for (const t of turnCosts) {
-          if (!t.model || t.costUsd === 0) continue;
+          if (!t.model) continue;
+          // Include local models (costUsd=0) so they appear in mini-Kodi team
+          // Mark them as "local" provider for display purposes
           const existing = byModel.get(t.model) ?? { inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0 };
           byModel.set(t.model, {
             inputTokens: existing.inputTokens + (t.inputTokens ?? 0),

@@ -176,9 +176,10 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
   if (SIMPLE_EDIT_PATTERNS.some((p) => p.test(userMessage))) return "simple-edit";
 
   // Complex edit: code modification without exact location
-  // Also catches "cambia X a Y", "modifica", "actualiza" in spanish
-  const COMPLEX_EDIT_EXTRA = /\b(cambia[r]?|modifica[r]?|actualiza[r]?|renombra[r]?|elimina[r]?|borra[r]?|reemplaza[r]?|replace|rename|remove|delete|update)\b/i;
-  if (detectCodeTask(userMessage) || COMPLEX_EDIT_EXTRA.test(userMessage)) return "complex-edit";
+  // Two patterns: non-accented (word boundary works) + accented Spanish imperatives
+  const COMPLEX_EDIT_BASE = /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|replace|rename|remove|delete|update)\b/i;
+  const COMPLEX_EDIT_ACCENTED = /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá])/i;
+  if (detectCodeTask(userMessage) || COMPLEX_EDIT_BASE.test(userMessage) || COMPLEX_EDIT_ACCENTED.test(userMessage)) return "complex-edit";
 
   // Chat/question: only truly short/conversational — NOT technical questions
   // Threshold reduced to 80 chars (greetings, simple lookups)
