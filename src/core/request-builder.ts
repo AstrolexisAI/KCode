@@ -763,9 +763,14 @@ export async function executeModelRequest(
   // Empty messages can appear when a reasoning loop aborts mid-stream, when a
   // tool call produces no follow-up text, or when retry logic injects a stub.
   if (Array.isArray(req.body.messages)) {
-    const original = req.body.messages as Array<{ role: string; content: unknown }>;
+    const original = req.body.messages as Array<{ role: string; content: unknown; tool_calls?: unknown }>;
     const stripped: Array<{ idx: number; role: string; shape: string }> = [];
     req.body.messages = original.filter((m, idx) => {
+      // OpenAI-format assistant messages with tool_calls legitimately have content=null.
+      // NEVER strip those — the API requires them to preserve the tool-use flow.
+      if (m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+        return true;
+      }
       const isEmpty = (() => {
         if (typeof m.content === "string") return m.content.trim().length === 0;
         if (Array.isArray(m.content)) {
