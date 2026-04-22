@@ -1667,33 +1667,88 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       } catch { /* non-fatal */ }
 
       // Multi-model routing: if enabled, auto-select best model for this task
+      // Orchestrator path: try DAG decomposition for > 60 char prompts.
+      // On >1 sub-tasks, run them in parallel on specialized models and
+      // inject the combined output as a single assistant message, skipping
+      // the normal sendMessage flow for this turn.
+      let orchestratorHandled = false;
       try {
         const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
           await import("../../core/router.js");
         if (isMultimodelEnabled()) {
-          const taskType = classifyBenchmarkTask(userInput);
-          const cfg = conversationManager.getConfig();
-          const route = await selectBenchmarkModel(taskType, cfg.model);
-          if (route) {
-            cfg.model = route.model;
-            cfg.apiBase = route.baseUrl;
-            if (route.apiKey) cfg.apiKey = route.apiKey;
+          if (userInput.length > 60) {
             try {
-              const { getModelContextSize } = await import("../../core/models.js");
-              const ctxSize = await getModelContextSize(route.model);
-              if (ctxSize) cfg.contextWindowSize = ctxSize;
-            } catch { /* non-fatal */ }
-            setCompleted((prev) => [
-              ...prev,
-              {
-                kind: "text",
-                role: "assistant",
-                text: `  \x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m`,
-              },
-            ]);
+              const { decomposePrompt } = await import("../../core/router-conductor.js");
+              const plan = await decomposePrompt(userInput);
+              if (plan && plan.sub_tasks.length > 1) {
+                const { orchestratePlan, formatOrchestrationOutput } =
+                  await import("../../core/router-orchestrator.js");
+                const cfg = conversationManager.getConfig();
+                setCompleted((prev) => [
+                  ...prev,
+                  {
+                    kind: "text",
+                    role: "assistant",
+                    text: `  \x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m`,
+                  },
+                ]);
+                setMode("responding");
+                setLoadingMessage("Orchestrating sub-tasks...");
+                const result = await orchestratePlan(plan, cfg, cfg.model);
+                const combined = formatOrchestrationOutput(result);
+                // Inject into conversation history so next turn has context
+                conversationManager.getState().messages.push(
+                  { role: "user", content: userInput },
+                  { role: "assistant", content: combined },
+                );
+                setCompleted((prev) => [
+                  ...prev,
+                  { kind: "text", role: "assistant", text: combined },
+                ]);
+                orchestratorHandled = true;
+              }
+            } catch (orchErr) {
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  \x1b[2m[orchestrator] ${orchErr} — falling back\x1b[0m`,
+                },
+              ]);
+            }
+          }
+          if (!orchestratorHandled) {
+            const taskType = classifyBenchmarkTask(userInput);
+            const cfg = conversationManager.getConfig();
+            const route = await selectBenchmarkModel(taskType, cfg.model);
+            if (route) {
+              cfg.model = route.model;
+              cfg.apiBase = route.baseUrl;
+              if (route.apiKey) cfg.apiKey = route.apiKey;
+              try {
+                const { getModelContextSize } = await import("../../core/models.js");
+                const ctxSize = await getModelContextSize(route.model);
+                if (ctxSize) cfg.contextWindowSize = ctxSize;
+              } catch { /* non-fatal */ }
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  \x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m`,
+                },
+              ]);
+            }
           }
         }
       } catch { /* non-fatal — routing failure falls back to current model */ }
+
+      // Skip sendMessage if orchestrator already injected the response
+      if (orchestratorHandled) {
+        setMode("input");
+        return;
+      }
 
       // Start response
       setMode("responding");
