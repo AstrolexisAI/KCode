@@ -638,6 +638,18 @@ export async function* executeToolsSequential(
       }
     }
 
+    // PreWrite hook: fires before Write execution
+    if (call.name === "Write" && typeof effectiveInput.file_path === "string") {
+      try {
+        await ctx.hooks.runEventHook("PreWrite", {
+          file_path: effectiveInput.file_path as string,
+          tool_name: "Write",
+        });
+      } catch (err) {
+        log.debug("hooks", `PreWrite hook failed: ${err}`);
+      }
+    }
+
     // Stream Bash output in real-time via tool_stream events
     if (call.name === "Bash" && !(effectiveInput as Record<string, unknown>).run_in_background) {
       const streamQueue: string[] = [];
@@ -702,9 +714,9 @@ export async function* executeToolsSequential(
       }
     }
 
-    // PostEdit hook: fires after successful Edit/MultiEdit/Write execution
+    // PostEdit hook: fires after successful Edit/MultiEdit execution
     if (
-      (call.name === "Edit" || call.name === "MultiEdit" || call.name === "Write") &&
+      (call.name === "Edit" || call.name === "MultiEdit") &&
       !result.is_error &&
       typeof effectiveInput.file_path === "string"
     ) {
@@ -716,6 +728,19 @@ export async function* executeToolsSequential(
         });
       } catch (err) {
         log.debug("hooks", `PostEdit hook failed: ${err}`);
+      }
+    }
+
+    // PostWrite hook: fires after successful Write execution
+    if (call.name === "Write" && !result.is_error && typeof effectiveInput.file_path === "string") {
+      try {
+        ctx.hooks.fireAndForget("PostWrite", {
+          file_path: effectiveInput.file_path,
+          tool_name: "Write",
+          success: true,
+        });
+      } catch (err) {
+        log.debug("hooks", `PostWrite hook failed: ${err}`);
       }
     }
 
