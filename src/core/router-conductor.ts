@@ -164,7 +164,7 @@ async function callConductor(
         model: model.name,
         max_tokens: 500,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userPrompt.slice(0, 1500) }],
+        messages: [{ role: "user", content: userPrompt.slice(0, 10000) }],
       }
     : {
         model: model.name,
@@ -172,7 +172,7 @@ async function callConductor(
         temperature: 0,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt.slice(0, 1500) },
+          { role: "user", content: userPrompt.slice(0, 10000) },
         ],
       };
 
@@ -207,7 +207,26 @@ async function callConductor(
 
   if (!text) return null;
 
-  const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  // Permissive extraction: models (esp. mark7 local) often wrap JSON in
+  // markdown fences or prefix with explanations. Strip fences first, then
+  // if the result isn't pure JSON, locate the first balanced {...} block.
+  let cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  if (!cleaned.startsWith("{")) {
+    // Find first { and the matching } via bracket counting
+    const start = cleaned.indexOf("{");
+    if (start >= 0) {
+      let depth = 0;
+      let end = -1;
+      for (let i = start; i < cleaned.length; i++) {
+        if (cleaned[i] === "{") depth++;
+        else if (cleaned[i] === "}") {
+          depth--;
+          if (depth === 0) { end = i; break; }
+        }
+      }
+      if (end > start) cleaned = cleaned.slice(start, end + 1);
+    }
+  }
   try {
     const parsed = JSON.parse(cleaned);
     const valid = validatePlan(parsed);
