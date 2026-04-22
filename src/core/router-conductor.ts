@@ -16,7 +16,12 @@ import { log } from "./logger";
 import { listModels } from "./models";
 import type { BenchmarkTaskType } from "./router";
 
-const CONDUCTOR_TIMEOUT_MS = 4_000;
+// Per-candidate timeouts: local models can take 5-15s on complex decomposition
+// (no GPU streaming to worry about), while cloud providers should respond in
+// 3-5s. If local is slow but the prompt clearly has multiple intents, we'd
+// rather wait for the plan than fall through to single-intent.
+const CONDUCTOR_TIMEOUT_MS_LOCAL = 20_000;
+const CONDUCTOR_TIMEOUT_MS_CLOUD = 8_000;
 
 export interface SubTask {
   /** Stable id: "a", "b", "c", ... */
@@ -121,11 +126,17 @@ export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan
           .join(" ");
         log.info("router/conductor", `${candidate.name} → [${summary}] (${elapsed}ms)`);
         return plan;
+      } else {
+        // Model returned something that didn't parse — log at info level
+        // so the user can see why the orchestrator was skipped.
+        log.info("router/conductor", `${candidate.name} returned unparseable response — trying next candidate`);
       }
     } catch (err) {
-      log.debug("router/conductor", `${candidate.name} failed: ${err}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      log.info("router/conductor", `${candidate.name} failed (${msg}) — trying next candidate`);
     }
   }
+  log.info("router/conductor", "all candidates failed — falling back to single-intent routing");
   return null;
 }
 
@@ -173,11 +184,13 @@ async function callConductor(
     headers["Authorization"] = `Bearer ${apiKey}`;
   }
 
+  const isLocal = /localhost|127\.0\.0\.1/.test(model.baseUrl);
+  const timeoutMs = isLocal ? CONDUCTOR_TIMEOUT_MS_LOCAL : CONDUCTOR_TIMEOUT_MS_CLOUD;
   const res = await fetch(endpoint, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(CONDUCTOR_TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) return null;
