@@ -14,6 +14,7 @@ import type { KCodeConfig, ContentBlock, Message, ToolUseBlock } from "./types";
 import type { ConductorPlan, SubTask } from "./router-conductor";
 import { resolveModelForSubTask } from "./router-conductor";
 import type { ConversationManager } from "./conversation";
+import { UndoManager } from "./undo";
 
 const MAX_SUB_TASK_TURNS = 12;
 const SUMMARY_WARN_TURN = 10; // inject "wrap up" prompt at this turn
@@ -358,16 +359,19 @@ async function runAgentLoopForSubTask(
     toolUseCount += toolCalls.length;
 
     // Record what tools did for potential synthetic summary, and update
-    // the reconnaissance counter (reset on any write, increment on read).
+    // the reconnaissance counter. Only reset on SUCCESSFUL writes — a
+    // failed Edit (permission denied, bad old_string) shouldn't count as
+    // progress; the model is still effectively exploring.
     for (let i = 0; i < toolCalls.length; i++) {
       const call = toolCalls[i]!;
       const resultBlock = toolResult.toolResultBlocks[i];
       const target = extractToolTarget(call.name, call.input as Record<string, unknown>);
       const success = !(resultBlock && (resultBlock as { is_error?: boolean }).is_error);
       toolActionLog.push({ name: call.name, target, success });
-      if (WRITE_TOOLS.has(call.name)) {
+      if (WRITE_TOOLS.has(call.name) && success) {
         readOnlySinceWrite = 0;
-      } else if (READ_ONLY_TOOLS.has(call.name)) {
+      } else if (READ_ONLY_TOOLS.has(call.name) || (WRITE_TOOLS.has(call.name) && !success)) {
+        // Failed writes count as exploration (model didn't produce a change)
         readOnlySinceWrite++;
       }
     }
