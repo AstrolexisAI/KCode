@@ -339,9 +339,15 @@ export default function App({ config, conversationManager, tools, initialSession
   // Only show plans that are explicitly created/updated during this session.
   // Do NOT read from getActivePlan() on mount — that contains DB-restored
   // plans from previous sessions. Only react to onPlanChange events.
+  // Auto-close the plan panel when all steps reach "done" status.
   useEffect(() => {
     return onPlanChange((plan) => {
-      setActivePlan(plan);
+      if (plan && plan.steps.length > 0 && plan.steps.every((s) => s.status === "done")) {
+        // All steps completed — clear the plan automatically
+        setActivePlan(null);
+      } else {
+        setActivePlan(plan);
+      }
     });
   }, []);
 
