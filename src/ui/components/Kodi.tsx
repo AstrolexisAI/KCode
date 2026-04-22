@@ -375,12 +375,13 @@ function formatTime(ms: number): string {
 // ─── Mini-Kodi animated component ──────────────────────────────
 
 const MINI_TICK_MS = 150; // slightly faster than main Kodi for lively feel
+// Compact face expressions — no box, no body, just the face chars
 const MINI_FACES: Record<string, string[]> = {
-  local:     ["^  _^", "^  -^", "^  v^", "^ _ ^", "^  .^", "^  _^"],
-  reasoning: ["O   O", "O  _O", "O   O", "@   O", "O  @@", "O . O"],
-  fast:      ["o  :o", "-  :-", "o  :o", "O  :O", "o  :o", ">  :>"],
-  analysis:  ["o  .o", "o  -o", "O . O", "o  .o", "O . o", "o . O"],
-  default:   ["o   o", "o  -o", "o . o", "o   o", "O   o", "o . O"],
+  local:     ["(^_^)", "(^v^)", "(^-^)", "(^.^)", "(^w^)", "(^_^)"],
+  reasoning: ["(O_O)", "(O.O)", "(@_@)", "(O_O)", "(0_0)", "(*_*)"],
+  fast:      ["(-_-)", "(o_o)", "(>_<)", "(-.-)", "(o_o)", "(^_-)"],
+  analysis:  ["(._.)","(o.o)", "(-.o)", "(o_o)", "(°.°)", "(._-)"],
+  default:   ["(o_o)", "(-.o)", "(o.o)", "(o_o)", "(*.*)", "(o_o)"],
 };
 const MINI_MOODS: Record<string, KodiMood[]> = {
   local:     ["idle", "happy", "waving", "idle", "curious"],
@@ -389,7 +390,6 @@ const MINI_MOODS: Record<string, KodiMood[]> = {
   analysis:  ["thinking", "curious", "thinking", "reasoning", "curious"],
   default:   ["idle", "thinking", "working", "happy", "idle"],
 };
-const MINI_BODY = ["   /|\\  ", "   /|  ", "  /|\\  ", " \\|/  ", "   |\\  "];
 
 function getMiniPersonality(modelName: string): string {
   if (modelName === "mark7" || modelName.includes("mnemo") || modelName.includes("local")) return "local";
@@ -406,7 +406,6 @@ function MiniKodi({ modelName, costUsd }: { modelName: string; costUsd: number }
   const moods = MINI_MOODS[personality] ?? MINI_MOODS.default;
 
   const [faceIdx, setFaceIdx] = useState(() => Math.floor(Math.random() * faces.length));
-  const [bodyIdx, setBodyIdx] = useState(() => Math.floor(Math.random() * MINI_BODY.length));
   const [moodIdx, setMoodIdx] = useState(() => Math.floor(Math.random() * moods.length));
   const [walkOffset, setWalkOffset] = useState(() => Math.floor(Math.random() * 3));
 
@@ -417,7 +416,6 @@ function MiniKodi({ modelName, costUsd }: { modelName: string; costUsd: number }
     const id = setInterval(() => {
       frameCount++;
       setFaceIdx((i) => (i + 1) % faces.length);
-      if (frameCount % 3 === 0) setBodyIdx((i) => (i + 1) % MINI_BODY.length);
       if (frameCount % 7 === 0) setMoodIdx((i) => (i + 1) % moods.length);
       // Walk: drift left/right randomly within 0-3 cols
       if (frameCount % 5 === 0) setWalkOffset((w) => Math.max(0, Math.min(3, w + (Math.random() > 0.5 ? 1 : -1))));
@@ -432,15 +430,11 @@ function MiniKodi({ modelName, costUsd }: { modelName: string; costUsd: number }
   const color = faceColor[personality] ?? theme.dimmed;
   const pad = " ".repeat(walkOffset);
   const face = faces[faceIdx]!;
-  const body = MINI_BODY[bodyIdx]!;
   const shortName = modelName.length > 13 ? modelName.slice(0, 13) : modelName;
 
   return (
-    <Box flexDirection="column" alignItems="flex-start" width={15}>
-      <Text color={color}>{pad + " ╭─────╮"}</Text>
-      <Text color={color}>{pad + ` │ ${face} │`}</Text>
-      <Text color={color}>{pad + "  ╰──┬──╯"}</Text>
-      <Text color={color}>{pad + body}</Text>
+    <Box flexDirection="column" alignItems="flex-start" width={14}>
+      <Text color={color}>{pad + face}</Text>
       <Text color={theme.dimmed}>{shortName}</Text>
       <Text color={theme.warning}>{`$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(3)}`}</Text>
     </Box>
