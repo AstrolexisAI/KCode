@@ -1696,6 +1696,15 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 setLoadingMessage("Orchestrating sub-tasks...");
                 const result = await orchestratePlan(plan, cfg, cfg.model);
                 const combined = formatOrchestrationOutput(result);
+                // Record per-model costs so Kodi's session economy reflects
+                // orchestrator usage (bypasses recordTurnCost in sendMessage)
+                for (const sub of result.results) {
+                  await conversationManager.recordExternalTurnCost({
+                    model: sub.model,
+                    inputTokens: sub.inputTokens ?? 0,
+                    outputTokens: sub.outputTokens ?? 0,
+                  });
+                }
                 // Inject into conversation history so next turn has context
                 conversationManager.getState().messages.push(
                   { role: "user", content: userInput },
