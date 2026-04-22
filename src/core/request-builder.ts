@@ -758,6 +758,30 @@ export async function executeModelRequest(
     }
   }
 
+  // Sanitize: strip messages with empty content so the API doesn't reject the
+  // whole request with "Each message must have at least one content element".
+  // Empty messages can appear when a reasoning loop aborts mid-stream, when a
+  // tool call produces no follow-up text, or when retry logic injects a stub.
+  if (Array.isArray(req.body.messages)) {
+    const before = req.body.messages.length;
+    req.body.messages = (req.body.messages as Array<{ role: string; content: unknown }>).filter((m) => {
+      if (typeof m.content === "string") return m.content.trim().length > 0;
+      if (Array.isArray(m.content)) {
+        if (m.content.length === 0) return false;
+        // Drop if all blocks are text with empty strings
+        const hasNonEmpty = (m.content as Array<{ type: string; text?: string }>).some((b) => {
+          if (b.type !== "text") return true; // tool_use/tool_result/image are never empty
+          return (b.text ?? "").trim().length > 0;
+        });
+        return hasNonEmpty;
+      }
+      return m.content != null;
+    });
+    if (req.body.messages.length < before) {
+      log.warn("llm", `Stripped ${before - (req.body.messages as unknown[]).length} empty messages before send`);
+    }
+  }
+
   // Log message structure at debug level for diagnosing tool_use/tool_result pairing
   if (log.isDebugEnabled?.()) {
     const msgs = Array.isArray(req.body.messages) ? req.body.messages as Array<{role: string; content: unknown}> : [];
