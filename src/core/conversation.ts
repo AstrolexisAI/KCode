@@ -742,7 +742,10 @@ export class ConversationManager {
               yield { type: "text_delta" as const, text: result.finalResponse.slice(i, i + 20) };
             }
             assistantContent.push({ type: "text", text: result.finalResponse });
-            this.state.messages.push({ role: "assistant", content: result.finalResponse });
+            const safeFinalResponse = (typeof result.finalResponse === "string" && result.finalResponse.trim().length > 0)
+              ? result.finalResponse
+              : "[ensemble produced no response]";
+            this.state.messages.push({ role: "assistant", content: safeFinalResponse });
             log.info("ensemble", `Ensemble response via ${result.strategy}: ${result.reasoning}`);
             yield { type: "turn_end", stopReason: "end_turn" };
             break;
