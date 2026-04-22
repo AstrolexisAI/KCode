@@ -38,6 +38,22 @@
 import { log } from "./logger";
 import type { KCodeConfig, StreamEvent, ConversationState } from "./types";
 
+/**
+ * Normalize content for an assistant message. If the orchestrator produced
+ * empty/null output, fall back to a placeholder so the API doesn't reject
+ * the request with "Each message must have at least one content element".
+ */
+function safeAssistantContent(content: unknown): string {
+  if (typeof content === "string" && content.trim().length > 0) return content;
+  if (Array.isArray(content) && content.length > 0) {
+    const hasReal = (content as Array<{ type: string; text?: string }>).some(
+      (b) => b.type !== "text" || (b.text ?? "").trim().length > 0,
+    );
+    if (hasReal) return JSON.stringify(content); // shouldn't hit, but keep a string fallback
+  }
+  return "[orchestrator produced no output]";
+}
+
 export type TaskRoutingResult =
   | {
       action: "handled";
@@ -100,7 +116,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
       lines.push(result.success ? "  ✅ Workflow complete" : "  ⚠️ Workflow completed with issues");
       lines.push(`  Total: ${(result.totalMs / 1000).toFixed(1)}s`);
       const output = lines.join("\n");
-      state.messages.push({ role: "assistant", content: output });
+      state.messages.push({ role: "assistant", content: safeAssistantContent(output) });
       log.info(
         "orchestrator",
         `Chain "${chain}" completed: ${result.steps.length} steps, ${result.totalMs}ms, 0 tokens`,
@@ -171,7 +187,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
           engineState.active = false;
 
           state.messages.push({ role: "user", content: userMessage });
-          state.messages.push({ role: "assistant", content: l1.output });
+          state.messages.push({ role: "assistant", content: safeAssistantContent(l1.output) });
           log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
           return handled([
               { type: "turn_start" } as unknown as StreamEvent,
@@ -189,7 +205,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
         const l1 = tryLevel1(userMessage, config.workingDirectory);
         if (l1.handled) {
           state.messages.push({ role: "user", content: userMessage });
-          state.messages.push({ role: "assistant", content: l1.output });
+          state.messages.push({ role: "assistant", content: safeAssistantContent(l1.output) });
           log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
           return handled([
               { type: "turn_start" } as unknown as StreamEvent,
@@ -266,7 +282,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
                 !result.includes("0 LLM");
               if (!hasLlmFiles) {
                 state.messages.push({ role: "user", content: userMessage });
-                state.messages.push({ role: "assistant", content: result });
+                state.messages.push({ role: "assistant", content: safeAssistantContent(result) });
                 log.info(
                   "orchestrator",
                   `Engine handled 100% machine: ${engineMatch.engine} (0 tokens)`,
@@ -477,7 +493,7 @@ async function runWebEngine(deps: {
       events.push({ type: "text_delta", text: finalText + "\n" } as StreamEvent);
 
       state.messages.push({ role: "user", content: userMessage });
-      state.messages.push({ role: "assistant", content: summary });
+      state.messages.push({ role: "assistant", content: safeAssistantContent(summary) });
       events.push({
         type: "turn_end",
         inputTokens: 0,
