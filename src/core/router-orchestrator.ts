@@ -47,6 +47,9 @@ export interface SubTaskResult {
   elapsedMs: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** True if the sub-task performed at least one successful write (Edit/Write/MultiEdit).
+   *  Downstream sub-tasks check this to avoid describing work that didn't happen. */
+  hadSuccessfulWrite?: boolean;
 }
 
 export interface OrchestrationResult {
@@ -142,14 +145,26 @@ async function executeSubTask(
   let prompt = task.prompt;
   if (task.depends_on.length > 0) {
     const contextParts: string[] = [];
+    const failedEditDeps: string[] = [];
     for (const depId of task.depends_on) {
       const depResult = completedResults.get(depId);
-      if (depResult && depResult.output) {
+      if (!depResult) continue;
+      if (depResult.output) {
         contextParts.push(`=== Output of task ${depId} (${depResult.intent}) ===\n${depResult.output}`);
+      }
+      // Flag edit-intent deps that made no successful writes — downstream
+      // needs to know there's no actual change to describe, otherwise it
+      // hallucinates (e.g., c inventing a "Plan tool fix" that never happened).
+      if ((depResult.intent === "complex-edit" || depResult.intent === "simple-edit")
+          && depResult.hadSuccessfulWrite === false) {
+        failedEditDeps.push(depId);
       }
     }
     if (contextParts.length > 0) {
       prompt = `${contextParts.join("\n\n")}\n\n=== Your task (${task.id}) ===\n${task.prompt}`;
+    }
+    if (failedEditDeps.length > 0) {
+      prompt += `\n\n---\nIMPORTANT: Task(s) ${failedEditDeps.join(", ")} did NOT perform any successful edits. If your task asks you to describe or explain "what was fixed", say explicitly that NO FIX WAS MADE and describe what was attempted instead. Do not invent a fix that didn't happen.`;
     }
   }
 
@@ -186,6 +201,7 @@ async function executeSubTask(
       elapsedMs,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
+      hadSuccessfulWrite: (result as { hadSuccessfulWrite?: boolean }).hadSuccessfulWrite,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -216,7 +232,7 @@ async function runAgentLoopForSubTask(
   parentConfig: KCodeConfig,
   manager: ConversationManager,
   fileLocks?: Map<string, Promise<unknown>>,
-): Promise<{ output: string; inputTokens?: number; outputTokens?: number }> {
+): Promise<{ output: string; inputTokens?: number; outputTokens?: number; hadSuccessfulWrite?: boolean }> {
   const { executeModelRequest } = await import("./request-builder");
   const { processSSEStream } = await import("./conversation-streaming");
   const { executeToolsSequential } = await import("./tool-executor");
@@ -387,10 +403,17 @@ async function runAgentLoopForSubTask(
     finalText = synthesizeActionSummary(toolActionLog);
   }
 
+  // Compute whether any successful write happened — downstream sub-tasks use
+  // this to avoid hallucinating "here's what was fixed" when nothing was fixed.
+  const hadSuccessfulWrite = toolActionLog.some(
+    (a) => WRITE_TOOLS.has(a.name) && a.success && a.name !== "Bash",
+  );
+
   return {
     output: finalText || "[sub-task completed with no output]",
     inputTokens: totalInput,
     outputTokens: totalOutput,
+    hadSuccessfulWrite,
   };
 }
 
