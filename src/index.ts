@@ -1567,6 +1567,21 @@ async function runNonInteractive(
 ): Promise<void> {
   let hadError = false;
 
+  // Apply multi-model routing in non-interactive mode too
+  try {
+    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
+      await import("./core/router.js");
+    if (isMultimodelEnabled()) {
+      const taskType = classifyBenchmarkTask(prompt);
+      const currentModel = conversationManager.getConfig().model;
+      const best = await selectBenchmarkModel(taskType, currentModel);
+      if (best && best !== currentModel) {
+        conversationManager.getConfig().model = best;
+        process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${best}\x1b[0m\n`);
+      }
+    }
+  } catch { /* non-fatal */ }
+
   for await (const event of conversationManager.sendMessage(prompt)) {
     switch (event.type) {
       case "text_delta":
