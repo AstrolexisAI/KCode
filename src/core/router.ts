@@ -209,15 +209,23 @@ export function isMultimodelEnabled(): boolean {
   }
 }
 
+export interface ModelRouteResult {
+  model: string;
+  baseUrl: string;
+  /** Resolved API key for the new provider */
+  apiKey?: string;
+}
+
 /**
  * Select the best model for a task using benchmark tags.
- * Prefers local model for chat tasks when available.
+ * Returns the full route info (model + baseUrl + apiKey) so callers can
+ * update config.apiBase and config.apiKey, not just config.model.
  * Returns null if no better model is found (use default).
  */
 export async function selectBenchmarkModel(
   taskType: BenchmarkTaskType,
   defaultModel: string,
-): Promise<string | null> {
+): Promise<ModelRouteResult | null> {
   const models = await listModels();
   const LOCAL_PATTERNS = /localhost|127\.0\.0\.1/;
 
@@ -229,7 +237,7 @@ export async function selectBenchmarkModel(
       const localModel = models.find((m) => LOCAL_PATTERNS.test(m.baseUrl));
       if (localModel && localModel.name !== defaultModel) {
         log.info("router/multi", `${taskType} → local: ${localModel.name}`);
-        return localModel.name;
+        return { model: localModel.name, baseUrl: localModel.baseUrl };
       }
       continue;
     }
@@ -242,12 +250,27 @@ export async function selectBenchmarkModel(
     });
 
     if (matched.length > 0) {
-      // Prefer a different model than current if one exists
       const different = matched.find((m) => m.name !== defaultModel);
       const chosen = different ?? matched[0]!;
       if (chosen.name !== defaultModel) {
-        log.info("router/multi", `${taskType} [${requiredTags.join("+")}] → ${chosen.name}`);
-        return chosen.name;
+        // Resolve API key for the new provider
+        const { resolveApiKey } = await import("./request-builder.js");
+        const { loadUserSettingsRaw } = await import("./config.js");
+        let settings: Record<string, unknown> = {};
+        try { settings = loadUserSettingsRaw() as Record<string, unknown>; } catch { /* */ }
+        const fakeConfig = {
+          apiKey: String(settings.apiKey ?? ""),
+          anthropicApiKey: String(settings.anthropicApiKey ?? ""),
+          xaiApiKey: String(settings.xaiApiKey ?? ""),
+          groqApiKey: String(settings.groqApiKey ?? ""),
+          geminiApiKey: String(settings.geminiApiKey ?? ""),
+          deepseekApiKey: String(settings.deepseekApiKey ?? ""),
+          togetherApiKey: String(settings.togetherApiKey ?? ""),
+          kimiApiKey: String(settings.kimiApiKey ?? ""),
+        };
+        const apiKey = resolveApiKey(chosen.name, chosen.baseUrl, fakeConfig as Parameters<typeof resolveApiKey>[2]);
+        log.info("router/multi", `${taskType} [${requiredTags.join("+")}] → ${chosen.name} @ ${chosen.baseUrl}`);
+        return { model: chosen.name, baseUrl: chosen.baseUrl, apiKey };
       }
       return null; // already on the best model
     }

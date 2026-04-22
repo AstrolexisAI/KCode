@@ -1672,17 +1672,18 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           await import("../../core/router.js");
         if (isMultimodelEnabled()) {
           const taskType = classifyBenchmarkTask(userInput);
-          const currentModel = conversationManager.getConfig().model;
-          const best = await selectBenchmarkModel(taskType, currentModel);
-          if (best && best !== currentModel) {
-            conversationManager.getConfig().model = best;
-            // Brief dim notification of the switch
+          const cfg = conversationManager.getConfig();
+          const route = await selectBenchmarkModel(taskType, cfg.model);
+          if (route) {
+            cfg.model = route.model;
+            cfg.apiBase = route.baseUrl;
+            if (route.apiKey) cfg.apiKey = route.apiKey;
             setCompleted((prev) => [
               ...prev,
               {
                 kind: "text",
                 role: "assistant",
-                text: `  \x1b[2m⇄ routing ${taskType} → ${best}\x1b[0m`,
+                text: `  \x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m`,
               },
             ]);
           }
