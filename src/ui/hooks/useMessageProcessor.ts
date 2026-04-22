@@ -1672,12 +1672,21 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       // inject the combined output as a single assistant message, skipping
       // the normal sendMessage flow for this turn.
       let orchestratorHandled = false;
+      // Pre-start spinner state so the user gets immediate feedback during
+      // the 1-3s conductor call (otherwise the UI looks frozen).
+      setMode("responding");
+      setStreamingText("");
+      setTurnTokens(0);
+      setTurnStartTime(Date.now());
+      setSpinnerPhase("thinking");
+      setLoadingMessage("Routing...");
       try {
         const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
           await import("../../core/router.js");
         if (isMultimodelEnabled()) {
           if (userInput.length > 60) {
             try {
+              setLoadingMessage("Decomposing prompt...");
               const { decomposePrompt } = await import("../../core/router-conductor.js");
               const plan = await decomposePrompt(userInput);
               if (plan && plan.sub_tasks.length > 1) {
@@ -1692,7 +1701,6 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                     text: `  \x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m`,
                   },
                 ]);
-                setMode("responding");
                 setLoadingMessage(`Decomposed: ${plan.sub_tasks.length} sub-tasks`);
                 // Live progress: each orchestrator event updates the loading message
                 // and appends a visible status line so the user sees what's running.
