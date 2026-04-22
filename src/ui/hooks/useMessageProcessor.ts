@@ -1730,7 +1730,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                       { kind: "text", role: "assistant", text: `  \x1b[31m✗ ${ev.id} failed: ${ev.error}\x1b[0m` },
                     ]);
                   }
-                });
+                }, conversationManager);
                 const combined = formatOrchestrationOutput(result);
                 // Record per-model costs so Kodi's session economy reflects
                 // orchestrator usage (bypasses recordTurnCost in sendMessage)
