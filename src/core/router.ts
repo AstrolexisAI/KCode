@@ -330,8 +330,8 @@ const MAX_PATTERN_LENGTH = 200;
  *   ([a-z]+)+     → nested quantifier in char class
  */
 function isDangerousRegex(pattern: string): boolean {
-  // Nested quantifier: (...<one-or-more-chars>+|*|?){+,*,?}
-  if (/\([^)]*[+*?]\s*\)\s*[+*?]/.test(pattern)) return true;
+  // Nested quantifier: (...<one-or-more-chars>+|*|?){+,*,?,{...}}
+  if (/\([^)]*[+*?]\s*\)\s*[+*?{]/.test(pattern)) return true;
   // Alternation over identical branches: (foo|foo) or (a|a|a)
   const altMatch = pattern.match(/\(([^|()]+)(?:\|\1)+\)/);
   if (altMatch) return true;
