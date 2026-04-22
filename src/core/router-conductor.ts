@@ -67,6 +67,13 @@ Rules:
 3. Edit tasks that modify code based on analysis MUST depend on the analysis
 4. Pure chat/explain of a concept has NO dependencies
 5. Give each sub-task a single-letter id starting from "a"
+6. CRITICAL — Monolithic prompts get ONE sub-task, not many:
+   - "creá un proyecto X" / "create a Y from scratch" → 1 sub-task
+   - "escribí un script que haga Z" → 1 sub-task
+   - "refactorizá todo el archivo" → 1 sub-task
+   - "traducí este archivo" / "migrá de Python 2 a 3" → 1 sub-task
+   Splitting a creation task into parallel pieces produces incoherent code
+   because each piece writes blind without seeing the others.
 
 Return ONLY JSON, no markdown. Format:
 {"sub_tasks":[{"id":"a","intent":"analysis","prompt":"...","depends_on":[]}]}
@@ -93,13 +100,43 @@ Output: {"sub_tasks":[
   {"id":"a","intent":"analysis","prompt":"analizá pricing.ts","depends_on":[]},
   {"id":"b","intent":"chat","prompt":"decime el modelo más caro en pricing.ts","depends_on":["a"]},
   {"id":"c","intent":"chat","prompt":"explicame el output más barato en pricing.ts","depends_on":["a"]}
+]}
+
+Input: "creá un proyecto Python llamado logger con CLI, tests y pyproject.toml"
+Output: {"sub_tasks":[
+  {"id":"a","intent":"complex-edit","prompt":"creá el proyecto logger completo: paquete Python, CLI, tests, pyproject.toml","depends_on":[]}
+]}
+
+Input: "escribí un script que descargue archivos HTTP con reintentos y barra de progreso"
+Output: {"sub_tasks":[
+  {"id":"a","intent":"complex-edit","prompt":"escribí el script completo con reintentos y progreso","depends_on":[]}
 ]}`;
 
 /**
  * Ask the conductor to decompose the prompt into a sub-task DAG.
  * Returns null on timeout/failure — caller falls back to single-intent routing.
+ *
+ * Short-circuits to null (no orchestration) for monolithic prompts:
+ *   - Project creation: "creá un proyecto X" / "create a Y from scratch"
+ *   - Whole-file edits: "refactorizá todo el archivo"
+ *   - Full translations / migrations
+ * These are single coherent tasks that fail catastrophically when split into
+ * parallel sub-tasks (observed: 6 sub-tasks writing blind to the same project,
+ * 296K tokens for incoherent code).
  */
 export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan | null> {
+  // Fast-path reject: monolithic creation or whole-scope edits should NOT
+  // be decomposed. Skip the conductor entirely.
+  const { isMonolithicCreation, isWholeScopeEdit } = await import("./router.js");
+  if (isMonolithicCreation(userPrompt)) {
+    log.info("router/conductor", "Monolithic creation prompt — skipping decomposition (single-model route)");
+    return null;
+  }
+  if (isWholeScopeEdit(userPrompt)) {
+    log.info("router/conductor", "Whole-scope edit prompt — skipping decomposition");
+    return null;
+  }
+
   const models = await listModels();
   const LOCAL_PATTERNS = /localhost|127\.0\.0\.1/;
 
@@ -125,6 +162,20 @@ export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan
       const plan = await callConductor(candidate, userPrompt);
       if (plan) {
         const elapsed = Date.now() - start;
+        // Safety net: if the LLM ignored the rule and produced multiple
+        // parallel complex-edit sub-tasks for what looks like a single
+        // creation, collapse to one task. Observed regression: grok-haiku
+        // sometimes splits "creá proyecto X" into 6 complex-edits.
+        const parallelCreateCount = plan.sub_tasks.filter(
+          (t) => t.intent === "complex-edit" && t.depends_on.length === 0,
+        ).length;
+        if (parallelCreateCount >= 3) {
+          log.warn(
+            "router/conductor",
+            `LLM produced ${parallelCreateCount} parallel complex-edit sub-tasks — collapsing to single task (likely monolithic creation)`,
+          );
+          return null; // single-model fallback
+        }
         const summary = plan.sub_tasks
           .map((t) => `${t.id}:${t.intent}${t.depends_on.length > 0 ? `<-${t.depends_on.join(",")}` : ""}`)
           .join(" ");

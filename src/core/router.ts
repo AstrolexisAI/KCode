@@ -140,10 +140,10 @@ export type BenchmarkTaskType =
 const ANALYSIS_PATTERNS = [
   // Spanish imperatives (with/without accent). Note: \b breaks on accented chars in JS,
   // so accented forms use lookahead/lookbehind instead.
-  /\b(audit[ae]?|analiz[ae]|revisar|review|debugg?[ea]?|diagnos|investig[ae]?|security|vulnerabil)\b/i,
-  /(analiz[aá]|audit[aá]|revis[aá]|investig[aá]|debugge[aá])/i,
-  /\b(por qu[eé]|why does|root cause|explain.*code|code.*review)\b/i,
-  /\b(benchmark|performance|profil|bottleneck)\b/i,
+  /\b(audit[ae]?|analiz[ae]|revisar?|review|debugg?[ea]?|diagnos|investig[ae]?|security|vulnerabil|inspecciona?r?|examina?r?|verifica?r?|chequear?)\b/i,
+  /(analiz[aá]|audit[aá]|revis[aá]|investig[aá]|debugge[aá]|inspeccio[nñ][aá]|examin[aá]|verific[aá])/i,
+  /\b(por qu[eé]|why does|root cause|explain.*code|code.*review|understand.*how)\b/i,
+  /\b(benchmark|performance|profil|bottleneck|mejorar.*performance)\b/i,
   // Technical complexity / algorithm questions
   /\b(complejidad|complexity|algoritm[oa]|big.?o|o\(n|o\(log|tradeoff|trade.?off)\b/i,
   /\b(cu[aá]ndo (usar|evitar|elegir|prefer)|when to (use|avoid|choose))\b/i,
@@ -152,11 +152,52 @@ const ANALYSIS_PATTERNS = [
   /\b(captura|screenshot|image|foto|pantalla)\b/i,
 ];
 
+// Monolithic creation prompts — "creá un proyecto X", "implementá Y", "escribí
+// un script Z". These must NOT be decomposed into parallel sub-tasks: they're
+// a single coherent construction task where each step depends on the previous.
+// Running 6 parallel sub-tasks creates incoherent code written blindly.
+const MONOLITHIC_CREATION_PATTERNS = [
+  // Spanish creation verbs, imperatives + infinitives, with/without accent
+  /\b(creá|crea\b|crear|cree|construye|construí|construir|armá|armar|implementá|implement[ae]\b|implementar|escribí|escrib[ae]\b|escribir|genera|generá|generar|desarrollá|desarrollar|programá|programar|diseña|diseñá|diseñar|hace|hacé|hacer)\s+(?:un|una|el|la|los|las|el?\s+)/i,
+  // English creation verbs followed by article/project terms
+  /\b(create|build|implement|make|write|generate|design|develop|scaffold|craft)\s+(?:an?|the|my|our|some|a\s+new)/i,
+  // Explicit "from scratch" phrases
+  /\b(from scratch|desde cero|nuevo proyecto|new project|fresh project)\b/i,
+  // "Creame/Hazme un X"
+  /\b(cre[aá]me|hazme|h[aá]game|armame|armáme)\s+(?:un|una|el|la)/i,
+];
+
+/**
+ * True if the prompt asks to CREATE a new project/file/module from scratch.
+ * Used to short-circuit the orchestrator: creation tasks shouldn't be
+ * decomposed into parallel sub-tasks because each step depends on the prior
+ * (file structure, entry points, package metadata all need coherent layout).
+ */
+export function isMonolithicCreation(userMessage: string): boolean {
+  return MONOLITHIC_CREATION_PATTERNS.some((p) => p.test(userMessage));
+}
+
+// Prompts that clearly operate on the whole file / whole codebase (not a
+// sliceable multi-task job). Same reasoning: one coherent edit, not parallel.
+const WHOLE_SCOPE_PATTERNS = [
+  /\b(refactoriz[aá]r?\s+todo|refactor\s+the\s+(?:whole|entire)|todo el archivo|entire file)\b/i,
+  /\b(traducí|traducir|translate)\s+(?:el |the |this |este )/i,
+  /\b(migrá|migrar|migrate)\s+.*(?:de|from|to|a)\s+(?:python|node|java|typescript|rust)/i,
+  /\b(reescrib[ií]r?|reescribí|reescribe|rewrite|re-write)\s+(?:el|the|la|esta|todo)/i,
+];
+
+export function isWholeScopeEdit(userMessage: string): boolean {
+  return WHOLE_SCOPE_PATTERNS.some((p) => p.test(userMessage));
+}
+
 const MULTI_STEP_PATTERNS = [
-  /^\s*[1-9]\.\s/m,                    // numbered list: "1. do this"
-  /\b(paso\s+[1-9]|step\s+[1-9])\b/i, // "paso 1", "step 1"
-  /\btarea\s+[1-9]\b/i,               // "tarea 1"
-  /\b(primero|luego|después|finalmente)\b.*\b(luego|después|finalmente)\b/i,
+  /^\s*[1-9]\.\s/m,                              // numbered list: "1. do this"
+  /\b(paso\s+[1-9]|step\s+[1-9])\b/i,           // "paso 1", "step 1"
+  /\b(tarea|task)\s+[1-9]\b/i,                   // "tarea 1" / "task 1"
+  /\b(primero|luego|despu[eé]s|finalmente|segundo|tercero)\b.*\b(luego|despu[eé]s|finalmente|segundo|tercero)\b/i,
+  /\b(first|then|next|finally|second|third)\b.*\b(then|next|finally|second|third)\b/i,
+  // "Hacé N cosas" / "Do N things"
+  /\b(hac[eé]|do)\s+[1-9]\s+(cosas|things|tareas|tasks)/i,
 ];
 
 const SIMPLE_EDIT_PATTERNS = [
@@ -169,22 +210,23 @@ const SIMPLE_EDIT_PATTERNS = [
 export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
   if (detectImageContent(userMessage)) return "vision";
 
+  // Multi-step FIRST — a prompt like "Hacé 3 cosas: 1. analizá..." should be
+  // multi-step even though it contains "analizá". Structure wins over keyword.
+  if (MULTI_STEP_PATTERNS.some((p) => p.test(userMessage))) return "multi-step";
+
   // Analysis: audit, review, debug, investigate
   if (ANALYSIS_PATTERNS.some((p) => p.test(userMessage))) {
     if (/\b(captura|screenshot)\b/i.test(userMessage)) return "vision";
     return "analysis";
   }
 
-  // Multi-step: numbered instructions or structured workflow
-  if (MULTI_STEP_PATTERNS.some((p) => p.test(userMessage))) return "multi-step";
-
   // Simple edit: explicit old_string or line number given
   if (SIMPLE_EDIT_PATTERNS.some((p) => p.test(userMessage))) return "simple-edit";
 
   // Complex edit: code modification without exact location
   // Two patterns: non-accented (word boundary works) + accented Spanish imperatives
-  const COMPLEX_EDIT_BASE = /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|agregar?|añadir?|insertar?|replace|rename|remove|delete|update|add|insert|append)\b/i;
-  const COMPLEX_EDIT_ACCENTED = /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá]|agreg[aá]|añad[ií]|insert[aá])/i;
+  const COMPLEX_EDIT_BASE = /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|agregar?|añadir?|insertar?|quitar?|corregir|corrige|arreglar?|arregla|repara|repar[aá]r?|refactoriz[aá]r?|refactor\b|optimiz[aá]r?|fix\b|replace|rename|remove|delete|update|add|insert|append|remove|enhance|improve|clean\s*up)\b/i;
+  const COMPLEX_EDIT_ACCENTED = /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá]|agreg[aá]|añad[ií]|insert[aá]|quit[aá]|corrig[eií]|correg[ií]|arregl[aá]|repar[aá]|refactor[ií][aá]|optimiz[aá]|mejor[aá])/i;
   if (detectCodeTask(userMessage) || COMPLEX_EDIT_BASE.test(userMessage) || COMPLEX_EDIT_ACCENTED.test(userMessage)) return "complex-edit";
 
   // Chat/question: only truly short/conversational — NOT technical questions
