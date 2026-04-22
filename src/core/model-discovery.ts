@@ -512,6 +512,12 @@ export async function maybeAutoDiscover(opts?: {
           "model-discovery",
           `auto-discovered ${added.length} new model(s): ${added.slice(0, 5).join(", ")}${added.length > 5 ? ", ..." : ""}`,
         );
+        // Schedule background benchmarks for the new models — runs async,
+        // doesn't block discovery, results appear as ✓ in /model over time.
+        try {
+          const { scheduleBackgroundBenchmark } = await import("./benchmark-driver.js");
+          scheduleBackgroundBenchmark();
+        } catch { /* benchmark module optional */ }
       }
       return added;
     } catch (err) {

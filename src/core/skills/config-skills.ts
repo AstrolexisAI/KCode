@@ -46,6 +46,13 @@ export const configSkills: SkillDefinition[] = [
     template: `__builtin_multimodel__`,
   },
   {
+    name: "benchmark",
+    description: "Run a 4-test benchmark on cloud models (marks ✓ in /model)",
+    aliases: ["bench"],
+    args: ["<model name> | --all | --new (default: --new)"],
+    template: `__builtin_benchmark__`,
+  },
+  {
     name: "hooks",
     description: "Show configured hooks",
     aliases: ["hook"],
