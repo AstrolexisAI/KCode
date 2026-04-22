@@ -63,6 +63,21 @@ export class ToolRegistry {
     return filtered;
   }
 
+  /**
+   * Inverse of filterTo: returns a new registry with the given names removed.
+   * Used by the orchestrator to disable multi-turn tools (Plan, TaskCreate)
+   * in sub-task agent loops where they'd create orphaned state.
+   */
+  filterOut(excluded: Set<string>): ToolRegistry {
+    const filtered = new ToolRegistry();
+    for (const [name, tool] of this.tools) {
+      if (!excluded.has(name)) {
+        filtered.register(name, tool.definition, tool.handler);
+      }
+    }
+    return filtered;
+  }
+
   /** Read-only tools that are safe to execute in parallel. */
   static readonly PARALLEL_SAFE = new Set([
     "Read",

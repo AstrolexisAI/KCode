@@ -205,7 +205,12 @@ async function runAgentLoopForSubTask(
   ];
   const systemPrompt = parentConfig._systemPrompt as string | undefined;
 
-  const tools = manager.getTools();
+  // Exclude tools that create persistent multi-turn state. Sub-tasks are
+  // isolated and turn-limited; if they call Plan or TaskCreate, the state
+  // gets left orphaned in the main session (plan stuck at 0/3 after b
+  // exhausts turns, no one to mark steps done).
+  const SUBTASK_EXCLUDED_TOOLS = new Set(["Plan", "TaskCreate", "TaskUpdate", "TaskStop"]);
+  const tools = manager.getTools().filterOut(SUBTASK_EXCLUDED_TOOLS);
   const permissions = manager.getPermissions();
   const hooks = manager.getHooks();
   const undoManager = manager.getUndo();
