@@ -294,14 +294,31 @@ function hasCycle(tasks: SubTask[]): boolean {
 /**
  * Resolve which cloud model should execute a given sub-task.
  * Returns { model, baseUrl, apiKey } or null if no suitable model.
+ *
+ * Heuristic override: chat sub-tasks with dependencies aren't really chat —
+ * they're synthesis tasks that combine analysis + edit output into a final
+ * explanation. mark7 local enters reasoning loops on heavy multi-context
+ * synthesis, so we upgrade those to a cloud model with the "cheap" tag
+ * instead.
  */
 export async function resolveModelForSubTask(
   task: SubTask,
   defaultModel: string,
 ): Promise<{ model: string; baseUrl: string; apiKey?: string } | null> {
   const { selectBenchmarkModel } = await import("./router.js");
+
+  // Synthesis chat: has deps → skip local, use cheap cloud instead
+  if (task.intent === "chat" && task.depends_on.length > 0) {
+    // Route as if it were "simple-edit" to get a cheap-fast cloud model
+    // without the "local first" bias of the chat routing preference.
+    const cloudRoute = await selectBenchmarkModel("simple-edit", defaultModel);
+    if (cloudRoute) {
+      log.info("router/conductor", `Chat sub-task ${task.id} has deps — upgrading to cloud (${cloudRoute.model})`);
+      return cloudRoute;
+    }
+  }
+
   const route = await selectBenchmarkModel(task.intent, defaultModel);
   if (route) return route;
-  // Fallback: use default model
   return null;
 }
