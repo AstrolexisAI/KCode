@@ -842,6 +842,56 @@ export async function handleModelConfigAction(
       }
     }
 
+    case "benchmark": {
+      const arg = args?.trim() ?? "";
+      const lines: string[] = [];
+
+      try {
+        if (arg === "" || arg === "--new") {
+          // Default: only untested cloud models
+          const { runBenchmarksForNewModels } = await import("../../core/benchmark-driver.js");
+          lines.push("  Running benchmarks on untested cloud models...");
+          lines.push("  (each model: 4 tests, ~$0.0004, ~20s)");
+          lines.push("");
+          let total = 0;
+          for await (const p of runBenchmarksForNewModels()) {
+            total = p.total;
+            if (p.error) {
+              lines.push(`  ✗ ${p.model} (${p.done}/${p.total}) — ${p.error}`);
+            } else {
+              lines.push(`  ✓ ${p.model} (${p.done}/${p.total}) — score ${p.score ?? "?"}/4`);
+            }
+          }
+          if (total === 0) {
+            lines.push("  No untested cloud models with valid API keys. Run `/benchmark --all` to re-test.");
+          } else {
+            lines.push("");
+            lines.push("  Done. Reopen /model to see ✓ marks.");
+          }
+          return lines.join("\n");
+        }
+        if (arg === "--all") {
+          const { runBenchmarksForNewModels } = await import("../../core/benchmark-driver.js");
+          lines.push("  Re-benchmarking ALL cloud models (force)...");
+          for await (const p of runBenchmarksForNewModels({ force: true })) {
+            if (p.error) {
+              lines.push(`  ✗ ${p.model} (${p.done}/${p.total}) — ${p.error}`);
+            } else {
+              lines.push(`  ✓ ${p.model} (${p.done}/${p.total}) — score ${p.score ?? "?"}/4`);
+            }
+          }
+          return lines.join("\n");
+        }
+        // Specific model name
+        const { runBenchmarkForModel } = await import("../../core/benchmark-driver.js");
+        const r = await runBenchmarkForModel(arg);
+        if (r.error) return `  ✗ ${arg}: ${r.error}`;
+        return `  ✓ ${arg}: score ${r.score ?? "?"}/4`;
+      } catch (err) {
+        return `  Benchmark error: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+
     default:
       return null;
   }

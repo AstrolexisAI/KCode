@@ -34,6 +34,8 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
   // /props endpoint to read the GGUF currently loaded, since the alias
   // in models.json can lag behind the actual weights.
   const [runtimeLabels, setRuntimeLabels] = useState<Record<string, string>>({});
+  // Per-model benchmark state: "passed" / "failed" / "new" (untested, cloud only)
+  const [benchmarkState, setBenchmarkState] = useState<Record<string, "passed" | "failed" | "new">>({});
 
   useEffect(() => {
     (async () => {
@@ -95,6 +97,24 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
         if (label) resolved[name] = label;
       }
       if (Object.keys(resolved).length > 0) setRuntimeLabels(resolved);
+
+      // Load benchmark results so we can render ✓ / [NEW] badges. Local
+      // models are excluded from the "new" state since we don't benchmark them.
+      try {
+        const { loadBenchmarkStore } = await import("../../core/benchmark-store.js");
+        const store = loadBenchmarkStore();
+        const state: Record<string, "passed" | "failed" | "new"> = {};
+        for (const m of all) {
+          if (m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1")) continue;
+          const result = store.results[m.name];
+          if (!result) {
+            state[m.name] = "new";
+          } else {
+            state[m.name] = result.score >= 2 ? "passed" : "failed";
+          }
+        }
+        if (Object.keys(state).length > 0) setBenchmarkState(state);
+      } catch { /* benchmark store absent — safe */ }
     })();
   }, []);
 
@@ -251,12 +271,17 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           const runtimeLabel = runtimeLabels[m.name];
           const tagLine = m.tags && m.tags.length > 0 ? "  " + m.tags.map(t => `[${t}]`).join(" ") : "";
 
+          const benchState = benchmarkState[m.name];
+
           return (
             <Box key={m.name} flexDirection="column">
               <Box flexDirection="row">
                 <Text color={isSelected ? theme.primary : undefined} bold={isSelected}>
                   {(isSelected ? "▸ " : "  ") + (runtimeLabel ?? m.name)}
                 </Text>
+                {benchState === "passed" && <Text color={theme.success}>{" ✓"}</Text>}
+                {benchState === "failed" && <Text color={theme.error}>{" ✗"}</Text>}
+                {benchState === "new" && <Text color={theme.warning}>{" [NEW]"}</Text>}
                 {isCurrent && <Text color={theme.success}>{" ●"}</Text>}
                 {tagLine && <Text dimColor>{tagLine}</Text>}
               </Box>
