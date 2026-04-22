@@ -1693,8 +1693,36 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                   },
                 ]);
                 setMode("responding");
-                setLoadingMessage("Orchestrating sub-tasks...");
-                const result = await orchestratePlan(plan, cfg, cfg.model);
+                setLoadingMessage(`Decomposed: ${plan.sub_tasks.length} sub-tasks`);
+                // Live progress: each orchestrator event updates the loading message
+                // and appends a visible status line so the user sees what's running.
+                const running = new Map<string, { model: string; startMs: number }>();
+                const result = await orchestratePlan(plan, cfg, cfg.model, (ev) => {
+                  if (ev.type === "wave-start") {
+                    setLoadingMessage(`Wave ${ev.wave}: running [${ev.taskIds.join(",")}] in parallel`);
+                  } else if (ev.type === "task-start") {
+                    running.set(ev.id, { model: ev.model, startMs: Date.now() });
+                    const labels = [...running.entries()].map(([id, v]) => `${id}:${v.model}`).join(" ");
+                    setLoadingMessage(`⟳ ${labels}`);
+                    setCompleted((prev) => [
+                      ...prev,
+                      { kind: "text", role: "assistant", text: `  \x1b[2m▶ ${ev.id} (${ev.intent}) → ${ev.model}\x1b[0m` },
+                    ]);
+                  } else if (ev.type === "task-done") {
+                    running.delete(ev.id);
+                    const s = (ev.elapsedMs / 1000).toFixed(1);
+                    setCompleted((prev) => [
+                      ...prev,
+                      { kind: "text", role: "assistant", text: `  \x1b[2m✓ ${ev.id} done in ${s}s · ${ev.tokens} tok\x1b[0m` },
+                    ]);
+                  } else if (ev.type === "task-error") {
+                    running.delete(ev.id);
+                    setCompleted((prev) => [
+                      ...prev,
+                      { kind: "text", role: "assistant", text: `  \x1b[31m✗ ${ev.id} failed: ${ev.error}\x1b[0m` },
+                    ]);
+                  }
+                });
                 const combined = formatOrchestrationOutput(result);
                 // Record per-model costs so Kodi's session economy reflects
                 // orchestrator usage (bypasses recordTurnCost in sendMessage)

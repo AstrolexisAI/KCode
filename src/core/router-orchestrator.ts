@@ -32,6 +32,12 @@ export interface OrchestrationResult {
   totalOutputTokens: number;
 }
 
+export type OrchestratorProgressEvent =
+  | { type: "wave-start"; wave: number; taskIds: string[] }
+  | { type: "task-start"; id: string; intent: string; model: string }
+  | { type: "task-done"; id: string; model: string; elapsedMs: number; tokens: number }
+  | { type: "task-error"; id: string; model: string; error: string };
+
 /**
  * Execute the DAG. Independent sub-tasks run in parallel via Promise.all;
  * dependent ones wait for their predecessors and inject prior outputs
@@ -41,16 +47,17 @@ export async function orchestratePlan(
   plan: ConductorPlan,
   config: KCodeConfig,
   defaultModel: string,
+  onProgress?: (event: OrchestratorProgressEvent) => void,
 ): Promise<OrchestrationResult> {
   const start = Date.now();
   const results = new Map<string, SubTaskResult>();
+  let waveNum = 0;
 
   // Topological execution: repeatedly find tasks whose deps are all complete
   const pending = new Set(plan.sub_tasks.map((t) => t.id));
   const taskById = new Map(plan.sub_tasks.map((t) => [t.id, t]));
 
   while (pending.size > 0) {
-    // Find all pending tasks whose deps are complete
     const ready: SubTask[] = [];
     for (const id of pending) {
       const task = taskById.get(id)!;
@@ -64,13 +71,14 @@ export async function orchestratePlan(
       break;
     }
 
-    // Run all ready tasks in parallel
+    waveNum++;
     log.info(
       "router/orchestrator",
       `Wave: ${ready.length} task(s) in parallel: ${ready.map((t) => t.id).join(",")}`,
     );
+    onProgress?.({ type: "wave-start", wave: waveNum, taskIds: ready.map((t) => t.id) });
 
-    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results));
+    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results, onProgress));
     const batchResults = await Promise.all(promises);
 
     for (const r of batchResults) {
@@ -97,10 +105,10 @@ async function executeSubTask(
   config: KCodeConfig,
   defaultModel: string,
   completedResults: Map<string, SubTaskResult>,
+  onProgress?: (event: OrchestratorProgressEvent) => void,
 ): Promise<SubTaskResult> {
   const start = Date.now();
 
-  // Build prompt: own prompt + injected context from dependencies
   let prompt = task.prompt;
   if (task.depends_on.length > 0) {
     const contextParts: string[] = [];
@@ -115,11 +123,12 @@ async function executeSubTask(
     }
   }
 
-  // Resolve model for this sub-task
   const route = await resolveModelForSubTask(task, defaultModel);
   const model = route?.model ?? defaultModel;
   const baseUrl = route?.baseUrl ?? config.apiBase;
   const apiKey = route?.apiKey ?? config.apiKey;
+
+  onProgress?.({ type: "task-start", id: task.id, intent: task.intent, model });
 
   try {
     const { output, inputTokens, outputTokens } = await callModel(
@@ -128,18 +137,19 @@ async function executeSubTask(
       apiKey ?? "",
       prompt,
     );
-    return {
+    const elapsedMs = Date.now() - start;
+    onProgress?.({
+      type: "task-done",
       id: task.id,
-      intent: task.intent,
       model,
-      output,
-      elapsedMs: Date.now() - start,
-      inputTokens,
-      outputTokens,
-    };
+      elapsedMs,
+      tokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+    });
+    return { id: task.id, intent: task.intent, model, output, elapsedMs, inputTokens, outputTokens };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.warn("router/orchestrator", `Sub-task ${task.id} (${task.intent} → ${model}) failed: ${msg}`);
+    onProgress?.({ type: "task-error", id: task.id, model, error: msg });
     return {
       id: task.id,
       intent: task.intent,
