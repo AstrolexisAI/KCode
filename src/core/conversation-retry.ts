@@ -215,10 +215,45 @@ export async function createStreamWithRetry(
             `Primary model failed after ${attempt + 1} attempts: ${lastError?.message}`,
           );
         }
+        // Resolve the fallback model's apiBase/apiKey so the request goes to the
+        // correct provider, not whatever apiBase the primary model was using.
+        // Without this, routing that switched apiBase to (e.g.) api.x.ai would
+        // leak into the fallback → Anthropic request sent to xAI → format error.
+        const fallbackConfig = { ...ctx.config };
+        try {
+          const { getModelBaseUrl } = await import("./models.js");
+          const { listModels } = await import("./models.js");
+          const all = await listModels();
+          // Fuzzy match: fallback "claude-haiku-4-5" matches "claude-haiku-4-5-20251001"
+          const match = all.find((m) =>
+            m.name === ctx.config.fallbackModel ||
+            m.name.startsWith(ctx.config.fallbackModel + "-")
+          );
+          if (match) {
+            fallbackConfig.apiBase = match.baseUrl;
+            const { loadUserSettingsRaw } = await import("./config.js");
+            const settings = await loadUserSettingsRaw();
+            const url = match.baseUrl.toLowerCase();
+            if (url.includes("anthropic.com")) {
+              fallbackConfig.apiKey = String(settings.anthropicApiKey ?? settings.apiKey ?? "");
+            } else if (url.includes("x.ai")) {
+              fallbackConfig.apiKey = String(settings.xaiApiKey ?? "");
+            } else if (url.includes("openai.com")) {
+              fallbackConfig.apiKey = String(settings.apiKey ?? "");
+            } else if (url.includes("moonshot")) {
+              fallbackConfig.apiKey = String(settings.kimiApiKey ?? "");
+            }
+          } else {
+            // Model not in registry — trust getModelBaseUrl fallback (uses config.apiBase)
+            fallbackConfig.apiBase = await getModelBaseUrl(ctx.config.fallbackModel, undefined);
+          }
+        } catch (resolveErr) {
+          log.debug("llm", `Fallback provider resolution failed: ${resolveErr}`);
+        }
         try {
           const stream = await executeModelRequest(
             ctx.config.fallbackModel,
-            ctx.config,
+            fallbackConfig,
             ctx.systemPrompt,
             ctx.messages,
             ctx.tools,

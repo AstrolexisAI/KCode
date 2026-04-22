@@ -818,7 +818,26 @@ export class ConversationManager {
       await detectPhantomTypoForTurn(guardState, fullText);
 
       // Store assistant message in conversation history
-      this.state.messages.push({ role: "assistant", content: assistantContent });
+      // Guard: if content is empty (e.g. repetition_aborted with no text generated),
+      // inject a placeholder so subsequent API calls don't fail with
+      // "Each message must have at least one content element" (400 Bad Request).
+      let safeContent = assistantContent;
+      const isEmpty = !safeContent ||
+        (Array.isArray(safeContent) && safeContent.length === 0) ||
+        (Array.isArray(safeContent) && safeContent.every((b) => {
+          if (b.type === "text") return !(b as { text?: string }).text?.trim();
+          return false;
+        })) ||
+        (typeof safeContent === "string" && !safeContent.trim());
+      if (isEmpty) {
+        safeContent = [{
+          type: "text",
+          text: stopReason === "repetition_aborted"
+            ? "[response aborted due to repetition loop]"
+            : "[empty response]",
+        }];
+      }
+      this.state.messages.push({ role: "assistant", content: safeContent });
 
       // ─── Stop condition checks (delegated to stop-conditions.ts) ───
 
