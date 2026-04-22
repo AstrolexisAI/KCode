@@ -355,25 +355,45 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
           log.debug("test-engine", `Test engine skipped: ${err}`);
         }
       } else if (task.type === "debug") {
-        try {
-          const { collectEvidence, buildDebugPrompt } = await import(
-            "./debug-engine/evidence-collector.js"
-          );
-          const evidence = await collectEvidence({
-            files: task.entities.files ?? [],
-            errorMessage: task.entities.error,
-            cwd: config.workingDirectory,
-          });
-          orchestratedMessage = buildDebugPrompt(evidence, userMessage);
-          log.info(
-            "orchestrator",
-            `Debug engine: ${evidence.targetFiles.length} files, ` +
-              `${evidence.errorPatterns.length} error patterns, ` +
-              `${evidence.testFiles.length} test files, ` +
-              `${evidence.callers.length} callers`,
-          );
-        } catch (err) {
-          log.debug("debug-engine", `Debug engine skipped: ${err}`);
+        // Guard: prompts that are really CREATION (e.g. "build a dashboard
+        // with error handling if Binance fails") can get miscategorized as
+        // debug due to keywords like "falla", "error handling", "fails when".
+        // Running the debug engine there pollutes the context with random
+        // files from cwd, confusing the model (observed: claude-sonnet
+        // correctly rejected the mismatch, sub-tasks wasted tokens).
+        const { isMonolithicCreation } = await import("./router.js");
+        if (isMonolithicCreation(userMessage)) {
+          log.info("orchestrator", "Debug engine skipped — prompt is monolithic creation, not debug");
+        } else {
+          try {
+            const { collectEvidence, buildDebugPrompt } = await import(
+              "./debug-engine/evidence-collector.js"
+            );
+            const evidence = await collectEvidence({
+              files: task.entities.files ?? [],
+              errorMessage: task.entities.error,
+              cwd: config.workingDirectory,
+            });
+            // Extra safety: if no files are referenced AND no error message
+            // was found, the "debug" classification is likely spurious.
+            // Skip to avoid dumping random cwd files into context.
+            const hasRealDebugSignal =
+              (task.entities.files?.length ?? 0) > 0 || !!task.entities.error;
+            if (!hasRealDebugSignal && evidence.targetFiles.length === 0) {
+              log.info("orchestrator", "Debug engine skipped — no files/error referenced");
+            } else {
+              orchestratedMessage = buildDebugPrompt(evidence, userMessage);
+              log.info(
+                "orchestrator",
+                `Debug engine: ${evidence.targetFiles.length} files, ` +
+                  `${evidence.errorPatterns.length} error patterns, ` +
+                  `${evidence.testFiles.length} test files, ` +
+                  `${evidence.callers.length} callers`,
+              );
+            }
+          } catch (err) {
+            log.debug("debug-engine", `Debug engine skipped: ${err}`);
+          }
         }
       } else {
         const { runPipeline } = await import("./task-orchestrator/pipelines.js");
