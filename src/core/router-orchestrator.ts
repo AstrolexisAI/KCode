@@ -15,7 +15,8 @@ import type { ConductorPlan, SubTask } from "./router-conductor";
 import { resolveModelForSubTask } from "./router-conductor";
 import type { ConversationManager } from "./conversation";
 
-const MAX_SUB_TASK_TURNS = 8;
+const MAX_SUB_TASK_TURNS = 12;
+const SUMMARY_WARN_TURN = 10; // inject "wrap up" prompt at this turn
 
 export interface SubTaskResult {
   id: string;
@@ -216,8 +217,20 @@ async function runAgentLoopForSubTask(
   let totalOutput = 0;
   let finalText = "";
   let toolUseCount = 0;
+  // Track actions for synthetic summary if the sub-task runs out of turns
+  // without producing text output (e.g. stuck in tool-call loop).
+  const toolActionLog: Array<{ name: string; target: string; success: boolean }> = [];
 
   for (let turn = 0; turn < MAX_SUB_TASK_TURNS; turn++) {
+    // At the warn turn, inject a "wrap up" user message so the model knows
+    // to stop making tool calls and summarize what it did.
+    if (turn === SUMMARY_WARN_TURN && messages[messages.length - 1]?.role !== "user") {
+      messages.push({
+        role: "user",
+        content: `You have ${MAX_SUB_TASK_TURNS - turn} turn(s) left. Stop making tool calls now and write a short final summary of what you did and the result. Do NOT call any more tools.`,
+      });
+    }
+
     const sseStream = await executeModelRequest(
       model,
       subConfig,
@@ -288,14 +301,65 @@ async function runAgentLoopForSubTask(
     const toolResult = toolGenResult.value;
     toolUseCount += toolCalls.length;
 
+    // Record what tools did for potential synthetic summary
+    for (let i = 0; i < toolCalls.length; i++) {
+      const call = toolCalls[i]!;
+      const resultBlock = toolResult.toolResultBlocks[i];
+      const target = extractToolTarget(call.name, call.input as Record<string, unknown>);
+      const success = !(resultBlock && (resultBlock as { is_error?: boolean }).is_error);
+      toolActionLog.push({ name: call.name, target, success });
+    }
+
     messages.push({ role: "user", content: toolResult.toolResultBlocks });
   }
 
+  // If no text was produced but tools were executed, synthesize a summary from
+  // the action log so downstream sub-tasks (c depends on b) have real context
+  // instead of nothing (which causes hallucination).
+  if (!finalText.trim() && toolActionLog.length > 0) {
+    finalText = synthesizeActionSummary(toolActionLog);
+  }
+
   return {
-    output: finalText || "[sub-task completed with no text output]",
+    output: finalText || "[sub-task completed with no output]",
     inputTokens: totalInput,
     outputTokens: totalOutput,
   };
+}
+
+function extractToolTarget(name: string, input: Record<string, unknown>): string {
+  if (name === "Read" || name === "Write" || name === "Edit" || name === "MultiEdit") {
+    return String(input.file_path ?? "");
+  }
+  if (name === "Bash") return String(input.command ?? "").slice(0, 80);
+  if (name === "Grep") return String(input.pattern ?? "");
+  if (name === "Glob") return String(input.pattern ?? "");
+  return "";
+}
+
+function synthesizeActionSummary(log: Array<{ name: string; target: string; success: boolean }>): string {
+  const byName = new Map<string, { success: number; fail: number; targets: Set<string> }>();
+  for (const a of log) {
+    const entry = byName.get(a.name) ?? { success: 0, fail: 0, targets: new Set() };
+    if (a.success) entry.success++;
+    else entry.fail++;
+    if (a.target) entry.targets.add(a.target);
+    byName.set(a.name, entry);
+  }
+  const lines: string[] = ["[auto-generated summary — sub-task exhausted turns without explicit output]"];
+  for (const [name, entry] of byName.entries()) {
+    const total = entry.success + entry.fail;
+    const targets = [...entry.targets].slice(0, 5).join(", ");
+    lines.push(`- ${name}: ${total} call${total === 1 ? "" : "s"} (${entry.success} ok, ${entry.fail} fail)${targets ? ` on ${targets}` : ""}`);
+  }
+  // Highlight file modifications specifically (most important for downstream)
+  const edits = log.filter((a) => ["Edit", "MultiEdit", "Write"].includes(a.name) && a.success);
+  if (edits.length > 0) {
+    lines.push(`\nFiles modified: ${[...new Set(edits.map((e) => e.target))].join(", ")}`);
+  } else if (log.some((a) => ["Edit", "MultiEdit", "Write"].includes(a.name))) {
+    lines.push(`\nNo files were modified (edits attempted but failed).`);
+  }
+  return lines.join("\n");
 }
 
 async function callModel(
