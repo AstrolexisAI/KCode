@@ -140,6 +140,10 @@ const ANALYSIS_PATTERNS = [
   /\b(audit|analiz[ae]|revisar|review|debug|diagnos|investig|security|vulnerabil)\b/i,
   /\b(por qu[eé]|why does|root cause|explain.*code|code.*review)\b/i,
   /\b(benchmark|performance|profil|bottleneck)\b/i,
+  // Technical complexity / algorithm questions
+  /\b(complejidad|complexity|algoritm[oa]|big.?o|o\(n|o\(log|tradeoff|trade.?off)\b/i,
+  /\b(cu[aá]ndo (usar|evitar|elegir|prefer)|when to (use|avoid|choose))\b/i,
+  /\b(diferencia|difference|compar[ae]|pros?\s+(?:y|and)\s+cons?)\b/i,
 ];
 
 const MULTI_STEP_PATTERNS = [
@@ -169,10 +173,13 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
   if (SIMPLE_EDIT_PATTERNS.some((p) => p.test(userMessage))) return "simple-edit";
 
   // Complex edit: code modification without exact location
-  if (detectCodeTask(userMessage)) return "complex-edit";
+  // Also catches "cambia X a Y", "modifica", "actualiza" in spanish
+  const COMPLEX_EDIT_EXTRA = /\b(cambia[r]?|modifica[r]?|actualiza[r]?|renombra[r]?|elimina[r]?|borra[r]?|reemplaza[r]?|replace|rename|remove|delete|update)\b/i;
+  if (detectCodeTask(userMessage) || COMPLEX_EDIT_EXTRA.test(userMessage)) return "complex-edit";
 
-  // Chat/question: short or conversational
-  if (userMessage.length < 150 || detectSimpleTask(userMessage)) return "chat";
+  // Chat/question: only truly short/conversational — NOT technical questions
+  // Threshold reduced to 80 chars (greetings, simple lookups)
+  if (userMessage.length < 80 || detectSimpleTask(userMessage)) return "chat";
 
   return "general";
 }
