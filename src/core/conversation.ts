@@ -313,6 +313,10 @@ export class ConversationManager {
   }
 
   /** Access the permission manager (e.g., to set the prompt callback from the UI). */
+  getTools(): ToolRegistry {
+    return this.tools;
+  }
+
   getPermissions(): PermissionManager {
     return this.permissions;
   }

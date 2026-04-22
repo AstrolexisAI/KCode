@@ -10,9 +10,12 @@
 // execution means independent sub-tasks don't serialize wall-clock.
 
 import { log } from "./logger";
-import type { KCodeConfig } from "./types";
+import type { KCodeConfig, ContentBlock, Message, ToolUseBlock } from "./types";
 import type { ConductorPlan, SubTask } from "./router-conductor";
 import { resolveModelForSubTask } from "./router-conductor";
+import type { ConversationManager } from "./conversation";
+
+const MAX_SUB_TASK_TURNS = 8;
 
 export interface SubTaskResult {
   id: string;
@@ -48,12 +51,12 @@ export async function orchestratePlan(
   config: KCodeConfig,
   defaultModel: string,
   onProgress?: (event: OrchestratorProgressEvent) => void,
+  manager?: ConversationManager,
 ): Promise<OrchestrationResult> {
   const start = Date.now();
   const results = new Map<string, SubTaskResult>();
   let waveNum = 0;
 
-  // Topological execution: repeatedly find tasks whose deps are all complete
   const pending = new Set(plan.sub_tasks.map((t) => t.id));
   const taskById = new Map(plan.sub_tasks.map((t) => [t.id, t]));
 
@@ -78,7 +81,7 @@ export async function orchestratePlan(
     );
     onProgress?.({ type: "wave-start", wave: waveNum, taskIds: ready.map((t) => t.id) });
 
-    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results, onProgress));
+    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results, onProgress, manager));
     const batchResults = await Promise.all(promises);
 
     for (const r of batchResults) {
@@ -106,6 +109,7 @@ async function executeSubTask(
   defaultModel: string,
   completedResults: Map<string, SubTaskResult>,
   onProgress?: (event: OrchestratorProgressEvent) => void,
+  manager?: ConversationManager,
 ): Promise<SubTaskResult> {
   const start = Date.now();
 
@@ -131,21 +135,26 @@ async function executeSubTask(
   onProgress?.({ type: "task-start", id: task.id, intent: task.intent, model });
 
   try {
-    const { output, inputTokens, outputTokens } = await callModel(
-      model,
-      baseUrl,
-      apiKey ?? "",
-      prompt,
-    );
+    const result = manager
+      ? await runAgentLoopForSubTask(task, model, baseUrl, apiKey ?? "", prompt, config, manager)
+      : await callModel(model, baseUrl, apiKey ?? "", prompt);
     const elapsedMs = Date.now() - start;
     onProgress?.({
       type: "task-done",
       id: task.id,
       model,
       elapsedMs,
-      tokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+      tokens: (result.inputTokens ?? 0) + (result.outputTokens ?? 0),
     });
-    return { id: task.id, intent: task.intent, model, output, elapsedMs, inputTokens, outputTokens };
+    return {
+      id: task.id,
+      intent: task.intent,
+      model,
+      output: result.output,
+      elapsedMs,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.warn("router/orchestrator", `Sub-task ${task.id} (${task.intent} → ${model}) failed: ${msg}`);
@@ -159,6 +168,122 @@ async function executeSubTask(
       elapsedMs: Date.now() - start,
     };
   }
+}
+
+/**
+ * Mini agent loop for a sub-task: stream → tool execution → feed back → repeat.
+ * Uses the shared tool registry/permissions/hooks from the parent ConversationManager
+ * so tool calls honor the same permission model and fire the same hooks.
+ */
+async function runAgentLoopForSubTask(
+  task: SubTask,
+  model: string,
+  baseUrl: string,
+  apiKey: string,
+  initialPrompt: string,
+  parentConfig: KCodeConfig,
+  manager: ConversationManager,
+): Promise<{ output: string; inputTokens?: number; outputTokens?: number }> {
+  const { executeModelRequest } = await import("./request-builder");
+  const { processSSEStream } = await import("./conversation-streaming");
+  const { executeToolsSequential } = await import("./tool-executor");
+  const { getModelContextSize } = await import("./models");
+
+  // Clone config with this sub-task's model/url/key, preserving systemPrompt + flags
+  const subConfig: KCodeConfig = {
+    ...parentConfig,
+    model,
+    apiBase: baseUrl,
+    apiKey,
+    contextWindowSize: (await getModelContextSize(model)) ?? parentConfig.contextWindowSize,
+  };
+
+  const messages: Message[] = [
+    { role: "user", content: initialPrompt },
+  ];
+  const systemPrompt = parentConfig._systemPrompt as string | undefined;
+
+  const tools = manager.getTools();
+  const permissions = manager.getPermissions();
+  const hooks = manager.getHooks();
+  const undoManager = manager.getUndo();
+  const sessionId = manager.getSessionId();
+  const abortController = new AbortController();
+
+  let totalInput = 0;
+  let totalOutput = 0;
+  let finalText = "";
+  let toolUseCount = 0;
+
+  for (let turn = 0; turn < MAX_SUB_TASK_TURNS; turn++) {
+    const sseStream = await executeModelRequest(
+      model,
+      subConfig,
+      systemPrompt ?? "",
+      messages,
+      tools,
+      abortController,
+    );
+
+    const cumulativeUsage = { inputTokens: 0, outputTokens: 0 };
+    const streamGen = processSSEStream({
+      sseStream,
+      tools,
+      accumulateUsage: (u) => {
+        cumulativeUsage.inputTokens += u.inputTokens;
+        cumulativeUsage.outputTokens += u.outputTokens;
+      },
+      cumulativeUsage,
+      abortSignal: abortController.signal,
+    });
+
+    let genResult = await streamGen.next();
+    while (!genResult.done) {
+      genResult = await streamGen.next();
+    }
+    const { assistantContent, toolCalls, stopReason, textChunks, turnInputTokens, turnOutputTokens } =
+      genResult.value;
+
+    totalInput += turnInputTokens;
+    totalOutput += turnOutputTokens;
+    finalText = textChunks.join("");
+
+    // Append assistant message (with potential tool calls) to history
+    messages.push({ role: "assistant", content: assistantContent });
+
+    if (toolCalls.length === 0 || stopReason === "end_turn" || stopReason === "stop") {
+      break;
+    }
+
+    // Execute tool calls and append results
+    const toolCtx = {
+      config: subConfig,
+      tools,
+      permissions,
+      hooks,
+      undoManager,
+      sessionId,
+      contextWindowSize: subConfig.contextWindowSize ?? 32_000,
+      abortController,
+      toolUseCount,
+    };
+    const toolResultBlocks: ContentBlock[] = [];
+    const toolGen = executeToolsSequential(toolCalls as ToolUseBlock[], toolCtx);
+    let toolGenResult = await toolGen.next();
+    while (!toolGenResult.done) {
+      toolGenResult = await toolGen.next();
+    }
+    toolResultBlocks.push(...toolGenResult.value);
+    toolUseCount += toolCalls.length;
+
+    messages.push({ role: "user", content: toolResultBlocks });
+  }
+
+  return {
+    output: finalText || "[sub-task completed with no text output]",
+    inputTokens: totalInput,
+    outputTokens: totalOutput,
+  };
 }
 
 async function callModel(
