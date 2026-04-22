@@ -18,11 +18,34 @@ export async function runPrintMode(
   prompt: string,
   outputFormat: OutputFormat = "text",
 ): Promise<number> {
-  // Apply multi-model routing before sending
+  // Apply multi-model routing before sending. Two paths:
+  //   1) Multi-intent: conductor decomposes prompt into DAG, orchestrator
+  //      runs independent sub-tasks in parallel → single combined output.
+  //      Saves tokens (each sub-task gets only its portion of the prompt).
+  //   2) Single intent: classify by regex, switch model, let sendMessage run.
   try {
     const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
       await import("../core/router.js");
     if (isMultimodelEnabled()) {
+      // Conductor path — only for prompts > 60 chars (avoids overhead on short chats)
+      if (prompt.length > 60) {
+        try {
+          const { decomposePrompt } = await import("../core/router-conductor.js");
+          const plan = await decomposePrompt(prompt);
+          if (plan && plan.sub_tasks.length > 1) {
+            const { orchestratePlan, formatOrchestrationOutput } = await import("../core/router-orchestrator.js");
+            process.stderr.write(`\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`);
+            const cfg = conversationManager.getConfig();
+            const result = await orchestratePlan(plan, cfg, cfg.model);
+            const combined = formatOrchestrationOutput(result);
+            process.stdout.write(combined + "\n");
+            return 0;
+          }
+        } catch (orchestrateErr) {
+          process.stderr.write(`\x1b[2m[orchestrator] ${orchestrateErr} — falling back\x1b[0m\n`);
+        }
+      }
+      // Single-intent path (fallback or short prompts)
       const taskType = classifyBenchmarkTask(prompt);
       const cfg = conversationManager.getConfig();
       const route = await selectBenchmarkModel(taskType, cfg.model);
@@ -30,7 +53,6 @@ export async function runPrintMode(
         cfg.model = route.model;
         cfg.apiBase = route.baseUrl;
         if (route.apiKey) cfg.apiKey = route.apiKey;
-        // Also update contextWindowSize so tool budget cap uses the correct window
         try {
           const { getModelContextSize } = await import("../core/models.js");
           const ctxSize = await getModelContextSize(route.model);
