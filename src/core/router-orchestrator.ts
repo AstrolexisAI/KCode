@@ -188,6 +188,7 @@ async function runAgentLoopForSubTask(
   const { processSSEStream } = await import("./conversation-streaming");
   const { executeToolsSequential } = await import("./tool-executor");
   const { getModelContextSize } = await import("./models");
+  const { LoopGuardState } = await import("./agent-loop-guards");
 
   // Clone config with this sub-task's model/url/key, preserving systemPrompt + flags
   const subConfig: KCodeConfig = {
@@ -209,6 +210,7 @@ async function runAgentLoopForSubTask(
   const undoManager = manager.getUndo();
   const sessionId = manager.getSessionId();
   const abortController = new AbortController();
+  const guardState = new LoopGuardState();
 
   let totalInput = 0;
   let totalOutput = 0;
@@ -267,16 +269,15 @@ async function runAgentLoopForSubTask(
       abortController,
       toolUseCount,
     };
-    const toolResultBlocks: ContentBlock[] = [];
-    const toolGen = executeToolsSequential(toolCalls as ToolUseBlock[], toolCtx);
+    const toolGen = executeToolsSequential(toolCalls as ToolUseBlock[], toolCtx, guardState);
     let toolGenResult = await toolGen.next();
     while (!toolGenResult.done) {
       toolGenResult = await toolGen.next();
     }
-    toolResultBlocks.push(...toolGenResult.value);
+    const toolResult = toolGenResult.value;
     toolUseCount += toolCalls.length;
 
-    messages.push({ role: "user", content: toolResultBlocks });
+    messages.push({ role: "user", content: toolResult.toolResultBlocks });
   }
 
   return {
