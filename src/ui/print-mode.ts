@@ -30,6 +30,12 @@ export async function runPrintMode(
         cfg.model = route.model;
         cfg.apiBase = route.baseUrl;
         if (route.apiKey) cfg.apiKey = route.apiKey;
+        // Also update contextWindowSize so tool budget cap uses the correct window
+        try {
+          const { getModelContextSize } = await import("../core/models.js");
+          const ctxSize = await getModelContextSize(route.model);
+          if (ctxSize) cfg.contextWindowSize = ctxSize;
+        } catch { /* non-fatal */ }
         process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
       }
     }

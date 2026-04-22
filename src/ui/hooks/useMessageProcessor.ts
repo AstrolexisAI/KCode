@@ -1678,6 +1678,11 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             cfg.model = route.model;
             cfg.apiBase = route.baseUrl;
             if (route.apiKey) cfg.apiKey = route.apiKey;
+            try {
+              const { getModelContextSize } = await import("../../core/models.js");
+              const ctxSize = await getModelContextSize(route.model);
+              if (ctxSize) cfg.contextWindowSize = ctxSize;
+            } catch { /* non-fatal */ }
             setCompleted((prev) => [
               ...prev,
               {
