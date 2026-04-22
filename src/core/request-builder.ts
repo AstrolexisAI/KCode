@@ -522,14 +522,16 @@ export async function buildRequestForModel(
   }
 
   // Tool budget cap: local models can't handle 47 tools (27K tokens).
-  // Cloud APIs: reduce if tools > 15% of context. Local: always use essentials.
+  // Cloud APIs: reduce if tools > 25% of context. Local: always use essentials.
+  // Raised from 15% → 25%: at 15%, models with 77K context (grok-code-fast-1)
+  // hit the cap on every request with 11K tool tokens, losing Edit/Write/MultiEdit.
   const contextWindow = config.contextWindowSize ?? 32_000;
   const isLocalModel =
     apiBase.includes("localhost") ||
     apiBase.includes("127.0.0.1") ||
     apiBase.startsWith("http://[::1]");
   const toolOverhead = estimateToolDefinitionTokens(tools, profileToolFilter ?? undefined);
-  if ((isLocalModel || toolOverhead > contextWindow * 0.15) && !profileToolFilter) {
+  if ((isLocalModel || toolOverhead > contextWindow * 0.25) && !profileToolFilter) {
     const ESSENTIAL_TOOLS = new Set([
       "Read",
       "Write",
@@ -544,7 +546,7 @@ export async function buildRequestForModel(
     profileToolFilter = (name: string) => ESSENTIAL_TOOLS.has(name);
     log.info(
       "llm",
-      `Tool budget cap: ${isLocalModel ? "local model" : `${toolOverhead} tok > 15%`}. Reduced to ${ESSENTIAL_TOOLS.size} essential tools.`,
+      `Tool budget cap: ${isLocalModel ? "local model" : `${toolOverhead} tok > 25%`}. Reduced to ${ESSENTIAL_TOOLS.size} essential tools.`,
     );
   }
 
