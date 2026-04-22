@@ -1595,6 +1595,48 @@ export class ConversationManager {
     return [...this.turnCosts];
   }
 
+  /**
+   * Record a turn cost for an externally-executed call (e.g. orchestrator
+   * sub-tasks that bypass the normal sendMessage flow). Resolves pricing
+   * per-model and applies the same balance/spend tracking the core loop uses.
+   */
+  async recordExternalTurnCost(args: {
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    toolCalls?: string[];
+  }): Promise<void> {
+    if (args.inputTokens === 0 && args.outputTokens === 0) return;
+    try {
+      const { getModelPricing, calculateCost } = await import("./pricing.js");
+      const pricing = await getModelPricing(args.model);
+      const costUsd = pricing
+        ? calculateCost(pricing, args.inputTokens, args.outputTokens)
+        : 0;
+      this.turnCosts.push({
+        turnIndex: this.turnCosts.length + 1,
+        model: args.model,
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        costUsd,
+        toolCalls: args.toolCalls ?? [],
+        timestamp: Date.now(),
+      });
+      const MAX_TURN_COSTS = 200;
+      if (this.turnCosts.length > MAX_TURN_COSTS) {
+        this.turnCosts.splice(0, this.turnCosts.length - MAX_TURN_COSTS);
+      }
+      if (costUsd > 0) {
+        try {
+          const { recordSpend } = await import("./balance/index.js");
+          await recordSpend(args.model, this.config.apiBase, costUsd);
+        } catch { /* non-fatal */ }
+      }
+    } catch {
+      /* pricing module failed — silent */
+    }
+  }
+
   formatCostBreakdown(): string {
     return _formatCostBreakdown(this.turnCosts);
   }

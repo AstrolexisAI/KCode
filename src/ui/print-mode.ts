@@ -37,6 +37,14 @@ export async function runPrintMode(
             process.stderr.write(`\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`);
             const cfg = conversationManager.getConfig();
             const result = await orchestratePlan(plan, cfg, cfg.model);
+            // Record per-model costs so later /usage reports reflect orchestrator usage
+            for (const sub of result.results) {
+              await conversationManager.recordExternalTurnCost({
+                model: sub.model,
+                inputTokens: sub.inputTokens ?? 0,
+                outputTokens: sub.outputTokens ?? 0,
+              });
+            }
             const combined = formatOrchestrationOutput(result);
             process.stdout.write(combined + "\n");
             return 0;
