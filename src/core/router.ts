@@ -137,7 +137,10 @@ export type BenchmarkTaskType =
   | "general";     // default
 
 const ANALYSIS_PATTERNS = [
-  /\b(audit|analiz[ae]|revisar|review|debug|diagnos|investig|security|vulnerabil)\b/i,
+  // Spanish imperatives (with/without accent). Note: \b breaks on accented chars in JS,
+  // so accented forms use lookahead/lookbehind instead.
+  /\b(audit[ae]?|analiz[ae]|revisar|review|debugg?[ea]?|diagnos|investig[ae]?|security|vulnerabil)\b/i,
+  /(analiz[aá]|audit[aá]|revis[aá]|investig[aá]|debugge[aá])/i,
   /\b(por qu[eé]|why does|root cause|explain.*code|code.*review)\b/i,
   /\b(benchmark|performance|profil|bottleneck)\b/i,
   // Technical complexity / algorithm questions
@@ -232,11 +235,15 @@ export async function selectBenchmarkModel(
   const tagGroups = BENCHMARK_TAG_MAP[taskType] ?? [["coding"]];
 
   for (const requiredTags of tagGroups) {
-    // For "local" tag, only consider local models
+    // For "local" tag, prefer local model unconditionally — even if it's already
+    // the current model. Routing may have previously switched to a cloud model
+    // mid-session; chat tasks should always snap back to local.
     if (requiredTags.includes("local")) {
       const localModel = models.find((m) => LOCAL_PATTERNS.test(m.baseUrl));
-      if (localModel && localModel.name !== defaultModel) {
-        log.info("router/multi", `${taskType} → local: ${localModel.name}`);
+      if (localModel) {
+        if (localModel.name !== defaultModel) {
+          log.info("router/multi", `${taskType} → local: ${localModel.name}`);
+        }
         return { model: localModel.name, baseUrl: localModel.baseUrl };
       }
       continue;
