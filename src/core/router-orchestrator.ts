@@ -14,7 +14,6 @@ import type { KCodeConfig, ContentBlock, Message, ToolUseBlock } from "./types";
 import type { ConductorPlan, SubTask } from "./router-conductor";
 import { resolveModelForSubTask } from "./router-conductor";
 import type { ConversationManager } from "./conversation";
-import { UndoManager } from "./undo";
 
 const MAX_SUB_TASK_TURNS = 12;
 const SUMMARY_WARN_TURN = 10; // inject "wrap up" prompt at this turn
@@ -78,7 +77,9 @@ export async function orchestratePlan(
 ): Promise<OrchestrationResult> {
   const start = Date.now();
   const results = new Map<string, SubTaskResult>();
-  const sharedFileLocks = fileLocks || new Map<string, Promise<unknown>>();
+  // Always have a lock map even if caller didn't pass one — otherwise
+  // parallel sub-tasks editing the same file would race with no protection.
+  const sharedFileLocks = fileLocks ?? new Map<string, Promise<unknown>>();
   let waveNum = 0;
 
   const pending = new Set(plan.sub_tasks.map((t) => t.id));
