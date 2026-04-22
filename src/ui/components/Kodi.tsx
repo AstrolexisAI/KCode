@@ -1191,45 +1191,84 @@ export default function KodiCompanion({
           )}
         </Box>
         {/* Session economy: per-model cost breakdown + live balance */}
-        {sessionModelBreakdown.length > 0 && (
-          <Box flexDirection="column" marginTop={0}>
-            <Text color={theme.dimmed} bold>{"  ─ Session Economy ─"}</Text>
-            {sessionModelBreakdown.map((m) => {
-              const bar = Math.round((m.costUsd / Math.max(...sessionModelBreakdown.map(x => x.costUsd))) * 8);
-              const barStr = "█".repeat(bar) + "░".repeat(8 - bar);
-              return (
-                <Box key={m.model} gap={1} marginLeft={2}>
-                  <Text color={theme.dimmed}>{m.model.length > 22 ? m.model.slice(0, 22) : m.model.padEnd(22)}</Text>
-                  <Text color={theme.warning}>${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}</Text>
-                  <Text color={theme.dimmed}>{barStr}</Text>
-                  <Text color={theme.dimmed}>{m.turns}t</Text>
-                </Box>
-              );
-            })}
-            {balance && (balance.liveAvailable != null || balance.remaining != null) && (
-              <Box marginLeft={2} marginTop={0}>
-                <Text color={theme.dimmed}>
-                  {"Balance: "}
-                  <Text color={theme.success}>
-                    ${(balance.liveAvailable ?? balance.remaining ?? 0).toFixed(2)}
-                    {balance.liveAvailable != null ? " (live)" : " (manual)"}
-                  </Text>
-                  {" · spent: "}
-                  <Text color={theme.warning}>${balance.spent.toFixed(3)}</Text>
-                </Text>
-              </Box>
-            )}
-          </Box>
-        )}
+        {/* Unified multi-model panel: columns per model when multimodel ON,
+            simple list when multimodel OFF */}
+        {sessionModelBreakdown.length > 0 && (() => {
+          const maxCost = Math.max(...sessionModelBreakdown.map(x => x.costUsd), 0.0001);
+          const totalSpent = sessionModelBreakdown.reduce((s, m) => s + m.costUsd, 0);
+          const balanceVal = balance ? (balance.liveAvailable ?? balance.remaining ?? null) : null;
 
-        {/* Multi-Kodi team: animated mini-Kodis, one per model */}
-        {multimodelEnabled && sessionModelBreakdown.length > 1 && (
-          <Box flexDirection="row" gap={1} marginTop={0} marginLeft={1}>
-            {sessionModelBreakdown.slice(0, 4).map((m) => (
-              <MiniKodi key={m.model} modelName={m.model} costUsd={m.costUsd} />
-            ))}
-          </Box>
-        )}
+          if (multimodelEnabled && sessionModelBreakdown.length > 1) {
+            // Wide columnar layout — one column per model
+            const cols = Math.min(sessionModelBreakdown.length, 4);
+            const colW = Math.max(14, Math.floor((Math.min(cols * 80, process.stdout.columns || 80) - 4) / cols));
+            return (
+              <Box flexDirection="column" marginTop={0} marginLeft={1}>
+                <Text color={theme.accent} bold>
+                  {"─── 🔀 Multi-Model "}
+                  <Text color={theme.dimmed}>{"─".repeat(Math.max(0, (colW * cols) - 18))}</Text>
+                </Text>
+                {/* Row 1: animated faces */}
+                <Box flexDirection="row" marginLeft={1}>
+                  {sessionModelBreakdown.slice(0, cols).map((m) => (
+                    <Box key={m.model} width={colW}>
+                      <MiniKodi modelName={m.model} costUsd={m.costUsd} />
+                    </Box>
+                  ))}
+                </Box>
+                {/* Row 2: cost + bar + turns per model */}
+                <Box flexDirection="row" marginLeft={1} marginTop={0}>
+                  {sessionModelBreakdown.slice(0, cols).map((m) => {
+                    const bar = Math.round((m.costUsd / maxCost) * 4);
+                    const barStr = "█".repeat(bar) + "░".repeat(4 - bar);
+                    const cost = m.costUsd === 0 ? "local" : `$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`;
+                    return (
+                      <Box key={m.model} width={colW}>
+                        <Text color={m.costUsd === 0 ? theme.success : theme.warning}>{cost}</Text>
+                        <Text color={theme.dimmed}>{` ${barStr} ${m.turns}t`}</Text>
+                      </Box>
+                    );
+                  })}
+                </Box>
+                {/* Balance footer */}
+                <Box marginLeft={1} marginTop={0}>
+                  <Text color={theme.dimmed}>
+                    {balanceVal != null
+                      ? `Balance: $${balanceVal.toFixed(2)} · session: $${totalSpent.toFixed(4)}`
+                      : `Session total: $${totalSpent.toFixed(4)}`}
+                  </Text>
+                </Box>
+              </Box>
+            );
+          }
+
+          // Single-model mode: compact list (no mini-Kodis)
+          return (
+            <Box flexDirection="column" marginTop={0} marginLeft={2}>
+              <Text color={theme.dimmed} bold>{"─ Economy ─"}</Text>
+              {sessionModelBreakdown.slice(0, 5).map((m) => {
+                const bar = Math.round((m.costUsd / maxCost) * 6);
+                const barStr = "█".repeat(bar) + "░".repeat(6 - bar);
+                const name = m.model.length > 20 ? m.model.slice(0, 20) : m.model.padEnd(20);
+                const cost = m.costUsd === 0 ? "local " : `$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`;
+                return (
+                  <Box key={m.model} gap={1}>
+                    <Text color={theme.dimmed}>{name}</Text>
+                    <Text color={m.costUsd === 0 ? theme.success : theme.warning}>{cost}</Text>
+                    <Text color={theme.dimmed}>{barStr}</Text>
+                    <Text color={theme.dimmed}>{m.turns}t</Text>
+                  </Box>
+                );
+              })}
+              {balanceVal != null && (
+                <Text color={theme.dimmed}>{"Balance: "}
+                  <Text color={theme.success}>${balanceVal.toFixed(2)}</Text>
+                  {" · spent: "}<Text color={theme.warning}>${totalSpent.toFixed(4)}</Text>
+                </Text>
+              )}
+            </Box>
+          );
+        })()}
 
         {/* Line 4: Live agent panel (when agents are running) */}
         {lastEvent?.agentStatuses && lastEvent.agentStatuses.length > 0 && (
