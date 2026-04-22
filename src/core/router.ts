@@ -177,8 +177,8 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
 
   // Complex edit: code modification without exact location
   // Two patterns: non-accented (word boundary works) + accented Spanish imperatives
-  const COMPLEX_EDIT_BASE = /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|replace|rename|remove|delete|update)\b/i;
-  const COMPLEX_EDIT_ACCENTED = /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá])/i;
+  const COMPLEX_EDIT_BASE = /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|agregar?|añadir?|insertar?|replace|rename|remove|delete|update|add|insert|append)\b/i;
+  const COMPLEX_EDIT_ACCENTED = /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá]|agreg[aá]|añad[ií]|insert[aá])/i;
   if (detectCodeTask(userMessage) || COMPLEX_EDIT_BASE.test(userMessage) || COMPLEX_EDIT_ACCENTED.test(userMessage)) return "complex-edit";
 
   // Chat/question: only truly short/conversational — NOT technical questions
