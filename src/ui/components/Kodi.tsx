@@ -404,6 +404,21 @@ export default function KodiCompanion({
   const displayModel = useModelDisplayLabel(model);
   const engineRef = useRef<KodiAnimEngine | null>(null);
   const [frame, setFrame] = useState<KodiAnimState | null>(null);
+  const [multimodelEnabled, setMultimodelEnabled] = useState(false);
+
+  // Poll multimodel state from settings (TTL: 2s)
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const { isMultimodelEnabled } = await import("../../core/router.js");
+        if (!cancelled) setMultimodelEnabled(isMultimodelEnabled());
+      } catch { /* ignore */ }
+    };
+    check();
+    const id = setInterval(check, 2000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
   const [llmReaction, setLlmReaction] = useState<string | null>(null);
   // Most recent advice string from the Kodi advisor, displayed as a
   // dim line under the info grid. Persists across events until a new
@@ -988,6 +1003,9 @@ export default function KodiCompanion({
         {/* Line 2: Model + mode + cwd */}
         <Box gap={1}>
           <Text color={theme.success}>{displayModel}</Text>
+          {multimodelEnabled && (
+            <Text color={theme.accent} bold>{"🔀"}</Text>
+          )}
           {permissionMode && (
             <>
               <Text color={theme.dimmed}>•</Text>
@@ -1132,6 +1150,31 @@ export default function KodiCompanion({
                 </Text>
               </Box>
             )}
+          </Box>
+        )}
+
+        {/* Multi-Kodi team: one mini-Kodi per model when multimodel is active */}
+        {multimodelEnabled && sessionModelBreakdown.length > 1 && (
+          <Box flexDirection="row" gap={2} marginTop={0} marginLeft={2}>
+            {sessionModelBreakdown.slice(0, 4).map((m) => {
+              const isLocal = m.model === "mark7" || m.model.includes("mnemo");
+              const isReasoning = m.model.includes("reasoning") || m.model.includes("o1") || m.model.includes("o3");
+              const isFast = m.model.includes("fast") || m.model.includes("mini") || m.model.includes("haiku");
+              const faceColor = isLocal ? theme.success : isReasoning ? theme.accent : isFast ? theme.warning : theme.primary;
+              const face = isReasoning ? "O   O" : isLocal ? "^  _^" : isFast ? "o  :o" : "o   o";
+              const shortName = m.model.length > 12 ? m.model.slice(0, 12) : m.model;
+              return (
+                <Box key={m.model} flexDirection="column" alignItems="center" width={14}>
+                  <Text color={faceColor}>{" ╭─────╮"}</Text>
+                  <Text color={faceColor}>{` │ ${face} │`}</Text>
+                  <Text color={faceColor}>{"  ╰──┬──╯"}</Text>
+                  <Text color={faceColor}>{"    /|\\ "}</Text>
+                  <Text color={faceColor}>{"    / \\ "}</Text>
+                  <Text color={theme.dimmed}>{shortName}</Text>
+                  <Text color={theme.warning}>{`$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`}</Text>
+                </Box>
+              );
+            })}
           </Box>
         )}
 
