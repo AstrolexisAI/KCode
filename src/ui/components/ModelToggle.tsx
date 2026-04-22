@@ -71,7 +71,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           description: m.description,
           gpu: m.gpu,
           provider: m.provider ?? (m.name.startsWith("claude") ? "anthropic" : "openai"),
-          tags: m.capabilities ?? (m as Record<string, unknown>).tags as string[] | undefined,
+          tags: m.tags ?? m.capabilities,
         })),
       );
       // Pre-select the current model
