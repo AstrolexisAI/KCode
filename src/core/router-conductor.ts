@@ -103,15 +103,19 @@ export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan
   const models = await listModels();
   const LOCAL_PATTERNS = /localhost|127\.0\.0\.1/;
 
-  const localModel = models.find((m) => LOCAL_PATTERNS.test(m.baseUrl));
+  // Candidate priority: models with reliable structured JSON output first.
+  // Empirically:
+  //   claude-haiku: ~100% success rate, ~2s
+  //   gpt-4o-mini:   ~95% success rate, ~1-2s
+  //   grok-3-mini:   unreliable (often times out)
+  //   grok-code-fast-1: reliable but "coding" not "cheap" tag
+  //   mark7 local:   fails parse consistently — last resort only
+  const claudeHaiku = models.find((m) => m.name.startsWith("claude-haiku-"));
+  const gpt4oMini = models.find((m) => m.name === "gpt-4o-mini");
   const grokMini = models.find((m) => m.name === "grok-3-mini");
-  const fallbackModel = models.find((m) => {
-    if (LOCAL_PATTERNS.test(m.baseUrl)) return false;
-    const tags: string[] = (m as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
-    return tags.includes("fast") && tags.includes("cheap");
-  });
+  const localModel = models.find((m) => LOCAL_PATTERNS.test(m.baseUrl));
 
-  const candidates = [localModel, grokMini, fallbackModel].filter(
+  const candidates = [claudeHaiku, gpt4oMini, grokMini, localModel].filter(
     (m): m is NonNullable<typeof m> => m !== undefined,
   );
 
