@@ -1582,7 +1582,9 @@ async function runNonInteractive(
         process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
       }
     }
-  } catch { /* non-fatal */ }
+  } catch (routeErr) {
+    process.stderr.write(`\x1b[2m[multimodel] routing error: ${routeErr}\x1b[0m\n`);
+  }
 
   for await (const event of conversationManager.sendMessage(prompt)) {
     switch (event.type) {
