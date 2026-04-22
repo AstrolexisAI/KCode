@@ -36,7 +36,18 @@ export async function runPrintMode(
             const { orchestratePlan, formatOrchestrationOutput } = await import("../core/router-orchestrator.js");
             process.stderr.write(`\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`);
             const cfg = conversationManager.getConfig();
-            const result = await orchestratePlan(plan, cfg, cfg.model);
+            const result = await orchestratePlan(plan, cfg, cfg.model, (ev) => {
+              if (ev.type === "wave-start") {
+                process.stderr.write(`\x1b[2m  Wave ${ev.wave}: [${ev.taskIds.join(",")}] in parallel\x1b[0m\n`);
+              } else if (ev.type === "task-start") {
+                process.stderr.write(`\x1b[2m  ▶ ${ev.id} (${ev.intent}) → ${ev.model}\x1b[0m\n`);
+              } else if (ev.type === "task-done") {
+                const s = (ev.elapsedMs / 1000).toFixed(1);
+                process.stderr.write(`\x1b[2m  ✓ ${ev.id} done in ${s}s · ${ev.tokens} tok\x1b[0m\n`);
+              } else if (ev.type === "task-error") {
+                process.stderr.write(`\x1b[31m  ✗ ${ev.id} failed: ${ev.error}\x1b[0m\n`);
+              }
+            });
             // Record per-model costs so later /usage reports reflect orchestrator usage
             for (const sub of result.results) {
               await conversationManager.recordExternalTurnCost({
