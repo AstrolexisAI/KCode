@@ -162,17 +162,18 @@ export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan
       const plan = await callConductor(candidate, userPrompt);
       if (plan) {
         const elapsed = Date.now() - start;
-        // Safety net: if the LLM ignored the rule and produced multiple
-        // parallel complex-edit sub-tasks for what looks like a single
-        // creation, collapse to one task. Observed regression: grok-haiku
-        // sometimes splits "creá proyecto X" into 6 complex-edits.
+        // Safety net: multiple parallel complex-edits to the same project
+        // almost never produce coherent code — each writes blind without
+        // seeing the others. Observed: 2 parallel complex-edits for
+        // "construí un dashboard" produced incoherent frontend+backend
+        // that didn't agree on endpoints.
         const parallelCreateCount = plan.sub_tasks.filter(
           (t) => t.intent === "complex-edit" && t.depends_on.length === 0,
         ).length;
-        if (parallelCreateCount >= 3) {
+        if (parallelCreateCount >= 2) {
           log.warn(
             "router/conductor",
-            `LLM produced ${parallelCreateCount} parallel complex-edit sub-tasks — collapsing to single task (likely monolithic creation)`,
+            `LLM produced ${parallelCreateCount} parallel complex-edit sub-tasks — collapsing to single task (parallel edits to same project are incoherent)`,
           );
           return null; // single-model fallback
         }
