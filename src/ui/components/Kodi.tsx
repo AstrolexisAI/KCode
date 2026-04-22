@@ -50,6 +50,14 @@ interface KodiProps {
   tier?: KodiTier;
   /** Feature flags from the subscription (pro, audit, rag, swarm, …). */
   tierFeatures?: string[];
+  /** Per-model session cost breakdown — aggregated from TurnCostEntry */
+  sessionModelBreakdown?: Array<{
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    turns: number;
+  }>;
 }
 
 // ─── LLM Reaction Generator ────────────────────────────────────
@@ -390,6 +398,7 @@ export default function KodiCompanion({
   subscriptionUsage7d,
   tier,
   tierFeatures,
+  sessionModelBreakdown = [],
 }: KodiProps) {
   const { theme } = useTheme();
   const displayModel = useModelDisplayLabel(model);
@@ -625,6 +634,8 @@ export default function KodiCompanion({
     starting: number | null;
     spent: number;
     fractionRemaining: number | null;
+    /** Live balance fetched from provider API (Kimi, OpenRouter) */
+    liveAvailable?: number | null;
   } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -637,13 +648,29 @@ export default function KodiCompanion({
           setBalance(null);
           return;
         }
-        setBalance({
+        const base = {
           label: status.label,
           remaining: status.remaining,
           starting: status.starting,
           spent: status.spent,
           fractionRemaining: status.fractionRemaining,
-        });
+          liveAvailable: undefined as number | null | undefined,
+        };
+        setBalance(base);
+        // Attempt live balance fetch (Kimi, OpenRouter) — non-blocking
+        try {
+          const { fetchLiveBalance } = await import("../../core/balance/live-fetch.js");
+          const { loadUserSettingsRaw } = await import("../../core/config.js");
+          const settings = loadUserSettingsRaw() as Record<string, unknown>;
+          const keyMap: Record<string, string> = {
+            kimi: String(settings.kimiApiKey ?? ""),
+            openrouter: String(settings.openrouterApiKey ?? ""),
+          };
+          const live = await fetchLiveBalance(status.provider, keyMap[status.provider] ?? "");
+          if (!cancelled && live) {
+            setBalance((prev) => prev ? { ...prev, liveAvailable: live.available } : prev);
+          }
+        } catch { /* live fetch optional */ }
       } catch {
         if (!cancelled) setBalance(null);
       }
@@ -1076,6 +1103,38 @@ export default function KodiCompanion({
             </>
           )}
         </Box>
+        {/* Session economy: per-model cost breakdown + live balance */}
+        {sessionModelBreakdown.length > 0 && (
+          <Box flexDirection="column" marginTop={0}>
+            <Text color={theme.dimmed} bold>{"  ─ Session Economy ─"}</Text>
+            {sessionModelBreakdown.map((m) => {
+              const bar = Math.round((m.costUsd / Math.max(...sessionModelBreakdown.map(x => x.costUsd))) * 8);
+              const barStr = "█".repeat(bar) + "░".repeat(8 - bar);
+              return (
+                <Box key={m.model} gap={1} marginLeft={2}>
+                  <Text color={theme.dimmed}>{m.model.length > 22 ? m.model.slice(0, 22) : m.model.padEnd(22)}</Text>
+                  <Text color={theme.warning}>${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}</Text>
+                  <Text color={theme.dimmed}>{barStr}</Text>
+                  <Text color={theme.dimmed}>{m.turns}t</Text>
+                </Box>
+              );
+            })}
+            {balance && (balance.liveAvailable != null || balance.remaining != null) && (
+              <Box marginLeft={2} marginTop={0}>
+                <Text color={theme.dimmed}>
+                  {"Balance: "}
+                  <Text color={theme.success}>
+                    ${(balance.liveAvailable ?? balance.remaining ?? 0).toFixed(2)}
+                    {balance.liveAvailable != null ? " (live)" : " (manual)"}
+                  </Text>
+                  {" · spent: "}
+                  <Text color={theme.warning}>${balance.spent.toFixed(3)}</Text>
+                </Text>
+              </Box>
+            )}
+          </Box>
+        )}
+
         {/* Line 4: Live agent panel (when agents are running) */}
         {lastEvent?.agentStatuses && lastEvent.agentStatuses.length > 0 && (
           <Box flexDirection="column">

@@ -351,12 +351,12 @@ export default function App({ config, conversationManager, tools, initialSession
     });
   }, []);
 
-  // Recompute running USD cost whenever the token count changes.
-  // Looks up the active model's pricing (KNOWN_PRICING + ~/.kcode/pricing.json)
-  // Session cost = sum of per-turn costs. Previously this multiplied the
-  // *cumulative* input/output tokens by pricing, but cumulative input
-  // double/triple-counts across turns (each turn's inputTokens already
-  // contains the full prior conversation). The per-turn ledger kept by
+  // Per-model session breakdown — aggregated from TurnCostEntry.model
+  const [sessionModelBreakdown, setSessionModelBreakdown] = useState<
+    Array<{ model: string; inputTokens: number; outputTokens: number; costUsd: number; turns: number }>
+  >([]);
+
+  // Recompute running USD cost + per-model breakdown whenever token count changes.
   // recordTurnCost already has the correct price for each turn, so
   // summing `costUsd` across turnCosts gives the real session spend.
   // Local models store costUsd=0 — they contribute nothing.
@@ -368,6 +368,23 @@ export default function App({ config, conversationManager, tools, initialSession
         if (cancelled) return;
         const total = turnCosts.reduce((sum, t) => sum + (t.costUsd ?? 0), 0);
         setSessionCostUsd(total);
+
+        // Per-model aggregation
+        const byModel = new Map<string, { inputTokens: number; outputTokens: number; costUsd: number; turns: number }>();
+        for (const t of turnCosts) {
+          if (!t.model || t.costUsd === 0) continue;
+          const existing = byModel.get(t.model) ?? { inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0 };
+          byModel.set(t.model, {
+            inputTokens: existing.inputTokens + (t.inputTokens ?? 0),
+            outputTokens: existing.outputTokens + (t.outputTokens ?? 0),
+            costUsd: existing.costUsd + (t.costUsd ?? 0),
+            turns: existing.turns + 1,
+          });
+        }
+        const breakdown = [...byModel.entries()]
+          .map(([model, v]) => ({ model, ...v }))
+          .sort((a, b) => b.costUsd - a.costUsd);
+        setSessionModelBreakdown(breakdown);
       } catch {
         // Silent — if anything fails, show 0 rather than crash.
       }
@@ -1171,6 +1188,7 @@ export default function App({ config, conversationManager, tools, initialSession
           subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
           tier={subscriptionTier}
           tierFeatures={subscriptionFeatures}
+          sessionModelBreakdown={sessionModelBreakdown}
         />}
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
