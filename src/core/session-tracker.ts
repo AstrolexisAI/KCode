@@ -154,15 +154,44 @@ export function detectAuditIntent(userMessage: string): boolean {
 /**
  * Mark the current session as an audit session. Called from the
  * conversation loop when the user's first message matches audit keywords.
+ *
+ * Phase 2 of the #100 refactor: when set to true AND a task scope is
+ * active, also flip the scope's audit sub-state. When false, do not
+ * unilaterally clear the scope — a scope transition is the correct
+ * path for that.
  */
 export function setAuditIntent(value: boolean): void {
   _auditIntent = value;
+  if (value) {
+    try {
+      const { getTaskScopeManager } = require("./task-scope") as typeof import("./task-scope");
+      const mgr = getTaskScopeManager();
+      const cur = mgr.current();
+      if (cur && !cur.audit.enabled) {
+        mgr.update({ audit: { enabled: true, reportRequired: true } });
+      }
+    } catch {
+      /* task-scope module not loaded — legacy path */
+    }
+  }
 }
 
 /**
  * Whether the current session is an audit session.
+ *
+ * Phase 2: prefers the TaskScope source of truth when available, so a
+ * scaffold/implement scope after a prior audit scope no longer reports
+ * "audit mode". Falls back to the legacy `_auditIntent` boolean when
+ * no scope is active (e.g. during test startup or early session setup).
  */
 export function isAuditSession(): boolean {
+  try {
+    const { getTaskScopeManager } = require("./task-scope") as typeof import("./task-scope");
+    const cur = getTaskScopeManager().current();
+    if (cur !== null) return cur.audit.enabled;
+  } catch {
+    /* fall through to legacy */
+  }
   return _auditIntent;
 }
 
@@ -251,10 +280,37 @@ export function unreadGrepHits(): string[] {
  * Phase 21: record a user-authored text message. Called from conversation.ts
  * on every sendMessage. write-guards uses this to determine whether the
  * user's original request granted documentation-creation permission.
+ *
+ * Phase 2 of the #100 refactor: also drives TaskScope transitions. When
+ * the user's intent (classified from the message) differs from the
+ * current scope's type, close the current scope and open a new one.
+ * This is what kills the "audit-mode leaks into scaffold" class of bug.
  */
 export function recordUserText(text: string): void {
   if (!text || typeof text !== "string") return;
   _userTexts.push(text);
+
+  try {
+    const { classifyIntent, getTaskScopeManager, shouldOpenNewScope } =
+      require("./task-scope") as typeof import("./task-scope");
+    const intent = classifyIntent(text);
+    const mgr = getTaskScopeManager();
+    if (shouldOpenNewScope(mgr.current(), intent)) {
+      const broadRequest = /\b(?:todo|toda|completo|completa|completamente|integral|full(?:ly)?|complete(?:ly)?|entire(?:ly)?|comprehensive|end[-\s]to[-\s]end|tiempo\s+real|real[-\s]time|mucho\s+m[aá]s)\b/i.test(
+        text,
+      );
+      mgr.beginNewScope({
+        type: intent,
+        userPrompt: text,
+        broadRequest,
+      });
+      // Keep the legacy _auditIntent boolean aligned with the new scope
+      // for any caller that doesn't yet read from the manager.
+      _auditIntent = intent === "audit";
+    }
+  } catch {
+    /* task-scope module unavailable — safe to ignore, legacy path keeps working */
+  }
 }
 
 /**
@@ -274,4 +330,10 @@ export function resetReads(): void {
   _grepHitFiles.clear();
   _auditIntent = false;
   _userTexts.length = 0;
+  try {
+    const { getTaskScopeManager } = require("./task-scope") as typeof import("./task-scope");
+    getTaskScopeManager().reset();
+  } catch {
+    /* task-scope module unavailable */
+  }
 }

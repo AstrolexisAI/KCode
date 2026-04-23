@@ -366,3 +366,60 @@ export function checkAuditEditGuard(filePath: string): AuditEditGuardResult {
 
   return { blocked: false };
 }
+
+/**
+ * Mutation kinds used by the unified policy check. Matches the tool
+ * names used by checkMutationAllowed below — adding a new mutation
+ * tool requires extending this union AND teaching the tool to call
+ * checkMutationAllowed before applying changes.
+ */
+export type MutationKind =
+  | "Edit"
+  | "Write"
+  | "MultiEdit"
+  | "GrepReplace"
+  | "Rename"
+  | "Bash-sed-i"
+  | "Bash-perl-i"
+  | "Bash-awk-inplace"
+  | "Bash-redirect";
+
+export interface MutationPolicyResult {
+  allowed: boolean;
+  /** When allowed=false, a full BLOCKED: … message ready to return from the tool. */
+  reason?: string;
+}
+
+/**
+ * Single source of truth for "may this mutation land?" questions. All
+ * mutation paths (Edit, Write, MultiEdit, GrepReplace, Bash sed -i,
+ * shell redirection, etc.) should call this before applying changes.
+ *
+ * Today's logic: delegates to the existing checkAuditEditGuard. This
+ * preserves current behavior while letting callers depend on a stable
+ * high-level helper. Phase 3+ will add scope-driven rules (target
+ * paths, read-only scopes, owner-file restrictions, etc.) without
+ * each tool needing to learn about them separately.
+ *
+ * Issue #104 / #108: before this helper, Edit blocked but GrepReplace
+ * or Bash sed -i could bypass. All paths now call this, so the policy
+ * is consistent.
+ */
+export function checkMutationAllowed(
+  filePath: string,
+  mutationKind: MutationKind,
+): MutationPolicyResult {
+  const result = checkAuditEditGuard(filePath);
+  if (result.blocked) {
+    // Decorate the reason with the mutation kind so the agent log
+    // shows which path tried to bypass the policy.
+    const prefix = `BLOCKED (via ${mutationKind}): `;
+    const reason = result.reason ?? "";
+    // Replace only the first "BLOCKED:" prefix; leave the rest intact.
+    const decoratedReason = reason.startsWith("BLOCKED")
+      ? prefix + reason.slice(reason.indexOf(":") + 1).trimStart()
+      : prefix + reason;
+    return { allowed: false, reason: decoratedReason };
+  }
+  return { allowed: true };
+}
