@@ -75,6 +75,22 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
             ? "**missing** (ENOENT / cd failed)"
             : scope.projectRoot.status;
     lines.push(`- Project root: ${rootLabel} (\`${basename(scope.projectRoot.path)}\`)`);
+
+    // Issue #110: when the scope says missing AND the reasons list
+    // includes the executor-skip marker, make it visually clear that
+    // the agent did something wrong, not the user. The agent has
+    // Bash — it was supposed to mkdir -p and didn't.
+    const skippedMkdir = scope.completion.reasons.some((r) =>
+      r.startsWith("executor skipped mandatory mkdir"),
+    );
+    if (scope.projectRoot.status === "missing" && skippedMkdir) {
+      lines.push(
+        `  ↳ **Executor error:** Bash is available; the agent should have run ` +
+          `\`mkdir -p ${basename(scope.projectRoot.path)}\` instead of asking the ` +
+          `user to create the directory manually. A forced-recovery directive ` +
+          `has been injected for the next turn.`,
+      );
+    }
   }
 
   // What landed on disk

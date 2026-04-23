@@ -724,6 +724,71 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       // conceptually but no real file exists.
       const filesOnDiskCount = countFilesOnDisk(filesModified);
 
+      // Check 0 — project root missing AND scaffold/implement scope.
+      // This is the executor gate from issue #110: the scope already
+      // detects the missing root (Phase 9), but the model can decide
+      // to delegate ("create the directory manually") instead of
+      // issuing mkdir -p. When scope says missing AND no successful
+      // mkdir happened this turn, inject a forced-recovery directive
+      // for the next turn so the executor cannot skip it.
+      {
+        const s = scopeMgr.current();
+        if (
+          s &&
+          (s.type === "scaffold" || s.type === "implement") &&
+          s.projectRoot.status === "missing" &&
+          s.projectRoot.path
+        ) {
+          // Did ANY successful mkdir for this path happen this turn?
+          let mkdirSucceeded = false;
+          for (const m of ctx.messages) {
+            if (m.role === "assistant" && Array.isArray(m.content)) {
+              for (const b of m.content) {
+                const t = typeof b === "object" && b !== null
+                  ? (b as { type?: unknown }).type
+                  : undefined;
+                if (t !== "tool_use") continue;
+                if (String((b as { name?: unknown }).name ?? "") !== "Bash") continue;
+                const inp = (b as { input?: unknown }).input;
+                const cmd = typeof inp === "object" && inp !== null
+                  ? String((inp as { command?: unknown }).command ?? "")
+                  : "";
+                if (cmd.includes("mkdir") && cmd.includes(s.projectRoot.path)) {
+                  mkdirSucceeded = true;
+                  break;
+                }
+              }
+            }
+            if (mkdirSucceeded) break;
+          }
+
+          if (!mkdirSucceeded) {
+            injectMessages.push({
+              role: "user",
+              content:
+                `[SYSTEM] The project root at "${s.projectRoot.path}" is MISSING ` +
+                `(the cd/chdir failed with ENOENT). You have the Bash tool available. ` +
+                `Your next action MUST be a Bash call with: mkdir -p ${s.projectRoot.path} && ls -ld ${s.projectRoot.path}\n\n` +
+                `Do NOT delegate directory creation to the user. Do NOT suggest they do it manually. ` +
+                `Do NOT attempt pip install, cd, or Write until the directory exists and is verified. ` +
+                `This is a mandatory recovery step — the executor skipped it on the previous turn.`,
+            });
+            log.warn(
+              "grounding",
+              `phase-9 executor gate: injecting forced mkdir directive for missing root ${s.projectRoot.path}`,
+            );
+            flagScope(
+              `executor skipped mandatory mkdir -p ${s.projectRoot.path} and delegated to the user instead`,
+              {
+                mayClaimReady: false,
+                mustUsePartialLanguage: true,
+                phase: "partial",
+              },
+            );
+          }
+        }
+      }
+
       // Check 1 — stub markers inside written files
       if (filesOnDiskCount > 0) {
         const findings = scanFilesForStubs(filesModified);
