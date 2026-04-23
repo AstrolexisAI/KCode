@@ -10,7 +10,6 @@ import { useVirtualScroll } from "../hooks/useVirtualScroll.js";
 import { useTheme } from "../ThemeContext.js";
 import MarkdownRenderer from "./MarkdownRenderer.js";
 import type { MessageEntry, ThinkingEntry } from "./MessageList.js";
-import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -20,20 +19,10 @@ export interface VirtualMessageListProps {
   completed: MessageEntry[];
   /** Text currently streaming from the assistant */
   streamingText: string;
-  /** Whether the assistant is currently responding */
-  isLoading: boolean;
-  /** Loading status message */
-  loadingMessage?: string;
   /** Thinking text currently being streamed */
   streamingThinking?: string;
   /** Whether thinking is actively streaming */
   isThinking?: boolean;
-  /** Current token count for this turn */
-  turnTokens?: number;
-  /** Timestamp (Date.now()) when the current turn started */
-  turnStartTime?: number;
-  /** Current spinner phase */
-  spinnerPhase?: "thinking" | "streaming" | "tool";
   /** Live streaming output from a running Bash command */
   bashStreamOutput?: string;
   /** Whether virtual scroll keybindings should be active */
@@ -92,13 +81,8 @@ function ScrollIndicator({
 export default function VirtualMessageList({
   completed,
   streamingText,
-  isLoading,
-  loadingMessage,
   streamingThinking = "",
   isThinking = false,
-  turnTokens = 0,
-  turnStartTime,
-  spinnerPhase = "thinking",
   bashStreamOutput = "",
   scrollActive = true,
   terminalRows,
@@ -165,17 +149,6 @@ export default function VirtualMessageList({
       {/* Live streaming Bash output */}
       {bashStreamOutput.length > 0 && <BashStreamDisplay output={bashStreamOutput} />}
 
-      {/* Loading spinner with tokens and elapsed time */}
-      {isLoading && (
-        <Box paddingLeft={2}>
-          <Spinner
-            message={loadingMessage ?? (isThinking ? "Reasoning..." : "Thinking...")}
-            tokens={turnTokens}
-            startTime={turnStartTime}
-            phase={isThinking ? "thinking" : spinnerPhase}
-          />
-        </Box>
-      )}
     </Box>
   );
 }

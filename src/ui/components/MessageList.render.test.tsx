@@ -109,7 +109,7 @@ describe("MessageList render", () => {
     expect(instance.lastFrame()).toContain("Generating response");
   });
 
-  test("shows loading message during load", () => {
+  test("does not render loading message inside the message flow", () => {
     instance = renderWithTheme(
       <MessageList
         completed={[]}
@@ -118,7 +118,7 @@ describe("MessageList render", () => {
         loadingMessage="Connecting to model..."
       />,
     );
-    expect(instance.lastFrame()).toContain("Connecting");
+    expect(instance.lastFrame()).not.toContain("Connecting");
   });
 
   test("renders multiple entries in order", () => {
