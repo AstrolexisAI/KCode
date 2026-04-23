@@ -406,7 +406,7 @@ Use `/plugins` to list installed plugins.
 | Hybrid local+cloud verification | **Yes (auto-detects)** | No | No |
 | NASA-validated findings | **PR #107 on nasa/IDF** | -- | -- |
 | Task orchestrator (intent→pipeline) | **Yes (8 task types)** | No | No |
-| Open source | **Yes (AGPL-3.0)** | No (proprietary) | Yes |
+| Open source | **Yes (Apache 2.0)** | No (proprietary) | Yes |
 | Built-in tools | **48 tools** | Many (plugins) | Good (Git focus) |
 | Slash commands | **190+** | IDE commands | ~10 |
 | Long-term memory (SQLite FTS5) | **Yes** | Project-based | Limited |
@@ -474,32 +474,32 @@ Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+S
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines. Report security issues to contact@astrolexis.space (see [SECURITY.md](./SECURITY.md)).
 
-## License — dual licensed
+## License
 
-KCode is available under **two licenses**. Pick the one that
-fits how you use it:
-
-### Open source: AGPL-3.0-only
-
-Run KCode as a CLI, in CI pipelines, in GitHub Actions, in
-your own fork — free of charge, no strings attached, under
-the terms of the GNU Affero General Public License v3.
+**KCode core is Apache 2.0.** Use it anywhere — personal, commercial,
+embedded, CI/CD, fork it — no restrictions, no copyleft viral clauses.
 See [LICENSE](./LICENSE).
 
-Most users are covered by this.
+### Pro features (separate repo, commercial license)
 
-### Commercial: for proprietary SaaS / embedding / indemnification
+Certain advanced features live in a **separate commercial repository**
+and are not covered by Apache 2.0:
 
-If your use case triggers AGPL's network-use clause (§13) or
-if you need to embed KCode into a proprietary product, you
-need a commercial license. Contact `contact@astrolexis.space`.
-See [LICENSE-COMMERCIAL.md](./LICENSE-COMMERCIAL.md) for the
-framework, scope, and inquiry process.
+- **Multi-Model Orchestrator** — DAG decomposition, conductor, parallel sub-tasks on specialized models
+- **Multi-agent swarm** — parallel sub-agents for divide-and-conquer workflows
+- **Auto-benchmarking background runner** — automatic model scoring on registered APIs
+- **Hallucination recovery + session blacklist** — rescues tool calls when models emit text instead of the API format
+- **Custom routing rules** — regex-based model routing with ReDoS protection
+- **Cloud failover chains** — automatic fallback + rate-limit parking
+- **Hosted KCode Cloud** — team sessions, dashboard, SSO, audit logs
+- **Managed audit service** — Astrolexis team runs audits for you
+- **Enterprise**: air-gapped deployment, compliance reports, priority SLA, white-label
+
+For Pro access or commercial licensing: `contact@astrolexis.space`.
 
 Copyright © 2026 Astrolexis.
 
 ### Contributing
 
-Every commit needs a DCO sign-off (`git commit -s -m "..."`)
-so the dual-license structure stays clean. Details in
-[CLA.md](./CLA.md).
+Contributions to the Apache 2.0 core are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Pull requests need a DCO sign-off (`git commit -s -m "..."`).

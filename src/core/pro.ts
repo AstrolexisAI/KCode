@@ -144,7 +144,7 @@ export const FREE_LIMITS = {
   maxSwarmAgents: 1,
   transcriptSearchHours: 168, // 7 days
   // Context window is intentionally uncapped on the free tier: KCode is
-  // self-hosted AGPL, capping display (and therefore compaction triggers)
+  // self-hosted Apache-licensed, capping display (and therefore compaction triggers)
   // below what the model actually supports only hurts users — the bar
   // hits 100% long before the real limit, and messages get summarized
   // prematurely. Providers already rate-limit and bill per token. If a
