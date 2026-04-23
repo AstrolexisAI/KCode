@@ -433,6 +433,90 @@ export function detectPatchWithoutRerun(
   return null;
 }
 
+// ─── Runtime traceback in bash output (issue #106) ──────────────
+
+/**
+ * Traceback / error patterns that indicate runtime failure even when
+ * the bash exit code is 0 (typical with `timeout N python app.py
+ * 2>&1 | head -20` shape commands where the pipe's last command
+ * succeeds and masks the python failure).
+ */
+const RUNTIME_ERROR_SIGNATURES = [
+  /\bTraceback\s+\(most recent call last\)/,
+  /\bModuleNotFoundError\b/,
+  /\bImportError\b/,
+  /\bSyntaxError\b/,
+  /\bNameError\b/,
+  /\bAttributeError\b/,
+  /\bIndentationError\b/,
+  /\bTypeError\s*:/,
+  /\bValueError\s*:/,
+  /\bruntime error\b/i,
+  // Node.js
+  /\bReferenceError\b/,
+  /\bUncaught Exception\b/,
+  /\bUnhandledPromiseRejectionWarning\b/,
+  /\bError: Cannot find module\b/,
+  // Ruby / Go / Rust
+  /\bpanic:/,
+  /\bNoMethodError\b/,
+  /\b(?:thread\s+'.+'\s+panicked|panicked at)\b/i,
+];
+
+export interface RuntimeFailureInOutputFinding {
+  /** The first signature that matched (regex source). */
+  marker: string;
+  /** The command line that produced the output. */
+  command: string;
+  /** A short excerpt of the failing output. */
+  excerpt: string;
+}
+
+/**
+ * Scan a list of (command, output) pairs for runtime-error signatures
+ * that indicate the generated code failed to run, even if the bash
+ * exit code was 0. Returns the first finding, or null.
+ *
+ * Issue #106: `timeout 5 python app.py 2>&1 | head` returned exit
+ * code 0 because the pipe's last command succeeded, masking the
+ * Traceback in stdout. KCode's error counter missed it, so the
+ * readiness-vs-errors gate didn't fire.
+ */
+export function detectRuntimeFailureInOutput(
+  events: Array<{ command: string; output: string }>,
+): RuntimeFailureInOutputFinding | null {
+  for (const ev of events) {
+    // Only check output from runtime execution commands
+    if (!/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(ev.command)) {
+      continue;
+    }
+    for (const sig of RUNTIME_ERROR_SIGNATURES) {
+      const m = ev.output.match(sig);
+      if (m) {
+        const start = Math.max(0, (m.index ?? 0) - 10);
+        const end = Math.min(ev.output.length, (m.index ?? 0) + m[0].length + 200);
+        return {
+          marker: sig.source,
+          command: ev.command.slice(0, 160),
+          excerpt: ev.output.slice(start, end).trim().slice(0, 240),
+        };
+      }
+    }
+  }
+  return null;
+}
+
+export function formatRuntimeFailureInOutputWarning(
+  finding: RuntimeFailureInOutputFinding,
+): string {
+  return (
+    `⚠ Grounding check: a runtime command produced an error in its output but the bash exit code was 0 — likely a piped command that masked the underlying failure. ` +
+    `Command: "${finding.command}". ` +
+    `Error excerpt: "${finding.excerpt}". ` +
+    `Do not present the artifact as working until the failing command runs cleanly (no Traceback / Error in output).`
+  );
+}
+
 export function formatPatchWithoutRerunWarning(
   finding: PatchWithoutRerunFinding,
 ): string {

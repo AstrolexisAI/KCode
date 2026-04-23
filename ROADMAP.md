@@ -4,7 +4,7 @@ This document tracks the commercial evolution of KCode. Licensing, Pro
 features, and infrastructure commitments are captured here so contributors,
 investors, and customers can see the trajectory.
 
-**Current state** (April 2026, v2.10.260)
+**Current state** (April 2026, v2.10.261)
 - License: Apache 2.0 (core)
 - Pro features: gated by `isPro()` runtime check, code currently in public repo
 - Infrastructure: local dev machine (no production server yet)

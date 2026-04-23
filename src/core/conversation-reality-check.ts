@@ -36,6 +36,9 @@ export async function* checkRealityPhase28(args: RealityCheckArgs): AsyncGenerat
     if (!currentAssistantText) return;
 
     const verdict = checkClaimReality(currentAssistantText, args.messages);
+    // Always compute raw counts so log output is useful for diagnosis
+    // of false-positive/false-negative fires (see issue #106).
+    const { successful, names: mutNames } = countSuccessfulMutations(args.messages);
     if (verdict.isHallucinatedCompletion) {
       const warning =
         `\n\n⚠️  REALITY CHECK (shown to user)\n` +
@@ -49,14 +52,12 @@ export async function* checkRealityPhase28(args: RealityCheckArgs): AsyncGenerat
       yield { type: "text_delta", text: warning };
       log.info(
         "reality-check",
-        `phase 28 fired: ${verdict.claims.length} claims, 0 mutations in current turn`,
+        `phase 28 fired: ${verdict.claims.length} claims, ${successful} mutations [${mutNames.join(",") || "none"}] in turn scope of ${args.messages.length} msgs`,
       );
     } else {
-      // Compute the count for logging visibility into near-fires
-      const { successful } = countSuccessfulMutations(args.messages);
-      log.debug(
+      log.info(
         "reality-check",
-        `phase 28 skipped: ${verdict.claims.length} claims, ${successful} mutations`,
+        `phase 28 skipped: ${verdict.claims.length} claims, ${successful} mutations [${mutNames.join(",") || "none"}]`,
       );
     }
   } catch (err) {

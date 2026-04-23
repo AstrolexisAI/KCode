@@ -739,6 +739,76 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         });
       }
 
+      // Check 4c — runtime error signature in bash OUTPUT even when
+      // exit code was 0. Issue #106: `timeout 5 python app.py 2>&1
+      // | head` succeeds (last pipe cmd = 0) and masks a Traceback
+      // in stdout. The existing errorsEncountered counter misses
+      // this because it only tracks is_error from tool results.
+      {
+        const { detectRuntimeFailureInOutput, formatRuntimeFailureInOutputWarning } =
+          await import("./grounding-gate.js");
+        // Build (command, output) pairs from this turn's Bash calls.
+        const bashOutputs: Array<{ command: string; output: string }> = [];
+        for (let i = 0; i < ctx.messages.length; i++) {
+          const m = ctx.messages[i];
+          if (!m) continue;
+          if (m.role === "assistant" && Array.isArray(m.content)) {
+            for (const b of m.content) {
+              const type = typeof b === "object" && b !== null
+                ? (b as { type?: unknown }).type
+                : undefined;
+              if (type !== "tool_use") continue;
+              if (String((b as { name?: unknown }).name ?? "") !== "Bash") continue;
+              const useId = String((b as { id?: unknown }).id ?? "");
+              const inp = (b as { input?: unknown }).input;
+              const cmd = typeof inp === "object" && inp !== null
+                ? String((inp as { command?: unknown }).command ?? "")
+                : "";
+              // Find matching tool_result in later user messages
+              for (let j = i + 1; j < ctx.messages.length; j++) {
+                const n = ctx.messages[j];
+                if (!n || n.role !== "user" || !Array.isArray(n.content)) continue;
+                for (const rb of n.content) {
+                  if (
+                    typeof rb === "object" && rb !== null &&
+                    (rb as { type?: unknown }).type === "tool_result" &&
+                    (rb as { tool_use_id?: unknown }).tool_use_id === useId
+                  ) {
+                    const raw = (rb as { content?: unknown }).content;
+                    const output = typeof raw === "string"
+                      ? raw
+                      : Array.isArray(raw)
+                        ? raw
+                            .filter((c: unknown): c is { type: string; text: string } =>
+                              typeof c === "object" && c !== null &&
+                              (c as { type?: unknown }).type === "text",
+                            )
+                            .map((c) => c.text)
+                            .join("\n")
+                        : "";
+                    bashOutputs.push({ command: cmd, output });
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+        const runtimeFailure = detectRuntimeFailureInOutput(bashOutputs);
+        if (runtimeFailure) {
+          const warning = formatRuntimeFailureInOutputWarning(runtimeFailure);
+          log.warn(
+            "grounding",
+            `runtime-failure-in-output: ${runtimeFailure.marker} from ${runtimeFailure.command.slice(0, 60)}`,
+          );
+          events.push({
+            type: "banner",
+            title: "Runtime error in output despite exit code 0",
+            subtitle: warning,
+          });
+        }
+      }
+
       // Check 4b — patch applied after runtime failure but no rerun.
       // Sequence: Bash (python/node/etc) returned non-zero →
       // Edit/Write/GrepReplace/sed -i applied → no successful rerun →
