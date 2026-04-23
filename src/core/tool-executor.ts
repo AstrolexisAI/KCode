@@ -1018,6 +1018,88 @@ export async function* executeToolsSequential(
       is_error: result.is_error,
     });
 
+    // Phase 3+4 follow-up: record successful mutations / runtime
+    // events into the TaskScope so the closeout renderer has
+    // authoritative accounting. Without this the scope reports
+    // "Files: none created or edited" even after a successful
+    // Write (#107 follow-up).
+    if (!result.is_error) {
+      try {
+        const { getTaskScopeManager } = await import("./task-scope.js");
+        const mgr = getTaskScopeManager();
+        if (mgr.current()) {
+          // Mutations
+          const input = call.input as Record<string, unknown>;
+          const filePath = typeof input.file_path === "string" ? input.file_path : "";
+          if (call.name === "Write" && filePath) {
+            mgr.recordMutation({ tool: "Write", path: filePath, at: Date.now() });
+          } else if ((call.name === "Edit" || call.name === "MultiEdit") && filePath) {
+            mgr.recordMutation({ tool: call.name, path: filePath, at: Date.now() });
+          } else if (call.name === "GrepReplace") {
+            // GrepReplace content includes "Applied N replacement(s) in M file(s)"
+            // — infer path from the result.content when possible
+            const matches = result.content.match(/\b([\/\w.-]+\.[a-zA-Z]+)\b/g);
+            if (matches) {
+              for (const p of new Set(matches)) {
+                mgr.recordMutation({ tool: "GrepReplace", path: p, at: Date.now() });
+              }
+            }
+          } else if (call.name === "Bash") {
+            // Runtime command detection: python/node/bun/cargo/go run
+            const cmd = typeof input.command === "string" ? input.command : "";
+            if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(cmd)) {
+              // Treat non-zero as failed; exit code 124 is timeout = alive but not verified.
+              // The content string starts with the stdout/stderr; we scan for traceback markers.
+              const hasTraceback = /\b(?:Traceback|Error|Exception|panic)\b/.test(result.content);
+              // Bash wraps non-zero exit with "exit code N" — not always available.
+              // Heuristic: if is_error was false, exit was 0. If traceback but exit 0, that's the #106 pipe case.
+              const runtimeFailed = hasTraceback;
+              mgr.recordRuntimeCommand({
+                command: cmd,
+                exitCode: 0, // non-error path = 0
+                output: result.content.slice(0, 1000),
+                runtimeFailed,
+                timestamp: Date.now(),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        log.debug(
+          "task-scope",
+          `recordMutation wiring error (non-fatal): ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    } else if (result.is_error) {
+      // Bash that EXITED with error AND ran a runtime command → record as failed
+      try {
+        if (call.name === "Bash") {
+          const input = call.input as Record<string, unknown>;
+          const cmd = typeof input.command === "string" ? input.command : "";
+          if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc)\b/i.test(cmd)) {
+            const { getTaskScopeManager } = await import("./task-scope.js");
+            const mgr = getTaskScopeManager();
+            if (mgr.current()) {
+              // Timeout (exit 124) means "started and stayed alive" but nothing verified.
+              const isTimeout = /exit code 124/.test(result.content) || /timed out/i.test(result.content);
+              mgr.recordRuntimeCommand({
+                command: cmd,
+                exitCode: isTimeout ? 124 : null,
+                output: result.content.slice(0, 1000),
+                runtimeFailed: !isTimeout,
+                timestamp: Date.now(),
+              });
+            }
+          }
+        }
+      } catch (err) {
+        log.debug(
+          "task-scope",
+          `runtime-error wiring error: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
     // 5. Run PostToolUse hooks (for logging/notification, non-blocking)
     if (ctx.hooks.hasHooks("PostToolUse")) {
       await ctx.hooks.runPostToolUse(call, {
