@@ -1002,6 +1002,22 @@ export async function* executeToolsSequential(
       );
     }
 
+    // Redact credentials from tool output before it enters the message
+    // history. Catches e.g. `grep rpcpassword ~/.bitcoin/bitcoin.conf`
+    // echoing the live password into the conversation (issue #100).
+    // Opt-out: set KCODE_DISABLE_REDACTION=1.
+    if (process.env.KCODE_DISABLE_REDACTION !== "1") {
+      const { redact } = await import("./secret-redactor.js");
+      const { redacted, rulesFired } = redact(contextContent);
+      if (rulesFired.length > 0) {
+        log.info(
+          "tool",
+          `Redacted ${rulesFired.length} secret(s) from ${call.name} output: ${rulesFired.join(", ")}`,
+        );
+        contextContent = redacted;
+      }
+    }
+
     toolResultBlocks.push({
       type: "tool_result",
       tool_use_id: call.id,

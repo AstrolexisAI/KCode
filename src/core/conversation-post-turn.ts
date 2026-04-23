@@ -606,6 +606,35 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);
   }
 
+  // Grounding gate — scan files the agent wrote/edited this turn for
+  // stub markers before declaring "done". See src/core/grounding-gate.ts
+  // and GitHub issue #100. Opt-out: KCODE_DISABLE_GROUNDING_GATE=1.
+  if (process.env.KCODE_DISABLE_GROUNDING_GATE !== "1") {
+    try {
+      const { filesModified } = ctx.collectSessionData();
+      if (filesModified.length > 0) {
+        const { scanFilesForStubs, formatStubWarning } = await import(
+          "./grounding-gate.js"
+        );
+        const findings = scanFilesForStubs(filesModified);
+        if (findings.length > 0) {
+          const warning = formatStubWarning(findings);
+          log.info(
+            "grounding",
+            `${findings.length} stub/placeholder finding(s) across ${filesModified.length} file(s)`,
+          );
+          events.push({
+            type: "banner",
+            title: "Partial implementation detected",
+            subtitle: warning.split("\n").slice(0, 4).join("\n"),
+          });
+        }
+      }
+    } catch (err) {
+      log.debug("grounding", `gate error: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   const contextFull =
     ctx.tokenCount > 0 &&
     ctx.config.contextWindowSize != null &&
