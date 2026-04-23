@@ -1,6 +1,12 @@
+<div align="center">
+  <img src="./assets/kulvex-logo.svg" alt="Kulvex" width="96" />
+</div>
+
 # KCode
 
 ### Deterministic AI security scanner and coding assistant for the terminal
+
+*by Astrolexis — Kulvex product family*
 
 ---
 
