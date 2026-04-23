@@ -12,7 +12,7 @@ Title (pick one; first is recommended):
 
 KCode is a static security scanner that flips the usual LLM-SAST split. Instead of sending your whole codebase to a cloud model and hoping it notices the bug, a deterministic scanner runs 256 hand-written patterns locally and then a small local LLM (runs on a 24GB GPU) verifies each candidate in isolation. The LLM's job is just to strip false positives — not to find bugs.
 
-Open source, AGPL-3.0: https://github.com/AstrolexisAI/KCode
+Open source, Apache 2.0: https://github.com/AstrolexisAI/KCode
 
 ### Why we built it
 
@@ -62,7 +62,7 @@ Full comparison page: https://kulvex.ai/kcode/compare
 - Not a dataflow engine (use CodeQL for that)
 - Not a compliance suite (we emit SARIF; use SonarQube/Snyk for dashboards)
 - Not the largest rule catalog
-- Not free for commercial embedding at scale — AGPL-3.0 covers SaaS / internal use; commercial licensing for proprietary embedding: contact@astrolexis.space
+- Free and permissive — Apache 2.0, use it anywhere (including commercial). Pro features (multi-model orchestrator, multi-agent swarm, hosted service) are a separate commercial repo: contact@astrolexis.space
 
 ### Stack
 

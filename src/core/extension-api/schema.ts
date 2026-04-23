@@ -15,7 +15,7 @@ export function generateOpenAPISchema(): object {
         name: "Astrolexis",
       },
       license: {
-        name: "AGPL-3.0-only",
+        name: "Apache-2.0",
       },
     },
     servers: [

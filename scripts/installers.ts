@@ -26,7 +26,7 @@ const RELEASE_DIR = "release";
 const INSTALLERS_DIR = "release/installers";
 const DESCRIPTION = "AI-powered coding assistant for the terminal by Astrolexis";
 const HOMEPAGE = "https://kulvex.ai";
-const LICENSE = "AGPL-3.0-only";
+const LICENSE = "Apache-2.0";
 const MAINTAINER = "Astrolexis <dev@astrolexis.com>";
 
 const args = process.argv.slice(2);
@@ -203,7 +203,7 @@ async function generatePkgbuild() {
     `pkgdesc="${DESCRIPTION}"`,
     `arch=('x86_64' 'aarch64')`,
     `url="${HOMEPAGE}"`,
-    `license=('AGPL-3.0-only')`,
+    `license=('Apache-2.0')`,
     `depends=()`,
     `source_x86_64=("https://github.com/AstrolexisAI/KCode/releases/download/v\${pkgver}/kcode-\${pkgver}-linux-x64.tar.gz")`,
     `source_aarch64=("https://github.com/AstrolexisAI/KCode/releases/download/v\${pkgver}/kcode-\${pkgver}-linux-arm64.tar.gz")`,
