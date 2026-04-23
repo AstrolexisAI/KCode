@@ -112,6 +112,112 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     expect(out!).not.toMatch(/Initial scaffold \/ MVP is in place/);
   });
 
+  test("alive_timeout → phase=partial + mustUsePartialLanguage (v282)", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordDirectoryVerified("/proj/bitcoin-tui-dashboard");
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/src/index.ts",
+      at: Date.now(),
+    });
+    mgr.recordRuntimeCommand({
+      command: "timeout 3 bun run src/index.ts",
+      exitCode: 124,
+      output: "blessed banner",
+      runtimeFailed: false,
+      status: "alive_timeout",
+      timestamp: Date.now(),
+    });
+    const scope = mgr.current()!;
+    expect(scope.phase).toBe("partial");
+    expect(scope.completion.mayClaimReady).toBe(false);
+    expect(scope.completion.reasons.some((r) => /stayed alive under timeout/i.test(r))).toBe(
+      true,
+    );
+  });
+
+  test("started_unverified → phase=partial", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordMutation({ tool: "Write", path: "/proj/main.py", at: Date.now() });
+    mgr.recordRuntimeCommand({
+      command: "python main.py",
+      exitCode: 0,
+      output: "Error: Request-sent",
+      runtimeFailed: false,
+      status: "started_unverified",
+      timestamp: Date.now(),
+    });
+    const scope = mgr.current()!;
+    expect(scope.phase).toBe("partial");
+    expect(scope.completion.mayClaimReady).toBe(false);
+  });
+
+  test("verified runtime does NOT downgrade", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordMutation({ tool: "Write", path: "/proj/main.py", at: Date.now() });
+    mgr.recordRuntimeCommand({
+      command: "python main.py",
+      exitCode: 0,
+      output: "Connected to node, height=820000",
+      runtimeFailed: false,
+      status: "verified",
+      timestamp: Date.now(),
+    });
+    const scope = mgr.current()!;
+    expect(scope.phase).not.toBe("partial");
+    expect(scope.completion.mayClaimReady).toBe(true);
+  });
+
+  test("failed status stays failed even if later alive_timeout comes in", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordRuntimeCommand({
+      command: "python main.py",
+      exitCode: 1,
+      output: "Traceback\nSyntaxError",
+      runtimeFailed: true,
+      status: "failed_traceback",
+      timestamp: Date.now(),
+    });
+    expect(mgr.current()!.phase).toBe("failed");
+    mgr.recordRuntimeCommand({
+      command: "timeout 3 python main.py",
+      exitCode: 124,
+      output: "...",
+      runtimeFailed: false,
+      status: "alive_timeout",
+      timestamp: Date.now(),
+    });
+    // Still failed — the stronger signal wins.
+    expect(mgr.current()!.phase).toBe("failed");
+  });
+
+  test("alive_timeout after post-patch edit does NOT clear rerunPassedAfterPatch", () => {
+    // A timeout-killed TUI isn't proof the patch worked. Keep
+    // patchAppliedAfterFailure armed so the forced-rerun gate
+    // can still fire (or the next real verification can land).
+    const mgr = newScaffoldScope();
+    mgr.recordRuntimeCommand({
+      command: "bun run index.ts",
+      exitCode: 1,
+      output: "SyntaxError",
+      runtimeFailed: true,
+      status: "failed_traceback",
+      timestamp: Date.now(),
+    });
+    mgr.recordMutation({ tool: "Edit", path: "/proj/index.ts", at: Date.now() });
+    mgr.recordRuntimeCommand({
+      command: "timeout 3 bun run index.ts",
+      exitCode: 124,
+      output: "...",
+      runtimeFailed: false,
+      status: "alive_timeout",
+      timestamp: Date.now(),
+    });
+    const scope = mgr.current()!;
+    expect(scope.verification.patchAppliedAfterFailure).toBe(true);
+    expect(scope.verification.rerunPassedAfterPatch).toBe(false);
+  });
+
   test("audit scope does NOT transition on failed_auth (stays audit)", () => {
     const mgr = getTaskScopeManager();
     mgr.beginNewScope({ type: "audit", userPrompt: "audita el proyecto" });
