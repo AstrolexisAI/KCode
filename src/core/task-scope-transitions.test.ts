@@ -71,7 +71,10 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
       exitCode: null,
       output:
         "✗ Port 3000 is already in use.\n  Spawning bun-direct on this port would race and fail.",
-      runtimeFailed: true,
+      // runner_misfire is a runner-level issue — the app never ran,
+      // so runtimeFailed is FALSE. The scope still transitions to
+      // partial via the pre-runtimeFailed branch in recordRuntimeCommand.
+      runtimeFailed: false,
       status: "runner_misfire",
       timestamp: Date.now(),
     });
@@ -96,7 +99,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
       exitCode: null,
       output:
         "Port 3000 is already in use. Spawning bun-direct on this port would race and fail.",
-      runtimeFailed: true,
+      runtimeFailed: false,
       status: "runner_misfire",
       timestamp: Date.now(),
     });

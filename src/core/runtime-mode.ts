@@ -188,3 +188,48 @@ export function inferRuntimeModeFromCwd(cwd: string): RuntimeMode {
 export function skipsServerPreflight(mode: RuntimeMode): boolean {
   return mode === "cli" || mode === "tui";
 }
+
+/**
+ * Extract the directory the command will ACTUALLY execute in. When
+ * a command starts with `cd PATH && ...` or `cd PATH; ...`, the
+ * effective cwd is PATH (resolved against the caller's cwd for
+ * relative targets). When the command has no cd prefix, the
+ * caller's cwd is the effective cwd.
+ *
+ * Issue #111 v276: the runtime-mode inference was called with the
+ * session cwd (~/proyectos) while the user's actual command was
+ * `cd ~/proyectos/bitcoin-tui-dashboard && bun run index.ts`. The
+ * package.json with blessed lived in the subdirectory, not in the
+ * session cwd, so mode resolved to "unknown" and the preflight
+ * still ran.
+ *
+ * Handles:
+ *   cd /abs/path && ...
+ *   cd ./rel/path && ...
+ *   cd rel/path && ...
+ *   cd path ; ...          (semicolon separator)
+ *
+ * NOT handled: shell-expanded paths ($HOME, ~), subshells, pushd.
+ * Those fall through to fallbackCwd — safe default.
+ */
+export function extractEffectiveCwd(command: string, fallbackCwd: string): string {
+  // Match a leading `cd PATH` up to && or ;. Tolerate leading whitespace
+  // and optional `sudo`/env-prefix — but only the first segment matters.
+  const m = command.match(/^\s*cd\s+([^\s&;|]+)/);
+  if (!m || !m[1]) return fallbackCwd;
+
+  const target = m[1].replace(/^['"]|['"]$/g, "");
+  if (target.startsWith("/")) return target;
+
+  // Very limited ~ expansion using HOME env (common enough to matter).
+  if (target.startsWith("~/") || target === "~") {
+    const home = process.env.HOME ?? "";
+    if (!home) return fallbackCwd;
+    return target === "~" ? home : `${home}/${target.slice(2)}`;
+  }
+
+  // Relative path — resolve against fallbackCwd.
+  const base = fallbackCwd.endsWith("/") ? fallbackCwd.slice(0, -1) : fallbackCwd;
+  const rel = target.startsWith("./") ? target.slice(2) : target;
+  return `${base}/${rel}`;
+}

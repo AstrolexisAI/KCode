@@ -395,6 +395,27 @@ export function createTaskScopeManager(): TaskScopeManager {
     recordRuntimeCommand(ev): void {
       if (_current === null) return;
       _current.verification.runtimeCommands.push(ev);
+
+      // runner_misfire is a runner-level issue, not an app-level
+      // failure. It doesn't set runtimeFailed (the app never ran),
+      // but we STILL need to transition the scope to "partial" so
+      // the closeout renders the runner-misfire next-step line
+      // instead of a generic "verified" verdict. Handled before
+      // the runtimeFailed branch to run regardless of that flag.
+      // Issue #111 v276 repro.
+      if (ev.status === "runner_misfire") {
+        _current.phase = "partial";
+        _current.completion.mayClaimReady = false;
+        _current.completion.mustUsePartialLanguage = true;
+        const reason =
+          "verification runner chose the wrong execution mode (CLI/TUI project executed through a web-spawn path)";
+        if (!_current.completion.reasons.includes(reason)) {
+          _current.completion.reasons.push(reason);
+        }
+        touch(_current);
+        return;
+      }
+
       if (ev.runtimeFailed) {
         _current.verification.lastRuntimeFailure = {
           command: ev.command,
@@ -419,13 +440,6 @@ export function createTaskScopeManager(): TaskScopeManager {
           _current.type = "configure";
           _current.phase = "blocked";
           const reason = "RPC authentication failed — credentials required";
-          if (!_current.completion.reasons.includes(reason)) {
-            _current.completion.reasons.push(reason);
-          }
-        } else if (ev.status === "runner_misfire") {
-          _current.phase = "partial";
-          const reason =
-            "verification runner chose the wrong execution mode (CLI/TUI project executed through a web-spawn path)";
           if (!_current.completion.reasons.includes(reason)) {
             _current.completion.reasons.push(reason);
           }

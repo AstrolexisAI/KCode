@@ -309,13 +309,19 @@ export function runSpawnPreflight(
   // commands (next dev, vite, flask run, ...) keep the check.
   if (detection.framework === "bun-direct" || detection.framework === "node-direct") {
     try {
-      const { inferRuntimeModeFromCwd, skipsServerPreflight } =
+      const { inferRuntimeModeFromCwd, skipsServerPreflight, extractEffectiveCwd } =
         require("./runtime-mode") as typeof import("./runtime-mode");
-      const mode = inferRuntimeModeFromCwd(cwd);
+      // The user's command often starts with `cd SUBDIR && bun run
+      // index.ts`. Infer mode from the EFFECTIVE cwd (the subdir),
+      // not from the session cwd — otherwise the package.json /
+      // entry file with the TUI imports lives in a different
+      // directory from the one we scan. Issue #111 v276 repro.
+      const effectiveCwd = extractEffectiveCwd(command, cwd);
+      const mode = inferRuntimeModeFromCwd(effectiveCwd);
       if (skipsServerPreflight(mode)) {
         log.debug(
           "preflight",
-          `skip ${detection.framework} preflight: runtime mode = ${mode} (non-web)`,
+          `skip ${detection.framework} preflight: effective cwd ${effectiveCwd}, runtime mode = ${mode}`,
         );
         return null;
       }

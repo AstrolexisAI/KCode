@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { inferRuntimeModeFromText, skipsServerPreflight } from "./runtime-mode";
+import {
+  extractEffectiveCwd,
+  inferRuntimeModeFromText,
+  skipsServerPreflight,
+} from "./runtime-mode";
 
 describe("inferRuntimeModeFromText", () => {
   test("blessed-contrib imports → tui (v275 EXACT repro)", () => {
@@ -82,6 +86,55 @@ import { Command } from "commander";
     expect(inferRuntimeModeFromText("import x from 'expressjs-helpers';")).toBe(
       "unknown",
     );
+  });
+});
+
+describe("extractEffectiveCwd", () => {
+  test("cd absolute path && cmd → absolute", () => {
+    expect(
+      extractEffectiveCwd(
+        "cd /home/curly/proyectos/bitcoin-tui-dashboard && bun run index.ts",
+        "/home/curly",
+      ),
+    ).toBe("/home/curly/proyectos/bitcoin-tui-dashboard");
+  });
+
+  test("cd relative path && cmd → resolved against fallback", () => {
+    expect(extractEffectiveCwd("cd bitcoin-tui-dashboard && bun run index.ts", "/home/curly/proyectos")).toBe(
+      "/home/curly/proyectos/bitcoin-tui-dashboard",
+    );
+  });
+
+  test("cd ./rel && cmd → resolved against fallback (no double-slash)", () => {
+    expect(
+      extractEffectiveCwd("cd ./sub && bun run app.ts", "/home/curly/proyectos"),
+    ).toBe("/home/curly/proyectos/sub");
+  });
+
+  test("cd ~/abs/path → HOME expansion", () => {
+    process.env.HOME = "/home/curly";
+    expect(
+      extractEffectiveCwd("cd ~/proyectos/app && bun run app.ts", "/tmp"),
+    ).toBe("/home/curly/proyectos/app");
+  });
+
+  test("no cd prefix → returns fallback", () => {
+    expect(extractEffectiveCwd("bun run index.ts", "/home/curly/proyectos")).toBe(
+      "/home/curly/proyectos",
+    );
+  });
+
+  test("timeout wrapper before cd is NOT supported (returns fallback)", () => {
+    // Documented limitation — matches conservative behavior.
+    expect(
+      extractEffectiveCwd("timeout 5 cd sub && bun run index.ts", "/home/curly"),
+    ).toBe("/home/curly");
+  });
+
+  test("semicolon separator also splits", () => {
+    expect(
+      extractEffectiveCwd("cd /tmp/proj ; bun run index.ts", "/home/curly"),
+    ).toBe("/tmp/proj");
   });
 });
 
