@@ -624,6 +624,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         detectCreationClaimMismatch,
         formatClaimMismatchWarning,
         countFilesOnDisk,
+        detectAuthClaim,
+        formatAuthClaimWarning,
       } = await import("./grounding-gate.js");
 
       // Only count files that ACTUALLY exist on disk. Session tracker
@@ -660,6 +662,23 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         events.push({
           type: "banner",
           title: "Ungrounded completion claim",
+          subtitle: warning,
+        });
+      }
+
+      // Check 3 — auth/network operational claim that isn't provable
+      // from a passive session. Fires regardless of file count because
+      // the user should always verify these manually. Issue #101.
+      const authFinding = detectAuthClaim(finalText);
+      if (authFinding) {
+        const warning = formatAuthClaimWarning(authFinding);
+        log.warn(
+          "grounding",
+          `unverifiable auth claim: "${authFinding.snippet}"`,
+        );
+        events.push({
+          type: "banner",
+          title: "Unverified auth/network assumption",
           subtitle: warning,
         });
       }

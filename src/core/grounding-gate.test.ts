@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   countFilesOnDisk,
+  detectAuthClaim,
   detectCreationClaimMismatch,
+  formatAuthClaimWarning,
   formatClaimMismatchWarning,
   formatStubWarning,
   scanFilesForStubs,
@@ -244,6 +246,53 @@ export async function login(email: string, password: string): Promise<string> {
     expect(warning).toContain("zero files were written");
     expect(warning).toContain("ha sido creado");
     expect(warning).toContain("Do not present this turn as complete");
+  });
+
+  // ─── Auth claim detection (issue #101) ────────────────────────
+
+  test("detects the EXACT 2026-04-23 phrase '(sin auth, como funciona)'", () => {
+    const finalText =
+      "Conecta al RPC de tu nodo en localhost:8332 (sin auth, como funciona).";
+    const finding = detectAuthClaim(finalText);
+    expect(finding).not.toBeNull();
+    expect(finding?.snippet).toMatch(/sin auth/i);
+  });
+
+  test("detects 'no authentication required' in English", () => {
+    const finalText = "The RPC is reachable (no auth required) from this host.";
+    expect(detectAuthClaim(finalText)).not.toBeNull();
+  });
+
+  test("detects 'RPC abierto'", () => {
+    const finalText = "El nodo tiene RPC abierto en el puerto 8332.";
+    expect(detectAuthClaim(finalText)).not.toBeNull();
+  });
+
+  test("detects 'sin credenciales'", () => {
+    const finalText = "Se puede llamar al nodo sin credenciales directamente.";
+    expect(detectAuthClaim(finalText)).not.toBeNull();
+  });
+
+  test("detects 'without a password'", () => {
+    const finalText = "Connects without a password since it's localhost-only";
+    expect(detectAuthClaim(finalText)).not.toBeNull();
+  });
+
+  test("does NOT trigger on neutral wording 'accesible desde este host'", () => {
+    const finalText = "RPC accesible desde este host. Authentication mode not yet confirmed.";
+    expect(detectAuthClaim(finalText)).toBeNull();
+  });
+
+  test("does NOT trigger on empty text", () => {
+    expect(detectAuthClaim("")).toBeNull();
+  });
+
+  test("formatAuthClaimWarning mentions the risk explicitly", () => {
+    const finding = { snippet: "(sin auth, como funciona)", rule: "..." };
+    const warning = formatAuthClaimWarning(finding);
+    expect(warning).toContain("Grounding check");
+    expect(warning).toContain("sin auth");
+    expect(warning).toMatch(/does not prove|Successful local/i);
   });
 
   test("formatStubWarning caps at 8 items with overflow note", () => {

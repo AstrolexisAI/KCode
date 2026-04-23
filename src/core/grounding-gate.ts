@@ -255,6 +255,65 @@ export function detectCreationClaimMismatch(
   return null;
 }
 
+// Patterns for operational / network claims that require actual evidence
+// from the session, not inference from a successful unauthenticated call.
+// See issue #101: agent claimed "Conecta al RPC de tu nodo en
+// localhost:8332 (sin auth, como funciona)" without ever running an
+// authenticated vs unauthenticated comparison.
+const UNVERIFIABLE_AUTH_CLAIM_PATTERNS: RegExp[] = [
+  // Spanish
+  /\b\(\s*sin\s+(?:auth|autenticaci[oó]n)\b/i,
+  /\bsin\s+(?:auth|autenticaci[oó]n)\s*[,.)]/i,
+  /\b(?:no requiere|no pide|no usa)\s+(?:auth|autenticaci[oó]n|credenciales|password|contraseña)\b/i,
+  /\bsin\s+(?:credenciales|password|contraseña|usuario)\b/i,
+  /\bRPC\s+(?:abierto|sin\s+auth|p[uú]blico)\b/i,
+  // English
+  /\b\(\s*no\s+(?:auth|authentication)\s*(?:required|needed)?\s*[,)]/i,
+  /\bwithout\s+(?:auth|authentication|credentials|a\s+password)\b/i,
+  /\b(?:no|does not require|doesn'?t need)\s+auth(?:entication)?\b/i,
+  /\bRPC\s+(?:is\s+)?(?:open|public|unauthenticated)\b/i,
+];
+
+export interface AuthClaimFinding {
+  /** The specific phrase in the final text that matched. */
+  snippet: string;
+  /** The regex rule that fired (for telemetry). */
+  rule: string;
+}
+
+/**
+ * Detect ungrounded auth/network claims in the final response. Unlike
+ * the creation-claim check, this one doesn't measure evidence — it
+ * always flags these claims because verifying them requires comparing
+ * authenticated vs unauthenticated access patterns, which the session
+ * almost never does. Safer to always warn and let the user confirm.
+ */
+export function detectAuthClaim(finalText: string): AuthClaimFinding | null {
+  if (!finalText || finalText.trim().length === 0) return null;
+
+  for (const pattern of UNVERIFIABLE_AUTH_CLAIM_PATTERNS) {
+    const match = finalText.match(pattern);
+    if (match) {
+      const start = Math.max(0, (match.index ?? 0) - 30);
+      const end = Math.min(finalText.length, (match.index ?? 0) + match[0].length + 60);
+      return {
+        snippet: finalText.slice(start, end).trim(),
+        rule: pattern.source,
+      };
+    }
+  }
+  return null;
+}
+
+export function formatAuthClaimWarning(finding: AuthClaimFinding): string {
+  return (
+    `⚠ Grounding check: the response asserts a specific auth/network property that isn't proven by the session. ` +
+    `Matched phrase: "${finding.snippet}". ` +
+    `Successful local access does not prove "no auth required" — your node could be accepting localhost without creds while still requiring them externally. ` +
+    `Verify directly with the customer/environment before acting on this claim.`
+  );
+}
+
 /**
  * Format a creation-claim mismatch warning.
  */

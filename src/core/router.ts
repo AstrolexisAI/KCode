@@ -214,6 +214,14 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
   // multi-step even though it contains "analizá". Structure wins over keyword.
   if (MULTI_STEP_PATTERNS.some((p) => p.test(userMessage))) return "multi-step";
 
+  // Scaffold/creation BEFORE analysis. A prompt like "crear un proyecto nuevo
+  // … para analizar la blockchain" is scaffold-first — the "analyze" is what
+  // the product will do, not what the agent should do. Without this order,
+  // the "analizar" keyword wins and the task is mis-routed to an analysis-
+  // tuned model that emits inspection-style output instead of scaffolding.
+  // See GitHub issue #101.
+  if (isMonolithicCreation(userMessage)) return "complex-edit";
+
   // Analysis: audit, review, debug, investigate
   if (ANALYSIS_PATTERNS.some((p) => p.test(userMessage))) {
     if (/\b(captura|screenshot)\b/i.test(userMessage)) return "vision";
