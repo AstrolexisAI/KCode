@@ -66,6 +66,21 @@ export interface RuntimeCommandEvent {
   output: string;         // stdout + stderr combined (truncated to 2KB)
   runtimeFailed: boolean; // true when output contains a traceback / error signature
                           // even if exitCode === 0 (see issue #106)
+  /**
+   * Fine-grained classification. Populated by tool-executor via
+   * classifyRuntimeStatus(); defaults to inferring from runtimeFailed
+   * when absent so legacy callers keep working. See runtime-classifier.ts.
+   */
+  status?:
+    | "not_run"
+    | "started"
+    | "verified"
+    | "alive_timeout"
+    | "failed_auth"
+    | "failed_connection"
+    | "failed_traceback"
+    | "failed_dependency"
+    | "failed_unknown";
   timestamp: number;
 }
 
@@ -383,14 +398,39 @@ export function createTaskScopeManager(): TaskScopeManager {
           command: ev.command,
           error: ev.output.slice(0, 400),
         };
-        _current.phase = "failed";
+        // Status-driven transitions. failed_auth on a scaffold/implement
+        // scope means the code artifact is fine but the surrounding
+        // environment (credentials) needs user configuration — flip
+        // task type to "configure" and phase to "blocked" so the
+        // closeout renders a config-next-step instead of a generic
+        // "failed". Issue #111 v273 repro: 401 Unauthorized from
+        // bitcoind was classified as generic runtime failure; now it
+        // transitions to configure/blocked with an explicit credentials
+        // remediation step.
+        if (
+          ev.status === "failed_auth" &&
+          (_current.type === "scaffold" || _current.type === "implement")
+        ) {
+          _current.type = "configure";
+          _current.phase = "blocked";
+          const reason = "RPC authentication failed — credentials required";
+          if (!_current.completion.reasons.includes(reason)) {
+            _current.completion.reasons.push(reason);
+          }
+        } else {
+          _current.phase = "failed";
+        }
         _current.completion.mayClaimReady = false;
         _current.completion.mustUsePartialLanguage = true;
         // A new failure resets the rerun counter — the old attempts
         // were for a different failure cluster.
         _current.verification.rerunAttempts = 0;
-        if (!_current.completion.reasons.includes("runtime failure")) {
-          _current.completion.reasons.push("runtime failure");
+        const genericReason =
+          ev.status && ev.status.startsWith("failed_")
+            ? `runtime failure: ${ev.status}`
+            : "runtime failure";
+        if (!_current.completion.reasons.includes(genericReason)) {
+          _current.completion.reasons.push(genericReason);
         }
       } else if (_current.verification.patchAppliedAfterFailure) {
         // Successful rerun after a patch clears the "not rerun" flag.

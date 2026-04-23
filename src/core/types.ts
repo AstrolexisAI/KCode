@@ -200,6 +200,16 @@ export interface TurnCostEntry {
 
 export type StreamEvent =
   | { type: "text_delta"; text: string }
+  /**
+   * Replace the LAST committed assistant-role text block in the UI.
+   * Emitted by conversation-post-turn when the scope closes in a
+   * failed/partial/blocked state — the model's optimistic draft
+   * should be displaced by the scope-grounded closeout instead of
+   * coexisting with it. The UI locates the most recent completed
+   * entry with kind==="text" && role==="assistant" and overwrites
+   * its `text` field with the provided payload.
+   */
+  | { type: "text_replace_last"; text: string }
   | { type: "thinking_delta"; thinking: string }
   | { type: "tool_use_start"; toolUseId: string; name: string }
   | { type: "tool_input_delta"; toolUseId: string; partialJson: string }

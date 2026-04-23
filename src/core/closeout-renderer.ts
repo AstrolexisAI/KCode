@@ -126,7 +126,31 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     lines.push("- Runtime: **not verified** — the generated code was not executed this turn.");
   } else {
     const last = runtimes[runtimes.length - 1]!;
-    if (last.runtimeFailed) {
+    if (last.status === "failed_auth") {
+      const authLine =
+        last.output
+          .split("\n")
+          .map((l) => l.trim())
+          .find((l) => /401|403|Unauthorized|Forbidden|auth/i.test(l)) ??
+        "auth rejected";
+      lines.push(`- Runtime: **failed_auth** (${authLine.slice(0, 140)})`);
+    } else if (last.status === "failed_dependency") {
+      const depLine =
+        last.output
+          .split("\n")
+          .map((l) => l.trim())
+          .find((l) => /ModuleNotFound|ImportError|cannot find/i.test(l)) ??
+        "missing dependency";
+      lines.push(`- Runtime: **failed_dependency** (${depLine.slice(0, 140)})`);
+    } else if (last.status === "failed_connection") {
+      const connLine =
+        last.output
+          .split("\n")
+          .map((l) => l.trim())
+          .find((l) => /refused|unreachable|resolve|ECONNREFUSED|ENOTFOUND/i.test(l)) ??
+        "connection refused";
+      lines.push(`- Runtime: **failed_connection** (${connLine.slice(0, 140)})`);
+    } else if (last.runtimeFailed || last.status === "failed_traceback" || last.status === "failed_unknown") {
       const errorLine =
         last.output
           .split("\n")
@@ -160,17 +184,28 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     lines.push(`- Secrets detected (redacted): ${kinds}.`);
   }
 
-  // Plan progress derived from scope.progress (Phase 6). This survives
-  // even if the Plan tool's internal _activePlan gets reset (issue #107:
-  // plan visible displayed 0/4 despite successful writes in the same
-  // turn). Scope mirror is authoritative.
+  // Plan progress. Source of truth is whatever is higher:
+  //   A) completedSteps — steps the Plan tool explicitly marked done.
+  //   B) deriveCompletedFromVerification(scope) — steps whose keywords
+  //      match the verification state (project root verified, files
+  //      written, runtime verified, etc.).
+  // Issue #111 v273 repro: the model never called plan.update after
+  // declaring 4 steps, so completedSteps stayed [] and the closeout
+  // rendered "0/4" while the project root was verified, 3 files were
+  // written, and runtime had actually run. Derivation fixes that.
   const planned = scope.progress.plannedSteps.length;
-  const completed = scope.progress.completedSteps.length;
+  const explicitCompleted = scope.progress.completedSteps.length;
+  const derivedCompleted = countDerivedCompletedSteps(scope);
+  const completed = Math.max(explicitCompleted, derivedCompleted);
   if (planned > 0) {
     const current = scope.progress.currentStep
       ? ` — current: "${scope.progress.currentStep}"`
       : "";
-    lines.push(`- Plan progress: ${completed}/${planned} step(s) completed${current}.`);
+    const note =
+      derivedCompleted > explicitCompleted ? " (derived from verification)" : "";
+    lines.push(
+      `- Plan progress: ${completed}/${planned} step(s) completed${current}${note}.`,
+    );
   }
 
   // Why the turn cannot be marked done
@@ -184,11 +219,26 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
 
   // Overall verdict
   lines.push("");
-  if (scope.phase === "failed") {
+  // failed_auth on scaffold/implement → task transitioned to configure/blocked
+  // in the scope manager. Render a precise next-step instead of a generic
+  // "failed". Issue #111 v273 repro.
+  const lastRuntime = runtimes[runtimes.length - 1];
+  const isAuthBlocked =
+    scope.phase === "blocked" &&
+    (scope.type === "configure" || lastRuntime?.status === "failed_auth");
+  if (isAuthBlocked) {
+    lines.push(
+      "**Status: blocked by configuration.** The project artifacts exist, but the runtime rejected the credentials.",
+    );
+    lines.push("");
+    lines.push(
+      "**Next required step:** supply valid credentials. For Bitcoin Core, set `BITCOIN_RPC_USER` and `BITCOIN_RPC_PASSWORD` (or equivalent `rpcuser` / `rpcpassword` in `bitcoin.conf`) and re-run the connection test.",
+    );
+  } else if (scope.phase === "failed") {
     lines.push("**Status: failed.** The task produced artifacts but verification did not pass.");
     lines.push("");
     lines.push(
-      "Do not act on any claim of 'created successfully', 'connection works', or 'ready to run' in the summary above — those are not verified.",
+      "The narrative summary above is unverified. Treat the lines above this block as suggestions, not facts — only the verification lines here reflect real state.",
     );
   } else if (scope.completion.mustUsePartialLanguage || scope.phase === "partial") {
     lines.push(
@@ -199,6 +249,76 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Count the plannedSteps that appear satisfied by the verification
+ * state, independent of whether the Plan tool was told they're done.
+ * Each step title is matched against keyword signals — the step
+ * counts as completed when its signal is present in scope state.
+ *
+ * Keyword → signal mapping:
+ *   create / project / directory      → projectRoot.status === "verified"
+ *   install / deps / dependenc        → deps present (any Write to requirements / pyproject / package.json, OR any runtime command succeeded importing)
+ *   write / script / code / main / app  → at least one file created/edited
+ *   test / verify / run / check / connect → at least one non-failed runtime command
+ */
+export function countDerivedCompletedSteps(scope: TaskScope): number {
+  let done = 0;
+  const v = scope.verification;
+  const lastRuntime = v.runtimeCommands[v.runtimeCommands.length - 1];
+  const depsFilesTouched = [...v.filesWritten, ...v.filesEdited].some((p) =>
+    /(?:requirements\.txt|pyproject\.toml|package\.json|Cargo\.toml|go\.mod|Gemfile)$/i.test(p),
+  );
+  const anyFileWritten = v.filesWritten.length + v.filesEdited.length > 0;
+  const anyRuntimeHappened = v.runtimeCommands.length > 0;
+  const lastRuntimeOk =
+    !!lastRuntime &&
+    !lastRuntime.runtimeFailed &&
+    (lastRuntime.status ?? "").startsWith("failed_") === false;
+
+  for (const title of scope.progress.plannedSteps) {
+    const t = title.toLowerCase();
+
+    // Create / scaffold a project root
+    if (/(create|cre[aá]r|init|setup|scaffold|project|directory|carpeta|proyecto)/i.test(t)) {
+      if (
+        scope.projectRoot.status === "verified" ||
+        scope.projectRoot.status === "created"
+      ) {
+        done++;
+        continue;
+      }
+    }
+
+    // Install dependencies
+    if (/(install|depend|requirement|dependenc|paquet|librer)/i.test(t)) {
+      if (depsFilesTouched || anyRuntimeHappened) {
+        done++;
+        continue;
+      }
+    }
+
+    // Write application code
+    if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci)/i.test(t)) {
+      if (anyFileWritten) {
+        done++;
+        continue;
+      }
+    }
+
+    // Test / verify / run / connect
+    if (/(test|verify|verific|run|ejecut|check|revis|connect|conect)/i.test(t)) {
+      if (lastRuntimeOk) {
+        done++;
+        continue;
+      }
+      // If runtime happened but failed, the step is in_progress, not
+      // completed — do NOT count. The closeout verdict already
+      // renders the failure separately.
+    }
+  }
+  return done;
 }
 
 /**
