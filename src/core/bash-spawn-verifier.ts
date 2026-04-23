@@ -356,6 +356,39 @@ export async function verifyBackgroundSpawn(
   const detection = detectServerSpawn(command);
   if (!detection) return null;
 
+  // Phase 13 (#111 v279 follow-up): skip the HTTP probe for TUI/CLI
+  // projects. detectServerSpawn over-matches on the bun-direct /
+  // node-direct filename patterns (index.ts / app.ts / main.ts)
+  // when the file is actually a blessed TUI entry point. Probing
+  // port 3000 then hits whatever unrelated process happens to be
+  // listening there and returns a false-positive HTTP 200, which
+  // the model reads as "the app works." Issue #111 v279 repro:
+  // Bitcoin TUI scaffold was "verified" against a foreign node
+  // on port 3000.
+  if (detection.framework === "bun-direct" || detection.framework === "node-direct") {
+    try {
+      const { inferRuntimeModeFromCwd, extractEffectiveCwd, skipsServerPreflight } =
+        require("./runtime-mode") as typeof import("./runtime-mode");
+      // Effective cwd: honor `cd SUBDIR && ...` in the command so the
+      // package.json / entry file we scan belongs to the project
+      // actually being spawned, not the session cwd.
+      const effective = cwd ? extractEffectiveCwd(command, cwd) : cwd ?? "";
+      const mode = effective ? inferRuntimeModeFromCwd(effective) : "unknown";
+      if (skipsServerPreflight(mode)) {
+        log.debug(
+          "verifier",
+          `skip ${detection.framework} probe: effective cwd ${effective}, mode=${mode} (non-web)`,
+        );
+        return null;
+      }
+    } catch (err) {
+      log.debug(
+        "verifier",
+        `runtime-mode inference failed, falling through: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
   const port = extractDeclaredPort(command, detection.defaultPort);
   if (!port) {
     log.debug("verifier", `${detection.framework}: no port resolved, skipping probe`);
