@@ -75,6 +75,16 @@ describe("secret-redactor", () => {
     expect(out).not.toContain("hunter2");
   });
 
+  test("masks the EXACT 2026-04-23 #107 assistant-prose leak", () => {
+    // Real model output: "(user: curly, password: tronco, port: 8332)"
+    const input =
+      "Configured with your RPC credentials (user: curly, password: tronco, port: 8332)";
+    const { redacted, rulesFired } = redact(input);
+    expect(redacted).not.toContain("tronco");
+    expect(redacted).toContain("***REDACTED***");
+    expect(rulesFired).toContain("password_assign");
+  });
+
   test("returns input unchanged when no secrets present", () => {
     const input = "ls -la /tmp\ntotal 0\ndrwxrwxrwt 15 root root 340 Apr 23 09:00 .";
     const { redacted, rulesFired } = redact(input);
