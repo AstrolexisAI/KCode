@@ -3,8 +3,8 @@
 
 import type { ConversationManager } from "../core/conversation.js";
 import { getFileChangeSuggester } from "../core/file-watcher.js";
-import { redactSilently } from "../core/secret-redactor.js";
 import type { StreamEvent } from "../core/types.js";
+import { renderVisibleText } from "../core/visible-text-renderer.js";
 import { summarizeInput } from "./builtin-actions.js";
 import type { KodiEvent } from "./components/Kodi.js";
 import type { MessageEntry } from "./components/MessageList.js";
@@ -211,15 +211,10 @@ export async function processStreamEvents(
         // If the text is long code that will be written via Write/Edit, collapse it
         // to avoid flooding the terminal with hundreds of raw code lines.
         if (currentText.length > 0) {
-          // Apply the secret redactor to the assistant's own prose before
-          // it reaches the UI. Catches the #107 case where the model
-          // echoed rpcpassword from bitcoin.conf back in its summary even
-          // though the tool-result redactor had already masked it in
-          // context. Opt-out: KCODE_DISABLE_REDACTION=1.
-          let text =
-            process.env.KCODE_DISABLE_REDACTION === "1"
-              ? currentText
-              : redactSilently(currentText);
+          // Phase 5: route assistant prose through the unified visible-text
+          // renderer. Redacts + records to scope. Catches the #107 case
+          // where the model echoed rpcpassword in its summary.
+          let text = renderVisibleText(currentText, { source: "assistant_prose" });
           const lineCount = text.split("\n").length;
           if (lineCount > 20) {
             // Extract any non-code preamble (text before the first code fence or long code block)
@@ -525,11 +520,8 @@ export async function processStreamEvents(
         }
         // Finalize any remaining streamed text
         if (currentText.length > 0) {
-          // Same redaction pass as the other finalization branch (#107).
-          let text =
-            process.env.KCODE_DISABLE_REDACTION === "1"
-              ? currentText
-              : redactSilently(currentText);
+          // Phase 5: unified visible-text pipeline (#107).
+          let text = renderVisibleText(currentText, { source: "assistant_prose" });
           // Clean up truncated questions/confirmations at the end
           try {
             const { isTruncatedQuestion } = require("../core/continuation-merge.js");
