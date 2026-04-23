@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  countFilesOnDisk,
   detectCreationClaimMismatch,
   formatClaimMismatchWarning,
   formatStubWarning,
@@ -159,6 +160,14 @@ export async function login(email: string, password: string): Promise<string> {
 
   // ─── Creation claim mismatch (2026-04-23 Bitcoin TUI pattern) ──
 
+  test("detects the EXACT 2026-04-23 phrase 'Proyecto X creado en /path'", () => {
+    const finalText =
+      "Proyecto Bitcoin TUI Dashboard creado en /home/curly/proyectos/bitcoin-tui-dashboard. Incluye venv con Textual.";
+    const mismatch = detectCreationClaimMismatch(finalText, 0);
+    expect(mismatch).not.toBeNull();
+    expect(mismatch?.snippet).toMatch(/creado/i);
+  });
+
   test("detects 'ha sido creado' when 0 files written", () => {
     const finalText = "El proyecto Bitcoin TUI Dashboard ha sido creado en /home/curly/proyectos/…";
     const mismatch = detectCreationClaimMismatch(finalText, 0);
@@ -196,6 +205,33 @@ export async function login(email: string, password: string): Promise<string> {
   test("does NOT trigger on empty text", () => {
     expect(detectCreationClaimMismatch("", 0)).toBeNull();
     expect(detectCreationClaimMismatch("   \n  \n", 0)).toBeNull();
+  });
+
+  test("countFilesOnDisk ignores paths that don't exist (blocked writes)", () => {
+    const existing = write("real.py", "print('hi')");
+    const blocked = join(tmp, "blocked-README.md"); // never created
+    expect(countFilesOnDisk([existing, blocked])).toBe(1);
+    expect(countFilesOnDisk([blocked])).toBe(0);
+    expect(countFilesOnDisk([])).toBe(0);
+  });
+
+  test("creation claim fires when all writes were blocked (none exist on disk)", () => {
+    // Simulate the 2026-04-23 Bitcoin TUI turn:
+    // Write README.md → blocked. No real files landed.
+    const blockedPath = join(tmp, "bitcoin-tui", "README.md");
+    const actualCount = countFilesOnDisk([blockedPath]);
+    expect(actualCount).toBe(0);
+    const finalText =
+      "Proyecto Bitcoin TUI Dashboard creado en /home/curly/proyectos/bitcoin-tui-dashboard.";
+    expect(detectCreationClaimMismatch(finalText, actualCount)).not.toBeNull();
+  });
+
+  test("creation claim does NOT fire when real file landed on disk", () => {
+    const real = write("main.py", "def main(): pass");
+    const count = countFilesOnDisk([real]);
+    expect(count).toBe(1);
+    const finalText = "Proyecto creado en /tmp/foo";
+    expect(detectCreationClaimMismatch(finalText, count)).toBeNull();
   });
 
   test("formatClaimMismatchWarning produces readable message", () => {
