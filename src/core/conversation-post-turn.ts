@@ -960,6 +960,18 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         const { runSelfCritique, formatCritiqueBanner } = await import(
           "./self-critique.js"
         );
+        // Prefer tertiaryModel; fall back to the primary model which
+        // is guaranteed reachable (the conversation just ran on it).
+        // Without this fallback, runForkedAgent resolves "model=undefined"
+        // to a default URL that may be unreachable (seen on 2026-04-23:
+        // "Unable to connect. Is the computer able to access the url?").
+        // Critique by the same model is a weaker signal than an
+        // independent reviewer, but weak > silent skip. Issue #105.
+        const critiqueModel = ctx.config.tertiaryModel ?? ctx.config.model;
+        log.info(
+          "self-critique",
+          `model selection: tertiary=${ctx.config.tertiaryModel ?? "(unset)"} primary=${ctx.config.model} → using ${critiqueModel}`,
+        );
         const critique = await runSelfCritique({
           draftText: sc_draftText,
           recentMessages: ctx.messages.slice(-20),
@@ -967,7 +979,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           filesWritten: sc_sessionData.filesModified,
           repairBlocked: sc_repairBlocked,
           userPrompt: sc_userPrompt,
-          model: ctx.config.tertiaryModel,
+          model: critiqueModel,
+          apiBase: ctx.config.apiBase,
+          apiKey: ctx.config.apiKey,
         });
 
         if (!critique.skipped && critique.contradictions.length > 0) {
