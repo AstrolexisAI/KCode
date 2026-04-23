@@ -49,7 +49,16 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   lines.push("");
   lines.push("---");
   lines.push("");
-  lines.push("**⚖ Scope-grounded status**");
+  // When the scope says the artifact is not ready, make the header
+  // explicitly supersede the draft above instead of coexisting with
+  // it as "extra info". Issue #107/#108 follow-up.
+  if (scope.phase === "failed" || !scope.completion.mayClaimReady) {
+    lines.push("## ⚠ Verified status (supersedes any 'ready/created successfully' claim above)");
+  } else if (scope.completion.mustUsePartialLanguage) {
+    lines.push("## ⚠ Verified status — partial progress (read below, not the optimistic summary above)");
+  } else {
+    lines.push("**⚖ Scope-grounded status**");
+  }
   lines.push("");
 
   // What landed on disk
@@ -86,7 +95,6 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   } else {
     const last = runtimes[runtimes.length - 1]!;
     if (last.runtimeFailed) {
-      // Prefer an error-signature line over the first-any-line.
       const errorLine =
         last.output
           .split("\n")
@@ -100,6 +108,14 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
         "";
       lines.push(
         `- Runtime: **failed** (${errorLine.slice(0, 140) || "see previous output"})`,
+      );
+    } else if (last.exitCode === 124) {
+      // Timeout: the process started and stayed alive, but nothing
+      // downstream of that was actually verified (no RPC round-trip,
+      // no UI assertion, etc.). Call it out so the user doesn't
+      // mistake "alive under timeout" for "works end-to-end".
+      lines.push(
+        `- Runtime: **started and stayed alive under timeout** — no connection/RPC/UI assertion verified.`,
       );
     } else {
       lines.push(`- Runtime: passed (${runtimes.length} command${runtimes.length > 1 ? "s" : ""}).`);
@@ -138,6 +154,10 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   lines.push("");
   if (scope.phase === "failed") {
     lines.push("**Status: failed.** The task produced artifacts but verification did not pass.");
+    lines.push("");
+    lines.push(
+      "Do not act on any claim of 'created successfully', 'connection works', or 'ready to run' in the summary above — those are not verified.",
+    );
   } else if (scope.completion.mustUsePartialLanguage || scope.phase === "partial") {
     lines.push(
       "**Status: partial.** Initial scaffold / MVP is in place; the requested functionality is not end-to-end verified.",
