@@ -6,11 +6,11 @@ import { log } from "./logger";
 
 // ─── Constants ───────────────────────────────────────────────────
 
-export const MAX_AGENT_TURNS = 25;
+export const MAX_AGENT_TURNS = 30;
 export const MAX_CONSECUTIVE_DENIALS = 2;
-export const LOOP_PATTERN_THRESHOLD = 3;
+export const LOOP_PATTERN_THRESHOLD = 5;
 export const LOOP_PATTERN_HARD_STOP = 5;
-export const MAX_LOOP_PATTERNS = 200;
+export const MAX_LOOP_PATTERNS = 300;
 
 // ─── Bash Loop Pattern Extraction ────────────────────────────────
 
@@ -47,6 +47,19 @@ export function extractBashLoopPattern(command: string): string | null {
   inner = inner.replace(/^(\s*\w+="[^"]*"\s*\n?)+/g, "").trim();
   inner = inner.replace(/^(\s*\w+='[^']*'\s*\n?)+/g, "").trim();
 
+  // Strip a leading `cd <path> && ...` / `cd <path> ; ...` prefix,
+  // optionally wrapped by `timeout N` or `nohup`. Without this, every
+  // command run from the same project directory collapses onto pattern
+  // "bash:cd" and the loop detector hard-stops the 5th legitimate
+  // distinct command. Issue #111 v280 repro: model ran cd /proj &&
+  // mkdir, cd /proj && bun init, cd /proj && bun add, cd /proj && bun
+  // run, cd /proj && bun run (after edit) — all classified as
+  // "bash:cd" and the 5th call (the post-patch rerun) was SKIPPED.
+  const cdStrip = inner.match(
+    /^(?:timeout\s+\d+(?:\.\d+)?s?\s+|nohup\s+)?cd\s+\S+\s*(?:&&|;)\s*(.+)$/s,
+  );
+  if (cdStrip && cdStrip[1]) inner = cdStrip[1].trim();
+
   // For piped commands (echo X | socat Y), use BOTH source and sink command names + target IP.
   // This prevents false loop detection when sending different payloads to different IoT devices.
   // e.g. "echo ... | socat - UDP:192.168.1.146:38899" -> "bash:echo|socat@192.168.1.146"
@@ -63,7 +76,10 @@ export function extractBashLoopPattern(command: string): string | null {
 
   // Extract the base binary/command (first word that looks like a tool)
   const words = inner.trim().split(/\s+/);
-  const skipPrefixes = new Set(["sudo", "nohup", "env", "bash", "-c", "sh", "timeout"]);
+  // `cd` included so a bare `cd foo && X` where the && split somehow
+  // failed still falls through to the real command name instead of
+  // collapsing onto pattern "bash:cd".
+  const skipPrefixes = new Set(["sudo", "nohup", "env", "bash", "-c", "sh", "timeout", "cd"]);
   let baseCmd = "";
   for (const w of words) {
     if (
@@ -72,7 +88,9 @@ export function extractBashLoopPattern(command: string): string | null {
       w.startsWith("$") ||
       w.startsWith('"') ||
       w.startsWith("'") ||
-      w.startsWith("#")
+      w.startsWith("#") ||
+      // Pure-digit tokens are timeout/retry arguments, not commands.
+      /^\d+(?:\.\d+)?$/.test(w)
     )
       continue;
     baseCmd = w.replace(/^.*\//, ""); // strip path prefix
