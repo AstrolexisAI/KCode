@@ -1043,6 +1043,45 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     }
   }
 
+  // Phase 4 — closeout renderer. If the scope state indicates the
+  // turn cannot claim ready/done (phase=failed/partial OR
+  // mustUsePartialLanguage), append a scope-grounded correction as
+  // a text_delta AFTER the model's draft. The model's draft still
+  // appears; the correction is an authoritative postscript with the
+  // verified facts (files actually written, runtime actually run,
+  // explicit reasons for downgrade). Issues #103, #107, #108.
+  //
+  // Opt-out: KCODE_DISABLE_CLOSEOUT_RENDERER=1.
+  if (process.env.KCODE_DISABLE_CLOSEOUT_RENDERER !== "1") {
+    try {
+      const { getTaskScopeManager } = await import("./task-scope.js");
+      const curScope = getTaskScopeManager().current();
+      if (curScope) {
+        const { renderCloseoutFromScope, summarizeScopeForTelemetry } = await import(
+          "./closeout-renderer.js"
+        );
+        const correction = renderCloseoutFromScope(curScope);
+        if (correction) {
+          log.info(
+            "closeout-renderer",
+            `emitting scope-grounded correction (${JSON.stringify(summarizeScopeForTelemetry(curScope))})`,
+          );
+          // Emit as text_delta so it streams into the assistant's
+          // text block rather than becoming a separate banner — the
+          // user sees a single cohesive closeout.
+          events.push({ type: "text_delta", text: correction });
+        } else {
+          log.debug("closeout-renderer", "scope ok, no correction needed");
+        }
+      }
+    } catch (err) {
+      log.debug(
+        "closeout-renderer",
+        `render error: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
   // Check 5 — semantic self-critique pass. A second model reviews
   // the draft response against the turn's tool history and flags
   // any claim not supported by evidence. Complements the regex-based
