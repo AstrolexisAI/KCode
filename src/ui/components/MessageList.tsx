@@ -6,7 +6,6 @@ import React from "react";
 import { CHARS_PER_TOKEN } from "../../core/token-budget.js";
 import { useTheme } from "../ThemeContext.js";
 import MarkdownRenderer from "./MarkdownRenderer.js";
-import Spinner from "./Spinner.js";
 import ThinkingBlockComponent from "./ThinkingBlock.js";
 
 // --- Types for rendered message entries ---
@@ -108,20 +107,10 @@ interface MessageListProps {
   completed: MessageEntry[];
   /** Text currently streaming from the assistant */
   streamingText: string;
-  /** Whether the assistant is currently responding */
-  isLoading: boolean;
-  /** Loading status message */
-  loadingMessage?: string;
   /** Thinking text currently being streamed */
   streamingThinking?: string;
   /** Whether thinking is actively streaming */
   isThinking?: boolean;
-  /** Current token count for this turn */
-  turnTokens?: number;
-  /** Timestamp (Date.now()) when the current turn started */
-  turnStartTime?: number;
-  /** Current spinner phase */
-  spinnerPhase?: "thinking" | "streaming" | "tool";
   /** Live streaming output from a running Bash command */
   bashStreamOutput?: string;
 }
@@ -129,13 +118,8 @@ interface MessageListProps {
 export default function MessageList({
   completed,
   streamingText,
-  isLoading,
-  loadingMessage,
   streamingThinking = "",
   isThinking = false,
-  turnTokens = 0,
-  turnStartTime,
-  spinnerPhase = "thinking",
   bashStreamOutput = "",
 }: MessageListProps) {
   return (
@@ -164,17 +148,6 @@ export default function MessageList({
       {/* Live streaming Bash output */}
       {bashStreamOutput.length > 0 && <BashStreamDisplay output={bashStreamOutput} />}
 
-      {/* Loading spinner with tokens and elapsed time */}
-      {isLoading && (
-        <Box paddingLeft={2}>
-          <Spinner
-            message={loadingMessage ?? (isThinking ? "Reasoning..." : "Thinking...")}
-            tokens={turnTokens}
-            startTime={turnStartTime}
-            phase={isThinking ? "thinking" : spinnerPhase}
-          />
-        </Box>
-      )}
     </Box>
   );
 }

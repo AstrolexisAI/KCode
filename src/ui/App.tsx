@@ -29,6 +29,7 @@ import PermissionDialog, {
 } from "./components/PermissionDialog.js";
 import QuestionDialog from "./components/QuestionDialog.js";
 import EscalationPrompt from "./components/EscalationPrompt.js";
+import Spinner from "./components/Spinner.js";
 import SudoPasswordPrompt from "./components/SudoPasswordPrompt.js";
 import ToolTabs from "./components/ToolTabs.js";
 import VirtualMessageList from "./components/VirtualMessageList.js";
@@ -988,13 +989,8 @@ export default function App({ config, conversationManager, tools, initialSession
           <VirtualMessageList
             completed={completed}
             streamingText={streamingText}
-            isLoading={mode === "responding"}
-            loadingMessage={loadingMessage}
             streamingThinking={streamingThinking}
             isThinking={isThinking}
-            turnTokens={turnTokens}
-            turnStartTime={turnStartTime}
-            spinnerPhase={spinnerPhase}
             bashStreamOutput={bashStreamOutput}
             scrollActive={mode === "input"}
           />
@@ -1002,13 +998,8 @@ export default function App({ config, conversationManager, tools, initialSession
           <MessageList
             completed={completed}
             streamingText={streamingText}
-            isLoading={mode === "responding"}
-            loadingMessage={loadingMessage}
             streamingThinking={streamingThinking}
             isThinking={isThinking}
-            turnTokens={turnTokens}
-            turnStartTime={turnStartTime}
-            spinnerPhase={spinnerPhase}
             bashStreamOutput={bashStreamOutput}
           />
         )}
@@ -1207,6 +1198,17 @@ export default function App({ config, conversationManager, tools, initialSession
           />
         )}
         {interactiveQuestion}
+
+        {mode === "responding" && (
+          <Box paddingLeft={2}>
+            <Spinner
+              message={loadingMessage || (isThinking ? "Reasoning..." : "Thinking...")}
+              tokens={turnTokens}
+              startTime={turnStartTime}
+              phase={isThinking ? "thinking" : spinnerPhase}
+            />
+          </Box>
+        )}
 
         <InputPrompt
           onSubmit={handleSubmit}
