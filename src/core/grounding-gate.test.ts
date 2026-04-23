@@ -8,11 +8,13 @@ import {
   detectCreationClaimMismatch,
   detectPatchWithoutRerun,
   detectReadinessAfterErrors,
+  detectRuntimeFailureInOutput,
   detectStrongCompletionClaim,
   formatAuthClaimWarning,
   formatClaimMismatchWarning,
   formatPatchWithoutRerunWarning,
   formatReadinessContradictionWarning,
+  formatRuntimeFailureInOutputWarning,
   formatStrongCompletionWarning,
   formatStubWarning,
   scanFilesForStubs,
@@ -519,6 +521,76 @@ export async function login(email: string, password: string): Promise<string> {
     expect(w).toContain("rerun");
     expect(w).toContain("python3 app.py");
     expect(w).toContain("GrepReplace");
+  });
+
+  // ─── Runtime failure in output despite exit code 0 (issue #106) ─
+
+  test("detects Traceback in bash output (the EXACT 2026-04-23 case)", () => {
+    const events = [
+      {
+        command: "timeout 5 python app.py 2>&1 | head -20",
+        output: "Traceback (most recent call last):\n  File \"app.py\", line 5, in <module>\n    import nonexistent\nModuleNotFoundError: No module named 'nonexistent'",
+      },
+    ];
+    const finding = detectRuntimeFailureInOutput(events);
+    expect(finding).not.toBeNull();
+    expect(finding?.command).toContain("python");
+    expect(finding?.excerpt).toContain("Traceback");
+  });
+
+  test("detects ModuleNotFoundError alone", () => {
+    const f = detectRuntimeFailureInOutput([
+      { command: "python3 main.py", output: "ModuleNotFoundError: No module named 'bitcoin'" },
+    ]);
+    expect(f).not.toBeNull();
+  });
+
+  test("detects Node ReferenceError", () => {
+    const f = detectRuntimeFailureInOutput([
+      { command: "node index.js", output: "ReferenceError: foo is not defined" },
+    ]);
+    expect(f).not.toBeNull();
+  });
+
+  test("detects Rust panic", () => {
+    const f = detectRuntimeFailureInOutput([
+      {
+        command: "cargo run",
+        output: "thread 'main' panicked at src/main.rs:10: index out of bounds",
+      },
+    ]);
+    expect(f).not.toBeNull();
+  });
+
+  test("does NOT fire on non-runtime commands (ls, cat)", () => {
+    expect(
+      detectRuntimeFailureInOutput([
+        { command: "ls -la", output: "Traceback something" },
+        { command: "cat file.txt", output: "SyntaxError" },
+      ]),
+    ).toBeNull();
+  });
+
+  test("does NOT fire on clean runtime output", () => {
+    expect(
+      detectRuntimeFailureInOutput([
+        { command: "python app.py", output: "Server listening on port 3000" },
+      ]),
+    ).toBeNull();
+  });
+
+  test("formatRuntimeFailureInOutputWarning mentions the key diagnostic", () => {
+    const f = {
+      marker: "Traceback",
+      command: "timeout 5 python app.py 2>&1 | head",
+      excerpt: "Traceback (most recent call last):\n  ModuleNotFoundError: No module named 'x'",
+    };
+    const w = formatRuntimeFailureInOutputWarning(f);
+    expect(w).toContain("runtime command");
+    expect(w).toContain("exit code was 0");
+    expect(w).toContain("piped");
+    expect(w).toContain("python app.py");
+    expect(w).toContain("Traceback");
   });
 
   test("formatStubWarning caps at 8 items with overflow note", () => {
