@@ -52,16 +52,40 @@ export function extractRelevantPaths(scope: TaskScope): Set<string> {
 
 /**
  * Decide whether a just-applied mutation should arm the forced-rerun
- * gate. A mutation "counts" when the patched file is one of the files
- * the failing command or traceback referenced. When we can't extract
- * any relevant paths (e.g., the command was just `python` with no
- * arguments), we err on the side of arming (it's cheaper to rerun
- * than to close prematurely).
+ * gate.
+ *
+ * A mutation "counts" when:
+ *   1. The patched basename appears in the failing command or its
+ *      traceback (the strictly-relevant case), OR
+ *   2. The patched file has a recognized code extension AND isn't
+ *      a docs/config file. This catches the indirect-fix case where
+ *      `bun run index.ts` fails because of a bad import in rpc.ts;
+ *      the error text mentions index.ts and node_modules paths but
+ *      not rpc.ts, yet rpc.ts IS where the fix lands. Issue #111
+ *      v277 repro.
+ *   3. Empty relevance set (no paths extractable) → arm conservatively.
+ *
+ * Docs/config-only edits (README.md, CHANGELOG, .gitignore) never
+ * arm the gate — those can't fix a runtime failure.
  */
 export function isRelevantPatch(filePath: string, scope: TaskScope): boolean {
   const relevant = extractRelevantPaths(scope);
+  const base = basename(filePath);
+
   if (relevant.size === 0) return true;
-  return relevant.has(basename(filePath));
+  if (relevant.has(base)) return true;
+
+  // Non-code files never arm the gate.
+  const DOC_OR_CONFIG_FILES = /^(?:README|CHANGELOG|LICENSE|CONTRIBUTING|TODO|\.gitignore|\.npmignore|\.dockerignore)(?:\.md|\.txt|\.rst)?$/i;
+  if (DOC_OR_CONFIG_FILES.test(base)) return false;
+
+  const DOC_EXT = /\.(?:md|mdx|txt|rst|adoc|html)$/i;
+  if (DOC_EXT.test(base)) return false;
+
+  const CODE_EXT = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|scala|swift|php|pl|lua|sh|bash|zsh|fish|c|cpp|cc|h|hpp|cs|fs|ex|exs|erl|clj|cljs|hs|ml|dart|r|nim|zig|v|vala|sql|json|yaml|yml|toml)$/i;
+  if (CODE_EXT.test(base)) return true;
+
+  return false;
 }
 
 /**

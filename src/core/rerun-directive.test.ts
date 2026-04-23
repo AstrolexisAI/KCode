@@ -26,7 +26,7 @@ describe("rerun-directive", () => {
     expect(relevant.has("test_connection.py")).toBe(true);
   });
 
-  test("isRelevantPatch hits for named file, misses for unrelated README", () => {
+  test("isRelevantPatch: direct hit + code files count, docs don't (v278 relaxed)", () => {
     const mgr = getTaskScopeManager();
     mgr.beginNewScope({ type: "scaffold", userPrompt: "test" });
     mgr.recordRuntimeCommand({
@@ -37,9 +37,18 @@ describe("rerun-directive", () => {
       timestamp: Date.now(),
     });
     const scope = mgr.current()!;
+    // Direct basename match
     expect(isRelevantPatch("/proj/main.py", scope)).toBe(true);
+    // Docs never arm the gate
     expect(isRelevantPatch("/proj/README.md", scope)).toBe(false);
-    expect(isRelevantPatch("/proj/test_connection.py", scope)).toBe(false);
+    expect(isRelevantPatch("/proj/docs/setup.md", scope)).toBe(false);
+    expect(isRelevantPatch("/proj/CHANGELOG", scope)).toBe(false);
+    // v278 relaxation: other code files in the project DO arm the
+    // gate — the real fix is often indirect (import in a sibling
+    // file, not the entrypoint named in the failure).
+    expect(isRelevantPatch("/proj/test_connection.py", scope)).toBe(true);
+    expect(isRelevantPatch("/proj/helpers.ts", scope)).toBe(true);
+    expect(isRelevantPatch("/proj/config.json", scope)).toBe(true);
   });
 
   test("deriveRerunCommand prefers test_connection.py sanity check", () => {
