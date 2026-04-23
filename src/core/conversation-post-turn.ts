@@ -632,6 +632,40 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         formatReadinessContradictionWarning,
       } = await import("./grounding-gate.js");
 
+      // Phase 3: grounding detectors update the TaskScope instead of
+      // only emitting advisory banners. The scope becomes source of
+      // truth for "may this turn claim ready/done?" — phase 4 will
+      // have the closeout renderer consult it.
+      const { getTaskScopeManager } = await import("./task-scope.js");
+      const scopeMgr = getTaskScopeManager();
+      const flagScope = (
+        reason: string,
+        opts: {
+          mayClaimReady?: boolean;
+          mayClaimImplemented?: boolean;
+          mustUsePartialLanguage?: boolean;
+          phase?: "partial" | "failed";
+        } = {},
+      ) => {
+        const cur = scopeMgr.current();
+        if (!cur) return;
+        const updates: {
+          phase?: typeof cur.phase;
+          completion: Partial<typeof cur.completion>;
+        } = { completion: {} };
+        if (opts.mayClaimReady === false) updates.completion.mayClaimReady = false;
+        if (opts.mayClaimImplemented === false)
+          updates.completion.mayClaimImplemented = false;
+        if (opts.mustUsePartialLanguage === true)
+          updates.completion.mustUsePartialLanguage = true;
+        if (opts.phase) updates.phase = opts.phase;
+        // Accumulate reason, avoid duplicates
+        if (!cur.completion.reasons.includes(reason)) {
+          updates.completion.reasons = [...cur.completion.reasons, reason];
+        }
+        scopeMgr.update(updates);
+      };
+
       // Detect whether ANY tool result this turn was a BLOCKED response
       // (Edit/Write blocked, bash-mutation blocked, rewrite blocked, etc.).
       // Walk backwards through ctx.messages until the previous user turn
@@ -704,6 +738,14 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             title: "Partial implementation detected",
             subtitle: warning.split("\n").slice(0, 4).join("\n"),
           });
+          flagScope(
+            `${findings.length} placeholder/stub marker(s) in generated code`,
+            {
+              mayClaimImplemented: false,
+              mustUsePartialLanguage: true,
+              phase: "partial",
+            },
+          );
         }
       }
 
@@ -720,6 +762,15 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           title: "Ungrounded completion claim",
           subtitle: warning,
         });
+        flagScope(
+          "creation claimed in response but zero files landed on disk",
+          {
+            mayClaimReady: false,
+            mayClaimImplemented: false,
+            mustUsePartialLanguage: true,
+            phase: "partial",
+          },
+        );
       }
 
       // Check 3 — auth/network operational claim that isn't provable
@@ -736,6 +787,11 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           type: "banner",
           title: "Unverified auth/network assumption",
           subtitle: warning,
+        });
+        // Softer signal — auth claim doesn't block ready, but must
+        // downgrade confidence language in the closeout.
+        flagScope(`unverified auth/network assumption ("${authFinding.snippet.slice(0, 60)}")`, {
+          mustUsePartialLanguage: true,
         });
       }
 
@@ -805,6 +861,16 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             type: "banner",
             title: "Runtime error in output despite exit code 0",
             subtitle: warning,
+          });
+          // Record as an actual runtime command result — this flips
+          // scope.phase to "failed" and scope.completion.mayClaimReady
+          // to false via the manager's own logic.
+          scopeMgr.recordRuntimeCommand({
+            command: runtimeFailure.command,
+            exitCode: 0, // exit was 0 but traceback was in output
+            output: runtimeFailure.excerpt,
+            runtimeFailed: true,
+            timestamp: Date.now(),
           });
         }
       }
@@ -876,6 +942,22 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             title: "Patch applied but app not rerun — success claim ungrounded",
             subtitle: warning,
           });
+          // Explicitly flag the patch-without-rerun pattern in the
+          // scope. The manager also tracks patchAppliedAfterFailure
+          // via recordMutation post-failure, but the detector covers
+          // cases where the scope wasn't kept in sync (e.g. bash
+          // pipe failure not recorded as runtime failure).
+          scopeMgr.update({
+            verification: { patchAppliedAfterFailure: true, rerunPassedAfterPatch: false },
+          });
+          flagScope(
+            `patch applied after runtime failure without successful rerun (${patchFinding.patchAction.slice(0, 60)})`,
+            {
+              mayClaimReady: false,
+              mustUsePartialLanguage: true,
+              phase: "partial",
+            },
+          );
         }
       }
 
@@ -900,6 +982,15 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           title: "Ready claim contradicts failure signals",
           subtitle: warning,
         });
+        flagScope(
+          `readiness claim contradicts ${readinessFinding.errorCount} tool error(s)${readinessFinding.repairBlocked ? " + blocked repair" : ""}`,
+          {
+            mayClaimReady: false,
+            mayClaimImplemented: false,
+            mustUsePartialLanguage: true,
+            phase: "failed",
+          },
+        );
       }
 
       // Check 4 — strong completion claim. Fires when the final text
@@ -940,6 +1031,12 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             : "Strong completion claim — verify runtime",
           subtitle: warning,
         });
+        flagScope(
+          strongClaim.broadRequest
+            ? `scope overclaim: "${strongClaim.snippet.slice(0, 60)}" on a broad-scope request`
+            : `strong completion claim: "${strongClaim.snippet.slice(0, 60)}" without verification`,
+          { mustUsePartialLanguage: true },
+        );
       }
     } catch (err) {
       log.debug("grounding", `gate error: ${err instanceof Error ? err.message : err}`);
