@@ -724,6 +724,44 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       // conceptually but no real file exists.
       const filesOnDiskCount = countFilesOnDisk(filesModified);
 
+      // Check 0-pre: scaffold/implement turn closed with files
+      // written but no runtime command — phase stays "writing" and
+      // mayClaimReady=true by default, so the closeout renderer
+      // sees no correction needed and the model's "Proyecto creado.
+      // Para ejecutar: ..." prose slips through. v278 repro: exact
+      // failure mode.
+      //
+      // Rule: any scaffold/implement turn that produced code files
+      // and zero runtime validations cannot claim ready. Force
+      // phase=partial + mustUsePartialLanguage + reason so the
+      // closeout renders an honest "code written, nothing executed"
+      // line. Docs-only edits don't trigger (e.g. just README).
+      {
+        const sc = scopeMgr.current();
+        if (
+          sc &&
+          (sc.type === "scaffold" || sc.type === "implement") &&
+          sc.verification.runtimeCommands.length === 0
+        ) {
+          const CODE_EXT =
+            /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|scala|swift|php|pl|lua|sh|c|cpp|cc|h|hpp|cs|fs|ex|exs|hs|ml|dart|r|nim|zig|sql)$/i;
+          const codeFilesTouched = [
+            ...sc.verification.filesWritten,
+            ...sc.verification.filesEdited,
+          ].some((p) => CODE_EXT.test(p));
+          if (codeFilesTouched) {
+            flagScope(
+              "code files were written/edited this turn but no runtime validation was executed — the artifact is unverified",
+              {
+                mayClaimReady: false,
+                mustUsePartialLanguage: true,
+                phase: "partial",
+              },
+            );
+          }
+        }
+      }
+
       // Check 0 — project root missing AND scaffold/implement scope.
       // This is the executor gate from issue #110: the scope already
       // detects the missing root (Phase 9), but the model can decide

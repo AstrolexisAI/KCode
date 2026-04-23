@@ -287,19 +287,29 @@ export async function maybeAutoLaunchDevServer(
       return null;
     }
 
-    // Guard 3b (Phase 12 follow-up): skip auto-launch when the
-    // project is a CLI or TUI. dashboard keyword matches TUI
-    // dashboards too (blessed-contrib bitcoin/crypto dashboards,
-    // rich.live dashboards), and those shouldn't get launched as
-    // web servers. Issue #111 v276 repro: Bitcoin TUI scaffold
-    // triggered auto-launch with bunx on port 11147 even though
-    // the project has zero web-facing code.
+    // Guard 3b (Phase 12/13 follow-up): skip auto-launch when the
+    // project is a CLI or TUI. Look at the scope.projectRoot.path
+    // FIRST (v278 fix: session cwd is ~/proyectos but the real
+    // project lives in ~/proyectos/bitcoin-tui-dashboard). Fall
+    // back to detectDevServer's srv cwd, then to the session cwd.
     try {
       const { inferRuntimeModeFromCwd } =
         require("./runtime-mode") as typeof import("./runtime-mode");
-      const mode = inferRuntimeModeFromCwd(cwd);
+      let inferCwd = cwd;
+      try {
+        const { getTaskScopeManager } =
+          require("./task-scope") as typeof import("./task-scope");
+        const sc = getTaskScopeManager().current();
+        if (sc?.projectRoot?.path) inferCwd = sc.projectRoot.path;
+      } catch {
+        /* no scope — keep session cwd */
+      }
+      const mode = inferRuntimeModeFromCwd(inferCwd);
       if (mode === "cli" || mode === "tui") {
-        log.debug("auto-launch", `skipped: runtime mode = ${mode} (non-web)`);
+        log.debug(
+          "auto-launch",
+          `skipped: inference cwd ${inferCwd}, runtime mode = ${mode} (non-web)`,
+        );
         return null;
       }
     } catch {
