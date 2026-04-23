@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="./docs/assets/kulvex-logo.svg" alt="Kulvex" width="120" />
+</div>
+
 # KCode -- Kulvex Code by Astrolexis
 
 > **Deterministic security audit for C, Rust, Go, Python, and 20+ other languages.** 256 curated patterns. A small local LLM verifies each finding to strip false positives. Source never leaves your machine.
