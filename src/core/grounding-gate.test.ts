@@ -6,14 +6,17 @@ import {
   countFilesOnDisk,
   detectAuthClaim,
   detectCreationClaimMismatch,
+  detectPatchWithoutRerun,
   detectReadinessAfterErrors,
   detectStrongCompletionClaim,
   formatAuthClaimWarning,
   formatClaimMismatchWarning,
+  formatPatchWithoutRerunWarning,
   formatReadinessContradictionWarning,
   formatStrongCompletionWarning,
   formatStubWarning,
   scanFilesForStubs,
+  type ToolEvent,
 } from "./grounding-gate";
 
 let tmp: string;
@@ -431,6 +434,91 @@ export async function login(email: string, password: string): Promise<string> {
     expect(formatReadinessContradictionWarning(errorsOnly)).not.toContain("repair attempt");
     const blockOnly = { snippet: "ready", errorCount: 0, repairBlocked: true };
     expect(formatReadinessContradictionWarning(blockOnly)).not.toContain("tool error");
+  });
+
+  // ─── Patch-without-rerun detection (issue #104) ───────────────
+
+  test("detects the EXACT 2026-04-23 sequence: python fail → GrepReplace → no rerun → success claim", () => {
+    const events: ToolEvent[] = [
+      { name: "Bash", isError: false, summary: "mkdir -p /tmp/app" },
+      { name: "Bash", isError: false, summary: "pip install rich" },
+      { name: "Write", isError: false, summary: "/tmp/app/app.py" },
+      { name: "Bash", isError: true, summary: "python3 app.py" }, // ran_failed
+      { name: "Edit", isError: true, summary: "/tmp/app/app.py" },   // blocked
+      {
+        name: "GrepReplace",
+        isError: false,
+        summary: "pattern=except JSONRPCException → except Exception",
+      }, // patched
+      // No subsequent python3 call
+    ];
+    const finalText =
+      "He creado el proyecto del dashboard TUI para Bitcoin. Incluye un script que conecta al nodo y mostrará los datos en vivo.";
+    const finding = detectPatchWithoutRerun(events, finalText);
+    expect(finding).not.toBeNull();
+    expect(finding?.failingCommand).toContain("python3");
+    expect(finding?.patchAction).toContain("GrepReplace");
+    expect(finding?.claimSnippet).toMatch(/conecta|mostrará|creado/i);
+  });
+
+  test("does NOT fire if rerun succeeded after patch", () => {
+    const events: ToolEvent[] = [
+      { name: "Bash", isError: true, summary: "python3 app.py" },
+      { name: "Edit", isError: false, summary: "app.py" },
+      { name: "Bash", isError: false, summary: "python3 app.py" }, // rerun passed
+    ];
+    expect(detectPatchWithoutRerun(events, "works great")).toBeNull();
+  });
+
+  test("does NOT fire without a runtime failure in the chain", () => {
+    const events: ToolEvent[] = [
+      { name: "Write", isError: false, summary: "app.py" },
+      { name: "Edit", isError: false, summary: "app.py" },
+    ];
+    expect(detectPatchWithoutRerun(events, "created the app, ready to use")).toBeNull();
+  });
+
+  test("counts bash sed -i as a patch (not just Edit/Write)", () => {
+    const events: ToolEvent[] = [
+      { name: "Bash", isError: true, summary: "node server.js" },
+      { name: "Bash", isError: false, summary: "sed -i 's/foo/bar/' server.js" },
+    ];
+    const finding = detectPatchWithoutRerun(events, "El servidor corre y muestra logs.");
+    expect(finding).not.toBeNull();
+    expect(finding?.patchAction).toContain("Bash");
+  });
+
+  test("ignores non-mutation bash after failure", () => {
+    const events: ToolEvent[] = [
+      { name: "Bash", isError: true, summary: "python3 app.py" },
+      { name: "Bash", isError: false, summary: "ls -la" }, // not a mutation
+    ];
+    // Even if final text claims success, without a real patch the check doesn't fire.
+    expect(detectPatchWithoutRerun(events, "app is ready")).toBeNull();
+  });
+
+  test("does NOT fire on neutral response wording", () => {
+    const events: ToolEvent[] = [
+      { name: "Bash", isError: true, summary: "python3 app.py" },
+      { name: "GrepReplace", isError: false, summary: "pattern" },
+    ];
+    const neutralText =
+      "Applied a patch to exception handling. I did not rerun the app, so functionality is not yet verified.";
+    expect(detectPatchWithoutRerun(events, neutralText)).toBeNull();
+  });
+
+  test("formatPatchWithoutRerunWarning explains the chain", () => {
+    const finding = {
+      failingCommand: "python3 app.py",
+      patchAction: "GrepReplace: pattern=except X → except Y",
+      claimSnippet: "mostrará los datos en vivo",
+    };
+    const w = formatPatchWithoutRerunWarning(finding);
+    expect(w).toContain("runtime failed");
+    expect(w).toContain("patch was applied");
+    expect(w).toContain("rerun");
+    expect(w).toContain("python3 app.py");
+    expect(w).toContain("GrepReplace");
   });
 
   test("formatStubWarning caps at 8 items with overflow note", () => {

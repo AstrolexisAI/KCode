@@ -321,6 +321,130 @@ export function detectReadinessAfterErrors(
   return null;
 }
 
+// ─── Post-error patch without rerun (issue #104) ────────────────
+
+/**
+ * Given the turn's tool history (as a flat list of {name, isError, cmd}),
+ * detect the #104 pattern:
+ *   1. A runtime execution via Bash (python/node/bun/etc running a
+ *      recently-written file) returned non-zero → ran_failed.
+ *   2. A patch was applied (Edit / Write / MultiEdit / GrepReplace /
+ *      Bash file-mutation) after that failure → patched_after_failure.
+ *   3. No subsequent successful rerun of the same kind of command →
+ *      rerun_passed = false.
+ *
+ * If all three conditions are met AND the final text claims the code
+ * works/is ready/runs, that's an ungrounded success claim.
+ */
+export interface ToolEvent {
+  name: string;
+  isError: boolean;
+  /** Free-form summary: the command for Bash, the path for Edit/Write. */
+  summary: string;
+}
+
+export interface PatchWithoutRerunFinding {
+  /** Description of the failing command that started the chain. */
+  failingCommand: string;
+  /** What patch tool and target were applied after the failure. */
+  patchAction: string;
+  /** Phrase in final text that asserts success. */
+  claimSnippet: string;
+}
+
+const RUNTIME_COMMAND = /\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc)\b/i;
+const PATCH_TOOL_NAMES = new Set([
+  "Edit",
+  "Write",
+  "MultiEdit",
+  "GrepReplace",
+  "Bash", // bash file-mutations count as patches — filter by command shape below
+]);
+const BASH_IS_MUTATION = /\b(?:sed\s+.*-i|perl\s+.*-i|awk\s+.*-i\s+inplace|>\s*\S|>>\s*\S|tee\s)\b/i;
+
+export function detectPatchWithoutRerun(
+  events: ToolEvent[],
+  finalText: string,
+): PatchWithoutRerunFinding | null {
+  if (events.length === 0 || !finalText) return null;
+
+  // Find the most recent runtime failure, scanning forwards.
+  let ranFailedIndex = -1;
+  let failingCmd = "";
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i]!;
+    if (ev.name !== "Bash") continue;
+    if (!ev.isError) continue;
+    if (!RUNTIME_COMMAND.test(ev.summary)) continue;
+    ranFailedIndex = i;
+    failingCmd = ev.summary.slice(0, 120);
+  }
+  if (ranFailedIndex < 0) return null;
+
+  // Find patches AFTER the failure.
+  let patchIndex = -1;
+  let patchDescription = "";
+  for (let i = ranFailedIndex + 1; i < events.length; i++) {
+    const ev = events[i]!;
+    if (!PATCH_TOOL_NAMES.has(ev.name)) continue;
+    if (ev.isError) continue; // only counts successful patches
+    if (ev.name === "Bash" && !BASH_IS_MUTATION.test(ev.summary)) continue;
+    patchIndex = i;
+    patchDescription = `${ev.name}: ${ev.summary.slice(0, 80)}`;
+  }
+  if (patchIndex < 0) return null;
+
+  // Check whether any SUCCESSFUL runtime command ran after the patch.
+  let rerunPassed = false;
+  for (let i = patchIndex + 1; i < events.length; i++) {
+    const ev = events[i]!;
+    if (ev.name !== "Bash") continue;
+    if (ev.isError) continue;
+    if (!RUNTIME_COMMAND.test(ev.summary)) continue;
+    rerunPassed = true;
+    break;
+  }
+  if (rerunPassed) return null;
+
+  // Claim-in-final-text patterns (readiness/success language).
+  const CLAIM_PATTERNS = [
+    /\bconecta\s+(?:al|a)\b/i,
+    /\bmuestra\b/i,
+    /\bactualiza\s+en\s+(?:vivo|tiempo\s+real)\b/i,
+    /\bmostrar[aá]?\b/i,
+    /\b(?:funciona|corre|ejecuta)\b/i,
+    /\bhe\s+creado\b/i,
+    /\bincluye\s+un\s+script\b/i,
+    /\b(?:works|runs|connects|displays|shows|updates)\b/i,
+    /\bcreated\s+the\s+(?:app|project|script)\b/i,
+  ];
+  for (const p of CLAIM_PATTERNS) {
+    const m = finalText.match(p);
+    if (m) {
+      const start = Math.max(0, (m.index ?? 0) - 30);
+      const end = Math.min(finalText.length, (m.index ?? 0) + m[0].length + 80);
+      return {
+        failingCommand: failingCmd,
+        patchAction: patchDescription,
+        claimSnippet: finalText.slice(start, end).trim(),
+      };
+    }
+  }
+  return null;
+}
+
+export function formatPatchWithoutRerunWarning(
+  finding: PatchWithoutRerunFinding,
+): string {
+  return (
+    `⚠ Grounding check: runtime failed → a patch was applied → no successful rerun was observed → the response still claims success. ` +
+    `Failing command: "${finding.failingCommand}". ` +
+    `Patch applied: ${finding.patchAction}. ` +
+    `Claim in response: "${finding.claimSnippet}". ` +
+    `Do not present the artifact as working until it has been rerun after the patch and the rerun passes.`
+  );
+}
+
 export function formatReadinessContradictionWarning(
   finding: ReadinessContradictionFinding,
 ): string {

@@ -312,6 +312,7 @@ export async function runSelfCritique(
   input: SelfCritiqueInput,
 ): Promise<SelfCritiqueResult> {
   if (process.env.KCODE_DISABLE_SELF_CRITIQUE === "1") {
+    log.info("self-critique", "skipped: disabled via KCODE_DISABLE_SELF_CRITIQUE");
     return {
       contradictions: [],
       verdict: "ok",
@@ -322,6 +323,10 @@ export async function runSelfCritique(
 
   // Skip if nothing substantial to critique
   if (!input.draftText || input.draftText.trim().length < 40) {
+    log.info(
+      "self-critique",
+      `skipped: draft too short (${input.draftText?.length ?? 0} chars)`,
+    );
     return {
       contradictions: [],
       verdict: "ok",
@@ -329,6 +334,11 @@ export async function runSelfCritique(
       skipReason: "draft too short to critique",
     };
   }
+
+  log.info(
+    "self-critique",
+    `running: draft=${input.draftText.length}ch errors=${input.errorsEncountered} blocked=${input.repairBlocked} files=${input.filesWritten.length} model=${input.model ?? "(default)"}`,
+  );
 
   const userPrompt = buildCritiquePrompt(input);
 
@@ -353,9 +363,9 @@ export async function runSelfCritique(
       onComplete: async (result: ForkedAgentResult) => {
         const parsed = parseCritiqueResponse(result.content);
         if (!parsed) {
-          log.debug(
+          log.warn(
             "self-critique",
-            `parse failed (${result.content.length} chars) — skipping`,
+            `parse FAILED (${result.content.length}ch, model=${result.model}, dur=${result.durationMs}ms). First 200ch: ${result.content.slice(0, 200)}`,
           );
           safeResolve({
             contradictions: [],
@@ -369,7 +379,7 @@ export async function runSelfCritique(
         }
         log.info(
           "self-critique",
-          `${parsed.contradictions.length} contradiction(s), verdict=${parsed.verdict}, model=${result.model}, dur=${result.durationMs}ms`,
+          `done: ${parsed.contradictions.length} contradiction(s), verdict=${parsed.verdict}, model=${result.model}, dur=${result.durationMs}ms`,
         );
         safeResolve({
           contradictions: parsed.contradictions,
@@ -380,7 +390,7 @@ export async function runSelfCritique(
         });
       },
       onError: (err: Error) => {
-        log.debug("self-critique", `skipped: ${err.message}`);
+        log.warn("self-critique", `model call failed: ${err.message}`);
         safeResolve({
           contradictions: [],
           verdict: "ok",

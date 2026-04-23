@@ -739,6 +739,76 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         });
       }
 
+      // Check 4b — patch applied after runtime failure but no rerun.
+      // Sequence: Bash (python/node/etc) returned non-zero →
+      // Edit/Write/GrepReplace/sed -i applied → no successful rerun →
+      // final text claims success. Issue #104.
+      {
+        const { detectPatchWithoutRerun, formatPatchWithoutRerunWarning } =
+          await import("./grounding-gate.js");
+        // Build tool-event list from this turn's messages.
+        const toolEvents: {
+          name: string;
+          isError: boolean;
+          summary: string;
+        }[] = [];
+        for (const m of ctx.messages.slice(-40)) {
+          if (!m) continue;
+          if (m.role === "assistant" && Array.isArray(m.content)) {
+            for (const b of m.content) {
+              const type = typeof b === "object" && b !== null
+                ? (b as { type?: unknown }).type
+                : undefined;
+              if (type === "tool_use") {
+                const name = String((b as { name?: unknown }).name ?? "?");
+                const inp = (b as { input?: unknown }).input;
+                let summary = "";
+                if (typeof inp === "object" && inp !== null) {
+                  const rec = inp as Record<string, unknown>;
+                  summary = typeof rec.command === "string"
+                    ? rec.command
+                    : typeof rec.file_path === "string"
+                      ? rec.file_path
+                      : typeof rec.path === "string"
+                        ? rec.path
+                        : typeof rec.pattern === "string"
+                          ? `pattern=${rec.pattern}`
+                          : JSON.stringify(inp).slice(0, 120);
+                }
+                toolEvents.push({ name, isError: false, summary });
+              }
+            }
+          }
+          if (m.role === "user" && Array.isArray(m.content)) {
+            for (const b of m.content) {
+              const type = typeof b === "object" && b !== null
+                ? (b as { type?: unknown }).type
+                : undefined;
+              if (type === "tool_result") {
+                const isError = (b as { is_error?: unknown }).is_error === true;
+                // Attach isError retroactively to the last matching tool_use.
+                if (toolEvents.length > 0 && isError) {
+                  toolEvents[toolEvents.length - 1]!.isError = true;
+                }
+              }
+            }
+          }
+        }
+        const patchFinding = detectPatchWithoutRerun(toolEvents, finalText);
+        if (patchFinding) {
+          const warning = formatPatchWithoutRerunWarning(patchFinding);
+          log.warn(
+            "grounding",
+            `patch-without-rerun: ${patchFinding.failingCommand} → ${patchFinding.patchAction} → no rerun`,
+          );
+          events.push({
+            type: "banner",
+            title: "Patch applied but app not rerun — success claim ungrounded",
+            subtitle: warning,
+          });
+        }
+      }
+
       // Check 4a — readiness claim contradicting direct error evidence.
       // Fires when the final text says the artifact is "ready / runs /
       // displays" but the turn recorded tool errors (likely a validation

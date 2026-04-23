@@ -2,7 +2,11 @@
 // Regex find-and-replace across multiple files with preview
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { extname, join, relative, resolve } from "node:path";
+import { basename, extname, join, relative, resolve } from "node:path";
+import {
+  auditGuardsEnabled,
+  checkAuditEditGuard,
+} from "../core/audit-guards";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const grepReplaceDefinition: ToolDefinition = {
@@ -400,6 +404,26 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
 
   // Apply changes if not dry run — use stored content (TOCTOU safe)
   if (!dryRun) {
+    // Guard: apply the audit-mode Edit policy equally to GrepReplace.
+    // Without this, GrepReplace bypasses the same block that stops Edit
+    // / Write / MultiEdit / sed -i / perl -i. Issue #104.
+    if (auditGuardsEnabled()) {
+      for (const fm of fileMatches) {
+        const guard = checkAuditEditGuard(fm.file);
+        if (guard.blocked) {
+          return {
+            tool_use_id: "",
+            content:
+              `BLOCKED — NO CHANGES APPLIED: GrepReplace would mutate "${basename(fm.file)}" ` +
+              `but the Edit path is currently blocked for this file under the audit-mode policy. ` +
+              `GrepReplace is treated as equivalent to Edit and must follow the same discipline.\n\n` +
+              `${guard.reason ?? ""}`,
+            is_error: true,
+          };
+        }
+      }
+    }
+
     let applied = 0;
     const errors: string[] = [];
     // Track successfully written files for rollback
