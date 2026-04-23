@@ -61,6 +61,22 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   }
   lines.push("");
 
+  // Project root (phase 9 — directory-level artifact). Distinguishes
+  // "no files written BUT root verified" from "root never established".
+  // Issue #109: v2.10.269 closeout said "Files: none" while the real
+  // problem was that mkdir/cd never actually succeeded.
+  if (scope.projectRoot.path && scope.projectRoot.status !== "unknown") {
+    const rootLabel =
+      scope.projectRoot.status === "verified"
+        ? "verified"
+        : scope.projectRoot.status === "created"
+          ? "created (not re-verified)"
+          : scope.projectRoot.status === "missing"
+            ? "**missing** (ENOENT / cd failed)"
+            : scope.projectRoot.status;
+    lines.push(`- Project root: ${rootLabel} (\`${basename(scope.projectRoot.path)}\`)`);
+  }
+
   // What landed on disk
   const written = scope.verification.filesWritten;
   const edited = scope.verification.filesEdited;
