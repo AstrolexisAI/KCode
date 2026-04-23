@@ -1137,6 +1137,73 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     }
   }
 
+  // Phase 10 — forced-rerun gate. When the scope carries
+  // patchAppliedAfterFailure && !rerunPassedAfterPatch, the model
+  // patched the artifact after a runtime failure but never re-ran
+  // the validation. Without this gate the closeout renders "status:
+  // unverified" and the turn closes — issue #111 / v2.10.272 repro.
+  //
+  // The gate injects a mandatory-rerun directive and returns action
+  // "continue", so the model's next step MUST be a Bash call with
+  // the derived rerun command. Capped at 3 attempts per failure to
+  // prevent infinite loops when the model refuses to comply.
+  //
+  // Opt-out: KCODE_DISABLE_FORCED_RERUN=1.
+  if (process.env.KCODE_DISABLE_FORCED_RERUN !== "1") {
+    try {
+      const { getTaskScopeManager } = await import("./task-scope.js");
+      const mgr = getTaskScopeManager();
+      const scope = mgr.current();
+      if (
+        scope &&
+        scope.verification.patchAppliedAfterFailure &&
+        !scope.verification.rerunPassedAfterPatch &&
+        scope.verification.rerunAttempts < 3
+      ) {
+        const { buildRerunDirective, deriveRerunCommand } = await import(
+          "./rerun-directive.js"
+        );
+        const directive = buildRerunDirective(scope);
+        const cmd = deriveRerunCommand(scope);
+        if (directive && cmd) {
+          mgr.update({
+            verification: { rerunAttempts: scope.verification.rerunAttempts + 1 },
+          });
+          log.warn(
+            "forced-rerun",
+            `injecting mandatory rerun directive (attempt ${scope.verification.rerunAttempts + 1}/3): ${cmd}`,
+          );
+          injectMessages.push({ role: "user", content: directive });
+          events.push({
+            type: "banner",
+            title: "Forced rerun — patch applied after runtime failure",
+            subtitle:
+              `The model patched the artifact after a runtime failure but did not re-run the validation.\n` +
+              `Next turn is forced to execute: \`${cmd}\``,
+          });
+          events.push({ type: "turn_end", stopReason: "forced_rerun" });
+          return {
+            action: "continue",
+            events,
+            injectMessages,
+            maxTokensContinuations,
+            emptyEndTurnCount,
+            truncationRetries,
+            lastEmptyType,
+            previousTurnTail,
+            turnsSinceLastExtraction,
+            actionNudgeUsed,
+          };
+        }
+      }
+    } catch (err) {
+      log.debug(
+        "forced-rerun",
+        `gate error: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
   // Phase 4 — closeout renderer. If the scope state indicates the
   // turn cannot claim ready/done (phase=failed/partial OR
   // mustUsePartialLanguage), append a scope-grounded correction as

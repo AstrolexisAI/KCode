@@ -134,6 +134,13 @@ export interface TaskScope {
     rerunPassedAfterPatch: boolean;
     /** True when a patch was applied after a runtime failure (needs rerun). */
     patchAppliedAfterFailure: boolean;
+    /**
+     * Number of mandatory-rerun directives injected for the current
+     * failure cluster. Capped in post-turn to prevent infinite loops
+     * when the model refuses to call Bash. Reset to 0 when the
+     * failure is cleared (new failure or successful rerun).
+     */
+    rerunAttempts: number;
   };
 
   // ── Secrets sub-state ──
@@ -243,6 +250,7 @@ function makeEmptyScope(opts: {
       lastRuntimeFailure: undefined,
       rerunPassedAfterPatch: false,
       patchAppliedAfterFailure: false,
+      rerunAttempts: 0,
     },
     secrets: {
       detected: [],
@@ -326,10 +334,40 @@ export function createTaskScopeManager(): TaskScopeManager {
           _current.verification.filesEdited.push(ev.path);
         }
       }
-      // A new mutation after a runtime failure marks "patch applied, needs rerun".
+      // A new mutation after a runtime failure marks "patch applied,
+      // needs rerun" — but only when the patched file is actually
+      // relevant to the failure (the file named by the failing command
+      // or mentioned in the traceback). Editing README.md after a
+      // python main.py failure should not arm the rerun gate.
       if (_current.verification.lastRuntimeFailure) {
-        _current.verification.patchAppliedAfterFailure = true;
-        _current.verification.rerunPassedAfterPatch = false;
+        // Inline relevancy check (can't import rerun-directive here
+        // without creating a circular dependency).
+        const failure = _current.verification.lastRuntimeFailure;
+        const CMD_FILE_RE =
+          /(?:^|[\s=])([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs|java|sh|php|pl|lua))(?=[\s&|;<>]|$)/gi;
+        const OUT_FILE_RE =
+          /(?:File\s+"([^"]+)"|at\s+([\w./]+\.(?:py|js|ts|rb|go|rs))\b)/g;
+        const relevant = new Set<string>();
+        for (const m of failure.command.matchAll(CMD_FILE_RE)) {
+          if (m[1]) {
+            const parts = m[1].split("/");
+            relevant.add(parts[parts.length - 1] ?? m[1]);
+          }
+        }
+        for (const m of failure.error.matchAll(OUT_FILE_RE)) {
+          const p = m[1] ?? m[2];
+          if (p) {
+            const parts = p.split("/");
+            relevant.add(parts[parts.length - 1] ?? p);
+          }
+        }
+        const evParts = ev.path.split("/");
+        const evBase = evParts[evParts.length - 1] ?? ev.path;
+        const relevantHit = relevant.size === 0 || relevant.has(evBase);
+        if (relevantHit) {
+          _current.verification.patchAppliedAfterFailure = true;
+          _current.verification.rerunPassedAfterPatch = false;
+        }
       }
       if (_current.phase === "planning") {
         _current.phase = "writing";
@@ -348,6 +386,9 @@ export function createTaskScopeManager(): TaskScopeManager {
         _current.phase = "failed";
         _current.completion.mayClaimReady = false;
         _current.completion.mustUsePartialLanguage = true;
+        // A new failure resets the rerun counter — the old attempts
+        // were for a different failure cluster.
+        _current.verification.rerunAttempts = 0;
         if (!_current.completion.reasons.includes("runtime failure")) {
           _current.completion.reasons.push("runtime failure");
         }
@@ -356,6 +397,7 @@ export function createTaskScopeManager(): TaskScopeManager {
         _current.verification.rerunPassedAfterPatch = true;
         _current.verification.patchAppliedAfterFailure = false;
         _current.verification.lastRuntimeFailure = undefined;
+        _current.verification.rerunAttempts = 0;
       }
       touch(_current);
     },
