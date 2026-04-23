@@ -11,7 +11,7 @@ class Kcode < Formula
   desc "Terminal-based AI coding assistant for local LLMs and cloud APIs"
   homepage "https://kulvex.ai"
   version "2.5.2"
-  license "AGPL-3.0-only"
+  license "Apache-2.0"
 
   on_macos do
     on_arm do
