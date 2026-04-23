@@ -623,16 +623,23 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         formatStubWarning,
         detectCreationClaimMismatch,
         formatClaimMismatchWarning,
+        countFilesOnDisk,
       } = await import("./grounding-gate.js");
 
+      // Only count files that ACTUALLY exist on disk. Session tracker
+      // records Write/Edit attempts by file_path even when the write
+      // was blocked by a safety guard; those paths are "modified"
+      // conceptually but no real file exists.
+      const filesOnDiskCount = countFilesOnDisk(filesModified);
+
       // Check 1 — stub markers inside written files
-      if (filesModified.length > 0) {
+      if (filesOnDiskCount > 0) {
         const findings = scanFilesForStubs(filesModified);
         if (findings.length > 0) {
           const warning = formatStubWarning(findings);
           log.info(
             "grounding",
-            `${findings.length} stub/placeholder finding(s) across ${filesModified.length} file(s)`,
+            `${findings.length} stub/placeholder finding(s) across ${filesOnDiskCount} file(s)`,
           );
           events.push({
             type: "banner",
@@ -642,8 +649,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         }
       }
 
-      // Check 2 — creation claim without actual writes
-      const mismatch = detectCreationClaimMismatch(finalText, filesModified.length);
+      // Check 2 — creation claim without actual writes landing on disk
+      const mismatch = detectCreationClaimMismatch(finalText, filesOnDiskCount);
       if (mismatch) {
         const warning = formatClaimMismatchWarning(mismatch);
         log.warn(

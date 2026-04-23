@@ -174,28 +174,30 @@ export function scanFilesForStubs(filePaths: string[]): StubFinding[] {
 
 // Phrases that indicate the agent is claiming it delivered concrete
 // code/project output, across Spanish + English. When any of these
-// appear in the final turn text AND zero files were successfully
-// written/edited this turn, that's a 2026-04-23-style ungrounded
-// completion claim — the agent declares victory after every tool call
-// was blocked/failed.
+// appear in the final turn text AND zero files were actually written
+// (verified against disk) this turn, that's a 2026-04-23-style
+// ungrounded completion claim — agent declares victory after tools
+// were blocked/failed.
 const CREATION_CLAIM_PATTERNS: RegExp[] = [
-  // Spanish
+  // Spanish — broad "X creado" / "X generado" shape (covers
+  // "Proyecto Foo creado en /tmp", "Dashboard generado correctamente",
+  // "Archivos listos", etc).
+  /\bcreado(?:s)?\s+(?:en|correctamente|exitosamente|sin errores|y|,)/i,
+  /\bgenerado(?:s)?\s+(?:en|correctamente|exitosamente|sin errores|y|,)/i,
+  /\b(?:proyecto|dashboard|script|app(?:licaci[oó]n)?|archivo|archivos|configuraci[oó]n|c[oó]digo|m[oó]dulo|setup|entorno)\s+(?:creado|generado|armado|construido|implementado|listo|completo|funcionando)/i,
   /\bha sido creado\b/i,
-  /\bse (?:ha )?(?:creado|generado|armado|construido)\b/i,
-  /\bproyecto creado\b/i,
-  /\barchivo(?:s)? creado(?:s)?\b/i,
-  /\bdirectorio (?:creado|inicial)\b/i,
-  /\blisto para (?:correr|ejecutar|usar)\b/i,
-  /\bestá (?:listo|funcionando|completo)\b/i,
-  /\bimplementado\b/i,
-  /\bdashboard (?:listo|creado|generado)\b/i,
+  /\bse (?:ha )?(?:creado|generado|armado|construido|implementado)\b/i,
+  /\blisto para (?:correr|ejecutar|usar|probar)\b/i,
+  /\bestá (?:listo|funcionando|completo|operativo)\b/i,
+  /\bimplementad[oa]\b/i,
+  /\bauditor[ií]a (?:completada|exitosa|finalizada)\b/i,
   // English
-  /\b(?:has been|was) (?:created|generated|built|implemented|set up)\b/i,
-  /\bproject (?:created|generated|ready)\b/i,
-  /\bfile(?:s)? (?:created|written)\b/i,
-  /\b(?:created|built|implemented) (?:a|the|your) [a-z]+\b/i,
-  /\bsuccessfully (?:created|generated|built|implemented)\b/i,
-  /\bdone\.?\s*$/i,
+  /\b(?:has been|have been|was|were)\s+(?:created|generated|built|implemented|set up|written|scaffolded)\b/i,
+  /\b(?:project|dashboard|script|app|application|file|files|config|code|module|setup|environment)\s+(?:created|generated|built|ready|complete|working|written)\b/i,
+  /\b(?:created|built|implemented|generated|wrote|scaffolded)\s+(?:a|the|your|new|an)\s+[a-z]+/i,
+  /\bsuccessfully (?:created|generated|built|implemented|wrote|written|scaffolded)\b/i,
+  /\b(?:implementation|build|setup|scaffold|generation)\s+(?:complete|done|finished|ready)\b/i,
+  /\ball\s+(?:done|set|good|ready)\b/i,
 ];
 
 export interface CreationClaimMismatch {
@@ -206,9 +208,30 @@ export interface CreationClaimMismatch {
 }
 
 /**
- * Detect the "claim creation, did nothing" pattern: final text says
- * "project created", zero files were actually written this turn.
- * Returns null if no mismatch.
+ * Count how many of the given paths actually exist on disk right now.
+ * The caller's `filesModified` list can include paths from Write/Edit
+ * tool_use inputs that were then blocked by safety guards — in that
+ * case the path is "modified" according to the session tracker but
+ * the file doesn't actually exist. We only care about files that
+ * really landed on disk.
+ */
+export function countFilesOnDisk(paths: string[]): number {
+  let count = 0;
+  for (const p of paths) {
+    if (existsSync(p)) count++;
+  }
+  return count;
+}
+
+/**
+ * Detect the "claim creation, did nothing" pattern: final text claims
+ * some form of creation/completion, but zero files that match the
+ * turn's attempted writes actually exist on disk. Returns null if
+ * no mismatch.
+ *
+ * The `filesWrittenCount` argument should be the count of files
+ * actually present on disk (use `countFilesOnDisk` to compute it),
+ * not the raw count from the session tracker.
  */
 export function detectCreationClaimMismatch(
   finalText: string,
