@@ -104,7 +104,7 @@ import { UndoManager } from "./undo";
 
 // ─── Constants ───────────────────────────────────────────────────
 
-const DEFAULT_CONTEXT_WINDOW = 32_000;
+const DEFAULT_CONTEXT_WINDOW = 128_000;
 // Context window margin removed — compactThreshold (default 0.75) is used instead
 const MAX_RETRIES = 2;
 
@@ -1033,19 +1033,110 @@ export class ConversationManager {
               `Reasoning loop: ${guardState.consecutiveTextOnlyTurns} text-only turn(s) ` +
                 `(threshold ${threshold}) — injecting tool-use directive and forcing continuation`,
             );
+            // Infer scaffold context: has the user asked to create a new
+            // project AND have we already run setup bash commands (mkdir,
+            // venv, pip install) without any successful Write yet? If so,
+            // the agent is almost certainly stuck right before writing
+            // the main application file — tell it exactly what to do.
+            // Issue #105.
+            const scaffoldWriteStuck = (() => {
+              try {
+                const { isMonolithicCreation } =
+                  require("./router") as typeof import("./router");
+                // Find the most recent user-typed prompt
+                let userPrompt = "";
+                for (let i = this.state.messages.length - 1; i >= 0; i--) {
+                  const m = this.state.messages[i];
+                  if (!m || m.role !== "user") continue;
+                  const c = m.content;
+                  if (typeof c === "string" && !c.startsWith("[SYSTEM]") && !c.startsWith("[REALITY")) {
+                    userPrompt = c;
+                    break;
+                  }
+                  if (Array.isArray(c)) {
+                    const textBlocks = c.filter(
+                      (b: unknown): b is { type: string; text: string } =>
+                        typeof b === "object" && b !== null &&
+                        (b as { type?: unknown }).type === "text",
+                    );
+                    if (textBlocks.length > 0) {
+                      const joined = textBlocks.map((b) => b.text).join(" ");
+                      if (!joined.startsWith("[SYSTEM]") && !joined.startsWith("[REALITY")) {
+                        userPrompt = joined;
+                        break;
+                      }
+                    }
+                  }
+                }
+                if (!userPrompt || !isMonolithicCreation(userPrompt)) return false;
+                // Have we run setup (mkdir / venv / pip / npm) but no Write yet?
+                let sawSetup = false;
+                let sawWrite = false;
+                for (const m of this.state.messages) {
+                  if (m.role === "assistant" && Array.isArray(m.content)) {
+                    for (const b of m.content) {
+                      const t = typeof b === "object" && b !== null
+                        ? (b as { type?: unknown }).type
+                        : undefined;
+                      if (t === "tool_use") {
+                        const name = String((b as { name?: unknown }).name ?? "");
+                        const inp = (b as { input?: unknown }).input;
+                        const cmd = typeof inp === "object" && inp !== null
+                          ? String((inp as { command?: unknown }).command ?? "")
+                          : "";
+                        if (name === "Bash" && /\b(?:mkdir|venv|pip\s+install|npm\s+install|cargo\s+init|git\s+init)\b/.test(cmd)) {
+                          sawSetup = true;
+                        }
+                        if (name === "Write" || name === "MultiEdit") {
+                          sawWrite = true;
+                        }
+                      }
+                    }
+                  }
+                }
+                return sawSetup && !sawWrite;
+              } catch {
+                return false;
+              }
+            })();
+
+            const contextPct = this.config.contextWindowSize
+              ? Math.round((this.state.tokenCount / this.config.contextWindowSize) * 100)
+              : 0;
+
+            const contextWarning = contextPct >= 90
+              ? ` Context is at ${contextPct}% — if the action below doesn't fit, respond with /compact first.`
+              : "";
+
+            let directive: string;
+            if (scaffoldWriteStuck) {
+              directive =
+                "[SYSTEM] You set up the project (directory, venv, dependencies) but have NOT yet written the main application file. " +
+                "Your next action MUST be a single Write tool call with the complete main source file (typically app.py, main.py, index.ts, or server.py depending on the stack chosen). " +
+                "Do NOT emit any planning text, meta-commentary, or 'Yes. Then …' monologue. " +
+                "Emit exactly ONE Write tool call with the full file content, nothing else." +
+                contextWarning;
+            } else if (isFirstTurn && hasThinkingNow) {
+              directive =
+                "[SYSTEM] You reasoned about this task but called ZERO tools. " +
+                "You have filesystem tools available: Read (reads a file by path), " +
+                "Grep (searches code), Glob (finds files). " +
+                "Call the Read tool NOW on the first relevant source file. " +
+                "Do NOT write any more text. Your very next action must be a tool call." +
+                contextWarning;
+            } else {
+              directive =
+                `[SYSTEM] You have produced ${guardState.consecutiveTextOnlyTurns} consecutive turns ` +
+                `with${hasThinkingNow ? " reasoning and" : ""} text output but zero tool calls. ` +
+                `Stop re-analyzing. Either: (1) declare the task complete with a final summary, ` +
+                `or (2) call a tool RIGHT NOW to make measurable progress. ` +
+                `Do NOT produce another text-only response.` +
+                contextWarning;
+            }
+
             this.state.messages.push({
               role: "user",
-              content: isFirstTurn && hasThinkingNow
-                ? "[SYSTEM] You reasoned about this task but called ZERO tools. " +
-                  "You have filesystem tools available: Read (reads a file by path), " +
-                  "Grep (searches code), Glob (finds files). " +
-                  "Call the Read tool NOW on the first relevant source file. " +
-                  "Do NOT write any more text. Your very next action must be a tool call."
-                : `[SYSTEM] You have produced ${guardState.consecutiveTextOnlyTurns} consecutive turns ` +
-                  `with${hasThinkingNow ? " reasoning and" : ""} text output but zero tool calls. ` +
-                  `Stop re-analyzing. Either: (1) declare the task complete with a final summary, ` +
-                  `or (2) call a tool RIGHT NOW to make measurable progress. ` +
-                  `Do NOT produce another text-only response.`,
+              content: directive,
             });
             guardState.consecutiveTextOnlyTurns = 0;
             // Force continuation: yield a turn_end for the analysis turn, then re-loop
