@@ -626,6 +626,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         countFilesOnDisk,
         detectAuthClaim,
         formatAuthClaimWarning,
+        detectStrongCompletionClaim,
+        formatStrongCompletionWarning,
       } = await import("./grounding-gate.js");
 
       // Only count files that ACTUALLY exist on disk. Session tracker
@@ -679,6 +681,46 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         events.push({
           type: "banner",
           title: "Unverified auth/network assumption",
+          subtitle: warning,
+        });
+      }
+
+      // Check 4 — strong completion claim. Fires when the final text
+      // uses phrases like "completado" / "listo para tiempo real" /
+      // "fully functional" / "production-ready". Issue #102.
+      // Extract the most recent user prompt to check for broad-scope
+      // markers. (ctx.messages is filtered assistant↔user, so we walk
+      // backwards to find the last user message text.)
+      let lastUserPrompt = "";
+      for (let i = ctx.messages.length - 1; i >= 0; i--) {
+        const m = ctx.messages[i];
+        if (m?.role === "user") {
+          const c = m.content;
+          if (typeof c === "string") {
+            lastUserPrompt = c;
+          } else if (Array.isArray(c)) {
+            lastUserPrompt = c
+              .filter((b: unknown): b is { type: string; text: string } =>
+                typeof b === "object" && b !== null && (b as { type?: unknown }).type === "text",
+              )
+              .map((b) => b.text)
+              .join(" ");
+          }
+          break;
+        }
+      }
+      const strongClaim = detectStrongCompletionClaim(finalText, lastUserPrompt);
+      if (strongClaim) {
+        const warning = formatStrongCompletionWarning(strongClaim);
+        log.warn(
+          "grounding",
+          `strong completion claim${strongClaim.broadRequest ? " (broad-scope request)" : ""}: "${strongClaim.snippet}"`,
+        );
+        events.push({
+          type: "banner",
+          title: strongClaim.broadRequest
+            ? "Scope overclaim on broad request"
+            : "Strong completion claim — verify runtime",
           subtitle: warning,
         });
       }

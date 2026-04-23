@@ -6,8 +6,10 @@ import {
   countFilesOnDisk,
   detectAuthClaim,
   detectCreationClaimMismatch,
+  detectStrongCompletionClaim,
   formatAuthClaimWarning,
   formatClaimMismatchWarning,
+  formatStrongCompletionWarning,
   formatStubWarning,
   scanFilesForStubs,
 } from "./grounding-gate";
@@ -293,6 +295,73 @@ export async function login(email: string, password: string): Promise<string> {
     expect(warning).toContain("Grounding check");
     expect(warning).toContain("sin auth");
     expect(warning).toMatch(/does not prove|Successful local/i);
+  });
+
+  // ─── Strong completion claims (issue #102) ────────────────────
+
+  test("detects the EXACT 2026-04-23 phrase 'Proyecto X completado'", () => {
+    const finalText =
+      "Proyecto Bitcoin TUI Dashboard completado — listo para analizar la blockchain de Bitcoin en tiempo real.";
+    const broadUserPrompt =
+      "quiero ver bloques, transacciones, y mucho mas en vivo, o sea, analizar completamente la blockchain";
+    const finding = detectStrongCompletionClaim(finalText, broadUserPrompt);
+    expect(finding).not.toBeNull();
+    expect(finding?.snippet).toMatch(/completado|listo para/i);
+    expect(finding?.broadRequest).toBe(true);
+  });
+
+  test("detects 'listo para producción'", () => {
+    const finding = detectStrongCompletionClaim(
+      "Implementación lista para producción.",
+      "hazlo",
+    );
+    expect(finding).not.toBeNull();
+    expect(finding?.broadRequest).toBe(false);
+  });
+
+  test("detects English 'production-ready'", () => {
+    expect(detectStrongCompletionClaim("The app is production-ready.", "hi")).not.toBeNull();
+  });
+
+  test("detects 'works perfectly'", () => {
+    expect(detectStrongCompletionClaim("Everything works perfectly end-to-end.", "fix")).not.toBeNull();
+  });
+
+  test("detects 'fully functional'", () => {
+    expect(detectStrongCompletionClaim("The dashboard is fully functional now.", "")).not.toBeNull();
+  });
+
+  test("does NOT trigger on MVP/scope-honest wording", () => {
+    expect(
+      detectStrongCompletionClaim("Created an initial MVP of the dashboard.", "build me X"),
+    ).toBeNull();
+    expect(
+      detectStrongCompletionClaim("First pass implementation of block viewer.", "build me X"),
+    ).toBeNull();
+  });
+
+  test("does NOT trigger on empty text", () => {
+    expect(detectStrongCompletionClaim("", "anything")).toBeNull();
+  });
+
+  test("broadRequest flag fires on 'analizar completamente'", () => {
+    const f = detectStrongCompletionClaim("proyecto completado", "quiero analizar completamente");
+    expect(f?.broadRequest).toBe(true);
+  });
+
+  test("broadRequest flag fires on 'end-to-end'", () => {
+    const f = detectStrongCompletionClaim(
+      "production-ready",
+      "build an end-to-end monitoring solution",
+    );
+    expect(f?.broadRequest).toBe(true);
+  });
+
+  test("formatStrongCompletionWarning escalates on broad-scope request", () => {
+    const broadFinding = { snippet: "proyecto completado", broadRequest: true };
+    const narrowFinding = { snippet: "proyecto completado", broadRequest: false };
+    expect(formatStrongCompletionWarning(broadFinding)).toContain("broad-scope");
+    expect(formatStrongCompletionWarning(narrowFinding)).not.toContain("broad-scope");
   });
 
   test("formatStubWarning caps at 8 items with overflow note", () => {

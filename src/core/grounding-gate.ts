@@ -255,6 +255,97 @@ export function detectCreationClaimMismatch(
   return null;
 }
 
+// Patterns that declare strong, broad completion — the kind of claim that
+// requires evidence of actual runtime behavior end-to-end, not just a
+// successful import or file write. Issue #102: "Proyecto completado,
+// listo para analizar la blockchain en tiempo real" after only imports
+// and a TUI render succeeded. When the user asked for a broad "analyze
+// the full blockchain in real time", a closeout this strong is almost
+// always over-calibrated relative to what was implemented.
+const STRONG_COMPLETION_PATTERNS: RegExp[] = [
+  // Spanish — "completado", "listo para", "funciona perfectamente", "en producción"
+  /\b(?:proyecto|aplicaci[oó]n|dashboard|sistema|implementaci[oó]n|soluci[oó]n)\s+(?:completad[oa]|terminad[oa]|finalizad[oa])\b/i,
+  /\blist[oa]s?\s+para\s+(?:analizar|usar|producci[oó]n|correr\s+en|funcionar\s+en|operar\s+en)/i,
+  /\bfunciona\s+(?:perfectamente|completamente|sin\s+problemas)\b/i,
+  /\bcompletamente\s+funcional\b/i,
+  /\ben\s+tiempo\s+real\b/i,
+  /\ben\s+producci[oó]n\b/i,
+  // English
+  /\b(?:project|app|application|dashboard|system|implementation|solution)\s+(?:complete|completed|finished|done|ready)\b/i,
+  /\bready\s+(?:for\s+(?:production|use|real.?time|deployment)|to\s+(?:analyze|use|deploy|ship))\b/i,
+  /\bfully\s+(?:working|functional|implemented|operational)\b/i,
+  /\bproduction[-\s]?ready\b/i,
+  /\bworks\s+(?:perfectly|flawlessly|end.to.end)\b/i,
+];
+
+// Heuristic markers that suggest the user wanted broad/comprehensive
+// functionality, not a narrow slice. When these appear alongside
+// strong-completion claims, the risk of scope over-claim is high.
+export const BROAD_SCOPE_REQUEST_PATTERNS: RegExp[] = [
+  /\b(?:todo|toda|todos|todas|completo|completa|completamente|integral|integral(mente)?|full[ly]?|complete(?:ly)?|entire(?:ly)?|comprehensive(?:ly)?|end[-\s]to[-\s]end)\b/i,
+  /\btiempo\s+real\b/i,
+  /\bmucho\s+m[aá]s\b/i,
+  /\banalizar?\s+(?:completamente|totalmente|a\s+fondo|todo)/i,
+  /\b(?:everything|all\s+(?:the|of)|full\s+(?:stack|implementation|featured))\b/i,
+];
+
+export interface StrongCompletionFinding {
+  /** The phrase that matched. */
+  snippet: string;
+  /** Whether the ORIGINAL user request had broad-scope markers. */
+  broadRequest: boolean;
+}
+
+/**
+ * Detect over-confident completion claims in the final text. Fires
+ * when any strong-completion phrase appears. If the session's original
+ * user message also contained broad-scope language, the mismatch is
+ * more severe and the warning can be escalated.
+ *
+ * Unlike the creation-claim check, this one does not require zero
+ * files — it fires even when files WERE written, because the
+ * 2026-04-23 #102 run DID write app.py but the "completado / listo
+ * para tiempo real" claim was still disproportionate.
+ */
+export function detectStrongCompletionClaim(
+  finalText: string,
+  originalUserPrompt: string,
+): StrongCompletionFinding | null {
+  if (!finalText || finalText.trim().length === 0) return null;
+
+  for (const pattern of STRONG_COMPLETION_PATTERNS) {
+    const match = finalText.match(pattern);
+    if (match) {
+      const start = Math.max(0, (match.index ?? 0) - 30);
+      const end = Math.min(finalText.length, (match.index ?? 0) + match[0].length + 80);
+      const broadRequest = BROAD_SCOPE_REQUEST_PATTERNS.some((p) =>
+        p.test(originalUserPrompt),
+      );
+      return {
+        snippet: finalText.slice(start, end).trim(),
+        broadRequest,
+      };
+    }
+  }
+  return null;
+}
+
+export function formatStrongCompletionWarning(finding: StrongCompletionFinding): string {
+  const severity = finding.broadRequest
+    ? "The user's request was broad-scope ('completo', 'full', 'tiempo real', etc.), " +
+      "but the implementation covers only a narrow subset. "
+    : "";
+  return (
+    `⚠ Grounding check: the response declares completion in strong, broad terms. ` +
+    `Matched phrase: "${finding.snippet}". ` +
+    severity +
+    `Replace "completado / listo para producción / works end-to-end" with scope-honest ` +
+    `wording: "initial version", "MVP", "first pass", "covers X but not Y". ` +
+    `Only claim end-to-end readiness when you've verified the full path (external ` +
+    `dependencies, auth, error cases), not just imports or a render.`
+  );
+}
+
 // Patterns for operational / network claims that require actual evidence
 // from the session, not inference from a successful unauthenticated call.
 // See issue #101: agent claimed "Conecta al RPC de tu nodo en
