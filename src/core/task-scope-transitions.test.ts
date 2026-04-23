@@ -58,6 +58,57 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     expect(scope.phase).toBe("failed");
   });
 
+  test("runner_misfire → phase=partial, NOT failed (v275 EXACT repro)", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordDirectoryVerified("/proj/bitcoin-tui-dashboard");
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/index.ts",
+      at: Date.now(),
+    });
+    mgr.recordRuntimeCommand({
+      command: "bun run index.ts",
+      exitCode: null,
+      output:
+        "✗ Port 3000 is already in use.\n  Spawning bun-direct on this port would race and fail.",
+      runtimeFailed: true,
+      status: "runner_misfire",
+      timestamp: Date.now(),
+    });
+    const scope = mgr.current()!;
+    expect(scope.phase).toBe("partial");
+    expect(scope.type).toBe("scaffold"); // NOT flipped to configure
+    expect(scope.completion.reasons.some((r) => /wrong execution mode/i.test(r))).toBe(
+      true,
+    );
+  });
+
+  test("closeout for runner_misfire renders next-step text and suppresses generic verdict", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordDirectoryVerified("/proj/bitcoin-tui-dashboard");
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/index.ts",
+      at: Date.now(),
+    });
+    mgr.recordRuntimeCommand({
+      command: "bun run index.ts",
+      exitCode: null,
+      output:
+        "Port 3000 is already in use. Spawning bun-direct on this port would race and fail.",
+      runtimeFailed: true,
+      status: "runner_misfire",
+      timestamp: Date.now(),
+    });
+    const out = renderCloseoutFromScope(mgr.current()!);
+    expect(out!).toContain("runner_misfire");
+    expect(out!).toContain("verification runner");
+    expect(out!).toMatch(/Next required step/i);
+    expect(out!).toMatch(/bun index\.ts|bun run index\.ts/);
+    // generic partial verdict should NOT also render — the misfire branch returns early
+    expect(out!).not.toMatch(/Initial scaffold \/ MVP is in place/);
+  });
+
   test("audit scope does NOT transition on failed_auth (stays audit)", () => {
     const mgr = getTaskScopeManager();
     mgr.beginNewScope({ type: "audit", userPrompt: "audita el proyecto" });

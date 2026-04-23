@@ -126,7 +126,11 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     lines.push("- Runtime: **not verified** — the generated code was not executed this turn.");
   } else {
     const last = runtimes[runtimes.length - 1]!;
-    if (last.status === "failed_auth") {
+    if (last.status === "runner_misfire") {
+      lines.push(
+        `- Runtime: **runner_misfire** — KCode's spawn preflight refused the command because it treated the project as a web server (port check). The app itself was never executed.`,
+      );
+    } else if (last.status === "failed_auth") {
       const authLine =
         last.output
           .split("\n")
@@ -226,6 +230,18 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
 
   // Overall verdict
   lines.push("");
+  const misfire = runtimes[runtimes.length - 1]?.status === "runner_misfire";
+  if (misfire) {
+    lines.push(
+      "**Status: partial.** The project artifacts were created, but KCode's verification runner " +
+        "refused the command based on a web-server preflight — not an app failure.",
+    );
+    lines.push("");
+    lines.push(
+      "**Next required step:** rerun with a direct CLI/TUI execution mode (e.g. `bun index.ts` / `timeout 8 bun run index.ts`) outside the spawn preflight, or confirm the project's web framework imports.",
+    );
+    return lines.join("\n");
+  }
   // failed_auth on scaffold/implement → task transitioned to configure/blocked
   // in the scope manager. Render a precise next-step instead of a generic
   // "failed". Issue #111 v273 repro.

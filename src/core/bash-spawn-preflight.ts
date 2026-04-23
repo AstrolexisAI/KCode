@@ -295,6 +295,38 @@ export function runSpawnPreflight(
   const detection = detectServerSpawn(command);
   if (!detection) return null;
 
+  // Phase 12: filename-based detection ("bun run index.ts", "node app.js")
+  // over-matches on CLI/TUI projects whose entry file happens to be
+  // named index / app / server / main. Before reserving a port, peek
+  // at the project's package.json / requirements.txt / entry file for
+  // TUI/CLI signals (blessed, ink, commander, rich, curses, typer, ...).
+  // When the project is demonstrably non-web, skip preflight entirely —
+  // the spawn can't collide with anything because it never listens.
+  //
+  // Issue #111 v275: Bitcoin TUI scaffold with blessed-contrib was
+  // refused by preflight on port 3000 (held by unrelated dev server).
+  // Only narrow the skip to the "direct" detections; explicit web
+  // commands (next dev, vite, flask run, ...) keep the check.
+  if (detection.framework === "bun-direct" || detection.framework === "node-direct") {
+    try {
+      const { inferRuntimeModeFromCwd, skipsServerPreflight } =
+        require("./runtime-mode") as typeof import("./runtime-mode");
+      const mode = inferRuntimeModeFromCwd(cwd);
+      if (skipsServerPreflight(mode)) {
+        log.debug(
+          "preflight",
+          `skip ${detection.framework} preflight: runtime mode = ${mode} (non-web)`,
+        );
+        return null;
+      }
+    } catch (err) {
+      log.debug(
+        "preflight",
+        `runtime-mode inference failed, falling through: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
+
   const lines: string[] = [];
 
   // Check 1: Port collision
