@@ -352,13 +352,14 @@ export function createTaskScopeManager(): TaskScopeManager {
         }
       }
       // A new mutation after a runtime failure marks "patch applied,
-      // needs rerun" — but only when the patched file is actually
-      // relevant to the failure (the file named by the failing command
-      // or mentioned in the traceback). Editing README.md after a
-      // python main.py failure should not arm the rerun gate.
+      // needs rerun" — but only when the patched file is PLAUSIBLY
+      // relevant to the failure. Relaxed in v277: a code file in the
+      // same project is usually the fix location even when its name
+      // doesn't appear in the failing command/traceback (e.g. the
+      // error is in index.ts but the bad import lives in rpc.ts).
+      // Docs/config files (README.md, .gitignore, *.md) still never
+      // arm the gate.
       if (_current.verification.lastRuntimeFailure) {
-        // Inline relevancy check (can't import rerun-directive here
-        // without creating a circular dependency).
         const failure = _current.verification.lastRuntimeFailure;
         const CMD_FILE_RE =
           /(?:^|[\s=])([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs|java|sh|php|pl|lua))(?=[\s&|;<>]|$)/gi;
@@ -380,7 +381,19 @@ export function createTaskScopeManager(): TaskScopeManager {
         }
         const evParts = ev.path.split("/");
         const evBase = evParts[evParts.length - 1] ?? ev.path;
-        const relevantHit = relevant.size === 0 || relevant.has(evBase);
+        const DOC_OR_CONFIG =
+          /^(?:README|CHANGELOG|LICENSE|CONTRIBUTING|TODO|\.gitignore|\.npmignore|\.dockerignore)(?:\.md|\.txt|\.rst)?$/i;
+        const DOC_EXT = /\.(?:md|mdx|txt|rst|adoc|html)$/i;
+        const CODE_EXT =
+          /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|scala|swift|php|pl|lua|sh|bash|zsh|fish|c|cpp|cc|h|hpp|cs|fs|ex|exs|erl|clj|cljs|hs|ml|dart|r|nim|zig|v|vala|sql|json|yaml|yml|toml)$/i;
+
+        const directHit = relevant.has(evBase);
+        const isDoc = DOC_OR_CONFIG.test(evBase) || DOC_EXT.test(evBase);
+        const isCode = CODE_EXT.test(evBase);
+        // arm if relevant has no paths (nothing to narrow), OR direct
+        // basename hit, OR the edit is to a code file (plausible fix).
+        const relevantHit =
+          relevant.size === 0 || directHit || (isCode && !isDoc);
         if (relevantHit) {
           _current.verification.patchAppliedAfterFailure = true;
           _current.verification.rerunPassedAfterPatch = false;
