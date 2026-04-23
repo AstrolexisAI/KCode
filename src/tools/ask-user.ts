@@ -45,6 +45,52 @@ export async function executeAskUser(input: Record<string, unknown>): Promise<To
     return { tool_use_id: "", content: "Error: question is required", is_error: true };
   }
 
+  // Phase 14 (#111 v282 follow-up): when the model asks about credentials
+  // / connection failures, its 'context' field is often the only place
+  // where failure evidence lives — e.g. the Bitcoin TUI swallowed the 401
+  // Unauthorized inside blessed, so stdout for 'bun run' showed no error
+  // but the model saw the 401 render on screen and put it into its
+  // AskUser context. Feed that signal into the scope so mayClaimReady
+  // flips to false and the closeout renders the failed_auth branch.
+  //
+  // Narrow classifier: only infer from unambiguous failure signatures
+  // (auth / connection / traceback). Status updates won't trip it.
+  try {
+    const combinedSignal = [question, context ?? ""].join("\n");
+    const { classifyRuntimeStatus } =
+      require("../core/runtime-classifier") as typeof import("../core/runtime-classifier");
+    const status = classifyRuntimeStatus("", null, combinedSignal);
+    // Only act on CONFIDENT failure signals. failed_unknown is the
+    // classifier's default-when-no-match and must not be treated as
+    // evidence (the question 'Which port should I bind to?' would
+    // otherwise degrade the scope to failed because classifier
+    // returns failed_unknown for anything without a matching signature).
+    const CONFIDENT = new Set([
+      "failed_auth",
+      "failed_connection",
+      "failed_traceback",
+      "failed_dependency",
+      "started_unverified",
+    ]);
+    if (CONFIDENT.has(status)) {
+      const { getTaskScopeManager } =
+        require("../core/task-scope") as typeof import("../core/task-scope");
+      const mgr = getTaskScopeManager();
+      if (mgr.current()) {
+        mgr.recordRuntimeCommand({
+          command: "(model-reported via AskUser)",
+          exitCode: null,
+          output: combinedSignal.slice(0, 600),
+          runtimeFailed: status.startsWith("failed_"),
+          status,
+          timestamp: Date.now(),
+        });
+      }
+    }
+  } catch {
+    /* scope unavailable — legacy path */
+  }
+
   const parts: string[] = [];
 
   if (context) {
