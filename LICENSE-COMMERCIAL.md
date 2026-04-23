@@ -5,8 +5,9 @@ See [LICENSE](./LICENSE).
 
 **Pro features** (multi-model orchestrator, multi-agent swarm, auto-benchmarking,
 hallucination recovery, custom routing rules, cloud failover, hosted KCode Cloud,
-managed audit service, enterprise compliance packs) are maintained in a
-**separate private repository** under a commercial license.
+managed audit service, enterprise compliance packs) are gated at runtime by a
+signed-license check. Team and Enterprise hosted services run from a private
+Astrolexis-operated infrastructure.
 
 ## Pro tiers
 
