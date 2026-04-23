@@ -41,8 +41,10 @@ licenses. Sign-off is automatic when you pass `-s` to
 git commit -s -m "your commit message"
 ```
 
-Unsigned commits will be asked to amend before merge. Full
-DCO text and rationale in [CLA.md](./CLA.md).
+Unsigned commits will be asked to amend before merge. The DCO
+text is the standard version from https://developercertificate.org/.
+Contributions are automatically licensed under Apache 2.0 per
+Section 5 of the license — no additional CLA required.
 
 ## Versioning + Changelog contract
 
