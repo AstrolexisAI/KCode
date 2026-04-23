@@ -746,6 +746,35 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               phase: "partial",
             },
           );
+
+          // Phase 8: for broad-scope requests, a placeholder-laden
+          // scaffold is NOT a valid stopping point. Inject a
+          // continuation directive that forces the next turn to
+          // replace placeholders with real implementation. Issue
+          // #108 (Dashboard coming soon... accepted as done).
+          const curScope = scopeMgr.current();
+          if (curScope && curScope.broadRequest && curScope.type === "scaffold") {
+            const placeholderHints = findings
+              .slice(0, 5)
+              .map((f) => `  • ${f.file.split("/").pop()}:${f.line} — ${f.snippet.slice(0, 80)}`)
+              .join("\n");
+            injectMessages.push({
+              role: "user",
+              content:
+                "[SYSTEM] The user asked for a broad/complete implementation, but the " +
+                `files you just wrote contain ${findings.length} placeholder/stub marker(s):\n` +
+                placeholderHints +
+                "\n\nThis is NOT a valid stopping point. Your next action must continue " +
+                "implementing the requested functionality: replace the placeholders with " +
+                "real code, add the views/panels/features the user asked for. Do not close " +
+                "with a summary until the placeholders are gone or each is explicitly " +
+                "documented as out-of-scope for a specific reason.",
+            });
+            log.info(
+              "grounding",
+              `phase 8 continuation directive injected: broad scaffold with ${findings.length} placeholders`,
+            );
+          }
         }
       }
 

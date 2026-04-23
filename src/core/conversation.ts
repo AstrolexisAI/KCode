@@ -1108,13 +1108,43 @@ export class ConversationManager {
               ? ` Context is at ${contextPct}% — if the action below doesn't fit, respond with /compact first.`
               : "";
 
+            // Phase 7: pull currentStep from TaskScope to inject a
+            // step-specific directive. Generic "call a tool" doesn't
+            // unstick the model; "call Write for app.py because that's
+            // your current plan step" does. Issue #105.
+            let scopeCurrentStep: string | undefined;
+            let scopeFilesWrittenCount = 0;
+            try {
+              const { getTaskScopeManager } =
+                require("./task-scope") as typeof import("./task-scope");
+              const scope = getTaskScopeManager().current();
+              if (scope) {
+                scopeCurrentStep = scope.progress.currentStep;
+                scopeFilesWrittenCount = scope.verification.filesWritten.length;
+              }
+            } catch {
+              /* scope unavailable */
+            }
+
             let directive: string;
             if (scaffoldWriteStuck) {
+              const stepHint = scopeCurrentStep
+                ? ` Your current plan step is: "${scopeCurrentStep}". `
+                : " ";
               directive =
-                "[SYSTEM] You set up the project (directory, venv, dependencies) but have NOT yet written the main application file. " +
+                "[SYSTEM] You set up the project (directory, venv, dependencies) but have NOT yet written the main application file." +
+                stepHint +
                 "Your next action MUST be a single Write tool call with the complete main source file (typically app.py, main.py, index.ts, or server.py depending on the stack chosen). " +
                 "Do NOT emit any planning text, meta-commentary, or 'Yes. Then …' monologue. " +
                 "Emit exactly ONE Write tool call with the full file content, nothing else." +
+                contextWarning;
+            } else if (scopeCurrentStep) {
+              // We have a plan step but no scaffold-specific heuristic fired.
+              // Use the step as the directive anchor.
+              directive =
+                `[SYSTEM] You emitted text but no tool calls. Your current plan step is: "${scopeCurrentStep}". ` +
+                `Your next action MUST be a tool call that makes progress on that step. ` +
+                `Do NOT emit any more narrative text until you've made a tool call.` +
                 contextWarning;
             } else if (isFirstTurn && hasThinkingNow) {
               directive =

@@ -112,6 +112,19 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     lines.push(`- Secrets detected (redacted): ${kinds}.`);
   }
 
+  // Plan progress derived from scope.progress (Phase 6). This survives
+  // even if the Plan tool's internal _activePlan gets reset (issue #107:
+  // plan visible displayed 0/4 despite successful writes in the same
+  // turn). Scope mirror is authoritative.
+  const planned = scope.progress.plannedSteps.length;
+  const completed = scope.progress.completedSteps.length;
+  if (planned > 0) {
+    const current = scope.progress.currentStep
+      ? ` — current: "${scope.progress.currentStep}"`
+      : "";
+    lines.push(`- Plan progress: ${completed}/${planned} step(s) completed${current}.`);
+  }
+
   // Why the turn cannot be marked done
   if (scope.completion.reasons.length > 0) {
     lines.push("");
