@@ -75,6 +75,22 @@ export interface SecretFinding {
 }
 
 /**
+ * Project root state for scaffold tasks. Distinguishes "never tried"
+ * from "mkdir succeeded but not re-verified" from "verified to exist
+ * on disk" from "failed to create / missing". Issue #108 + #109:
+ * without this, the plan advanced past step 1 on an abstract mkdir
+ * success while the directory didn't actually exist (cd → ENOENT).
+ */
+export type ProjectRootStatus = "unknown" | "created" | "verified" | "missing";
+
+export interface ProjectRootState {
+  path: string;
+  status: ProjectRootStatus;
+  lastError?: string;
+  verifiedAt?: number;
+}
+
+/**
  * Self-contained snapshot of everything the task layers need. All
  * fields are initialized on beginNewScope(); mutations go through
  * `update()` which bumps `updatedAt`.
@@ -127,6 +143,9 @@ export interface TaskScope {
     redactionRequired: boolean;
   };
 
+  // ── Project root (scaffold tasks) ──
+  projectRoot: ProjectRootState;
+
   // ── Completion flags (computed by grounding layers, read by closeout renderer) ──
   completion: {
     mayClaimReady: boolean;
@@ -161,6 +180,12 @@ export interface TaskScopeManager {
   recordRuntimeCommand(ev: RuntimeCommandEvent): void;
   /** Record a detected secret (for redaction). */
   recordSecret(finding: SecretFinding): void;
+  /** mkdir succeeded (directory CREATED but not yet verified to exist on disk). */
+  recordDirectoryCreated(path: string): void;
+  /** existsSync + isDirectory confirmed. Step 1 can only complete after this. */
+  recordDirectoryVerified(path: string): void;
+  /** cd / stat / similar returned ENOENT. Prior "created" optimism invalidated. */
+  recordDirectoryMissing(path: string, reason: string): void;
   /** Close the current scope explicitly. */
   closeScope(reason: string): void;
   /** History of prior closed scopes (for debugging / telemetry). */
@@ -222,6 +247,10 @@ function makeEmptyScope(opts: {
     secrets: {
       detected: [],
       redactionRequired: true,
+    },
+    projectRoot: {
+      path: "",
+      status: "unknown",
     },
     completion: {
       mayClaimReady: true,
@@ -339,6 +368,46 @@ export function createTaskScopeManager(): TaskScopeManager {
       );
       if (!exists) _current.secrets.detected.push(finding);
       _current.secrets.redactionRequired = true;
+      touch(_current);
+    },
+
+    recordDirectoryCreated(path): void {
+      if (_current === null) return;
+      // Don't downgrade "verified" to "created" if we already verified.
+      if (_current.projectRoot.status === "verified" && _current.projectRoot.path === path) return;
+      _current.projectRoot = {
+        path,
+        status: "created",
+        lastError: undefined,
+      };
+      touch(_current);
+    },
+
+    recordDirectoryVerified(path): void {
+      if (_current === null) return;
+      _current.projectRoot = {
+        path,
+        status: "verified",
+        lastError: undefined,
+        verifiedAt: Date.now(),
+      };
+      touch(_current);
+    },
+
+    recordDirectoryMissing(path, reason): void {
+      if (_current === null) return;
+      _current.projectRoot = {
+        path,
+        status: "missing",
+        lastError: reason,
+      };
+      // A missing root invalidates any ready/implemented claim and
+      // flags the turn as partial until the root is re-established.
+      _current.completion.mayClaimReady = false;
+      _current.completion.mustUsePartialLanguage = true;
+      if (!_current.completion.reasons.includes(`project root missing: ${path}`)) {
+        _current.completion.reasons.push(`project root missing: ${path}`);
+      }
       touch(_current);
     },
 

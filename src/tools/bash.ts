@@ -24,6 +24,7 @@ export function decodeBashHtmlEntities(cmd: string): string {
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { existsSync as _existsSync, statSync as _statSync } from "node:fs";
 import {
   auditGuardsEnabled,
   checkMutationAllowed,
@@ -950,6 +951,69 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
       const rawOutput = stdout + (stderr ? `\n${stderr}` : "");
       // Strip dangerous terminal escape sequences (title bar injection, cursor manipulation)
       const output = stripDangerousEscapes(rawOutput);
+
+      // Phase 9: emit directory events to TaskScope for mkdir/cd
+      // commands. Lets step 1 of scaffold plans only complete on
+      // verified-exists, not abstract mkdir success. Issue #109.
+      try {
+        const { getTaskScopeManager } = require("../core/task-scope") as typeof import("../core/task-scope");
+        const { resolve: resolvePath } = require("node:path") as typeof import("node:path");
+        const mgr = getTaskScopeManager();
+        if (mgr.current()) {
+          // Match all mkdir targets in the command (including chained)
+          const mkdirMatches = [...command.matchAll(/\bmkdir\b(?:\s+-p)?\s+([^\s;|&]+)/g)];
+          for (const m of mkdirMatches) {
+            const target = m[1]?.replace(/^['"]|['"]$/g, "") ?? "";
+            if (!target) continue;
+            const abs = resolvePath(process.cwd(), target);
+            if (code === 0) {
+              mgr.recordDirectoryCreated(abs);
+              // Verify immediately for step-1 gating — mkdir success
+              // doesn't guarantee a later cd won't ENOENT (e.g. race,
+              // wrong cwd).
+              try {
+                if (_existsSync(abs) && _statSync(abs).isDirectory()) {
+                  mgr.recordDirectoryVerified(abs);
+                }
+              } catch {
+                /* stat error swallowed */
+              }
+            }
+          }
+          // Detect cd failures: `cd path` returning ENOENT or its
+          // Spanish localization. Authoritative signal that the
+          // directory doesn't actually exist.
+          const cdMatch = command.match(/\bcd\s+([^\s;|&]+)/);
+          if (cdMatch && code !== 0) {
+            const target = cdMatch[1]?.replace(/^['"]|['"]$/g, "") ?? "";
+            if (target) {
+              const abs = resolvePath(process.cwd(), target);
+              if (/no such file or directory|no existe el (?:fichero|archivo) o el directorio|ENOENT/i.test(output)) {
+                mgr.recordDirectoryMissing(abs, output.slice(0, 200));
+              }
+            }
+          }
+          // Successful `cd` confirms the target exists
+          if (cdMatch && code === 0) {
+            const target = cdMatch[1]?.replace(/^['"]|['"]$/g, "") ?? "";
+            if (target) {
+              const abs = resolvePath(process.cwd(), target);
+              try {
+                if (_existsSync(abs) && _statSync(abs).isDirectory()) {
+                  mgr.recordDirectoryVerified(abs);
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        }
+      } catch (err) {
+        log.debug(
+          "task-scope",
+          `bash dir-event wiring error (non-fatal): ${err instanceof Error ? err.message : err}`,
+        );
+      }
 
       // Auto-detect project creation: if a scaffold command succeeded and
       // we're still in ~, update the workspace to the new project directory.
