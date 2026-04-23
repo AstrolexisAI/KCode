@@ -76,6 +76,17 @@ export function deriveRerunCommand(scope: TaskScope): string | null {
   const last = scope.verification.lastRuntimeFailure;
   if (!last) return null;
 
+  // runner_misfire: the KCode preflight refused the command because
+  // of a port-3000 collision, but the project is a CLI/TUI and
+  // never binds a port. Re-running the SAME command goes through
+  // the same preflight again. The task-scope transition should have
+  // moved the scope to phase="partial" and the closeout renders a
+  // direct-mode next-step; the forced-rerun gate has nothing useful
+  // to inject here. Return null so the gate skips.
+  const lastRuntime =
+    scope.verification.runtimeCommands[scope.verification.runtimeCommands.length - 1];
+  if (lastRuntime?.status === "runner_misfire") return null;
+
   const allTouched = [
     ...scope.verification.filesWritten,
     ...scope.verification.filesEdited,

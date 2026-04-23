@@ -120,6 +120,38 @@ describe("runtime-classifier", () => {
     );
   });
 
+  test("bash preflight refusal → runner_misfire (v275 EXACT repro)", () => {
+    const output =
+      "✗ Port 3000 is already in use.\n" +
+      "  occupant: PID 2040642 (node)\n" +
+      "  occupant cwd: /home/curly/projects\n" +
+      "  Spawning bun-direct on this port would race and fail.";
+    expect(classifyRuntimeStatus("bun run index.ts", null, output)).toBe(
+      "runner_misfire",
+    );
+  });
+
+  test("'race and fail' message alone → runner_misfire", () => {
+    expect(
+      classifyRuntimeStatus(
+        "bun run app.ts",
+        null,
+        "bun-direct on this port would race and fail",
+      ),
+    ).toBe("runner_misfire");
+  });
+
+  test("runner_misfire takes precedence over dependency/traceback tokens", () => {
+    // Preflight output can contain framework names (Next.js, Vite) —
+    // make sure we don't degrade to dep/traceback just because the
+    // preflight mentions them.
+    const output =
+      "✗ Port 3000 is already in use. Spawning bun-direct on this port would race and fail. (hint: Next.js)";
+    expect(classifyRuntimeStatus("bun run index.ts", null, output)).toBe(
+      "runner_misfire",
+    );
+  });
+
   test("phaseForStatus maps failed_auth to blocked, others to failed", () => {
     expect(phaseForStatus("failed_auth")).toBe("blocked");
     expect(phaseForStatus("failed_connection")).toBe("failed");

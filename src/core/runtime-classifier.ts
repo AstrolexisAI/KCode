@@ -28,6 +28,16 @@ export type RuntimeStatus =
   | "failed_connection"
   | "failed_traceback"
   | "failed_dependency"
+  /**
+   * The verification runner itself mis-fired — KCode's bash preflight
+   * refused the spawn because of a port collision or other infra
+   * concern, even though the project was never meant to bind to a
+   * port. The app's real status is unknown because the runner never
+   * actually executed it. Issue #111 v275: Bitcoin TUI scaffold with
+   * blessed-contrib was refused on port 3000. Distinct from failed_*
+   * because no app-level evidence was produced.
+   */
+  | "runner_misfire"
   | "failed_unknown";
 
 /**
@@ -47,6 +57,18 @@ export function classifyRuntimeStatus(
 ): RuntimeStatus {
   const o = output;
   const lo = o.toLowerCase();
+
+  // Runner misfire FIRST — the bash spawn preflight refused to
+  // execute. The tokens below are emitted only by KCode's own
+  // preflight, so matching them means the verifier chose the wrong
+  // execution path for this project type (TUI/CLI vs web).
+  if (
+    /Spawning\s+\S+\s+on this port would race and fail/i.test(o) ||
+    (/Port\s+\d+\s+is already in use/i.test(o) && /occupant\s+cwd/i.test(o)) ||
+    /bun-direct on this port would race and fail/i.test(o)
+  ) {
+    return "runner_misfire";
+  }
 
   // Auth first — 401/403/invalid credentials beat a traceback that
   // merely WRAPS the auth error (python-bitcoinrpc raises
@@ -143,6 +165,17 @@ export function classifyRuntimeStatus(
  */
 export function isFailedStatus(status: RuntimeStatus): boolean {
   return status.startsWith("failed_");
+}
+
+/**
+ * True when the status is a real negative signal the scope should
+ * record as a failure. runner_misfire is NOT a real failure — the
+ * app was never executed. verified/started_unverified/alive_timeout
+ * are also not failures. Use this to decide whether to set
+ * phase="failed" and mark the claims gate.
+ */
+export function isAppLevelFailure(status: RuntimeStatus): boolean {
+  return status.startsWith("failed_") && status !== "failed_unknown";
 }
 
 /**

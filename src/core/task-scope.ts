@@ -81,6 +81,7 @@ export interface RuntimeCommandEvent {
     | "failed_connection"
     | "failed_traceback"
     | "failed_dependency"
+    | "runner_misfire"
     | "failed_unknown";
   timestamp: number;
 }
@@ -399,15 +400,18 @@ export function createTaskScopeManager(): TaskScopeManager {
           command: ev.command,
           error: ev.output.slice(0, 400),
         };
-        // Status-driven transitions. failed_auth on a scaffold/implement
-        // scope means the code artifact is fine but the surrounding
-        // environment (credentials) needs user configuration — flip
-        // task type to "configure" and phase to "blocked" so the
-        // closeout renders a config-next-step instead of a generic
-        // "failed". Issue #111 v273 repro: 401 Unauthorized from
-        // bitcoind was classified as generic runtime failure; now it
-        // transitions to configure/blocked with an explicit credentials
-        // remediation step.
+        // Status-driven transitions.
+        //
+        // failed_auth on a scaffold/implement scope means the code
+        // artifact is fine but credentials need user configuration —
+        // flip task type to "configure" and phase to "blocked".
+        //
+        // runner_misfire means KCode's verification runner refused
+        // the spawn (wrong execution mode — CLI/TUI treated as web).
+        // The app itself was never executed, so phase is "partial",
+        // NOT "failed". Issue #111 v275.
+        //
+        // Everything else → phase "failed".
         if (
           ev.status === "failed_auth" &&
           (_current.type === "scaffold" || _current.type === "implement")
@@ -415,6 +419,13 @@ export function createTaskScopeManager(): TaskScopeManager {
           _current.type = "configure";
           _current.phase = "blocked";
           const reason = "RPC authentication failed — credentials required";
+          if (!_current.completion.reasons.includes(reason)) {
+            _current.completion.reasons.push(reason);
+          }
+        } else if (ev.status === "runner_misfire") {
+          _current.phase = "partial";
+          const reason =
+            "verification runner chose the wrong execution mode (CLI/TUI project executed through a web-spawn path)";
           if (!_current.completion.reasons.includes(reason)) {
             _current.completion.reasons.push(reason);
           }
