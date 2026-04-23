@@ -326,6 +326,26 @@ export async function executePlan(input: Record<string, unknown>): Promise<ToolR
       savePlanToDb(plan);
       notifyListeners();
 
+      // Phase 6: mirror plan into TaskScope.progress so the closeout
+      // renderer has the same source of truth and the plan survives
+      // even if _activePlan gets reset (issue #107: plan showed 0/4
+      // despite successful writes in the same turn).
+      try {
+        const { getTaskScopeManager } =
+          require("../core/task-scope") as typeof import("../core/task-scope");
+        const mgr = getTaskScopeManager();
+        if (mgr.current()) {
+          mgr.update({
+            progress: {
+              plannedSteps: plan.steps.map((s) => s.title),
+              currentStep: plan.steps.find((s) => s.status === "in_progress")?.title,
+            },
+          });
+        }
+      } catch {
+        /* scope unavailable — legacy path */
+      }
+
       return {
         tool_use_id: "",
         content: `Plan created: "${title}" with ${plan.steps.length} steps\n${formatPlan(plan)}`,
@@ -366,6 +386,24 @@ export async function executePlan(input: Record<string, unknown>): Promise<ToolR
       _activePlan.updatedAt = Date.now();
       savePlanToDb(_activePlan);
       notifyListeners();
+
+      // Phase 6: keep scope.progress in sync on updates too.
+      try {
+        const { getTaskScopeManager } =
+          require("../core/task-scope") as typeof import("../core/task-scope");
+        const mgr = getTaskScopeManager();
+        if (mgr.current()) {
+          const completedSteps = _activePlan.steps
+            .filter((s) => s.status === "completed")
+            .map((s) => s.title);
+          const currentStep = _activePlan.steps.find((s) => s.status === "in_progress")?.title;
+          mgr.update({
+            progress: { completedSteps, currentStep },
+          });
+        }
+      } catch {
+        /* scope unavailable */
+      }
 
       return {
         tool_use_id: "",
