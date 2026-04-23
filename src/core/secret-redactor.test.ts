@@ -28,9 +28,12 @@ describe("secret-redactor", () => {
   });
 
   test("masks Stripe webhook secrets", () => {
-    const input = "STRIPE_WEBHOOK_SECRET=whsec_Vp2CVUiGOPZJMZlvREytF5niWcPjmKFz";
+    // Synthetic fixture — NEVER paste real whsec_ values into tests.
+    const input =
+      "STRIPE_WEBHOOK_SECRET=whsec_FAKE" + "0".repeat(28);
     const { redacted } = redact(input);
-    expect(redacted).not.toContain("whsec_Vp2CVU");
+    expect(redacted).not.toContain("whsec_FAKE");
+    expect(redacted).toContain("***REDACTED***");
   });
 
   test("masks PEM-encoded private keys", () => {
