@@ -167,6 +167,107 @@ function notifyListeners(): void {
   }
 }
 
+/**
+ * Overlay scope-derived completion onto the active plan. The model
+ * frequently calls Plan tool once with mode=create and then never
+ * calls update, so the UI widget shows 0/N while the scope's
+ * verification state shows N-1/N. This helper matches each step's
+ * title against the same keyword signals the closeout renderer uses
+ * (create/install/write/verify) and flips pending steps to "done"
+ * when their verification signal is present.
+ *
+ * Issue #111 v274 repro: "Plan progress: 4/4 step(s) completed"
+ * in the grounded closeout alongside "0/4" in the UI widget.
+ *
+ * Pure data side-effect: mutates _activePlan in-place and fires
+ * listeners so the UI re-renders. Returns the number of steps
+ * whose status was flipped. Tests can force a scope manager
+ * instance via the optional `scopeGetter` parameter.
+ */
+export function reconcilePlanFromScope(
+  scopeGetter?: () => {
+    projectRoot: { status: string };
+    verification: {
+      filesWritten: string[];
+      filesEdited: string[];
+      runtimeCommands: Array<{
+        runtimeFailed: boolean;
+        status?: string;
+        exitCode: number | null;
+      }>;
+    };
+  } | null,
+): number {
+  if (!_activePlan) return 0;
+
+  let getScope = scopeGetter;
+  if (!getScope) {
+    try {
+      const { getTaskScopeManager } =
+        require("../core/task-scope") as typeof import("../core/task-scope");
+      const mgr = getTaskScopeManager();
+      getScope = () => mgr.current();
+    } catch {
+      return 0;
+    }
+  }
+
+  const scope = getScope();
+  if (!scope) return 0;
+
+  const v = scope.verification;
+  const last = v.runtimeCommands[v.runtimeCommands.length - 1];
+  const depsFilesTouched = [...v.filesWritten, ...v.filesEdited].some((p) =>
+    /(?:requirements\.txt|pyproject\.toml|package\.json|Cargo\.toml|go\.mod|Gemfile)$/i.test(p),
+  );
+  const anyFileWritten = v.filesWritten.length + v.filesEdited.length > 0;
+  const anyRuntimeHappened = v.runtimeCommands.length > 0;
+  const lastRuntimeVerified =
+    !!last &&
+    !last.runtimeFailed &&
+    (last.status === undefined || last.status === "verified");
+
+  let flipped = 0;
+  for (const step of _activePlan.steps) {
+    if (step.status !== "pending" && step.status !== "in_progress") continue;
+    const t = step.title.toLowerCase();
+    let derived: PlanStepStatus | null = null;
+
+    if (/(create|cre[aá]r|init|setup|scaffold|project|directory|carpeta|proyecto)/i.test(t)) {
+      if (scope.projectRoot.status === "verified" || scope.projectRoot.status === "created") {
+        derived = "done";
+      }
+    } else if (/(install|depend|requirement|dependenc|paquet|librer)/i.test(t)) {
+      if (depsFilesTouched || anyRuntimeHappened) {
+        derived = "done";
+      }
+    } else if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci)/i.test(t)) {
+      if (anyFileWritten) {
+        derived = "done";
+      }
+    } else if (/(test|verify|verific|run|ejecut|check|revis|connect|conect)/i.test(t)) {
+      if (lastRuntimeVerified) {
+        derived = "done";
+      } else if (last) {
+        // Runtime ran but didn't verify — signal progress without
+        // marking done. The UI will show [~] instead of [x].
+        derived = "in_progress";
+      }
+    }
+
+    if (derived && derived !== step.status) {
+      step.status = derived;
+      flipped++;
+    }
+  }
+
+  if (flipped > 0) {
+    _activePlan.updatedAt = Date.now();
+    notifyListeners();
+  }
+  return flipped;
+}
+
 // ─── Persistence ────────────────────────────────────────────────
 
 function savePlanToDb(plan: Plan): void {
@@ -394,7 +495,7 @@ export async function executePlan(input: Record<string, unknown>): Promise<ToolR
         const mgr = getTaskScopeManager();
         if (mgr.current()) {
           const completedSteps = _activePlan.steps
-            .filter((s) => s.status === "completed")
+            .filter((s) => s.status === "done")
             .map((s) => s.title);
           const currentStep = _activePlan.steps.find((s) => s.status === "in_progress")?.title;
           mgr.update({

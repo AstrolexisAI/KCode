@@ -165,16 +165,23 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
       lines.push(
         `- Runtime: **failed** (${errorLine.slice(0, 140) || "see previous output"})`,
       );
-    } else if (last.exitCode === 124) {
-      // Timeout: the process started and stayed alive, but nothing
-      // downstream of that was actually verified (no RPC round-trip,
-      // no UI assertion, etc.). Call it out so the user doesn't
-      // mistake "alive under timeout" for "works end-to-end".
+    } else if (last.exitCode === 124 || last.status === "alive_timeout") {
       lines.push(
         `- Runtime: **started and stayed alive under timeout** — no connection/RPC/UI assertion verified.`,
       );
+    } else if (last.status === "started_unverified") {
+      const errLine =
+        last.output
+          .split("\n")
+          .map((l) => l.trim())
+          .find((l) => /(^|[\s\n])(?:Error|ERROR|error)\s*[:\-—]/.test(l)) ??
+        last.output.split("\n").find((l) => l.trim())?.trim() ??
+        "";
+      lines.push(
+        `- Runtime: **started_unverified** — process exited cleanly but printed an application error (${errLine.slice(0, 140)}); end-to-end behavior not proven.`,
+      );
     } else {
-      lines.push(`- Runtime: passed (${runtimes.length} command${runtimes.length > 1 ? "s" : ""}).`);
+      lines.push(`- Runtime: verified (${runtimes.length} command${runtimes.length > 1 ? "s" : ""}).`);
     }
   }
 
@@ -272,10 +279,16 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
   );
   const anyFileWritten = v.filesWritten.length + v.filesEdited.length > 0;
   const anyRuntimeHappened = v.runtimeCommands.length > 0;
-  const lastRuntimeOk =
+  // Strict verification: "test/verify/connect" steps ONLY complete when
+  // the runtime classifier returned "verified". started_unverified,
+  // alive_timeout, and any failed_* variant leave the step open.
+  // Issue #111 v274: previous looser test (!runtimeFailed) marked the
+  // verify step done when the app printed "Error: Request-sent" and
+  // exited 0, producing "4/4 completed" under "status: partial".
+  const lastRuntimeVerified =
     !!lastRuntime &&
     !lastRuntime.runtimeFailed &&
-    (lastRuntime.status ?? "").startsWith("failed_") === false;
+    (lastRuntime.status === undefined || lastRuntime.status === "verified");
 
   for (const title of scope.progress.plannedSteps) {
     const t = title.toLowerCase();
@@ -307,15 +320,15 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
       }
     }
 
-    // Test / verify / run / connect
+    // Test / verify / run / connect — strict: only verified runtime counts.
     if (/(test|verify|verific|run|ejecut|check|revis|connect|conect)/i.test(t)) {
-      if (lastRuntimeOk) {
+      if (lastRuntimeVerified) {
         done++;
         continue;
       }
-      // If runtime happened but failed, the step is in_progress, not
-      // completed — do NOT count. The closeout verdict already
-      // renders the failure separately.
+      // Runtime happened but status is started_unverified / alive_timeout /
+      // failed_* — the step is open. The closeout verdict already renders
+      // the failure separately.
     }
   }
   return done;

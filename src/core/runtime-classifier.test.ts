@@ -91,6 +91,35 @@ describe("runtime-classifier", () => {
     expect(isFailedStatus("started")).toBe(false);
   });
 
+  test("Error: Request-sent with exit 0 → started_unverified (v274 EXACT repro)", () => {
+    // Real output: python caught python-bitcoinrpc's http.client error
+    // and printed "Error: Request-sent" from the generic except handler.
+    // Exit was 0 (process handled the exception gracefully).
+    const output = "Error: Request-sent";
+    expect(classifyRuntimeStatus("timeout 5 python3 main.py", 0, output)).toBe(
+      "started_unverified",
+    );
+  });
+
+  test("exit 0 with 'error:' prose and no positive signal → started_unverified", () => {
+    expect(
+      classifyRuntimeStatus("python m.py", 0, "error: could not connect to host"),
+    ).toBe("started_unverified");
+  });
+
+  test("exit 0 with positive signal overrides ambiguous error text", () => {
+    // App said it connected/is ready — ambiguity resolved in favor of verified.
+    expect(
+      classifyRuntimeStatus("python m.py", 0, "Error: old log line\nConnected to node, height=820000"),
+    ).toBe("verified");
+  });
+
+  test("exit 0 with bare 'verified' output → verified (no false started_unverified)", () => {
+    expect(classifyRuntimeStatus("python m.py", 0, "All good\nheight: 820000")).toBe(
+      "verified",
+    );
+  });
+
   test("phaseForStatus maps failed_auth to blocked, others to failed", () => {
     expect(phaseForStatus("failed_auth")).toBe("blocked");
     expect(phaseForStatus("failed_connection")).toBe("failed");
