@@ -806,6 +806,120 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     }
   }
 
+  // Check 5 — semantic self-critique pass. A second model reviews
+  // the draft response against the turn's tool history and flags
+  // any claim not supported by evidence. Complements the regex-based
+  // gates above by catching novel phrasings regex patterns never
+  // see. Issue #103 + general robustness.
+  // Non-blocking failure modes: timeout, parse error, model
+  // unreachable all resolve to "ok" (no banner). Opt-out:
+  // KCODE_DISABLE_SELF_CRITIQUE=1.
+  {
+    const sc_draftText = ctx.textChunks.join("");
+    if (
+      process.env.KCODE_DISABLE_SELF_CRITIQUE !== "1" &&
+      sc_draftText.trim().length >= 40
+    ) {
+      try {
+        // Compute the signals the critique needs, independent of
+        // whether the regex-gate block above ran.
+        const sc_sessionData = ctx.collectSessionData();
+
+        // Walk backwards to find whether any tool_result this turn
+        // contained a BLOCKED prefix (a safety guard refusal).
+        let sc_repairBlocked = false;
+        for (let i = ctx.messages.length - 1; i >= 0; i--) {
+          const m = ctx.messages[i];
+          if (!m) continue;
+          if (m.role === "user" && Array.isArray(m.content)) {
+            let foundBlock = false;
+            let allToolResults = true;
+            for (const b of m.content) {
+              const type = typeof b === "object" && b !== null
+                ? (b as { type?: unknown }).type
+                : undefined;
+              if (type !== "tool_result") {
+                allToolResults = false;
+                continue;
+              }
+              const raw = (b as { content?: unknown }).content;
+              const txt = typeof raw === "string"
+                ? raw
+                : Array.isArray(raw)
+                  ? raw
+                      .filter((c: unknown): c is { type: string; text: string } =>
+                        typeof c === "object" && c !== null &&
+                        (c as { type?: unknown }).type === "text",
+                      )
+                      .map((c) => c.text)
+                      .join(" ")
+                  : "";
+              if (/\bBLOCKED\b/.test(txt)) foundBlock = true;
+            }
+            if (foundBlock) {
+              sc_repairBlocked = true;
+              break;
+            }
+            if (!allToolResults) break;
+          } else if (m.role === "user") {
+            break;
+          }
+        }
+
+        // Walk backwards to find the last user-typed prompt.
+        let sc_userPrompt = "";
+        for (let i = ctx.messages.length - 1; i >= 0; i--) {
+          const m = ctx.messages[i];
+          if (m?.role === "user") {
+            const c = m.content;
+            if (typeof c === "string") {
+              sc_userPrompt = c;
+            } else if (Array.isArray(c)) {
+              sc_userPrompt = c
+                .filter((b: unknown): b is { type: string; text: string } =>
+                  typeof b === "object" && b !== null &&
+                  (b as { type?: unknown }).type === "text",
+                )
+                .map((b) => b.text)
+                .join(" ");
+            }
+            if (sc_userPrompt) break;
+          }
+        }
+
+        const { runSelfCritique, formatCritiqueBanner } = await import(
+          "./self-critique.js"
+        );
+        const critique = await runSelfCritique({
+          draftText: sc_draftText,
+          recentMessages: ctx.messages.slice(-20),
+          errorsEncountered: sc_sessionData.errorsEncountered,
+          filesWritten: sc_sessionData.filesModified,
+          repairBlocked: sc_repairBlocked,
+          userPrompt: sc_userPrompt,
+          model: ctx.config.tertiaryModel,
+        });
+
+        if (!critique.skipped && critique.contradictions.length > 0) {
+          const banner = formatCritiqueBanner(critique);
+          events.push({
+            type: "banner",
+            title:
+              critique.verdict === "downgrade"
+                ? "Self-critique: response contradicts evidence"
+                : "Self-critique: minor issues",
+            subtitle: banner,
+          });
+        }
+      } catch (err) {
+        log.debug(
+          "self-critique",
+          `pass error: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+  }
+
   const contextFull =
     ctx.tokenCount > 0 &&
     ctx.config.contextWindowSize != null &&
