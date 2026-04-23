@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { formatStubWarning, scanFilesForStubs } from "./grounding-gate";
+import {
+  detectCreationClaimMismatch,
+  formatClaimMismatchWarning,
+  formatStubWarning,
+  scanFilesForStubs,
+} from "./grounding-gate";
 
 let tmp: string;
 
@@ -150,6 +155,59 @@ export async function login(email: string, password: string): Promise<string> {
     expect(warning).toContain("NotImplementedError");
     expect(warning).toContain("placeholder");
     expect(warning).toContain("not implemented");
+  });
+
+  // ─── Creation claim mismatch (2026-04-23 Bitcoin TUI pattern) ──
+
+  test("detects 'ha sido creado' when 0 files written", () => {
+    const finalText = "El proyecto Bitcoin TUI Dashboard ha sido creado en /home/curly/proyectos/…";
+    const mismatch = detectCreationClaimMismatch(finalText, 0);
+    expect(mismatch).not.toBeNull();
+    expect(mismatch?.snippet).toContain("ha sido creado");
+    expect(mismatch?.filesWritten).toBe(0);
+  });
+
+  test("detects English 'has been created'", () => {
+    const mismatch = detectCreationClaimMismatch("The project has been created successfully", 0);
+    expect(mismatch).not.toBeNull();
+  });
+
+  test("detects 'proyecto creado'", () => {
+    const mismatch = detectCreationClaimMismatch("Proyecto creado. Corré el comando…", 0);
+    expect(mismatch).not.toBeNull();
+  });
+
+  test("detects 'successfully created'", () => {
+    const mismatch = detectCreationClaimMismatch("I've successfully created the dashboard", 0);
+    expect(mismatch).not.toBeNull();
+  });
+
+  test("does NOT trigger when files were actually written", () => {
+    const finalText = "El proyecto ha sido creado en /tmp/foo";
+    expect(detectCreationClaimMismatch(finalText, 1)).toBeNull();
+    expect(detectCreationClaimMismatch(finalText, 5)).toBeNull();
+  });
+
+  test("does NOT trigger on analysis-only responses", () => {
+    const finalText = "I analyzed the codebase and found no bugs in critical paths";
+    expect(detectCreationClaimMismatch(finalText, 0)).toBeNull();
+  });
+
+  test("does NOT trigger on empty text", () => {
+    expect(detectCreationClaimMismatch("", 0)).toBeNull();
+    expect(detectCreationClaimMismatch("   \n  \n", 0)).toBeNull();
+  });
+
+  test("formatClaimMismatchWarning produces readable message", () => {
+    const mismatch = {
+      snippet: "ha sido creado en /home/curly/proyectos/bitcoin-tui",
+      filesWritten: 0,
+    };
+    const warning = formatClaimMismatchWarning(mismatch);
+    expect(warning).toContain("Grounding check");
+    expect(warning).toContain("zero files were written");
+    expect(warning).toContain("ha sido creado");
+    expect(warning).toContain("Do not present this turn as complete");
   });
 
   test("formatStubWarning caps at 8 items with overflow note", () => {

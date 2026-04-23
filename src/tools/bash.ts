@@ -1,6 +1,26 @@
 // KCode - Bash Tool
 // Executes shell commands with timeout and sandboxing
 
+/**
+ * Decode HTML entities that some local models (mark7 / Qwen3-family) emit
+ * instead of raw operators. Without this, `cd foo &amp;&amp; ls` lands
+ * literally in bash and blows up with a syntax error. Only decodes the
+ * five entities that never appear as intentional literals in real bash
+ * commands — anything else is left alone.
+ *
+ * See issue #100 follow-up (2026-04-23 incident): Bitcoin TUI session
+ * where every `&&` chain failed because the model emitted `&amp;`.
+ */
+export function decodeBashHtmlEntities(cmd: string): string {
+  return cmd
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&apos;", "'");
+}
+
 import { spawn } from "node:child_process";
 import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -269,12 +289,20 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 }
 
 async function _executeBashInner(input: Record<string, unknown>): Promise<ToolResult> {
-  const { command, timeout, run_in_background, sandbox } = input as unknown as BashInput & {
+  const { command: rawCommand, timeout, run_in_background, sandbox } = input as unknown as BashInput & {
     sandbox?: boolean;
   };
+  // Decode HTML entities some local models (mark7 / Qwen3-family) emit in
+  // bash commands — `&amp;&amp;` ends up in the shell literally, which
+  // bash parses as syntax error. Narrow whitelist of the five entities
+  // that have no legitimate bash-literal use case.
+  const command = decodeBashHtmlEntities(rawCommand);
   const timeoutMs = Math.min(timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
   const startTime = Date.now();
   const cmdPrefix = command.length > 80 ? command.slice(0, 80) + "..." : command;
+  if (rawCommand !== command) {
+    log.info("bash", `decoded ${rawCommand.length - command.length} HTML entity chars in command`);
+  }
 
   // Record Bash-as-Read and Bash-as-Grep so they count toward the audit
   // reconnaissance minimums. Without this, `cat foo.cpp` via Bash would

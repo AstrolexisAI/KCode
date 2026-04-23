@@ -172,6 +172,78 @@ export function scanFilesForStubs(filePaths: string[]): StubFinding[] {
   return findings;
 }
 
+// Phrases that indicate the agent is claiming it delivered concrete
+// code/project output, across Spanish + English. When any of these
+// appear in the final turn text AND zero files were successfully
+// written/edited this turn, that's a 2026-04-23-style ungrounded
+// completion claim — the agent declares victory after every tool call
+// was blocked/failed.
+const CREATION_CLAIM_PATTERNS: RegExp[] = [
+  // Spanish
+  /\bha sido creado\b/i,
+  /\bse (?:ha )?(?:creado|generado|armado|construido)\b/i,
+  /\bproyecto creado\b/i,
+  /\barchivo(?:s)? creado(?:s)?\b/i,
+  /\bdirectorio (?:creado|inicial)\b/i,
+  /\blisto para (?:correr|ejecutar|usar)\b/i,
+  /\bestá (?:listo|funcionando|completo)\b/i,
+  /\bimplementado\b/i,
+  /\bdashboard (?:listo|creado|generado)\b/i,
+  // English
+  /\b(?:has been|was) (?:created|generated|built|implemented|set up)\b/i,
+  /\bproject (?:created|generated|ready)\b/i,
+  /\bfile(?:s)? (?:created|written)\b/i,
+  /\b(?:created|built|implemented) (?:a|the|your) [a-z]+\b/i,
+  /\bsuccessfully (?:created|generated|built|implemented)\b/i,
+  /\bdone\.?\s*$/i,
+];
+
+export interface CreationClaimMismatch {
+  /** The phrase in the final text that matched. */
+  snippet: string;
+  /** Number of successful file writes/edits this turn (always 0 if mismatch triggers). */
+  filesWritten: number;
+}
+
+/**
+ * Detect the "claim creation, did nothing" pattern: final text says
+ * "project created", zero files were actually written this turn.
+ * Returns null if no mismatch.
+ */
+export function detectCreationClaimMismatch(
+  finalText: string,
+  filesWrittenCount: number,
+): CreationClaimMismatch | null {
+  if (filesWrittenCount > 0) return null;
+  if (!finalText || finalText.trim().length === 0) return null;
+
+  for (const pattern of CREATION_CLAIM_PATTERNS) {
+    const match = finalText.match(pattern);
+    if (match) {
+      // Extract a reasonable surrounding snippet (up to 120 chars).
+      const start = Math.max(0, (match.index ?? 0) - 30);
+      const end = Math.min(finalText.length, (match.index ?? 0) + match[0].length + 60);
+      return {
+        snippet: finalText.slice(start, end).trim(),
+        filesWritten: filesWrittenCount,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * Format a creation-claim mismatch warning.
+ */
+export function formatClaimMismatchWarning(mismatch: CreationClaimMismatch): string {
+  return (
+    `⚠ Grounding check: the final message claims creation, but zero files were written or edited this turn. ` +
+    `Matched phrase: "${mismatch.snippet}". ` +
+    `Either a tool failed silently (check logs) or the response over-promised. ` +
+    `Do not present this turn as complete work.`
+  );
+}
+
 /**
  * Format findings as a short human-readable warning block to prepend
  * to the agent's final turn summary. Returns an empty string if no

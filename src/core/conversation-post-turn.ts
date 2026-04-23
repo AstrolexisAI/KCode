@@ -606,16 +606,27 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);
   }
 
-  // Grounding gate — scan files the agent wrote/edited this turn for
-  // stub markers before declaring "done". See src/core/grounding-gate.ts
-  // and GitHub issue #100. Opt-out: KCODE_DISABLE_GROUNDING_GATE=1.
+  // Grounding gate — two checks before declaring "done":
+  //   1. Scan files written/edited this turn for stub markers
+  //      (stub_tx1, NotImplementedError, TODO, empty pass, …)
+  //   2. If the final text claims creation ("has been created",
+  //      "proyecto creado", etc) but zero files were written this
+  //      turn, that's the 2026-04-23 Bitcoin TUI pattern: every tool
+  //      call failed, agent declared victory anyway.
+  // Opt-out: KCODE_DISABLE_GROUNDING_GATE=1. See issue #100.
   if (process.env.KCODE_DISABLE_GROUNDING_GATE !== "1") {
     try {
       const { filesModified } = ctx.collectSessionData();
+      const finalText = ctx.textChunks.join("");
+      const {
+        scanFilesForStubs,
+        formatStubWarning,
+        detectCreationClaimMismatch,
+        formatClaimMismatchWarning,
+      } = await import("./grounding-gate.js");
+
+      // Check 1 — stub markers inside written files
       if (filesModified.length > 0) {
-        const { scanFilesForStubs, formatStubWarning } = await import(
-          "./grounding-gate.js"
-        );
         const findings = scanFilesForStubs(filesModified);
         if (findings.length > 0) {
           const warning = formatStubWarning(findings);
@@ -629,6 +640,21 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             subtitle: warning.split("\n").slice(0, 4).join("\n"),
           });
         }
+      }
+
+      // Check 2 — creation claim without actual writes
+      const mismatch = detectCreationClaimMismatch(finalText, filesModified.length);
+      if (mismatch) {
+        const warning = formatClaimMismatchWarning(mismatch);
+        log.warn(
+          "grounding",
+          `creation-claim mismatch: "${mismatch.snippet}" but 0 files written`,
+        );
+        events.push({
+          type: "banner",
+          title: "Ungrounded completion claim",
+          subtitle: warning,
+        });
       }
     } catch (err) {
       log.debug("grounding", `gate error: ${err instanceof Error ? err.message : err}`);
