@@ -2,7 +2,7 @@
 // Performs exact string replacements in files with visual diff output
 
 import { lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { checkAuditEditGuard } from "../core/audit-guards";
+import { checkMutationAllowed } from "../core/audit-guards";
 import { detectStrcmpInversion } from "../core/semantic-guards";
 import type { FileEditInput, ToolDefinition, ToolResult } from "../core/types";
 
