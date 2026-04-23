@@ -1002,20 +1002,13 @@ export async function* executeToolsSequential(
       );
     }
 
-    // Redact credentials from tool output before it enters the message
-    // history. Catches e.g. `grep rpcpassword ~/.bitcoin/bitcoin.conf`
-    // echoing the live password into the conversation (issue #100).
-    // Opt-out: set KCODE_DISABLE_REDACTION=1.
-    if (process.env.KCODE_DISABLE_REDACTION !== "1") {
-      const { redact } = await import("./secret-redactor.js");
-      const { redacted, rulesFired } = redact(contextContent);
-      if (rulesFired.length > 0) {
-        log.info(
-          "tool",
-          `Redacted ${rulesFired.length} secret(s) from ${call.name} output: ${rulesFired.join(", ")}`,
-        );
-        contextContent = redacted;
-      }
+    // Phase 5: route tool output through the unified visible-text
+    // renderer. Redacts secrets AND records findings to scope.secrets
+    // so the closeout can surface detected categories. Opt-out via
+    // KCODE_DISABLE_REDACTION=1 (same as before). Issues #100, #107.
+    {
+      const { renderVisibleText } = await import("./visible-text-renderer.js");
+      contextContent = renderVisibleText(contextContent, { source: "tool_output" });
     }
 
     toolResultBlocks.push({

@@ -1066,10 +1066,18 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             "closeout-renderer",
             `emitting scope-grounded correction (${JSON.stringify(summarizeScopeForTelemetry(curScope))})`,
           );
-          // Emit as text_delta so it streams into the assistant's
-          // text block rather than becoming a separate banner — the
-          // user sees a single cohesive closeout.
-          events.push({ type: "text_delta", text: correction });
+          // Route through the visible-text renderer (phase 5) as
+          // defense-in-depth. The correction body is built from
+          // scope.verification (safe fields) but basenames could
+          // theoretically be anything — a path-like string is
+          // redacted too if it matches a secret pattern. No scope
+          // double-record: this text was ALREADY rendered from scope.
+          const { renderVisibleText } = await import("./visible-text-renderer.js");
+          const safeCorrection = renderVisibleText(correction, {
+            source: "closeout",
+            skipScopeRecord: true,
+          });
+          events.push({ type: "text_delta", text: safeCorrection });
         } else {
           log.debug("closeout-renderer", "scope ok, no correction needed");
         }
