@@ -8,9 +8,11 @@
 //
 // Admin-only commands (HIDDEN from --help, and refuse to run unless a
 // private signing key is present on this machine):
-//   kcode license serve          → launch Web UI for generating licenses
 //   kcode license init-keypair   → generate a fresh RSA signing keypair
 //   kcode license generate       → CLI-mode quick-gen (for scripting)
+//
+// The web UI for issuing licenses (`kcode license serve`) lives in the
+// private `kcode-admin` repo — it is not shipped with the public build.
 //
 // Gating: admin commands check for ~/.kcode/license-signing.pem (or
 // KCODE_LICENSE_PRIVATE_KEY env). End users never have that key, so
@@ -187,51 +189,6 @@ export function registerLicenseCommand(program: Command): void {
       unlinkSync(path);
       console.log("✓ License removed from this machine.");
     });
-
-  // ─── serve (Web UI) — ADMIN-ONLY, hidden from help ───────────
-
-  licenseCmd
-    .command("serve", { hidden: true })
-    .description("[ADMIN] Launch the license generator Web UI on localhost")
-    .option("-p, --port <port>", "Port to bind", "11200")
-    .option("--host <host>", "Host to bind (default: 127.0.0.1)", "127.0.0.1")
-    .option("--open", "Open in browser after starting", false)
-    .action(
-      async (opts: { port: string; host: string; open: boolean }) => {
-        if (refuseIfNotAdmin("serve")) process.exit(1);
-
-        const port = parseInt(opts.port, 10);
-        if (!Number.isFinite(port) || port < 1024 || port > 65535) {
-          console.error(`Invalid port: ${opts.port} (must be 1024-65535)`);
-          process.exit(1);
-        }
-
-        const { startLicenseServer } = await import("../../license-ui/server");
-        const { url } = await startLicenseServer({ port, host: opts.host });
-
-        console.log(`\n  \x1b[32m✓\x1b[0m License generator running at \x1b[36m${url}\x1b[0m`);
-        console.log(`  \x1b[2mPress Ctrl+C to stop.\x1b[0m\n`);
-
-        if (opts.open) {
-          try {
-            const proc = Bun.spawn(
-              process.platform === "darwin"
-                ? ["open", url]
-                : process.platform === "win32"
-                  ? ["cmd", "/c", "start", url]
-                  : ["xdg-open", url],
-              { stdout: "ignore", stderr: "ignore" },
-            );
-            proc.unref();
-          } catch {
-            /* best effort */
-          }
-        }
-
-        // Keep process alive until Ctrl+C
-        await new Promise(() => {});
-      },
-    );
 
   // ─── init-keypair ── ADMIN-ONLY, hidden from help ────────────
   //
