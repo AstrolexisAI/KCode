@@ -1227,18 +1227,41 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             "closeout-renderer",
             `emitting scope-grounded correction (${JSON.stringify(summarizeScopeForTelemetry(curScope))})`,
           );
-          // Route through the visible-text renderer (phase 5) as
-          // defense-in-depth. The correction body is built from
-          // scope.verification (safe fields) but basenames could
-          // theoretically be anything — a path-like string is
-          // redacted too if it matches a secret pattern. No scope
-          // double-record: this text was ALREADY rendered from scope.
           const { renderVisibleText } = await import("./visible-text-renderer.js");
           const safeCorrection = renderVisibleText(correction, {
             source: "closeout",
             skipScopeRecord: true,
           });
-          events.push({ type: "text_delta", text: safeCorrection });
+
+          // Decide whether the draft should be REPLACED or merely
+          // annotated. Replacement is mandatory when the scope is in
+          // a terminal non-ready state (failed, blocked, or
+          // mayClaimReady=false) — keeping the draft alongside the
+          // correction creates the "created successfully / status:
+          // failed" contradiction the user reported in #111 v273.
+          // Milder conditions (partial language only) still use the
+          // append path so the model's partial narrative survives.
+          // Opt-out: KCODE_DISABLE_FREEFORM_SUPPRESS=1.
+          const suppressDraft =
+            process.env.KCODE_DISABLE_FREEFORM_SUPPRESS !== "1" &&
+            (curScope.phase === "failed" ||
+              curScope.phase === "blocked" ||
+              !curScope.completion.mayClaimReady);
+
+          if (suppressDraft) {
+            log.info(
+              "closeout-renderer",
+              `suppress mode — replacing draft (phase=${curScope.phase}, mayClaimReady=${curScope.completion.mayClaimReady})`,
+            );
+            // Strip the leading "---" separator that the append path
+            // needed to distinguish draft from correction. In replace
+            // mode the correction IS the draft, so the separator is
+            // cosmetic noise.
+            const standalone = safeCorrection.replace(/^\s*\n?---\n?\s*/, "");
+            events.push({ type: "text_replace_last", text: standalone });
+          } else {
+            events.push({ type: "text_delta", text: safeCorrection });
+          }
         } else {
           log.debug("closeout-renderer", "scope ok, no correction needed");
         }

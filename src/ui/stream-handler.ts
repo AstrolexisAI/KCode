@@ -174,6 +174,27 @@ export async function processStreamEvents(
         }
         break;
 
+      case "text_replace_last":
+        // Suppress the model's free-form draft when the scope-grounded
+        // closeout supersedes it (failed/partial/blocked). The draft
+        // already rendered; we rewrite it in place so the user sees the
+        // authoritative closeout as the primary prose, not as a
+        // postscript contradicting an "all good" narrative.
+        setCompleted((prev) => {
+          // Find the last assistant text block. Scan from the end.
+          for (let i = prev.length - 1; i >= 0; i--) {
+            const entry = prev[i];
+            if (entry && entry.kind === "text" && entry.role === "assistant") {
+              const updated = [...prev];
+              updated[i] = { ...entry, text: event.text };
+              return updated;
+            }
+          }
+          // No prior draft to replace — append as a fresh assistant block.
+          return [...prev, { kind: "text", role: "assistant", text: event.text }];
+        });
+        break;
+
       case "thinking_delta":
         if (currentThinking.length === 0) {
           setLastKodiEvent({ type: "thinking" });

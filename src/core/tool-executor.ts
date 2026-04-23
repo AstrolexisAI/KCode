@@ -1048,17 +1048,16 @@ export async function* executeToolsSequential(
             // Runtime command detection: python/node/bun/cargo/go run
             const cmd = typeof input.command === "string" ? input.command : "";
             if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(cmd)) {
-              // Treat non-zero as failed; exit code 124 is timeout = alive but not verified.
-              // The content string starts with the stdout/stderr; we scan for traceback markers.
-              const hasTraceback = /\b(?:Traceback|Error|Exception|panic)\b/.test(result.content);
-              // Bash wraps non-zero exit with "exit code N" — not always available.
-              // Heuristic: if is_error was false, exit was 0. If traceback but exit 0, that's the #106 pipe case.
-              const runtimeFailed = hasTraceback;
+              const { classifyRuntimeStatus, isFailedStatus } = await import(
+                "./runtime-classifier.js"
+              );
+              const status = classifyRuntimeStatus(cmd, 0, result.content);
               mgr.recordRuntimeCommand({
                 command: cmd,
-                exitCode: 0, // non-error path = 0
+                exitCode: 0,
                 output: result.content.slice(0, 1000),
-                runtimeFailed,
+                runtimeFailed: isFailedStatus(status),
+                status,
                 timestamp: Date.now(),
               });
             }
@@ -1087,19 +1086,22 @@ export async function* executeToolsSequential(
             const { getTaskScopeManager } = await import("./task-scope.js");
             const mgr = getTaskScopeManager();
             if (mgr.current()) {
-              const isTimeout = /exit code 124/.test(result.content) || /timed out/i.test(result.content) || /Bash failed \(\d+\.\d+s\)/.test(result.content);
-              const hasTraceback = /\b(?:Traceback|ModuleNotFoundError|ImportError|SyntaxError|NameError|AttributeError|IndentationError|ReferenceError|panic|TypeError\s*:|ValueError\s*:)\b/.test(
-                result.content,
+              const isTimeout =
+                /exit code 124/.test(result.content) ||
+                /timed out/i.test(result.content) ||
+                /Bash failed \(\d+\.\d+s\)/.test(result.content);
+              const exitCode = isTimeout ? 124 : null;
+              const { classifyRuntimeStatus, isFailedStatus } = await import(
+                "./runtime-classifier.js"
               );
+              const status = classifyRuntimeStatus(cmd, exitCode, result.content);
               mgr.recordRuntimeCommand({
                 command: cmd,
-                // Timeout → exitCode 124 (standard); traceback → null (process crashed)
-                exitCode: isTimeout ? 124 : null,
+                exitCode,
                 output: result.content.slice(0, 1000),
-                // Only flag as failed when we have real error evidence.
-                // Timeout alone means "alive but not verified" — closeout
-                // renderer has a specific branch for that (v269).
-                runtimeFailed: hasTraceback && !isTimeout,
+                // alive_timeout is "started and stayed up" — not a failure.
+                runtimeFailed: isFailedStatus(status),
+                status,
                 timestamp: Date.now(),
               });
             }
