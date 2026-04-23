@@ -473,10 +473,42 @@ export function createTaskScopeManager(): TaskScopeManager {
         }
       } else if (_current.verification.patchAppliedAfterFailure) {
         // Successful rerun after a patch clears the "not rerun" flag.
-        _current.verification.rerunPassedAfterPatch = true;
-        _current.verification.patchAppliedAfterFailure = false;
-        _current.verification.lastRuntimeFailure = undefined;
-        _current.verification.rerunAttempts = 0;
+        // Only a true "verified" status clears; started_unverified /
+        // alive_timeout / etc. don't prove the patch worked.
+        if (ev.status === undefined || ev.status === "verified") {
+          _current.verification.rerunPassedAfterPatch = true;
+          _current.verification.patchAppliedAfterFailure = false;
+          _current.verification.lastRuntimeFailure = undefined;
+          _current.verification.rerunAttempts = 0;
+        }
+      }
+
+      // Non-verified runtime → downgrade to partial. A TUI that started
+      // and was killed by timeout, or a process that exited 0 after
+      // printing an application error, is NOT end-to-end verified.
+      // Without this downgrade the scope stays phase=writing,
+      // mayClaimReady=true, and the model's "Proyecto creado. Para
+      // ejecutar: ..." prose slips through. Issue #111 v281 repro.
+      //
+      // Skips if phase is already failed/blocked (those are stronger
+      // signals) or if the status is explicitly verified.
+      if (
+        _current.phase !== "failed" &&
+        _current.phase !== "blocked" &&
+        ev.status !== undefined &&
+        ev.status !== "verified" &&
+        (ev.status === "alive_timeout" || ev.status === "started_unverified")
+      ) {
+        _current.phase = "partial";
+        _current.completion.mayClaimReady = false;
+        _current.completion.mustUsePartialLanguage = true;
+        const reason =
+          ev.status === "alive_timeout"
+            ? "runtime started and stayed alive under timeout — end-to-end behavior not verified"
+            : "runtime exited cleanly but printed an application error — end-to-end behavior not verified";
+        if (!_current.completion.reasons.includes(reason)) {
+          _current.completion.reasons.push(reason);
+        }
       }
       touch(_current);
     },
