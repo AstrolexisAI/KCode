@@ -75,6 +75,7 @@ export interface RuntimeCommandEvent {
     | "not_run"
     | "started"
     | "verified"
+    | "started_unverified"
     | "alive_timeout"
     | "failed_auth"
     | "failed_connection"

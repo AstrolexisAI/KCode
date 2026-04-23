@@ -11,7 +11,18 @@
 export type RuntimeStatus =
   | "not_run"
   | "started"
+  /** Process ran AND produced evidence of success (non-error output, exit 0). */
   | "verified"
+  /**
+   * Process ran, exit 0, but the output contains ambiguous error-like
+   * text ("Error: Request-sent", "Connection timed out", "Unable to
+   * reach host") — NOT a traceback, NOT an explicit auth/connection
+   * refusal. The app started but end-to-end behavior is not proven.
+   * Issue #111 v274 repro: python3 main.py exited 0 after printing
+   * "Error: Request-sent" from its own except-handler; classifier
+   * returned "verified" and the turn closed as partial/4-of-4.
+   */
+  | "started_unverified"
   | "alive_timeout"
   | "failed_auth"
   | "failed_connection"
@@ -101,7 +112,26 @@ export function classifyRuntimeStatus(
     return "alive_timeout";
   }
 
-  if (exitCode === 0) return "verified";
+  if (exitCode === 0) {
+    // Ambiguous error signal in output ("Error:", "ERROR:", "error —",
+    // "failed to") without a matching failed_* pattern above. The
+    // process exited clean but printed an application-level error,
+    // so we can't claim it worked. Issue #111 v274.
+    const hasAmbiguousError =
+      /(^|[\s\n])(?:Error|ERROR|error)\s*[:\-—]/m.test(o) ||
+      /\bfailed\s+to\s+\w+/i.test(lo) ||
+      /\bcould\s+not\s+\w+/i.test(lo) ||
+      /\bunable\s+to\s+\w+/i.test(lo);
+    // Positive verification signal that would override the ambiguity
+    // (app said it successfully connected / started serving / received
+    // N blocks / etc.).
+    const hasPositiveSignal =
+      /\b(?:Connected|Ready|Listening|Serving|Success|OK|Synced|height\s*[:=]?\s*\d+)\b/i.test(o);
+    if (hasAmbiguousError && !hasPositiveSignal) {
+      return "started_unverified";
+    }
+    return "verified";
+  }
   if (exitCode === null) return "failed_unknown";
   return "failed_unknown";
 }

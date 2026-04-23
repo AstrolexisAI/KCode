@@ -1218,6 +1218,24 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       const { getTaskScopeManager } = await import("./task-scope.js");
       const curScope = getTaskScopeManager().current();
       if (curScope) {
+        // Reconcile the Plan widget from scope state so the widget's
+        // step checkboxes match the closeout's "Plan progress: N/M"
+        // line. Model often calls plan.create once and never plan.update,
+        // leaving the widget at 0/N while verification state has
+        // clearly advanced. Issue #111 v274 repro.
+        try {
+          const { reconcilePlanFromScope } = await import("../tools/plan.js");
+          const flipped = reconcilePlanFromScope();
+          if (flipped > 0) {
+            log.info("plan", `reconciled ${flipped} step(s) from scope`);
+          }
+        } catch (err) {
+          log.debug(
+            "plan",
+            `reconcile error (non-fatal): ${err instanceof Error ? err.message : err}`,
+          );
+        }
+
         const { renderCloseoutFromScope, summarizeScopeForTelemetry } = await import(
           "./closeout-renderer.js"
         );
@@ -1246,6 +1264,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             process.env.KCODE_DISABLE_FREEFORM_SUPPRESS !== "1" &&
             (curScope.phase === "failed" ||
               curScope.phase === "blocked" ||
+              curScope.phase === "partial" ||
               !curScope.completion.mayClaimReady);
 
           if (suppressDraft) {
