@@ -287,6 +287,25 @@ export async function maybeAutoLaunchDevServer(
       return null;
     }
 
+    // Guard 3b (Phase 12 follow-up): skip auto-launch when the
+    // project is a CLI or TUI. dashboard keyword matches TUI
+    // dashboards too (blessed-contrib bitcoin/crypto dashboards,
+    // rich.live dashboards), and those shouldn't get launched as
+    // web servers. Issue #111 v276 repro: Bitcoin TUI scaffold
+    // triggered auto-launch with bunx on port 11147 even though
+    // the project has zero web-facing code.
+    try {
+      const { inferRuntimeModeFromCwd } =
+        require("./runtime-mode") as typeof import("./runtime-mode");
+      const mode = inferRuntimeModeFromCwd(cwd);
+      if (mode === "cli" || mode === "tui") {
+        log.debug("auto-launch", `skipped: runtime mode = ${mode} (non-web)`);
+        return null;
+      }
+    } catch {
+      /* runtime-mode inference failed — fall through (conservative) */
+    }
+
     // Guard 4: don't re-launch if recently started for same cwd
     if (launchedRecently(cwd)) {
       log.debug("auto-launch", "skipped: already launched recently");
