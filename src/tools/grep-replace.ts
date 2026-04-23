@@ -5,7 +5,7 @@ import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
 import {
   auditGuardsEnabled,
-  checkAuditEditGuard,
+  checkMutationAllowed,
 } from "../core/audit-guards";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
@@ -404,20 +404,16 @@ export async function executeGrepReplace(input: Record<string, unknown>): Promis
 
   // Apply changes if not dry run — use stored content (TOCTOU safe)
   if (!dryRun) {
-    // Guard: apply the audit-mode Edit policy equally to GrepReplace.
-    // Without this, GrepReplace bypasses the same block that stops Edit
-    // / Write / MultiEdit / sed -i / perl -i. Issue #104.
+    // Unified mutation policy (Phase 2) — single entry for all
+    // mutation tools. Consistent with Edit/Write/MultiEdit/Bash-sed-i.
+    // Issues #102 / #104 / #108.
     if (auditGuardsEnabled()) {
       for (const fm of fileMatches) {
-        const guard = checkAuditEditGuard(fm.file);
-        if (guard.blocked) {
+        const policy = checkMutationAllowed(fm.file, "GrepReplace");
+        if (!policy.allowed) {
           return {
             tool_use_id: "",
-            content:
-              `BLOCKED — NO CHANGES APPLIED: GrepReplace would mutate "${basename(fm.file)}" ` +
-              `but the Edit path is currently blocked for this file under the audit-mode policy. ` +
-              `GrepReplace is treated as equivalent to Edit and must follow the same discipline.\n\n` +
-              `${guard.reason ?? ""}`,
+            content: policy.reason!,
             is_error: true,
           };
         }

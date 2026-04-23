@@ -195,11 +195,13 @@ export async function executeEdit(input: Record<string, unknown>): Promise<ToolR
 async function _executeEditInner(input: Record<string, unknown>): Promise<ToolResult> {
   const { file_path, old_string, new_string, replace_all } = input as unknown as FileEditInput;
 
-  // Audit-session guard: when the user asked for an audit, source files
-  // can only be edited AFTER an AUDIT_REPORT.md exists and cites the file.
-  const auditGuard = checkAuditEditGuard(file_path);
-  if (auditGuard.blocked) {
-    return { tool_use_id: "", content: auditGuard.reason!, is_error: true };
+  // Unified mutation policy (Phase 2): consults TaskScope + audit
+  // guards + future scope-based rules via a single entry point. All
+  // mutation tools (Edit, Write, MultiEdit, GrepReplace, Bash-sed-i)
+  // go through the same check so policy is consistent.
+  const policy = checkMutationAllowed(file_path, "Edit");
+  if (!policy.allowed) {
+    return { tool_use_id: "", content: policy.reason!, is_error: true };
   }
 
   // Semantic inversion guard: catches hallucinated "fixes" that invert

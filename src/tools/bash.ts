@@ -26,7 +26,7 @@ import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import {
   auditGuardsEnabled,
-  checkAuditEditGuard,
+  checkMutationAllowed,
   extractBashFileMutations,
   extractBashGrepPattern,
   extractBashReadTargets,
@@ -417,23 +417,20 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
   if (auditGuardsEnabled()) try {
     const mutations = extractBashFileMutations(command);
     for (const target of mutations) {
-      // Skip audit-named targets — they're already handled by the
-      // block above with a more specific message.
+      // Skip audit-named targets — they're handled above with a more
+      // specific audit-report-companion message.
       if (isAuditFilename(target)) continue;
       const absTarget = resolve(target);
-      const auditCheck = checkAuditEditGuard(absTarget);
-      if (auditCheck.blocked) {
-        log.warn("tool", `Blocked bash file-mutation of ${target}: audit-mode guard`);
-        return {
-          tool_use_id: "",
-          content:
-            `BLOCKED — FILE NOT MODIFIED: Bash command would mutate "${basename(absTarget)}" ` +
-            `in place, but the Edit tool is currently blocked for this file under the audit-mode ` +
-            `policy. Bash-based mutation (sed -i, perl -i, awk -i inplace, shell redirection) ` +
-            `is treated as equivalent to Edit and must follow the same discipline.\n\n` +
-            `${auditCheck.reason ?? ""}`,
-          is_error: true,
-        };
+      // Classify which bash-mutation kind this is so diagnostics are clear.
+      const mutationKind: Parameters<typeof checkMutationAllowed>[1] =
+        /\bsed\s+.*-i/.test(command) ? "Bash-sed-i"
+        : /\bperl\s+.*-i/.test(command) ? "Bash-perl-i"
+        : /\bawk\s+-i\s+inplace/.test(command) ? "Bash-awk-inplace"
+        : "Bash-redirect";
+      const policy = checkMutationAllowed(absTarget, mutationKind);
+      if (!policy.allowed) {
+        log.warn("tool", `Blocked bash file-mutation of ${target} (${mutationKind}): policy`);
+        return { tool_use_id: "", content: policy.reason!, is_error: true };
       }
     }
   } catch (err) {

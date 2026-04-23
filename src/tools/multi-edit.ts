@@ -4,7 +4,7 @@
 // no files are modified (atomic all-or-nothing).
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { checkAuditEditGuard } from "../core/audit-guards";
+import { checkMutationAllowed } from "../core/audit-guards";
 import { detectStrcmpInversion } from "../core/semantic-guards";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
@@ -114,10 +114,11 @@ async function _executeMultiEditInner(input: Record<string, unknown>): Promise<T
   let firstBlockReason: string | null = null;
   for (const edit of edits) {
     if (!edit?.file_path) continue;
-    const guard = checkAuditEditGuard(edit.file_path);
-    if (guard.blocked) {
+    // Unified mutation policy (Phase 2) — see edit.ts for rationale.
+    const policy = checkMutationAllowed(edit.file_path, "MultiEdit");
+    if (!policy.allowed) {
       blockedFiles.push(edit.file_path);
-      if (!firstBlockReason) firstBlockReason = guard.reason!;
+      if (!firstBlockReason) firstBlockReason = policy.reason!;
     }
   }
   if (blockedFiles.length > 0) {
