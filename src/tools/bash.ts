@@ -26,6 +26,8 @@ import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import {
   auditGuardsEnabled,
+  checkAuditEditGuard,
+  extractBashFileMutations,
   extractBashGrepPattern,
   extractBashReadTargets,
   extractRedirectionTargets,
@@ -406,6 +408,37 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
     }
   } catch {
     /* redirection analysis is best-effort */
+  }
+
+  // Guard: apply the audit-edit policy to ANY bash file-mutation the
+  // model emits (sed -i, perl -i, awk -i inplace, > redirection to a
+  // source file). Without this, `sed -i app.py` bypasses the Edit
+  // tool's audit-mode restriction. GitHub issue #102.
+  if (auditGuardsEnabled()) try {
+    const mutations = extractBashFileMutations(command);
+    for (const target of mutations) {
+      // Skip audit-named targets — they're already handled by the
+      // block above with a more specific message.
+      if (isAuditFilename(target)) continue;
+      const absTarget = resolve(target);
+      const auditCheck = checkAuditEditGuard(absTarget);
+      if (auditCheck.blocked) {
+        log.warn("tool", `Blocked bash file-mutation of ${target}: audit-mode guard`);
+        return {
+          tool_use_id: "",
+          content:
+            `BLOCKED — FILE NOT MODIFIED: Bash command would mutate "${basename(absTarget)}" ` +
+            `in place, but the Edit tool is currently blocked for this file under the audit-mode ` +
+            `policy. Bash-based mutation (sed -i, perl -i, awk -i inplace, shell redirection) ` +
+            `is treated as equivalent to Edit and must follow the same discipline.\n\n` +
+            `${auditCheck.reason ?? ""}`,
+          is_error: true,
+        };
+      }
+    }
+  } catch (err) {
+    log.debug("tool", `bash file-mutation audit check failed: ${err}`);
+    /* best-effort — don't crash the tool on analysis errors */
   }
 
   // Guard: block dangerous pkill/killall with broad patterns that could kill system services

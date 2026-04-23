@@ -62,6 +62,84 @@ export function extractRedirectionTargets(command: string): string[] {
   return targets;
 }
 
+/**
+ * Extract file paths that a Bash command will MUTATE in place. This is
+ * the set of write paths the Edit/Write guards would see if those tools
+ * had been used instead — so the same audit-mode discipline can apply.
+ *
+ * Matches (quoted or unquoted paths):
+ *   sed -i[suffix] [script] file
+ *   perl -i[.bak] -pe '…' file
+ *   awk -i inplace '…' file
+ *   > file          (redirect write)
+ *   >> file         (redirect append)
+ *   tee [-a] file   (captured by the existing redirect extractor)
+ *
+ * The first three matter because the model can use them to edit a
+ * source file without going through the Edit tool, bypassing any
+ * task-scoped write policy. See GitHub issue #102.
+ */
+export function extractBashFileMutations(command: string): string[] {
+  const targets: string[] = [];
+
+  // sed -i[suffix] [scripts…] file1 [file2 …]
+  // -i can be followed optionally by a suffix with no space, then
+  // zero or more -e/-f flags, then one or more file operands.
+  const sedRe =
+    /\bsed\s+(?:-[a-zA-Z]*[iI][^\s]*|--in-place(?:=\S+)?)(?:\s+-[efnrsE]\S*|\s+['"][^'"]+['"]|\s+\S)*?\s+(?:'([^']+)'|"([^"]+)"|([^\s;&|<>`]+))\s*(?:;|\||&&|\|\||$)/g;
+  // Simpler approach: find all sed -i occurrences and collect last token(s)
+  // that don't start with `-` as file operands.
+  const sedBlockRe = /\bsed\s+(?:-[a-zA-Z]*[iI][^\s]*|--in-place(?:=\S+)?)[^;&|\n]*/g;
+  let sm: RegExpExecArray | null;
+  sm = sedBlockRe.exec(command);
+  while (sm !== null) {
+    const block = sm[0];
+    // Split on whitespace; collect trailing non-flag non-quoted-script tokens.
+    const tokens = block.split(/\s+/);
+    for (let i = tokens.length - 1; i >= 0; i--) {
+      const t = tokens[i]!;
+      if (!t) continue;
+      if (t.startsWith("-")) break;
+      if (t.startsWith("'") || t.startsWith('"')) break;
+      if (t === "sed") break;
+      // Strip surrounding quotes if any
+      const clean = t.replace(/^['"]|['"]$/g, "");
+      if (clean) targets.push(clean);
+    }
+    sm = sedBlockRe.exec(command);
+  }
+  void sedRe; // intentionally unused; kept for documentation of the strict shape
+
+  // perl -i[.bak] -pe/-ne '…' file
+  const perlRe =
+    /\bperl\s+(?:-[a-zA-Z]*i[a-zA-Z0-9.]*)[^;&|\n]*?(?:-[eE]\s+(?:'[^']*'|"[^"]*")|-[nNpP])[^;&|\n]*?\s+(?:'([^']+)'|"([^"]+)"|([^\s;&|<>`]+))\s*(?:;|\||&&|\|\||$)/g;
+  let pm: RegExpExecArray | null;
+  pm = perlRe.exec(command);
+  while (pm !== null) {
+    const path = pm[1] ?? pm[2] ?? pm[3];
+    if (path) targets.push(path);
+    pm = perlRe.exec(command);
+  }
+
+  // awk -i inplace '…' file
+  const awkRe =
+    /\bawk\s+-i\s+inplace\s+(?:'[^']*'|"[^"]*")\s+(?:'([^']+)'|"([^"]+)"|([^\s;&|<>`]+))/g;
+  let am: RegExpExecArray | null;
+  am = awkRe.exec(command);
+  while (am !== null) {
+    const path = am[1] ?? am[2] ?? am[3];
+    if (path) targets.push(path);
+    am = awkRe.exec(command);
+  }
+
+  // Redirection writes (already implemented elsewhere, fold them in)
+  for (const t of extractRedirectionTargets(command)) {
+    targets.push(t);
+  }
+
+  return targets;
+}
+
 // File extensions that count as "source code" for the audit-edit guard.
 const SOURCE_EXTS = new Set([
   ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
