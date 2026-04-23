@@ -1071,7 +1071,14 @@ export async function* executeToolsSequential(
         );
       }
     } else if (result.is_error) {
-      // Bash that EXITED with error AND ran a runtime command → record as failed
+      // Bash that EXITED with error AND ran a runtime command → classify
+      // properly: timeout is "alive but not verified" (the TUI started
+      // and stayed up until the wrapper killed it), not "failed".
+      // Only mark failed when the output shows an actual error
+      // signature (Traceback, ImportError, panic, etc.). Issue #111
+      // follow-up: v271 reported 'Runtime: failed (Bitcoin TUI Dashboard)'
+      // for a timeout-killed TUI that had only produced its startup
+      // banner — misleading.
       try {
         if (call.name === "Bash") {
           const input = call.input as Record<string, unknown>;
@@ -1080,13 +1087,19 @@ export async function* executeToolsSequential(
             const { getTaskScopeManager } = await import("./task-scope.js");
             const mgr = getTaskScopeManager();
             if (mgr.current()) {
-              // Timeout (exit 124) means "started and stayed alive" but nothing verified.
-              const isTimeout = /exit code 124/.test(result.content) || /timed out/i.test(result.content);
+              const isTimeout = /exit code 124/.test(result.content) || /timed out/i.test(result.content) || /Bash failed \(\d+\.\d+s\)/.test(result.content);
+              const hasTraceback = /\b(?:Traceback|ModuleNotFoundError|ImportError|SyntaxError|NameError|AttributeError|IndentationError|ReferenceError|panic|TypeError\s*:|ValueError\s*:)\b/.test(
+                result.content,
+              );
               mgr.recordRuntimeCommand({
                 command: cmd,
+                // Timeout → exitCode 124 (standard); traceback → null (process crashed)
                 exitCode: isTimeout ? 124 : null,
                 output: result.content.slice(0, 1000),
-                runtimeFailed: !isTimeout,
+                // Only flag as failed when we have real error evidence.
+                // Timeout alone means "alive but not verified" — closeout
+                // renderer has a specific branch for that (v269).
+                runtimeFailed: hasTraceback && !isTimeout,
                 timestamp: Date.now(),
               });
             }

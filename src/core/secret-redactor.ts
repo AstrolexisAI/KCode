@@ -46,9 +46,25 @@ const RULES: RedactionRule[] = [
     name: "password_assign",
     pattern: /\b(password\s*[:=]\s*)([^\s"'#\n]{3,})/gi,
   },
+  // Prose form "password tronco" — whitespace-separated credential
+  // appearing after "password". Excludes common English/Spanish
+  // follower words that indicate a generic-noun usage (policy,
+  // field, strength, manager, reset, …) rather than a specific
+  // credential reference. Issues #107, #111.
+  {
+    name: "password_prose",
+    pattern:
+      /\b(password\s+)(?!(?:policy|policies|field|fields|manager|managers|reset|resets|required|strength|hash|hashes|hashing|protection|expiry|validator|validators|rules|length|setup|input|confirm|confirmation|recovery|prompt|placeholder|example|examples|box|boxes|form|forms|required|generation|generator|generators|security)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
+  },
   {
     name: "passwd_assign",
     pattern: /\b(passwd\s*[:=]\s*)([^\s"'#\n]{3,})/gi,
+  },
+  // Prose form "contraseña tronco" (Spanish) — denylist Spanish nouns.
+  {
+    name: "contrasena_prose",
+    pattern:
+      /\b(contrase[nñ]a\s+)(?!(?:fuerte|débil|debil|segura|temporal|nueva|válida|valida|incorrecta|válida|por\b|para\b|actual|anterior|predeterminada|requerida|ingresada|correcta|larga|corta|encriptada|nunca)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
   },
   {
     name: "secret_assign",

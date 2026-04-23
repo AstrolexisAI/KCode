@@ -85,6 +85,28 @@ describe("secret-redactor", () => {
     expect(rulesFired).toContain("password_assign");
   });
 
+  test("masks the 2026-04-23 #111 prose-whitespace leak 'password tronco'", () => {
+    // Real model output: "using the credentials from your bitcoin.conf:
+    //                     user curly, password tronco"
+    const input =
+      "using the credentials from your bitcoin.conf: user curly, password tronco";
+    const { redacted, rulesFired } = redact(input);
+    expect(redacted).not.toContain("tronco");
+    expect(rulesFired).toContain("password_prose");
+  });
+
+  test("does NOT redact 'password policy' / 'password field' style legit phrases", () => {
+    const { redacted } = redact("Please set a strong password policy for your team.");
+    expect(redacted).toContain("policy");
+  });
+
+  test("masks Spanish 'contraseña tronco'", () => {
+    const input = "configurá la contraseña tronco en el .env";
+    const { redacted, rulesFired } = redact(input);
+    expect(redacted).not.toContain("tronco");
+    expect(rulesFired).toContain("contrasena_prose");
+  });
+
   test("returns input unchanged when no secrets present", () => {
     const input = "ls -la /tmp\ntotal 0\ndrwxrwxrwt 15 root root 340 Apr 23 09:00 .";
     const { redacted, rulesFired } = redact(input);
