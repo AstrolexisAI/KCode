@@ -628,7 +628,61 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         formatAuthClaimWarning,
         detectStrongCompletionClaim,
         formatStrongCompletionWarning,
+        detectReadinessAfterErrors,
+        formatReadinessContradictionWarning,
       } = await import("./grounding-gate.js");
+
+      // Detect whether ANY tool result this turn was a BLOCKED response
+      // (Edit/Write blocked, bash-mutation blocked, rewrite blocked, etc.).
+      // Walk backwards through ctx.messages until the previous user turn
+      // marker and scan tool_result blocks for the "BLOCKED" prefix that
+      // every safety guard emits. Issue #103.
+      let repairBlocked = false;
+      for (let i = ctx.messages.length - 1; i >= 0; i--) {
+        const m = ctx.messages[i];
+        if (!m) continue;
+        if (m.role === "user" && Array.isArray(m.content)) {
+          let blockFound = false;
+          for (const b of m.content) {
+            if (
+              typeof b === "object" &&
+              b !== null &&
+              (b as { type?: unknown }).type === "tool_result"
+            ) {
+              const content = (b as { content?: unknown }).content;
+              const text = typeof content === "string"
+                ? content
+                : Array.isArray(content)
+                  ? content
+                      .filter((c: unknown): c is { type: string; text: string } =>
+                        typeof c === "object" && c !== null &&
+                        (c as { type?: unknown }).type === "text",
+                      )
+                      .map((c) => c.text)
+                      .join(" ")
+                  : "";
+              if (/\bBLOCKED\b/.test(text)) {
+                blockFound = true;
+                break;
+              }
+            }
+          }
+          if (blockFound) {
+            repairBlocked = true;
+            break;
+          }
+          // Reached a non-tool-result user message (the prior turn boundary) — stop scanning.
+          const isToolResultsOnly = m.content.every(
+            (b) =>
+              typeof b === "object" && b !== null &&
+              (b as { type?: unknown }).type === "tool_result",
+          );
+          if (!isToolResultsOnly) break;
+        } else if (m.role === "user") {
+          // Plain user text message — turn boundary
+          break;
+        }
+      }
 
       // Only count files that ACTUALLY exist on disk. Session tracker
       // records Write/Edit attempts by file_path even when the write
@@ -681,6 +735,29 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         events.push({
           type: "banner",
           title: "Unverified auth/network assumption",
+          subtitle: warning,
+        });
+      }
+
+      // Check 4a — readiness claim contradicting direct error evidence.
+      // Fires when the final text says the artifact is "ready / runs /
+      // displays" but the turn recorded tool errors (likely a validation
+      // run) or blocked repair attempts. Issue #103.
+      const sessionData = ctx.collectSessionData();
+      const readinessFinding = detectReadinessAfterErrors(
+        finalText,
+        sessionData.errorsEncountered,
+        repairBlocked,
+      );
+      if (readinessFinding) {
+        const warning = formatReadinessContradictionWarning(readinessFinding);
+        log.warn(
+          "grounding",
+          `readiness contradicts errors (errors=${readinessFinding.errorCount}, blocked=${readinessFinding.repairBlocked}): "${readinessFinding.snippet}"`,
+        );
+        events.push({
+          type: "banner",
+          title: "Ready claim contradicts failure signals",
           subtitle: warning,
         });
       }

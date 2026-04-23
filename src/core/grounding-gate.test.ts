@@ -6,9 +6,11 @@ import {
   countFilesOnDisk,
   detectAuthClaim,
   detectCreationClaimMismatch,
+  detectReadinessAfterErrors,
   detectStrongCompletionClaim,
   formatAuthClaimWarning,
   formatClaimMismatchWarning,
+  formatReadinessContradictionWarning,
   formatStrongCompletionWarning,
   formatStubWarning,
   scanFilesForStubs,
@@ -362,6 +364,73 @@ export async function login(email: string, password: string): Promise<string> {
     const narrowFinding = { snippet: "proyecto completado", broadRequest: false };
     expect(formatStrongCompletionWarning(broadFinding)).toContain("broad-scope");
     expect(formatStrongCompletionWarning(narrowFinding)).not.toContain("broad-scope");
+  });
+
+  // ─── Readiness claim contradicting errors (issue #103) ────────
+
+  test("detects the EXACT 2026-04-23 phrase 'app.py is ready' after errors", () => {
+    const finalText = "The main application script (app.py) is ready. Run it with python3 app.py.";
+    const finding = detectReadinessAfterErrors(finalText, 1, false);
+    expect(finding).not.toBeNull();
+    expect(finding?.snippet).toMatch(/ready/i);
+    expect(finding?.errorCount).toBe(1);
+  });
+
+  test("detects readiness claim when only repair was blocked", () => {
+    const finalText = "The dashboard displays real-time stats.";
+    const finding = detectReadinessAfterErrors(finalText, 0, true);
+    expect(finding).not.toBeNull();
+    expect(finding?.repairBlocked).toBe(true);
+  });
+
+  test("detects 'muestra en tiempo real' with errors", () => {
+    expect(
+      detectReadinessAfterErrors("La app muestra en tiempo real las transacciones.", 2, false),
+    ).not.toBeNull();
+  });
+
+  test("detects 'Run it with python3 app.py'", () => {
+    expect(
+      detectReadinessAfterErrors("Run it with: python3 /tmp/app.py", 1, false),
+    ).not.toBeNull();
+  });
+
+  test("detects 'el dashboard muestra'", () => {
+    expect(
+      detectReadinessAfterErrors("El dashboard muestra bloques en vivo.", 1, false),
+    ).not.toBeNull();
+  });
+
+  test("does NOT fire when no errors and nothing blocked", () => {
+    expect(
+      detectReadinessAfterErrors("The app is ready to use.", 0, false),
+    ).toBeNull();
+  });
+
+  test("does NOT fire on honest partial wording", () => {
+    expect(
+      detectReadinessAfterErrors(
+        "Created the initial skeleton, but the app is not ready — runtime validation failed.",
+        1,
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("formatReadinessContradictionWarning mentions error count and block", () => {
+    const finding = { snippet: "app is ready", errorCount: 2, repairBlocked: true };
+    const warning = formatReadinessContradictionWarning(finding);
+    expect(warning).toContain("Grounding check");
+    expect(warning).toContain("2 tool error");
+    expect(warning).toContain("repair attempt");
+    expect(warning).toContain("blocked");
+  });
+
+  test("formatReadinessContradictionWarning omits unused fields", () => {
+    const errorsOnly = { snippet: "ready", errorCount: 1, repairBlocked: false };
+    expect(formatReadinessContradictionWarning(errorsOnly)).not.toContain("repair attempt");
+    const blockOnly = { snippet: "ready", errorCount: 0, repairBlocked: true };
+    expect(formatReadinessContradictionWarning(blockOnly)).not.toContain("tool error");
   });
 
   test("formatStubWarning caps at 8 items with overflow note", () => {

@@ -255,6 +255,95 @@ export function detectCreationClaimMismatch(
   return null;
 }
 
+// Patterns for readiness claims — "X is ready / está listo / runs with …
+// / displays real-time …". When paired with direct evidence of runtime
+// failure (errors encountered this turn) or blocked repair paths, this
+// is the #103 pattern: agent saw ModuleNotFoundError + blocked Edit +
+// still emitted "app.py is ready" / "the dashboard displays …".
+const READINESS_CLAIM_PATTERNS: RegExp[] = [
+  // Spanish
+  /\b(?:app(?:licaci[oó]n)?|script|dashboard|proyecto|archivo|c[oó]digo|m[oó]dulo)\s+(?:est[aá]\s+list[oa]|es\s+list[oa])\b/i,
+  /\b(?:correl[oa]|ejecut[aá]l?[oa]?|corr[eé])\s+con\b/i,
+  /\b(?:el|la)\s+(?:dashboard|app|aplicaci[oó]n)\s+(?:muestra|actualiza|despliega|funciona|corre)/i,
+  /\bmuestra\s+en\s+(?:tiempo\s+real|vivo)\b/i,
+  /\b(?:funciona|funcionando|operativo)\s+(?:perfectamente|correctamente|bien)\b/i,
+  // English
+  /\b(?:app|script|dashboard|project|file|code|module)\s+(?:is|'s)\s+(?:ready|running|working|functional|live)\b/i,
+  /\brun\s+it\s+with\b/i,
+  /\bthe\s+(?:dashboard|app|application)\s+(?:displays|shows|updates|runs|renders|works)\b/i,
+  /\bdisplays\s+real[-\s]?time\b/i,
+  /\b(?:is|are)\s+(?:fully|now)\s+(?:working|functional|operational|running)\b/i,
+  // Run-command hints — "run with: python3 app.py" style
+  /\brun\s+with\s*[:]?\s*['"`]?(?:python(?:3)?|node|bun|ruby|go)\s+/i,
+];
+
+export interface ReadinessContradictionFinding {
+  /** Phrase in final text that claims readiness. */
+  snippet: string;
+  /** Number of tool errors recorded this turn. */
+  errorCount: number;
+  /** Whether any tool returned a BLOCKED response (repair blocked). */
+  repairBlocked: boolean;
+}
+
+/**
+ * Detect readiness-claim contradictions: final text says the artifact
+ * runs / is ready, but tool signals from the same turn say otherwise.
+ * Fires on any of:
+ *   - errorCount > 0 (a tool, typically a validation Bash call,
+ *     returned non-zero)
+ *   - repairBlocked true (Edit/Write was blocked, so the broken code
+ *     was never fixed)
+ *
+ * This is the #103 invariant: the agent must not contradict its own
+ * direct observation of failure.
+ */
+export function detectReadinessAfterErrors(
+  finalText: string,
+  errorCount: number,
+  repairBlocked: boolean,
+): ReadinessContradictionFinding | null {
+  if (errorCount === 0 && !repairBlocked) return null;
+  if (!finalText || finalText.trim().length === 0) return null;
+
+  for (const pattern of READINESS_CLAIM_PATTERNS) {
+    const match = finalText.match(pattern);
+    if (match) {
+      const start = Math.max(0, (match.index ?? 0) - 30);
+      const end = Math.min(finalText.length, (match.index ?? 0) + match[0].length + 80);
+      return {
+        snippet: finalText.slice(start, end).trim(),
+        errorCount,
+        repairBlocked,
+      };
+    }
+  }
+  return null;
+}
+
+export function formatReadinessContradictionWarning(
+  finding: ReadinessContradictionFinding,
+): string {
+  const parts: string[] = [
+    `⚠ Grounding check: the response claims the artifact is ready, but the turn recorded direct failure signals.`,
+    `Matched phrase: "${finding.snippet}".`,
+  ];
+  if (finding.errorCount > 0) {
+    parts.push(
+      `${finding.errorCount} tool error(s) occurred this turn — likely a validation Bash call returned non-zero.`,
+    );
+  }
+  if (finding.repairBlocked) {
+    parts.push(
+      `At least one repair attempt (Edit/Write) was blocked by a safety policy, so the broken state was never fixed.`,
+    );
+  }
+  parts.push(
+    `Do not present the artifact as working. Say exactly: what was created, that validation failed, what the error was, and whether repair was possible.`,
+  );
+  return parts.join(" ");
+}
+
 // Patterns that declare strong, broad completion — the kind of claim that
 // requires evidence of actual runtime behavior end-to-end, not just a
 // successful import or file write. Issue #102: "Proyecto completado,
