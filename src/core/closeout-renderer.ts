@@ -23,6 +23,31 @@ import { basename } from "node:path";
 import type { TaskScope } from "./task-scope";
 
 /**
+ * Classify the "mode" of this turn based on what the scope recorded.
+ * The closeout renders different vocabulary depending on the mode —
+ * an informational turn (model answered a question by reading web
+ * sources) should not talk about "scaffold / MVP / runtime verified",
+ * and a mutation turn should not talk about "information verified".
+ *
+ * - informational: 0 files written/edited, 0 runtime commands. Only
+ *   reads / searches / fetches happened.
+ * - mutation: one or more files created or edited.
+ * - execution: one or more runtime commands (build/run/test).
+ * - mixed: combination of mutation + execution.
+ */
+export type TurnMode = "informational" | "mutation" | "execution" | "mixed";
+
+export function classifyTurnMode(scope: TaskScope): TurnMode {
+  const v = scope.verification;
+  const hasMutation = v.filesWritten.length + v.filesEdited.length > 0;
+  const hasRuntime = v.runtimeCommands.length > 0;
+  if (hasMutation && hasRuntime) return "mixed";
+  if (hasRuntime) return "execution";
+  if (hasMutation) return "mutation";
+  return "informational";
+}
+
+/**
  * Decide whether a scope needs a corrective closeout at all.
  * True when the model must NOT claim ready / implemented, or when
  * the phase is failed / partial, or when partial-language is
@@ -93,11 +118,16 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     }
   }
 
-  // What landed on disk
+  // What landed on disk. Informational-mode turns don't emit the
+  // "none created" line — it's meaningless when the query didn't
+  // ask for artifacts. Issue #111 v2.10.306.
+  const mode = classifyTurnMode(scope);
   const written = scope.verification.filesWritten;
   const edited = scope.verification.filesEdited;
   if (written.length === 0 && edited.length === 0) {
-    lines.push("- Files: **none created or edited** this task.");
+    if (mode !== "informational") {
+      lines.push("- Files: **none created or edited** this task.");
+    }
   } else {
     if (written.length > 0) {
       lines.push(
@@ -123,7 +153,11 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
       "- Runtime: **patch applied after earlier failure, no successful rerun** — status unverified.",
     );
   } else if (runtimes.length === 0) {
-    lines.push("- Runtime: **not verified** — the generated code was not executed this turn.");
+    // Informational queries don't have anything to execute.
+    // Only emit "runtime not verified" for mutation/execution/mixed modes.
+    if (mode !== "informational") {
+      lines.push("- Runtime: **not verified** — the generated code was not executed this turn.");
+    }
   } else {
     const last = runtimes[runtimes.length - 1]!;
     if (last.status === "runner_misfire") {
@@ -333,9 +367,20 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
       "The narrative summary above is unverified. Treat the lines above this block as suggestions, not facts — only the verification lines here reflect real state.",
     );
   } else if (scope.completion.mustUsePartialLanguage || scope.phase === "partial") {
-    lines.push(
-      "**Status: partial.** Initial scaffold / MVP is in place; the requested functionality is not end-to-end verified.",
-    );
+    // Issue #111 v2.10.306: for purely informational turns (0 files,
+    // 0 runtime), the default "scaffold / MVP" wording is nonsense —
+    // nothing was built. Route through classifyTurnMode so the
+    // closeout language matches what the turn actually did.
+    const mode = classifyTurnMode(scope);
+    if (mode === "informational") {
+      lines.push(
+        "**Status: partial.** Evidence was gathered from external sources, but some references / claims were not independently verified.",
+      );
+    } else {
+      lines.push(
+        "**Status: partial.** Initial scaffold / MVP is in place; the requested functionality is not end-to-end verified.",
+      );
+    }
   } else if (!scope.completion.mayClaimReady) {
     lines.push("**Status: not ready.** See reasons above.");
   }

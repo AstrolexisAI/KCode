@@ -1501,6 +1501,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         // Now the draft is softened in-place and the closeout no
         // longer contradicts it. Opt-out: KCODE_DISABLE_GROUNDING_REWRITE=1.
         let rewrittenDraft: string | null = null;
+        let missingRepos: Array<{ repo: string; evidence?: string }> = [];
         try {
           if (process.env.KCODE_DISABLE_GROUNDING_REWRITE !== "1") {
             const { rewriteFinalTextForGrounding, enforceEvidenceFloor } = await import(
@@ -1508,8 +1509,50 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             );
             const draftText = ctx.textChunks.join("");
             if (draftText.trim().length > 0) {
-              const rw = rewriteFinalTextForGrounding(draftText, freshScope);
-              let working = rw.text;
+              let working = draftText;
+
+              // Issue #111 v306 — github claim grounding. Verify every
+              // owner/repo token in the draft against github.com HEAD.
+              // Fabricated claims (e.g. "nasa/ai" — doesn't exist) get
+              // annotated with "(repo no encontrado)". Preventive
+              // layer: catches fabrications BEFORE they reach the user.
+              if (process.env.KCODE_DISABLE_REPO_GROUNDING !== "1") {
+                try {
+                  const { groundGithubRepoClaims } = await import(
+                    "./github-claim-grounding.js"
+                  );
+                  const grounded = await groundGithubRepoClaims(working, {
+                    timeoutMs: 2500,
+                  });
+                  if (grounded.missing.length > 0 || grounded.unknown.length > 0) {
+                    working = grounded.text;
+                    missingRepos = grounded.missing.map((m) => ({
+                      repo: m.repo,
+                      evidence: m.evidence,
+                    }));
+                    log.info(
+                      "repo-grounding",
+                      `verified=${grounded.verified.length} missing=${grounded.missing.length} unknown=${grounded.unknown.length}` +
+                        (grounded.missing.length > 0
+                          ? ` — missing: ${grounded.missing.map((m) => m.repo).join(", ")}`
+                          : ""),
+                    );
+                  } else if (grounded.verified.length > 0) {
+                    log.debug(
+                      "repo-grounding",
+                      `all ${grounded.verified.length} repo claim(s) verified`,
+                    );
+                  }
+                } catch (err) {
+                  log.debug(
+                    "repo-grounding",
+                    `ground error (non-fatal): ${err instanceof Error ? err.message : err}`,
+                  );
+                }
+              }
+
+              const rw = rewriteFinalTextForGrounding(working, freshScope);
+              working = rw.text;
               let reads = 0;
               try {
                 const { sourceReadCount } = await import("./session-tracker.js");
@@ -1519,11 +1562,16 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               }
               const floor = enforceEvidenceFloor(working, reads, 5);
               working = floor.text;
-              if (rw.replacements > 0 || floor.underfloor) {
+              if (
+                rw.replacements > 0 ||
+                floor.underfloor ||
+                missingRepos.length > 0 ||
+                working !== draftText
+              ) {
                 rewrittenDraft = working;
                 log.info(
                   "grounding-rewrite",
-                  `softened draft (replacements=${rw.replacements}, reasons=[${rw.reasons.join(",")}], evidence_floor=${floor.underfloor})`,
+                  `softened draft (replacements=${rw.replacements}, reasons=[${rw.reasons.join(",")}], evidence_floor=${floor.underfloor}, repos_flagged=${missingRepos.length})`,
                 );
               }
             }
@@ -1532,6 +1580,19 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           log.debug(
             "grounding-rewrite",
             `rewrite error (non-fatal): ${err instanceof Error ? err.message : err}`,
+          );
+        }
+
+        // Flag scope when fabricated repos were detected so the
+        // closeout renders "partial" + surfaces the reason.
+        if (missingRepos.length > 0) {
+          flagScope(
+            `fabricated repo reference(s): ${missingRepos.map((r) => r.repo).join(", ")}`,
+            {
+              mayClaimReady: false,
+              mayClaimImplemented: false,
+              mustUsePartialLanguage: true,
+            },
           );
         }
 
@@ -1733,26 +1794,58 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     }
   }
 
-  // Issue #111 v305 — auto-capture ranked lists emitted by the
+  // Issue #111 v305-v306 — auto-capture ranked lists emitted by the
   // assistant in this turn so follow-up prompts like "clona el
   // proyecto 6" / "abre #2" can resolve deterministically instead of
   // relying on the model's token-level recall (which drifts).
+  //
+  // v306 extends the capture shapes: bullets, markdown links, and
+  // tables (not just 1./2./3. numbered). See reference-extractor.ts.
   try {
     const { bumpTurnCounter, extractRankedListFromText, recordRankedList } =
       await import("./reference-memory.js");
     bumpTurnCounter();
     const turnText = ctx.textChunks.join("");
     if (turnText.length > 0) {
-      const items = extractRankedListFromText(turnText);
-      if (items.length >= 3) {
-        recordRankedList("items", items);
-        log.info(
-          "ref-memory",
-          `captured ranked list of ${items.length} item(s): ${items
-            .slice(0, 3)
-            .map((it) => `#${it.rank}=${it.title.slice(0, 30)}`)
-            .join(", ")}${items.length > 3 ? ", …" : ""}`,
+      // Try the generalized repo/github extractor first — handles bullets,
+      // markdown links, tables, numbered lists.
+      let captured = false;
+      try {
+        const { extractRepoList, capturedListToRankedItems } = await import(
+          "./reference-extractor.js"
         );
+        const list = extractRepoList(turnText);
+        if (list && list.items.length >= 3) {
+          const items = capturedListToRankedItems(list);
+          recordRankedList("github_repos", items);
+          captured = true;
+          log.info(
+            "ref-memory",
+            `captured ${list.kind} list of ${list.items.length} repo(s): ${list.items
+              .slice(0, 3)
+              .map((it) => `#${it.ordinal}=${it.repo}`)
+              .join(", ")}${list.items.length > 3 ? ", …" : ""}`,
+          );
+        }
+      } catch (err) {
+        log.debug(
+          "ref-extractor",
+          `extract error (non-fatal): ${err instanceof Error ? err.message : err}`,
+        );
+      }
+      // Fallback to numeric-only extractor if repo extractor found nothing.
+      if (!captured) {
+        const items = extractRankedListFromText(turnText);
+        if (items.length >= 3) {
+          recordRankedList("items", items);
+          log.info(
+            "ref-memory",
+            `captured numeric list of ${items.length} item(s): ${items
+              .slice(0, 3)
+              .map((it) => `#${it.rank}=${it.title.slice(0, 30)}`)
+              .join(", ")}${items.length > 3 ? ", …" : ""}`,
+          );
+        }
       }
     }
   } catch (err) {

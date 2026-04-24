@@ -613,18 +613,118 @@ export function detectStrongCompletionClaim(
   for (const pattern of STRONG_COMPLETION_PATTERNS) {
     const match = finalText.match(pattern);
     if (match) {
-      const start = Math.max(0, (match.index ?? 0) - 30);
-      const end = Math.min(finalText.length, (match.index ?? 0) + match[0].length + 80);
       const broadRequest = BROAD_SCOPE_REQUEST_PATTERNS.some((p) =>
         p.test(originalUserPrompt),
       );
       return {
-        snippet: finalText.slice(start, end).trim(),
+        snippet: extractSentenceLikeSnippet(
+          finalText,
+          match.index ?? 0,
+          match[0].length,
+        ),
         broadRequest,
       };
     }
   }
   return null;
+}
+
+/**
+ * Extract a snippet centered on a regex match, expanded to the
+ * nearest semantic boundaries instead of raw byte offsets. Prevents
+ * the "rk de observación..." class of mid-word truncation.
+ *
+ * Boundaries (in priority order):
+ *   - newline
+ *   - sentence terminator: . ! ? (followed by whitespace or EOL)
+ *   - bullet/list marker at column 0: •, -, *
+ *   - colon followed by whitespace (description markers)
+ *
+ * After boundary expansion, markdown bold/italic/code markers are
+ * trimmed from both ends so the snippet doesn't start with "**" or
+ * a half-closed backtick.
+ */
+export function extractSentenceLikeSnippet(
+  text: string,
+  matchStart: number,
+  matchLen: number,
+  maxLen = 220,
+): string {
+  if (matchStart < 0 || matchStart >= text.length) return "";
+  const matchEnd = Math.min(text.length, matchStart + matchLen);
+
+  let start = matchStart;
+  // Walk backward to nearest sentence boundary or line start.
+  for (let i = matchStart - 1; i >= 0 && matchStart - i < maxLen; i--) {
+    const ch = text[i];
+    if (ch === "\n") { start = i + 1; break; }
+    if (i > 0 && (ch === "." || ch === "!" || ch === "?")) {
+      const next = text[i + 1];
+      if (next === " " || next === "\n" || next === "\t") {
+        start = i + 1;
+        break;
+      }
+    }
+    if (ch === "•" || (ch === "-" && (i === 0 || text[i - 1] === "\n" || text[i - 1] === " "))) {
+      start = i;
+      break;
+    }
+    start = i;
+  }
+
+  let end = matchEnd;
+  for (let i = matchEnd; i < text.length && i - matchEnd < maxLen; i++) {
+    const ch = text[i];
+    if (ch === "\n") { end = i; break; }
+    if (ch === "." || ch === "!" || ch === "?") {
+      const next = text[i + 1];
+      if (next === undefined || next === " " || next === "\n" || next === "\t") {
+        end = i + 1;
+        break;
+      }
+    }
+    end = i + 1;
+  }
+
+  // Trim pure whitespace and dangling markdown markers without
+  // breaking word boundaries.
+  let snippet = text.slice(start, end).trim();
+  // Remove leading list marker
+  snippet = snippet.replace(/^[-*•]\s+/, "");
+  // Strip dangling markdown delimiters at edges (count unmatched).
+  snippet = balanceMarkdownDelimiters(snippet);
+  // Guarantee word-boundary edges: if we still start/end mid-word
+  // (rare — only when the whole text has no boundaries within maxLen),
+  // trim inward to the nearest space.
+  if (snippet.length > 0 && /\w/.test(snippet[0]!) && start > 0 && /\w/.test(text[start - 1]!)) {
+    const firstSpace = snippet.indexOf(" ");
+    if (firstSpace !== -1 && firstSpace < snippet.length / 2) {
+      snippet = snippet.slice(firstSpace + 1);
+    }
+  }
+  const last = snippet[snippet.length - 1];
+  if (snippet.length > 0 && last !== undefined && /\w/.test(last) && end < text.length && /\w/.test(text[end] ?? "")) {
+    const lastSpace = snippet.lastIndexOf(" ");
+    if (lastSpace !== -1 && lastSpace > snippet.length / 2) {
+      snippet = snippet.slice(0, lastSpace);
+    }
+  }
+  if (snippet.length > maxLen) snippet = `${snippet.slice(0, maxLen - 1).trimEnd()}…`;
+  return snippet;
+}
+
+function balanceMarkdownDelimiters(s: string): string {
+  let out = s;
+  // Strip leading half-opened **, *, `, ~~ if the closer is missing.
+  for (const delim of ["**", "`", "*", "~~"]) {
+    const occ = out.split(delim).length - 1;
+    if (occ === 1) {
+      // One occurrence means a dangling half. Remove both edge cases.
+      if (out.startsWith(delim)) out = out.slice(delim.length).trimStart();
+      else if (out.endsWith(delim)) out = out.slice(0, -delim.length).trimEnd();
+    }
+  }
+  return out;
 }
 
 export function formatStrongCompletionWarning(finding: StrongCompletionFinding): string {
