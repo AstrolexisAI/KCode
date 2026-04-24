@@ -269,6 +269,48 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     );
     return lines.join("\n");
   }
+
+  // v301: probe-derived auth failure takes precedence over generic
+  // runtime failure verdict. The probe actually hit the external
+  // resource and got a 401 — that's the real operational problem,
+  // not the SyntaxError from a throwaway import test. If the model
+  // later fixes imports, the app will still fail until credentials
+  // are fixed.
+  const probeResult = (scope.verification as { lastProbeResult?: { status: string; probeId: string; error?: string; evidence?: string } }).lastProbeResult;
+  if (probeResult?.status === "fail_auth") {
+    lines.push(
+      "**Status: blocked by configuration.** The project artifacts exist and the dependencies installed cleanly, but the live-node probe was rejected by the RPC endpoint.",
+    );
+    lines.push("");
+    lines.push(
+      "**Next required step:** supply valid credentials. For Bitcoin Core, set `BITCOIN_RPC_USER` and `BITCOIN_RPC_PASSWORD` env vars (or put `rpcuser` / `rpcpassword` in `bitcoin.conf`) matching what your node actually uses. The probe (`" +
+        probeResult.probeId +
+        "`) will re-run on the next turn and confirm `getblockcount` returns a block number.",
+    );
+    return lines.join("\n");
+  }
+
+  // Probe-derived connection failure — distinct from runtime failure.
+  if (probeResult?.status === "fail_connection") {
+    lines.push(
+      "**Status: blocked by infrastructure.** The project artifacts exist, but the live-node probe could not reach the RPC endpoint.",
+    );
+    lines.push("");
+    lines.push(
+      `**Next required step:** confirm the node is running and reachable. Probe reported: ${probeResult.error ?? "connection failed"}.`,
+    );
+    return lines.join("\n");
+  }
+
+  // Probe passed — tier-3 ground truth. Render "Status: done" with the
+  // concrete evidence so the user sees KCode actually verified the app.
+  if (probeResult?.status === "pass") {
+    lines.push(
+      `**Status: done.** Functional probe ${probeResult.probeId} passed — ${probeResult.evidence ?? "verified end-to-end"}.`,
+    );
+    return lines.join("\n");
+  }
+
   // failed_auth on scaffold/implement → task transitioned to configure/blocked
   // in the scope manager. Render a precise next-step instead of a generic
   // "failed". Issue #111 v273 repro.
