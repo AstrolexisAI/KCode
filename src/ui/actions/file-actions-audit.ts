@@ -166,7 +166,19 @@ export async function handleAuditAction(
                 }
               }
               result.confirmed_findings = result.findings.length;
-              result.false_positives = result.candidates_found - result.confirmed_findings;
+              // Replace FP detail with cloud's (authoritative second-opinion).
+              // Previously this code recomputed result.false_positives without
+              // touching false_positives_detail, producing a report with
+              // "false_positives: 33" and "false_positives_detail: []" — a
+              // contradiction that made the rejections unauditable. Issue
+              // #111 v2.10.309.
+              result.false_positives_detail = cloudResult.false_positives_detail.filter(
+                (fp) =>
+                  !result.findings.some(
+                    (conf) => conf.file === fp.file && conf.line === fp.line,
+                  ),
+              );
+              result.false_positives = result.false_positives_detail.length;
             } else {
               scanState.pendingEscalation = undefined;
             }
