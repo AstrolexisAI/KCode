@@ -1311,14 +1311,16 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               `suppress mode — replacing draft (phase=${curScope.phase}, mayClaimReady=${curScope.completion.mayClaimReady})`,
             );
             const standalone = safeCorrection.replace(/^\s*\n?---\n?\s*/, "");
-            // Seal the window when phase is failed or blocked. Any
-            // text_delta arriving AFTER this replace (e.g. from a
-            // continuation turn triggered by forced-rerun directive)
-            // gets dropped by the UI. This closes the post-failure
-            // prose-leak loophole #111 v286 reported.
-            const seal =
-              curScope.phase === "failed" || curScope.phase === "blocked";
-            events.push({ type: "text_replace_last", text: standalone, seal });
+            // Seal the window whenever the draft should be suppressed.
+            // Previously only failed/blocked triggered the seal, which
+            // meant partial scopes (unverified-artifact gate, strong-
+            // completion-claim flag) still let follow-up prose through.
+            // Issue #111 v287 repro: Python pivot with no runtime, scope
+            // at phase=partial, 'Para ejecutar: ...' leaked after the
+            // closeout. Sealing whenever suppressDraft is true closes
+            // that hole without losing the ability to emit new prose on
+            // the next user turn (seal is per-stream-handler invocation).
+            events.push({ type: "text_replace_last", text: standalone, seal: true });
           } else {
             events.push({ type: "text_delta", text: safeCorrection });
           }
