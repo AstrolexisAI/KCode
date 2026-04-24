@@ -90,7 +90,30 @@ async function stepFix(cwd: string, ctx: Map<string, string>): Promise<{ output:
 
   const { applyFixes } = await import("../audit-engine/fixer");
   const data = JSON.parse(readFileSync(jsonPath, "utf-8"));
-  const fixes = applyFixes(data);
+
+  // v304: the report just written by stepScan used skipVerification:true,
+  // so every finding has a synthetic 'CONFIRMED' verdict from the
+  // hard-coded llmCallback rather than a real model review. Passing
+  // that directly to applyFixes() violates the fixer's 'confirmed
+  // findings only' contract and can patch regex false positives into
+  // user code. Filter to findings that have been independently
+  // confirmed by a real verifier, or bail out with a clear message.
+  const realConfirmed = (data.findings ?? []).filter(
+    (f: { verification?: { verdict?: string; reasoning?: string } }) =>
+      f.verification?.verdict === "confirmed" &&
+      f.verification.reasoning !== "static-only",
+  );
+  if (realConfirmed.length === 0) {
+    return {
+      output:
+        `Skipped: ${data.findings?.length ?? 0} candidate(s) but none are model-verified. ` +
+        `Workflow uses skip-verification for speed; to apply fixes, re-run scan without ` +
+        `skip-verify and then /fix manually.`,
+      success: true,
+    };
+  }
+  const filteredData = { ...data, findings: realConfirmed };
+  const fixes = applyFixes(filteredData);
   const transformed = fixes.filter(f => f.kind === "transformed").length;
   const annotated = fixes.filter(f => f.kind === "annotated").length;
   const skipped = fixes.filter(f => f.kind === "skipped").length;

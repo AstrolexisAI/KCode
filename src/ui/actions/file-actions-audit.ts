@@ -248,21 +248,57 @@ export async function handleAuditAction(
       if (existsSync(jsonPath)) {
         auditResult = JSON.parse(readFs(jsonPath, "utf-8"));
       } else {
-        // Re-run scan in skip-verify mode to get structured findings fast
-        const { runAudit } = await import("../../core/audit-engine/audit-engine.js");
-        auditResult = await runAudit({
-          projectRoot,
-          llmCallback: async () => "VERDICT: CONFIRMED\nREASONING: static-only\n",
-          skipVerification: true,
-        });
+        // Refuse to auto-fix without a verified audit. Previously this
+        // re-ran the scan with skipVerification:true and stamped every
+        // candidate as 'CONFIRMED' via a hard-coded llmCallback, then
+        // handed that to applyFixes() which is contractually for
+        // 'confirmed findings only' (see fixer.ts:64). That let regex
+        // false positives get patched into user code. Safer: require
+        // an actual /scan first so the user has a chance to review.
+        return (
+          `  /fix refuses to run without a verified AUDIT_REPORT.json.\n` +
+          `  Reason: auto-fixing static-only candidates can patch false\n` +
+          `  positives into your code.\n\n` +
+          `  Next step: run /scan ${pathToken} (without skip-verify),\n` +
+          `  review AUDIT_REPORT.md, then /fix.`
+        );
       }
 
       if (auditResult.findings.length === 0) {
         return `  No findings to fix in ${pathToken}/`;
       }
 
+      // Guard: never apply fixes derived from a skip-verified scan.
+      // A verified audit has findings whose verdict === 'confirmed'.
+      // Static-only scans produce findings with no verification, and
+      // applyFixes should not act on them.
+      const unverified = auditResult.findings.filter(
+        (f) => !(f as { verification?: { verdict?: string } }).verification?.verdict ||
+          (f as { verification: { verdict: string } }).verification.verdict !== "confirmed",
+      );
+      if (unverified.length > 0 && unverified.length === auditResult.findings.length) {
+        return (
+          `  /fix refuses to apply: all ${auditResult.findings.length} finding(s) in the ` +
+          `report lack a 'confirmed' verdict.\n` +
+          `  Reason: the fixer is contractually limited to confirmed findings ` +
+          `(see src/core/audit-engine/fixer.ts:64).\n` +
+          `  Next step: re-run /scan ${pathToken} WITHOUT --skip-verify, or edit ` +
+          `AUDIT_REPORT.json to mark specific findings as 'confirmed' manually.`
+        );
+      }
+
       const { applyFixes } = await import("../../core/audit-engine/fixer.js");
-      const fixes = applyFixes(auditResult);
+      // Only pass the confirmed subset so mixed reports can't leak
+      // unverified findings through applyFixes.
+      const confirmedOnly = {
+        ...auditResult,
+        findings: auditResult.findings.filter(
+          (f) =>
+            (f as { verification?: { verdict?: string } }).verification?.verdict ===
+            "confirmed",
+        ),
+      };
+      const fixes = applyFixes(confirmedOnly);
 
       // Three-way split: transformed (real code change), annotated
       // (KCODE-AUDIT advisory comment only — finding still needs a manual
