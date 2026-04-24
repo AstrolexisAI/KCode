@@ -1093,6 +1093,136 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         }
       }
 
+      // Check 3b (v290) — fabricated artifact / diagnostic claims.
+      // The model mentions files or diagnostics that are NOT in the
+      // canonical tool-trace for this turn. Issue #111 v289 repro:
+      // final prose claimed 'Basic README with setup instructions'
+      // but the Write README.md was BLOCKED, and 'port check: closed'
+      // but no port-probe command was issued this turn.
+      {
+        const finalText = ctx.textChunks.join("");
+        const fabricatedReasons: string[] = [];
+
+        // Artifact fabrication: README claimed but not created.
+        // The unsolicited-docs gate produces this exact BLOCKED
+        // message. If we see that in the tool-result stream AND the
+        // final prose mentions README, the claim is fabricated.
+        if (
+          /\breadme\b|setup\s+instructions|basic\s+readme/i.test(finalText)
+        ) {
+          let readmeBlocked = false;
+          let readmeActuallyCreated = false;
+          for (const m of ctx.messages) {
+            if (!Array.isArray(m.content)) continue;
+            for (const b of m.content) {
+              if (typeof b !== "object" || b === null) continue;
+              if (
+                (b as { type?: unknown }).type === "tool_result" &&
+                typeof (b as { content?: unknown }).content === "string" &&
+                /BLOCKED — FILE NOT CREATED:.*README/i.test(
+                  (b as { content: string }).content,
+                )
+              ) {
+                readmeBlocked = true;
+              }
+              if (
+                (b as { type?: unknown }).type === "tool_use" &&
+                (b as { name?: string }).name === "Write"
+              ) {
+                const inp = (b as { input?: unknown }).input;
+                if (
+                  typeof inp === "object" &&
+                  inp !== null &&
+                  /readme/i.test(String((inp as { file_path?: unknown }).file_path ?? ""))
+                ) {
+                  // Check next message for a successful result
+                  // (not BLOCKED). If Write succeeded, README exists.
+                  // Heuristic: if ANY Write to a README path happened
+                  // in the turn AND we didn't see the BLOCKED text,
+                  // assume it was created.
+                  // This branch is reached after Write was called —
+                  // whether success or failure is recorded separately.
+                }
+              }
+            }
+          }
+          // filesWritten already captures successful Writes.
+          const sc = scopeMgr.current();
+          if (sc) {
+            readmeActuallyCreated = [
+              ...sc.verification.filesWritten,
+              ...sc.verification.filesEdited,
+            ].some((p) => /readme/i.test(p));
+          }
+          if (readmeBlocked && !readmeActuallyCreated) {
+            fabricatedReasons.push(
+              "final prose mentions README but README creation was BLOCKED this turn",
+            );
+          }
+        }
+
+        // Diagnostic fabrication: 'port check: closed' / 'port X is closed'
+        // / 'port closed' in prose but no port-probe command ran.
+        if (
+          /port\s+check\s*:\s*closed|port\s+\d+\s+is\s+closed|\bport\s+closed\b|\bss\s+-tlnp\b/i.test(
+            finalText,
+          )
+        ) {
+          let portProbeHappened = false;
+          for (const m of ctx.messages) {
+            if (!Array.isArray(m.content)) continue;
+            for (const b of m.content) {
+              if (typeof b !== "object" || b === null) continue;
+              if ((b as { type?: unknown }).type !== "tool_use") continue;
+              if ((b as { name?: string }).name !== "Bash") continue;
+              const inp = (b as { input?: unknown }).input;
+              const cmd =
+                typeof inp === "object" && inp !== null
+                  ? String((inp as { command?: unknown }).command ?? "")
+                  : "";
+              if (
+                /\bss\s+-[tu]/.test(cmd) ||
+                /\bnetstat\b/.test(cmd) ||
+                /\bnc\s+-z/.test(cmd) ||
+                /\bcurl.*localhost/.test(cmd) ||
+                /\btelnet\b/.test(cmd) ||
+                /\bfuser\b/.test(cmd) ||
+                /\blsof\s+-i/.test(cmd)
+              ) {
+                portProbeHappened = true;
+                break;
+              }
+            }
+            if (portProbeHappened) break;
+          }
+          if (!portProbeHappened) {
+            fabricatedReasons.push(
+              "final prose mentions 'port check' / 'port closed' but no port-probe command was issued this turn",
+            );
+          }
+        }
+
+        if (fabricatedReasons.length > 0) {
+          log.warn(
+            "grounding",
+            `fabricated claim(s) detected: ${fabricatedReasons.join("; ")}`,
+          );
+          events.push({
+            type: "banner",
+            title: "Fabricated claim detected",
+            subtitle: fabricatedReasons.join("\n"),
+          });
+          for (const reason of fabricatedReasons) {
+            flagScope(reason, {
+              mayClaimReady: false,
+              mayClaimImplemented: false,
+              mustUsePartialLanguage: true,
+              phase: "failed",
+            });
+          }
+        }
+      }
+
       // Check 4a — readiness claim contradicting direct error evidence.
       // Fires when the final text says the artifact is "ready / runs /
       // displays" but the turn recorded tool errors (likely a validation
