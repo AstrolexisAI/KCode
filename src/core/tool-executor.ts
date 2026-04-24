@@ -1172,7 +1172,34 @@ export async function* executeToolsSequential(
               const { classifyRuntimeStatus, isFailedStatus } = await import(
                 "./runtime-classifier.js"
               );
-              const status = classifyRuntimeStatus(cmd, 0, result.content);
+              let status = classifyRuntimeStatus(cmd, 0, result.content);
+
+              // v297 P1-1: post-spawn liveness probe. If the bash
+              // wrapper output contains 'PID: N' and the classifier
+              // leaned toward verified/started_unverified, check if
+              // the process is still alive. Dead-on-arrival means
+              // the app crashed inside the wrapper's reporting window
+              // and we shouldn't claim verified.
+              const pidMatch = result.content.match(/PID:\s*(\d+)/);
+              if (pidMatch && (status === "verified" || status === "started_unverified")) {
+                const pid = parseInt(pidMatch[1]!, 10);
+                if (Number.isFinite(pid) && pid > 0) {
+                  try {
+                    // kill(pid, 0) throws if process doesn't exist.
+                    process.kill(pid, 0);
+                    // Still alive — keep original status.
+                  } catch {
+                    // Dead — downgrade. Even if classifier said
+                    // verified, the process isn't running anymore.
+                    log.info(
+                      "runtime-classifier",
+                      `post-spawn liveness: PID ${pid} already dead; downgrading ${status} → started_unverified`,
+                    );
+                    status = "started_unverified";
+                  }
+                }
+              }
+
               mgr.recordRuntimeCommand({
                 command: cmd,
                 exitCode: 0,

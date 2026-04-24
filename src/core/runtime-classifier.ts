@@ -136,19 +136,38 @@ export function classifyRuntimeStatus(
 
   if (exitCode === 0) {
     // Ambiguous error signal in output ("Error:", "ERROR:", "error —",
-    // "failed to") without a matching failed_* pattern above. The
-    // process exited clean but printed an application-level error,
-    // so we can't claim it worked. Issue #111 v274.
+    // "failed to") without a matching failed_* pattern above.
     const hasAmbiguousError =
       /(^|[\s\n])(?:Error|ERROR|error)\s*[:\-—]/m.test(o) ||
       /\bfailed\s+to\s+\w+/i.test(lo) ||
       /\bcould\s+not\s+\w+/i.test(lo) ||
       /\bunable\s+to\s+\w+/i.test(lo);
-    // Positive verification signal that would override the ambiguity
-    // (app said it successfully connected / started serving / received
-    // N blocks / etc.).
+    // Positive verification signal (app said it connected / serving /
+    // synced / height=N / etc.).
     const hasPositiveSignal =
       /\b(?:Connected|Ready|Listening|Serving|Success|OK|Synced|height\s*[:=]?\s*\d+)\b/i.test(o);
+
+    // v297 P0-1: spawn-only evidence ('PID: N (Xs)' from the bash
+    // background wrapper) is NOT sufficient for verified. The
+    // process started but we have no application-level assertion
+    // that it's doing its job. TUI apps in particular can crash
+    // 200ms after spawn while the wrapper still reports PID alive.
+    // Downgrade to started_unverified unless a positive signal is
+    // present in the output.
+    const isSpawnOnly =
+      /^\s*PID:\s*\d+/m.test(o) &&
+      !/\n.*[a-zA-Z]{4,}/.test(o.replace(/PID:\s*\d+\s*\([^)]+\)\s*/g, ""));
+    if (isSpawnOnly && !hasPositiveSignal) {
+      return "started_unverified";
+    }
+
+    // v297 P0-2: validation commands using shell fallback ('||')
+    // cannot produce verified. The fallback can convert a failing
+    // runtime into a shell-success path, masking the real error.
+    if (/\s\|\|\s/.test(_command) && !hasPositiveSignal) {
+      return "started_unverified";
+    }
+
     if (hasAmbiguousError && !hasPositiveSignal) {
       return "started_unverified";
     }
