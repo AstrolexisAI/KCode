@@ -208,8 +208,14 @@ export type StreamEvent =
    * coexisting with it. The UI locates the most recent completed
    * entry with kind==="text" && role==="assistant" and overwrites
    * its `text` field with the provided payload.
+   *
+   * When `seal` is true, the UI ALSO drops any subsequent text_delta
+   * events until the next user message. This closes the loophole
+   * where model prose arrives AFTER the closeout (e.g. through
+   * multi-turn rerun-directive responses) and contradicts the
+   * grounded status that's already been emitted. Issue #111 v286.
    */
-  | { type: "text_replace_last"; text: string }
+  | { type: "text_replace_last"; text: string; seal?: boolean }
   | { type: "thinking_delta"; thinking: string }
   | { type: "tool_use_start"; toolUseId: string; name: string }
   | { type: "tool_input_delta"; toolUseId: string; partialJson: string }
