@@ -22,6 +22,46 @@ const SEVERITY_ORDER: Record<Severity, number> = {
   low: 3,
 };
 
+/**
+ * Append a "Verifier rejections (false positives)" section with up to
+ * FP_SAMPLE_LIMIT entries. Designed to be spot-checkable: if the
+ * user doesn't trust a 0-findings result, they can scan these to see
+ * what the verifier threw out and judge the reasoning.
+ */
+const FP_SAMPLE_LIMIT = 10;
+function renderFalsePositiveSection(result: AuditResult, lines: string[]): void {
+  const details = result.false_positives_detail ?? [];
+  if (details.length === 0) return;
+
+  lines.push("## Verifier rejections (false positives)");
+  lines.push("");
+  lines.push(
+    `The verifier rejected **${details.length}** candidate${details.length === 1 ? "" : "s"} ` +
+      "as false positives. Spot-check these against the code to confirm the rejections were sensible; " +
+      `full list is in \`AUDIT_REPORT.json → false_positives_detail\`.`,
+  );
+  lines.push("");
+
+  const shown = details.slice(0, FP_SAMPLE_LIMIT);
+  for (let i = 0; i < shown.length; i++) {
+    const fp = shown[i]!;
+    const rel = fp.file.startsWith(result.project + "/")
+      ? fp.file.slice(result.project.length + 1)
+      : fp.file;
+    lines.push(
+      `${i + 1}. \`${rel}:${fp.line}\` — pattern \`${fp.pattern_id}\` (${fp.severity})`,
+    );
+    lines.push(`   - Reason: ${fp.verification.reasoning.slice(0, 400).replace(/\n/g, " ")}`);
+  }
+  if (details.length > shown.length) {
+    lines.push("");
+    lines.push(
+      `_…and ${details.length - shown.length} more. See \`AUDIT_REPORT.json\`._`,
+    );
+  }
+  lines.push("");
+}
+
 export function generateMarkdownReport(result: AuditResult): string {
   const lines: string[] = [];
   const projectName = result.project.split("/").filter(Boolean).pop() ?? result.project;
@@ -35,6 +75,33 @@ export function generateMarkdownReport(result: AuditResult): string {
   lines.push("");
   lines.push("---");
   lines.push("");
+
+  // Coverage — always emitted so a user can tell "scanned everything"
+  // apart from "scanned the first 500 in traversal order". Critical for
+  // judging whether the verdict is representative of the whole codebase
+  // or only a slice of it.
+  const cov = result.coverage;
+  if (cov) {
+    lines.push("## Coverage");
+    lines.push("");
+    const truncLabel = cov.truncated
+      ? `**yes** (${cov.skippedByLimit} file${cov.skippedByLimit === 1 ? "" : "s"} skipped by --max-files)`
+      : "no";
+    lines.push(`- Files in project: **${cov.totalCandidateFiles}**`);
+    lines.push(`- Files scanned: **${cov.scannedFiles}** (${Math.round((cov.scannedFiles / Math.max(cov.totalCandidateFiles, 1)) * 100)}%)`);
+    lines.push(`- Truncated: ${truncLabel}`);
+    lines.push(`- Max-files cap: ${cov.maxFiles} (${cov.capSource})`);
+    if (cov.truncated) {
+      const suggestion = Math.min(cov.totalCandidateFiles, cov.maxFiles * 4);
+      lines.push("");
+      lines.push(
+        `> ⚠ This report covers only ${cov.scannedFiles}/${cov.totalCandidateFiles} source files. ` +
+          `Findings below reflect the scanned subset, not the whole codebase. ` +
+          `Re-run with \`--max-files ${suggestion}\` (or higher) for full coverage.`,
+      );
+    }
+    lines.push("");
+  }
 
   // Executive summary
   lines.push("## Summary");
@@ -50,6 +117,7 @@ export function generateMarkdownReport(result: AuditResult): string {
     lines.push("No confirmed findings. Either the code is clean for the checked patterns,");
     lines.push("or the pattern library needs expansion for this codebase's language/style.");
     lines.push("");
+    renderFalsePositiveSection(result, lines);
     return lines.join("\n");
   }
 
@@ -180,6 +248,10 @@ export function generateMarkdownReport(result: AuditResult): string {
       lines.push("");
     }
   }
+
+  // Always render a false-positive section when there are any, so the
+  // human auditor can spot-check the verifier's rejections.
+  renderFalsePositiveSection(result, lines);
 
   // Methodology footer
   lines.push("## Methodology");

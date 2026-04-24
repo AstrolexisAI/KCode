@@ -11,7 +11,13 @@ import {
   needsSubmoduleInit,
   scanProject,
 } from "./scanner";
-import type { AuditResult, Candidate, Finding, Verification } from "./types";
+import type {
+  AuditResult,
+  Candidate,
+  FalsePositiveDetail,
+  Finding,
+  Verification,
+} from "./types";
 import { verifyAllCandidates, type VerifyOptions } from "./verifier";
 
 export interface AuditEngineOptions {
@@ -47,7 +53,11 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   }
 
   // Phase 1: Discovery + scanning
-  const { files, candidates: rawCandidates } = scanProject(opts.projectRoot, {
+  const {
+    files,
+    candidates: rawCandidates,
+    coverage: scanCoverage,
+  } = scanProject(opts.projectRoot, {
     maxFiles: opts.maxFiles,
   });
   const languages = detectLanguages(files);
@@ -93,32 +103,37 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     verified = await verifyAllCandidates(candidates, verifyOpts);
   }
 
-  // Filter to confirmed findings
+  // Filter to confirmed findings AND keep rejected candidates as
+  // structured false-positive detail so the report is auditable.
+  // Prior behavior persisted a bare counter, which made it impossible
+  // to tell whether the verifier's rejections were sensible.
   const findings: Finding[] = [];
+  const falsePositivesDetail: FalsePositiveDetail[] = [];
   for (const r of verified) {
+    const pattern = await import("./patterns").then((m) =>
+      m.getPatternById(r.candidate.pattern_id),
+    );
+    const key = `${r.candidate.pattern_id}|${r.candidate.file}`;
+    const count = multiples.get(key);
+    const extraReasoning = count
+      ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern in the same file)`
+      : r.verification.reasoning;
+    const base = {
+      pattern_id: r.candidate.pattern_id,
+      pattern_title: pattern?.title ?? r.candidate.pattern_id,
+      severity: r.candidate.severity,
+      file: r.candidate.file,
+      line: r.candidate.line,
+      matched_text: r.candidate.matched_text,
+      context: r.candidate.context,
+      verification: { ...r.verification, reasoning: extraReasoning },
+      cwe: pattern?.cwe,
+    };
     if (r.verification.verdict === "confirmed") {
-      const pattern = await import("./patterns").then((m) =>
-        m.getPatternById(r.candidate.pattern_id),
-      );
-      const key = `${r.candidate.pattern_id}|${r.candidate.file}`;
-      const count = multiples.get(key);
-      // Note: if this pattern+file has multiple matches, mention that.
-      const extraReasoning = count
-        ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern in the same file)`
-        : r.verification.reasoning;
-      findings.push({
-        pattern_id: r.candidate.pattern_id,
-        pattern_title: pattern?.title ?? r.candidate.pattern_id,
-        severity: r.candidate.severity,
-        file: r.candidate.file,
-        line: r.candidate.line,
-        matched_text: r.candidate.matched_text,
-        context: r.candidate.context,
-        verification: { ...r.verification, reasoning: extraReasoning },
-        cwe: pattern?.cwe,
-      });
+      findings.push(base);
     } else if (r.verification.verdict === "false_positive") {
       falsePositives += 1;
+      falsePositivesDetail.push(base);
     }
   }
 
@@ -133,6 +148,8 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     confirmed_findings: findings.length,
     false_positives: falsePositives,
     findings,
+    false_positives_detail: falsePositivesDetail,
+    coverage: scanCoverage,
     elapsed_ms: Date.now() - startTime,
   };
 

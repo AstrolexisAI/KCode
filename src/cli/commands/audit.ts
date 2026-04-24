@@ -176,13 +176,31 @@ export function registerAuditCommand(program: Command): void {
       }
 
       console.log("");
-      console.log(`  Files scanned:       ${result.files_scanned}`);
+      const scannedLabel = result.coverage
+        ? `${result.files_scanned} / ${result.coverage.totalCandidateFiles}`
+        : String(result.files_scanned);
+      console.log(`  Files scanned:       ${scannedLabel}`);
       console.log(`  Candidates found:    ${result.candidates_found}`);
       console.log(
         `  \x1b[31mConfirmed findings:  ${result.confirmed_findings}\x1b[0m`,
       );
       console.log(`  False positives:     ${result.false_positives}`);
       console.log(`  Duration:            ${(result.elapsed_ms / 1000).toFixed(1)}s`);
+      if (result.coverage?.truncated) {
+        const suggestion = Math.min(
+          result.coverage.totalCandidateFiles,
+          result.coverage.maxFiles * 4,
+        );
+        console.log("");
+        console.log(
+          `  \x1b[33m⚠ Coverage truncated: ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} ` +
+            `files scanned (${result.coverage.skippedByLimit} skipped, cap ${result.coverage.maxFiles} ` +
+            `from ${result.coverage.capSource}).\x1b[0m`,
+        );
+        console.log(
+          `  \x1b[33m  Rerun with --max-files ${suggestion} for full coverage.\x1b[0m`,
+        );
+      }
       console.log("");
     });
 }

@@ -310,30 +310,19 @@ function isSkippedPath(fullPath: string): boolean {
 }
 
 /**
- * Walk a directory tree and return absolute paths of source files.
- *
- * Symlink safety:
- *   - Every directory is resolved via `realpath` so cyclic symlinks
- *     (a→b→a, link→., etc.) are detected and only traversed once.
- *   - Every resolved path is required to stay inside the resolved
- *     project root. A symlink that points outside the project
- *     (`my-lib -> /etc/ssh/...`) is silently skipped instead of
- *     leaking files outside the audit scope.
- *   - File symlinks are resolved the same way before being emitted,
- *     so the audit never double-reports the same file via two aliases.
+ * Enumerate EVERY source file in the project without applying a cap.
+ * The output is the full universe of candidates — the caller then
+ * applies ranking + truncation (see selectFilesForAudit). Returned
+ * paths are symlink-resolved and root-confined.
  */
-export function findSourceFiles(root: string, maxFiles = 500): string[] {
+export function enumerateSourceFiles(root: string): string[] {
   const out: string[] = [];
-  // Resolve the project root once. If realpath fails (broken link,
-  // missing dir) fall back to the plain absolute path.
   let rootReal: string;
   try {
     rootReal = realpathSync(resolve(root));
   } catch {
     rootReal = resolve(root);
   }
-  // rootPrefix is what we compare every resolved descendant against.
-  // Appending the separator avoids `/home/foo` matching `/home/foo-evil`.
   const rootPrefix = rootReal.endsWith(sep) ? rootReal : rootReal + sep;
 
   const visitedDirs = new Set<string>();
@@ -341,7 +330,7 @@ export function findSourceFiles(root: string, maxFiles = 500): string[] {
   const stack: string[] = [rootReal];
   visitedDirs.add(rootReal);
 
-  while (stack.length > 0 && out.length < maxFiles) {
+  while (stack.length > 0) {
     const dir = stack.pop()!;
     let entries: string[];
     try {
@@ -360,17 +349,12 @@ export function findSourceFiles(root: string, maxFiles = 500): string[] {
       }
       if (s.isDirectory()) {
         if (isSkippedPath(full + "/")) continue;
-        // Resolve the real path before descending — this is how we
-        // both break symlink cycles and prevent escaping the project
-        // root through a symlink into /etc or $HOME.
         let real: string;
         try {
           real = realpathSync(full);
         } catch {
           continue;
         }
-        // Root-confinement: the resolved directory must equal the
-        // project root itself OR be strictly inside it.
         if (real !== rootReal && !real.startsWith(rootPrefix)) continue;
         if (visitedDirs.has(real)) continue;
         visitedDirs.add(real);
@@ -386,17 +370,131 @@ export function findSourceFiles(root: string, maxFiles = 500): string[] {
         } catch {
           continue;
         }
-        // Same root confinement for file symlinks: never report a file
-        // whose real path is outside the audited project.
         if (real !== rootReal && !real.startsWith(rootPrefix)) continue;
         if (visitedFiles.has(real)) continue;
         visitedFiles.add(real);
         out.push(real);
-        if (out.length >= maxFiles) break;
       }
     }
   }
   return out;
+}
+
+/**
+ * Rank a file for audit attention. Higher = scan first. Scores are
+ * deterministic and only depend on the path (no disk I/O, no LLM).
+ *
+ * Signals:
+ *  + main-code extensions (.c/.cpp/.py/.ts/…) — baseline +50
+ *  + security-relevant directories (src/, auth/, crypto/, …) — +30
+ *  + "core" / "runtime" / "engine" / "protocol" — +15
+ *  - tests / fixtures / examples / docs / generated — strong penalty
+ *  - notebooks / configs / auxiliary scripts — soft penalty
+ *
+ * Paths are compared lower-cased with forward-slash separators so
+ * Windows paths still match `src/`.
+ */
+export function scoreFileForAudit(filePath: string): number {
+  const p = filePath.replace(/\\/g, "/").toLowerCase();
+  const ext = extname(p);
+  let score = 0;
+
+  // Extension bucket.
+  if (/\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|py|rs|go|java|kt|swift|ts|tsx|js|jsx|cs|rb|php)$/.test(ext)) {
+    score += 50;
+  } else if (/\.(sh|bash|zsh|ps1|pl|lua|r|jl|sql)$/.test(ext)) {
+    score += 20;
+  } else if (/\.(md|rst|txt|json|yml|yaml|toml|xml|html|css|scss|svg)$/.test(ext)) {
+    score -= 20;
+  } else if (/\.(ipynb)$/.test(ext)) {
+    score -= 20;
+  }
+
+  // Security-relevant directory hints (first-class, each worth +30).
+  const hotDirs = [
+    "/src/", "/lib/", "/core/", "/runtime/", "/engine/",
+    "/auth/", "/crypto/", "/security/", "/net/", "/network/",
+    "/parser/", "/serialize/", "/deserialize/", "/protocol/",
+    "/ipc/", "/rpc/", "/kernel/", "/driver/", "/firmware/",
+  ];
+  if (hotDirs.some((d) => p.includes(d))) score += 30;
+
+  // Softer module hints.
+  const warmDirs = ["/app/", "/server/", "/api/", "/handler/", "/controller/"];
+  if (warmDirs.some((d) => p.includes(d))) score += 15;
+
+  // Penalty zones.
+  const coldDirs = [
+    "/test/", "/tests/", "/spec/", "/specs/", "/__tests__/",
+    "/fixtures/", "/fixture/", "/examples/", "/example/", "/sample/",
+    "/samples/", "/demo/", "/demos/", "/docs/", "/doc/", "/tutorial/",
+    "/tutorials/", "/benchmark/", "/benchmarks/", "/generated/",
+    "/third_party/", "/vendor/", "/node_modules/", "/_generated/",
+  ];
+  if (coldDirs.some((d) => p.includes(d))) score -= 40;
+
+  // Filenames that suggest tests / fixtures.
+  const base = p.split("/").pop() ?? "";
+  if (/(^test[_-]|[_-]test\.|\.test\.|\.spec\.|^spec[_-])/.test(base)) score -= 20;
+  if (/^mock[_.-]|[_-]mock\.|^stub[_.-]|[_-]stub\./.test(base)) score -= 15;
+
+  return score;
+}
+
+/**
+ * Adaptive default file cap. Repositories under ~800 source files
+ * get the full tree. Medium repos (<3000) get bumped to 1500. Large
+ * repos (≥3000) cap at 2000 — that's still ~12× the average 170-file
+ * project, and the verifier is the cost bottleneck, not the scanner.
+ */
+export function defaultMaxFiles(total: number): number {
+  if (total <= 800) return total;
+  if (total < 3000) return 1500;
+  return 2000;
+}
+
+/**
+ * Apply ranking + truncation to the raw enumeration. Returns both
+ * the selected subset and the total so the caller can build a
+ * coverage report.
+ */
+export function selectFilesForAudit(
+  all: string[],
+  maxFiles: number,
+): { selected: string[]; total: number; truncated: boolean; maxFiles: number } {
+  if (all.length <= maxFiles) {
+    return {
+      selected: [...all],
+      total: all.length,
+      truncated: false,
+      maxFiles,
+    };
+  }
+  // Stable sort by score desc, then by path for determinism.
+  const ranked = all
+    .map((p) => ({ path: p, score: scoreFileForAudit(p) }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.path.localeCompare(b.path);
+    });
+  return {
+    selected: ranked.slice(0, maxFiles).map((r) => r.path),
+    total: all.length,
+    truncated: true,
+    maxFiles,
+  };
+}
+
+/**
+ * Legacy wrapper preserved for callers that want a flat list with a
+ * hard cap applied in traversal order. Prefer enumerateSourceFiles +
+ * selectFilesForAudit for new code — that path yields a coverage
+ * report and ranked selection.
+ */
+export function findSourceFiles(root: string, maxFiles = 500): string[] {
+  const all = enumerateSourceFiles(root);
+  const { selected } = selectFilesForAudit(all, maxFiles);
+  return selected;
 }
 
 /**
@@ -629,12 +727,30 @@ function applyPattern(
 export function scanProject(
   projectRoot: string,
   opts?: { maxFiles?: number; patterns?: BugPattern[] },
-): { files: string[]; candidates: Candidate[] } {
-  const files = findSourceFiles(projectRoot, opts?.maxFiles ?? 500);
+): {
+  files: string[];
+  candidates: Candidate[];
+  coverage: {
+    totalCandidateFiles: number;
+    scannedFiles: number;
+    skippedByLimit: number;
+    truncated: boolean;
+    maxFiles: number;
+    capSource: "user" | "adaptive";
+  };
+} {
+  // Enumerate first so we know the full universe and can report coverage.
+  const all = enumerateSourceFiles(projectRoot);
+
+  const userSetMax = opts?.maxFiles !== undefined;
+  const maxFiles = userSetMax ? opts!.maxFiles! : defaultMaxFiles(all.length);
+  const capSource: "user" | "adaptive" = userSetMax ? "user" : "adaptive";
+
+  const { selected, total, truncated } = selectFilesForAudit(all, maxFiles);
   const patterns = opts?.patterns ?? getAllPatterns();
   const candidates: Candidate[] = [];
 
-  for (const file of files) {
+  for (const file of selected) {
     let content: string;
     try {
       content = readFileSync(file, "utf-8");
@@ -656,7 +772,18 @@ export function scanProject(
     }
   }
 
-  return { files, candidates };
+  return {
+    files: selected,
+    candidates,
+    coverage: {
+      totalCandidateFiles: total,
+      scannedFiles: selected.length,
+      skippedByLimit: total - selected.length,
+      truncated,
+      maxFiles,
+      capSource,
+    },
+  };
 }
 
 /**
