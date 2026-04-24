@@ -228,10 +228,16 @@ export async function verifyAllCandidates(
       consecutiveTransportFailures = 0;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      // Transport-level: connection refused / DNS / timeout.
+      // Configuration-level: 401 (bad key), 404 (bad URL), 429 retry-exhausted.
+      // Both indicate the audit cannot proceed — abort early instead
+      // of bucketing every candidate as needs_context with the same
+      // error string. v311/v312.
       const isTransport =
         /Unable to connect|ECONNREFUSED|ENOTFOUND|fetch failed|timeout|EAI_AGAIN|connection refused|getaddrinfo/i.test(
           msg,
-        );
+        ) ||
+        /\bLLM 40[14]\b|\bLLM 5\d\d\b|\bAnthropic 40[14]\b|\bAnthropic 5\d\d\b/.test(msg);
       if (isTransport) {
         consecutiveTransportFailures++;
         if (consecutiveTransportFailures >= TRANSPORT_FAIL_LIMIT && i + 1 >= TRANSPORT_FAIL_LIMIT) {
