@@ -1386,6 +1386,68 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       const { getTaskScopeManager } = await import("./task-scope.js");
       const curScope = getTaskScopeManager().current();
       if (curScope) {
+        // v298 Phase 2: run the applicable verification probe BEFORE
+        // closeout renders. The probe actively exercises the app
+        // (e.g. JSON-RPC getblockcount against bitcoind) and produces
+        // tier-3 evidence or a concrete failure reason. Opt-out:
+        // KCODE_DISABLE_PROBES=1.
+        if (process.env.KCODE_DISABLE_PROBES !== "1") {
+          try {
+            const { runApplicableProbe } = await import("./probes/registry.js");
+            const result = await runApplicableProbe(curScope);
+            if (result) {
+              const mgr = getTaskScopeManager();
+              mgr.update({
+                verification: {
+                  lastProbeResult: {
+                    status: result.status,
+                    probeId: result.probeId,
+                    evidence: result.status === "pass" ? result.evidence : undefined,
+                    error: result.status !== "pass" && result.status !== "not_applicable" ? result.error : undefined,
+                    tier: result.status === "pass" ? result.tier : undefined,
+                  },
+                },
+              });
+              // Downgrade phase if probe failed with a specific cause.
+              if (result.status === "fail_auth") {
+                flagScope(`functional probe failed: ${result.error}`, {
+                  mayClaimReady: false,
+                  mustUsePartialLanguage: true,
+                  phase: "blocked",
+                });
+              } else if (
+                result.status === "fail_connection" ||
+                result.status === "fail_runtime"
+              ) {
+                flagScope(`functional probe failed: ${result.error}`, {
+                  mayClaimReady: false,
+                  mustUsePartialLanguage: true,
+                  phase: "partial",
+                });
+              } else if (result.status === "pass") {
+                // Probe passed — the current phase can relax (unless
+                // other gates have already blocked). Don't override
+                // failed/blocked but do allow mayClaimReady to lift
+                // if nothing else fights it.
+                if (
+                  curScope.phase !== "failed" &&
+                  curScope.phase !== "blocked"
+                ) {
+                  mgr.update({
+                    completion: { mayClaimReady: true, mayClaimImplemented: true },
+                    phase: "done",
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            log.debug(
+              "probe",
+              `probe run error (non-fatal): ${err instanceof Error ? err.message : err}`,
+            );
+          }
+        }
+
         // Reconcile the Plan widget from scope state so the widget's
         // step checkboxes match the closeout's "Plan progress: N/M"
         // line. Model often calls plan.create once and never plan.update,
