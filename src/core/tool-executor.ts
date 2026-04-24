@@ -310,6 +310,59 @@ export async function* executeToolsSequential(
       if (pattern) {
         const entry = guardState.trackLoopPattern(pattern, command);
 
+        // Mandatory-rerun bypass. When the scope says 'patch applied
+        // after failure and no successful rerun yet', the NEXT bash
+        // call that re-runs the failing command (or its derived rerun)
+        // is semantic revalidation, not repetition. Suppressing it
+        // via the loop-guard lets the turn close as 'complete' with
+        // an unverified patch — the exact v293 repro. Reset the
+        // counter + flag before the hard-stop check so the call
+        // proceeds normally.
+        try {
+          const { getTaskScopeManager } = await import("./task-scope.js");
+          const scope = getTaskScopeManager().current();
+          if (
+            scope?.verification.patchAppliedAfterFailure &&
+            !scope.verification.rerunPassedAfterPatch
+          ) {
+            const { deriveRerunCommand } = await import("./rerun-directive.js");
+            const rerunCmd = deriveRerunCommand(scope);
+            // Match both a direct string match and basename overlap
+            // (the rerun can vary slightly: `bun run --check index.ts`
+            // vs `bun run index.ts`).
+            const sameAsRerun =
+              rerunCmd !== null &&
+              (command.includes(rerunCmd) ||
+                rerunCmd.includes(command) ||
+                (() => {
+                  const rerunFiles = Array.from(
+                    rerunCmd.matchAll(/([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs))/g),
+                  ).map((m) => m[1]!);
+                  const cmdFiles = Array.from(
+                    command.matchAll(/([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs))/g),
+                  ).map((m) => m[1]!);
+                  return (
+                    rerunFiles.length > 0 &&
+                    rerunFiles.some((f) => cmdFiles.includes(f))
+                  );
+                })());
+            if (sameAsRerun && entry.count >= LOOP_PATTERN_HARD_STOP) {
+              log.info(
+                "tool",
+                `mandatory-rerun bypass: scope requires revalidation of ${rerunCmd}, resetting loop counter for pattern "${pattern}"`,
+              );
+              entry.count = 0;
+              entry.warned = false;
+              entry.examples = [];
+            }
+          }
+        } catch (err) {
+          log.debug(
+            "tool",
+            `mandatory-rerun bypass check failed (non-fatal): ${err instanceof Error ? err.message : err}`,
+          );
+        }
+
         if (entry.count >= LOOP_PATTERN_HARD_STOP) {
           // Hard redirect: skip this call, force a strategy change, reset counter
           entry.redirects++;

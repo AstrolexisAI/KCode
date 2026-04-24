@@ -408,6 +408,19 @@ export function createTaskScopeManager(): TaskScopeManager {
         if (relevantHit) {
           _current.verification.patchAppliedAfterFailure = true;
           _current.verification.rerunPassedAfterPatch = false;
+          // Explicit claim-gate (#111 v294 user feedback #3): while a
+          // patch is pending rerun, no 'ready/complete' claims allowed.
+          // Previously we relied on phase=failed (set when the runtime
+          // failed) to keep mayClaimReady=false, but the claim-gate
+          // should be independent of phase in case other transitions
+          // clear phase back to something healthier.
+          _current.completion.mayClaimReady = false;
+          _current.completion.mayClaimImplemented = false;
+          _current.completion.mustUsePartialLanguage = true;
+          const reason = "patch applied after failure, awaiting successful rerun";
+          if (!_current.completion.reasons.includes(reason)) {
+            _current.completion.reasons.push(reason);
+          }
         }
       }
       if (_current.phase === "planning") {
