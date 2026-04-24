@@ -1046,6 +1046,74 @@ export async function* executeToolsSequential(
             }
           } else if (call.name === "Bash") {
             const cmd = typeof input.command === "string" ? input.command : "";
+            // File-mutation detection — Bash can create/edit files
+            // via redirection (cat > X, echo > X), sed/perl/awk -i,
+            // mv, touch, cp. Without this wiring the scope's
+            // filesWritten/filesEdited stay empty even when the
+            // model DID create files through Bash, and the closeout
+            // renderer reports 'Files: none'. Issue #111 v288/v289
+            // repro: .env.example created via 'cat > .env.example'
+            // never appeared in the final artifact accounting.
+            try {
+              const { extractBashFileMutations } = await import(
+                "./audit-guards.js"
+              );
+              const targets = extractBashFileMutations(cmd);
+              for (const target of targets) {
+                const abs = target.startsWith("/")
+                  ? target
+                  : `${process.cwd()}/${target}`;
+                mgr.recordMutation({
+                  tool: "Bash",
+                  path: abs,
+                  at: Date.now(),
+                });
+              }
+              // Handle mv / cp / touch separately — extractBashFileMutations
+              // covers redirects and in-place edit flags, not rename/touch.
+              // mv SRC DST → SRC gets removed from filesWritten/Edited, DST added
+              const mvMatch = cmd.match(
+                /\bmv\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/,
+              );
+              if (mvMatch) {
+                const dst = mvMatch[2]!.replace(/^['"]|['"]$/g, "");
+                const absDst = dst.startsWith("/") ? dst : `${process.cwd()}/${dst}`;
+                mgr.recordMutation({
+                  tool: "Bash",
+                  path: absDst,
+                  at: Date.now(),
+                });
+              }
+              // touch FILE → create (empty)
+              const touchMatches = cmd.matchAll(/\btouch\s+([^\s;&|<>`]+)/g);
+              for (const m of touchMatches) {
+                const p = m[1]!.replace(/^['"]|['"]$/g, "");
+                const abs = p.startsWith("/") ? p : `${process.cwd()}/${p}`;
+                mgr.recordMutation({
+                  tool: "Bash",
+                  path: abs,
+                  at: Date.now(),
+                });
+              }
+              // cp SRC DST → DST is a new file (treat as Write)
+              const cpMatch = cmd.match(
+                /\bcp\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/,
+              );
+              if (cpMatch) {
+                const dst = cpMatch[2]!.replace(/^['"]|['"]$/g, "");
+                const absDst = dst.startsWith("/") ? dst : `${process.cwd()}/${dst}`;
+                mgr.recordMutation({
+                  tool: "Write",
+                  path: absDst,
+                  at: Date.now(),
+                });
+              }
+            } catch (err) {
+              log.debug(
+                "task-scope",
+                `bash file-mutation recording failed: ${err instanceof Error ? err.message : err}`,
+              );
+            }
             // Runtime command detection: python/node/bun/cargo/go run
             if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(cmd)) {
               const { classifyRuntimeStatus, isFailedStatus } = await import(
