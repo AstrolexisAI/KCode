@@ -1,6 +1,12 @@
 // Tests for AskUser tool — structured user questions
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { getTaskScopeManager } from "../core/task-scope";
 import { askUserDefinition, executeAskUser } from "./ask-user";
+
+// v292: ask-user enriches 'context' with the grounded closeout when
+// scope is in a failed/partial state. Legacy tests that don't set up
+// scope need a reset so previous tests' scopes don't bleed through.
+beforeEach(() => getTaskScopeManager().reset());
 
 describe("askUserDefinition", () => {
   test("has correct name and required params", () => {
