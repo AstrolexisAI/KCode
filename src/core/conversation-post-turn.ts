@@ -1433,19 +1433,24 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
                   phase: "partial",
                 });
               } else if (result.status === "pass") {
-                // Probe passed — the current phase can relax (unless
-                // other gates have already blocked). Don't override
-                // failed/blocked but do allow mayClaimReady to lift
-                // if nothing else fights it.
-                if (
-                  curScope.phase !== "failed" &&
-                  curScope.phase !== "blocked"
-                ) {
-                  mgr.update({
-                    completion: { mayClaimReady: true, mayClaimImplemented: true },
-                    phase: "done",
-                  });
-                }
+                // Probe passed — this is tier-3 evidence, the
+                // strongest signal KCode can produce. It OVERRIDES
+                // weaker gates including phase=failed (which may have
+                // come from a loop-guard skip or readiness-vs-errors
+                // detector that saw something unrelated). The probe
+                // actually exercised the user's thing and it works.
+                //
+                // Exception: phase=blocked from a failed_auth status
+                // remains if it was set by a PRIOR probe run this turn
+                // (unusual — usually there's only one probe per turn).
+                mgr.update({
+                  completion: { mayClaimReady: true, mayClaimImplemented: true },
+                  phase: "done",
+                });
+                log.info(
+                  "probe",
+                  `pass (tier ${result.tier}) — overriding phase to done`,
+                );
               }
             }
           } catch (err) {
@@ -1477,7 +1482,15 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         const { renderCloseoutFromScope, summarizeScopeForTelemetry } = await import(
           "./closeout-renderer.js"
         );
-        const correction = renderCloseoutFromScope(curScope);
+        // Re-read scope — the probe hook above may have updated
+        // verification.lastProbeResult and phase since curScope was
+        // captured. Rendering against curScope would show stale state
+        // (no probe line, wrong phase). Issue #111 v299 diagnostic:
+        // logs confirmed probe passed with getblockcount=946464 but
+        // the closeout had no 'Functional probe' line because
+        // curScope was captured pre-probe.
+        const freshScope = getTaskScopeManager().current() ?? curScope;
+        const correction = renderCloseoutFromScope(freshScope);
         if (correction) {
           log.info(
             "closeout-renderer",
