@@ -16,6 +16,7 @@ import type {
   Candidate,
   FalsePositiveDetail,
   Finding,
+  NeedsContextDetail,
   Verification,
 } from "./types";
 import { verifyAllCandidates, type VerifyOptions } from "./verifier";
@@ -109,6 +110,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // to tell whether the verifier's rejections were sensible.
   const findings: Finding[] = [];
   const falsePositivesDetail: FalsePositiveDetail[] = [];
+  const needsContextDetail: NeedsContextDetail[] = [];
   for (const r of verified) {
     const pattern = await import("./patterns").then((m) =>
       m.getPatternById(r.candidate.pattern_id),
@@ -134,6 +136,8 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     } else if (r.verification.verdict === "false_positive") {
       falsePositives += 1;
       falsePositivesDetail.push(base);
+    } else {
+      needsContextDetail.push(base);
     }
   }
 
@@ -149,6 +153,8 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     false_positives: falsePositives,
     findings,
     false_positives_detail: falsePositivesDetail,
+    needs_context: needsContextDetail.length,
+    needs_context_detail: needsContextDetail,
     coverage: scanCoverage,
     elapsed_ms: Date.now() - startTime,
   };

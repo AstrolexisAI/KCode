@@ -179,6 +179,13 @@ export async function handleAuditAction(
                   ),
               );
               result.false_positives = result.false_positives_detail.length;
+              result.needs_context_detail = (cloudResult.needs_context_detail ?? []).filter(
+                (nc) =>
+                  !result.findings.some(
+                    (conf) => conf.file === nc.file && conf.line === nc.line,
+                  ),
+              );
+              result.needs_context = result.needs_context_detail.length;
             } else {
               scanState.pendingEscalation = undefined;
             }
@@ -209,8 +216,15 @@ export async function handleAuditAction(
             `    Candidates found:   ${result.candidates_found}`,
             `    Confirmed findings: ${result.confirmed_findings}`,
             `    False positives:    ${result.false_positives}`,
-            `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
           ];
+          if ((result.needs_context ?? 0) > 0) {
+            reportLines.push(
+              `    \x1b[33mUncertain:          ${result.needs_context}\x1b[0m (verifier couldn't decide)`,
+            );
+          }
+          reportLines.push(
+            `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
+          );
           if (result.coverage?.truncated) {
             const suggestion = Math.min(
               result.coverage.totalCandidateFiles,

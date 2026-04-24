@@ -90,6 +90,18 @@ export interface FalsePositiveDetail {
 }
 
 /**
+ * Detail about a candidate the verifier couldn't classify. Shares the
+ * FalsePositiveDetail shape; persisted separately so the report can
+ * distinguish "model said safe" from "model couldn't decide".
+ *
+ * v2.10.309 session showed 33 candidates / 0 confirmed / 0 FP —
+ * which arithmetically means 33 needs_context silently dropped.
+ * Making the bucket first-class restores accounting:
+ *   candidates_found == confirmed + false_positives + needs_context.
+ */
+export type NeedsContextDetail = FalsePositiveDetail;
+
+/**
  * Coverage report: how many source files the project had vs how
  * many were actually scanned, so a truncated audit is visibly
  * truncated instead of silently under-covering.
@@ -154,6 +166,15 @@ export interface AuditResult {
    * candidates or when the verifier was disabled.
    */
   false_positives_detail: FalsePositiveDetail[];
+  /**
+   * Candidates the verifier returned verdict=needs_context for. The
+   * model either couldn't decide or the response didn't parse cleanly
+   * into confirmed/false_positive. Surfacing them keeps the arithmetic
+   * honest:
+   *   candidates_found == confirmed_findings + false_positives + needs_context.
+   */
+  needs_context: number;
+  needs_context_detail: NeedsContextDetail[];
   /**
    * Coverage accounting. Always present so consumers can tell
    * "scanned all the code" from "scanned the first 500 files in
