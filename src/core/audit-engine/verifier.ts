@@ -209,16 +209,41 @@ export async function verifyAllCandidates(
   opts: VerifyOptions,
 ): Promise<Array<{ candidate: Candidate; verification: Verification }>> {
   const results: Array<{ candidate: Candidate; verification: Verification }> = [];
+  // Track consecutive transport-level failures. If the first 3
+  // candidates ALL fail with a network/connect-style error, the
+  // verifier endpoint is unreachable — abort the whole pass instead
+  // of silently classifying every candidate as needs_context with a
+  // misleading "verifier couldn't decide" label. Issue #111 v2.10.310:
+  // 33/33 candidates buried behind "Unable to connect" was invisible
+  // to the user. Now we throw early so the CLI can surface the
+  // configuration error.
+  let consecutiveTransportFailures = 0;
+  const TRANSPORT_FAIL_LIMIT = 3;
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i]!;
     opts.onProgress?.(i, candidates.length, c);
     let verification: Verification;
     try {
       verification = await verifyCandidate(c, opts);
+      consecutiveTransportFailures = 0;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isTransport =
+        /Unable to connect|ECONNREFUSED|ENOTFOUND|fetch failed|timeout|EAI_AGAIN|connection refused|getaddrinfo/i.test(
+          msg,
+        );
+      if (isTransport) {
+        consecutiveTransportFailures++;
+        if (consecutiveTransportFailures >= TRANSPORT_FAIL_LIMIT && i + 1 >= TRANSPORT_FAIL_LIMIT) {
+          throw new Error(
+            `Audit verifier unreachable after ${TRANSPORT_FAIL_LIMIT} attempts: ${msg}. ` +
+              `Check that the model endpoint is running and the apiBase in ~/.kcode/models.json is correct.`,
+          );
+        }
+      }
       verification = {
         verdict: "needs_context",
-        reasoning: `Verification failed: ${err instanceof Error ? err.message : String(err)}`,
+        reasoning: `Verification failed: ${msg}`,
       };
     }
     results.push({ candidate: c, verification });
