@@ -24,6 +24,13 @@ export interface Plan {
   updatedAt: number;
   /** If set, execution should stop after this step reaches 'done'. */
   stopAfterStepId?: string;
+  /**
+   * Working directory when the plan was created. Used by loadLatestPlan
+   * to avoid restoring plans from unrelated sessions (e.g. a prior
+   * bitcoin-tui-dashboard scaffold whose directory was subsequently
+   * deleted). Issue #111 v296 repro.
+   */
+  workingDirectory?: string;
 }
 
 // ─── In-memory active plan ──────────────────────────────────────
@@ -38,6 +45,30 @@ export function getActivePlan(): Plan | null {
 /** Clear the active plan (used in tests for isolation) */
 export function clearActivePlan(): void {
   _activePlan = null;
+}
+
+/**
+ * Clear the active plan AND remove persisted plans from the DB.
+ * Used by session-tracker when the user explicitly starts a fresh
+ * scaffold — any leftover plan from a prior attempt would confuse
+ * the model (saw this verbatim in v296 repro).
+ */
+export function discardActivePlanAndPersisted(): void {
+  _activePlan = null;
+  try {
+    const db = getDb();
+    db.run(`DELETE FROM plans`);
+  } catch {
+    /* non-fatal */
+  }
+  // Notify listeners so the UI widget clears too.
+  for (const listener of _planListeners) {
+    try {
+      listener(null);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
@@ -290,10 +321,17 @@ export function reconcilePlanFromScope(
 function savePlanToDb(plan: Plan): void {
   try {
     const db = getDb();
+    // Ensure optional workingDirectory column exists (ALTER TABLE idempotent).
+    try {
+      db.run(`ALTER TABLE plans ADD COLUMN working_directory TEXT`);
+    } catch {
+      /* column already exists — SQLite raises if so */
+    }
+    const cwd = plan.workingDirectory ?? process.cwd();
     db.run(
-      `INSERT OR REPLACE INTO plans (id, title, steps, created_at, updated_at)
-       VALUES (?, ?, ?, datetime(? / 1000, 'unixepoch'), datetime(? / 1000, 'unixepoch'))`,
-      [plan.id, plan.title, JSON.stringify(plan.steps), plan.createdAt, plan.updatedAt],
+      `INSERT OR REPLACE INTO plans (id, title, steps, created_at, updated_at, working_directory)
+       VALUES (?, ?, ?, datetime(? / 1000, 'unixepoch'), datetime(? / 1000, 'unixepoch'), ?)`,
+      [plan.id, plan.title, JSON.stringify(plan.steps), plan.createdAt, plan.updatedAt, cwd],
     );
   } catch (err) {
     log.error("plan", `Failed to save plan: ${err}`);
@@ -303,17 +341,31 @@ function savePlanToDb(plan: Plan): void {
 export function loadLatestPlan(): Plan | null {
   try {
     const db = getDb();
-    const row = db
-      .query(
-        `SELECT id, title, steps, created_at, updated_at FROM plans ORDER BY updated_at DESC LIMIT 1`,
-      )
-      .get() as {
+    // Attempt to include working_directory if the column exists;
+    // older DBs without the column fall back to the legacy query.
+    let row: {
       id: string;
       title: string;
       steps: string;
       created_at: string;
       updated_at: string;
+      working_directory?: string;
     } | null;
+    try {
+      row = db
+        .query(
+          `SELECT id, title, steps, created_at, updated_at, working_directory
+             FROM plans
+            ORDER BY updated_at DESC LIMIT 1`,
+        )
+        .get() as typeof row;
+    } catch {
+      row = db
+        .query(
+          `SELECT id, title, steps, created_at, updated_at FROM plans ORDER BY updated_at DESC LIMIT 1`,
+        )
+        .get() as typeof row;
+    }
 
     if (!row) return null;
 
@@ -323,10 +375,22 @@ export function loadLatestPlan(): Plan | null {
       steps: JSON.parse(row.steps),
       createdAt: new Date(row.created_at).getTime(),
       updatedAt: new Date(row.updated_at).getTime(),
+      workingDirectory: row.working_directory,
     };
 
-    // Only restore plans from the last 24 hours
+    // Only restore plans from the last 24 hours.
     if (Date.now() - plan.updatedAt > 24 * 60 * 60 * 1000) return null;
+
+    // Only restore if the plan was created in the CURRENT working
+    // directory. A plan that referenced a project in a different cwd
+    // (or whose cwd no longer exists) would inject confusing state
+    // into the new session. Issue #111 v296 repro: a stale
+    // bitcoin-tui-dashboard plan was restored after the project dir
+    // was deleted; the model saw '7/9 done' and asked the user to
+    // re-create the directory instead of doing it itself.
+    if (plan.workingDirectory && plan.workingDirectory !== process.cwd()) {
+      return null;
+    }
 
     _activePlan = plan;
     return plan;
