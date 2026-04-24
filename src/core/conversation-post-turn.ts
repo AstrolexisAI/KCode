@@ -1392,9 +1392,17 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         // tier-3 evidence or a concrete failure reason. Opt-out:
         // KCODE_DISABLE_PROBES=1.
         if (process.env.KCODE_DISABLE_PROBES !== "1") {
+          log.info(
+            "probe",
+            `post-turn: evaluating probes against scope (filesWritten=${curScope.verification.filesWritten.length}, filesEdited=${curScope.verification.filesEdited.length})`,
+          );
           try {
             const { runApplicableProbe } = await import("./probes/registry.js");
             const result = await runApplicableProbe(curScope);
+            log.info(
+              "probe",
+              `post-turn: runApplicableProbe returned ${result ? result.status + " (" + result.probeId + ")" : "null (no probe applied)"}`,
+            );
             if (result) {
               const mgr = getTaskScopeManager();
               mgr.update({
