@@ -190,12 +190,23 @@ export async function handleAuditAction(
             "",
             `    ✓ Report written: ${outputPath}`,
             "",
-            `    Files scanned:      ${result.files_scanned}`,
+            `    Files scanned:      ${result.files_scanned}${result.coverage ? ` / ${result.coverage.totalCandidateFiles}` : ""}`,
             `    Candidates found:   ${result.candidates_found}`,
             `    Confirmed findings: ${result.confirmed_findings}`,
             `    False positives:    ${result.false_positives}`,
             `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
           ];
+          if (result.coverage?.truncated) {
+            const suggestion = Math.min(
+              result.coverage.totalCandidateFiles,
+              result.coverage.maxFiles * 4,
+            );
+            reportLines.push(
+              "",
+              `    \x1b[33m⚠ Coverage: ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} files (${result.coverage.skippedByLimit} skipped by --max-files ${result.coverage.maxFiles}).\x1b[0m`,
+              `    \x1b[33m  Rerun with --max-files ${suggestion} for full coverage.\x1b[0m`,
+            );
+          }
           if (topFindings.length > 0) {
             reportLines.push("", `  Top findings:`);
             for (const f of topFindings) {
