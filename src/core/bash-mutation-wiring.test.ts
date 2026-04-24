@@ -38,6 +38,55 @@ describe("bash mutation wiring (v289)", () => {
     });
   });
 
+  describe("heredoc + arrow-function false positives (v290)", () => {
+    test("heredoc body with .then(() => {}) does NOT capture '{' (v290 repro)", () => {
+      // The v290 repro had: cat > index.ts << 'EOF'\n...\n.then(() => {\n... })\nEOF
+      // which captured `{` as a redirect target. After the fix, only
+      // the actual redirect target (index.ts) should be returned.
+      const cmd =
+        "cat > index.ts << 'EOF'\n" +
+        "import blessed from 'blessed';\n" +
+        "testConnection().then(() => {\n" +
+        "  console.log('Iniciando TUI...');\n" +
+        "  const screen = blessed.screen({ smartCSR: true });\n" +
+        "});\n" +
+        "EOF";
+      const out = extractBashFileMutations(cmd);
+      expect(out).toContain("index.ts");
+      expect(out).not.toContain("{");
+      expect(out).not.toContain("}");
+      // Arrow functions and block opens inside the heredoc body
+      // should not leak through.
+      expect(out.filter((p) => p.length === 1)).toHaveLength(0);
+    });
+
+    test("=> arrow function outside heredoc does NOT match", () => {
+      const cmd = "echo 'x => y' > notes.txt";
+      const out = extractBashFileMutations(cmd);
+      expect(out).toContain("notes.txt");
+      // The `=>` inside the quoted string shouldn't create a phantom target.
+      expect(out).not.toContain("y");
+    });
+
+    test("numeric fd redirects (2>&1) are ignored", () => {
+      const cmd = "make build > build.log 2>&1";
+      const out = extractBashFileMutations(cmd);
+      expect(out).toContain("build.log");
+      expect(out).not.toContain("1");
+      expect(out).not.toContain("&1");
+    });
+
+    test("path sanity — punctuation-only captures are dropped", () => {
+      // Direct call to the extractor with a deliberately malformed
+      // redirect to confirm validation kicks in.
+      const cmd = "weird > { && other > } ; real > file.txt";
+      const out = extractBashFileMutations(cmd);
+      expect(out).toContain("file.txt");
+      expect(out).not.toContain("{");
+      expect(out).not.toContain("}");
+    });
+  });
+
   describe("mv / touch / cp regex detection (raw patterns used in tool-executor)", () => {
     test("mv src dst captures dst", () => {
       const m = "cd /proj && mv index.ts index.tsx".match(

@@ -491,6 +491,24 @@ export function createTaskScopeManager(): TaskScopeManager {
           _current.verification.patchAppliedAfterFailure = false;
           _current.verification.lastRuntimeFailure = undefined;
           _current.verification.rerunAttempts = 0;
+          // Also lift phase out of "failed" — the verified rerun
+          // proves the patch worked. Move to "verifying" (the task
+          // is running and passed a check; subsequent state will
+          // promote it to "done" or similar). Claims stay cautious
+          // until any later grounding gate confirms readiness.
+          // Issue #111 v290: phase stayed locked at "failed" after
+          // a successful post-patch rerun, so the closeout reported
+          // 'Runtime: verified (3 commands)' alongside 'Status: failed'
+          // — a self-contradiction.
+          if (_current.phase === "failed") {
+            _current.phase = "verifying";
+            // Drop the stale 'runtime failure: ...' reason because
+            // the patch was rerun and verified. Keep any other
+            // reasons (grounding gates may have added their own).
+            _current.completion.reasons = _current.completion.reasons.filter(
+              (r) => !r.startsWith("runtime failure"),
+            );
+          }
         }
       }
 
