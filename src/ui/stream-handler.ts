@@ -73,6 +73,12 @@ export async function processStreamEvents(
   let bashStreamBuffer = "";
   let bashStreamThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   let textStreamThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  // Set by text_replace_last with seal=true when a failed-phase closeout
+  // has become the authoritative closeout. Blocks further text_delta and
+  // turn_end text commits until the next turn_start event (new user
+  // message). Issue #111 v286 — post-failure prose leaked after the
+  // closeout because later turns could still emit text_delta.
+  let sealedUntilNextUser = false;
 
   for await (const event of events) {
     switch (event.type) {
@@ -108,6 +114,10 @@ export async function processStreamEvents(
       }
 
       case "text_delta":
+        // Seal: drop any text_delta once the closeout has sealed the
+        // window. The grounded closeout is the only narrator allowed
+        // until the user sends a new message.
+        if (sealedUntilNextUser) break;
         if (currentText.length === 0) {
           setLastKodiEvent({ type: "streaming" });
           setSpinnerPhase("streaming");
@@ -175,6 +185,13 @@ export async function processStreamEvents(
         break;
 
       case "text_replace_last":
+        // Seal mode: after this replace lands, subsequent text_delta
+        // events are dropped until the next user message. Prevents
+        // post-failure prose from leaking after a grounded closeout.
+        // Issue #111 v286.
+        if (event.seal) {
+          sealedUntilNextUser = true;
+        }
         // Suppress the model's free-form draft when the scope-grounded
         // closeout supersedes it (failed/partial/blocked). Walks back
         // from the end and collapses ALL assistant text blocks emitted

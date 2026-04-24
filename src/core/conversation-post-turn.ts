@@ -1310,12 +1310,15 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               "closeout-renderer",
               `suppress mode — replacing draft (phase=${curScope.phase}, mayClaimReady=${curScope.completion.mayClaimReady})`,
             );
-            // Strip the leading "---" separator that the append path
-            // needed to distinguish draft from correction. In replace
-            // mode the correction IS the draft, so the separator is
-            // cosmetic noise.
             const standalone = safeCorrection.replace(/^\s*\n?---\n?\s*/, "");
-            events.push({ type: "text_replace_last", text: standalone });
+            // Seal the window when phase is failed or blocked. Any
+            // text_delta arriving AFTER this replace (e.g. from a
+            // continuation turn triggered by forced-rerun directive)
+            // gets dropped by the UI. This closes the post-failure
+            // prose-leak loophole #111 v286 reported.
+            const seal =
+              curScope.phase === "failed" || curScope.phase === "blocked";
+            events.push({ type: "text_replace_last", text: standalone, seal });
           } else {
             events.push({ type: "text_delta", text: safeCorrection });
           }
