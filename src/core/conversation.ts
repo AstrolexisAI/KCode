@@ -698,9 +698,14 @@ export class ConversationManager {
         break;
       }
 
-      // Ensemble: try multi-model consensus if enabled and triggered
+      // Ensemble: try multi-model consensus if enabled and triggered.
+      // Historical bug: this used `this.turnCount` which doesn't exist
+      // on the class — the ensemble NEVER fired. Fixed to use the local
+      // `turnCount` variable declared at the top of the loop. This is
+      // the memory note 'ensemble never fires due to this.turnCount
+      // typo' finally closed out. Issue #111 v293 user question.
       try {
-        if (this.config.ensemble?.enabled && this.turnCount === 1) {
+        if (this.config.ensemble?.enabled && turnCount === 1) {
           const { EnsembleOrchestrator } = await import("./ensemble/orchestrator.js");
           const orchestrator = new EnsembleOrchestrator(
             {
