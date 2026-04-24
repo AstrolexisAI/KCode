@@ -53,7 +53,7 @@ export async function handleAuditAction(
       const { scanState, resetScanState } = await import(
         "../../core/audit-engine/scan-state.js"
       );
-      const { buildAuditLlmCallbackFromConfig } = await import(
+      const { buildAuditLlmCallbackFromConfigAsync } = await import(
         "../../core/audit-engine/llm-callback.js"
       );
 
@@ -64,7 +64,7 @@ export async function handleAuditAction(
 
       const llmCallback = skipVerify
         ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
-        : buildAuditLlmCallbackFromConfig(appConfig);
+        : await buildAuditLlmCallbackFromConfigAsync(appConfig);
 
       // Detect available audit models (tagged [analysis]/[reasoning] with valid keys)
       let auditModels: Awaited<ReturnType<typeof import("../../core/audit-engine/cloud-fallback.js")["detectAuditModels"]>>["models"] = [];
