@@ -198,17 +198,12 @@ export async function startDaemon(opts?: {
   // Generate auth token
   const token = generateToken();
 
-  // Write state files
-  writeFileSync(PID_FILE, String(process.pid), "utf-8");
-  writeFileSync(PORT_FILE, String(port), "utf-8");
-  writeFileSync(TOKEN_FILE, token, "utf-8");
-  try {
-    chmodSync(TOKEN_FILE, 0o600);
-  } catch {
-    // chmod may fail on Windows — not critical
-  }
-
-  // Initialize components
+  // Initialize components first — we must NOT persist state files
+  // until the WebSocket server has actually bound the port. Otherwise
+  // a port-in-use / EADDRINUSE after writeFileSync leaves a "zombie"
+  // daemon.pid/port/token on disk pointing at our own PID, and
+  // isDaemonRunning() will return true forever (until cleaned up
+  // manually). Issue #111 v304 audit finding #3.
   const sessionManager = new SessionManager();
   const permissionBridge = new PermissionBridge();
   const wsServer = new BridgeWebSocketServer({
@@ -217,8 +212,25 @@ export async function startDaemon(opts?: {
     permissionBridge,
   });
 
-  // Start server
-  wsServer.start(port);
+  // Start server — if this throws, we don't write any state files.
+  try {
+    wsServer.start(port);
+  } catch (err) {
+    throw new Error(
+      `Daemon failed to bind 127.0.0.1:${port}: ${err instanceof Error ? err.message : err}. No state files written.`,
+    );
+  }
+
+  // WebSocket is up. NOW it's safe to write the state files so other
+  // processes can connect.
+  writeFileSync(PID_FILE, String(process.pid), "utf-8");
+  writeFileSync(PORT_FILE, String(port), "utf-8");
+  writeFileSync(TOKEN_FILE, token, "utf-8");
+  try {
+    chmodSync(TOKEN_FILE, 0o600);
+  } catch {
+    // chmod may fail on Windows — not critical
+  }
 
   activeDaemon = { sessionManager, wsServer, permissionBridge, port };
 

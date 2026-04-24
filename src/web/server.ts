@@ -164,10 +164,22 @@ export class WebServer {
     // test suite relies on to run in parallel without EADDRINUSE).
     const actualPort = this.server.port;
     const baseUrl = `http://${config.host}:${actualPort}`;
-    const uiUrl = `${baseUrl}?token=${config.auth.token}`;
+    // v304: do NOT embed the auth token in the URL. Putting it in a
+    // query string leaks it to:
+    //   - browser history / bookmark sync
+    //   - process-args table (xdg-open/open receive it)
+    //   - any terminal screenshot / scrollback
+    //   - any server access log
+    // Pass the token via a one-shot cookie-setting path (#auth=...)
+    // that the client-side bootstrap copies to localStorage and strips
+    // from the URL on first load.
+    const uiUrl = `${baseUrl}#auth=${encodeURIComponent(config.auth.token)}`;
 
     log.info("web", `Web UI server started at ${baseUrl}`);
-    log.info("web", `Auth token: ${config.auth.token}`);
+    // Token redacted in logs — fragment hash-based handoff only, never
+    // stored in log files.
+    const tokenPreview = config.auth.token.slice(0, 4) + "…" + config.auth.token.slice(-2);
+    log.info("web", `Auth token: ${tokenPreview} (redacted — full token in browser fragment, not logs)`);
 
     // Auto-open browser
     if (config.openBrowser) {
