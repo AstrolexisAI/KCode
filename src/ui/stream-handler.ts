@@ -274,6 +274,14 @@ export async function processStreamEvents(
         // If the text is long code that will be written via Write/Edit, collapse it
         // to avoid flooding the terminal with hundreds of raw code lines.
         if (currentText.length > 0) {
+          // Honor the seal: once the grounded closeout has landed for
+          // this session, discard any pending accumulated text instead
+          // of committing it as a new assistant block.
+          if (sealedUntilNextUser) {
+            currentText = "";
+            setStreamingText("");
+            break;
+          }
           // Phase 5: route assistant prose through the unified visible-text
           // renderer. Redacts + records to scope. Catches the #107 case
           // where the model echoed rpcpassword in its summary.
