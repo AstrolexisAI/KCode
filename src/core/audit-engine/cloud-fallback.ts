@@ -129,17 +129,35 @@ export async function detectAuditModels(currentApiBase?: string): Promise<CloudF
 }
 
 /**
- * Build an audit LLM callback for the chosen model.
+ * Build an audit LLM callback for the chosen model. Normalizes the
+ * registry baseUrl so OpenAI-compatible providers that need a /v1
+ * suffix (xAI, OpenAI, OpenRouter, Mistral, …) get one. The
+ * registry stores root URLs like "https://api.x.ai" but the audit
+ * verifier hits "/chat/completions" directly — without /v1 the call
+ * 404s and every candidate gets bucketed as needs_context with a
+ * misleading "verifier couldn't decide" label. v2.10.312 fix.
+ *
+ * Anthropic endpoints (api.anthropic.com) use /messages directly so
+ * the /v1 prefix is added there too — Anthropic's actual URL is
+ * "https://api.anthropic.com/v1/messages" and the callback computes
+ * `${apiBase}/messages` so apiBase must end in /v1 for that to work.
  */
 export async function buildAuditCallbackForModel(
   model: AuditCloudModel,
 ): Promise<(prompt: string) => Promise<string>> {
   return makeAuditLlmCallback({
     model: model.name,
-    apiBase: model.baseUrl,
+    apiBase: normalizeAuditApiBase(model.baseUrl),
     apiKey: model.apiKey,
     temperature: 0.05,
   });
+}
+
+function normalizeAuditApiBase(raw: string): string {
+  const trimmed = raw.replace(/\/$/, "");
+  // Already has a /vN suffix → keep as-is.
+  if (/\/v\d+$/.test(trimmed)) return trimmed;
+  return `${trimmed}/v1`;
 }
 
 /** Legacy compat — still used by other callers */

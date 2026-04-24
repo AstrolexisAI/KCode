@@ -137,28 +137,46 @@ export async function handleAuditAction(
               scanState.total = 0;
               scanState.escalated = 0;
 
-              // Re-run full scan with cloud as primary
-              const cloudResult = await runAudit({
-                projectRoot,
-                llmCallback: fallbackCallback,
-                // Same as primary pass: unlimited.
-                maxFiles: Number.MAX_SAFE_INTEGER,
-                skipVerification: false,
-                onPhase: (phase, detail) => {
-                  scanState.phase = `☁ ${phase}${detail ? ": " + detail : ""}`;
-                  if (phase === "verifying" && detail) {
-                    const m = detail.match(/(\d+) candidate/);
-                    if (m) scanState.total = parseInt(m[1]!, 10);
-                  }
-                },
-                onCandidate: (_cand, verification) => {
-                  scanState.verified++;
-                  scanState.escalated++;
-                  if (verification.verdict === "confirmed") scanState.confirmed++;
-                },
-              });
+              // Re-run full scan with cloud as primary. Wrapped in
+              // try/catch because the verifier now aborts after 3
+              // consecutive transport / 401 / 404 errors instead of
+              // silently bucketing every candidate as needs_context.
+              // When that happens we keep the primary pass result and
+              // surface a clear error in scanState. v2.10.312.
+              let cloudResult: typeof result | null = null;
+              let cloudAbortError: string | null = null;
+              try {
+                cloudResult = await runAudit({
+                  projectRoot,
+                  llmCallback: fallbackCallback,
+                  maxFiles: Number.MAX_SAFE_INTEGER,
+                  skipVerification: false,
+                  onPhase: (phase, detail) => {
+                    scanState.phase = `☁ ${phase}${detail ? ": " + detail : ""}`;
+                    if (phase === "verifying" && detail) {
+                      const m = detail.match(/(\d+) candidate/);
+                      if (m) scanState.total = parseInt(m[1]!, 10);
+                    }
+                  },
+                  onCandidate: (_cand, verification) => {
+                    scanState.verified++;
+                    scanState.escalated++;
+                    if (verification.verdict === "confirmed") scanState.confirmed++;
+                  },
+                });
+              } catch (err) {
+                cloudAbortError = err instanceof Error ? err.message : String(err);
+                scanState.phase = `☁ cloud verification aborted: ${cloudAbortError.slice(0, 120)}`;
+                log.warn(
+                  "audit",
+                  `cloud escalation aborted: ${cloudAbortError}`,
+                );
+              }
 
-              // Merge: keep original confirmed + add cloud-confirmed (dedup by file:line)
+              // Merge: keep original confirmed + add cloud-confirmed (dedup by file:line).
+              // Skip the merge entirely if the cloud pass aborted —
+              // primary results stay untouched and the error is surfaced.
+              if (cloudResult) {
               for (const f of cloudResult.findings) {
                 if (!result.findings.some((e) => e.file === f.file && e.line === f.line)) {
                   f.verification.reasoning = `[☁ second opinion] ${f.verification.reasoning}`;
@@ -186,6 +204,13 @@ export async function handleAuditAction(
                   ),
               );
               result.needs_context = result.needs_context_detail.length;
+              } // end if (cloudResult)
+              // Surface cloud-abort error in the scan state so the
+              // user-visible report includes the reason instead of a
+              // silent no-op.
+              if (cloudAbortError) {
+                scanState.cloudAbortError = cloudAbortError;
+              }
             } else {
               scanState.pendingEscalation = undefined;
             }
@@ -225,6 +250,13 @@ export async function handleAuditAction(
           reportLines.push(
             `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
           );
+          if (scanState.cloudAbortError) {
+            reportLines.push(
+              "",
+              `    \x1b[31m✗ Cloud second-opinion aborted:\x1b[0m ${scanState.cloudAbortError.slice(0, 200)}`,
+              `    \x1b[33m  Primary results above are from local model only.\x1b[0m`,
+            );
+          }
           if (result.coverage?.truncated) {
             const suggestion = Math.min(
               result.coverage.totalCandidateFiles,

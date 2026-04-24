@@ -24,6 +24,14 @@ export interface ScanProgress {
   };
   /** Set by the UI: name of the chosen cloud model, or null to skip */
   escalationModelChoice?: string | null;
+  /**
+   * Set when the cloud-escalation pass aborted (typically due to a
+   * misconfigured endpoint — bad API key, wrong baseUrl, sustained
+   * timeouts). The primary pass results stay valid; this flag tells
+   * the UI to surface the error so the user can fix the config.
+   * v2.10.312.
+   */
+  cloudAbortError?: string;
   /** Set when audit completes — the handler reads this to push result. */
   result?: {
     outputPath: string;
@@ -64,4 +72,5 @@ export function resetScanState(): void {
   scanState.escalationModelChoice = undefined;
   scanState.result = undefined;
   scanState.error = undefined;
+  scanState.cloudAbortError = undefined;
 }
