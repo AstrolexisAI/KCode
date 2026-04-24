@@ -77,4 +77,31 @@ describe("AskUser grounding feed (v283 #111)", () => {
     const result = await executeAskUser({ question: "" });
     expect(result.is_error).toBe(true);
   });
+
+  test("scope with failed/partial state prepends grounded closeout to context (v292)", async () => {
+    const mgr = getTaskScopeManager();
+    mgr.beginNewScope({ type: "scaffold", userPrompt: "bitcoin tui" });
+    mgr.recordDirectoryVerified("/proj");
+    mgr.recordMutation({ tool: "Write", path: "/proj/index.ts", at: Date.now() });
+    // A timeout-killed TUI → phase=partial via v282 downgrade
+    mgr.recordRuntimeCommand({
+      command: "timeout 5 bun run dashboard.ts",
+      exitCode: 124,
+      output: "...",
+      runtimeFailed: false,
+      status: "alive_timeout",
+      timestamp: Date.now(),
+    });
+    const result = await executeAskUser({
+      question: "¿Quieres que continúe expandiendo las funcionalidades?",
+      context: "Falta añadir vistas más detalladas",
+    });
+    expect(result.is_error).toBeFalsy();
+    // Grounded closeout text should appear in the output before the
+    // original context. Look for the 'Verified status' header that
+    // renderCloseoutFromScope emits.
+    expect(result.content).toMatch(/Verified status/i);
+    expect(result.content).toContain("Falta añadir vistas");
+    expect(result.content).toContain("Model's stated context");
+  });
 });

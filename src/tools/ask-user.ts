@@ -45,6 +45,41 @@ export async function executeAskUser(input: Record<string, unknown>): Promise<To
     return { tool_use_id: "", content: "Error: question is required", is_error: true };
   }
 
+  // Phase 15 (#111 v292): AskUser pauses the conversation waiting for
+  // user input. Post-turn doesn't run, so the grounded closeout never
+  // renders before the user sees the question. The model can therefore
+  // ask 'do you want more features?' while scope state is partial/failed,
+  // and the user misses the honest state.
+  //
+  // Fix: if scope has a correction worth rendering (phase failed/partial/
+  // blocked, patchAppliedAfterFailure, etc.) we prepend the grounded
+  // closeout to the context string the user sees. That way the AskUser
+  // box shows:
+  //   Context: <grounded closeout>\n<original context>
+  //   Question: ...
+  let enrichedContext = context ?? "";
+  try {
+    const { getTaskScopeManager } =
+      require("../core/task-scope") as typeof import("../core/task-scope");
+    const { renderCloseoutFromScope, needsClosewoutCorrection } =
+      require("../core/closeout-renderer") as typeof import("../core/closeout-renderer");
+    const scope = getTaskScopeManager().current();
+    if (scope && needsClosewoutCorrection(scope)) {
+      const closeout = renderCloseoutFromScope(scope);
+      if (closeout) {
+        // Strip the leading '---' divider (it's visual noise in the
+        // AskUser box). Prepend the closeout to the context so the
+        // user sees grounded state before the question.
+        const clean = closeout.replace(/^\s*\n?---\n?\s*/, "").trim();
+        enrichedContext = enrichedContext
+          ? `${clean}\n\n--- Model's stated context ---\n${enrichedContext}`
+          : clean;
+      }
+    }
+  } catch {
+    /* scope unavailable — fall back to plain context */
+  }
+
   // Phase 14 (#111 v282 follow-up): when the model asks about credentials
   // / connection failures, its 'context' field is often the only place
   // where failure evidence lives — e.g. the Bitcoin TUI swallowed the 401
@@ -93,8 +128,8 @@ export async function executeAskUser(input: Record<string, unknown>): Promise<To
 
   const parts: string[] = [];
 
-  if (context) {
-    parts.push(`Context: ${context}\n`);
+  if (enrichedContext) {
+    parts.push(`Context: ${enrichedContext}\n`);
   }
 
   parts.push(`[USER_INPUT_REQUIRED]`);
