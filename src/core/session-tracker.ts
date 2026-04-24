@@ -307,6 +307,31 @@ export function recordUserText(text: string): void {
       // Keep the legacy _auditIntent boolean aligned with the new scope
       // for any caller that doesn't yet read from the manager.
       _auditIntent = intent === "audit";
+
+      // Clear any stale plan when the user explicitly starts fresh.
+      // v296 repro: a 9-step plan from a prior bitcoin-tui-dashboard
+      // scaffold persisted to SQLite. The project directory was
+      // later deleted but the plan restored into the new session
+      // (same cwd). Model saw '7/9 done' and asked the user to
+      // recreate the directory instead of doing it itself.
+      //
+      // Heuristic: when the prompt says 'nuevo proyecto' / 'new
+      // project' / 'from scratch' / 'desde cero', any active plan
+      // is for a DIFFERENT task — drop it.
+      if (
+        intent === "scaffold" &&
+        /(?:\bnuevo\s+proyecto\b|\bnew\s+project\b|\bfrom\s+scratch\b|\bdesde\s+cero\b|\bcre[aá]r?\s+un\s+(?:proyecto|app|dashboard)\s+nuevo\b)/i.test(
+          text,
+        )
+      ) {
+        try {
+          const { discardActivePlanAndPersisted } =
+            require("../tools/plan") as typeof import("../tools/plan");
+          discardActivePlanAndPersisted();
+        } catch {
+          /* plan module unavailable — safe to ignore */
+        }
+      }
     }
   } catch {
     /* task-scope module unavailable — safe to ignore, legacy path keeps working */
