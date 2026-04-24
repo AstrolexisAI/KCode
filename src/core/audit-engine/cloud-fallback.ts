@@ -22,11 +22,19 @@ export interface CloudFallbackConfig {
 const AUDIT_TAGS = new Set(["analysis", "reasoning"]);
 const LOCAL_PATTERNS = /localhost|127\.0\.0\.1|0\.0\.0\.0/;
 
-/** Load saved API keys from settings.json (populated by /cloud) */
-function loadSavedKeys(): Record<string, string> {
+/** Load saved API keys from settings.json (populated by /cloud).
+ *
+ * v303 bug fix: loadUserSettingsRaw() is async (returns Promise),
+ * but this function was calling it without await and casting the
+ * Promise as Record. Every key came back undefined → String(undefined
+ * ?? "") === "" → every non-anthropic/non-openai model got filtered
+ * out of the audit list (xAI/Kimi/Groq/DeepSeek/Together). Anthropic
+ * survived via the OAuth fallback path; OpenAI survived if its key
+ * was set via env var. Making this async fixes the escalation menu. */
+async function loadSavedKeys(): Promise<Record<string, string>> {
   try {
     const { loadUserSettingsRaw } = require("../config.js") as typeof import("../config");
-    const s = loadUserSettingsRaw() as Record<string, unknown>;
+    const s = (await loadUserSettingsRaw()) as Record<string, unknown>;
     return {
       anthropic: String(s.anthropicApiKey ?? ""),
       xai:       String(s.xaiApiKey ?? ""),
@@ -81,7 +89,7 @@ export async function detectAuditModels(currentApiBase?: string): Promise<CloudF
   try {
     const { listModels } = await import("../models.js");
     const all = await listModels();
-    const savedKeys = loadSavedKeys();
+    const savedKeys = await loadSavedKeys();
 
     // Also check for Anthropic OAuth token
     let oauthKey = "";
