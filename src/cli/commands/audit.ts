@@ -37,7 +37,7 @@ export function registerAuditCommand(program: Command): void {
     )
     .option("--fallback-api-base <url>", "API base for fallback model")
     .option("--fallback-api-key <key>", "API key for fallback model")
-    .option("--max-files <n>", "Max files to scan (default 500)", "500")
+    .option("--max-files <n>", "Max files to scan (default: unlimited)", "0")
     .option("--skip-verify", "Skip model verification (static-only output)", false)
     .option("--json", "Also write AUDIT_REPORT.json alongside the markdown", false)
     .option(
@@ -60,7 +60,13 @@ export function registerAuditCommand(program: Command): void {
     }) => {
       const projectRoot = pathResolve(path);
       const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
-      const maxFiles = parseInt(opts.maxFiles, 10) || 500;
+      // Default is unlimited (Number.MAX_SAFE_INTEGER). Users can cap
+      // with --max-files N when they explicitly want truncation.
+      const parsedMaxFiles = parseInt(opts.maxFiles, 10);
+      const maxFiles =
+        !Number.isFinite(parsedMaxFiles) || parsedMaxFiles <= 0
+          ? Number.MAX_SAFE_INTEGER
+          : parsedMaxFiles;
 
       console.log("");
       console.log(`${ICONS.phase} KCode Audit Engine`);

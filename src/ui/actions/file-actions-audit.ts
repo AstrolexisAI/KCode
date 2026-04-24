@@ -81,8 +81,10 @@ export async function handleAuditAction(
           const result = await runAudit({
             projectRoot,
             llmCallback,
-            // NO fallbackCallback here — we'll escalate manually after user approval
-            maxFiles: 500,
+            // NO fallbackCallback here — we'll escalate manually after user approval.
+            // /scan audits the whole project by design — no truncation.
+            // Issue #111 v307 repro: user explicitly asked for unlimited scan.
+            maxFiles: Number.MAX_SAFE_INTEGER,
             skipVerification: skipVerify,
             onPhase: (phase, detail) => {
               scanState.phase = detail ? `${phase}: ${detail}` : phase;
@@ -139,7 +141,8 @@ export async function handleAuditAction(
               const cloudResult = await runAudit({
                 projectRoot,
                 llmCallback: fallbackCallback,
-                maxFiles: 500,
+                // Same as primary pass: unlimited.
+                maxFiles: Number.MAX_SAFE_INTEGER,
                 skipVerification: false,
                 onPhase: (phase, detail) => {
                   scanState.phase = `☁ ${phase}${detail ? ": " + detail : ""}`;

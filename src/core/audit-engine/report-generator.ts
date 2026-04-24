@@ -90,7 +90,13 @@ export function generateMarkdownReport(result: AuditResult): string {
     lines.push(`- Files in project: **${cov.totalCandidateFiles}**`);
     lines.push(`- Files scanned: **${cov.scannedFiles}** (${Math.round((cov.scannedFiles / Math.max(cov.totalCandidateFiles, 1)) * 100)}%)`);
     lines.push(`- Truncated: ${truncLabel}`);
-    lines.push(`- Max-files cap: ${cov.maxFiles} (${cov.capSource})`);
+    // MAX_SAFE_INTEGER (or numbers larger than reasonable project sizes)
+    // mean "unlimited" — render as such instead of an ugly 9-quadrillion.
+    const capLabel =
+      cov.maxFiles >= Number.MAX_SAFE_INTEGER / 2 || cov.maxFiles > 1_000_000
+        ? "unlimited"
+        : String(cov.maxFiles);
+    lines.push(`- Max-files cap: ${capLabel} (${cov.capSource})`);
     if (cov.truncated) {
       const suggestion = Math.min(cov.totalCandidateFiles, cov.maxFiles * 4);
       lines.push("");
