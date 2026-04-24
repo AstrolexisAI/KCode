@@ -2,15 +2,19 @@
 // Extracted from conversation.ts runAgentLoop — the per-turn housekeeping
 // that runs before the LLM request: microcompact stale tool results,
 // optional debug-trace of compaction thresholds, prune if above the
-// compactThreshold, and a hard-safety emergency prune if still over 95%.
+// compactThreshold, run multi-strategy auto-compaction (image strip /
+// micro / full LLM / emergency) and a hard-safety emergency prune if
+// still over 95%.
 
 import {
+  compactMultiStrategy,
   emergencyPrune,
   estimateContextTokens,
   microcompactToolResults,
   pruneMessagesIfNeeded,
 } from "./context-manager";
 import type { DebugTracer } from "./debug-tracer";
+import { log } from "./logger";
 import type { ConversationState, KCodeConfig, StreamEvent } from "./types";
 
 export interface ContextMaintenanceArgs {
@@ -53,6 +57,46 @@ export async function* runContextMaintenance(
     args.compactThreshold,
     args.config,
   );
+
+  // AUTO-COMPACT (#111 v285): if tool-result compression + aggressive
+  // clearing didn't get us below threshold, run the multi-strategy
+  // orchestrator. It escalates through micro-compact (>=60%),
+  // LLM-based full summarization (>=75%), and emergency prune (>=90%)
+  // so the user doesn't have to type /compact manually. Historically
+  // the multi-strategy orchestrator was defined but never wired — the
+  // UI would show "context at 100% — /compact soon" and just stay
+  // there until the user acted. This closes that loop.
+  //
+  // Opt-out: KCODE_DISABLE_AUTO_COMPACT=1.
+  if (process.env.KCODE_DISABLE_AUTO_COMPACT !== "1") {
+    const postPruneTokens = estimateContextTokens(
+      args.systemPrompt,
+      args.state.messages,
+    );
+    const usage = postPruneTokens / args.contextWindowSize;
+    // Trigger multi-strategy at 75% — same as full-compact phase
+    // inside the orchestrator. Below that, plain microcompact is
+    // enough.
+    if (usage >= 0.75) {
+      log.info(
+        "session",
+        `auto-compact: triggering multi-strategy at ${Math.round(usage * 100)}% (~${postPruneTokens} tokens)`,
+      );
+      try {
+        yield* compactMultiStrategy(
+          args.state,
+          args.systemPrompt,
+          args.contextWindowSize,
+          args.config,
+        );
+      } catch (err) {
+        log.warn(
+          "session",
+          `auto-compact failed: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+  }
 
   // Hard safety: emergency prune if still over 95%
   for (const evt of emergencyPrune(args.state, args.systemPrompt, args.contextWindowSize)) {
