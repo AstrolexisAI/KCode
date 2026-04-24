@@ -191,6 +191,46 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     expect(mgr.current()!.phase).toBe("failed");
   });
 
+  test("verified rerun after patch clears phase=failed (v290)", () => {
+    const mgr = newScaffoldScope();
+    mgr.recordRuntimeCommand({
+      command: "bun run index.ts",
+      exitCode: 0,
+      output: "SyntaxError: Export named 'Client' not found",
+      runtimeFailed: true,
+      status: "failed_traceback",
+      timestamp: Date.now(),
+    });
+    expect(mgr.current()!.phase).toBe("failed");
+    expect(
+      mgr.current()!.completion.reasons.some((r) => r.startsWith("runtime failure")),
+    ).toBe(true);
+
+    // Patch index.ts
+    mgr.recordMutation({ tool: "Edit", path: "/proj/index.ts", at: Date.now() });
+    expect(mgr.current()!.verification.patchAppliedAfterFailure).toBe(true);
+
+    // Rerun verifies OK
+    mgr.recordRuntimeCommand({
+      command: "bun run index.ts",
+      exitCode: 0,
+      output: "Server running",
+      runtimeFailed: false,
+      status: "verified",
+      timestamp: Date.now(),
+    });
+    const scope = mgr.current()!;
+    expect(scope.verification.rerunPassedAfterPatch).toBe(true);
+    expect(scope.verification.patchAppliedAfterFailure).toBe(false);
+    // phase lifted out of failed — avoids the 'Runtime: verified' +
+    // 'Status: failed' self-contradiction.
+    expect(scope.phase).not.toBe("failed");
+    // Stale 'runtime failure' reason dropped.
+    expect(
+      scope.completion.reasons.some((r) => r.startsWith("runtime failure")),
+    ).toBe(false);
+  });
+
   test("alive_timeout after post-patch edit does NOT clear rerunPassedAfterPatch", () => {
     // A timeout-killed TUI isn't proof the patch worked. Keep
     // patchAppliedAfterFailure armed so the forced-rerun gate

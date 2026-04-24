@@ -37,29 +37,63 @@ export function isAuditFilename(pathOrName: string): boolean {
 export function extractRedirectionTargets(command: string): string[] {
   const targets: string[] = [];
 
-  // Match > or >> redirections: optional whitespace, >, >, path
-  // Path can be: unquoted (no spaces), single-quoted, or double-quoted
-  const redirRe = /(?<![<0-9&])>>?\s*(?:'([^']+)'|"([^"]+)"|([^\s;&|<>`]+))/g;
+  // Strip heredoc bodies BEFORE scanning. A heredoc body can contain
+  // arbitrary code with '=>' arrow functions, '>' comparisons, etc.
+  // that the redirect regex would otherwise misinterpret. Issue #111
+  // v290 repro: `cat > index.ts << 'EOF'\n...\n.then(() => {...})\n...EOF`
+  // captured `{` as a redirect target because the lookbehind didn't
+  // exclude `=`, and the heredoc body was scanned along with the
+  // cat-prefix. Strip the heredoc content between DELIMITER markers.
+  const stripped = command.replace(
+    /<<-?\s*['"]?(\w+)['"]?\s*\n[\s\S]*?^\1\s*$/gm,
+    "<<HEREDOC_STRIPPED\nHEREDOC_STRIPPED\n",
+  );
+
+  // Match > or >> redirections: optional whitespace, >, >, path.
+  // Negative lookbehind now also excludes `=` (for `=>` arrow functions
+  // that escape the heredoc strip on single-line heredocs).
+  const redirRe = /(?<![<=0-9&])>>?\s*(?:'([^']+)'|"([^"]+)"|([^\s;&|<>`]+))/g;
   let m: RegExpExecArray | null;
-  m = redirRe.exec(command);
+  m = redirRe.exec(stripped);
   while (m !== null) {
     const path = m[1] ?? m[2] ?? m[3];
-    if (path && !path.startsWith("&") && !/^\d+$/.test(path)) {
+    if (path && looksLikeFilePath(path)) {
       targets.push(path);
     }
-    m = redirRe.exec(command);
+    m = redirRe.exec(stripped);
   }
 
   // Match tee targets: tee [-a|-i|...] file
   const teeRe = /\btee\s+(?:-[\w-]+\s+)*(?:'([^']+)'|"([^"]+)"|([^\s;&|<>`]+))/g;
-  m = teeRe.exec(command);
+  m = teeRe.exec(stripped);
   while (m !== null) {
     const path = m[1] ?? m[2] ?? m[3];
-    if (path) targets.push(path);
-    m = teeRe.exec(command);
+    if (path && looksLikeFilePath(path)) targets.push(path);
+    m = teeRe.exec(stripped);
   }
 
   return targets;
+}
+
+/**
+ * Sanity check: a captured "redirect target" must actually look
+ * like a file path. Drops artifacts from regex misfires (bare `{`,
+ * `}`, `=>`, numeric-only, starts with `&`, `$VAR` expansions).
+ * Shell reserved tokens can't be redirect targets in practice.
+ */
+function looksLikeFilePath(s: string): boolean {
+  if (!s) return false;
+  // Pure punctuation / control chars
+  if (/^[{}()[\];,&|`]+$/.test(s)) return false;
+  // Numeric-only (file descriptor duplicates: &1, &2)
+  if (/^\d+$/.test(s)) return false;
+  // Starts with & (fd duplicate)
+  if (s.startsWith("&")) return false;
+  // Shell variable that wasn't expanded (e.g. $HOME, $TMPDIR)
+  if (s.startsWith("$")) return false;
+  // Single-char that isn't a valid filename
+  if (s.length === 1 && !/[a-zA-Z0-9._]/.test(s)) return false;
+  return true;
 }
 
 /**
