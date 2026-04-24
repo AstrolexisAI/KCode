@@ -152,6 +152,63 @@ describe("runtime-classifier", () => {
     );
   });
 
+  test("v297 P0-1: bare 'PID: N (3.0s)' wrapper output → started_unverified", () => {
+    // Real repro: the bash background wrapper prints 'PID: 1172909
+    // (3.0s)' and nothing else. The classifier used to treat this
+    // as verified. Now it requires at least one app-level positive
+    // signal (Connected/Ready/height=N/etc).
+    expect(
+      classifyRuntimeStatus("bun run index.ts", 0, "PID: 1172909 (3.0s)"),
+    ).toBe("started_unverified");
+  });
+
+  test("v297 P0-1: PID output WITH positive signal → verified", () => {
+    // If the app printed a meaningful signal alongside the PID line,
+    // treat as verified.
+    expect(
+      classifyRuntimeStatus(
+        "bun run index.ts",
+        0,
+        "PID: 12345 (3.0s)\nConnected to node, height=820000",
+      ),
+    ).toBe("verified");
+  });
+
+  test("v297 P0-2: command with '||' fallback → started_unverified", () => {
+    // The shell fallback can mask failing commands. Without a positive
+    // signal in output, downgrade.
+    expect(
+      classifyRuntimeStatus(
+        "timeout 5s bun run index.ts || echo failed",
+        0,
+        "PID: 12345 (3.0s)",
+      ),
+    ).toBe("started_unverified");
+  });
+
+  test("v297 P0-2: '||' fallback bypassed when positive signal present", () => {
+    // An explicit 'Connected' or 'Ready' output still qualifies even
+    // if the command used '||'.
+    expect(
+      classifyRuntimeStatus(
+        "python -m server || echo failed",
+        0,
+        "Connected to node\nListening on 0.0.0.0:8080",
+      ),
+    ).toBe("verified");
+  });
+
+  test("v297 P0-2: pipe (|) alone does NOT trigger fallback downgrade", () => {
+    // Only '||' (logical OR) triggers; a single pipe is fine.
+    expect(
+      classifyRuntimeStatus(
+        "bun run build 2>&1 | tee build.log",
+        0,
+        "Build complete\nReady",
+      ),
+    ).toBe("verified");
+  });
+
   test("phaseForStatus maps failed_auth to blocked, others to failed", () => {
     expect(phaseForStatus("failed_auth")).toBe("blocked");
     expect(phaseForStatus("failed_connection")).toBe("failed");
