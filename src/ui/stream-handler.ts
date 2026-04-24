@@ -176,22 +176,47 @@ export async function processStreamEvents(
 
       case "text_replace_last":
         // Suppress the model's free-form draft when the scope-grounded
-        // closeout supersedes it (failed/partial/blocked). The draft
-        // already rendered; we rewrite it in place so the user sees the
-        // authoritative closeout as the primary prose, not as a
-        // postscript contradicting an "all good" narrative.
+        // closeout supersedes it (failed/partial/blocked). Walks back
+        // from the end and collapses ALL assistant text blocks emitted
+        // since the most recent user message into a single replacement.
+        // Prior version only replaced the LAST block — but the v283
+        // repro showed the model emits 3-4 separate prose chunks
+        // across multiple turns ("He creado ...", "El parche ...",
+        // "No puedo validar ...", "Project created ...") interleaved
+        // with tool calls. Replacing only the last leaves the earlier
+        // hallucinations visible.
         setCompleted((prev) => {
-          // Find the last assistant text block. Scan from the end.
+          // Find boundary: most recent non-assistant-text entry, OR
+          // a user-role entry. Walk back from end.
+          let boundary = prev.length;
           for (let i = prev.length - 1; i >= 0; i--) {
-            const entry = prev[i];
-            if (entry && entry.kind === "text" && entry.role === "assistant") {
-              const updated = [...prev];
-              updated[i] = { ...entry, text: event.text };
-              return updated;
-            }
+            const e = prev[i];
+            // User message always breaks the replacement window.
+            if (e && e.kind === "text" && e.role === "user") break;
+            // Only collapse consecutive assistant text + thinking +
+            // banner + tool_status entries. A user message or a
+            // question_highlight breaks the window.
+            if (e && e.kind === "question_highlight") break;
+            boundary = i;
           }
-          // No prior draft to replace — append as a fresh assistant block.
-          return [...prev, { kind: "text", role: "assistant", text: event.text }];
+          if (boundary >= prev.length) {
+            // Nothing to collapse — append fresh.
+            return [...prev, { kind: "text", role: "assistant", text: event.text }];
+          }
+          // Keep everything up to `boundary` unchanged; replace the
+          // remainder with a single authoritative assistant text.
+          const kept = prev.slice(0, boundary);
+          // Also keep tool-status entries and banners that lived in
+          // the collapsed window — those are grounded facts the user
+          // already saw. Only text-role assistant blocks get replaced.
+          const keptInWindow = prev
+            .slice(boundary)
+            .filter((e) => !(e.kind === "text" && e.role === "assistant"));
+          return [
+            ...kept,
+            ...keptInWindow,
+            { kind: "text", role: "assistant", text: event.text },
+          ];
         });
         break;
 
