@@ -195,6 +195,33 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     lines.push(`- Secrets detected (redacted): ${kinds}.`);
   }
 
+  // v298: functional probe result. Tier-3 evidence — the probe
+  // actually exercised the app's external surface. Much stronger
+  // than 'process spawned' (tier 2) or 'files written' (tier 1).
+  const probe = (scope.verification as { lastProbeResult?: { status: string; probeId: string; evidence?: string; error?: string } })
+    .lastProbeResult;
+  if (probe) {
+    if (probe.status === "pass") {
+      lines.push(
+        `- **Functional probe**: ✓ ${probe.probeId} passed — ${probe.evidence ?? "ok"}.`,
+      );
+    } else if (probe.status === "fail_auth") {
+      lines.push(
+        `- **Functional probe**: ✗ ${probe.probeId} failed auth — ${probe.error ?? "credentials rejected"}.`,
+      );
+    } else if (probe.status === "fail_connection") {
+      lines.push(
+        `- **Functional probe**: ✗ ${probe.probeId} connection failed — ${probe.error ?? "node unreachable"}.`,
+      );
+    } else if (probe.status === "fail_runtime") {
+      lines.push(
+        `- **Functional probe**: ✗ ${probe.probeId} runtime error — ${probe.error ?? ""}.`,
+      );
+    } else if (probe.status === "not_applicable") {
+      // Don't render — noisy.
+    }
+  }
+
   // Plan progress. Source of truth is whatever is higher:
   //   A) completedSteps — steps the Plan tool explicitly marked done.
   //   B) deriveCompletedFromVerification(scope) — steps whose keywords

@@ -168,6 +168,21 @@ export interface TaskScope {
      * successfully but the plan step stayed incomplete.
      */
     packageManagerOps: string[];
+    /**
+     * Result of the most recent verification probe (v298). Separate
+     * from runtimeCommands because probes are ACTIVE verification
+     * (kcode reaches into the app) whereas runtimeCommands are
+     * passive observation (kcode records what bash did).
+     * Shape matches ProbeResult from core/probes/types.ts; using a
+     * loose type here to avoid a circular import.
+     */
+    lastProbeResult?: {
+      status: "pass" | "fail_auth" | "fail_connection" | "fail_runtime" | "not_applicable";
+      probeId: string;
+      evidence?: string;
+      error?: string;
+      tier?: 3 | 4;
+    };
   };
 
   // ── Secrets sub-state ──
@@ -279,6 +294,7 @@ function makeEmptyScope(opts: {
       patchAppliedAfterFailure: false,
       rerunAttempts: 0,
       packageManagerOps: [],
+      lastProbeResult: undefined,
     },
     secrets: {
       detected: [],
