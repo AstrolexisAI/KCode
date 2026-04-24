@@ -1490,6 +1490,51 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         // the closeout had no 'Functional probe' line because
         // curScope was captured pre-probe.
         const freshScope = getTaskScopeManager().current() ?? curScope;
+
+        // Issue #111 v305 — grounding rewrite. If the draft contains
+        // overclaim phrases ("visión profunda", "proyecto completo",
+        // "ready", "fully functional") and the scope says we're
+        // partial/failed/blocked OR mustUsePartialLanguage is set,
+        // rewrite them to cautious equivalents BEFORE render. Prior
+        // design let the optimistic prose render then appended a
+        // ⚠ Verified status below — user read the overclaim first.
+        // Now the draft is softened in-place and the closeout no
+        // longer contradicts it. Opt-out: KCODE_DISABLE_GROUNDING_REWRITE=1.
+        let rewrittenDraft: string | null = null;
+        try {
+          if (process.env.KCODE_DISABLE_GROUNDING_REWRITE !== "1") {
+            const { rewriteFinalTextForGrounding, enforceEvidenceFloor } = await import(
+              "./grounding-rewrite.js"
+            );
+            const draftText = ctx.textChunks.join("");
+            if (draftText.trim().length > 0) {
+              const rw = rewriteFinalTextForGrounding(draftText, freshScope);
+              let working = rw.text;
+              let reads = 0;
+              try {
+                const { sourceReadCount } = await import("./session-tracker.js");
+                reads = sourceReadCount();
+              } catch {
+                /* tracker optional */
+              }
+              const floor = enforceEvidenceFloor(working, reads, 5);
+              working = floor.text;
+              if (rw.replacements > 0 || floor.underfloor) {
+                rewrittenDraft = working;
+                log.info(
+                  "grounding-rewrite",
+                  `softened draft (replacements=${rw.replacements}, reasons=[${rw.reasons.join(",")}], evidence_floor=${floor.underfloor})`,
+                );
+              }
+            }
+          }
+        } catch (err) {
+          log.debug(
+            "grounding-rewrite",
+            `rewrite error (non-fatal): ${err instanceof Error ? err.message : err}`,
+          );
+        }
+
         const correction = renderCloseoutFromScope(freshScope);
         if (correction) {
           log.info(
@@ -1521,20 +1566,31 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           if (suppressDraft) {
             log.info(
               "closeout-renderer",
-              `suppress mode — replacing draft (phase=${curScope.phase}, mayClaimReady=${curScope.completion.mayClaimReady})`,
+              `suppress mode — replacing draft (phase=${curScope.phase}, mayClaimReady=${curScope.completion.mayClaimReady}, rewritten=${rewrittenDraft !== null})`,
             );
             const standalone = safeCorrection.replace(/^\s*\n?---\n?\s*/, "");
-            // Seal the window whenever the draft should be suppressed.
-            // Previously only failed/blocked triggered the seal, which
-            // meant partial scopes (unverified-artifact gate, strong-
-            // completion-claim flag) still let follow-up prose through.
-            // Issue #111 v287 repro: Python pivot with no runtime, scope
-            // at phase=partial, 'Para ejecutar: ...' leaked after the
-            // closeout. Sealing whenever suppressDraft is true closes
-            // that hole without losing the ability to emit new prose on
-            // the next user turn (seal is per-stream-handler invocation).
-            events.push({ type: "text_replace_last", text: standalone, seal: true });
+            // Issue #111 v305 — when phase is partial AND the model
+            // wrote a non-trivial analysis, preserve the softened
+            // draft above the Verified status block so the user keeps
+            // the architectural context (just with cautious language).
+            // For failed/blocked or empty drafts, still render just
+            // the Verified status. The seal closes the stream so
+            // follow-up prose in the same turn is blocked.
+            const preserveSoftenedDraft =
+              curScope.phase === "partial" &&
+              rewrittenDraft !== null &&
+              rewrittenDraft.trim().length > 40;
+            const replacement = preserveSoftenedDraft
+              ? `${rewrittenDraft!.trim()}\n\n---\n\n${standalone}`
+              : standalone;
+            events.push({ type: "text_replace_last", text: replacement, seal: true });
           } else {
+            // No suppression, but if the rewrite changed the draft
+            // (overclaim softened without triggering full suppress),
+            // replace the draft in-place then append the correction.
+            if (rewrittenDraft !== null) {
+              events.push({ type: "text_replace_last", text: rewrittenDraft, seal: false });
+            }
             events.push({ type: "text_delta", text: safeCorrection });
           }
         } else {
@@ -1675,6 +1731,35 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         );
       }
     }
+  }
+
+  // Issue #111 v305 — auto-capture ranked lists emitted by the
+  // assistant in this turn so follow-up prompts like "clona el
+  // proyecto 6" / "abre #2" can resolve deterministically instead of
+  // relying on the model's token-level recall (which drifts).
+  try {
+    const { bumpTurnCounter, extractRankedListFromText, recordRankedList } =
+      await import("./reference-memory.js");
+    bumpTurnCounter();
+    const turnText = ctx.textChunks.join("");
+    if (turnText.length > 0) {
+      const items = extractRankedListFromText(turnText);
+      if (items.length >= 3) {
+        recordRankedList("items", items);
+        log.info(
+          "ref-memory",
+          `captured ranked list of ${items.length} item(s): ${items
+            .slice(0, 3)
+            .map((it) => `#${it.rank}=${it.title.slice(0, 30)}`)
+            .join(", ")}${items.length > 3 ? ", …" : ""}`,
+        );
+      }
+    }
+  } catch (err) {
+    log.debug(
+      "ref-memory",
+      `capture error (non-fatal): ${err instanceof Error ? err.message : err}`,
+    );
   }
 
   const contextFull =

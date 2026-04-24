@@ -421,6 +421,57 @@ export class ConversationManager {
     } catch {
       /* non-fatal */
     }
+
+    // Issue #111 v305 ordinal resolution: if the user just said
+    // "clona el proyecto 6" / "abre #2" and we captured a ranked list
+    // in a recent turn, inject a resolved-target hint so the model
+    // doesn't free-recall the wrong item. Also blocks destructive
+    // actions when the ordinal can't be resolved (avoids cloning the
+    // wrong repo on drift). Opt-out: KCODE_DISABLE_ORDINAL_RESOLVE=1.
+    try {
+      if (process.env.KCODE_DISABLE_ORDINAL_RESOLVE !== "1") {
+        const { resolveOrdinal, detectOrdinalReference, hasDestructiveActionIntent, getLastRankedList } =
+          await import("./reference-memory.js");
+        const hasOrdinal = detectOrdinalReference(userMessage) !== null;
+        const isDestructive = hasDestructiveActionIntent(userMessage);
+        if (hasOrdinal && isDestructive) {
+          const resolved = resolveOrdinal(userMessage);
+          if (resolved) {
+            const target =
+              resolved.item.url ?? resolved.item.title;
+            const anchor =
+              `[kcode] Ordinal anchor: #${resolved.rank} → ${target}. ` +
+              `(from recent list "${resolved.listLabel}"). ` +
+              `Use EXACTLY this target — do not substitute from free recall.`;
+            this.state.messages.push({ role: "user", content: anchor });
+            log.info(
+              "ordinal-resolve",
+              `anchored #${resolved.rank} → ${resolved.item.title}${resolved.item.url ? ` (${resolved.item.url})` : ""}`,
+            );
+          } else {
+            const list = getLastRankedList();
+            const reason = !list
+              ? "no prior ranked list captured this session"
+              : `rank out of range or list stale (>3 turns old)`;
+            const anchor =
+              `[kcode] Ordinal reference detected in a destructive action ("${userMessage.slice(0, 80)}"), ` +
+              `but could not be resolved: ${reason}. ` +
+              `DO NOT proceed with the action. Ask the user which specific item they mean ` +
+              `(by name or URL) before running clone / delete / install / etc.`;
+            this.state.messages.push({ role: "user", content: anchor });
+            log.warn(
+              "ordinal-resolve",
+              `unresolvable ordinal in destructive intent — blocked: ${reason}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      log.debug(
+        "ordinal-resolve",
+        `resolve error (non-fatal): ${err instanceof Error ? err.message : err}`,
+      );
+    }
     // Ensure system prompt is built (async due to Pro check in distillation)
     await this._systemPromptReady;
 
