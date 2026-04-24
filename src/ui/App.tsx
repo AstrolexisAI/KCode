@@ -53,7 +53,8 @@ type AppMode =
   | "sudo-password"
   | "cloud"
   | "toggle"
-  | "kodi-advisor";
+  | "kodi-advisor"
+  | "escalation";
 
 export default function App({ config, conversationManager, tools, initialSessionName }: AppProps) {
   const { exit } = useApp();
@@ -418,7 +419,7 @@ export default function App({ config, conversationManager, tools, initialSession
               reason: scanState.pendingEscalation.reason,
               availableModels: scanState.pendingEscalation.availableModels,
             });
-            setMode("escalation" as any);
+            setMode("escalation");
             setLastKodiEvent({ type: "agent_spawn", detail: "☁ second opinion?" });
           }
           if (scanState.escalated > 0) {
@@ -511,7 +512,7 @@ export default function App({ config, conversationManager, tools, initialSession
     const isWorking =
       mode === "responding" ||
       (scanProgress?.active ?? false) ||
-      mode === ("escalation" as any);
+      mode === ("escalation");
 
     if (isWorking) {
       const frames = [
@@ -1098,12 +1099,12 @@ export default function App({ config, conversationManager, tools, initialSession
         )}
 
         {/* Escalation model picker — shown after /scan when uncertain findings need cloud review */}
-        {mode === ("escalation" as any) && escalationData && (
+        {mode === ("escalation") && escalationData && (
           <EscalationPrompt
             count={escalationData.count}
             reason={escalationData.reason}
             availableModels={escalationData.availableModels}
-            isActive={mode === ("escalation" as any)}
+            isActive={mode === ("escalation")}
             onChoice={handleEscalationChoice}
           />
         )}
@@ -1220,7 +1221,7 @@ export default function App({ config, conversationManager, tools, initialSession
             mode !== "cloud" &&
             mode !== "toggle" &&
             mode !== "kodi-advisor" &&
-            mode !== ("escalation" as any)
+            mode !== ("escalation")
           }
           isQueuing={mode === "responding"}
           queueSize={messageQueue.length}

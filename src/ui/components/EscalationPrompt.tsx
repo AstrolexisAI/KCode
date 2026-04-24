@@ -21,6 +21,10 @@ interface EscalationPromptProps {
   onChoice: (modelName: string | null) => void;
 }
 
+// Visible window for the list. Keeps the prompt readable even when
+// 30+ models are registered. Selected item is always in view.
+const VISIBLE_ROWS = 8;
+
 export default function EscalationPrompt({
   count,
   reason,
@@ -38,6 +42,14 @@ export default function EscalationPrompt({
         setSelectedIdx((i) => (i > 0 ? i - 1 : availableModels.length - 1));
       } else if (key.downArrow || input === "j") {
         setSelectedIdx((i) => (i < availableModels.length - 1 ? i + 1 : 0));
+      } else if (key.pageUp || (key.ctrl && input === "u")) {
+        setSelectedIdx((i) => Math.max(0, i - VISIBLE_ROWS));
+      } else if (key.pageDown || (key.ctrl && input === "d")) {
+        setSelectedIdx((i) => Math.min(availableModels.length - 1, i + VISIBLE_ROWS));
+      } else if (input === "g") {
+        setSelectedIdx(0);
+      } else if (input === "G") {
+        setSelectedIdx(availableModels.length - 1);
       } else if (key.return) {
         const chosen = availableModels[selectedIdx];
         onChoice(chosen ? chosen.name : null);
@@ -49,6 +61,20 @@ export default function EscalationPrompt({
   );
 
   if (!isActive) return null;
+
+  // Compute visible window: center around selectedIdx when possible.
+  const total = availableModels.length;
+  const windowStart = Math.max(
+    0,
+    Math.min(
+      selectedIdx - Math.floor(VISIBLE_ROWS / 2),
+      total - VISIBLE_ROWS,
+    ),
+  );
+  const windowEnd = Math.min(total, windowStart + VISIBLE_ROWS);
+  const visibleModels = availableModels.slice(windowStart, windowEnd);
+  const hasAbove = windowStart > 0;
+  const hasBelow = windowEnd < total;
 
   return (
     <Box
@@ -67,10 +93,17 @@ export default function EscalationPrompt({
       </Text>
       <Text color={theme.dimmed}>{reason}</Text>
       <Text color={theme.dimmed}>{""}</Text>
-      <Text dimColor>{"  Choose a model for re-verification (↑↓ navigate · Enter select · Esc skip):"}</Text>
+      <Text dimColor>
+        {"  ↑↓ / jk · PgUp/PgDn · g/G · Enter select · Esc skip   "}
+        <Text color={theme.primary} bold>
+          [{selectedIdx + 1}/{total}]
+        </Text>
+      </Text>
       <Box flexDirection="column" marginTop={1} marginLeft={2}>
-        {availableModels.map((m, i) => {
-          const isSel = i === selectedIdx;
+        {hasAbove && <Text dimColor>{"  ▲ " + windowStart + " more above"}</Text>}
+        {visibleModels.map((m, i) => {
+          const absoluteIdx = windowStart + i;
+          const isSel = absoluteIdx === selectedIdx;
           const tagStr = m.tags.length > 0 ? "  " + m.tags.map((t) => `[${t}]`).join(" ") : "";
           return (
             <Box key={m.name} flexDirection="row">
@@ -82,6 +115,7 @@ export default function EscalationPrompt({
             </Box>
           );
         })}
+        {hasBelow && <Text dimColor>{"  ▼ " + (total - windowEnd) + " more below"}</Text>}
         <Box marginTop={1}>
           <Text dimColor>{"  ── "}</Text>
           <Text color="red">{"Skip (Esc / N)"}</Text>
