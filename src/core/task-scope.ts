@@ -158,6 +158,16 @@ export interface TaskScope {
      * failure is cleared (new failure or successful rerun).
      */
     rerunAttempts: number;
+    /**
+     * Successful package-manager bash invocations — bun add / npm
+     * install / pip install / cargo add / go get. Tool-executor
+     * records each successful call. Used by plan reconciliation to
+     * mark the "install dependencies" step as done without needing
+     * a recorded filesystem mutation on package.json.
+     * Issue #111 v285 repro: `bun add blessed bitcoin-core` ran
+     * successfully but the plan step stayed incomplete.
+     */
+    packageManagerOps: string[];
   };
 
   // ── Secrets sub-state ──
@@ -268,6 +278,7 @@ function makeEmptyScope(opts: {
       rerunPassedAfterPatch: false,
       patchAppliedAfterFailure: false,
       rerunAttempts: 0,
+      packageManagerOps: [],
     },
     secrets: {
       detected: [],

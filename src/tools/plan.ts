@@ -222,6 +222,15 @@ export function reconcilePlanFromScope(
   );
   const anyFileWritten = v.filesWritten.length + v.filesEdited.length > 0;
   const anyRuntimeHappened = v.runtimeCommands.length > 0;
+  const depsInstalled =
+    ((v as { packageManagerOps?: string[] }).packageManagerOps ?? []).length > 0;
+  const allPaths = [...v.filesWritten, ...v.filesEdited];
+  const hasTransactionsFile = allPaths.some((p) =>
+    /(?:transactions?|tx|mempool)[./\\]|(?:transactions?|tx|mempool)\.\w+$/i.test(p),
+  );
+  const hasRefreshCode = allPaths.some((p) =>
+    /(?:index|main|app|dashboard|server)\.(?:ts|tsx|js|jsx|py|mjs)$/i.test(p),
+  );
   const lastRuntimeVerified =
     !!last &&
     !last.runtimeFailed &&
@@ -237,15 +246,23 @@ export function reconcilePlanFromScope(
       if (scope.projectRoot.status === "verified" || scope.projectRoot.status === "created") {
         derived = "done";
       }
-    } else if (/(install|depend|requirement|dependenc|paquet|librer)/i.test(t)) {
-      if (depsFilesTouched || anyRuntimeHappened) {
+    } else if (/(install|instal[aá]r?|depend|requirement|dependenc|paquet|librer)/i.test(t)) {
+      if (depsInstalled || depsFilesTouched || anyRuntimeHappened) {
         derived = "done";
       }
-    } else if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci)/i.test(t)) {
+    } else if (/(transacc|transaction|mempool)/i.test(t)) {
+      if (hasTransactionsFile) {
+        derived = "done";
+      }
+    } else if (/(live|refresh|actualiz|vivo|tiempo.?real|real.?time|auto.?refresh|setInterval)/i.test(t)) {
+      if (hasRefreshCode) {
+        derived = "done";
+      }
+    } else if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci|implement|implementar|rpc|client|cliente)/i.test(t)) {
       if (anyFileWritten) {
         derived = "done";
       }
-    } else if (/(test|verify|verific|run|ejecut|check|revis|connect|conect)/i.test(t)) {
+    } else if (/(test|verify|verific|run|ejecut|check|revis|connect|conect|probar|prueba)/i.test(t)) {
       if (lastRuntimeVerified) {
         derived = "done";
       } else if (last) {

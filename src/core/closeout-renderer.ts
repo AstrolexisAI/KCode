@@ -295,6 +295,15 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
   );
   const anyFileWritten = v.filesWritten.length + v.filesEdited.length > 0;
   const anyRuntimeHappened = v.runtimeCommands.length > 0;
+  const depsInstalled = (v.packageManagerOps ?? []).length > 0;
+  const allPaths = [...v.filesWritten, ...v.filesEdited];
+  const hasTransactionsFile = allPaths.some((p) =>
+    /(?:transactions?|tx|mempool)[./\\]|(?:transactions?|tx|mempool)\.\w+$/i.test(p),
+  );
+  const hasRefreshCode = allPaths.some((p) =>
+    // Entrypoint files likely to host setInterval / refresh loops.
+    /(?:index|main|app|dashboard|server)\.(?:ts|tsx|js|jsx|py|mjs)$/i.test(p),
+  );
   // Strict verification: "test/verify/connect" steps ONLY complete when
   // the runtime classifier returned "verified". started_unverified,
   // alive_timeout, and any failed_* variant leave the step open.
@@ -321,15 +330,31 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
     }
 
     // Install dependencies
-    if (/(install|depend|requirement|dependenc|paquet|librer)/i.test(t)) {
-      if (depsFilesTouched || anyRuntimeHappened) {
+    if (/(install|instal[aá]r?|depend|requirement|dependenc|paquet|librer)/i.test(t)) {
+      if (depsInstalled || depsFilesTouched || anyRuntimeHappened) {
         done++;
         continue;
       }
     }
 
-    // Write application code
-    if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci)/i.test(t)) {
+    // Transactions / mempool view (specific file)
+    if (/(transacc|transaction|mempool)/i.test(t)) {
+      if (hasTransactionsFile) {
+        done++;
+        continue;
+      }
+    }
+
+    // Live updates / refresh / auto-refresh
+    if (/(live|refresh|actualiz|vivo|tiempo.?real|real.?time|auto.?refresh|setInterval)/i.test(t)) {
+      if (hasRefreshCode) {
+        done++;
+        continue;
+      }
+    }
+
+    // Write / implement application code
+    if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci|implement|implementar|rpc|client|cliente)/i.test(t)) {
       if (anyFileWritten) {
         done++;
         continue;
@@ -337,7 +362,7 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
     }
 
     // Test / verify / run / connect — strict: only verified runtime counts.
-    if (/(test|verify|verific|run|ejecut|check|revis|connect|conect)/i.test(t)) {
+    if (/(test|verify|verific|run|ejecut|check|revis|connect|conect|probar|prueba)/i.test(t)) {
       if (lastRuntimeVerified) {
         done++;
         continue;

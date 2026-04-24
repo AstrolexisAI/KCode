@@ -1045,8 +1045,8 @@ export async function* executeToolsSequential(
               }
             }
           } else if (call.name === "Bash") {
-            // Runtime command detection: python/node/bun/cargo/go run
             const cmd = typeof input.command === "string" ? input.command : "";
+            // Runtime command detection: python/node/bun/cargo/go run
             if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(cmd)) {
               const { classifyRuntimeStatus, isFailedStatus } = await import(
                 "./runtime-classifier.js"
@@ -1060,6 +1060,26 @@ export async function* executeToolsSequential(
                 status,
                 timestamp: Date.now(),
               });
+            }
+            // Package-manager detection — record successful install ops
+            // so plan reconciliation can mark the "install dependencies"
+            // step as done. Issue #111 v285: `bun add blessed ...` ran
+            // clean but the plan step stayed open. Matches the common
+            // install-y verb patterns across ecosystems.
+            const isInstall =
+              /\b(?:bun\s+add|npm\s+install|npm\s+i\s|yarn\s+add|pnpm\s+(?:add|install|i)|pip\s+install|pip3\s+install|cargo\s+add|cargo\s+install|go\s+get|gem\s+install|composer\s+require|poetry\s+add)\b/i.test(cmd);
+            if (isInstall) {
+              const current = mgr.current();
+              if (current) {
+                mgr.update({
+                  verification: {
+                    packageManagerOps: [
+                      ...(current.verification.packageManagerOps ?? []),
+                      cmd.slice(0, 200),
+                    ],
+                  },
+                });
+              }
             }
           }
         }
