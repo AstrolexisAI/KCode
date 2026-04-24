@@ -51,6 +51,62 @@ describe("reconcilePlanFromScope", () => {
     expect(plan.steps[1]!.status).toBe("pending");
   });
 
+  test("v285 EXACT repro: 8-step Bitcoin TUI plan with install/transactions/refresh/test keywords", () => {
+    setActivePlanForTesting(
+      makePlan([
+        "Crear directorio del proyecto e inicializar con Bun",
+        "Instalar dependencias (librería TUI, cliente RPC de Bitcoin)",
+        "Configurar estructura del proyecto (archivo principal, componentes)",
+        "Implementar conexión RPC a Bitcoin",
+        "Crear interfaz TUI para vista de bloques",
+        "Agregar vista de transacciones",
+        "Agregar actualizaciones en vivo y funcionalidad de refresco",
+        "Probar y ejecutar el dashboard",
+      ]),
+    );
+    const mgr = getTaskScopeManager();
+    mgr.beginNewScope({ type: "scaffold", userPrompt: "bitcoin tui dashboard" });
+    mgr.recordDirectoryVerified("/proj/bitcoin-tui-dashboard");
+    // bun add blessed bitcoin-core — recorded as package manager op
+    mgr.update({
+      verification: {
+        packageManagerOps: ["bun add blessed bitcoin-core"],
+      },
+    });
+    // Scaffold files
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/index.ts",
+      at: Date.now(),
+    });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/bitcoinClient.ts",
+      at: Date.now(),
+    });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/components/blocks.ts",
+      at: Date.now(),
+    });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/components/transactions.ts",
+      at: Date.now(),
+    });
+
+    reconcilePlanFromScope();
+    const plan = getActivePlan()!;
+    expect(plan.steps[0]!.status).toBe("done");   // create project
+    expect(plan.steps[1]!.status).toBe("done");   // install deps
+    expect(plan.steps[2]!.status).toBe("done");   // structure (files written)
+    expect(plan.steps[3]!.status).toBe("done");   // implement connection (bitcoinClient.ts exists)
+    expect(plan.steps[4]!.status).toBe("done");   // blocks view file exists
+    expect(plan.steps[5]!.status).toBe("done");   // transactions view file exists
+    expect(plan.steps[6]!.status).toBe("done");   // live updates (index.ts has refresh)
+    expect(plan.steps[7]!.status).toBe("pending"); // test/run — no runtime yet
+  });
+
   test("v274 EXACT repro: 3 files + started_unverified runtime → 3 done + 1 in_progress", () => {
     setActivePlanForTesting(
       makePlan([
