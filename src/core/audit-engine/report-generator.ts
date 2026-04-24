@@ -62,6 +62,47 @@ function renderFalsePositiveSection(result: AuditResult, lines: string[]): void 
   lines.push("");
 }
 
+/**
+ * Append a "Needs context (undecided)" section. Same shape + cap as
+ * the FP section. These are candidates the verifier couldn't
+ * classify — re-running with a better model (or passing more
+ * context) may resolve them.
+ */
+function renderNeedsContextSection(result: AuditResult, lines: string[]): void {
+  const details = result.needs_context_detail ?? [];
+  if (details.length === 0) return;
+
+  lines.push("## Needs context (undecided by verifier)");
+  lines.push("");
+  lines.push(
+    `The verifier returned **${details.length}** candidate${details.length === 1 ? "" : "s"} ` +
+      "as needs_context — either the model's response didn't parse into a clean " +
+      "confirmed/false_positive verdict, or the model explicitly said it couldn't " +
+      "decide. These deserve a second look with a stronger model " +
+      "(`/scan` → escalate, or `kcode audit --fallback-model`).",
+  );
+  lines.push("");
+
+  const shown = details.slice(0, FP_SAMPLE_LIMIT);
+  for (let i = 0; i < shown.length; i++) {
+    const fp = shown[i]!;
+    const rel = fp.file.startsWith(result.project + "/")
+      ? fp.file.slice(result.project.length + 1)
+      : fp.file;
+    lines.push(
+      `${i + 1}. \`${rel}:${fp.line}\` — pattern \`${fp.pattern_id}\` (${fp.severity})`,
+    );
+    lines.push(`   - Reason: ${fp.verification.reasoning.slice(0, 400).replace(/\n/g, " ")}`);
+  }
+  if (details.length > shown.length) {
+    lines.push("");
+    lines.push(
+      `_…and ${details.length - shown.length} more. See \`AUDIT_REPORT.json\`._`,
+    );
+  }
+  lines.push("");
+}
+
 export function generateMarkdownReport(result: AuditResult): string {
   const lines: string[] = [];
   const projectName = result.project.split("/").filter(Boolean).pop() ?? result.project;
@@ -116,6 +157,10 @@ export function generateMarkdownReport(result: AuditResult): string {
   lines.push(`- Candidates found: **${result.candidates_found}**`);
   lines.push(`- Confirmed findings: **${result.confirmed_findings}**`);
   lines.push(`- False positives: **${result.false_positives}**`);
+  const needsCtx = result.needs_context ?? 0;
+  if (needsCtx > 0) {
+    lines.push(`- Uncertain (needs_context): **${needsCtx}** — verifier could not decide`);
+  }
   lines.push(`- Scan duration: ${(result.elapsed_ms / 1000).toFixed(1)}s`);
   lines.push("");
 
@@ -124,6 +169,7 @@ export function generateMarkdownReport(result: AuditResult): string {
     lines.push("or the pattern library needs expansion for this codebase's language/style.");
     lines.push("");
     renderFalsePositiveSection(result, lines);
+    renderNeedsContextSection(result, lines);
     return lines.join("\n");
   }
 
@@ -258,6 +304,9 @@ export function generateMarkdownReport(result: AuditResult): string {
   // Always render a false-positive section when there are any, so the
   // human auditor can spot-check the verifier's rejections.
   renderFalsePositiveSection(result, lines);
+  // And the needs_context bucket so "33 candidates / 0 confirmed /
+  // 0 FP" can't hide 33 undecided results.
+  renderNeedsContextSection(result, lines);
 
   // Methodology footer
   lines.push("## Methodology");

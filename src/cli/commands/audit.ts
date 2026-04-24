@@ -191,6 +191,11 @@ export function registerAuditCommand(program: Command): void {
         `  \x1b[31mConfirmed findings:  ${result.confirmed_findings}\x1b[0m`,
       );
       console.log(`  False positives:     ${result.false_positives}`);
+      if ((result.needs_context ?? 0) > 0) {
+        console.log(
+          `  \x1b[33mUncertain (needs_context): ${result.needs_context}\x1b[0m — verifier couldn't decide`,
+        );
+      }
       console.log(`  Duration:            ${(result.elapsed_ms / 1000).toFixed(1)}s`);
       if (result.coverage?.truncated) {
         const suggestion = Math.min(
