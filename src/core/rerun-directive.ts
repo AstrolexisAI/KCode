@@ -160,7 +160,13 @@ export function buildRerunDirective(scope: TaskScope): string | null {
     `[SYSTEM] You patched ${patchList} after a runtime failure of \`${failed}\`. ` +
     `Your next action MUST be a Bash call that re-runs the validation:\n\n` +
     `    ${cmd}\n\n` +
-    `Do NOT write new prose. Do NOT call Plan or Write. Do NOT close the turn with a summary. ` +
+    `**The Bash tool is AVAILABLE.** If you saw a "BLOCKED — FILE NOT CREATED" ` +
+    `or "BLOCKED — ..." message earlier, that was for ONE specific file (e.g. an ` +
+    `unsolicited README.md). It does NOT block the Bash tool. It does NOT block ` +
+    `re-running the validation. Do NOT claim the tool is blocked — it isn't.\n\n` +
+    `Do NOT write new prose. Do NOT call Plan or Write. Do NOT close the turn with ` +
+    `a summary. Do NOT emit operational guidance ("To run: ...", "Project created", ` +
+    `"funcional", "ready") until the rerun succeeds.\n\n` +
     `If the rerun succeeds, the turn can close with grounded results. ` +
     `If it fails again, address the NEW error — don't silently move on.\n\n` +
     `This is a mandatory recovery step: the previous turn applied a patch without verifying it.`
