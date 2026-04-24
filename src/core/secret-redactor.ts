@@ -46,25 +46,50 @@ const RULES: RedactionRule[] = [
     name: "password_assign",
     pattern: /\b(password\s*[:=]\s*)([^\s"'#\n]{3,})/gi,
   },
-  // Prose form "password tronco" — whitespace-separated credential
-  // appearing after "password". Excludes common English/Spanish
-  // follower words that indicate a generic-noun usage (policy,
-  // field, strength, manager, reset, …) rather than a specific
-  // credential reference. Issues #107, #111.
+  // Prose form "password tronco" / "password 'tronco'" / "password \"tronco\"".
+  // The quote prefix is optional; we strip it via the capture-group shape:
+  //   group 1 = 'password ' + optional opening quote
+  //   group 2 = value (letters/digits/safe punct)
+  // The closing quote, if any, stays in the remaining text — the
+  // redactor replaces group 2 with MASK and leaves the trailing quote
+  // intact. Denylist excludes generic-noun follow-ups. Issues #107,
+  // #111, v293 repro.
   {
     name: "password_prose",
     pattern:
-      /\b(password\s+)(?!(?:policy|policies|field|fields|manager|managers|reset|resets|required|strength|hash|hashes|hashing|protection|expiry|validator|validators|rules|length|setup|input|confirm|confirmation|recovery|prompt|placeholder|example|examples|box|boxes|form|forms|required|generation|generator|generators|security)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
+      /\b(password\s+['"]?)(?!(?:policy|policies|field|fields|manager|managers|reset|resets|required|strength|hash|hashes|hashing|protection|expiry|validator|validators|rules|length|setup|input|confirm|confirmation|recovery|prompt|placeholder|example|examples|box|boxes|form|forms|generation|generator|generators|security)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
   },
   {
     name: "passwd_assign",
     pattern: /\b(passwd\s*[:=]\s*)([^\s"'#\n]{3,})/gi,
   },
-  // Prose form "contraseña tronco" (Spanish) — denylist Spanish nouns.
+  // Prose form "contraseña tronco" / "contraseña 'tronco'" (Spanish).
   {
     name: "contrasena_prose",
     pattern:
-      /\b(contrase[nñ]a\s+)(?!(?:fuerte|débil|debil|segura|temporal|nueva|válida|valida|incorrecta|válida|por\b|para\b|actual|anterior|predeterminada|requerida|ingresada|correcta|larga|corta|encriptada|nunca)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
+      /\b(contrase[nñ]a\s+['"]?)(?!(?:fuerte|débil|debil|segura|temporal|nueva|válida|valida|incorrecta|por\b|para\b|actual|anterior|predeterminada|requerida|ingresada|correcta|larga|corta|encriptada|nunca)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
+  },
+  // Prose form "usuario curly" / "usuario 'curly'" / "user curly".
+  // v293 repro: model read bitcoin.conf and then emitted 'usuario
+  // 'curly', contraseña 'tronco'' in its final summary. Redactor
+  // missed 'curly' because no username-prose pattern existed.
+  // Denylist covers generic-noun usages ('user interface', 'user
+  // manual', 'user story', 'usuario final', 'usuario común').
+  {
+    name: "usuario_prose",
+    pattern:
+      /\b(usuario\s+['"]?)(?!(?:final|com[uú]n|registrado|invitado|admin\b|administrador|anonimo|an[oó]nimo|activo|nuevo|actual|por\b|para\b|de\b)\b)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
+  },
+  {
+    name: "user_prose",
+    pattern:
+      /\b(user\s+['"]?)(?!(?:interface|manual|story|stories|experience|agent\b|role|roles|input|default|group|groups|account|accounts|space|guide)\b)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
+  },
+  // "rpcuser X" / "rpc user X" without the equals sign.
+  {
+    name: "rpcuser_prose",
+    pattern:
+      /\b(rpc[-_\s]?user\s+['"]?)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
   },
   {
     name: "secret_assign",

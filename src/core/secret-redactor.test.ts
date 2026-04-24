@@ -119,6 +119,41 @@ describe("secret-redactor", () => {
     expect(redact("" as string).rulesFired).toHaveLength(0);
   });
 
+  test("v293 EXACT: masks quoted 'contraseña' + quoted 'usuario' prose", () => {
+    // Real model output: "Credenciales RPC configuradas: usuario 'curly',
+    // contraseña 'tronco' en localhost:8332."
+    const input =
+      "Credenciales RPC configuradas: usuario 'curly', contraseña 'tronco' en localhost:8332.";
+    const { redacted, rulesFired } = redact(input);
+    expect(redacted).not.toContain("curly");
+    expect(redacted).not.toContain("tronco");
+    expect(rulesFired).toContain("contrasena_prose");
+    expect(rulesFired).toContain("usuario_prose");
+  });
+
+  test("masks double-quoted password prose", () => {
+    const input = 'The password "hunter2" was set.';
+    const { redacted, rulesFired } = redact(input);
+    expect(redacted).not.toContain("hunter2");
+    expect(rulesFired).toContain("password_prose");
+  });
+
+  test("does NOT redact 'user interface' / 'usuario final' generic phrases", () => {
+    const { redacted: r1 } = redact("Redesigning the user interface for clarity.");
+    expect(r1).toContain("interface");
+    const { redacted: r2 } = redact("Este feature es para el usuario final activo.");
+    expect(r2).toContain("final");
+    const { redacted: r3 } = redact("The user manual explains this.");
+    expect(r3).toContain("manual");
+  });
+
+  test("masks 'rpcuser X' prose form (no equals)", () => {
+    const input = "Configured with rpcuser curly_admin and an rpc token.";
+    const { redacted, rulesFired } = redact(input);
+    expect(redacted).not.toContain("curly_admin");
+    expect(rulesFired).toContain("rpcuser_prose");
+  });
+
   test("masks multiple distinct secrets in one text", () => {
     const input =
       "ANTHROPIC_API_KEY=sk-ant-api03-abcd1234efgh5678ijkl9012mnop3456qrst7890uvwxyz\nrpcpassword=hunter2\nSTRIPE_SECRET=sk_live_" +
