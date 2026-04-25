@@ -1480,7 +1480,7 @@ function applyRecipe(
   const result = [...lines];
   result.splice(idx, 0, ...warningLines);
   // IMPORTANT: this is an annotation, NOT a real fix. The buggy code is
-  // unchanged; we only inserted an advisory `KCODE-AUDIT:<id>` comment.
+  // unchanged; we only inserted an advisory `audit-note:<id>` comment.
   // Callers should report this distinctly from transformed fixes so users
   // know the finding still needs manual attention.
   return { applied: true, kind: "annotated", lines: result, description: recipe.description };

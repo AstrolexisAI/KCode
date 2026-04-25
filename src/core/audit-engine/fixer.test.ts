@@ -371,14 +371,14 @@ Future<void> fetch() async {
     });
     applyFixes(r1);
     const afterFirst = readFileSync(join(tmp, "api.dart"), "utf-8");
-    const firstCount = (afterFirst.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    const firstCount = (afterFirst.match(/audit-note:dart-001-insecure-http/g) ?? []).length;
     expect(firstCount).toBe(1);
 
     // Second /fix run against the same (stale) audit result. The
     // annotation is already in the file; the guard must catch it.
     applyFixes(r1);
     const afterSecond = readFileSync(join(tmp, "api.dart"), "utf-8");
-    const secondCount = (afterSecond.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    const secondCount = (afterSecond.match(/audit-note:dart-001-insecure-http/g) ?? []).length;
     expect(secondCount).toBe(1);
 
     // Third run with a re-scan (scanner now reports the line AFTER
@@ -391,7 +391,7 @@ Future<void> fetch() async {
     });
     applyFixes(r3);
     const afterThird = readFileSync(join(tmp, "api.dart"), "utf-8");
-    const thirdCount = (afterThird.match(/KCODE-AUDIT:dart-001-insecure-http/g) ?? []).length;
+    const thirdCount = (afterThird.match(/audit-note:dart-001-insecure-http/g) ?? []).length;
     expect(thirdCount).toBe(1);
   });
 
@@ -424,7 +424,7 @@ Future<void> fetch() async {
     // still be in the file — an annotation did not rewrite it.
     const content = readFileSync(join(tmp, "api.dart"), "utf-8");
     expect(content).toContain("http://api.example.com/data");
-    // And a KCODE-AUDIT marker comment was inserted above it.
-    expect(content).toContain("KCODE-AUDIT:dart-001-insecure-http");
+    // And an audit-note marker comment was inserted above it.
+    expect(content).toContain("audit-note:dart-001-insecure-http");
   });
 });
