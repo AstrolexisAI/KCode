@@ -101,6 +101,43 @@ function parameterNames(func: AstNode): Set<string> {
  * is `spread_parameter (type, variable_declarator(identifier))` —
  * we recurse one level deeper for that case.
  */
+/**
+ * v344 audit fix — Java's tree-sitter represents fully-qualified
+ * names like `java.io.File` as `scoped_type_identifier` containing
+ * a chain of `type_identifier` children. The simple name is the
+ * LAST type_identifier descendant. Without this helper the queries
+ * only matched the unqualified form (`new File(p)`); any code that
+ * writes `new java.io.File(p)` (common in code-generation output and
+ * in IDE-imported snippets) silently passed through.
+ *
+ * For a plain `type_identifier` node we just return its text. For a
+ * `scoped_type_identifier`, we walk to the last named child until
+ * we find a leaf type_identifier.
+ */
+function simpleTypeName(node: AstNode): string {
+  if (node.type === "type_identifier") return node.text;
+  if (node.type === "scoped_type_identifier") {
+    // Walk the last named child until we hit a plain type_identifier.
+    // Bound at depth 6 to be defensive — `a.b.c.d.e.f.G` is already
+    // beyond what real codebases use.
+    let cur: AstNode | null = node;
+    for (let depth = 0; depth < 6 && cur; depth++) {
+      let last: AstNode | null = null;
+      for (let i = cur.namedChildCount - 1; i >= 0; i--) {
+        const c = cur.namedChild(i);
+        if (c) {
+          last = c;
+          break;
+        }
+      }
+      if (!last) break;
+      if (last.type === "type_identifier") return last.text;
+      cur = last;
+    }
+  }
+  return node.text;
+}
+
 function collectJavaParamName(param: AstNode, names: Set<string>): void {
   if (param.type === "formal_parameter") {
     // Walk children for the identifier (it's typically the second
@@ -141,6 +178,12 @@ function collectJavaParamName(param: AstNode, names: Set<string>): void {
 
 const JAVA_EXEC_METHODS = new Set(["exec"]);
 const JAVA_PROCESS_TYPES = new Set(["ProcessBuilder"]);
+// v344 audit fix — only types that actually have a String-path
+// constructor. BufferedReader / BufferedWriter wrap a Reader / Writer
+// (not a path); Scanner(String) treats the string as INPUT TEXT, not
+// a path. Including those produced false positives on every routine
+// io-pipeline construction. ZipFile / JarFile / PrintStream / FileChannel
+// are added — all have legitimate String-path constructors.
 const JAVA_FILE_TYPES = new Set([
   "File",
   "FileInputStream",
@@ -148,10 +191,10 @@ const JAVA_FILE_TYPES = new Set([
   "FileReader",
   "FileWriter",
   "RandomAccessFile",
-  "BufferedReader",
-  "BufferedWriter",
-  "Scanner",
   "PrintWriter",
+  "PrintStream",
+  "ZipFile",
+  "JarFile",
 ]);
 const JAVA_REFLECTION_METHODS = new Set([
   "forName",     // Class.forName
@@ -168,6 +211,9 @@ export const JAVA_AST_PATTERNS: AstPattern[] = [
      * Two shapes:
      *   x.exec(p)              method_invocation with name "exec"
      *   new ProcessBuilder(p)  object_creation_expression with type ProcessBuilder
+     * Type captures cover BOTH plain `type_identifier` AND
+     * `scoped_type_identifier` (FQN like `java.lang.ProcessBuilder`)
+     * — v344 audit fix; before this only the unqualified form fired.
      * The argument is anchored to position 0; for ProcessBuilder
      * with multiple args (`new ProcessBuilder("sh","-c", p)`) the
      * later-position parameter is the dangerous one but our anchor
@@ -182,6 +228,9 @@ export const JAVA_AST_PATTERNS: AstPattern[] = [
         (object_creation_expression
           type: (type_identifier) @type
           arguments: (argument_list . (identifier) @arg))
+        (object_creation_expression
+          type: (scoped_type_identifier) @type
+          arguments: (argument_list . (identifier) @arg))
       ]
     `,
     match(captures, _source, file): Candidate | null {
@@ -194,9 +243,11 @@ export const JAVA_AST_PATTERNS: AstPattern[] = [
       if (method && JAVA_EXEC_METHODS.has(method.node.text)) {
         trigger = method.node;
         label = `.${method.node.text}(${arg.node.text})`;
-      } else if (type && JAVA_PROCESS_TYPES.has(type.node.text)) {
+      } else if (type) {
+        const simple = simpleTypeName(type.node);
+        if (!JAVA_PROCESS_TYPES.has(simple)) return null;
         trigger = type.node;
-        label = `new ${type.node.text}(${arg.node.text})`;
+        label = `new ${simple}(${arg.node.text})`;
       } else {
         return null;
       }
@@ -233,15 +284,21 @@ export const JAVA_AST_PATTERNS: AstPattern[] = [
     severity: "high",
     languages: ["java"],
     query: `
-      (object_creation_expression
-        type: (type_identifier) @type
-        arguments: (argument_list . (identifier) @arg))
+      [
+        (object_creation_expression
+          type: (type_identifier) @type
+          arguments: (argument_list . (identifier) @arg))
+        (object_creation_expression
+          type: (scoped_type_identifier) @type
+          arguments: (argument_list . (identifier) @arg))
+      ]
     `,
     match(captures, _source, file): Candidate | null {
       const type = captures.type?.[0];
       const arg = captures.arg?.[0];
       if (!type || !arg) return null;
-      if (!JAVA_FILE_TYPES.has(type.node.text)) return null;
+      const simple = simpleTypeName(type.node);
+      if (!JAVA_FILE_TYPES.has(simple)) return null;
       const enclosing = findEnclosingFunction(type.node);
       if (!enclosing) return null;
       const params = parameterNames(enclosing);
@@ -252,8 +309,8 @@ export const JAVA_AST_PATTERNS: AstPattern[] = [
         severity: "high",
         file,
         line,
-        matched_text: `new ${type.node.text}(${arg.node.text})`,
-        context: `new ${type.node.text}(${arg.node.text})  // arg is a parameter — path traversal candidate`,
+        matched_text: `new ${simple}(${arg.node.text})`,
+        context: `new ${simple}(${arg.node.text})  // arg is a parameter — path traversal candidate`,
       };
     },
     explanation:
