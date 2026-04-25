@@ -36,6 +36,11 @@ import { HASKELL_PATTERNS } from "./patterns/haskell";
 import { ZIG_PATTERNS } from "./patterns/zig";
 import { FRAMEWORK_PATTERNS } from "./patterns/framework";
 import { UNIVERSAL_PATTERNS } from "./patterns/universal";
+// v2.10.314 expansion packs
+import { CRYPTO_PATTERNS } from "./patterns/crypto";
+import { INJECTION_PATTERNS } from "./patterns/injection";
+import { DESERIALIZE_PATTERNS } from "./patterns/deserialize";
+import { FLIGHT_SOFTWARE_PATTERNS } from "./patterns/flight-software";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -59,6 +64,10 @@ export {
   ZIG_PATTERNS,
   FRAMEWORK_PATTERNS,
   UNIVERSAL_PATTERNS,
+  CRYPTO_PATTERNS,
+  INJECTION_PATTERNS,
+  DESERIALIZE_PATTERNS,
+  FLIGHT_SOFTWARE_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -82,6 +91,10 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...ZIG_PATTERNS,
   ...FRAMEWORK_PATTERNS,
   ...UNIVERSAL_PATTERNS,
+  ...CRYPTO_PATTERNS,
+  ...INJECTION_PATTERNS,
+  ...DESERIALIZE_PATTERNS,
+  ...FLIGHT_SOFTWARE_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */
