@@ -20,7 +20,7 @@ export const codeSkills: SkillDefinition[] = [
   {
     name: "audit",
     description: "Forensic code audit — read files deeply, find real bugs with line numbers",
-    aliases: ["review", "security-audit"],
+    aliases: ["security-audit"],
     args: ["project path or specific files (optional)"],
     template: `You are now in FORENSIC AUDIT MODE. Your reputation depends on finding REAL bugs, not generating pretty reports.
 
