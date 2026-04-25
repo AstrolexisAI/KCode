@@ -120,6 +120,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const extraReasoning = count
       ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern in the same file)`
       : r.verification.reasoning;
+    // Stamp fix_support on every finding-shaped object at scan time
+    // so /review and /fix and /pr can surface it without re-resolving
+    // the fixer registry. v2.10.328 (Sprint 3).
+    const { fixSupportFor } = await import("./fixer");
     const base = {
       pattern_id: r.candidate.pattern_id,
       pattern_title: pattern?.title ?? r.candidate.pattern_id,
@@ -130,6 +134,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       context: r.candidate.context,
       verification: { ...r.verification, reasoning: extraReasoning },
       cwe: pattern?.cwe,
+      fix_support: fixSupportFor(r.candidate.pattern_id),
     };
     if (r.verification.verdict === "confirmed") {
       findings.push(base);
@@ -139,6 +144,17 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     } else {
       needsContextDetail.push(base);
     }
+  }
+
+  // Build fix_support_summary for the confirmed bucket so the report
+  // and /fix output can announce up front: "8 confirmed (3 rewrite, 2
+  // annotate, 3 manual)". v2.10.328.
+  const fixSupportSummary = { rewrite: 0, annotate: 0, manual: 0 };
+  for (const f of findings) {
+    const tier = (f as { fix_support?: "rewrite" | "annotate" | "manual" }).fix_support;
+    if (tier === "rewrite") fixSupportSummary.rewrite++;
+    else if (tier === "annotate") fixSupportSummary.annotate++;
+    else fixSupportSummary.manual++;
   }
 
   opts.onPhase?.("reporting");
@@ -156,6 +172,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     needs_context: needsContextDetail.length,
     needs_context_detail: needsContextDetail,
     coverage: scanCoverage,
+    fix_support_summary: fixSupportSummary,
     elapsed_ms: Date.now() - startTime,
   };
 

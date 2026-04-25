@@ -247,6 +247,19 @@ export async function handleAuditAction(
               `    \x1b[33mUncertain:          ${result.needs_context}\x1b[0m (verifier couldn't decide)`,
             );
           }
+          // v2.10.328 (Sprint 3): announce fix_support breakdown up
+          // front so the user knows BEFORE running /fix what fraction
+          // is actually mechanical. Avoids the previous trap of seeing
+          // "5 confirmed" then "Fixed: 1 / Annotated: 2 / Skipped: 2"
+          // and feeling /fix underdelivered — when really only 1 was
+          // ever auto-fixable.
+          const fixSupport = (result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
+            .fix_support_summary;
+          if (fixSupport && (fixSupport.rewrite + fixSupport.annotate + fixSupport.manual) > 0) {
+            reportLines.push(
+              `    Fix support:        ${fixSupport.rewrite} rewrite · ${fixSupport.annotate} annotate · ${fixSupport.manual} manual-only`,
+            );
+          }
           reportLines.push(
             `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
           );
@@ -717,23 +730,25 @@ export async function handleAuditAction(
       };
       const fixes = applyFixes(confirmedOnly);
 
-      // Three-way split: transformed (real code change), annotated
-      // (audit-note advisory comment only — finding still needs a manual
-      // fix), skipped (nothing applied). The previous UI lumped
-      // transformed and annotated together as "Applied", which lied to
-      // the user: they'd see "5 applied" and then discover every
-      // "fix" was just a TODO comment.
+      // Four-way split (v2.10.328, Sprint 3): transformed (real code
+      // change), annotated (advisory comment), manual (no fixer
+      // exists for the pattern), skipped (fixer exists but didn't
+      // apply this run — idempotent re-runs end up here). v327 and
+      // earlier conflated manual and skipped, hiding the difference
+      // between "you have to patch this by hand" and "already fixed".
       const transformed = fixes.filter((f) => f.kind === "transformed");
       const annotated = fixes.filter((f) => f.kind === "annotated");
+      const manual = fixes.filter((f) => f.kind === "manual");
       const skipped = fixes.filter((f) => f.kind === "skipped");
 
       const lines: string[] = [
         `  KCode Auto-Fixer`,
         `    Project: ${projectRoot}`,
         "",
-        `    ✅ Fixed: ${transformed.length} (real code transforms)`,
-        `    📝 Annotated: ${annotated.length} (advisory comment only — still needs manual fix)`,
-        `    ⏭  Skipped: ${skipped.length}`,
+        `    ✅ Rewritten: ${transformed.length} (real code transforms)`,
+        `    📝 Annotated: ${annotated.length} (advisory \`audit-note\` comments — buggy code unchanged)`,
+        `    ✋ Manual:    ${manual.length} (no mechanical fix — patch by hand)`,
+        `    ⏭  Skipped:   ${skipped.length} (idempotent — already fixed in a previous run)`,
         "",
       ];
 
@@ -759,8 +774,19 @@ export async function handleAuditAction(
         );
       }
 
+      if (manual.length > 0) {
+        lines.push("", "  Manual-only (these patterns have no autofixer — review by hand):");
+        for (const f of manual.slice(0, 10)) {
+          const rel = f.file.replace(projectRoot + "/", "");
+          lines.push(`    ✋ ${rel}:${f.line}  ${f.pattern_id}`);
+        }
+        if (manual.length > 10) {
+          lines.push(`    ... and ${manual.length - 10} more`);
+        }
+      }
+
       if (skipped.length > 0) {
-        lines.push("", "  Skipped (no fix strategy available):");
+        lines.push("", "  Skipped (fix already applied in a previous run, or unreachable site):");
         for (const f of skipped.slice(0, 10)) {
           const rel = f.file.replace(projectRoot + "/", "");
           lines.push(`    ⏭  ${rel}:${f.line}  ${f.description}`);
