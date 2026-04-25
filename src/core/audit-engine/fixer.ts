@@ -1392,6 +1392,13 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "php-016-ssrf-fetch": r("PHP SSRF", "Allowlist permitted hosts; block RFC1918 + loopback + metadata IPs."),
   "rb-013-ssrf-net-http": r("Ruby Net::HTTP SSRF", "Allowlist host + restrict scheme to https; block file:/// and metadata IPs."),
   "rb-014-send-file-traversal": r("Ruby send_file path traversal", W.PATH),
+
+  // ── v2.10.334 — Phase B: deeper flight-software pack ───────
+  "fsw-016-frame-length-as-offset": r("frame length as offset", "Cap header.get_lengthField() against MAX_PAYLOAD_SIZE before calling moveDeserToOffset / setBuffSize."),
+  "fsw-017-component-array-id-no-check": r("array indexed by external ID", "FW_ASSERT(id < ARRAY_SIZE) before indexing the channels/packets/ports array."),
+  "fsw-018-cmdhandler-stub-only-response": r("cmdHandler stub", "Implement the handler, or emit cmdResponse NOT_IMPLEMENTED so ground sees the gap."),
+  "fsw-019-logger-format-from-arg": r("logger format injection", "Always pass a literal format string; never let user input become the format."),
+  "fsw-020-fwtime-getseconds-no-tb-check": r("Fw::Time TimeBase mismatch", "Check getTimeBase() agreement, or use Fw::Time::sub()."),
 };
 
 function commentPrefix(path: string): string {

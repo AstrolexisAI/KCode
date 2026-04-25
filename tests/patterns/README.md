@@ -32,8 +32,8 @@ than a 4,380-line file that nobody double-checks when they edit it.
 
 ## Coverage status
 
-Current coverage: **63 patterns out of 323** in the library
-(as of v2.10.333). This is the authoritative count — not a stale
+Current coverage: **68 patterns out of 328** in the library
+(as of v2.10.334). This is the authoritative count — not a stale
 target — and it lives next to the runner so the number can't drift
 without someone editing this file.
 

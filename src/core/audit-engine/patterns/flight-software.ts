@@ -258,4 +258,112 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     fix_template:
       "Use pre-allocated buffer pools (Fw::BufferManager, cFE memory pools). Move allocation to setup().",
   },
+
+  // ── v2.10.334 — Phase B: deeper flight-software pack ──────────
+  // These patterns target the highest-impact bug shapes in
+  // fprime/cFS-class systems: framers/deframers, telemetry routing,
+  // command dispatchers, and Fw::Time arithmetic. Each is regex-
+  // tractable and has a clean mitigation idiom in the framework
+  // that the verifier checklist looks for.
+
+  {
+    id: "fsw-016-frame-length-as-offset",
+    title: "Frame length field used as buffer offset without max bound",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex:
+      /\b(?:moveDeserToOffset|deserializer\.setBuffSize|setDeserOffset|skipBytes)\s*\(\s*[^)]*\b(?:header|hdr|frame|packet|msg)\.get_?(?:length|size)\w*\s*\(\s*\)/g,
+    explanation:
+      "Frame parsers (FprimeDeframer, CcsdsTcFrameDetector) read a length field from a header that just came over the wire, then use that length to advance into the buffer. If the length isn't bounded against MAX_FRAME_SIZE before the offset move, a malicious frame with `length=0xFFFFFFFF` walks the deserializer past valid memory.",
+    verify_prompt:
+      "Trace the length value backwards. FALSE_POSITIVE if ANY:\n" +
+      "1. The header's lengthField is checked against an upper bound (`if (header.get_lengthField() > MAX) return error`) earlier in the function → FALSE_POSITIVE.\n" +
+      "2. The buffer's getSize() is compared against the implied total (header + length + trailer) before the offset use → FALSE_POSITIVE.\n" +
+      "3. The pattern is in a unit test deliberately constructing oversized frames → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the length field reaches the offset-move call without an explicit upper bound.",
+    cwe: "CWE-823",
+    fix_template:
+      "Cap the length: `if (header.get_lengthField() > MAX_PAYLOAD_SIZE) { drop frame; return; }` before any deserializer.move call.",
+  },
+
+  {
+    id: "fsw-017-component-array-id-no-check",
+    title: "Component port / channel array indexed by ID without bound check",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex:
+      /\bthis->(?:m_channels|m_packets|m_ports|m_filteredIDs|m_handlers|m_callbacks)\s*\[\s*(?:\w+(?:\.id|\.chanId|\.packetId|->id)|cmd_?\w*\.|msg_?\w*\.)/g,
+    explanation:
+      "Telemetry packetizers, command dispatchers, and event handlers maintain arrays indexed by an externally-supplied ID (channel ID, packet descriptor, opcode index). Indexing the array directly with the external value is OOB on a malformed packet — leaking adjacent memory or crashing the component.",
+    verify_prompt:
+      "Is the index value bound-checked before this access?\n" +
+      "1. FW_ASSERT(idx < ARRAY_SIZE) on the same or previous line → FALSE_POSITIVE.\n" +
+      "2. `if (idx >= this->getNum_X()) return error` upstream → FALSE_POSITIVE.\n" +
+      "3. The index is the result of a switch/case that already enumerates valid values → FALSE_POSITIVE.\n" +
+      "4. The 'external' source is actually a sibling component over an in-process port, AND the framework guarantees portNum range (e.g. autocoded port-handler dispatcher) → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when an externally-supplied ID indexes an array directly with no upstream check.",
+    cwe: "CWE-129",
+    fix_template:
+      "Check before indexing: `FW_ASSERT(id < std::size(m_channels), id);` or return an error path.",
+  },
+
+  {
+    id: "fsw-018-cmdhandler-stub-only-response",
+    title: "Ground-command handler that only emits cmdResponse (forgotten implementation)",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    regex:
+      /\b(?:\w+::)?[A-Z_]\w+_cmdHandler\s*\([^)]*\)\s*\{\s*(?:\/\/[^\n]*\n\s*)*this->cmdResponse_out\s*\([^)]+\)\s*;\s*\}/g,
+    explanation:
+      "A ground-command handler whose entire body is `cmdResponse_out(opCode, cmdSeq, OK)` is almost always a stub the developer forgot to fill in — it tells the ground station the command succeeded when nothing actually happened. Production deployments end up with silent-noop commands that operators trust.",
+    verify_prompt:
+      "Is the handler genuinely empty by design, or is the implementation missing?\n" +
+      "1. Comment immediately before the handler explicitly says it's a no-op / placeholder for an interface the deployment doesn't implement → FALSE_POSITIVE.\n" +
+      "2. The framework requires the stub to be present even when the deployment doesn't act on it (some autocoded base classes) → FALSE_POSITIVE.\n" +
+      "3. The handler is in a Stub*.cpp file used for unit-test mocking → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when a production-path handler responds OK without doing the work the command name implies.",
+    cwe: "CWE-1077",
+    fix_template:
+      "Either implement the handler, or emit `cmdResponse_out(..., NOT_IMPLEMENTED)` to make the gap visible to ground operators.",
+  },
+
+  {
+    id: "fsw-019-logger-format-from-arg",
+    title: "Fw::Logger / log_* format string from function argument (format-string injection)",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex:
+      /\b(?:Fw::Logger::log|log_\w+|CFE_EVS_SendEvent)\s*\(\s*(?:[A-Z][A-Z_]+\s*,\s*)?(?:[A-Z][A-Z_]+\s*,\s*)?(\w+)\s*[,)]/g,
+    explanation:
+      "Fw::Logger::log and CFE_EVS_SendEvent treat their first format argument as a printf-style format string. If that argument comes from a command parameter, packet field, or ground-controllable source, an attacker controls format specifiers — `%n` writes to memory, `%s` reads arbitrary pointers, `%x` leaks stack contents.",
+    verify_prompt:
+      "Is the matched argument a STRING LITERAL or a function parameter?\n" +
+      "1. The first arg is a literal `\"some format %s\"` or a `static const char*` constant → FALSE_POSITIVE.\n" +
+      "2. The first arg is a non-format argument (severity enum, event ID, return value) — this regex over-matched → FALSE_POSITIVE.\n" +
+      "3. The arg is captured from a function parameter that's documented as a format string only used internally → FALSE_POSITIVE (still flag for review).\n" +
+      "Only CONFIRMED when a format-string argument flows from external input (command arg, deserialized packet field, ground parameter) into the logger call.",
+    cwe: "CWE-134",
+    fix_template:
+      "Always pass a literal format string: `log_WARNING_HI_BadInput(\"%s\", user_value);` — never `log_WARNING_HI_BadInput(user_format, ...)`.",
+  },
+
+  {
+    id: "fsw-020-fwtime-getseconds-no-tb-check",
+    title: "Fw::Time arithmetic without checking matching TimeBase",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    regex:
+      /\b(\w+)\.getSeconds\s*\(\s*\)\s*[-+]\s*(\w+)\.getSeconds\s*\(\s*\)/g,
+    explanation:
+      "Fw::Time has a TimeBase field (TB_NONE / TB_PROC_TIME / TB_WORKSTATION_TIME / TB_DONT_CARE / mission-specific). Subtracting Time values without first checking they share a TimeBase produces meaningless results when the spacecraft transitions across boot epochs or syncs to UTC mid-mission. Subtle bug — works in unit tests, breaks in flight.",
+    verify_prompt:
+      "Is the TimeBase relationship guaranteed?\n" +
+      "1. Both Time values come from the same source within the same scope (e.g. `auto t = getTime(); ...; t.getSeconds() - t.getSeconds()`) → FALSE_POSITIVE.\n" +
+      "2. There's a `getTimeBase()` comparison or FW_ASSERT before the subtraction → FALSE_POSITIVE.\n" +
+      "3. The subtraction is on a delta computed by the framework (Fw::Time::sub() / similar) → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the two Time operands could have different TimeBases (different sources, persisted across boots, different components).",
+    cwe: "CWE-682",
+    fix_template:
+      "Check first: `if (a.getTimeBase() != b.getTimeBase()) handle_mismatch();`. Or use Fw::Time::sub() which encodes the contract explicitly.",
+  },
 ];
