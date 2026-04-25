@@ -63,6 +63,51 @@ function renderFalsePositiveSection(result: AuditResult, lines: string[]): void 
 }
 
 /**
+ * Append a per-pattern metrics section showing which patterns fired,
+ * how many hits each had, and what the verifier did with them.
+ * Helps the auditor spot patterns that fire heavily but rarely confirm
+ * (low signal-to-noise) or never fire (candidate for removal). v2.10.330.
+ *
+ * Shows the top 10 patterns by hit count, sorted desc. If only one or
+ * two patterns fired, we just list them; sorting is a no-op.
+ */
+function renderPatternMetricsSection(result: AuditResult, lines: string[]): void {
+  const metrics = result.pattern_metrics ?? {};
+  const entries = Object.entries(metrics);
+  if (entries.length === 0) return;
+
+  // Sort by hits desc, then by pattern_id for determinism.
+  entries.sort((a, b) => {
+    const diff = b[1].hits - a[1].hits;
+    return diff !== 0 ? diff : a[0].localeCompare(b[0]);
+  });
+  const top = entries.slice(0, 10);
+
+  lines.push("## Pattern hit-rate");
+  lines.push("");
+  lines.push(
+    `${entries.length} pattern${entries.length === 1 ? "" : "s"} fired during this run. ` +
+      "Top entries by hit count:",
+  );
+  lines.push("");
+  lines.push("| Pattern | Hits | Confirmed | FP | needs_context | confirmed_rate |");
+  lines.push("|---------|-----:|----------:|---:|---:|---------------:|");
+  for (const [pid, m] of top) {
+    const rate = m.confirmed_rate !== undefined
+      ? `${(m.confirmed_rate * 100).toFixed(0)}%`
+      : "—";
+    lines.push(
+      `| \`${pid}\` | ${m.hits} | ${m.confirmed} | ${m.false_positive} | ${m.needs_context} | ${rate} |`,
+    );
+  }
+  if (entries.length > top.length) {
+    lines.push("");
+    lines.push(`_…and ${entries.length - top.length} more patterns. See \`AUDIT_REPORT.json → pattern_metrics\` for the full list._`);
+  }
+  lines.push("");
+}
+
+/**
  * Append a "Needs context (undecided)" section. Same shape + cap as
  * the FP section. These are candidates the verifier couldn't
  * classify — re-running with a better model (or passing more
@@ -170,6 +215,7 @@ export function generateMarkdownReport(result: AuditResult): string {
     lines.push("");
     renderFalsePositiveSection(result, lines);
     renderNeedsContextSection(result, lines);
+    renderPatternMetricsSection(result, lines);
     return lines.join("\n");
   }
 
@@ -307,6 +353,9 @@ export function generateMarkdownReport(result: AuditResult): string {
   // And the needs_context bucket so "33 candidates / 0 confirmed /
   // 0 FP" can't hide 33 undecided results.
   renderNeedsContextSection(result, lines);
+  // Pattern hit-rate breakdown — shows which patterns fired heavily
+  // and which had high FP rates. v2.10.330.
+  renderPatternMetricsSection(result, lines);
 
   // Methodology footer
   lines.push("## Methodology");

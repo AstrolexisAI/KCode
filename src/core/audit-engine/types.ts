@@ -64,6 +64,33 @@ export type FixSupport = "rewrite" | "annotate" | "manual";
  * stress-tested yet.
  */
 export type PatternMaturity = "experimental" | "stable" | "high_precision";
+
+/**
+ * Per-pattern statistics from a single audit run. Lets the report
+ * surface which patterns fired heavily, which had a high FP rate,
+ * and which never fire (candidates for removal). Aggregated across
+ * many runs, this is the input to a pattern-quality dashboard.
+ *
+ * v2.10.330 (Sprint 5/6 of the audit-pipeline maturity roadmap).
+ */
+export interface PatternMetrics {
+  /** Total candidate matches before verification. */
+  hits: number;
+  /** Verifier said confirmed. */
+  confirmed: number;
+  /** Verifier said false_positive. */
+  false_positive: number;
+  /** Verifier said needs_context (or response didn't parse). */
+  needs_context: number;
+  /**
+   * confirmed / hits, undefined when hits === 0. A pattern with
+   * persistently low confirmed_rate across runs is a candidate for
+   * tightening or maturity downgrade.
+   */
+  confirmed_rate?: number;
+  /** false_positive / hits, undefined when hits === 0. */
+  false_positive_rate?: number;
+}
 export type Language =
   | "c" | "cpp" | "python" | "go" | "rust"
   | "javascript" | "typescript" | "swift" | "java"
@@ -314,6 +341,14 @@ export interface AuditResult {
     annotate: number;
     manual: number;
   };
+  /**
+   * Per-pattern statistics, keyed by pattern_id. Populated at scan
+   * time for every pattern that produced at least one candidate
+   * during the run. Patterns that never matched are absent (vs. with
+   * 0 hits) so consumers can distinguish "didn't fire" from "fired
+   * but everything passed". v2.10.330.
+   */
+  pattern_metrics?: Record<string, PatternMetrics>;
   exploits?: ExploitProof[];
   elapsed_ms: number;
 }
