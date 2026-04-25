@@ -1014,6 +1014,8 @@ const W = {
   REDOS: "Rewrite this regex to avoid catastrophic backtracking.",
   ERR: "Handle this error explicitly instead of ignoring it.",
   HTTPS: "Use HTTPS and enable certificate verification.",
+  OVERFLOW: "Use bounded copy primitives (strlcpy / strncpy_s) and size by destination, not source.",
+  FORMAT: "Use a literal format string; never let user input be the format argument.",
 };
 
 const PATTERN_RECIPES: Record<string, PatternRecipe> = {
@@ -1422,6 +1424,11 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "java-ast-001-runtime-exec-of-parameter": r("Runtime.exec / ProcessBuilder of parameter (command injection)", W.SHELL),
   "java-ast-002-file-construction-of-parameter": r("new File / FileInputStream of parameter (path traversal)", W.PATH),
   "java-ast-003-class-forname-of-parameter": r("Class.forName / loadClass of parameter (reflection abuse)", W.DESER),
+
+  // ── v2.10.346 — C / C++ AST ────────────────────────────────
+  "cpp-ast-001-system-of-parameter": r("system / popen / exec* of parameter (command injection)", W.SHELL),
+  "cpp-ast-002-strcpy-of-parameter": r("strcpy / strcat / sprintf of parameter (buffer overflow)", W.OVERFLOW),
+  "cpp-ast-003-printf-format-of-parameter": r("printf format string from parameter (format-string vulnerability)", W.FORMAT),
 };
 
 function commentPrefix(path: string): string {
