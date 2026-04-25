@@ -64,11 +64,30 @@ export async function handleGitAction(
             lines.push(`    ✅ Committed: ${result.commitHash}`);
           }
           if (result.pushError) {
+            // Detect upstream repo so the manual-fallback hints don't
+            // hardcode the wrong project. Falls back to placeholders
+            // when detection fails.
+            let upstream = "OWNER/REPO";
+            try {
+              const { execSync } = await import("node:child_process");
+              const url = execSync("git remote get-url origin", {
+                cwd: projectRoot,
+                encoding: "utf-8",
+                timeout: 5000,
+              }).trim();
+              const m = url.match(/github\.com[:/]([^/]+\/[^/.]+)/);
+              if (m) upstream = m[1]!.replace(/\.git$/, "");
+            } catch {
+              /* keep placeholder */
+            }
+            const repoName = upstream.split("/")[1] ?? "REPO";
+
             lines.push(`    ⚠️  Push failed: ${result.pushError}`);
-            lines.push(`    Branch ready locally. To submit as fork PR:`);
-            lines.push(`      cd ${pathToken} && git remote add fork https://github.com/YOUR_USER/IDF.git`);
-            lines.push(`      git push -u fork ${result.branchName}`);
-            lines.push(`      gh pr create --repo nasa/IDF --head YOUR_USER:${result.branchName}`);
+            lines.push(`    Re-running /pr ${pathToken} will resume from this branch.`);
+            lines.push(`    Or push + open the PR manually:`);
+            lines.push(`      ! cd ${pathToken} && git push -u fork ${result.branchName} --force`);
+            lines.push(`      ! cd ${pathToken} && gh pr create --repo ${upstream} --head YOUR_USER:${result.branchName}`);
+            lines.push(`    (Replace YOUR_USER with your GitHub username; ${repoName} fork must already exist.)`);
           } else if (result.prUrl) {
             lines.push(`    ✅ PR created: ${result.prUrl}`);
           }
