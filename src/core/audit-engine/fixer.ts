@@ -1399,6 +1399,9 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "fsw-018-cmdhandler-stub-only-response": r("cmdHandler stub", "Implement the handler, or emit cmdResponse NOT_IMPLEMENTED so ground sees the gap."),
   "fsw-019-logger-format-from-arg": r("logger format injection", "Always pass a literal format string; never let user input become the format."),
   "fsw-020-fwtime-getseconds-no-tb-check": r("Fw::Time TimeBase mismatch", "Check getTimeBase() agreement, or use Fw::Time::sub()."),
+
+  // ── v2.10.336 — AST-based patterns ─────────────────────────
+  "py-ast-001-eval-of-parameter": r("eval() of function parameter (AST taint)", W.EVAL),
 };
 
 function commentPrefix(path: string): string {
