@@ -1417,6 +1417,11 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "py-ast-002-deserialization-of-parameter": r("pickle/yaml/marshal/dill .loads of parameter (RCE via deserialization)", W.DESER),
   "py-ast-003-subprocess-of-parameter": r("subprocess / os.system / os.exec of parameter (command injection)", W.SHELL),
   "py-ast-004-open-of-parameter": r("open() of parameter (path traversal)", W.PATH),
+
+  // ── v2.10.344 — Java AST ───────────────────────────────────
+  "java-ast-001-runtime-exec-of-parameter": r("Runtime.exec / ProcessBuilder of parameter (command injection)", W.SHELL),
+  "java-ast-002-file-construction-of-parameter": r("new File / FileInputStream of parameter (path traversal)", W.PATH),
+  "java-ast-003-class-forname-of-parameter": r("Class.forName / loadClass of parameter (reflection abuse)", W.DESER),
 };
 
 function commentPrefix(path: string): string {
