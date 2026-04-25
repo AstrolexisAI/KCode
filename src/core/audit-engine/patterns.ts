@@ -16,6 +16,24 @@
 // their explanation/verify_prompt text.
 
 import type { BugPattern } from "./types";
+import type { AstPattern } from "./ast/types";
+// v2.10.351 — AST pattern aggregator. The verifier looks up
+// patterns by id via getPatternById(); without registering AST
+// patterns here, every AST candidate ended up in needs_context with
+// "Unknown pattern id". The fix: extend getPatternById to also
+// search the AST-pattern registry. AstPattern carries the same
+// title / severity / explanation / verify_prompt fields the
+// verifier consumes — only the runtime shape (regex vs query+match)
+// differs.
+import { PYTHON_AST_PATTERNS } from "./ast/python-patterns";
+import { JAVASCRIPT_AST_PATTERNS } from "./ast/javascript-patterns";
+import { TYPESCRIPT_AST_PATTERNS } from "./ast/typescript-patterns";
+import { GO_AST_PATTERNS } from "./ast/go-patterns";
+import { JAVA_AST_PATTERNS } from "./ast/java-patterns";
+import { C_CPP_AST_PATTERNS } from "./ast/c-cpp-patterns";
+import { RUST_AST_PATTERNS } from "./ast/rust-patterns";
+import { RUBY_AST_PATTERNS } from "./ast/ruby-patterns";
+import { PHP_AST_PATTERNS } from "./ast/php-patterns";
 import { CPP_PATTERNS } from "./patterns/cpp";
 import { PYTHON_PATTERNS } from "./patterns/python";
 import { JS_PATTERNS } from "./patterns/js";
@@ -102,9 +120,51 @@ export function getPatternsForLanguage(lang: string): BugPattern[] {
   return ALL_PATTERNS.filter((p) => p.languages.includes(lang as never));
 }
 
-/** Look up a pattern by ID. */
-export function getPatternById(id: string): BugPattern | undefined {
-  return ALL_PATTERNS.find((p) => p.id === id);
+/** All bundled AST patterns — searched by getPatternById() so the
+ *  verifier can resolve `<lang>-ast-NNN-*` ids the same way it
+ *  resolves regex pattern ids. v2.10.351. */
+const ALL_AST_PATTERNS: AstPattern[] = [
+  ...PYTHON_AST_PATTERNS,
+  ...JAVASCRIPT_AST_PATTERNS,
+  ...TYPESCRIPT_AST_PATTERNS,
+  ...GO_AST_PATTERNS,
+  ...JAVA_AST_PATTERNS,
+  ...C_CPP_AST_PATTERNS,
+  ...RUST_AST_PATTERNS,
+  ...RUBY_AST_PATTERNS,
+  ...PHP_AST_PATTERNS,
+];
+
+/**
+ * The fields verifier.ts consumes from a pattern. BugPattern AND
+ * AstPattern both satisfy this — same id/title/severity/explanation/
+ * verify_prompt naming. Returning a structural subset keeps the
+ * return type honest about which fields callers can rely on across
+ * regex and AST patterns. v2.10.351.
+ */
+export type LookupPattern = Pick<
+  BugPattern,
+  "id" | "title" | "severity" | "explanation" | "verify_prompt" | "cwe" | "fix_template" | "languages"
+>;
+
+/** Look up a pattern by ID — searches both regex and AST registries. */
+export function getPatternById(id: string): LookupPattern | undefined {
+  const regex = ALL_PATTERNS.find((p) => p.id === id);
+  if (regex) return regex;
+  const ast = ALL_AST_PATTERNS.find((p) => p.id === id);
+  if (ast) {
+    return {
+      id: ast.id,
+      title: ast.title,
+      severity: ast.severity,
+      explanation: ast.explanation,
+      verify_prompt: ast.verify_prompt,
+      cwe: ast.cwe,
+      fix_template: ast.fix_template,
+      languages: ast.languages,
+    };
+  }
+  return undefined;
 }
 
 /** All patterns across all languages. */

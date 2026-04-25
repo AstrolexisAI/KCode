@@ -30,6 +30,32 @@ describe("pattern library", () => {
     expect(getPatternById("cpp-002-unreachable-after-return")).toBeDefined();
     expect(getPatternById("nonexistent")).toBeUndefined();
   });
+
+  test("getPatternById finds AST patterns (v2.10.351 verifier fix)", () => {
+    // Without the AST lookup, the verifier sent every AST candidate
+    // to needs_context with 'Unknown pattern id'. Pin the lookup
+    // across at least one pattern from each AST registry.
+    const astIds = [
+      "py-ast-001-eval-of-parameter",
+      "py-ast-004-open-of-parameter",
+      "js-ast-001-eval-of-parameter",
+      "ts-ast-001-prototype-pollution-of-parameter",
+      "go-ast-001-exec-command-of-parameter",
+      "java-ast-001-runtime-exec-of-parameter",
+      "cpp-ast-001-system-of-parameter",
+      "cpp-ast-002-strcpy-of-parameter",
+      "rust-ast-001-command-new-of-parameter",
+      "rb-ast-001-eval-of-parameter",
+      "php-ast-001-eval-of-parameter",
+    ];
+    for (const id of astIds) {
+      const p = getPatternById(id);
+      expect(p).toBeDefined();
+      expect(p!.id).toBe(id);
+      expect(p!.verify_prompt.length).toBeGreaterThan(20);
+      expect(p!.title.length).toBeGreaterThan(5);
+    }
+  });
 });
 
 describe("scanner", () => {
