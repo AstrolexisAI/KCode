@@ -301,6 +301,156 @@ export async function handleAuditAction(
       return `  ◆ Scanning ${projectRoot.split("/").pop()}/ in background...`;
     }
 
+    case "review": {
+      // /review fprime/                — list confirmed findings with indices
+      // /review fprime/ keep 1,3,5     — mark only those findings confirmed; demote rest to FP
+      // /review fprime/ drop 2,4       — demote those findings to FP; keep rest
+      // /review fprime/ all            — keep everything as-is (no-op)
+      // /review fprime/ none           — demote ALL to FP (cancel pre-/fix)
+      //
+      // Replaces the previous "manually edit AUDIT_REPORT.json with python"
+      // workflow that broke the autonomous-flow promise. Issue #111 v322.
+      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      const pathToken = tokens.shift() ?? ".";
+      const cmd = (tokens.shift() ?? "").toLowerCase();
+      const indicesArg = tokens.join(" ").replace(/\s/g, "");
+
+      const { resolve: resolvePath } = await import("node:path");
+      const { existsSync, readFileSync: readFs, writeFileSync: writeFs } =
+        await import("node:fs");
+      const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
+      const jsonPath = resolvePath(projectRoot, "AUDIT_REPORT.json");
+
+      if (!existsSync(jsonPath)) {
+        return (
+          `  No AUDIT_REPORT.json in ${pathToken}/\n` +
+          `  Run /scan ${pathToken} first.`
+        );
+      }
+
+      const audit = JSON.parse(readFs(jsonPath, "utf-8")) as {
+        findings: Array<{
+          pattern_id: string;
+          pattern_title: string;
+          severity: string;
+          file: string;
+          line: number;
+          verification: { reasoning: string; verdict: string };
+        }>;
+        false_positives: number;
+        false_positives_detail?: typeof audit.findings;
+        confirmed_findings: number;
+      };
+
+      // No subcommand → print the list with indices.
+      if (!cmd) {
+        if (audit.findings.length === 0) {
+          return (
+            `  ${pathToken}/AUDIT_REPORT.json has 0 confirmed findings.\n` +
+            `  Run /scan ${pathToken} first or check the FP details in the JSON.`
+          );
+        }
+        const lines: string[] = [
+          `  KCode Review`,
+          `    Project: ${projectRoot}`,
+          `    ${audit.findings.length} confirmed finding(s) — review each before /fix:`,
+          "",
+        ];
+        for (let i = 0; i < audit.findings.length; i++) {
+          const f = audit.findings[i]!;
+          const rel = f.file.replace(projectRoot + "/", "");
+          const icon =
+            f.severity === "critical" ? "🔴" :
+            f.severity === "high" ? "🟠" :
+            f.severity === "medium" ? "🟡" : "🟢";
+          lines.push(`    ${i + 1}. ${icon} [${f.severity.toUpperCase()}] ${f.pattern_id}`);
+          lines.push(`       ${rel}:${f.line}`);
+          lines.push(`       ${f.verification.reasoning.slice(0, 220)}`);
+          lines.push("");
+        }
+        lines.push("  Decide which to keep, then run ONE of:");
+        lines.push(`    /review ${pathToken} keep 1,3   — keep only those, drop the rest as FP`);
+        lines.push(`    /review ${pathToken} drop 2,4   — drop those as FP, keep the rest`);
+        lines.push(`    /review ${pathToken} none       — mark all as FP (cancel before /fix)`);
+        lines.push(`    /review ${pathToken} all        — keep all as-is`);
+        return lines.join("\n");
+      }
+
+      if (cmd === "all") {
+        return `  No changes — all ${audit.findings.length} finding(s) remain confirmed.`;
+      }
+
+      // Parse indices for keep/drop/none.
+      const allIndices = new Set(audit.findings.map((_, i) => i + 1));
+      let keepSet: Set<number>;
+      if (cmd === "none") {
+        keepSet = new Set();
+      } else if (cmd === "keep" || cmd === "drop") {
+        const parsed = indicesArg
+          .split(",")
+          .map((s) => Number.parseInt(s, 10))
+          .filter((n) => Number.isFinite(n) && n >= 1 && n <= audit.findings.length);
+        if (parsed.length === 0) {
+          return (
+            `  No valid indices in "${indicesArg}".\n` +
+            `  Indices must be between 1 and ${audit.findings.length}.\n` +
+            `  Example: /review ${pathToken} keep 1,3`
+          );
+        }
+        keepSet = cmd === "keep"
+          ? new Set(parsed)
+          : new Set(audit.findings.map((_, i) => i + 1).filter((i) => !parsed.includes(i)));
+      } else {
+        return (
+          `  Unknown subcommand "${cmd}". Valid: keep, drop, all, none.\n` +
+          `  Run /review ${pathToken} (no args) to see the list.`
+        );
+      }
+
+      const kept = audit.findings.filter((_, i) => keepSet.has(i + 1));
+      const dropped = audit.findings.filter((_, i) => !keepSet.has(i + 1));
+
+      // Move dropped findings to false_positives_detail with verdict downgraded.
+      const fpDetail = audit.false_positives_detail ?? [];
+      for (const d of dropped) {
+        fpDetail.push({
+          ...d,
+          verification: {
+            ...d.verification,
+            verdict: "false_positive",
+            reasoning: `[reviewed by user — demoted from confirmed] ${d.verification.reasoning}`,
+          } as typeof d.verification,
+        });
+      }
+
+      audit.findings = kept;
+      audit.confirmed_findings = kept.length;
+      audit.false_positives_detail = fpDetail;
+      audit.false_positives = (audit.false_positives ?? 0) + dropped.length;
+
+      writeFs(jsonPath, JSON.stringify(audit, null, 2));
+
+      const lines: string[] = [
+        `  KCode Review — applied`,
+        `    Project: ${projectRoot}`,
+        "",
+        `    ✅ Kept:    ${kept.length} confirmed finding(s)`,
+        `    🗑  Dropped: ${dropped.length} (moved to false_positives_detail)`,
+      ];
+      if (kept.length > 0) {
+        lines.push("");
+        lines.push("    Confirmed findings going to /fix:");
+        for (const f of kept) {
+          const rel = f.file.replace(projectRoot + "/", "");
+          lines.push(`      • ${rel}:${f.line}  [${f.pattern_id}]`);
+        }
+      }
+      lines.push("");
+      lines.push(`  Next: /fix ${pathToken}`);
+      void allIndices; // kept for future range/range-with-indices syntax
+      return lines.join("\n");
+    }
+
     case "fix": {
       const pathToken = (args ?? "").trim() || ".";
       const { resolve: resolvePath } = await import("node:path");
@@ -354,8 +504,8 @@ export async function handleAuditAction(
           `report lack a 'confirmed' verdict.\n` +
           `  Reason: the fixer is contractually limited to confirmed findings ` +
           `(see src/core/audit-engine/fixer.ts:64).\n` +
-          `  Next step: re-run /scan ${pathToken} WITHOUT --skip-verify, or edit ` +
-          `AUDIT_REPORT.json to mark specific findings as 'confirmed' manually.`
+          `  Next step: re-run /scan ${pathToken} WITHOUT --skip-verify, or run ` +
+          `/review ${pathToken} to mark specific findings as confirmed.`
         );
       }
 
@@ -373,7 +523,7 @@ export async function handleAuditAction(
       const fixes = applyFixes(confirmedOnly);
 
       // Three-way split: transformed (real code change), annotated
-      // (KCODE-AUDIT advisory comment only — finding still needs a manual
+      // (audit-note advisory comment only — finding still needs a manual
       // fix), skipped (nothing applied). The previous UI lumped
       // transformed and annotated together as "Applied", which lied to
       // the user: they'd see "5 applied" and then discover every
@@ -401,7 +551,7 @@ export async function handleAuditAction(
       }
 
       if (annotated.length > 0) {
-        lines.push("", "  Advisory annotations (KCODE-AUDIT comments added, code unchanged):");
+        lines.push("", "  Advisory annotations (audit-note comments added, code unchanged):");
         for (const f of annotated.slice(0, 10)) {
           const rel = f.file.replace(projectRoot + "/", "");
           lines.push(`    📝 ${rel}:${f.line}  ${f.pattern_id} — ${f.description}`);
@@ -410,7 +560,7 @@ export async function handleAuditAction(
           lines.push(`    ... and ${annotated.length - 10} more`);
         }
         lines.push(
-          "    (Use `grep -rn KCODE-AUDIT` to list all advisories in the project.)",
+          "    (Use `grep -rn audit-note` to list all advisories in the project.)",
         );
       }
 
