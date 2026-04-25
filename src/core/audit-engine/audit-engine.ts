@@ -154,8 +154,48 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       );
     }
   }
-  const { files, candidates: rawCandidates, coverage: scanCoverage } = scanResult;
+  const { files, coverage: scanCoverage } = scanResult;
+  let { candidates: rawCandidates } = scanResult;
   const languages = detectLanguages(files);
+
+  // Phase 1b: AST-based patterns (v2.10.336). Lazy-loads
+  // web-tree-sitter; absent dep / grammar → silent no-op so existing
+  // regex pipeline is unaffected. AST candidates merge into the same
+  // pool that goes through dedupe + verification.
+  try {
+    const { runAstPatterns } = await import("./ast/runner");
+    const { PYTHON_AST_PATTERNS } = await import("./ast/python-patterns");
+    const allAstPatterns = [...PYTHON_AST_PATTERNS];
+    if (allAstPatterns.length > 0 && files.length > 0) {
+      const { readFileSync } = await import("node:fs");
+      let astTotal = 0;
+      for (const file of files) {
+        let content: string;
+        try {
+          content = readFileSync(file, "utf-8");
+        } catch {
+          continue;
+        }
+        if (content.length > 500_000) continue;
+        const { candidates: astCandidates } = await runAstPatterns(
+          allAstPatterns,
+          file,
+          content,
+        );
+        if (astCandidates.length > 0) {
+          rawCandidates = rawCandidates.concat(astCandidates);
+          astTotal += astCandidates.length;
+        }
+      }
+      if (astTotal > 0) {
+        opts.onPhase?.("scanning", `AST patterns contributed ${astTotal} candidates`);
+      }
+    }
+  } catch (err) {
+    // AST module entirely failed to load — that's fine, regex
+    // patterns above already produced their candidates.
+    void err;
+  }
 
   // Dedupe: one verification per (pattern, file) pair. When a file has N
   // matches of the same pattern, verify the first; the finding represents
