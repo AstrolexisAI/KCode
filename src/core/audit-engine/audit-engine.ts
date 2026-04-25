@@ -176,12 +176,14 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const { GO_AST_PATTERNS } = await import("./ast/go-patterns");
     const { TYPESCRIPT_AST_PATTERNS } = await import("./ast/typescript-patterns");
     const { JAVA_AST_PATTERNS } = await import("./ast/java-patterns");
+    const { C_CPP_AST_PATTERNS } = await import("./ast/c-cpp-patterns");
     const allAstPatterns = [
       ...PYTHON_AST_PATTERNS,
       ...JAVASCRIPT_AST_PATTERNS,
       ...TYPESCRIPT_AST_PATTERNS,
       ...GO_AST_PATTERNS,
       ...JAVA_AST_PATTERNS,
+      ...C_CPP_AST_PATTERNS,
     ];
     if (allAstPatterns.length > 0 && files.length > 0) {
       const { readFileSync } = await import("node:fs");

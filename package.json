@@ -1,6 +1,6 @@
 {
   "name": "kcode",
-  "version": "2.10.345",
+  "version": "2.10.346",
   "description": "AI-powered coding assistant for the terminal - by Astrolexis",
   "author": "Astrolexis",
   "module": "src/index.ts",
@@ -73,6 +73,8 @@
     "ora": "^9.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "tree-sitter-c": "^0.24.1",
+    "tree-sitter-cpp": "^0.23.4",
     "tree-sitter-go": "0.25.0",
     "tree-sitter-java": "^0.23.5",
     "tree-sitter-javascript": "0.25.0",

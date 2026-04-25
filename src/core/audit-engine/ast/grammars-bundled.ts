@@ -22,6 +22,8 @@ import goWasm from "./grammars/tree-sitter-go.wasm" with { type: "file" };
 import typescriptWasm from "./grammars/tree-sitter-typescript.wasm" with { type: "file" };
 import tsxWasm from "./grammars/tree-sitter-tsx.wasm" with { type: "file" };
 import javaWasm from "./grammars/tree-sitter-java.wasm" with { type: "file" };
+import cWasm from "./grammars/tree-sitter-c.wasm" with { type: "file" };
+import cppWasm from "./grammars/tree-sitter-cpp.wasm" with { type: "file" };
 
 export interface BundledGrammar {
   /** tree-sitter language key (matches tsLangFor in runner.ts) */
@@ -65,6 +67,16 @@ export const BUNDLED_GRAMMARS: readonly BundledGrammar[] = [
     language: "java",
     path: javaWasm,
     filename: "tree-sitter-java.wasm",
+  },
+  {
+    language: "c",
+    path: cWasm,
+    filename: "tree-sitter-c.wasm",
+  },
+  {
+    language: "cpp",
+    path: cppWasm,
+    filename: "tree-sitter-cpp.wasm",
   },
 ];
 
