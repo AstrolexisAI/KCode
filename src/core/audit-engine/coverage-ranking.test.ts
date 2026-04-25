@@ -84,6 +84,33 @@ describe("scoreFileForAudit", () => {
     );
   });
 
+  it("penalizes build-time directories (cmake/scripts/autocoder/tools) — v313", () => {
+    const buildTimePaths = [
+      "/repo/cmake/autocoder/scripts/gen.py",
+      "/repo/scripts/setup.sh",
+      "/repo/autocoder/helpers/convert.py",
+      "/repo/tools/lint.py",
+      "/repo/ci/release.sh",
+      "/repo/.github/workflows/build.yml.py",
+    ];
+    const runtimePath = "/repo/Svc/ComQueue/ComQueueHandler.cpp";
+    for (const btp of buildTimePaths) {
+      expect(scoreFileForAudit(btp)).toBeLessThan(scoreFileForAudit(runtimePath));
+    }
+  });
+
+  it("boosts embedded/flight-software directories (Fw/Svc/Drv) — v313", () => {
+    expect(scoreFileForAudit("/fprime/Svc/ComQueue/x.cpp")).toBeGreaterThan(
+      scoreFileForAudit("/fprime/cmake/scripts/x.py"),
+    );
+    expect(scoreFileForAudit("/fprime/Fw/Com/ComPacket.cpp")).toBeGreaterThan(
+      scoreFileForAudit("/fprime/docs/guide.md"),
+    );
+    expect(scoreFileForAudit("/fprime/Drv/TcpClient/TcpClient.cpp")).toBeGreaterThan(
+      scoreFileForAudit("/fprime/third_party/cppcheck/cppcheck.cpp"),
+    );
+  });
+
   it("handles Windows-style separators", () => {
     const winSrc = scoreFileForAudit("C:\\repo\\src\\auth.c");
     const winTest = scoreFileForAudit("C:\\repo\\tests\\foo_test.c");

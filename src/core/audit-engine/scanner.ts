@@ -416,6 +416,9 @@ export function scoreFileForAudit(filePath: string): number {
     "/auth/", "/crypto/", "/security/", "/net/", "/network/",
     "/parser/", "/serialize/", "/deserialize/", "/protocol/",
     "/ipc/", "/rpc/", "/kernel/", "/driver/", "/firmware/",
+    // Embedded / flight-software layouts (fprime, NASA cFS, zephyr):
+    "/fw/", "/svc/", "/drv/", "/subsystems/", "/bsp/",
+    "/deframer/", "/framer/", "/comqueue/", "/telemetry/", "/command/",
   ];
   if (hotDirs.some((d) => p.includes(d))) score += 30;
 
@@ -430,6 +433,11 @@ export function scoreFileForAudit(filePath: string): number {
     "/samples/", "/demo/", "/demos/", "/docs/", "/doc/", "/tutorial/",
     "/tutorials/", "/benchmark/", "/benchmarks/", "/generated/",
     "/third_party/", "/vendor/", "/node_modules/", "/_generated/",
+    // Build-time / tooling — outside the runtime threat model for
+    // most flight / embedded / server projects. v313 addition after
+    // fprime scan confirmed a false-positive in cmake/autocoder.
+    "/cmake/", "/scripts/", "/autocoder/", "/ci/", "/build/",
+    "/tools/", "/.github/", "/packaging/", "/installer/",
   ];
   if (coldDirs.some((d) => p.includes(d))) score -= 40;
 
