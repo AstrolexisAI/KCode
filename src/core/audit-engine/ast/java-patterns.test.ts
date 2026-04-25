@@ -175,6 +175,54 @@ describe("java-ast-003 class-forname-of-parameter", () => {
   });
 });
 
+describe("java-ast-001/002 — fully-qualified names (v344 audit fix)", () => {
+  it("flags new java.io.File(p) — FQN ProcessBuilder shape", async () => {
+    _resetAstRunnerForTest();
+    const code = `class A { java.io.File f(String p) { return new java.io.File(p); } }\n`;
+    const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      expect(hits.length).toBe(1);
+      expect(hits[0]!.matched_text).toBe("new File(p)");
+    });
+  });
+
+  it("flags new java.lang.ProcessBuilder(p) — FQN ProcessBuilder", async () => {
+    _resetAstRunnerForTest();
+    const code = `class A { void f(String p) throws Exception { new java.lang.ProcessBuilder(p).start(); } }\n`;
+    const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      expect(hits.length).toBe(1);
+      expect(hits[0]!.matched_text).toBe("new ProcessBuilder(p)");
+    });
+  });
+
+  it("does NOT flag new BufferedReader(reader) — wraps a Reader, no String-path ctor", async () => {
+    _resetAstRunnerForTest();
+    const code = `class A { void f(java.io.Reader r) { new java.io.BufferedReader(r); } }\n`;
+    const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      expect(hits.length).toBe(0);
+    });
+  });
+
+  it("flags new ZipFile(p) and new JarFile(p) — added in v344 audit", async () => {
+    _resetAstRunnerForTest();
+    const code = `class A {
+  void a(String p) throws Exception { new java.util.zip.ZipFile(p); }
+  void b(String p) throws Exception { new java.util.jar.JarFile(p); }
+}
+`;
+    const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      expect(hits.length).toBe(2);
+    });
+  });
+});
+
 describe("java-patterns shape", () => {
   it("declares ids, severities, and CWEs", () => {
     const ids = JAVA_AST_PATTERNS.map((p) => p.id).sort();

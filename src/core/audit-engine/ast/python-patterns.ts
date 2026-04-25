@@ -196,7 +196,8 @@ export const PYTHON_AST_PATTERNS: AstPattern[] = [
       };
     },
     explanation:
-      "An unsafe deserializer (pickle / dill / marshal / yaml.load / shelve.open) invoked with bytes/text that AST analysis traces back to a function parameter. Each of these formats can construct arbitrary Python objects during deserialization — the canonical attack is a malicious payload that runs `__reduce__` to invoke os.system. Note: `yaml.safe_load` and `json.loads` are explicitly NOT in this set.",
+      "An unsafe deserializer (pickle / dill / marshal / yaml.load / shelve.open) invoked with bytes/text that AST analysis traces back to a function parameter. Each of these formats can construct arbitrary Python objects during deserialization — the canonical attack is a malicious payload that runs `__reduce__` to invoke os.system. Note: `yaml.safe_load` and `json.loads` are explicitly NOT in this set. " +
+      "Known coverage gap: aliased imports (`import pickle as p; p.loads(...)`) and from-imports (`from pickle import loads; loads(...)`) are NOT detected at the AST level — the pattern matches the literal `pickle` / `yaml` / etc. module name and doesn't track import bindings. The regex-based py-* patterns layer below catches the literal-module cases; the verifier handles the rest.",
     verify_prompt:
       "Is the deserializer reading data the caller controls?\n" +
       "1. Function is an HTTP/RPC handler, message consumer, or session/cookie loader — CONFIRMED.\n" +
@@ -267,7 +268,8 @@ export const PYTHON_AST_PATTERNS: AstPattern[] = [
       };
     },
     explanation:
-      "subprocess / os.system / os.popen / os.exec* / commands.getoutput invoked with a value AST-traced to a function parameter. os.system and os.popen always go through a shell; subprocess.run with shell=True is the same. Even shell=False forms are flagged because the parameter at position 0 typically becomes the binary path — letting an attacker run arbitrary executables.",
+      "subprocess / os.system / os.popen / os.exec* / commands.getoutput invoked with a value AST-traced to a function parameter. os.system and os.popen always go through a shell; subprocess.run with shell=True is the same. Even shell=False forms are flagged because the parameter at position 0 typically becomes the binary path — letting an attacker run arbitrary executables. " +
+      "Known coverage gaps: aliased imports (`import subprocess as sp; sp.run(...)`) and list-form first arguments (`subprocess.run([p, ...])`) are not detected at the AST level. The regex layer catches literal-module cases; AST patterns walking into list literals is a future enhancement.",
     verify_prompt:
       "Is the function exposed to external input?\n" +
       "1. HTTP/RPC handler, CLI taking command/file args, message consumer — CONFIRMED.\n" +
