@@ -111,19 +111,19 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   const findings: Finding[] = [];
   const falsePositivesDetail: FalsePositiveDetail[] = [];
   const needsContextDetail: NeedsContextDetail[] = [];
+  // v2.10.331 audit fix: hoist per-candidate imports out of the loop.
+  // Previously did `await import("./patterns")` and `await import("./fixer")`
+  // inside every iteration; with N candidates that's 2*N module-cache
+  // lookups for no reason. Now resolved once.
+  const { getPatternById } = await import("./patterns");
+  const { fixSupportFor } = await import("./fixer");
   for (const r of verified) {
-    const pattern = await import("./patterns").then((m) =>
-      m.getPatternById(r.candidate.pattern_id),
-    );
+    const pattern = getPatternById(r.candidate.pattern_id);
     const key = `${r.candidate.pattern_id}|${r.candidate.file}`;
     const count = multiples.get(key);
     const extraReasoning = count
       ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern in the same file)`
       : r.verification.reasoning;
-    // Stamp fix_support on every finding-shaped object at scan time
-    // so /review and /fix and /pr can surface it without re-resolving
-    // the fixer registry. v2.10.328 (Sprint 3).
-    const { fixSupportFor } = await import("./fixer");
     const base = {
       pattern_id: r.candidate.pattern_id,
       pattern_title: pattern?.title ?? r.candidate.pattern_id,
@@ -165,37 +165,52 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // ("which patterns fire heavily but rarely confirm? which never
   // fire at all?"). For a single run, the report can show the top-N
   // hit patterns so the user knows where the noise / value came from.
+  // v2.10.331 audit fix: track unique_sites (verifier-call count)
+  // separately from hits (total raw matches). Rates use unique_sites
+  // as denominator so they stay coherent with the verdict counts —
+  // confirmed/false_positive/needs_context all count per-site.
   const patternMetrics: Record<
     string,
-    { hits: number; confirmed: number; false_positive: number; needs_context: number; confirmed_rate?: number; false_positive_rate?: number }
+    {
+      hits: number;
+      unique_sites: number;
+      confirmed: number;
+      false_positive: number;
+      needs_context: number;
+      confirmed_rate?: number;
+      false_positive_rate?: number;
+    }
   > = {};
   for (const r of verified) {
     const pid = r.candidate.pattern_id;
     const m = patternMetrics[pid] ??= {
       hits: 0,
+      unique_sites: 0,
       confirmed: 0,
       false_positive: 0,
       needs_context: 0,
     };
-    m.hits++;
+    m.unique_sites++;
+    m.hits++; // first match in the (pattern, file) is +1
     if (r.verification.verdict === "confirmed") m.confirmed++;
     else if (r.verification.verdict === "false_positive") m.false_positive++;
     else m.needs_context++;
   }
-  // Add raw-candidate counts (pre-dedupe) so the report can show
-  // "this pattern fired 12 times in 3 files" not just the 3 dedup'd
-  // verifications. multiples is keyed by `${pattern_id}|${file}` so
-  // we sum across files.
+  // Add raw-candidate counts (pre-dedupe) so `hits` reflects total
+  // regex matches across the run, not just the deduped verifier-call
+  // count. multiples is keyed by `${pattern_id}|${file}` and stores
+  // the total matches in that file (≥2). Each entry contributes
+  // (count - 1) extra hits beyond the one already counted above.
   for (const [key, count] of multiples) {
     const pid = key.split("|", 1)[0]!;
     const m = patternMetrics[pid];
-    if (m) m.hits += count - 1; // dedupe kept 1, multiples are the rest
+    if (m) m.hits += count - 1;
   }
-  // Compute rates last so they always reflect the final hit count.
+  // Compute rates against unique_sites (verifier denominator).
   for (const m of Object.values(patternMetrics)) {
-    if (m.hits > 0) {
-      m.confirmed_rate = m.confirmed / m.hits;
-      m.false_positive_rate = m.false_positive / m.hits;
+    if (m.unique_sites > 0) {
+      m.confirmed_rate = m.confirmed / m.unique_sites;
+      m.false_positive_rate = m.false_positive / m.unique_sites;
     }
   }
 

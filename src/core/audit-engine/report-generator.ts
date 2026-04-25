@@ -90,14 +90,20 @@ function renderPatternMetricsSection(result: AuditResult, lines: string[]): void
       "Top entries by hit count:",
   );
   lines.push("");
-  lines.push("| Pattern | Hits | Confirmed | FP | needs_context | confirmed_rate |");
-  lines.push("|---------|-----:|----------:|---:|---:|---------------:|");
+  lines.push("| Pattern | Hits | Sites | Confirmed | FP | needs_context | confirmed_rate |");
+  lines.push("|---------|-----:|------:|----------:|---:|---:|---------------:|");
   for (const [pid, m] of top) {
     const rate = m.confirmed_rate !== undefined
       ? `${(m.confirmed_rate * 100).toFixed(0)}%`
       : "—";
+    // unique_sites was added in v2.10.331 audit fix; older JSONs
+    // without the field fall back to "—" so the column stays valid.
+    const sites =
+      (m as { unique_sites?: number }).unique_sites !== undefined
+        ? String((m as { unique_sites: number }).unique_sites)
+        : "—";
     lines.push(
-      `| \`${pid}\` | ${m.hits} | ${m.confirmed} | ${m.false_positive} | ${m.needs_context} | ${rate} |`,
+      `| \`${pid}\` | ${m.hits} | ${sites} | ${m.confirmed} | ${m.false_positive} | ${m.needs_context} | ${rate} |`,
     );
   }
   if (entries.length > top.length) {
