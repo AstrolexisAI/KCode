@@ -22,7 +22,8 @@ const KNOWN_PRICING: Record<string, ModelPricing> = {
   "o4-mini": { inputPer1M: 1.1, outputPer1M: 4.4 },
   // Google
   "gemini-2.5-pro": { inputPer1M: 1.25, outputPer1M: 10.0 },
-  "gemini-2.5-flash": { inputPer1M: 0.15, outputPer1M: 0.6 },
+  "gemini-2.5-flash": { inputPer1M: 0.30, outputPer1M: 2.5 },
+  "gemini-2.5-flash-lite": { inputPer1M: 0.10, outputPer1M: 0.4 },
   // DeepSeek
   "deepseek-chat": { inputPer1M: 0.27, outputPer1M: 1.1 },
   "deepseek-reasoner": { inputPer1M: 0.55, outputPer1M: 2.19 },

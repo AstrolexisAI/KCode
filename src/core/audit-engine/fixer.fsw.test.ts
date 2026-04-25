@@ -43,14 +43,14 @@ describe("fsw-005 bespoke fixer (Fw::Buffer.getData null-check)", () => {
 `,
     );
     expect(out).toContain("FW_ASSERT(fwBuffer.getData() != nullptr)");
-    expect(out).toContain("KCODE-FIX:fsw-005");
+    expect(out).toContain("audit-fix:fsw-005");
     // The original code is preserved
     expect(out).toContain("U8* rawData = fwBuffer.getData() + 12;");
   });
 
   it("is idempotent (second run is a no-op)", async () => {
     const original = `void Hub::handler(Fw::Buffer fwBuffer) {
-    FW_ASSERT(fwBuffer.getData() != nullptr);  // KCODE-FIX:fsw-005
+    FW_ASSERT(fwBuffer.getData() != nullptr);  // audit-fix:fsw-005
     U8* rawData = fwBuffer.getData() + 12;
 }
 `;
@@ -75,7 +75,7 @@ describe("fsw-010 bespoke fixer (cmd-arg before validate)", () => {
     );
     expect(out).toContain("if (dirName.length() == 0");
     expect(out).toContain("VALIDATION_ERROR");
-    expect(out).toContain("KCODE-FIX:fsw-010");
+    expect(out).toContain("audit-fix:fsw-010");
     // Real call still present after the guard
     expect(out).toContain("Os::FileSystem::createDirectory(dirName.toChar(), true);");
     // Order: guard appears BEFORE the createDirectory call
@@ -86,7 +86,7 @@ describe("fsw-010 bespoke fixer (cmd-arg before validate)", () => {
 
   it("is idempotent — does not double-insert if guard already present", async () => {
     const original = `void Mgr::REMOVE_cmdHandler(const FwOpcodeType opCode, const U32 cmdSeq, const Fw::CmdStringArg& fileName) {
-    // KCODE-FIX:fsw-010 — reject malformed ground-command argument before any side effect.
+    // audit-fix:fsw-010 — reject malformed ground-command argument before any side effect.
     if (fileName.length() == 0 || fileName.length() >= Fw::CmdStringArg::SERIALIZED_SIZE) {
         this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::VALIDATION_ERROR);
         return;
