@@ -1429,6 +1429,10 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "cpp-ast-001-system-of-parameter": r("system / popen / exec* of parameter (command injection)", W.SHELL),
   "cpp-ast-002-strcpy-of-parameter": r("strcpy / strcat / sprintf of parameter (buffer overflow)", W.OVERFLOW),
   "cpp-ast-003-printf-format-of-parameter": r("printf format string from parameter (format-string vulnerability)", W.FORMAT),
+
+  // ── v2.10.348 — Rust AST ───────────────────────────────────
+  "rust-ast-001-command-new-of-parameter": r("Command::new(p) of parameter (command injection)", W.SHELL),
+  "rust-ast-002-fs-path-of-parameter": r("File::open / fs::read_to_string of parameter (path traversal)", W.PATH),
 };
 
 function commentPrefix(path: string): string {
