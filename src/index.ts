@@ -82,6 +82,7 @@ import {
   registerDashboardCommand,
   registerDistillCommand,
   registerDoctorCommand,
+  registerGrammarsCommand,
   registerHistoryCommand,
   registerInitCommand,
   registerLicenseCommand,
@@ -393,6 +394,7 @@ registerServerCommand(program);
 registerProCommands(program);
 registerSetupCommand(program, exitWithPause);
 registerAuditCommand(program);
+registerGrammarsCommand(program);
 registerDoctorCommand(program);
 registerTeachCommand(program);
 registerStatsCommand(program);

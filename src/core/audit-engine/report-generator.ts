@@ -119,6 +119,48 @@ function renderPatternMetricsSection(result: AuditResult, lines: string[]): void
  * classify — re-running with a better model (or passing more
  * context) may resolve them.
  */
+/**
+ * Surface AST grammar load status. Shown only when at least one
+ * language failed to load — successful loads are silent. The point is
+ * to tell the user "AST coverage is degraded for X; run `kcode
+ * grammars install` to fix it" without spamming the happy-path report.
+ *
+ * v2.10.339.
+ */
+function renderAstGrammarStatus(result: AuditResult, lines: string[]): void {
+  const status = result.ast_grammar_status ?? [];
+  if (status.length === 0) return;
+  const missing = status.filter((s) => !s.loaded);
+  if (missing.length === 0) return;
+
+  lines.push("## AST coverage");
+  lines.push("");
+  lines.push(
+    `> ⚠ AST patterns ran with degraded coverage: ${missing.length} language` +
+      `${missing.length === 1 ? "" : "s"} could not load a tree-sitter grammar. ` +
+      "Regex patterns above are unaffected; the engine just couldn't run the " +
+      "deeper taint-aware queries for these languages.",
+  );
+  lines.push("");
+  for (const s of missing) {
+    const reason = s.last_error ? ` — ${s.last_error}` : "";
+    lines.push(
+      `- \`${s.language}\`: ${s.patterns_attempted} pattern${s.patterns_attempted === 1 ? "" : "s"} skipped${reason}`,
+    );
+  }
+  lines.push("");
+  lines.push("**Fix:** install the bundled grammars into `~/.kcode/grammars/`:");
+  lines.push("");
+  lines.push("```");
+  lines.push("kcode grammars install");
+  lines.push("```");
+  lines.push("");
+  lines.push(
+    "Re-run the audit afterwards. `kcode grammars list` shows what this build ships with.",
+  );
+  lines.push("");
+}
+
 function renderNeedsContextSection(result: AuditResult, lines: string[]): void {
   const details = result.needs_context_detail ?? [];
   if (details.length === 0) return;
@@ -225,6 +267,8 @@ export function generateMarkdownReport(result: AuditResult): string {
   }
   lines.push(`- Scan duration: ${(result.elapsed_ms / 1000).toFixed(1)}s`);
   lines.push("");
+
+  renderAstGrammarStatus(result, lines);
 
   if (result.findings.length === 0) {
     lines.push("No confirmed findings. Either the code is clean for the checked patterns,");

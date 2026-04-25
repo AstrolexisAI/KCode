@@ -162,6 +162,13 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // web-tree-sitter; absent dep / grammar → silent no-op so existing
   // regex pipeline is unaffected. AST candidates merge into the same
   // pool that goes through dedupe + verification.
+  // v2.10.339: aggregate per-language grammar status so the report can
+  // surface a `kcode grammars install` hint when AST coverage is
+  // degraded for a language.
+  const astLangAgg = new Map<
+    string,
+    { patterns_attempted: number; loaded: boolean; last_error?: string }
+  >();
   try {
     const { runAstPatterns } = await import("./ast/runner");
     const { PYTHON_AST_PATTERNS } = await import("./ast/python-patterns");
@@ -177,7 +184,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
           continue;
         }
         if (content.length > 500_000) continue;
-        const { candidates: astCandidates } = await runAstPatterns(
+        const { candidates: astCandidates, stats: astStats } = await runAstPatterns(
           allAstPatterns,
           file,
           content,
@@ -185,6 +192,14 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
         if (astCandidates.length > 0) {
           rawCandidates = rawCandidates.concat(astCandidates);
           astTotal += astCandidates.length;
+        }
+        for (const s of astStats) {
+          const lang = s.language ?? "unknown";
+          const cur = astLangAgg.get(lang) ?? { patterns_attempted: 0, loaded: false };
+          cur.patterns_attempted += 1;
+          if (s.grammar_loaded) cur.loaded = true;
+          else if (s.load_error) cur.last_error = s.load_error;
+          astLangAgg.set(lang, cur);
         }
       }
       if (astTotal > 0) {
@@ -369,6 +384,18 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     },
     fix_support_summary: fixSupportSummary,
     pattern_metrics: patternMetrics,
+    ...(astLangAgg.size > 0
+      ? {
+          ast_grammar_status: Array.from(astLangAgg.entries())
+            .map(([language, v]) => ({
+              language,
+              patterns_attempted: v.patterns_attempted,
+              loaded: v.loaded,
+              ...(v.loaded ? {} : v.last_error ? { last_error: v.last_error } : {}),
+            }))
+            .sort((a, b) => a.language.localeCompare(b.language)),
+        }
+      : {}),
     elapsed_ms: Date.now() - startTime,
   };
 
