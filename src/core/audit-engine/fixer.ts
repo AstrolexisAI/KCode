@@ -40,17 +40,24 @@ function atomicWriteFileSync(targetPath: string, content: string): void {
  *
  * - `transformed`: a bespoke fixer rewrote real code to remove the bug.
  *   The file on disk is now different in a meaningful way.
- * - `annotated`: the generic recipe inserted a `KCODE-AUDIT:<id>` warning
+ * - `annotated`: the generic recipe inserted an `audit-note:<id>` warning
  *   comment above the finding. The buggy code is UNCHANGED — the comment
  *   is an advisory TODO the user still has to act on.
- * - `skipped`: neither a bespoke fixer nor an annotation was applied
- *   (line out of range, pattern no longer present, marker already there).
+ * - `manual`: the pattern has NO entry in BESPOKE_PATTERN_IDS or
+ *   PATTERN_RECIPES — there's nothing /fix can do mechanically. The user
+ *   must address it by hand. v2.10.328 split this out from `skipped` so
+ *   the UI no longer conflates "no auto-fix exists" with "marker already
+ *   present" or "line out of range".
+ * - `skipped`: a fixer/recipe DOES exist but didn't apply this run
+ *   (line out of range, pattern no longer present on the matched line,
+ *   marker already there from a previous run, etc.). Idempotent re-runs
+ *   end up here.
  *
  * `applied` is kept as a boolean for existing callers; it is true for both
  * `transformed` and `annotated`. New UI should look at `kind` instead so
  * annotations aren't reported as real fixes.
  */
-export type FixKind = "transformed" | "annotated" | "skipped";
+export type FixKind = "transformed" | "annotated" | "manual" | "skipped";
 
 export interface FixResult {
   file: string;
@@ -178,11 +185,15 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       // or a language-aware safety comment.
       const recipe = PATTERN_RECIPES[finding.pattern_id];
       if (recipe) return applyRecipe(lines, finding, recipe);
+      // v2.10.328: distinguish "manual" (no fixer exists) from
+      // "skipped" (fixer exists but didn't apply this run). The UI
+      // can then announce both honestly: "5 manual-only — patch by
+      // hand" vs "2 skipped — already fixed in a previous run".
       return {
         applied: false,
-        kind: "skipped",
+        kind: "manual",
         lines,
-        description: `No auto-fix for pattern: ${finding.pattern_id}`,
+        description: `No mechanical fix — manual patch required for ${finding.pattern_id}`,
       };
     }
   }
@@ -856,7 +867,7 @@ function fixFswBufferGetdata(lines: string[], finding: Finding): OneFixResult {
     }
   }
 
-  const assertLine = `${indent}FW_ASSERT(${bufName}.getData() != nullptr);  // KCODE-FIX:fsw-005`;
+  const assertLine = `${indent}FW_ASSERT(${bufName}.getData() != nullptr);  // audit-fix:fsw-005`;
   const result = [...lines];
   result.splice(idx, 0, assertLine);
   return {
@@ -948,7 +959,7 @@ function fixFswCmdArgBeforeValidate(lines: string[], finding: Finding): OneFixRe
   const indent = indentMatch ? indentMatch[0] : "    ";
 
   const guard = [
-    `${indent}// KCODE-FIX:fsw-010 — reject malformed ground-command argument before any side effect.`,
+    `${indent}// audit-fix:fsw-010 — reject malformed ground-command argument before any side effect.`,
     `${indent}if (${argName}.length() == 0 || ${argName}.length() >= Fw::CmdStringArg::SERIALIZED_SIZE) {`,
     `${indent}    this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::VALIDATION_ERROR);`,
     `${indent}    return;`,
@@ -970,7 +981,7 @@ function fixFswCmdArgBeforeValidate(lines: string[], finding: Finding): OneFixRe
 // Every pattern in patterns.ts must have coverage: either a bespoke
 // fixer above, or an entry in PATTERN_RECIPES below. A recipe inserts
 // a language-aware safety comment directly above the finding, tagged
-// `KCODE-AUDIT:<pattern_id>` so subsequent runs can detect and skip it.
+// `audit-note:<pattern_id>` so subsequent runs can detect and skip it.
 // This gives developers a concrete, greppable marker per finding and
 // keeps /fix from reporting "no auto-fix" for any registered pattern.
 
@@ -1394,7 +1405,7 @@ function applyRecipe(
   const line = lines[idx]!;
   const indent = line.match(/^(\s*)/)?.[1] ?? "";
   const prefix = commentPrefix(finding.file);
-  const tag = `KCODE-AUDIT:${finding.pattern_id}`;
+  const tag = `audit-note:${finding.pattern_id}`;
 
   // Skip if a previous /fix run already tagged this location.
   //
@@ -1413,8 +1424,13 @@ function applyRecipe(
   // drift of up to 3 positions from stale reports.
   const WINDOW = 3;
   let existingTag = false;
+  // Match either the new spelling-friendly `audit-note:` tag (current)
+  // or the legacy `KCODE-AUDIT:` tag (old runs) so re-runs against
+  // pre-existing annotations don't duplicate the warning.
+  const legacyTag = `KCODE-AUDIT:${finding.pattern_id}`;
   for (let i = Math.max(0, idx - WINDOW); i <= Math.min(lines.length - 1, idx + WINDOW); i++) {
-    if (lines[i]!.includes(tag)) {
+    const ln = lines[i]!;
+    if (ln.includes(tag) || ln.includes(legacyTag)) {
       existingTag = true;
       break;
     }
@@ -1465,4 +1481,26 @@ const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
 
 export function hasFixRecipe(patternId: string): boolean {
   return BESPOKE_PATTERN_IDS.has(patternId) || patternId in PATTERN_RECIPES;
+}
+
+/**
+ * Classify a pattern by what /fix can do for it:
+ *
+ *   "rewrite"  — bespoke fixer that performs a real code transform.
+ *                /fix output should announce these as fixes.
+ *   "annotate" — generic PATTERN_RECIPES entry that inserts an
+ *                advisory `audit-note:` comment. The buggy code stays
+ *                buggy. UI should NOT call this a fix.
+ *   "manual"   — pattern has neither; user must address by hand.
+ *                /fix should NOT silently skip these — the report
+ *                must surface the count up front.
+ *
+ * Drives Sprint 3 honesty: report fix_support_summary {rewrite,
+ * annotate, manual} on every audit so the user knows BEFORE running
+ * /fix what fraction is actually mechanical. v2.10.328.
+ */
+export function fixSupportFor(patternId: string): "rewrite" | "annotate" | "manual" {
+  if (BESPOKE_PATTERN_IDS.has(patternId)) return "rewrite";
+  if (patternId in PATTERN_RECIPES) return "annotate";
+  return "manual";
 }
