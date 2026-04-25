@@ -11,7 +11,12 @@ import type { AstNode, AstPattern } from "./types";
 function findEnclosingFunction(node: AstNode): AstNode | null {
   let cur: AstNode | null = node.parent;
   while (cur !== null) {
-    if (cur.type === "function_definition") return cur;
+    // v2.10.338 audit fix: also stop on lambda. `lambda x: eval(x)`
+    // is identical taint to `def f(x): eval(x)` but tree-sitter uses
+    // a different node type ("lambda") and a different parameters
+    // node ("lambda_parameters"). Without this, lambda-style code
+    // sneaks past the analysis entirely.
+    if (cur.type === "function_definition" || cur.type === "lambda") return cur;
     cur = cur.parent;
   }
   return null;
@@ -19,30 +24,65 @@ function findEnclosingFunction(node: AstNode): AstNode | null {
 
 /**
  * Walk the named children of `func` until we find the parameters
- * list, then return the set of parameter names. Tree-sitter for
- * Python: function_definition has children name + parameters + body.
+ * list, then return the set of parameter names. Handles regular
+ * function_definition (`parameters` node) and lambda (`lambda_parameters`).
+ *
+ * Recognized parameter shapes:
+ *   identifier                — `def f(x): ...`, `lambda x: ...`
+ *   typed_parameter           — `def f(x: T): ...`
+ *   default_parameter         — `def f(x = "v"): ...`
+ *   typed_default_parameter   — `def f(x: T = v): ...`
+ *   list_splat_pattern        — `def f(*args): ...`     → name = "args"
+ *   dictionary_splat_pattern  — `def f(**kw): ...`      → name = "kw"
+ *   positional_separator      — `/` divider (no name)
+ *   keyword_separator         — `*` divider (no name)
+ *
+ * For each, the parameter NAME is the first identifier child. v2.10.338
+ * audit fix expanded coverage from "identifier-only" to the full
+ * splat / typed / default set.
  */
 function parameterNames(func: AstNode): Set<string> {
   const names = new Set<string>();
   for (let i = 0; i < func.namedChildCount; i++) {
     const child = func.namedChild(i);
-    if (!child || child.type !== "parameters") continue;
+    if (!child) continue;
+    if (child.type !== "parameters" && child.type !== "lambda_parameters") {
+      continue;
+    }
     for (let j = 0; j < child.namedChildCount; j++) {
       const param = child.namedChild(j);
       if (!param) continue;
-      // Common parameter shapes: identifier, default_parameter,
-      // typed_parameter, typed_default_parameter, list_splat_pattern,
-      // dictionary_splat_pattern. Each has the name as the first
-      // identifier-child.
       if (param.type === "identifier") {
         names.add(param.text);
         continue;
       }
+      // For splat / typed / default forms, recurse to find the
+      // first identifier descendant — but bounded to direct children
+      // first (the common case) so we don't accidentally pull in
+      // type-annotation identifiers.
+      let foundName = false;
       for (let k = 0; k < param.namedChildCount; k++) {
         const sub = param.namedChild(k);
         if (sub && sub.type === "identifier") {
           names.add(sub.text);
+          foundName = true;
           break;
+        }
+      }
+      // list_splat_pattern / dictionary_splat_pattern wrap the name
+      // inside an inner identifier. If the direct-child scan didn't
+      // find one, try one level deeper.
+      if (!foundName && (param.type === "list_splat_pattern" || param.type === "dictionary_splat_pattern")) {
+        for (let k = 0; k < param.namedChildCount; k++) {
+          const sub = param.namedChild(k);
+          if (!sub) continue;
+          for (let m = 0; m < sub.namedChildCount; m++) {
+            const inner = sub.namedChild(m);
+            if (inner && inner.type === "identifier") {
+              names.add(inner.text);
+              break;
+            }
+          }
         }
       }
     }
