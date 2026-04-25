@@ -90,6 +90,14 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
     template: `__builtin_scan__`,
   },
   {
+    name: "review",
+    description:
+      "Triage findings from /scan: list, drop false positives, keep only the ones you want fixed.",
+    aliases: ["triage"],
+    args: ["project path (default: cwd) [keep|drop|none|all] [indices]"],
+    template: `__builtin_review__`,
+  },
+  {
     name: "fix",
     description: "Auto-fix findings from /scan (deterministic patches, no LLM needed)",
     aliases: ["autofix", "patch"],
