@@ -166,6 +166,10 @@ function applyOneFix(lines: string[], finding: Finding): OneFixResult {
       return fixDartSetStateAfterDispose(lines, finding);
     case "dart-007-json-null-check":
       return fixDartJsonNullCheck(lines, finding);
+    case "fsw-005-buffer-getdata-unchecked":
+      return fixFswBufferGetdata(lines, finding);
+    case "fsw-010-cmd-arg-before-validate":
+      return fixFswCmdArgBeforeValidate(lines, finding);
     default: {
       // Fall through to the generic recipe table below. Every pattern
       // registered in patterns.ts has an entry here — the bespoke fixers
@@ -816,6 +820,151 @@ function fixDartSetStateAfterDispose(lines: string[], finding: Finding): OneFixR
   };
 }
 
+// ── Flight-software bespoke fixers (v2.10.315) ───────────────
+
+/**
+ * fsw-005: insert FW_ASSERT(buf.getData() != nullptr) BEFORE the use.
+ *
+ * Strategy: find the buffer name from the matched line (the regex
+ * captures `\\w+\\.getData\\(\\)`), then emit an assert one line above
+ * with the same indentation as the use site. Idempotent: if the
+ * line above already contains `FW_ASSERT(<name>.getData()` skip.
+ */
+function fixFswBufferGetdata(lines: string[], finding: Finding): OneFixResult {
+  const idx = finding.line - 1;
+  if (idx < 0 || idx >= lines.length) {
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  }
+  const line = lines[idx]!;
+  const m = line.match(/(\b\w+)\.getData\s*\(\s*\)/);
+  if (!m) {
+    return { applied: false, kind: "skipped", lines, description: "getData() not on this line" };
+  }
+  const bufName = m[1]!;
+  const indent = (line.match(/^\s*/) ?? [""])[0];
+
+  // Idempotency: if the line above already has the assert for THIS
+  // buffer, do nothing. Walk back up to 3 lines to absorb minor drift.
+  for (let i = Math.max(0, idx - 3); i < idx; i++) {
+    if (lines[i]!.includes(`FW_ASSERT(${bufName}.getData()`)) {
+      return {
+        applied: false,
+        kind: "skipped",
+        lines,
+        description: `Assert already present for ${bufName}.getData()`,
+      };
+    }
+  }
+
+  const assertLine = `${indent}FW_ASSERT(${bufName}.getData() != nullptr);  // KCODE-FIX:fsw-005`;
+  const result = [...lines];
+  result.splice(idx, 0, assertLine);
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: `Added FW_ASSERT(${bufName}.getData() != nullptr) guard`,
+  };
+}
+
+/**
+ * fsw-010: insert input validation at the top of a *_cmdHandler that
+ * receives a Fw::CmdStringArg.
+ *
+ * Strategy:
+ *   1. From the finding line, walk forward to the opening brace `{`
+ *      of the function body.
+ *   2. Walk back to the function signature to extract the StringArg
+ *      parameter name (the regex captured group #2 was the name).
+ *   3. Insert at the top of the body:
+ *        const Fw::CmdStringArg& <name> = <name>; // marker
+ *        if (<name>.length() == 0 || <name>.length() >= Fw::CmdStringArg::SERIALIZED_SIZE) {
+ *            this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::VALIDATION_ERROR);
+ *            return;
+ *        }
+ *
+ * Idempotent: if the body already contains a length check on this
+ * variable + cmdResponse_out(VALIDATION_ERROR), skip.
+ */
+function fixFswCmdArgBeforeValidate(lines: string[], finding: Finding): OneFixResult {
+  const startIdx = finding.line - 1;
+  if (startIdx < 0 || startIdx >= lines.length) {
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  }
+
+  // Walk forward up to 12 lines to find the opening brace of the body.
+  let braceIdx = -1;
+  let signatureBlob = "";
+  for (let i = startIdx; i < Math.min(lines.length, startIdx + 12); i++) {
+    signatureBlob += lines[i] + " ";
+    if (lines[i]!.includes("{")) {
+      braceIdx = i;
+      break;
+    }
+  }
+  if (braceIdx < 0) {
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "Could not locate opening brace of cmdHandler body",
+    };
+  }
+
+  // Extract the StringArg parameter name from the signature.
+  const argMatch = signatureBlob.match(
+    /(?:const\s+Fw::CmdStringArg\s*&\s*|Fw::CmdStringArg\s+)(\w+)/,
+  );
+  if (!argMatch) {
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "No Fw::CmdStringArg parameter found in signature",
+    };
+  }
+  const argName = argMatch[1]!;
+
+  // Idempotency: if the next ~30 lines after the brace already check
+  // this argument and emit cmdResponse VALIDATION_ERROR, skip.
+  for (let i = braceIdx; i < Math.min(lines.length, braceIdx + 30); i++) {
+    const l = lines[i]!;
+    if (
+      l.includes(`${argName}.length()`) &&
+      lines.slice(i, Math.min(lines.length, i + 4)).some((x) =>
+        x.includes("VALIDATION_ERROR"),
+      )
+    ) {
+      return {
+        applied: false,
+        kind: "skipped",
+        lines,
+        description: `${argName} validation already present`,
+      };
+    }
+  }
+
+  const indentMatch = lines[braceIdx + 1]?.match(/^\s*/);
+  const indent = indentMatch ? indentMatch[0] : "    ";
+
+  const guard = [
+    `${indent}// KCODE-FIX:fsw-010 — reject malformed ground-command argument before any side effect.`,
+    `${indent}if (${argName}.length() == 0 || ${argName}.length() >= Fw::CmdStringArg::SERIALIZED_SIZE) {`,
+    `${indent}    this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::VALIDATION_ERROR);`,
+    `${indent}    return;`,
+    `${indent}}`,
+    "",
+  ];
+  const result = [...lines];
+  result.splice(braceIdx + 1, 0, ...guard);
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: `Inserted ${argName} length-check + VALIDATION_ERROR response`,
+  };
+}
+
 // ── Generic recipe table ──────────────────────────────────────
 //
 // Every pattern in patterns.ts must have coverage: either a bespoke
@@ -1309,6 +1458,9 @@ const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
   "py-013-bare-except",
   "dart-005-setstate-after-dispose",
   "dart-007-json-null-check",
+  // v2.10.315 flight-software bespoke fixers
+  "fsw-005-buffer-getdata-unchecked",
+  "fsw-010-cmd-arg-before-validate",
 ]);
 
 export function hasFixRecipe(patternId: string): boolean {
