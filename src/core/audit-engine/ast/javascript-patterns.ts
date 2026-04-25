@@ -171,15 +171,22 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
     severity: "critical",
     languages: ["javascript", "typescript"],
     /**
-     * Match a global call where the callee is a bare identifier and
-     * the first argument is a bare identifier. The match() narrows to
-     * dangerous callees and verifies the argument is a parameter of
-     * the enclosing function.
+     * Match both `Function(p)` (call_expression) and `new Function(p)`
+     * (new_expression) where the first argument is a bare identifier.
+     * `new Function(arg)` is the more common form in production JS
+     * for code-execution-from-string and was silently missed before
+     * the union — caught during the v341 audit. The match() callback
+     * narrows by callee identity and verifies parameter scope.
      */
     query: `
-      (call_expression
-        function: (identifier) @callee
-        arguments: (arguments . (identifier) @arg))
+      [
+        (call_expression
+          function: (identifier) @callee
+          arguments: (arguments . (identifier) @arg))
+        (new_expression
+          constructor: (identifier) @callee
+          arguments: (arguments . (identifier) @arg))
+      ]
     `,
     match(captures, _source, file): Candidate | null {
       const callee = captures.callee?.[0];
@@ -194,6 +201,10 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
       const params = parameterNames(enclosing);
       if (!params.has(arg.node.text)) return null;
       const line = arg.node.startPosition.row + 1;
+      // The captured node is the callee/constructor identifier; tell
+      // new_expression apart from call_expression by walking up one.
+      const isNewExpr = callee.node.parent?.type === "new_expression";
+      const prefix = isNewExpr ? "new " : "";
       const note = isCodeExec
         ? "arg is a parameter of the enclosing function"
         : "arg is a parameter — setTimeout/setInterval with a non-function first arg evaluates as code";
@@ -202,8 +213,8 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
         severity: "critical",
         file,
         line,
-        matched_text: `${fn}(${arg.node.text})`,
-        context: `${fn}(${arg.node.text})  // ${note}`,
+        matched_text: `${prefix}${fn}(${arg.node.text})`,
+        context: `${prefix}${fn}(${arg.node.text})  // ${note}`,
       };
     },
     explanation:

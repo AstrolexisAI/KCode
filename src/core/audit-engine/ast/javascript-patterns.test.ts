@@ -168,6 +168,22 @@ describe("js-ast-001 — negative cases", () => {
     });
   });
 
+  it("flags `new Function(x)` — the common code-from-string form", async () => {
+    // v341 audit fix: pre-fix this was silently missed because the
+    // query only matched call_expression. new_expression is a
+    // separate AST node type; the union now covers both.
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f(x) { return new Function(x); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      expect(r.candidates.length).toBe(1);
+      expect(r.candidates[0]!.matched_text).toBe("new Function(x)");
+    });
+  });
+
   it("flags setTimeout(x) when x is a parameter (string-form sink)", async () => {
     _resetAstRunnerForTest();
     const r = await runAstPatterns(

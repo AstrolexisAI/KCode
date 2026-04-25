@@ -104,6 +104,58 @@ function parameterNames(func: AstNode): Set<string> {
   return names;
 }
 
+/**
+ * v341 audit fix — without a type-aware filter, ts-ast-001 fires on
+ * `arr[i] = val` for every numeric array index, which is everywhere
+ * in TypeScript code. Returns true iff the named parameter of `func`
+ * carries a numeric type annotation (`number`, `bigint`). The check
+ * is purely syntactic: a programmer could lie about types, but at
+ * that point the FP is on them, not on us.
+ *
+ * Recognized numeric annotations:
+ *   :number, :bigint
+ *   :number | undefined, :number | null    (union with nullables)
+ *   :Number, :Integer                       (rare custom types — accept)
+ */
+function paramHasNumericType(func: AstNode, name: string): boolean {
+  let formalParams: AstNode | null = null;
+  for (let i = 0; i < func.namedChildCount; i++) {
+    const child = func.namedChild(i);
+    if (child && child.type === "formal_parameters") {
+      formalParams = child;
+      break;
+    }
+  }
+  if (!formalParams) return false;
+  for (let i = 0; i < formalParams.namedChildCount; i++) {
+    const param = formalParams.namedChild(i);
+    if (!param) continue;
+    if (param.type !== "required_parameter" && param.type !== "optional_parameter") {
+      continue;
+    }
+    const bind = param.namedChild(0);
+    if (!bind || bind.type !== "identifier" || bind.text !== name) continue;
+    // Find the type_annotation sibling.
+    for (let j = 1; j < param.namedChildCount; j++) {
+      const sib = param.namedChild(j);
+      if (!sib || sib.type !== "type_annotation") continue;
+      const inner = sib.namedChild(0);
+      if (!inner) return false;
+      const t = inner.text.trim();
+      // Strip trailing `| undefined` / `| null` to catch nullable
+      // numerics. We're conservative: any union containing `number`
+      // counts as numeric for FP-suppression purposes.
+      if (/^(number|bigint|Number|Integer)(\s*\|\s*(null|undefined))*$/.test(t)) {
+        return true;
+      }
+      // Reject early on anything that's clearly a string/object type;
+      // anything else falls through and the pattern fires.
+      return false;
+    }
+  }
+  return false;
+}
+
 export const TYPESCRIPT_AST_PATTERNS: AstPattern[] = [
   {
     id: "ts-ast-001-prototype-pollution-of-parameter",
@@ -135,6 +187,10 @@ export const TYPESCRIPT_AST_PATTERNS: AstPattern[] = [
       if (!enclosing) return null;
       const params = parameterNames(enclosing);
       if (!params.has(key.node.text)) return null;
+      // FP suppression — `arr[i] = val` with i:number is array
+      // indexing, not prototype pollution. v341 audit fix; without
+      // this, the pattern was hot on every TS array-write loop body.
+      if (paramHasNumericType(enclosing, key.node.text)) return null;
       const line = key.node.startPosition.row + 1;
       return {
         pattern_id: "ts-ast-001-prototype-pollution-of-parameter",
