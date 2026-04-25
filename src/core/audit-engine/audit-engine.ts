@@ -32,9 +32,69 @@ export interface AuditEngineOptions {
   maxFiles?: number;
   /** Skip verification phase (return candidates as findings without model check) */
   skipVerification?: boolean;
+  /**
+   * Diff-based audit: when set, only scan source files that git
+   * reports as changed since this ref (e.g. "main", "HEAD~10",
+   * "origin/main"). Drops the wallclock 10x+ on big repos and turns
+   * /scan into a CI pre-merge gate. v2.10.335.
+   */
+  since?: string;
   /** Progress reporting */
   onPhase?: (phase: "discovery" | "scanning" | "verifying" | "reporting", detail?: string) => void;
   onCandidate?: (candidate: Candidate, verification: Verification, index: number, total: number) => void;
+}
+
+/**
+ * Resolve the list of files git reports as changed since `ref` vs
+ * the working tree (HEAD + uncommitted). Returns absolute paths. If
+ * git fails or the ref is invalid, throws — the caller decides
+ * whether to abort the run or fall back to a full scan.
+ *
+ * v2.10.335: introduced for the --since diff-based audit mode.
+ */
+export async function listChangedFilesSinceRef(
+  projectRoot: string,
+  ref: string,
+): Promise<string[]> {
+  const { execSync } = await import("node:child_process");
+  const { resolve } = await import("node:path");
+  // Validate the ref upfront so a typo gets a clear error instead of
+  // silently scanning the whole project (the `;` chain below would
+  // otherwise swallow non-zero exits from the diff against an
+  // invalid ref).
+  try {
+    execSync(`git rev-parse --verify ${JSON.stringify(ref)}^{commit}`, {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      timeout: 10_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch (err) {
+    const e = err as { stderr?: string; message?: string };
+    throw new Error(
+      `git rev-parse failed for ref "${ref}": ${(e.stderr ?? e.message ?? "").toString().trim().slice(0, 200)}`,
+    );
+  }
+  // `<ref>...HEAD` is the symmetric range used by GitHub PRs:
+  // "files changed in HEAD that are NOT in <ref>". Combined with
+  // separate diffs against the unstaged and staged working-tree
+  // so a developer can audit work in progress.
+  const out = execSync(
+    `git diff --name-only ${JSON.stringify(ref)}...HEAD; git diff --name-only HEAD; git diff --name-only --cached`,
+    {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      timeout: 30_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  const seen = new Set<string>();
+  for (const line of out.split("\n")) {
+    const rel = line.trim();
+    if (!rel) continue;
+    seen.add(resolve(projectRoot, rel));
+  }
+  return [...seen];
 }
 
 /**
@@ -53,14 +113,48 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     opts.onPhase?.("discovery");
   }
 
-  // Phase 1: Discovery + scanning
-  const {
-    files,
-    candidates: rawCandidates,
-    coverage: scanCoverage,
-  } = scanProject(opts.projectRoot, {
+  // Phase 1: Discovery + scanning.
+  //
+  // When `opts.since` is set we run scanProject as usual to get the
+  // full file universe, then narrow to the intersection with the git
+  // diff. The narrowing happens AFTER scanProject so the report's
+  // coverage shape stays internally consistent (totalCandidateFiles
+  // = full project, scannedFiles = the diff-filtered subset).
+  let scanResult = scanProject(opts.projectRoot, {
     maxFiles: opts.maxFiles,
   });
+  let changedFilesInDiff: number | undefined;
+  if (opts.since) {
+    opts.onPhase?.("discovery", `diff filter: ${opts.since}...HEAD`);
+    try {
+      const changed = await listChangedFilesSinceRef(opts.projectRoot, opts.since);
+      changedFilesInDiff = changed.length;
+      const changedSet = new Set(changed);
+      const filteredFiles = scanResult.files.filter((f) => changedSet.has(f));
+      const filteredCandidates = scanResult.candidates.filter((c) =>
+        changedSet.has(c.file),
+      );
+      scanResult = {
+        files: filteredFiles,
+        candidates: filteredCandidates,
+        coverage: {
+          ...scanResult.coverage,
+          scannedFiles: filteredFiles.length,
+          skippedByLimit: scanResult.coverage.totalCandidateFiles - filteredFiles.length,
+          // Truncated stays driven by the cap; the diff filter is
+          // expressed via `since` / `changedFilesInDiff` instead so
+          // callers don't conflate "ran out of budget" with "deliberately
+          // narrow".
+        },
+      };
+    } catch (err) {
+      throw new Error(
+        `--since ${opts.since} failed: ${err instanceof Error ? err.message : String(err)}. ` +
+          `Make sure the ref exists in this repo (try git rev-parse ${opts.since}) and that the project root is a git checkout.`,
+      );
+    }
+  }
+  const { files, candidates: rawCandidates, coverage: scanCoverage } = scanResult;
   const languages = detectLanguages(files);
 
   // Dedupe: one verification per (pattern, file) pair. When a file has N
@@ -228,7 +322,11 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     false_positives_detail: falsePositivesDetail,
     needs_context: needsContextDetail.length,
     needs_context_detail: needsContextDetail,
-    coverage: scanCoverage,
+    coverage: {
+      ...scanCoverage,
+      ...(opts.since ? { since: opts.since } : {}),
+      ...(changedFilesInDiff !== undefined ? { changedFilesInDiff } : {}),
+    },
     fix_support_summary: fixSupportSummary,
     pattern_metrics: patternMetrics,
     elapsed_ms: Date.now() - startTime,
