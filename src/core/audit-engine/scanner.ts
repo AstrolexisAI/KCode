@@ -438,8 +438,19 @@ export function scoreFileForAudit(filePath: string): number {
     // fprime scan confirmed a false-positive in cmake/autocoder.
     "/cmake/", "/scripts/", "/autocoder/", "/ci/", "/build/",
     "/tools/", "/.github/", "/packaging/", "/installer/",
+    // Project-named test trees (FppTestProject, MyAppTests, etc.) —
+    // path tokens with `Test` or `Tests` as a subdirectory component
+    // are test infrastructure even when the parent dir doesn't match
+    // a /tests/ literal. v321 addition after fprime scan confirmed a
+    // false-positive in FppTestProject/FppTest/topology/types/.
+    "/fpptest", "/fpptestproject", "/testproject", "/testharness",
+    "/testutils", "/testtools",
   ];
   if (coldDirs.some((d) => p.includes(d))) score -= 40;
+  // Generic test-tree heuristic: any path component that ends with
+  // "test" or "tests" (case-insensitive) is treated as test infra.
+  // Catches FppTestProject, MyComponentTest, IntegrationTests, etc.
+  if (/\/[a-z][a-z0-9-]*tests?\b/i.test(p)) score -= 20;
 
   // Filenames that suggest tests / fixtures.
   const base = p.split("/").pop() ?? "";

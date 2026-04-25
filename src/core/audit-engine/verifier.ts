@@ -110,12 +110,25 @@ mitigation below. If you cannot, the verdict is FALSE_POSITIVE or NEEDS_CONTEXT.
   3. What is the EXACT chain of calls from an external input boundary
      (network, IPC, file, CLI) to this line? If you cannot trace a
      concrete path, return NEEDS_CONTEXT.
+     IMPORTANT for component-based / flight-software code:
+       * A port-input handler receiving data from a sibling component
+         in the SAME flight binary is NOT external untrusted input.
+         Inter-component IPC inside a single trusted process is part
+         of the framework's trusted boundary. Mark FALSE_POSITIVE.
+       * Only ground-command handlers (*_cmdHandler), network deframers,
+         file deserializers, and IPC from outside the binary qualify
+         as untrusted external input.
+       * Test-only code (paths containing "Test", "test", "Tests",
+         "TestProject", "TestHarness") is NOT in the runtime threat
+         model. Mark FALSE_POSITIVE.
   4. Does the language / type system already rule out the concern
      (e.g. bounded integer types, C++ references that cannot be null,
-     std::array with compile-time size)?
+     std::array with compile-time size, fixed-size struct member
+     arrays whose loop bound is the array's own length)?
 
 Only return CONFIRMED when you can name:
-  - the specific external input source (what an attacker sends)
+  - the specific external input source (what an attacker sends from
+    OUTSIDE the trusted process boundary)
   - a clear trigger path that bypasses all mitigations found in step 1
   - the concrete bad outcome (crash / read / write / infinite loop / …)
 

@@ -99,6 +99,19 @@ describe("scoreFileForAudit", () => {
     }
   });
 
+  it("penalizes project-named test trees (FppTestProject, MyAppTests) — v321", () => {
+    const testNamedPaths = [
+      "/fprime/FppTestProject/FppTest/topology/types/DataBuffer.cpp",
+      "/repo/MyComponentTest/handler.cpp",
+      "/repo/IntegrationTests/runner.cpp",
+      "/repo/TestHarness/main.cpp",
+    ];
+    const realRuntime = "/fprime/Svc/PrmDb/PrmDbImpl.cpp";
+    for (const p of testNamedPaths) {
+      expect(scoreFileForAudit(p)).toBeLessThan(scoreFileForAudit(realRuntime));
+    }
+  });
+
   it("boosts embedded/flight-software directories (Fw/Svc/Drv) — v313", () => {
     expect(scoreFileForAudit("/fprime/Svc/ComQueue/x.cpp")).toBeGreaterThan(
       scoreFileForAudit("/fprime/cmake/scripts/x.py"),
