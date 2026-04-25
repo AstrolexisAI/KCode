@@ -340,4 +340,63 @@ export const GO_PATTERNS: BugPattern[] = [
     cwe: "CWE-362",
     fix_template: "Shadow the variable: `v := v` before the go statement, or pass it as a goroutine argument.",
   },
+
+  // ── v2.10.332 — Phase A web verticals ──────────────────────────
+  {
+    id: "go-021-readall-no-limit",
+    title: "io.ReadAll / ioutil.ReadAll on a network reader without size limit",
+    severity: "high",
+    languages: ["go"],
+    regex:
+      /\b(?:io\.ReadAll|ioutil\.ReadAll)\s*\(\s*(?:resp\.Body|r\.Body|req\.Body|conn|reader|response\.Body)\b/g,
+    explanation:
+      "io.ReadAll on an HTTP body or network reader buffers the entire stream into memory. An attacker can send a multi-gigabyte body and OOM the server. Always wrap with io.LimitReader or http.MaxBytesReader.",
+    verify_prompt:
+      "Check before confirming. FALSE_POSITIVE if ANY:\n" +
+      "1. The reader is wrapped by io.LimitReader / http.MaxBytesReader on the same statement or earlier in the function → FALSE_POSITIVE.\n" +
+      "2. The body is from a trusted internal source (test fixture, stdin of a CLI tool, a file you control) → FALSE_POSITIVE.\n" +
+      "3. The handler explicitly checks Content-Length against a max before reading → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when an HTTP body or network reader is read whole without any size cap.",
+    cwe: "CWE-770",
+    fix_template:
+      "Wrap with io.LimitReader: `body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes))`. For HTTP handlers: `r.Body = http.MaxBytesReader(w, r.Body, maxBytes)`.",
+  },
+  {
+    id: "go-022-http-no-timeout",
+    title: "http.Client without Timeout (default is unlimited)",
+    severity: "medium",
+    languages: ["go"],
+    regex:
+      /\bhttp\.Client\s*\{\s*(?![\s\S]{0,400}?\bTimeout\s*:)/g,
+    explanation:
+      "Go's http.Client default Timeout is 0 (unlimited). A slow / malicious server can keep a connection open indefinitely, exhausting goroutines or starving the request. Production clients should always set a Timeout.",
+    verify_prompt:
+      "Check before confirming. FALSE_POSITIVE if ANY:\n" +
+      "1. The struct has a Timeout field set within the literal (the lookahead missed it because the field is more than 400 chars away) → FALSE_POSITIVE.\n" +
+      "2. The client uses a Transport with custom timeouts (DialContext, ResponseHeaderTimeout, IdleConnTimeout, etc.) that cover the use case → FALSE_POSITIVE.\n" +
+      "3. The client is used with a context.Context that has a deadline (Do(req.WithContext(ctx))) — that's effectively a timeout → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the client is constructed with no timeout AND no custom transport AND requests are issued without a deadline-bearing context.",
+    cwe: "CWE-400",
+    fix_template:
+      "Set Timeout on the client: `&http.Client{Timeout: 30 * time.Second}`. Or pass a deadline-bearing context: `req.WithContext(ctx)`.",
+  },
+  {
+    id: "go-023-template-html-bypass",
+    title: "html/template HTML / JS / URL bypass on user input",
+    severity: "high",
+    languages: ["go"],
+    regex:
+      /\btemplate\.(?:HTML|JS|URL|HTMLAttr|CSS|JSStr)\s*\(\s*(?!\s*"[^"]*"\s*\))(?:[^()]*?(?:input|user|request|param|query|body|argv|args)\b|[a-zA-Z_]\w*)/g,
+    explanation:
+      "html/template's safe-by-default escaping is bypassed by typed conversions like template.HTML(s), template.JS(s), template.URL(s). Wrapping user input in these types tells the template the value is already safe — but if it isn't, you have XSS.",
+    verify_prompt:
+      "Is the argument to template.HTML / template.JS / template.URL etc. a STRING LITERAL or constant, or a value derived from user input?\n" +
+      "1. String literal or compile-time constant → FALSE_POSITIVE.\n" +
+      "2. Value comes from a sanitizer (bluemonday, etc.) immediately upstream → FALSE_POSITIVE.\n" +
+      "3. Value is a path within a fixed allowlist → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the value could be user-controllable AND there's no sanitization in the visible code path.",
+    cwe: "CWE-79",
+    fix_template:
+      "Pass the value as a regular string and let html/template auto-escape it. If you genuinely need raw HTML, route the input through a sanitizer like bluemonday first.",
+  },
 ];

@@ -240,4 +240,45 @@ export const CPP_PATTERNS: BugPattern[] = [
     cwe: "CWE-606",
     fix_template: "Add `if (bound > MAX_ALLOWED) return error;` before the loop.",
   },
+
+  // ── v2.10.332 — Phase A C/C++ expansion ───────────────────────
+  {
+    id: "cpp-013-snprintf-truncation-ignored",
+    title: "snprintf return value ignored (silent truncation)",
+    severity: "medium",
+    languages: ["c", "cpp"],
+    regex:
+      /(?:^|\n)\s*snprintf\s*\(/g,
+    explanation:
+      "snprintf returns the number of bytes that WOULD have been written (excluding the null). If the return value ≥ buffer size, the output was truncated. Code that ignores the return and treats the buffer as a complete formatted string mishandles long inputs — common in log formatters, command builders, and serializers.",
+    verify_prompt:
+      "Check the surrounding context. FALSE_POSITIVE if ANY:\n" +
+      "1. The return is captured into a variable that's checked against the buffer size → FALSE_POSITIVE.\n" +
+      "2. The format string contains only fixed-width specifiers whose total can never exceed the buffer (e.g. \"%04d\" into a 16-byte buffer) → FALSE_POSITIVE.\n" +
+      "3. The buffer is later treated as untrusted and bounds-checked before use → FALSE_POSITIVE.\n" +
+      "4. This is in test code or a known-safe internal log path → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the call is `snprintf(buf, sizeof buf, fmt, %s/%d untrusted_value)` with the return value discarded AND the result is treated as a complete string downstream.",
+    cwe: "CWE-252",
+    fix_template:
+      "Capture the return value: `int n = snprintf(buf, sizeof buf, ...); if (n < 0 || (size_t)n >= sizeof buf) handle_truncation();`",
+  },
+  {
+    id: "cpp-014-fread-return-ignored",
+    title: "fread / read return value not checked before parsing",
+    severity: "high",
+    languages: ["c", "cpp"],
+    regex:
+      /(?:^|\n)\s*(?:fread|read)\s*\([^;]+\);(?![\s\S]{0,200}?\b(?:if|FW_ASSERT|assert)\s*\()/g,
+    explanation:
+      "fread/read can return fewer bytes than requested (partial read on a network socket, end-of-file on a file). Code that calls fread then immediately parses the buffer assumes a full read happened. Short reads cause garbage parsing, OOB reads on the next access, or undefined behavior on uninitialized memory.",
+    verify_prompt:
+      "Check the next ~200 chars after the call:\n" +
+      "1. Is the return captured AND compared (== expected_size, < 0, etc.)? → FALSE_POSITIVE.\n" +
+      "2. Is there an FW_ASSERT or assert that gates further use? → FALSE_POSITIVE.\n" +
+      "3. Is the read bounded by a length-prefix check upstream? → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the read result is discarded AND the buffer is parsed / dereferenced immediately afterwards.",
+    cwe: "CWE-252",
+    fix_template:
+      "Capture and check: `ssize_t n = read(fd, buf, len); if (n < (ssize_t)len) handle_short_read();`",
+  },
 ];

@@ -1376,6 +1376,14 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "fsw-013-reinterpret-cast-untrusted": r("reinterpret_cast untrusted", "Check buf.getSize() >= sizeof(T) before the cast."),
   "fsw-014-tlm-string-write-unbounded": r("unbounded log string", "Use Fw::StringBase::format with width specifier; guarantee null-termination."),
   "fsw-015-malloc-in-handler": r("heap alloc in realtime handler", "Use pre-allocated pools (BufferManager / cFE memory pools) on data-plane paths."),
+
+  // ── v2.10.332 — Phase A web/ML expansion ───────────────────
+  "py-021-torch-load-untrusted": r("torch.load untrusted", W.DESER),
+  "go-021-readall-no-limit": r("io.ReadAll no limit", "Wrap with io.LimitReader / http.MaxBytesReader to cap body size."),
+  "go-022-http-no-timeout": r("http.Client no timeout", "Set http.Client.Timeout or pass a deadline-bearing context.Context."),
+  "go-023-template-html-bypass": r("html/template safe bypass", W.XSS),
+  "cpp-013-snprintf-truncation-ignored": r("snprintf truncation ignored", W.ERR),
+  "cpp-014-fread-return-ignored": r("fread/read result ignored", W.ERR),
 };
 
 function commentPrefix(path: string): string {
