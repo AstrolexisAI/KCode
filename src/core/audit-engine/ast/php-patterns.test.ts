@@ -141,6 +141,70 @@ function b() { $path = "/etc/known"; include $path; }
   });
 });
 
+describe("php-ast — qualified-name (root namespace) coverage (v349 audit fix)", () => {
+  it("flags \\\\eval($p) with leading backslash (root-namespaced)", async () => {
+    _resetAstRunnerForTest();
+    const code = `<?php namespace App; function f($p) { \\eval($p); }`;
+    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-001-eval-of-parameter");
+      expect(hits.length).toBe(1);
+    });
+  });
+
+  it("flags \\\\system($p) — root-namespaced shell call", async () => {
+    _resetAstRunnerForTest();
+    const code = `<?php namespace App; function f($p) { \\system($p); }`;
+    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-002-shell-of-parameter");
+      expect(hits.length).toBe(1);
+    });
+  });
+
+  it("flags \\\\file_get_contents($p) — root-namespaced file call", async () => {
+    _resetAstRunnerForTest();
+    const code = `<?php namespace App; function f($p) { return \\file_get_contents($p); }`;
+    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-003-include-of-parameter");
+      expect(hits.length).toBe(1);
+    });
+  });
+});
+
+describe("php-ast — confirmed-correct edge cases (v349 audit pinning)", () => {
+  it("does NOT flag $obj->eval($p) — method call, not global function", async () => {
+    _resetAstRunnerForTest();
+    const code = `<?php class A { public function f($p) { $this->eval($p); } public function eval($x){} }`;
+    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-001-eval-of-parameter");
+      expect(hits.length).toBe(0);
+    });
+  });
+
+  it("does NOT flag closure use($var) — captured-by-use is not a parameter", async () => {
+    _resetAstRunnerForTest();
+    const code = `<?php $f = function() use ($x) { eval($x); };`;
+    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-001-eval-of-parameter");
+      expect(hits.length).toBe(0);
+    });
+  });
+
+  it("flags property-promotion parameter (PHP 8) — public string $x in __construct", async () => {
+    _resetAstRunnerForTest();
+    const code = `<?php class A { public function __construct(public string $x) { eval($x); } }`;
+    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-001-eval-of-parameter");
+      expect(hits.length).toBe(1);
+    });
+  });
+});
+
 describe("php-patterns shape", () => {
   it("declares ids, severities, and CWEs", () => {
     const ids = PHP_AST_PATTERNS.map((p) => p.id).sort();

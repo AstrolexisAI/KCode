@@ -142,12 +142,20 @@ export const PHP_AST_PATTERNS: AstPattern[] = [
     /**
      * Match `eval($x)` and `assert($x)` (string-form assert is also
      * an RCE primitive in PHP <8). The arg is anchored to position 0
-     * — eval takes one arg.
+     * — eval takes one arg. Two query branches: bare-name and
+     * qualified-name (`\eval($x)`, used to escape an enclosing
+     * namespace and call the global). v349 audit fix added the
+     * qualified-name branch.
      */
     query: `
-      (function_call_expression
-        function: (name) @callee
-        arguments: (arguments . (argument (variable_name (name) @arg))))
+      [
+        (function_call_expression
+          function: (name) @callee
+          arguments: (arguments . (argument (variable_name (name) @arg))))
+        (function_call_expression
+          function: (qualified_name (name) @callee)
+          arguments: (arguments . (argument (variable_name (name) @arg))))
+      ]
     `,
     match(captures, _source, file): Candidate | null {
       const callee = captures.callee?.[0];
@@ -187,9 +195,14 @@ export const PHP_AST_PATTERNS: AstPattern[] = [
     severity: "critical",
     languages: ["php"],
     query: `
-      (function_call_expression
-        function: (name) @callee
-        arguments: (arguments . (argument (variable_name (name) @arg))))
+      [
+        (function_call_expression
+          function: (name) @callee
+          arguments: (arguments . (argument (variable_name (name) @arg))))
+        (function_call_expression
+          function: (qualified_name (name) @callee)
+          arguments: (arguments . (argument (variable_name (name) @arg))))
+      ]
     `,
     match(captures, _source, file): Candidate | null {
       const callee = captures.callee?.[0];
@@ -240,6 +253,9 @@ export const PHP_AST_PATTERNS: AstPattern[] = [
       [
         (function_call_expression
           function: (name) @callee
+          arguments: (arguments . (argument (variable_name (name) @arg))))
+        (function_call_expression
+          function: (qualified_name (name) @callee)
           arguments: (arguments . (argument (variable_name (name) @arg))))
         (include_expression
           (variable_name (name) @arg) @incl_arg) @incl
