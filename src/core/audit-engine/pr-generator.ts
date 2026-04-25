@@ -5,7 +5,7 @@
 // each bug found, its impact, and the fix applied.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import type { AuditResult, Finding } from "./types";
 
@@ -39,6 +39,37 @@ function git(cwd: string, args: string): string {
 
 function gh(cwd: string, args: string): string {
   return execSync(`gh ${args}`, { cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+}
+
+/**
+ * Detect the repository's default integration branch.
+ *
+ * Order of preference:
+ *   1. `origin`'s configured default (`origin/HEAD` symbolic-ref) — what
+ *      `gh` and most CI tools use.
+ *   2. First match among common conventional names: main, master, devel,
+ *      develop, trunk.
+ *   3. Fallback to "main" so callers always get a string.
+ *
+ * Avoids the historic hardcode that broke `/pr` on repos using `devel`
+ * (NASA-fprime) or `master` (older projects) — it raised
+ * `fatal: ambiguous argument 'main^'`.
+ */
+function defaultBranch(cwd: string): string {
+  try {
+    const ref = git(cwd, "symbolic-ref refs/remotes/origin/HEAD");
+    const m = ref.match(/^refs\/remotes\/origin\/(.+)$/);
+    if (m) return m[1]!;
+  } catch { /* origin/HEAD not set — try fallbacks */ }
+  for (const candidate of ["main", "master", "devel", "develop", "trunk"]) {
+    try {
+      execSync(`git rev-parse --verify --quiet ${candidate}`, {
+        cwd, encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"],
+      });
+      return candidate;
+    } catch { /* not this one */ }
+  }
+  return "main";
 }
 
 /**
@@ -202,10 +233,21 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   }
 
   const changedFiles = resumeMode
-    ? Number.parseInt(
-        git(projectRoot, "rev-list --count HEAD --not main^").trim() || "0",
-        10,
-      ) || 0
+    ? (() => {
+        // Resume-mode: count commits on the fix branch that aren't on the
+        // repository's default integration branch. Use `<base>..HEAD` form
+        // (commits in HEAD not in base) instead of the brittle `--not main^`
+        // shorthand that assumed `main` exists.
+        const base = defaultBranch(projectRoot);
+        try {
+          return Number.parseInt(
+            git(projectRoot, `rev-list --count ${base}..HEAD`).trim() || "0",
+            10,
+          ) || 0;
+        } catch {
+          return 0; // base branch missing locally — show 0 rather than crash
+        }
+      })()
     : status.split("\n").filter((l) => l.trim()).length;
 
   // Get the diff summary for the LLM
@@ -255,9 +297,8 @@ Automated fixes applied by KCode Audit Engine:
 
 Signed-off-by: Astrolexis.space — Kulvex Code
 `;
-      const { writeFileSync: writeTemp, unlinkSync } = require("node:fs") as typeof import("node:fs");
       const msgFile = resolve(projectRoot, ".kcode-commit-msg");
-      writeTemp(msgFile, commitMsg);
+      writeFileSync(msgFile, commitMsg);
       try {
         commitHash = git(projectRoot, `commit -F ${msgFile}`);
         const hashMatch = commitHash.match(/\[[\w/]+ ([a-f0-9]+)\]/);
@@ -367,7 +408,7 @@ Signed-off-by: Astrolexis.space — Kulvex Code
     if (!pushError && upstreamRepo) {
       step("Creating PR...");
       const bodyFile = resolve(projectRoot, ".kcode-pr-body");
-      writeTemp(bodyFile, prDescription);
+      writeFileSync(bodyFile, prDescription);
       // Detect existing PR for this branch first — if one is already
       // open we can't create a duplicate.
       const head = pushedToFork && forkUser ? `${forkUser}:${branchName}` : branchName;
