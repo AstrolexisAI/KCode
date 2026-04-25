@@ -1,7 +1,69 @@
 // KCode - Audit Engine Types
 // Core types for the deterministic audit pipeline.
+//
+// v2.10.326 (Sprint 1 of audit-pipeline maturity roadmap) introduces
+// non-breaking extensions to the contract. Every new field is OPTIONAL
+// so existing AUDIT_REPORT.json files keep loading and emitting code
+// keeps compiling without changes. The intent is to enable richer
+// downstream features (/review v2 with promote/demote/tag, /fix with
+// honest fix_support, /pr structured-first) without forcing a
+// migration.
 
 export type Severity = "critical" | "high" | "medium" | "low";
+
+/**
+ * State assigned by a human reviewer in /review (Sprint 2).
+ *
+ *   confirmed     — the verifier said yes; reviewer agrees (default)
+ *   demoted_fp    — reviewer downgraded a confirmed finding to FP
+ *   promoted     — reviewer escalated a needs_context to confirmed
+ *   needs_context — reviewer punted; same as the verifier's verdict
+ *   ignored       — reviewer wants this excluded from /fix and /pr
+ *
+ * Persisted on Finding so the reviewer's decisions survive across
+ * reruns of /fix and /pr without re-running /scan.
+ */
+export type ReviewState =
+  | "confirmed"
+  | "demoted_fp"
+  | "promoted"
+  | "needs_context"
+  | "ignored";
+
+/**
+ * Why a reviewer made a decision in /review (Sprint 2). Used to
+ * generate richer report sections AND to feed back into pattern
+ * priority — patterns that consistently get demoted with reason
+ * "trusted_boundary" or "test_only" should drop in ranking.
+ */
+export type ReviewReason =
+  | "trusted_boundary"     // intra-process IPC, sibling component, framework guarantee
+  | "test_only"            // file is in a test/spec/fixture path
+  | "generated_code"       // autogen — fixing requires regenerating, not patching
+  | "build_time_only"      // CMake / scripts / autocoder — outside runtime threat model
+  | "placeholder_secret"   // hardcoded value is a doc / fixture / changeme
+  | "sanitized"            // input is validated upstream, verifier missed the guard
+  | "manual_confirmation"  // reviewer confirmed by inspection
+  | "other";
+
+/**
+ * Whether a pattern can be fixed mechanically, only annotated, or
+ * requires human judgment. Driven by the bespoke-fixer registry vs
+ * recipe-only PATTERN_RECIPES vs no entry. Lets /fix be honest about
+ * what it actually applied (rewrite vs annotate vs nothing) and lets
+ * the report show "X autofixable, Y annotate-only, Z manual-only"
+ * upfront instead of after running /fix.
+ */
+export type FixSupport = "rewrite" | "annotate" | "manual";
+
+/**
+ * Maturity tier of a pattern. Used in the report to surface
+ * confidence: high_precision rules have curated fixtures and a low
+ * historical false-positive rate; experimental rules are recent
+ * additions where the regex/verifier-prompt pair has not been
+ * stress-tested yet.
+ */
+export type PatternMaturity = "experimental" | "stable" | "high_precision";
 export type Language =
   | "c" | "cpp" | "python" | "go" | "rust"
   | "javascript" | "typescript" | "swift" | "java"
@@ -34,6 +96,29 @@ export interface BugPattern {
   cwe?: string;
   /** Suggested fix template (human-readable) */
   fix_template?: string;
+  /**
+   * Whether /fix can mechanically rewrite this pattern, can only
+   * annotate it with an advisory comment, or requires manual review.
+   * Inferred at scan time from the fixer registry; declaring it on
+   * the pattern itself is also allowed for explicit overrides.
+   * v2.10.326. Default behaviour when undefined: derived from fixer
+   * (BESPOKE_PATTERN_IDS → rewrite, PATTERN_RECIPES → annotate, else
+   * manual).
+   */
+  fix_support?: FixSupport;
+  /**
+   * Confidence tier. Defaults to "experimental" when undefined to
+   * keep the bar high — patterns must be promoted explicitly after
+   * fixture coverage and FP-rate review. v2.10.326.
+   */
+  maturity?: PatternMaturity;
+  /**
+   * Whether the pattern has positive + negative fixtures under
+   * tests/patterns/. Set by the test harness, not authored on the
+   * pattern. Used by the report to flag patterns that fired without
+   * fixture coverage. v2.10.326.
+   */
+  fixture_covered?: boolean;
 }
 
 /** A candidate finding — a pattern match that hasn't been verified yet. */
@@ -67,6 +152,32 @@ export interface Finding {
   context: string;
   verification: Verification;
   cwe?: string;
+  /**
+   * Reviewer-assigned state from /review. Undefined means the
+   * reviewer has not touched the finding since the last /scan.
+   * Default behaviour for /fix and /pr when undefined is to treat
+   * it as "confirmed" (i.e. proceed) — same as pre-v326. v2.10.326.
+   */
+  review_state?: ReviewState;
+  /**
+   * Reason recorded by the reviewer (only meaningful when
+   * review_state is demoted_fp / promoted / ignored). Drives the
+   * report's "why findings were rejected" section and feeds back
+   * into pattern weighting. v2.10.326.
+   */
+  review_reason?: ReviewReason;
+  /**
+   * Free-form tags assigned by the reviewer (e.g. "wontfix",
+   * "tracked-elsewhere"). Persisted as-is. v2.10.326.
+   */
+  review_tags?: string[];
+  /**
+   * Snapshot of the pattern's fix_support at scan time. Lets /fix
+   * report counts of rewrite/annotate/manual without re-resolving
+   * the registry, and lets /pr distinguish "auto-applied" from
+   * "manual review needed" in the body. v2.10.326.
+   */
+  fix_support?: FixSupport;
 }
 
 /**
@@ -87,6 +198,15 @@ export interface FalsePositiveDetail {
   context: string;
   verification: Verification;
   cwe?: string;
+  /**
+   * /review state — same semantics as on Finding. Lets a reviewer
+   * promote a false_positive back to confirmed if they suspect the
+   * verifier got it wrong, without losing the original verdict.
+   * v2.10.326.
+   */
+  review_state?: ReviewState;
+  review_reason?: ReviewReason;
+  review_tags?: string[];
 }
 
 /**
@@ -181,6 +301,19 @@ export interface AuditResult {
    * traversal order". See AuditCoverage for field semantics.
    */
   coverage: AuditCoverage;
+  /**
+   * Counts of confirmed findings by fix_support tier. Lets /fix and
+   * the report announce up front: "8 confirmed (3 rewrite, 2
+   * annotate, 3 manual)" instead of revealing it only after /fix
+   * runs. Optional for backwards compat; when missing, downstream
+   * code derives it from finding.fix_support if present, else falls
+   * back to the legacy "all confirmed" model. v2.10.326.
+   */
+  fix_support_summary?: {
+    rewrite: number;
+    annotate: number;
+    manual: number;
+  };
   exploits?: ExploitProof[];
   elapsed_ms: number;
 }
