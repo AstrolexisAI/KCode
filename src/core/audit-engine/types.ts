@@ -280,6 +280,22 @@ export interface AuditCoverage {
   maxFiles: number;
   /** Did the cap come from the user (--max-files) or the adaptive default? */
   capSource: "user" | "adaptive";
+  /**
+   * Set when the run was a diff-based audit (`--since <ref>`). Tells
+   * downstream consumers that "scanned only X of Y files" reflects a
+   * deliberate scope filter, not a coverage gap. The reference matches
+   * what was passed to the CLI/option (e.g. "main", "HEAD~10",
+   * "origin/main"). v2.10.335.
+   */
+  since?: string;
+  /**
+   * When `since` is set: the count of files git reported as changed
+   * vs the project's HEAD. Some of those files may not be source
+   * files (markdown, lockfiles) and won't appear in scannedFiles.
+   * Surfacing both lets the report distinguish "no source changes"
+   * from "no diff at all". v2.10.335.
+   */
+  changedFilesInDiff?: number;
 }
 
 /**

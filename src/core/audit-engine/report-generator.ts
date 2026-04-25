@@ -179,6 +179,17 @@ export function generateMarkdownReport(result: AuditResult): string {
     const truncLabel = cov.truncated
       ? `**yes** (${cov.skippedByLimit} file${cov.skippedByLimit === 1 ? "" : "s"} skipped by --max-files)`
       : "no";
+    // v2.10.335 — when the run was a diff-based audit, render that
+    // first so consumers don't read "10 of 1505 files" as a coverage
+    // gap instead of a deliberate scope filter.
+    const since = (cov as { since?: string }).since;
+    const changedFilesInDiff = (cov as { changedFilesInDiff?: number }).changedFilesInDiff;
+    if (since) {
+      lines.push(`- **Mode:** diff-based audit since \`${since}\``);
+      if (changedFilesInDiff !== undefined) {
+        lines.push(`- Files changed in diff: ${changedFilesInDiff}`);
+      }
+    }
     lines.push(`- Files in project: **${cov.totalCandidateFiles}**`);
     lines.push(`- Files scanned: **${cov.scannedFiles}** (${Math.round((cov.scannedFiles / Math.max(cov.totalCandidateFiles, 1)) * 100)}%)`);
     lines.push(`- Truncated: ${truncLabel}`);

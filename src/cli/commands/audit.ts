@@ -39,6 +39,11 @@ export function registerAuditCommand(program: Command): void {
     .option("--fallback-api-key <key>", "API key for fallback model")
     .option("--max-files <n>", "Max files to scan (default: unlimited)", "0")
     .option("--skip-verify", "Skip model verification (static-only output)", false)
+    .option(
+      "--since <ref>",
+      "Diff-based audit: only scan files changed since <ref> (e.g. main, HEAD~10, origin/main). " +
+        "10x+ speedup on large repos and the right default for CI pre-merge gates.",
+    )
     .option("--json", "Also write AUDIT_REPORT.json alongside the markdown", false)
     .option(
       "--sarif",
@@ -55,6 +60,7 @@ export function registerAuditCommand(program: Command): void {
       fallbackApiKey?: string;
       maxFiles: string;
       skipVerify: boolean;
+      since?: string;
       json: boolean;
       sarif: boolean;
     }) => {
@@ -136,6 +142,7 @@ export function registerAuditCommand(program: Command): void {
         fallbackCallback,
         maxFiles,
         skipVerification: opts.skipVerify,
+        since: opts.since,
         onPhase: (phase, detail) => {
           if (phase !== lastPhase) {
             console.log(`${ICONS.phase} ${phase}${detail ? `: ${detail}` : "..."}`);
