@@ -108,4 +108,41 @@ def also_evil(payload): exec(payload)
     expect(r.candidates.length).toBe(1);
     expect(r.candidates[0]!.matched_text).toBe("eval(user_input)");
   });
+
+  // v2.10.338 audit fix — these were silent gaps in v337.
+  it("flags lambda parameters: lambda x: eval(x)", async () => {
+    _resetAstRunnerForTest();
+    const code = `f = lambda x: eval(x)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/lam.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]!.matched_text).toBe("eval(x)");
+  });
+
+  it("flags *args: def f(*args): eval(args)", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(*args):\n    eval(args)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/splat.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]!.matched_text).toBe("eval(args)");
+  });
+
+  it("flags **kwargs: def f(**kw): eval(kw)", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(**kw):\n    eval(kw)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/dict-splat.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]!.matched_text).toBe("eval(kw)");
+  });
+
+  it("flags typed and default-valued parameters", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(x: str = "safe"):\n    eval(x)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/typed.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]!.matched_text).toBe("eval(x)");
+  });
 });
