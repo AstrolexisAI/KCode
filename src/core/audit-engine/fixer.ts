@@ -1433,6 +1433,14 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   // ── v2.10.348 — Rust AST ───────────────────────────────────
   "rust-ast-001-command-new-of-parameter": r("Command::new(p) of parameter (command injection)", W.SHELL),
   "rust-ast-002-fs-path-of-parameter": r("File::open / fs::read_to_string of parameter (path traversal)", W.PATH),
+
+  // ── v2.10.349 — Ruby + PHP AST ─────────────────────────────
+  "rb-ast-001-eval-of-parameter": r("eval / instance_eval / class_eval of parameter (RCE)", W.EVAL),
+  "rb-ast-002-shell-of-parameter": r("system / exec / spawn / backtick of parameter (command injection)", W.SHELL),
+  "rb-ast-003-file-open-of-parameter": r("File.open / IO.read of parameter (path traversal)", W.PATH),
+  "php-ast-001-eval-of-parameter": r("eval / assert of parameter (RCE)", W.EVAL),
+  "php-ast-002-shell-of-parameter": r("system / shell_exec / passthru of parameter (command injection)", W.SHELL),
+  "php-ast-003-include-of-parameter": r("include / require / file_get_contents of parameter (RFI/LFI/path traversal)", W.PATH),
 };
 
 function commentPrefix(path: string): string {

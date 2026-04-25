@@ -178,6 +178,8 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const { JAVA_AST_PATTERNS } = await import("./ast/java-patterns");
     const { C_CPP_AST_PATTERNS } = await import("./ast/c-cpp-patterns");
     const { RUST_AST_PATTERNS } = await import("./ast/rust-patterns");
+    const { RUBY_AST_PATTERNS } = await import("./ast/ruby-patterns");
+    const { PHP_AST_PATTERNS } = await import("./ast/php-patterns");
     const allAstPatterns = [
       ...PYTHON_AST_PATTERNS,
       ...JAVASCRIPT_AST_PATTERNS,
@@ -186,6 +188,8 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       ...JAVA_AST_PATTERNS,
       ...C_CPP_AST_PATTERNS,
       ...RUST_AST_PATTERNS,
+      ...RUBY_AST_PATTERNS,
+      ...PHP_AST_PATTERNS,
     ];
     if (allAstPatterns.length > 0 && files.length > 0) {
       const { readFileSync } = await import("node:fs");
