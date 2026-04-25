@@ -41,6 +41,47 @@ function gh(cwd: string, args: string): string {
   return execSync(`gh ${args}`, { cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
 }
 
+/**
+ * Run a git/gh command and capture both stdout and stderr. v316 made
+ * push errors generic ("Push to fork failed") because execSync's
+ * default error message is just the exit code summary; the actual
+ * remote error (e.g. "permission denied", "fork not provisioned yet")
+ * was lost. This variant returns the captured stderr so callers can
+ * surface it.
+ */
+function runCapturing(
+  bin: "git" | "gh",
+  cwd: string,
+  args: string,
+): { ok: boolean; stdout: string; stderr: string } {
+  try {
+    const out = execSync(`${bin} ${args}`, {
+      cwd,
+      encoding: "utf-8",
+      timeout: 30_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    return { ok: true, stdout: out.trim(), stderr: "" };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message?: string };
+    return {
+      ok: false,
+      stdout: (e.stdout ?? "").trim(),
+      stderr: (e.stderr ?? e.message ?? "").trim(),
+    };
+  }
+}
+
+/**
+ * Returns true when a remote+branch pair exists on the remote (i.e. the
+ * local branch was already pushed). Used to make /pr idempotent so a
+ * user can re-run after a transient push failure without losing state.
+ */
+function remoteBranchExists(cwd: string, remote: string, branch: string): boolean {
+  const r = runCapturing("git", cwd, `ls-remote --heads ${remote} ${branch}`);
+  return r.ok && r.stdout.length > 0;
+}
+
 function detectRemoteRepo(cwd: string): string | null {
   try {
     const url = git(cwd, "remote get-url origin");
@@ -124,7 +165,7 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   // Use timestamp with hour+minute for unique branch names across runs
   const now = new Date();
   const ts = now.toISOString().replace(/[T:]/g, "-").slice(0, 16); // 2026-04-06-21-45
-  const branchName = opts.branchName ?? `fix/kcode-audit-${ts}`;
+  let branchName = opts.branchName ?? `fix/kcode-audit-${ts}`;
 
   // Read the audit result
   const jsonPath = resolve(projectRoot, "AUDIT_REPORT.json");
@@ -141,13 +182,31 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
     throw new Error("No AUDIT_REPORT found. Run `/scan` first.");
   }
 
-  // Check for uncommitted changes (our fixes)
+  // Check for uncommitted changes (our fixes). Two shapes are valid:
+  //   (A) dirty tree with /fix-applied changes → normal first-run flow
+  //   (B) clean tree but currently on a fix/kcode-audit-* branch with
+  //       a recent commit → previous /pr run committed but couldn't
+  //       push, resume from push step.
   const status = git(projectRoot, "status --porcelain");
+  let resumeMode = false;
   if (!status) {
-    throw new Error("No changes to commit. Run `/fix` first to apply patches.");
+    const currentBranch = git(projectRoot, "branch --show-current");
+    if (/^fix\/kcode-audit-/.test(currentBranch)) {
+      resumeMode = true;
+      // Use the branch we're already on instead of generating a new one,
+      // so the existing commit + (maybe) existing remote ref keep working.
+      branchName = currentBranch;
+    } else {
+      throw new Error("No changes to commit. Run `/fix` first to apply patches.");
+    }
   }
 
-  const changedFiles = status.split("\n").filter((l) => l.trim()).length;
+  const changedFiles = resumeMode
+    ? Number.parseInt(
+        git(projectRoot, "rev-list --count HEAD --not main^").trim() || "0",
+        10,
+      ) || 0
+    : status.split("\n").filter((l) => l.trim()).length;
 
   // Get the diff summary for the LLM
   const diffStat = git(projectRoot, "diff --stat");
@@ -168,36 +227,44 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   const step = opts.onStep ?? (() => {});
 
   if (!dryRun) {
-    // Create branch
-    step("Creating branch...");
-    try {
-      git(projectRoot, `checkout -b ${branchName}`);
-    } catch {
-      try { git(projectRoot, `checkout ${branchName}`); } catch { /* ignore */ }
-    }
+    if (resumeMode) {
+      step("Resume mode: branch + commit already present, skipping to push...");
+      // Capture the existing HEAD as the commit hash.
+      try {
+        commitHash = git(projectRoot, "rev-parse --short HEAD");
+      } catch { /* ignore */ }
+    } else {
+      // Create branch
+      step("Creating branch...");
+      try {
+        git(projectRoot, `checkout -b ${branchName}`);
+      } catch {
+        try { git(projectRoot, `checkout ${branchName}`); } catch { /* ignore */ }
+      }
 
-    // Stage all changes
-    step("Staging changes...");
-    git(projectRoot, "add -A");
+      // Stage all changes
+      step("Staging changes...");
+      git(projectRoot, "add -A");
 
-    // Commit
-    step("Committing...");
-    const commitMsg = `fix: address ${auditResult.confirmed_findings} security/quality findings from KCode audit
+      // Commit
+      step("Committing...");
+      const commitMsg = `fix: address ${auditResult.confirmed_findings} security/quality findings from KCode audit
 
 Automated fixes applied by KCode Audit Engine:
 - ${fixes.slice(0, 10).join("\n- ")}${fixes.length > 10 ? `\n- ... and ${fixes.length - 10} more` : ""}
 
 Signed-off-by: Astrolexis.space — Kulvex Code
 `;
-    const { writeFileSync: writeTemp, unlinkSync } = require("node:fs") as typeof import("node:fs");
-    const msgFile = resolve(projectRoot, ".kcode-commit-msg");
-    writeTemp(msgFile, commitMsg);
-    try {
-      commitHash = git(projectRoot, `commit -F ${msgFile}`);
-      const hashMatch = commitHash.match(/\[[\w/]+ ([a-f0-9]+)\]/);
-      commitHash = hashMatch ? hashMatch[1]! : "";
-    } finally {
-      try { unlinkSync(msgFile); } catch { /* ignore */ }
+      const { writeFileSync: writeTemp, unlinkSync } = require("node:fs") as typeof import("node:fs");
+      const msgFile = resolve(projectRoot, ".kcode-commit-msg");
+      writeTemp(msgFile, commitMsg);
+      try {
+        commitHash = git(projectRoot, `commit -F ${msgFile}`);
+        const hashMatch = commitHash.match(/\[[\w/]+ ([a-f0-9]+)\]/);
+        commitHash = hashMatch ? hashMatch[1]! : "";
+      } finally {
+        try { unlinkSync(msgFile); } catch { /* ignore */ }
+      }
     }
 
     // Push strategy: try origin → if 403, fork → push to fork → PR from fork
@@ -205,49 +272,94 @@ Signed-off-by: Astrolexis.space — Kulvex Code
     let pushedToFork = false;
     let forkUser = "";
 
-    step("Pushing to origin...");
-    try {
-      git(projectRoot, `push -u origin ${branchName}`);
-    } catch {
-      // Origin push failed (likely 403 — no write access). Try fork workflow.
-      if (upstreamRepo) {
-        // Get current user first
-        step("No write access. Detecting GitHub user...");
-        try {
-          forkUser = gh(projectRoot, "api user --jq .login");
-        } catch { /* gh not authenticated */ }
+    // Resolve forkUser early so we can short-circuit when the branch
+    // is already pushed to the user's fork.
+    const userQ = runCapturing("gh", projectRoot, "api user --jq .login");
+    if (userQ.ok) forkUser = userQ.stdout;
 
-        if (!forkUser) {
-          pushError = "GitHub not authenticated. Run /github login first.";
+    // Resume / idempotent path: if the branch is already on the user's
+    // fork, skip the push step entirely. This handles the case where a
+    // previous /pr run pushed but failed to create the PR (e.g. transient
+    // gh CLI error), or where the user manually pushed after a previous
+    // /pr run reported "Push failed".
+    if (forkUser) {
+      const exists = remoteBranchExists(projectRoot, "fork", branchName);
+      if (exists) {
+        step("Branch already on fork. Skipping push.");
+        pushedToFork = true;
+      }
+    }
+
+    if (!pushedToFork) {
+      step("Pushing to origin...");
+      const originPush = runCapturing(
+        "git",
+        projectRoot,
+        `push -u origin ${branchName}`,
+      );
+      if (!originPush.ok) {
+        // Origin push failed (likely 403 — no write access). Try fork workflow.
+        if (upstreamRepo) {
+          if (!forkUser) {
+            pushError = "GitHub not authenticated. Run /github login first.";
+          } else {
+            const repoName = upstreamRepo.split("/")[1] ?? "";
+
+            // Fork the repo (or confirm it exists). gh's "already exists"
+            // failure is non-fatal — we just want the fork to exist.
+            step(`Forking ${upstreamRepo}...`);
+            runCapturing("gh", projectRoot, `repo fork ${upstreamRepo} --clone=false`);
+
+            // Always ensure the "fork" remote points to our fork.
+            step("Configuring fork remote...");
+            runCapturing("git", projectRoot, `remote remove fork`);
+            const addRemote = runCapturing(
+              "git",
+              projectRoot,
+              `remote add fork https://github.com/${forkUser}/${repoName}.git`,
+            );
+            if (!addRemote.ok) {
+              pushError = `Could not configure fork remote: ${addRemote.stderr}`;
+            }
+          }
+
+          if (!pushError) {
+            step("Pushing to fork...");
+            // Two attempts with a brief pause between — when gh just
+            // forked the repo, GitHub takes a few seconds to fully
+            // provision push access. The first push commonly hits 404
+            // and a 5s retry succeeds.
+            let lastStderr = "";
+            for (let attempt = 0; attempt < 2; attempt++) {
+              if (attempt > 0) {
+                step("Waiting for fork to provision (retry)...");
+                await new Promise((r) => setTimeout(r, 5000));
+              }
+              const r = runCapturing(
+                "git",
+                projectRoot,
+                `push -u fork ${branchName} --force`,
+              );
+              if (r.ok) {
+                pushedToFork = true;
+                break;
+              }
+              lastStderr = r.stderr || r.stdout;
+            }
+            if (!pushedToFork) {
+              const lower = lastStderr.toLowerCase();
+              if (lower.includes("403") || lower.includes("permission denied")) {
+                pushError = `Permission denied pushing to fork: ${lastStderr.slice(0, 240)}`;
+              } else if (lower.includes("404") || lower.includes("not found")) {
+                pushError = `Fork not yet provisioned by GitHub. Wait ~30s and re-run /pr. (${lastStderr.slice(0, 200)})`;
+              } else {
+                pushError = `Push to fork failed: ${lastStderr.slice(0, 240)}`;
+              }
+            }
+          }
         } else {
-          const repoName = upstreamRepo.split("/")[1] ?? "";
-
-          // Fork the repo (or confirm it exists)
-          step(`Forking ${upstreamRepo}...`);
-          try {
-            gh(projectRoot, `repo fork ${upstreamRepo} --clone=false`);
-          } catch { /* fork already exists — OK */ }
-
-          // Always ensure the "fork" remote points to our fork
-          step("Configuring fork remote...");
-          try {
-            git(projectRoot, `remote remove fork`);
-          } catch { /* didn't exist */ }
-          git(projectRoot, `remote add fork https://github.com/${forkUser}/${repoName}.git`);
+          pushError = "No write access and no upstream repo detected";
         }
-
-        step("Pushing to fork...");
-        try {
-          git(projectRoot, `push -u fork ${branchName} --force`);
-          pushedToFork = true;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          pushError = msg.includes("403") || msg.includes("denied")
-            ? "Permission denied (both origin and fork)"
-            : "Push to fork failed";
-        }
-      } else {
-        pushError = "No write access and no upstream repo detected";
       }
     }
 
@@ -256,20 +368,32 @@ Signed-off-by: Astrolexis.space — Kulvex Code
       step("Creating PR...");
       const bodyFile = resolve(projectRoot, ".kcode-pr-body");
       writeTemp(bodyFile, prDescription);
-      try {
-        if (pushedToFork && forkUser) {
-          prUrl = gh(
-            projectRoot,
-            `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo} --head ${forkUser}:${branchName}`,
-          );
+      // Detect existing PR for this branch first — if one is already
+      // open we can't create a duplicate.
+      const head = pushedToFork && forkUser ? `${forkUser}:${branchName}` : branchName;
+      const existingPr = runCapturing(
+        "gh",
+        projectRoot,
+        `pr list --repo ${upstreamRepo} --head ${head} --state open --json url --jq ".[0].url"`,
+      );
+      if (existingPr.ok && existingPr.stdout && existingPr.stdout !== "null") {
+        prUrl = existingPr.stdout;
+      } else {
+        const create = runCapturing(
+          "gh",
+          projectRoot,
+          pushedToFork && forkUser
+            ? `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo} --head ${forkUser}:${branchName}`
+            : `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo}`,
+        );
+        if (create.ok) {
+          prUrl = create.stdout;
         } else {
-          prUrl = gh(
-            projectRoot,
-            `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo}`,
-          );
+          // Surface the real reason instead of swallowing.
+          pushError = `gh pr create failed: ${(create.stderr || create.stdout).slice(0, 240)}`;
         }
-      } catch { prUrl = undefined; }
-      finally { try { unlinkSync(bodyFile); } catch { /* ignore */ } }
+      }
+      try { unlinkSync(bodyFile); } catch { /* ignore */ }
     }
   }
 
