@@ -27,8 +27,7 @@ function w(rel: string, content: string): void {
 }
 
 describe("pattern_metrics", () => {
-  it("populates hits / confirmed / false_positive / needs_context from verified results", async () => {
-    // Code that triggers cpp-006-strcpy-family (strcpy without bounds).
+  it("populates hits / unique_sites / confirmed / false_positive / needs_context", async () => {
     w("a.c", `void f(const char* src) { char buf[16]; strcpy(buf, src); }\n`);
     const result = await runAudit({
       projectRoot: TMP,
@@ -37,8 +36,62 @@ describe("pattern_metrics", () => {
     expect(result.pattern_metrics).toBeDefined();
     const ids = Object.keys(result.pattern_metrics ?? {});
     expect(ids.length).toBeGreaterThan(0);
+    // v2.10.331 audit fix: the unique_sites total must equal the
+    // verdict counts, not hits. hits ≥ unique_sites since multiples
+    // of the same pattern in the same file are deduped before
+    // verification but still count as hits.
     for (const m of Object.values(result.pattern_metrics ?? {})) {
-      expect(m.hits).toBe(m.confirmed + m.false_positive + m.needs_context);
+      const verdictTotal = m.confirmed + m.false_positive + m.needs_context;
+      expect((m as { unique_sites?: number }).unique_sites ?? m.hits).toBe(verdictTotal);
+      expect(m.hits).toBeGreaterThanOrEqual(verdictTotal);
+    }
+  });
+
+  it("hits and unique_sites diverge when the same pattern fires multiple times in one file", async () => {
+    // Three strcpy calls in one file → 1 verifier site, 3 hits.
+    w(
+      "multi.c",
+      `void f(const char* a, const char* b, const char* c) {
+  char x[16]; char y[16]; char z[16];
+  strcpy(x, a);
+  strcpy(y, b);
+  strcpy(z, c);
+}
+`,
+    );
+    const result = await runAudit({
+      projectRoot: TMP,
+      llmCallback: async () => "VERDICT: confirmed\n",
+    });
+    const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
+    if (m) {
+      // The dedupe should leave exactly one verifier call for this
+      // (pattern, file) site, but hits should reflect all three matches.
+      expect((m as { unique_sites?: number }).unique_sites).toBe(1);
+      expect(m.hits).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("confirmed_rate uses unique_sites as denominator (v2.10.331 audit fix)", async () => {
+    // Same multi-match scenario — verifier confirms the single site.
+    // Rate must be 1.0 (100%), not 0.33 (1/3).
+    w(
+      "rate.c",
+      `void f(const char* a, const char* b, const char* c) {
+  char x[16]; char y[16]; char z[16];
+  strcpy(x, a);
+  strcpy(y, b);
+  strcpy(z, c);
+}
+`,
+    );
+    const result = await runAudit({
+      projectRoot: TMP,
+      llmCallback: async () => "VERDICT: confirmed\n",
+    });
+    const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
+    if (m) {
+      expect(m.confirmed_rate).toBe(1);
     }
   });
 

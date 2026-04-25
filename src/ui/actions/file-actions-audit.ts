@@ -532,6 +532,7 @@ export async function handleAuditAction(
           `  Promoted ${indices.length} finding(s) → confirmed`,
           ...moved.map((s) => `    ${s}`),
           "",
+          `  ⚠ Indices have shifted after this mutation. Re-run /review ${pathToken} before issuing more promote/demote/tag commands.`,
           `  Next: /fix ${pathToken}`,
         ].join("\n");
       }
@@ -565,6 +566,8 @@ export async function handleAuditAction(
         return [
           `  Demoted ${indices.length} finding(s) → false_positives_detail`,
           ...moved.map((s) => `    ${s}`),
+          "",
+          `  ⚠ Indices have shifted after this mutation. Re-run /review ${pathToken} before issuing more promote/demote/tag commands.`,
         ].join("\n");
       }
 

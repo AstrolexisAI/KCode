@@ -450,8 +450,9 @@ function buildStructuredPrBody(
     lines.push("### Findings demoted by reviewer");
     lines.push("");
     lines.push(
-      `${reviewedFps.length} candidate${reviewedFps.length === 1 ? "" : "s"} ` +
-        "were dropped from the confirmed list during human triage:",
+      reviewedFps.length === 1
+        ? "1 candidate was dropped from the confirmed list during human triage:"
+        : `${reviewedFps.length} candidates were dropped from the confirmed list during human triage:`,
     );
     lines.push("");
     for (const fp of reviewedFps) {

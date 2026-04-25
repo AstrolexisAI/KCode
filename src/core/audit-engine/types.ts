@@ -74,21 +74,35 @@ export type PatternMaturity = "experimental" | "stable" | "high_precision";
  * v2.10.330 (Sprint 5/6 of the audit-pipeline maturity roadmap).
  */
 export interface PatternMetrics {
-  /** Total candidate matches before verification. */
+  /**
+   * Total raw regex matches for this pattern across the run, before
+   * dedupe-by-(pattern,file). Useful for "this regex fired heavily"
+   * regardless of whether each site was a separate verifier call.
+   */
   hits: number;
-  /** Verifier said confirmed. */
+  /**
+   * Number of unique (pattern_id, file) sites the verifier was
+   * actually asked about. Always ≤ hits (dedupe collapses N matches
+   * in 1 file to 1 verifier call). This is the denominator for
+   * confirmed_rate / false_positive_rate so the rates stay coherent
+   * with the verdict counts. v2.10.331 audit fix — earlier rates
+   * mixed denominators (numerator was per-site, denominator was
+   * per-hit), giving misleadingly low rates for heavy-firing patterns.
+   */
+  unique_sites: number;
+  /** Verifier said confirmed (per unique site). */
   confirmed: number;
-  /** Verifier said false_positive. */
+  /** Verifier said false_positive (per unique site). */
   false_positive: number;
   /** Verifier said needs_context (or response didn't parse). */
   needs_context: number;
   /**
-   * confirmed / hits, undefined when hits === 0. A pattern with
-   * persistently low confirmed_rate across runs is a candidate for
-   * tightening or maturity downgrade.
+   * confirmed / unique_sites, undefined when unique_sites === 0.
+   * A pattern with persistently low confirmed_rate across runs is a
+   * candidate for tightening or maturity downgrade.
    */
   confirmed_rate?: number;
-  /** false_positive / hits, undefined when hits === 0. */
+  /** false_positive / unique_sites, undefined when unique_sites === 0. */
   false_positive_rate?: number;
 }
 export type Language =
