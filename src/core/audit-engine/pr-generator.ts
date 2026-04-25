@@ -128,6 +128,146 @@ function detectRemoteRepo(cwd: string): string | null {
  * Build a prompt for the LLM to generate a detailed PR description
  * from the audit findings.
  */
+/**
+ * Detect the repo's primary build/test ecosystem so the testing
+ * checklist in the PR is the actual invocation a maintainer would
+ * use, not a generic "cmake && make". v2.10.329 (Sprint 4).
+ */
+type Ecosystem =
+  | "cmake"
+  | "cargo"
+  | "go"
+  | "bun"
+  | "npm"
+  | "python-pyproject"
+  | "python-setup"
+  | "gradle"
+  | "maven"
+  | "make"
+  | "unknown";
+
+function detectEcosystem(projectRoot: string): Ecosystem {
+  const has = (rel: string): boolean => existsSync(resolve(projectRoot, rel));
+  // Order matters — check the most specific build files first.
+  if (has("Cargo.toml")) return "cargo";
+  if (has("go.mod")) return "go";
+  if (has("bun.lock") || has("bun.lockb")) return "bun";
+  if (has("package-lock.json") || has("package.json")) return "npm";
+  if (has("pyproject.toml")) return "python-pyproject";
+  if (has("setup.py") || has("requirements.txt")) return "python-setup";
+  if (has("build.gradle") || has("build.gradle.kts")) return "gradle";
+  if (has("pom.xml")) return "maven";
+  if (has("CMakeLists.txt")) return "cmake";
+  if (has("Makefile") || has("makefile")) return "make";
+  return "unknown";
+}
+
+/**
+ * Render the testing-checklist section using the actual build/test
+ * commands the project responds to. Avoids the previous trap where
+ * every PR said "cmake && make" regardless of language.
+ */
+function buildTestingChecklist(ecosystem: Ecosystem): string[] {
+  const ecosystemCmd: Record<Ecosystem, string[]> = {
+    cmake: ["`cmake -B build && cmake --build build`", "`ctest --test-dir build --output-on-failure`"],
+    cargo: ["`cargo build --all-targets`", "`cargo test --all-features`", "`cargo clippy -- -D warnings`"],
+    go: ["`go build ./...`", "`go test ./...`", "`go vet ./...`"],
+    bun: ["`bun install`", "`bun test`", "`bun run --bun tsc --noEmit` (if TypeScript)"],
+    npm: ["`npm install`", "`npm test`", "`npm run typecheck` (if TypeScript)"],
+    "python-pyproject": ["`pip install -e .`", "`pytest`", "`ruff check .` (if configured)"],
+    "python-setup": ["`pip install -e .`", "`pytest`"],
+    gradle: ["`./gradlew build`", "`./gradlew test`"],
+    maven: ["`mvn clean install`", "`mvn test`"],
+    make: ["`make`", "`make test`"],
+    unknown: ["Build the project using the repository's standard tooling.", "Run the project's test suite."],
+  };
+  const cmds = ecosystemCmd[ecosystem];
+  const lines: string[] = [];
+  for (const cmd of cmds) {
+    lines.push(`- [ ] ${cmd}`);
+  }
+  lines.push("- [ ] No regressions in existing functionality");
+  lines.push("- [ ] Fixes address `CWE` references where applicable");
+  return lines;
+}
+
+/**
+ * Narrow LLM prompt — only asks for a 2-3 paragraph executive
+ * summary. Findings, counts, coverage, methodology and testing
+ * checklist are rendered deterministically from JSON. v2.10.329.
+ *
+ * The narrower the prompt, the less surface area for hallucinated
+ * paths / Spanish leaks / chain-of-thought / fabricated counts.
+ */
+function buildExecutiveSummaryPrompt(result: AuditResult): string {
+  const findingsList = result.findings
+    .map((f, i) => {
+      const rel = f.file.replace(result.project + "/", "");
+      return `${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — ${rel}:${f.line}`;
+    })
+    .join("\n");
+
+  return `Write a 2-3 paragraph executive summary for a code-quality / security
+audit Pull Request. English only. Plain prose. NO bullet lists, NO headings,
+NO inline code blocks, NO links, NO file paths, NO numeric counts (those are
+rendered separately).
+
+Constraints (matter for upstream CI):
+  - Common English words only. No Spanish or other languages.
+  - Do not name the auditor, the tool, or any vendor.
+  - Do not invent CWE numbers or claim things the findings list doesn't say.
+  - 350 words MAX. Aim for 200.
+
+Audit context:
+  Project: ${basename(result.project)}
+  Confirmed findings: ${result.confirmed_findings}
+  False positives filtered: ${result.false_positives}
+
+Findings list (do NOT enumerate; summarize the patterns at a high level):
+${findingsList}
+
+Write the summary as 2-3 paragraphs explaining: (a) what classes of issues
+were found, (b) why they matter for the kind of system this code runs in,
+(c) what the patches change at the highest level. End there. No conclusion
+sentence, no call to action.`;
+}
+
+/**
+ * Sanitize the LLM-produced executive summary. Narrower than the
+ * full-body sanitizePrBody — the LLM only writes prose now, so this
+ * just strips chain-of-thought, escapes brand terms, and caps length.
+ */
+function sanitizeExecutiveSummary(text: string, projectRoot: string): string {
+  let out = text.trim();
+
+  // Chain-of-thought: drop everything before "Here's" / numbered
+  // reasoning preamble. If the model emitted a clean summary it
+  // starts with prose; this is a no-op.
+  const headingIdx = out.search(/^[A-Z][A-Za-z]+\s/m);
+  if (headingIdx > 0 && /^(Here'?s a (?:thinking|reasoning)|^\d+\.\s)/i.test(out)) {
+    out = out.slice(headingIdx);
+  }
+
+  // Strip absolute paths.
+  const projectAbs = projectRoot.replace(/\/+$/, "");
+  if (projectAbs) out = out.split(projectAbs + "/").join("").split(projectAbs).join("");
+  out = out.replace(/\/(?:home|Users|var|opt|tmp)\/[\w./-]+\/([\w./-]+)/g, "$1");
+
+  // Wrap brand terms.
+  for (const term of ["KCode", "kcode", "Astrolexis", "Kulvex"]) {
+    out = out.replace(new RegExp(`(?<!\`)\\b${term}\\b(?!\`)`, "g"), `\`${term}\``);
+  }
+
+  // Replace coined words.
+  out = out.replace(/\boverreads?\b/gi, "out-of-bounds reads");
+
+  // Cap length at 1500 chars (~250 words).
+  if (out.length > 1500) {
+    out = `${out.slice(0, 1500).replace(/\s+\S*$/, "")}…`;
+  }
+  return out.trim();
+}
+
 function buildPrPrompt(result: AuditResult, fixes: string[]): string {
   const findingsSummary = result.findings
     .map((f, i) => {
@@ -194,78 +334,185 @@ English terms, no vendor names.]
 }
 
 /**
- * Deterministic PR body — used when the LLM output failed the quality
- * gate (too short, no heading, missing findings section, or chain-of-
- * thought leak). Builds the markdown directly from the audit JSON so
- * the PR is always presentable even when the verifier model misbehaves.
+ * Build the PR body deterministically from the audit JSON. Becomes
+ * the PRIMARY path for /pr in v2.10.329 (Sprint 4) — the LLM is now
+ * only invoked for the executive-summary paragraph, which is spliced
+ * in at insertSummaryAt by composePrBody. Sections produced here:
+ *
+ *   • Header (counts + scan duration + coverage)
+ *   • Auditability table (rewrite/annotate/manual breakdown)
+ *   • Summary placeholder (LLM-filled or omitted on failure)
+ *   • Findings and fixes (deterministic, cites pattern_id, CWE,
+ *     fix_support, review_reason when reviewer touched it)
+ *   • Methodology (fixed prose)
+ *   • Testing (ecosystem-aware via detectEcosystem)
+ *   • Footer (attribution in inline code so spell-check skips it)
+ *
+ * Eliminates two whole classes of v318/v320 bugs: chain-of-thought
+ * leaks and hallucinated counts/paths/CWE numbers, since the LLM
+ * never writes any of those fields.
  */
-function buildFallbackPrBody(result: AuditResult): string {
+const SUMMARY_PLACEHOLDER = "<!-- KCODE_SUMMARY -->";
+
+function buildStructuredPrBody(
+  result: AuditResult,
+  projectRoot: string,
+): string {
   const lines: string[] = [];
+  const fixSummary =
+    (result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
+      .fix_support_summary;
+
   lines.push("## Security and code-quality audit");
   lines.push("");
   lines.push(
-    `**Findings:** ${result.confirmed_findings} confirmed (${result.false_positives} false positives filtered)`,
+    `**Findings:** ${result.confirmed_findings} confirmed (${result.false_positives} false positives filtered${result.needs_context ? `, ${result.needs_context} uncertain` : ""})`,
   );
   lines.push(`**Scan duration:** ${(result.elapsed_ms / 1000).toFixed(1)}s`);
   if (result.coverage) {
+    const pct = Math.round(
+      (result.coverage.scannedFiles / Math.max(result.coverage.totalCandidateFiles, 1)) * 100,
+    );
+    const truncTag = result.coverage.truncated ? " (truncated — see warning below)" : "";
     lines.push(
-      `**Coverage:** ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} files scanned`,
+      `**Coverage:** ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} files (${pct}%)${truncTag}`,
+    );
+  }
+  if (fixSummary) {
+    lines.push(
+      `**Fix support:** ${fixSummary.rewrite} rewrite · ${fixSummary.annotate} annotate · ${fixSummary.manual} manual-only`,
     );
   }
   lines.push("");
+  if (result.coverage?.truncated) {
+    lines.push(
+      `> ⚠ This audit covered only ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} files. ` +
+        "Findings reflect the scanned subset, not the full codebase.",
+    );
+    lines.push("");
+  }
+
   lines.push("### Summary");
   lines.push("");
-  lines.push(
-    `${result.confirmed_findings} issue${result.confirmed_findings === 1 ? "" : "s"} ` +
-      "were confirmed by the model-based verifier after running a deterministic " +
-      "pattern library against the codebase. Each entry below names the file, " +
-      "the affected line, the pattern that fired, and the patch applied.",
-  );
+  lines.push(SUMMARY_PLACEHOLDER);
   lines.push("");
+
   lines.push("### Findings and fixes");
   lines.push("");
-  for (let i = 0; i < result.findings.length; i++) {
-    const f = result.findings[i]!;
-    const rel = f.file.startsWith(result.project + "/")
-      ? f.file.slice(result.project.length + 1)
-      : f.file;
+  if (result.findings.length === 0) {
+    lines.push("_No confirmed findings — see the methodology section for what was checked._");
+    lines.push("");
+  } else {
+    for (let i = 0; i < result.findings.length; i++) {
+      const f = result.findings[i]!;
+      const rel = f.file.startsWith(projectRoot + "/")
+        ? f.file.slice(projectRoot.length + 1)
+        : f.file.replace(result.project + "/", "");
+      const fSupport = (f as { fix_support?: "rewrite" | "annotate" | "manual" }).fix_support;
+      const reviewReason = (f as { review_reason?: string }).review_reason;
+
+      lines.push(
+        `#### ${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — \`${rel}:${f.line}\``,
+      );
+      lines.push("");
+      const meta: string[] = [];
+      meta.push(`Pattern \`${f.pattern_id}\``);
+      if (f.cwe) meta.push(f.cwe);
+      if (fSupport) meta.push(`fix-support: \`${fSupport}\``);
+      if (reviewReason) meta.push(`reviewer: \`${reviewReason}\``);
+      lines.push(meta.join(" · "));
+      lines.push("");
+      if (f.verification.reasoning) {
+        lines.push(`**Bug.** ${f.verification.reasoning.slice(0, 500).replace(/\n/g, " ")}`);
+      }
+      if (f.verification.execution_path) {
+        lines.push("");
+        lines.push(
+          `**Execution path.** ${f.verification.execution_path.slice(0, 500).replace(/\n/g, " ")}`,
+        );
+      }
+      if (f.verification.suggested_fix) {
+        lines.push("");
+        lines.push(
+          `**Fix applied.** ${f.verification.suggested_fix.slice(0, 500).replace(/\n/g, " ")}`,
+        );
+      }
+      lines.push("");
+    }
+  }
+
+  // Surface findings reviewers explicitly demoted/promoted so the
+  // PR makes the human triage visible rather than hiding it in JSON.
+  const reviewedFps = (result.false_positives_detail ?? []).filter(
+    (fp) => (fp as { review_state?: string }).review_state === "demoted_fp",
+  );
+  if (reviewedFps.length > 0) {
+    lines.push("### Findings demoted by reviewer");
+    lines.push("");
     lines.push(
-      `#### ${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — \`${rel}:${f.line}\``,
+      `${reviewedFps.length} candidate${reviewedFps.length === 1 ? "" : "s"} ` +
+        "were dropped from the confirmed list during human triage:",
     );
     lines.push("");
-    if (f.cwe) lines.push(`**Reference:** \`${f.cwe}\``);
-    lines.push(`**Pattern:** \`${f.pattern_id}\``);
-    if (f.verification.reasoning) {
-      lines.push(`**Bug:** ${f.verification.reasoning.slice(0, 400).replace(/\n/g, " ")}`);
-    }
-    if (f.verification.execution_path) {
-      lines.push(
-        `**Execution path:** ${f.verification.execution_path.slice(0, 400).replace(/\n/g, " ")}`,
-      );
-    }
-    if (f.verification.suggested_fix) {
-      lines.push(`**Fix:** ${f.verification.suggested_fix.slice(0, 400).replace(/\n/g, " ")}`);
+    for (const fp of reviewedFps) {
+      const rel = fp.file.startsWith(projectRoot + "/")
+        ? fp.file.slice(projectRoot.length + 1)
+        : fp.file;
+      const reason = (fp as { review_reason?: string }).review_reason ?? "manual_confirmation";
+      lines.push(`- \`${fp.pattern_id}\` @ \`${rel}:${fp.line}\` — reason: \`${reason}\``);
     }
     lines.push("");
   }
+
   lines.push("### Methodology");
   lines.push("");
   lines.push(
     "A deterministic pattern library scanned the codebase for known-dangerous " +
-      "shapes. Each candidate was then evaluated by a model-based verifier with a " +
-      "mitigation checklist that explicitly looks for in-source guards (asserts, " +
-      "bound checks, type-system constraints) before confirming. Findings shown " +
-      "here passed the checklist; rejected candidates are listed in the JSON report.",
+      "shapes. Each candidate was then evaluated by a model-based verifier whose " +
+      "mitigation checklist explicitly looked for in-source guards — asserts, " +
+      "bound checks, type-system constraints, and trust-boundary distinctions " +
+      "(intra-process port input vs external untrusted input) — before confirming. " +
+      "Confirmed findings shown above passed the checklist; rejected candidates " +
+      "remain in the JSON report's `false_positives_detail` for spot-checking.",
   );
   lines.push("");
+
   lines.push("### Testing");
-  lines.push("- [ ] Compilation verified (`cmake` and `make` — clean build)");
-  lines.push("- [ ] No regressions in existing functionality");
-  lines.push("- [ ] Fixes address `CWE` references where applicable");
+  const ecosystem = detectEcosystem(projectRoot);
+  for (const item of buildTestingChecklist(ecosystem)) {
+    lines.push(item);
+  }
   lines.push("");
   lines.push("---");
   lines.push("_Generated by `KCode` automated audit engine — `Astrolexis.space`._");
   return lines.join("\n");
+}
+
+/**
+ * Compose the final PR body: structured skeleton + LLM summary
+ * spliced into the placeholder. If the summary failed (empty / too
+ * short), drop the placeholder line entirely so the markdown stays
+ * valid. v2.10.329.
+ */
+function composePrBody(structured: string, summary: string): string {
+  const trimmed = summary.trim();
+  if (trimmed.length < 60) {
+    // Treat the LLM output as a no-op. Replace the placeholder
+    // with a one-line auto-summary derived from the structure.
+    return structured.replace(
+      SUMMARY_PLACEHOLDER,
+      "_See findings below. Each entry names the file, the pattern, the bug, the impact, and the patch._",
+    );
+  }
+  return structured.replace(SUMMARY_PLACEHOLDER, trimmed);
+}
+
+/** Backwards-compat alias kept for external callers / tests. */
+function buildFallbackPrBody(result: AuditResult): string {
+  return composePrBody(
+    buildStructuredPrBody(result, result.project),
+    "",
+  );
 }
 
 /**
@@ -408,28 +655,44 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
       })()
     : status.split("\n").filter((l) => l.trim()).length;
 
-  // Get the diff summary for the LLM
+  // Diff stat is captured for the commit message footer; the PR
+  // body itself no longer needs it (structured body draws from JSON).
   const diffStat = git(projectRoot, "diff --stat");
   const fixes = diffStat.split("\n").filter((l) => l.includes("|")).map((l) => l.trim());
 
-  // Generate PR description via LLM, then sanitize before submission.
-  const rawDescription = await llmCallback(buildPrPrompt(auditResult, fixes));
-  let prDescription = sanitizePrBody(rawDescription, projectRoot);
-
-  // Quality gate: if the sanitized body is missing structure (no
-  // heading, no findings section, or trivially short), the LLM
-  // probably emitted reasoning / refused / errored — fall back to a
-  // deterministic template generated from the audit JSON. v320: PR
-  // #5061 had 2400 lines of chain-of-thought as the body because
-  // mark7's content was raw thinking and the heading-strip left it
-  // empty, then nothing rebuilt a usable body.
-  const looksValid =
-    prDescription.length >= 200 &&
-    prDescription.includes("##") &&
-    prDescription.toLowerCase().includes("finding");
-  if (!looksValid) {
-    prDescription = buildFallbackPrBody(auditResult);
+  // v2.10.329 (Sprint 4) — structured-first generation.
+  //
+  // 1. Build the deterministic skeleton from the audit JSON. Header,
+  //    counts, coverage, fix_support breakdown, findings, methodology,
+  //    ecosystem-aware testing checklist, footer.
+  // 2. Ask the LLM ONLY for a 2-3 paragraph executive summary; splice
+  //    it into the SUMMARY_PLACEHOLDER. If the LLM fails or returns
+  //    garbage, the placeholder gets a one-line fallback and the rest
+  //    of the body is intact.
+  //
+  // This eliminates the v318/v320 class of bugs where mark7 emitted
+  // chain-of-thought / hallucinated counts / fabricated CWE numbers
+  // into the body — the LLM never writes any of those fields now.
+  const structured = buildStructuredPrBody(auditResult, projectRoot);
+  let executiveSummary = "";
+  try {
+    const raw = await llmCallback(buildExecutiveSummaryPrompt(auditResult));
+    executiveSummary = sanitizeExecutiveSummary(raw, projectRoot);
+  } catch (err) {
+    // Soft-fail — the structured body is still presentable.
+    void err;
   }
+  let prDescription = composePrBody(structured, executiveSummary);
+  // Final defensive sanitize across the whole body — strips any
+  // residual paths the LLM might have leaked into the summary, wraps
+  // brand terms in inline code so spell-check skips them.
+  prDescription = sanitizePrBody(prDescription, projectRoot);
+  // v329: avoid never-used warnings while preserving the legacy
+  // export (some callers still reference buildFallbackPrBody and
+  // buildPrPrompt for their own tooling).
+  void buildFallbackPrBody;
+  void buildPrPrompt;
+  void fixes;
 
   // Extract title from description (first ## heading)
   const titleMatch = prDescription.match(/^## (.+)$/m);
