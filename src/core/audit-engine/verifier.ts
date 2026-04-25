@@ -50,17 +50,32 @@ function buildVerifyPrompt(candidate: Candidate): string {
     throw new Error(`Unknown pattern id: ${candidate.pattern_id}`);
   }
 
-  // Read extended context from the file (~30 lines around the match)
+  // Read extended context from the file.
+  //
+  // Strategy:
+  //   - Short file (≤200 lines): send the whole file. A well-sized
+  //     source file always fits in a verify prompt and lets the model
+  //     see mitigations in OTHER methods of the same class — which
+  //     is exactly what was missed in v312: the FW_ASSERT that made
+  //     a loop bound safe lived in configure() while the match hit
+  //     TextLogger_handler() 15 lines later.
+  //   - Longer file: ±30 lines around the match (was ±15 before v313).
   let extendedContext = candidate.context;
   try {
     const content = readFileSync(candidate.file, "utf-8");
     const lines = content.split("\n");
-    const start = Math.max(0, candidate.line - 15);
-    const end = Math.min(lines.length, candidate.line + 15);
-    extendedContext = lines
-      .slice(start, end)
-      .map((l, i) => `${start + i + 1}: ${l}`)
-      .join("\n");
+    if (lines.length <= 200) {
+      extendedContext = lines
+        .map((l, i) => `${i + 1}: ${l}`)
+        .join("\n");
+    } else {
+      const start = Math.max(0, candidate.line - 30);
+      const end = Math.min(lines.length, candidate.line + 30);
+      extendedContext = lines
+        .slice(start, end)
+        .map((l, i) => `${start + i + 1}: ${l}`)
+        .join("\n");
+    }
   } catch {
     /* fall back to small context */
   }
@@ -80,13 +95,37 @@ ${extendedContext}
 
 QUESTION: ${pattern.verify_prompt}
 
+BEFORE CONFIRMING, work through this checklist. You MUST rule out every
+mitigation below. If you cannot, the verdict is FALSE_POSITIVE or NEEDS_CONTEXT.
+
+  1. Is there an assert, bound check, or validation in the surrounding
+     function (or a setter/configure method in the same class) that
+     already constrains the suspect value? List the exact line number
+     of each check you find.
+  2. Is the input to this code path user-controlled AT RUNTIME, or is
+     it from trusted compile-time / build-time / static configuration?
+     Build-time scripts (CMake, scripts/, autocoder/, tools/) are NOT
+     in most security threat models — mark those FALSE_POSITIVE unless
+     the concern is clearly runtime-relevant.
+  3. What is the EXACT chain of calls from an external input boundary
+     (network, IPC, file, CLI) to this line? If you cannot trace a
+     concrete path, return NEEDS_CONTEXT.
+  4. Does the language / type system already rule out the concern
+     (e.g. bounded integer types, C++ references that cannot be null,
+     std::array with compile-time size)?
+
+Only return CONFIRMED when you can name:
+  - the specific external input source (what an attacker sends)
+  - a clear trigger path that bypasses all mitigations found in step 1
+  - the concrete bad outcome (crash / read / write / infinite loop / …)
+
 Respond in EXACTLY this format (parsed deterministically):
 VERDICT: <CONFIRMED | FALSE_POSITIVE | NEEDS_CONTEXT>
-REASONING: <one sentence explaining WHY in your own words>
+REASONING: <one sentence naming the input source + bypass + outcome, OR the specific mitigation that rules this out>
 EXECUTION_PATH: <the exact sequence of calls/events that triggers this, or NONE>
 FIX: <a minimal code change that would resolve this, or NONE>
 
-Be strict. If you cannot prove the bug triggers, use FALSE_POSITIVE or NEEDS_CONTEXT.
+Be strict. Prefer FALSE_POSITIVE over CONFIRMED when any mitigation is present.
 `;
 }
 
