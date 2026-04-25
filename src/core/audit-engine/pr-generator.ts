@@ -139,7 +139,18 @@ function buildPrPrompt(result: AuditResult, fixes: string[]): string {
   const fixesSummary = fixes.map((f) => `- ${f}`).join("\n");
 
   return `You are writing a Pull Request description for a security/code-quality audit.
-Write a professional, detailed PR description in English.
+Write a professional, detailed PR description in English ONLY.
+
+CONSTRAINTS — these matter for upstream CI (spell-check / linting):
+- Use ONLY common English words. No Spanish, no Portuguese, no other-language words.
+- Do not include absolute file paths. Use repo-relative paths only.
+- Do not invent project names, vendor names, or organization names.
+- When you reference a tool / acronym (CWE, GCC, RAII, AES, etc.), put it in
+  inline backticks (e.g. \`CWE-22\`) so spell-checkers skip the token.
+- Do not use the word "kcode", "Astrolexis", or "Kulvex" in the body. The
+  attribution footer is added programmatically and is the only branded text.
+- Pattern IDs (like \`fsw-010\`, \`crypto-001\`) must always be in inline backticks.
+- Avoid coined words like "overreads"; prefer "out-of-bounds reads".
 
 PROJECT: ${basename(result.project)}
 FILES SCANNED: ${result.files_scanned}
@@ -154,34 +165,89 @@ ${fixesSummary}
 
 Write the PR in this EXACT format:
 
-## Security & Code Quality Audit
+## Security and code-quality audit
 
-**Auditor:** Astrolexis.space — Kulvex Code
 **Findings:** N confirmed (N false positives filtered)
 **Scan time:** Ns
 
 ### Summary
-[2-3 sentences explaining what was found and fixed]
+[2-3 sentences explaining what was found and fixed.]
 
-### Findings & Fixes
+### Findings and fixes
 
 [For EACH finding, write a subsection with:]
 #### N. [SEVERITY] Title — file:line
-**Bug:** [1-2 sentences explaining the root cause]
-**Impact:** [What could go wrong — be specific about exploitation]
-**Fix:** [What the patch does]
+**Bug:** [1-2 sentences explaining the root cause.]
+**Impact:** [What could go wrong — be specific about exploitation.]
+**Fix:** [What the patch does.]
 
 ### Methodology
-[1 paragraph about the deterministic pattern library + model verification approach]
+[One paragraph: deterministic pattern library scans for known-dangerous patterns,
+then a model-based verifier rules out false positives. Mention only common
+English terms, no vendor names.]
 
 ### Testing
-- [ ] Compilation verified (cmake && make — clean build)
+- [ ] Compilation verified (\`cmake\` and \`make\` — clean build)
 - [ ] No regressions in existing functionality
-- [ ] Fixes address CWE references where applicable
-
----
-*Astrolexis.space — Kulvex Code | Deterministic Audit Engine*
+- [ ] Fixes address \`CWE\` references where applicable
 `;
+}
+
+/**
+ * Strip / wrap content that fails upstream CI spell-check / linters:
+ *
+ *   - Absolute local paths (e.g. /home/<user>/proyectos/...) → repo-relative.
+ *     Catches the v318 leak where the LLM hallucinated "proyectos" into the
+ *     body even though it wasn't in the prompt.
+ *   - Brand / vendor / project codename terms wrapped in inline code so
+ *     spell-check skips them. Specific terms come from KCODE_PR_BRAND_TERMS
+ *     (env override) and a short built-in list.
+ *   - A neutral programmatic footer is appended at the end so the auditor
+ *     attribution survives even if the LLM dropped it from the body.
+ */
+function sanitizePrBody(body: string, projectRoot: string): string {
+  let out = body;
+
+  // 1. Strip the local project path so anything downstream sees only the
+  //    repo-relative form. Both the resolved path and any common parent
+  //    leak (e.g. "/home/<user>/proyectos/<repo>/Svc/..." → "Svc/...").
+  const projectAbs = projectRoot.replace(/\/+$/, "");
+  if (projectAbs) {
+    out = out.split(projectAbs + "/").join("");
+    out = out.split(projectAbs).join("");
+  }
+  // Defensive: drop any other absolute path that escaped the LLM, replacing
+  // it with the trailing path component only.
+  out = out.replace(
+    /\/(?:home|Users|var|opt|tmp)\/[\w./-]+\/([\w./-]+)/g,
+    "$1",
+  );
+
+  // 2. Wrap brand / project-codename terms in inline code so spell-check
+  //    skips them. The built-in list covers Astrolexis-org branding; users
+  //    can extend via KCODE_PR_BRAND_TERMS=Foo,Bar.
+  const builtin = ["KCode", "kcode", "Astrolexis", "Kulvex"];
+  const extra = (process.env.KCODE_PR_BRAND_TERMS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const term of [...builtin, ...extra]) {
+    // Only wrap when not ALREADY in inline code. Cheap heuristic: skip the
+    // term if it already appears between backticks on the same line.
+    const re = new RegExp(`(?<!\`)\\b${term}\\b(?!\`)`, "g");
+    out = out.replace(re, `\`${term}\``);
+  }
+
+  // 3. Replace coined English words that some upstream spell-checkers
+  //    flag (e.g. "overreads" — flagged by NASA's check-spelling).
+  out = out.replace(/\boverreads?\b/gi, "out-of-bounds reads");
+
+  // 4. Trim + ensure neutral, spell-check-safe footer.
+  out = out.replace(/\n{3,}/g, "\n\n").trim();
+  const footer = "\n\n---\n_Generated by `KCode` automated audit engine — `Astrolexis.space`._";
+  // Avoid double-footer when the LLM already produced one matching ours.
+  if (!out.includes("Generated by")) out += footer;
+  return out;
 }
 
 /**
@@ -254,8 +320,9 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   const diffStat = git(projectRoot, "diff --stat");
   const fixes = diffStat.split("\n").filter((l) => l.includes("|")).map((l) => l.trim());
 
-  // Generate PR description via LLM
-  const prDescription = await llmCallback(buildPrPrompt(auditResult, fixes));
+  // Generate PR description via LLM, then sanitize before submission.
+  const rawDescription = await llmCallback(buildPrPrompt(auditResult, fixes));
+  const prDescription = sanitizePrBody(rawDescription, projectRoot);
 
   // Extract title from description (first ## heading)
   const titleMatch = prDescription.match(/^## (.+)$/m);
@@ -435,6 +502,27 @@ Signed-off-by: Astrolexis.space — Kulvex Code
         }
       }
       try { unlinkSync(bodyFile); } catch { /* ignore */ }
+
+      // After the PR exists, add an attribution comment. PR comments are
+      // not in scope of upstream spell-check / lint workflows, so this is
+      // where KCode and Astrolexis can be named without escaping. Soft-fail:
+      // a comment that doesn't post is non-fatal; the PR itself still works.
+      if (prUrl) {
+        const commentBody =
+          `🛡️ **This audit was conducted by [KCode](https://astrolexis.space) — an automated security and code-quality audit engine by Astrolexis.**\n\n` +
+          `KCode performed a deterministic pattern scan against the codebase, then ran a model-based verifier with a mitigation checklist over each candidate. The Pull Request body above is auto-generated from the verified findings.\n\n` +
+          `Pattern coverage and verification details: [astrolexis.space/kcode](https://astrolexis.space).`;
+        const commentFile = resolve(projectRoot, ".kcode-pr-comment");
+        try {
+          writeFileSync(commentFile, commentBody);
+          runCapturing(
+            "gh",
+            projectRoot,
+            `pr comment ${prUrl} --body-file ${commentFile}`,
+          );
+        } catch { /* non-fatal */ }
+        finally { try { unlinkSync(commentFile); } catch { /* ignore */ } }
+      }
     }
   }
 
