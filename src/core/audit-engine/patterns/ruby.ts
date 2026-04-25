@@ -174,4 +174,44 @@ export const RUBY_PATTERNS: BugPattern[] = [
     cwe: "CWE-95",
     fix_template: "Avoid eval(). Use a hash lookup, case/when, or method dispatch with a whitelist.",
   },
+
+  // ── v2.10.333 — Phase A round 2 (Ruby) ────────────────────────
+  {
+    id: "rb-013-ssrf-net-http",
+    title: "Net::HTTP / open-uri / Faraday / HTTParty with user URL (SSRF)",
+    severity: "high",
+    languages: ["ruby"],
+    regex:
+      /\b(?:Net::HTTP\.(?:get|post|start)|URI\.open|HTTParty\.(?:get|post)|Faraday\.(?:get|post)|RestClient\.(?:get|post))\s*\([^)\n]{0,120}?params\[/g,
+    explanation:
+      "Server-Side Request Forgery: the Rails / Sinatra app fetches a URL chosen by the attacker. Net::HTTP and URI.open both honor http://, https://, AND file://, ftp:// schemes — a request like `params[:url]=file:///etc/passwd` reads server files. Used to reach internal services or steal cloud metadata.",
+    verify_prompt:
+      "Is there an allowlist check (host or scheme) before the call?\n" +
+      "1. URL host is compared against a fixed set of allowed hosts → FALSE_POSITIVE.\n" +
+      "2. URI(url).scheme is restricted to https only → FALSE_POSITIVE.\n" +
+      "3. The URL is from a config file / Rails.application.credentials, not params[] → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when params[:url] / request.params reaches the call unfiltered.",
+    cwe: "CWE-918",
+    fix_template:
+      "Validate scheme + host: `u = URI.parse(params[:url]); raise unless u.scheme == 'https' && ALLOWLIST.include?(u.host)`. Block file://, ftp://, gopher://, RFC1918 / 127/8 / 169.254.169.254 IPs.",
+  },
+  {
+    id: "rb-014-send-file-traversal",
+    title: "send_file / send_data with params-derived path (path traversal)",
+    severity: "high",
+    languages: ["ruby"],
+    regex:
+      /\bsend_file\s+(?:Rails\.root\.join\s*\(\s*)?(?:[^,)\n]*,\s*)*params\[/g,
+    explanation:
+      "Rails send_file with a path built from params lets an attacker read any file the Rails process can read. `?file=../../etc/passwd` walks out of the public directory. Even with `Rails.root.join`, the user-supplied component is not normalized — Pathname.new('a/../../../etc/passwd') still resolves outside the root.",
+    verify_prompt:
+      "Is the user-supplied path component validated?\n" +
+      "1. Allowlist of known filenames (whitelist of public assets) → FALSE_POSITIVE.\n" +
+      "2. Resolved with Pathname#realpath then `.start_with?(allowed_root.realpath.to_s + '/')` check → FALSE_POSITIVE.\n" +
+      "3. The path is built from a database ID, not the literal filename → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when params[:file] / params[:filename] reaches the path argument as a substring.",
+    cwe: "CWE-22",
+    fix_template:
+      "Look up the file by ID, not by path. If you must accept a name: `name = File.basename(params[:file]); raise unless ALLOWED_NAMES.include?(name)`.",
+  },
 ];

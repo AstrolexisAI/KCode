@@ -213,4 +213,25 @@ export const PHP_PATTERNS: BugPattern[] = [
     cwe: "CWE-78",
     fix_template: "Use escapeshellarg(): $out = shell_exec('cmd ' . escapeshellarg($_GET['arg']));",
   },
+
+  // ── v2.10.333 — Phase A round 2 (PHP SSRF) ────────────────────
+  {
+    id: "php-016-ssrf-fetch",
+    title: "file_get_contents / cURL on user-controllable URL (SSRF)",
+    severity: "high",
+    languages: ["php"],
+    regex:
+      /\b(?:file_get_contents|fopen|curl_setopt\s*\([^,]+,\s*CURLOPT_URL\s*,)\s*\(?\s*\$_(?:GET|POST|REQUEST|COOKIE)\b/g,
+    explanation:
+      "PHP's file_get_contents accepts http:// / https:// / phar:// URLs. cURL likewise. Passing a user-controllable URL without an allowlist lets the attacker reach internal services (Redis, metadata endpoints, admin panels) from inside the perimeter.",
+    verify_prompt:
+      "Is there an allowlist check (host comparison against a fixed list, scheme restricted to https) BEFORE the call?\n" +
+      "1. Allowlist present → FALSE_POSITIVE.\n" +
+      "2. URL parsed and IP resolved + checked against RFC1918 / loopback / metadata IPs → FALSE_POSITIVE.\n" +
+      "3. URL comes from a config file the operator owns, not a superglobal → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when a $_GET / $_POST / $_REQUEST value reaches the URL argument unfiltered.",
+    cwe: "CWE-918",
+    fix_template:
+      "Validate the URL: check scheme is https, host is in an allowlist, and the resolved IP is NOT RFC1918 / 127/8 / 169.254.169.254.",
+  },
 ];

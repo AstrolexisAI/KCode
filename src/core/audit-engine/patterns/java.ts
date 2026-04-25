@@ -294,4 +294,63 @@ export const JAVA_PATTERNS: BugPattern[] = [
     cwe: "CWE-396",
     fix_template: "Catch specific exceptions: catch (IOException | SQLException e) { ... }",
   },
+
+  // ── v2.10.333 — Phase A round 2 (Java) ────────────────────────
+  {
+    id: "java-019-tls-trust-all",
+    title: "TrustManager that accepts every certificate (TLS bypass)",
+    severity: "critical",
+    languages: ["java", "kotlin"],
+    regex:
+      /(?:new\s+(?:X509TrustManager|HostnameVerifier)\s*\(\s*\)\s*\{[^}]*?(?:checkServerTrusted|checkClientTrusted|verify)[^}]*?\{\s*\}|new\s+TrustManager\s*\[\s*\]\s*\{[^}]*?@Override[^}]*?\{\s*\})/g,
+    explanation:
+      "An X509TrustManager whose checkServerTrusted is empty (or a HostnameVerifier whose verify always returns true) accepts every certificate including self-signed and attacker-presented ones. Any MITM on the path can decrypt and forge the traffic.",
+    verify_prompt:
+      "Is this in a production code path or a test fixture?\n" +
+      "1. If in src/test/ or wrapped in `if (env.equals(\"test\"))` → FALSE_POSITIVE.\n" +
+      "2. If the empty-body method actually pins a specific cert (compares against a known fingerprint inside the body) → FALSE_POSITIVE.\n" +
+      "3. If the trust-all is gated behind a config flag that's off in production → FALSE_POSITIVE (still flag for review).\n" +
+      "Only CONFIRMED when the trust manager is unconditional and reachable from production.",
+    cwe: "CWE-295",
+    fix_template:
+      "Use the JDK default TrustManager. If self-signed certs are required, add the specific CA to the trust store rather than disabling validation.",
+  },
+  {
+    id: "java-020-ssrf-resttemplate",
+    title: "RestTemplate / WebClient / OkHttp with user-controllable URL",
+    severity: "high",
+    languages: ["java", "kotlin"],
+    regex:
+      /\b(?:restTemplate\.(?:getForObject|getForEntity|postForObject|exchange)|webClient\.(?:get|post)\s*\(\s*\)\s*\.uri|okHttpClient\.newCall\s*\(\s*new\s+Request\.Builder\s*\(\s*\)\s*\.url|HttpClient\.newBuilder)\s*\([^)]*(?:request\.|@RequestParam|@PathVariable|input|userUrl)\b/gi,
+    explanation:
+      "Server-Side Request Forgery: the server fetches a URL chosen by the attacker. Used to reach internal services (Redis, metadata endpoints like 169.254.169.254 on AWS, admin panels), bypassing network perimeters. Capital One 2019 breach was a Java RestTemplate SSRF.",
+    verify_prompt:
+      "Check before confirming. FALSE_POSITIVE if ANY:\n" +
+      "1. URL goes through an allowlist (host comparison against a fixed list, scheme restricted to https) BEFORE the call → FALSE_POSITIVE.\n" +
+      "2. The hostname is resolved and the IP is checked to NOT be RFC1918 / loopback / link-local before fetch → FALSE_POSITIVE.\n" +
+      "3. URL is from a config file the operator owns, not a request parameter → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when an HTTP request parameter / path variable / form field reaches the URL argument with no filtering.",
+    cwe: "CWE-918",
+    fix_template:
+      "Allowlist permitted hosts. Block RFC1918, 127/8, ::1, 169.254.169.254 (AWS/GCP/Azure metadata). Resolve the hostname first and validate the IP, not just the input string.",
+  },
+  {
+    id: "java-021-spring-restbody-map",
+    title: "Spring @RequestBody Map<String,Object> used directly in business logic",
+    severity: "high",
+    languages: ["java", "kotlin"],
+    regex:
+      /@RequestBody\s+(?:final\s+)?Map\s*<\s*String\s*,\s*(?:Object|\?)\s*>/g,
+    explanation:
+      "Binding the request body to a raw Map<String,Object> defeats schema validation. Any field the attacker sends ends up in the map, and downstream code may persist privileged fields (isAdmin, role, balance) without realizing they came from outside. Use a typed DTO with explicit @JsonIgnore / Bean Validation.",
+    verify_prompt:
+      "Does the handler immediately validate / extract specific keys from the map (with whitelisting), or does it pass the map directly to a save / update / merge call?\n" +
+      "1. If keys are extracted by name and only known-safe fields are used → FALSE_POSITIVE.\n" +
+      "2. If the map is forwarded into ObjectMapper.convertValue(map, ConcreteDto.class) where ConcreteDto has explicit fields → FALSE_POSITIVE (still consider migrating to typed binding).\n" +
+      "3. If the map is iterated and applied to an entity via reflection / setProperty → CONFIRMED (mass-assignment hole).\n" +
+      "Only CONFIRMED when an externally-controlled map reaches a side-effecting call without per-field allowlisting.",
+    cwe: "CWE-915",
+    fix_template:
+      "Replace `Map<String,Object>` with a typed DTO. Use Bean Validation (@Valid + @NotNull / @Size) for schema enforcement.",
+  },
 ];
