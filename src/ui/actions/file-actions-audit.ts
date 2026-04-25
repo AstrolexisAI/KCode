@@ -302,18 +302,25 @@ export async function handleAuditAction(
     }
 
     case "review": {
-      // /review fprime/                — list confirmed findings with indices
-      // /review fprime/ keep 1,3,5     — mark only those findings confirmed; demote rest to FP
-      // /review fprime/ drop 2,4       — demote those findings to FP; keep rest
-      // /review fprime/ all            — keep everything as-is (no-op)
-      // /review fprime/ none           — demote ALL to FP (cancel pre-/fix)
+      // /review v2 — Sprint 2. Triage every bucket the verifier produced,
+      // not just confirmed.
       //
-      // Replaces the previous "manually edit AUDIT_REPORT.json with python"
-      // workflow that broke the autonomous-flow promise. Issue #111 v322.
+      //   /review fprime/                          — dashboard (all 3 buckets)
+      //   /review fprime/ list confirmed|fp|uncertain
+      //   /review fprime/ promote 7,8              — uncertain or FP → confirmed
+      //   /review fprime/ demote 2,3               — confirmed → FP
+      //   /review fprime/ tag 5 trusted_boundary   — set review_reason
+      //   /review fprime/ untag 5                  — clear review_reason
+      //   Legacy syntax still works: keep, drop, all, none.
+      //
+      // Indices are GLOBAL across all three buckets and stable across
+      // reruns (driven by array order in the JSON). The dashboard prints
+      // them in groups so the user always knows what each number maps to.
+      // Decisions persist via the v326 fields review_state, review_reason,
+      // and review_tags on Finding / FalsePositiveDetail.
       const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
       const pathToken = tokens.shift() ?? ".";
       const cmd = (tokens.shift() ?? "").toLowerCase();
-      const indicesArg = tokens.join(" ").replace(/\s/g, "");
 
       const { resolve: resolvePath } = await import("node:path");
       const { existsSync, readFileSync: readFs, writeFileSync: writeFs } =
@@ -328,127 +335,315 @@ export async function handleAuditAction(
         );
       }
 
+      type Reviewable = {
+        pattern_id: string;
+        pattern_title?: string;
+        severity: string;
+        file: string;
+        line: number;
+        verification: { reasoning: string; verdict: string };
+        review_state?: string;
+        review_reason?: string;
+        review_tags?: string[];
+      };
       const audit = JSON.parse(readFs(jsonPath, "utf-8")) as {
-        findings: Array<{
-          pattern_id: string;
-          pattern_title: string;
-          severity: string;
-          file: string;
-          line: number;
-          verification: { reasoning: string; verdict: string };
-        }>;
+        findings: Reviewable[];
         false_positives: number;
-        false_positives_detail?: typeof audit.findings;
+        false_positives_detail?: Reviewable[];
+        needs_context?: number;
+        needs_context_detail?: Reviewable[];
         confirmed_findings: number;
       };
 
-      // No subcommand → print the list with indices.
+      // Build a flat global-index map across all three buckets so commands
+      // can refer to any finding by a single integer regardless of which
+      // bucket it currently lives in.
+      type Bucket = "confirmed" | "fp" | "uncertain";
+      const fpDetail = audit.false_positives_detail ?? [];
+      const ncDetail = audit.needs_context_detail ?? [];
+      const flat: Array<{ bucket: Bucket; localIdx: number; item: Reviewable }> = [];
+      for (let i = 0; i < audit.findings.length; i++) {
+        flat.push({ bucket: "confirmed", localIdx: i, item: audit.findings[i]! });
+      }
+      for (let i = 0; i < fpDetail.length; i++) {
+        flat.push({ bucket: "fp", localIdx: i, item: fpDetail[i]! });
+      }
+      for (let i = 0; i < ncDetail.length; i++) {
+        flat.push({ bucket: "uncertain", localIdx: i, item: ncDetail[i]! });
+      }
+
+      const icon = (sev: string): string =>
+        sev === "critical" ? "🔴" :
+        sev === "high" ? "🟠" :
+        sev === "medium" ? "🟡" : "🟢";
+      const fmtItem = (
+        globalIdx: number,
+        e: Reviewable,
+      ): string[] => {
+        const rel = e.file.replace(projectRoot + "/", "");
+        const tagStr = e.review_tags && e.review_tags.length > 0
+          ? ` [tags: ${e.review_tags.join(", ")}]`
+          : "";
+        const reasonStr = e.review_reason ? ` (reason: ${e.review_reason})` : "";
+        return [
+          `    ${globalIdx}. ${icon(e.severity)} [${e.severity.toUpperCase()}] ${e.pattern_id}${reasonStr}${tagStr}`,
+          `       ${rel}:${e.line}`,
+          `       ${e.verification.reasoning.slice(0, 220)}`,
+        ];
+      };
+
+      // ── Dashboard (no subcommand) ──────────────────────────────
       if (!cmd) {
-        if (audit.findings.length === 0) {
-          return (
-            `  ${pathToken}/AUDIT_REPORT.json has 0 confirmed findings.\n` +
-            `  Run /scan ${pathToken} first or check the FP details in the JSON.`
-          );
-        }
         const lines: string[] = [
-          `  KCode Review`,
+          `  KCode Review — ${pathToken}`,
           `    Project: ${projectRoot}`,
-          `    ${audit.findings.length} confirmed finding(s) — review each before /fix:`,
+          `    ${audit.findings.length} confirmed | ${fpDetail.length} false-positive | ${ncDetail.length} uncertain`,
           "",
         ];
-        for (let i = 0; i < audit.findings.length; i++) {
-          const f = audit.findings[i]!;
-          const rel = f.file.replace(projectRoot + "/", "");
-          const icon =
-            f.severity === "critical" ? "🔴" :
-            f.severity === "high" ? "🟠" :
-            f.severity === "medium" ? "🟡" : "🟢";
-          lines.push(`    ${i + 1}. ${icon} [${f.severity.toUpperCase()}] ${f.pattern_id}`);
-          lines.push(`       ${rel}:${f.line}`);
-          lines.push(`       ${f.verification.reasoning.slice(0, 220)}`);
+        if (audit.findings.length > 0) {
+          lines.push(`  ── Confirmed (${audit.findings.length}) ──`);
+          for (const entry of flat.filter((e) => e.bucket === "confirmed")) {
+            const gIdx = flat.indexOf(entry) + 1;
+            lines.push(...fmtItem(gIdx, entry.item));
+            lines.push("");
+          }
+        }
+        if (ncDetail.length > 0) {
+          lines.push(`  ── Uncertain — needs_context (${ncDetail.length}) ──`);
+          for (const entry of flat.filter((e) => e.bucket === "uncertain").slice(0, 10)) {
+            const gIdx = flat.indexOf(entry) + 1;
+            lines.push(...fmtItem(gIdx, entry.item));
+            lines.push("");
+          }
+          if (ncDetail.length > 10) {
+            lines.push(`    …and ${ncDetail.length - 10} more — /review ${pathToken} list uncertain`);
+            lines.push("");
+          }
+        }
+        if (fpDetail.length > 0 && fpDetail.length <= 10) {
+          lines.push(`  ── False positives (${fpDetail.length}) ──`);
+          for (const entry of flat.filter((e) => e.bucket === "fp")) {
+            const gIdx = flat.indexOf(entry) + 1;
+            lines.push(...fmtItem(gIdx, entry.item));
+            lines.push("");
+          }
+        } else if (fpDetail.length > 10) {
+          lines.push(`  ── False positives: ${fpDetail.length} (use /review ${pathToken} list fp to inspect) ──`);
           lines.push("");
         }
-        lines.push("  Decide which to keep, then run ONE of:");
-        lines.push(`    /review ${pathToken} keep 1,3   — keep only those, drop the rest as FP`);
-        lines.push(`    /review ${pathToken} drop 2,4   — drop those as FP, keep the rest`);
-        lines.push(`    /review ${pathToken} none       — mark all as FP (cancel before /fix)`);
-        lines.push(`    /review ${pathToken} all        — keep all as-is`);
+        lines.push("  Commands:");
+        lines.push(`    /review ${pathToken} list confirmed|fp|uncertain   — show one bucket`);
+        lines.push(`    /review ${pathToken} promote 7,8                  — uncertain or FP → confirmed`);
+        lines.push(`    /review ${pathToken} demote 2,3                   — confirmed → FP`);
+        lines.push(`    /review ${pathToken} tag 5 trusted_boundary       — annotate (drives report sections)`);
+        lines.push(`    /review ${pathToken} untag 5                      — clear annotation`);
+        lines.push("");
+        lines.push("  Legacy aliases: keep / drop / all / none — see /help.");
         return lines.join("\n");
       }
 
-      if (cmd === "all") {
-        return `  No changes — all ${audit.findings.length} finding(s) remain confirmed.`;
-      }
-
-      // Parse indices for keep/drop/none.
-      const allIndices = new Set(audit.findings.map((_, i) => i + 1));
-      let keepSet: Set<number>;
-      if (cmd === "none") {
-        keepSet = new Set();
-      } else if (cmd === "keep" || cmd === "drop") {
-        const parsed = indicesArg
-          .split(",")
-          .map((s) => Number.parseInt(s, 10))
-          .filter((n) => Number.isFinite(n) && n >= 1 && n <= audit.findings.length);
-        if (parsed.length === 0) {
+      // ── /review … list <bucket> ───────────────────────────────
+      if (cmd === "list") {
+        const bucketArg = (tokens.shift() ?? "").toLowerCase() as Bucket | "";
+        if (!bucketArg || !["confirmed", "fp", "uncertain"].includes(bucketArg)) {
           return (
-            `  No valid indices in "${indicesArg}".\n` +
-            `  Indices must be between 1 and ${audit.findings.length}.\n` +
-            `  Example: /review ${pathToken} keep 1,3`
+            `  Usage: /review ${pathToken} list confirmed|fp|uncertain\n` +
+            `  Or run /review ${pathToken} (no args) for the dashboard.`
           );
         }
-        keepSet = cmd === "keep"
-          ? new Set(parsed)
-          : new Set(audit.findings.map((_, i) => i + 1).filter((i) => !parsed.includes(i)));
-      } else {
-        return (
-          `  Unknown subcommand "${cmd}". Valid: keep, drop, all, none.\n` +
-          `  Run /review ${pathToken} (no args) to see the list.`
-        );
-      }
-
-      const kept = audit.findings.filter((_, i) => keepSet.has(i + 1));
-      const dropped = audit.findings.filter((_, i) => !keepSet.has(i + 1));
-
-      // Move dropped findings to false_positives_detail with verdict downgraded.
-      const fpDetail = audit.false_positives_detail ?? [];
-      for (const d of dropped) {
-        fpDetail.push({
-          ...d,
-          verification: {
-            ...d.verification,
-            verdict: "false_positive",
-            reasoning: `[reviewed by user — demoted from confirmed] ${d.verification.reasoning}`,
-          } as typeof d.verification,
-        });
-      }
-
-      audit.findings = kept;
-      audit.confirmed_findings = kept.length;
-      audit.false_positives_detail = fpDetail;
-      audit.false_positives = (audit.false_positives ?? 0) + dropped.length;
-
-      writeFs(jsonPath, JSON.stringify(audit, null, 2));
-
-      const lines: string[] = [
-        `  KCode Review — applied`,
-        `    Project: ${projectRoot}`,
-        "",
-        `    ✅ Kept:    ${kept.length} confirmed finding(s)`,
-        `    🗑  Dropped: ${dropped.length} (moved to false_positives_detail)`,
-      ];
-      if (kept.length > 0) {
-        lines.push("");
-        lines.push("    Confirmed findings going to /fix:");
-        for (const f of kept) {
-          const rel = f.file.replace(projectRoot + "/", "");
-          lines.push(`      • ${rel}:${f.line}  [${f.pattern_id}]`);
+        const filtered = flat.filter((e) => e.bucket === bucketArg);
+        if (filtered.length === 0) {
+          return `  No ${bucketArg} findings in ${pathToken}/.`;
         }
+        const lines: string[] = [
+          `  ${bucketArg.toUpperCase()} (${filtered.length}) — ${pathToken}`,
+          "",
+        ];
+        for (const entry of filtered) {
+          const gIdx = flat.indexOf(entry) + 1;
+          lines.push(...fmtItem(gIdx, entry.item));
+          lines.push("");
+        }
+        return lines.join("\n");
       }
-      lines.push("");
-      lines.push(`  Next: /fix ${pathToken}`);
-      void allIndices; // kept for future range/range-with-indices syntax
-      return lines.join("\n");
+
+      // Helpers for promote/demote/tag/untag — parse comma-separated indices.
+      const parseIndices = (raw: string): number[] => {
+        return raw
+          .split(",")
+          .map((s) => Number.parseInt(s.trim(), 10))
+          .filter((n) => Number.isFinite(n) && n >= 1 && n <= flat.length);
+      };
+
+      const persist = (): void => {
+        // Re-derive arrays from `flat` snapshots — consumers will do
+        // their own indexing on next /review run, but we must keep the
+        // JSON arrays consistent with the bucket reassignments below.
+        const newConfirmed: Reviewable[] = [];
+        const newFp: Reviewable[] = [];
+        const newNc: Reviewable[] = [];
+        for (const e of flat) {
+          if (e.bucket === "confirmed") newConfirmed.push(e.item);
+          else if (e.bucket === "fp") newFp.push(e.item);
+          else newNc.push(e.item);
+        }
+        audit.findings = newConfirmed;
+        audit.false_positives_detail = newFp;
+        audit.needs_context_detail = newNc;
+        audit.confirmed_findings = newConfirmed.length;
+        audit.false_positives = newFp.length;
+        audit.needs_context = newNc.length;
+        writeFs(jsonPath, JSON.stringify(audit, null, 2));
+      };
+
+      // ── promote ───────────────────────────────────────────────
+      if (cmd === "promote") {
+        const indices = parseIndices(tokens.join(" "));
+        if (indices.length === 0) {
+          return `  Usage: /review ${pathToken} promote 7,8 — indices from the dashboard.`;
+        }
+        const moved: string[] = [];
+        for (const idx of indices) {
+          const entry = flat[idx - 1]!;
+          if (entry.bucket === "confirmed") {
+            moved.push(`#${idx}: already confirmed (no change)`);
+            continue;
+          }
+          entry.item.review_state = "promoted";
+          if (!entry.item.review_reason) entry.item.review_reason = "manual_confirmation";
+          entry.bucket = "confirmed";
+          moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
+        }
+        persist();
+        return [
+          `  Promoted ${indices.length} finding(s) → confirmed`,
+          ...moved.map((s) => `    ${s}`),
+          "",
+          `  Next: /fix ${pathToken}`,
+        ].join("\n");
+      }
+
+      // ── demote ────────────────────────────────────────────────
+      if (cmd === "demote") {
+        const indices = parseIndices(tokens.join(" "));
+        if (indices.length === 0) {
+          return `  Usage: /review ${pathToken} demote 2,3 — indices from the dashboard.`;
+        }
+        const moved: string[] = [];
+        for (const idx of indices) {
+          const entry = flat[idx - 1]!;
+          if (entry.bucket === "fp") {
+            moved.push(`#${idx}: already FP (no change)`);
+            continue;
+          }
+          entry.item.review_state = "demoted_fp";
+          if (!entry.item.review_reason) entry.item.review_reason = "manual_confirmation";
+          // Annotate the verdict reasoning so the FP detail section is
+          // self-explaining without cross-referencing review_state.
+          entry.item.verification = {
+            ...entry.item.verification,
+            verdict: "false_positive",
+            reasoning: `[reviewer demoted] ${entry.item.verification.reasoning}`,
+          };
+          entry.bucket = "fp";
+          moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
+        }
+        persist();
+        return [
+          `  Demoted ${indices.length} finding(s) → false_positives_detail`,
+          ...moved.map((s) => `    ${s}`),
+        ].join("\n");
+      }
+
+      // ── tag <idx> <reason> ────────────────────────────────────
+      if (cmd === "tag") {
+        const idxArg = tokens.shift() ?? "";
+        const reasonArg = (tokens.join(" ").trim() || "").toLowerCase();
+        const validReasons = new Set([
+          "trusted_boundary", "test_only", "generated_code",
+          "build_time_only", "placeholder_secret", "sanitized",
+          "manual_confirmation", "other",
+        ]);
+        const idx = Number.parseInt(idxArg, 10);
+        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
+          return `  Usage: /review ${pathToken} tag <index> <reason>\n  Valid reasons: ${[...validReasons].join(", ")}`;
+        }
+        if (!validReasons.has(reasonArg)) {
+          return `  Unknown reason "${reasonArg}".\n  Valid: ${[...validReasons].join(", ")}`;
+        }
+        const entry = flat[idx - 1]!;
+        entry.item.review_reason = reasonArg as Reviewable["review_reason"];
+        persist();
+        return `  Tagged #${idx} with reason: ${reasonArg}`;
+      }
+
+      if (cmd === "untag") {
+        const idxArg = tokens.shift() ?? "";
+        const idx = Number.parseInt(idxArg, 10);
+        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
+          return `  Usage: /review ${pathToken} untag <index>`;
+        }
+        const entry = flat[idx - 1]!;
+        delete entry.item.review_reason;
+        persist();
+        return `  Cleared review_reason on #${idx}`;
+      }
+
+      // ── Legacy: keep / drop / all / none (operate on confirmed bucket only)
+      if (cmd === "all") {
+        return `  No changes — all ${audit.findings.length} confirmed finding(s) remain.`;
+      }
+      if (cmd === "keep" || cmd === "drop" || cmd === "none") {
+        const confirmedRange = audit.findings.length;
+        const indicesArg = tokens.join(" ").replace(/\s/g, "");
+        let dropLocalIdx: number[];
+        if (cmd === "none") {
+          dropLocalIdx = audit.findings.map((_, i) => i);
+        } else {
+          const parsed = indicesArg
+            .split(",")
+            .map((s) => Number.parseInt(s, 10))
+            .filter((n) => Number.isFinite(n) && n >= 1 && n <= confirmedRange);
+          if (parsed.length === 0) {
+            return (
+              `  No valid indices in "${indicesArg}".\n` +
+              `  Confirmed indices: 1..${confirmedRange}.\n` +
+              `  Example: /review ${pathToken} keep 1,3`
+            );
+          }
+          dropLocalIdx = cmd === "keep"
+            ? audit.findings.map((_, i) => i + 1).filter((n) => !parsed.includes(n)).map((n) => n - 1)
+            : parsed.map((n) => n - 1);
+        }
+        // Translate confirmed-local indices to global indices and demote.
+        const moved: string[] = [];
+        for (const lIdx of dropLocalIdx) {
+          const globalIdx = lIdx + 1; // confirmed bucket is the first slice in `flat`
+          const entry = flat[globalIdx - 1]!;
+          if (entry.bucket !== "confirmed") continue;
+          entry.item.review_state = "demoted_fp";
+          entry.item.verification = {
+            ...entry.item.verification,
+            verdict: "false_positive",
+            reasoning: `[reviewer demoted via ${cmd}] ${entry.item.verification.reasoning}`,
+          };
+          entry.bucket = "fp";
+          moved.push(`#${globalIdx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
+        }
+        persist();
+        return [
+          `  ${cmd}: demoted ${moved.length} finding(s) → false_positives_detail`,
+          ...moved.map((s) => `    ${s}`),
+          "",
+          `  Next: /fix ${pathToken}`,
+        ].join("\n");
+      }
+
+      return (
+        `  Unknown subcommand "${cmd}".\n` +
+        `  Try: list | promote | demote | tag | untag\n` +
+        `  Or run /review ${pathToken} (no args) for the dashboard.`
+      );
     }
 
     case "fix": {
