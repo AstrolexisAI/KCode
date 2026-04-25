@@ -380,5 +380,25 @@ export interface AuditResult {
    */
   pattern_metrics?: Record<string, PatternMetrics>;
   exploits?: ExploitProof[];
+  /**
+   * Per-language AST grammar load status. Present when at least one
+   * AST pattern was attempted during the run. Lets the report tell the
+   * user that AST coverage is degraded for a specific language and
+   * suggest `kcode grammars install`. v2.10.339.
+   *
+   * Aggregated from the stats array of the AST runner: a language is
+   * "loaded" if any pattern of that language reported grammar_loaded:
+   * true at least once during the run. Last load_error is captured for
+   * the unloaded case so the user sees why.
+   */
+  ast_grammar_status?: Array<{
+    language: string;
+    /** Number of AST patterns of this language that ran during the audit. */
+    patterns_attempted: number;
+    /** True iff at least one pattern of this language successfully parsed at least one file. */
+    loaded: boolean;
+    /** Most recent load_error seen for this language (when loaded === false). */
+    last_error?: string;
+  }>;
   elapsed_ms: number;
 }

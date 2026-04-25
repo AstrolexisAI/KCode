@@ -17,6 +17,15 @@ import type {
   AstRunner,
   AstScanStats,
 } from "./types";
+// Embed web-tree-sitter's runtime wasm via Bun's `with { type: "file" }`.
+// In `bun run` mode this resolves to the path under node_modules; in
+// `bun build --compile` mode Bun copies the file into the binary and
+// the import returns a path inside the embedded virtual filesystem
+// (/$bunfs/...). Either way, Parser.init({ locateFile }) below can
+// hand the runtime a real path. v2.10.339.
+import runtimeWasm from "web-tree-sitter/web-tree-sitter.wasm" with {
+  type: "file",
+};
 
 // ── Lazy module + grammar cache ──────────────────────────────────
 
@@ -81,7 +90,21 @@ async function loadModule(): Promise<TreeSitterModule | null> {
       // an .init() static. Initialize once, then return the module.
       const Parser = (mod as { default?: unknown }).default ?? (mod as { Parser?: unknown }).Parser;
       if (typeof Parser === "function" && typeof (Parser as { init?: unknown }).init === "function") {
-        await (Parser as { init: () => Promise<void> }).init();
+        // locateFile lets the Emscripten module find its sibling
+        // .wasm without relying on the CWD or import.meta.url —
+        // critical for the compiled binary (`bun build --compile`),
+        // where node_modules doesn't exist on disk and the embedded
+        // file lives under /$bunfs/. The runtimeWasm import above
+        // resolves to the right path in both modes.
+        const init = Parser as unknown as {
+          init: (opts?: { locateFile?: (p: string) => string }) => Promise<void>;
+        };
+        await init.init({
+          locateFile: (file: string) => {
+            if (file === "web-tree-sitter.wasm") return runtimeWasm;
+            return file;
+          },
+        });
       }
       return mod as unknown as TreeSitterModule;
     } catch {
@@ -215,6 +238,7 @@ export const runAstPatterns: AstRunner = async (patterns, file, content) => {
         candidates: 0,
         grammar_loaded: false,
         load_error: "web-tree-sitter not installed",
+        language: tsLangFor(p.languages[0] ?? "") ?? undefined,
       });
     }
     return { candidates, stats };
@@ -243,6 +267,7 @@ export const runAstPatterns: AstRunner = async (patterns, file, content) => {
           candidates: 0,
           grammar_loaded: false,
           load_error: `tree-sitter-${lang}.wasm not found`,
+          language: lang,
         });
       }
       continue;
@@ -262,6 +287,7 @@ export const runAstPatterns: AstRunner = async (patterns, file, content) => {
           candidates: 0,
           grammar_loaded: true,
           load_error: `parse failed: ${msg.slice(0, 120)}`,
+          language: lang,
         });
       }
       continue;
@@ -282,6 +308,7 @@ export const runAstPatterns: AstRunner = async (patterns, file, content) => {
           load_error: `query compile failed: ${
             err instanceof Error ? err.message.slice(0, 120) : String(err)
           }`,
+          language: lang,
         });
         continue;
       }
@@ -306,6 +333,7 @@ export const runAstPatterns: AstRunner = async (patterns, file, content) => {
         raw_matches: raw,
         candidates: conf,
         grammar_loaded: true,
+        language: lang,
       });
     }
   }

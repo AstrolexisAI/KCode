@@ -7,6 +7,7 @@ export { registerDaemonCommand } from "./daemon";
 export { registerDashboardCommand } from "./dashboard";
 export { registerDistillCommand } from "./distill";
 export { registerDoctorCommand } from "./doctor";
+export { registerGrammarsCommand } from "./grammars";
 export { registerHistoryCommand } from "./history";
 export { registerInitCommand } from "./init";
 export { registerLicenseCommand } from "./license";

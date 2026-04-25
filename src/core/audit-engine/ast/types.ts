@@ -96,6 +96,12 @@ export interface AstScanStats {
   grammar_loaded: boolean;
   /** Surfaced reason if grammar_loaded === false. */
   load_error?: string;
+  /**
+   * tree-sitter language key the runner attempted (e.g. "python").
+   * Lets aggregators report grammar status per language instead of
+   * per pattern. Optional for backwards compat. v2.10.339.
+   */
+  language?: string;
 }
 
 /**
