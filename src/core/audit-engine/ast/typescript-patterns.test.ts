@@ -134,6 +134,54 @@ describe("ts-ast-001 prototype-pollution-of-parameter", () => {
     });
   });
 
+  it("does NOT flag arr[i] = val when i is typed number (v341 audit FP fix)", async () => {
+    _resetAstRunnerForTest();
+    const code = `function f(arr: number[], i: number, val: number) {
+  arr[i] = val;
+}
+`;
+    const r = await runAstPatterns(TYPESCRIPT_AST_PATTERNS, "/tmp/a.ts", code);
+    gateOnGrammar(r.stats, () => {
+      expect(r.candidates.length).toBe(0);
+    });
+  });
+
+  it("does NOT flag bigint-typed index either", async () => {
+    _resetAstRunnerForTest();
+    const code = `function f(buf: any, i: bigint) { buf[i] = 1; }\n`;
+    const r = await runAstPatterns(TYPESCRIPT_AST_PATTERNS, "/tmp/a.ts", code);
+    gateOnGrammar(r.stats, () => {
+      expect(r.candidates.length).toBe(0);
+    });
+  });
+
+  it("does NOT flag nullable number: i: number | undefined", async () => {
+    _resetAstRunnerForTest();
+    const code = `function f(arr: any, i: number | undefined) { if (i !== undefined) arr[i] = 1; }\n`;
+    const r = await runAstPatterns(TYPESCRIPT_AST_PATTERNS, "/tmp/a.ts", code);
+    gateOnGrammar(r.stats, () => {
+      expect(r.candidates.length).toBe(0);
+    });
+  });
+
+  it("DOES flag when key is string-typed (regression, ensure suppression isn't over-broad)", async () => {
+    _resetAstRunnerForTest();
+    const code = `function f(target: any, k: string) { target[k] = 1; }\n`;
+    const r = await runAstPatterns(TYPESCRIPT_AST_PATTERNS, "/tmp/a.ts", code);
+    gateOnGrammar(r.stats, () => {
+      expect(r.candidates.length).toBe(1);
+    });
+  });
+
+  it("DOES flag when key has no type annotation (untyped key)", async () => {
+    _resetAstRunnerForTest();
+    const code = `function f(target: any, k: any) { target[k] = 1; }\n`;
+    const r = await runAstPatterns(TYPESCRIPT_AST_PATTERNS, "/tmp/a.ts", code);
+    gateOnGrammar(r.stats, () => {
+      expect(r.candidates.length).toBe(1);
+    });
+  });
+
   it("flags destructured-key: function f({key}: {key: string}, target: any)", async () => {
     _resetAstRunnerForTest();
     const code = `function f({key}: {key: string}, target: any) {
