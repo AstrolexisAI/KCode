@@ -146,3 +146,145 @@ def also_evil(payload): exec(payload)
     expect(r.candidates[0]!.matched_text).toBe("eval(x)");
   });
 });
+
+// v2.10.343 — second wave of Python AST patterns
+describe("py-ast-002 deserialization-of-parameter", () => {
+  it("flags pickle.loads(p) when p is a parameter", async () => {
+    _resetAstRunnerForTest();
+    const code = `import pickle\ndef f(p):\n    pickle.loads(p)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    expect(hits.length).toBe(1);
+    expect(hits[0]!.matched_text).toBe("pickle.loads(p)");
+  });
+
+  it("flags yaml.load(p) but NOT yaml.safe_load(p)", async () => {
+    _resetAstRunnerForTest();
+    const code = `import yaml\ndef a(p): yaml.load(p)\ndef b(p): yaml.safe_load(p)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    expect(hits.length).toBe(1);
+    expect(hits[0]!.matched_text).toBe("yaml.load(p)");
+  });
+
+  it("flags marshal / dill / cPickle / yaml.unsafe_load / yaml.full_load", async () => {
+    _resetAstRunnerForTest();
+    const code = `def a(p): marshal.loads(p)
+def b(p): dill.loads(p)
+def c(p): cPickle.loads(p)
+def d(p): yaml.unsafe_load(p)
+def e(p): yaml.full_load(p)
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    expect(hits.length).toBe(5);
+  });
+
+  it("does not flag json.loads / pickle.loads of a literal", async () => {
+    _resetAstRunnerForTest();
+    const code = `def a(p): json.loads(p)
+def b(): pickle.loads(b"safe")
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    expect(hits.length).toBe(0);
+  });
+});
+
+describe("py-ast-003 subprocess-of-parameter", () => {
+  it("flags subprocess.run(p) and subprocess.Popen(p) and subprocess.check_call(p)", async () => {
+    _resetAstRunnerForTest();
+    const code = `def a(p): subprocess.run(p)
+def b(p): subprocess.Popen(p)
+def c(p): subprocess.check_call(p)
+def d(p): subprocess.check_output(p)
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-003-subprocess-of-parameter");
+    expect(hits.length).toBe(4);
+  });
+
+  it("flags os.system, os.popen, os.execv, os.spawnv", async () => {
+    _resetAstRunnerForTest();
+    const code = `def a(p): os.system(p)
+def b(p): os.popen(p)
+def c(p): os.execv(p)
+def d(p): os.spawnv(p)
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-003-subprocess-of-parameter");
+    expect(hits.length).toBe(4);
+  });
+
+  it("does not flag a non-shell module: foo.run(p)", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(p): foo.run(p)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-003-subprocess-of-parameter");
+    expect(hits.length).toBe(0);
+  });
+
+  it("does not flag os.system of a literal", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(): os.system("ls -la")\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-003-subprocess-of-parameter");
+    expect(hits.length).toBe(0);
+  });
+});
+
+describe("py-ast-004 open-of-parameter", () => {
+  it("flags open(p) when p is a parameter", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(p): open(p)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-004-open-of-parameter");
+    expect(hits.length).toBe(1);
+    expect(hits[0]!.matched_text).toBe("open(p)");
+  });
+
+  it("flags open(p, 'r') — second arg (mode) doesn't disqualify", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(p): open(p, "r")\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-004-open-of-parameter");
+    expect(hits.length).toBe(1);
+  });
+
+  it("does not flag open of a literal", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f(): open("/etc/hosts")\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-004-open-of-parameter");
+    expect(hits.length).toBe(0);
+  });
+
+  it("does not flag open of an internal local variable", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f():\n    path = "/tmp/x"\n    open(path)\n`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-004-open-of-parameter");
+    expect(hits.length).toBe(0);
+  });
+});
+
+describe("python-patterns: shape declarations for the v343 wave", () => {
+  it("declares CWE for each new pattern", () => {
+    const get = (id: string) => PYTHON_AST_PATTERNS.find((p) => p.id === id);
+    expect(get("py-ast-002-deserialization-of-parameter")?.cwe).toBe("CWE-502");
+    expect(get("py-ast-003-subprocess-of-parameter")?.cwe).toBe("CWE-78");
+    expect(get("py-ast-004-open-of-parameter")?.cwe).toBe("CWE-22");
+  });
+});

@@ -1412,6 +1412,11 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   // ── v2.10.341 — TS prototype-pollution + JS RegExp ReDoS ───
   "ts-ast-001-prototype-pollution-of-parameter": r("obj[key] = ... where key is a parameter (prototype pollution)", W.PROTO),
   "js-ast-003-regexp-construction-of-parameter": r("new RegExp(p) where p is a parameter (ReDoS)", W.REDOS),
+
+  // ── v2.10.343 — second wave Python AST ─────────────────────
+  "py-ast-002-deserialization-of-parameter": r("pickle/yaml/marshal/dill .loads of parameter (RCE via deserialization)", W.DESER),
+  "py-ast-003-subprocess-of-parameter": r("subprocess / os.system / os.exec of parameter (command injection)", W.SHELL),
+  "py-ast-004-open-of-parameter": r("open() of parameter (path traversal)", W.PATH),
 };
 
 function commentPrefix(path: string): string {
