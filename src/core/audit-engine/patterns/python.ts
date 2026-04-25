@@ -347,4 +347,27 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     cwe: "CWE-1054",
     fix_template: "Pass the value as a function parameter, use a class to encapsulate state, or use a module-level constant.",
   },
+
+  // ── ML library deserialization (torch / joblib / cloudpickle) ──
+  // v2.10.332 — Phase A web/ML expansion.
+  {
+    id: "py-021-torch-load-untrusted",
+    title: "torch.load / joblib.load on untrusted bytes (pickle under the hood)",
+    severity: "critical",
+    languages: ["python"],
+    regex:
+      /\b(?:torch\.load|joblib\.load|tf\.keras\.models\.load_model|skops\.io\.load)\s*\([^)]*(?:request|params|body|user|input|args|argv|file|path|url|download)\b/gi,
+    explanation:
+      "torch.load and joblib.load both use Python pickle internally. Passing an attacker-controllable file (a downloaded model, a user-uploaded checkpoint, a path stored in a request) is full RCE — the pickle's __reduce__ method runs at load time. PyTorch issued a security advisory recommending weights_only=True (default in 2.6+) precisely for this class.",
+    verify_prompt:
+      "Is the file path / bytes argument user-controllable in this code path? Check for:\n" +
+      "1. Hardcoded path to a model file shipped with the project → FALSE_POSITIVE.\n" +
+      "2. torch.load(..., weights_only=True) or map_location with explicit type filter → FALSE_POSITIVE.\n" +
+      "3. The path comes from an env var or config that the operator controls (not a request) → FALSE_POSITIVE.\n" +
+      "4. The blob is HMAC-verified before loading → FALSE_POSITIVE.\n" +
+      "Only CONFIRMED when the bytes / path could reach the call from an external boundary (HTTP request, file upload, message queue, etc.).",
+    cwe: "CWE-502",
+    fix_template:
+      "PyTorch: torch.load(..., weights_only=True). joblib: validate the source, sign the artifact (hmac), or load into a sandboxed subprocess.",
+  },
 ];
