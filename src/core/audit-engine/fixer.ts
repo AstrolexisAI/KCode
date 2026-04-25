@@ -1402,6 +1402,12 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
 
   // ── v2.10.336 — AST-based patterns ─────────────────────────
   "py-ast-001-eval-of-parameter": r("eval() of function parameter (AST taint)", W.EVAL),
+
+  // ── v2.10.340 — JS + Go AST patterns ───────────────────────
+  "js-ast-001-eval-of-parameter": r("eval/Function/setTimeout-string of parameter (AST taint)", W.EVAL),
+  "js-ast-002-child-process-exec-of-parameter": r("child_process.exec of parameter (AST taint)", W.SHELL),
+  "go-ast-001-exec-command-of-parameter": r("exec.Command of parameter (AST taint)", W.SHELL),
+  "go-ast-002-os-open-of-parameter": r("os.Open / ReadFile of parameter (AST taint)", W.PATH),
 };
 
 function commentPrefix(path: string): string {

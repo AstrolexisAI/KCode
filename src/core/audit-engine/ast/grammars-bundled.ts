@@ -17,6 +17,8 @@
 //   3. Add a tsLangFor() entry in runner.ts if the language id differs
 
 import pythonWasm from "./grammars/tree-sitter-python.wasm" with { type: "file" };
+import javascriptWasm from "./grammars/tree-sitter-javascript.wasm" with { type: "file" };
+import goWasm from "./grammars/tree-sitter-go.wasm" with { type: "file" };
 
 export interface BundledGrammar {
   /** tree-sitter language key (matches tsLangFor in runner.ts) */
@@ -32,6 +34,16 @@ export const BUNDLED_GRAMMARS: readonly BundledGrammar[] = [
     language: "python",
     path: pythonWasm,
     filename: "tree-sitter-python.wasm",
+  },
+  {
+    language: "javascript",
+    path: javascriptWasm,
+    filename: "tree-sitter-javascript.wasm",
+  },
+  {
+    language: "go",
+    path: goWasm,
+    filename: "tree-sitter-go.wasm",
   },
 ];
 
