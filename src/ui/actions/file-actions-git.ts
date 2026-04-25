@@ -22,7 +22,7 @@ export async function handleGitAction(
       // Background execution — same pattern as /scan
       const { prState, resetPrState } = await import("../../core/audit-engine/pr-state.js");
       const { createPr } = await import("../../core/audit-engine/pr-generator.js");
-      const { buildAuditLlmCallbackFromConfig } = await import(
+      const { buildAuditLlmCallbackFromConfigAsync } = await import(
         "../../core/audit-engine/llm-callback.js"
       );
 
@@ -34,9 +34,14 @@ export async function handleGitAction(
       // Fire-and-forget
       (async () => {
         try {
+          // v2.10.316: use the registry-aware async builder so /pr
+          // hits the actual configured model (e.g. mark7 on port 8090)
+          // instead of falling back to the dead localhost:10091 default.
+          // Same fix applied to /scan in v311.
+          const llmCallback = await buildAuditLlmCallbackFromConfigAsync(appConfig);
           const result = await createPr({
             projectRoot,
-            llmCallback: buildAuditLlmCallbackFromConfig(appConfig),
+            llmCallback,
             repo,
             dryRun,
             onStep: (step) => { prState.step = step; },
