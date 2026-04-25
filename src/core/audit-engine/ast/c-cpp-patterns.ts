@@ -238,6 +238,25 @@ export const C_CPP_AST_PATTERNS: AstPattern[] = [
       const arg = captures.arg?.[0];
       if (!callee || !arg) return null;
       if (!CPP_STR_COPY_CALLEES.has(callee.node.text)) return null;
+      // v346 audit fix — position 0 is the destination buffer for
+      // every callee in the strcpy family (`strcpy(dst, src)`,
+      // `sprintf(buf, fmt, ...)`, etc.). The buffer-overflow bug is
+      // when SOURCE (position 1+) is caller-controlled, not when
+      // dst is a parameter. Skipping position 0 cuts a hot FP on
+      // every routine `strcpy(my_buf, "literal")` call where my_buf
+      // is the function's outparam.
+      const argList = arg.node.parent;
+      if (argList) {
+        let pos = -1;
+        for (let i = 0; i < argList.namedChildCount; i++) {
+          const c = argList.namedChild(i);
+          if (c && c.startIndex === arg.node.startIndex) {
+            pos = i;
+            break;
+          }
+        }
+        if (pos === 0) return null;
+      }
       const enclosing = findEnclosingFunction(callee.node);
       if (!enclosing) return null;
       const params = parameterNames(enclosing);

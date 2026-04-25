@@ -107,15 +107,27 @@ void d(char *p) { execve(p, NULL, NULL); }
 });
 
 describe("cpp-ast-002 strcpy-of-parameter", () => {
-  it("flags strcpy(dst, src) when src is a parameter", async () => {
+  it("flags strcpy(dst, src) when src is a parameter — v346 audit: dst at position 0 is skipped", async () => {
     _resetAstRunnerForTest();
     const code = `void f(char *dst, const char *src) { strcpy(dst, src); }\n`;
     const r = await runAstPatterns(C_CPP_AST_PATTERNS, "/tmp/x.c", code);
     gateOnGrammar(r.stats, () => {
       const hits = r.candidates.filter((c) => c.pattern_id === "cpp-ast-002-strcpy-of-parameter");
-      // Both dst and src are parameters; no-anchor query produces
-      // two matches for the same call.
-      expect(hits.length).toBe(2);
+      // Only src (position 1) fires — dst at position 0 is the
+      // destination buffer; a parameter destination is normal API
+      // usage, not the buffer-overflow shape.
+      expect(hits.length).toBe(1);
+      expect(hits[0]!.matched_text).toBe("strcpy(...src...)");
+    });
+  });
+
+  it("does NOT flag strcpy(dst, literal) — only dst is param at position 0 (v346 audit fix)", async () => {
+    _resetAstRunnerForTest();
+    const code = `void f(char *dst) { strcpy(dst, "fixed"); }\n`;
+    const r = await runAstPatterns(C_CPP_AST_PATTERNS, "/tmp/x.c", code);
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "cpp-ast-002-strcpy-of-parameter");
+      expect(hits.length).toBe(0);
     });
   });
 
@@ -128,12 +140,13 @@ void c(char *buf, const char *fmt) { sprintf(buf, fmt); }
     const r = await runAstPatterns(C_CPP_AST_PATTERNS, "/tmp/x.c", code);
     gateOnGrammar(r.stats, () => {
       const hits = r.candidates.filter((c) => c.pattern_id === "cpp-ast-002-strcpy-of-parameter");
-      // strcat: 2 (dst, src), strncpy: 3 (dst, src, n — n is also a
-      // parameter so the no-anchor query catches it), sprintf: 2
-      // (buf, fmt) → 7 total. The n-param hit is technically a FP
-      // (n is a length, not a buffer), but the verifier prompt
-      // handles the demotion.
-      expect(hits.length).toBe(7);
+      // After v346 audit fix (position 0 skipped):
+      //   strcat: 1 (src only — dst at pos 0 skipped)
+      //   strncpy: 2 (src at pos 1, n at pos 2; both are params)
+      //   sprintf: 1 (fmt at pos 1)
+      // → 4 total. The n-param hit is technically a FP (n is a
+      // length, not a buffer), the verifier prompt demotes it.
+      expect(hits.length).toBe(4);
     });
   });
 
