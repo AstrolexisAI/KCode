@@ -245,19 +245,101 @@ function e(x) { cp.execFileSync(x); }
   });
 });
 
+describe("js-ast-003 regexp-construction-of-parameter", () => {
+  it("flags new RegExp(p) when p is a parameter", async () => {
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f(p) { return new RegExp(p); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      expect(hits.length).toBe(1);
+      expect(hits[0]!.matched_text).toBe("new RegExp(p)");
+    });
+  });
+
+  it("flags RegExp(p) without 'new' when p is a parameter", async () => {
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f(p) { return RegExp(p); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      expect(hits.length).toBe(1);
+    });
+  });
+
+  it("does not flag new RegExp(literal)", async () => {
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f() { return new RegExp("[a-z]+"); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      expect(hits.length).toBe(0);
+    });
+  });
+
+  it("does not flag new RegExp of an internal local", async () => {
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f() { const pat = "[a-z]"; return new RegExp(pat); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      expect(hits.length).toBe(0);
+    });
+  });
+
+  it("does not flag a non-RegExp constructor (e.g. new Date(p))", async () => {
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f(p) { return new Date(p); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      expect(hits.length).toBe(0);
+    });
+  });
+
+  it("flags new RegExp(p, 'g') — second arg (flags) doesn't affect the match", async () => {
+    _resetAstRunnerForTest();
+    const r = await runAstPatterns(
+      JAVASCRIPT_AST_PATTERNS,
+      "/tmp/a.js",
+      `function f(p) { return new RegExp(p, "g"); }\n`,
+    );
+    gateOnGrammar(r.stats, () => {
+      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      expect(hits.length).toBe(1);
+    });
+  });
+});
+
 describe("javascript-patterns shape", () => {
   it("declares ids and CWE", () => {
     const ids = JAVASCRIPT_AST_PATTERNS.map((p) => p.id).sort();
     expect(ids).toEqual([
       "js-ast-001-eval-of-parameter",
       "js-ast-002-child-process-exec-of-parameter",
+      "js-ast-003-regexp-construction-of-parameter",
     ]);
     for (const p of JAVASCRIPT_AST_PATTERNS) {
-      expect(p.severity).toBe("critical");
       expect(p.languages).toContain("javascript");
       expect(p.languages).toContain("typescript");
       expect(typeof p.match).toBe("function");
       expect(typeof p.query).toBe("string");
     }
+    expect(JAVASCRIPT_AST_PATTERNS.find((p) => p.id === "js-ast-003-regexp-construction-of-parameter")!.cwe).toBe("CWE-1333");
   });
 });

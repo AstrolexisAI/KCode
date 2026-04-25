@@ -1408,6 +1408,10 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "js-ast-002-child-process-exec-of-parameter": r("child_process.exec of parameter (AST taint)", W.SHELL),
   "go-ast-001-exec-command-of-parameter": r("exec.Command of parameter (AST taint)", W.SHELL),
   "go-ast-002-os-open-of-parameter": r("os.Open / ReadFile of parameter (AST taint)", W.PATH),
+
+  // ── v2.10.341 — TS prototype-pollution + JS RegExp ReDoS ───
+  "ts-ast-001-prototype-pollution-of-parameter": r("obj[key] = ... where key is a parameter (prototype pollution)", W.PROTO),
+  "js-ast-003-regexp-construction-of-parameter": r("new RegExp(p) where p is a parameter (ReDoS)", W.REDOS),
 };
 
 function commentPrefix(path: string): string {

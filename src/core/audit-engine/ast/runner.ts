@@ -173,9 +173,15 @@ async function loadGrammar(
 
 /**
  * Map a Language id (from BugPattern.languages) to the tree-sitter
- * grammar key. Most map 1:1 except aliases like "javascript" / "js".
+ * grammar key. Most map 1:1 except aliases like "javascript" / "js"
+ * and the typescript / tsx split — TSX needs its own grammar (the TS
+ * grammar can't parse JSX syntax). The `file` arg lets the caller
+ * promote a "typescript" pattern to the tsx grammar when the file
+ * ends in .tsx; without that, every TSX file would fail to parse and
+ * silently contribute zero AST candidates. v2.10.341.
  */
-function tsLangFor(language: string): string | null {
+function tsLangFor(language: string, file?: string): string | null {
+  if (language === "typescript" && file && file.endsWith(".tsx")) return "tsx";
   const m: Record<string, string> = {
     python: "python",
     javascript: "javascript",
@@ -189,6 +195,34 @@ function tsLangFor(language: string): string | null {
     php: "php",
   };
   return m[language] ?? null;
+}
+
+/**
+ * Determine the canonical Language id of a file from its extension.
+ * Used by the runner to route each file through exactly ONE grammar
+ * even when a pattern declares languages: ["javascript", "typescript"]
+ * — without this, a .ts file would be parsed by BOTH grammars and
+ * any matches would surface twice. v2.10.341.
+ *
+ * Returns null when the extension isn't AST-supported; the runner
+ * skips the file entirely instead of wasting a parse pass.
+ */
+function fileLanguage(file: string): string | null {
+  const lower = file.toLowerCase();
+  if (lower.endsWith(".py") || lower.endsWith(".pyi")) return "python";
+  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs") || lower.endsWith(".jsx")) return "javascript";
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx") || lower.endsWith(".mts") || lower.endsWith(".cts")) return "typescript";
+  if (lower.endsWith(".go")) return "go";
+  if (lower.endsWith(".c") || lower.endsWith(".h")) return "c";
+  if (
+    lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") ||
+    lower.endsWith(".hpp") || lower.endsWith(".hh") || lower.endsWith(".hxx")
+  ) return "cpp";
+  if (lower.endsWith(".rs")) return "rust";
+  if (lower.endsWith(".java")) return "java";
+  if (lower.endsWith(".rb")) return "ruby";
+  if (lower.endsWith(".php")) return "php";
+  return null;
 }
 
 /**
@@ -238,24 +272,37 @@ export const runAstPatterns: AstRunner = async (patterns, file, content) => {
         candidates: 0,
         grammar_loaded: false,
         load_error: "web-tree-sitter not installed",
-        language: tsLangFor(p.languages[0] ?? "") ?? undefined,
+        language: tsLangFor(p.languages[0] ?? "", file) ?? undefined,
       });
     }
     return { candidates, stats };
   }
 
-  // Group patterns by language so we parse the file once per
-  // language even when N patterns target the same grammar.
-  const byLang = new Map<string, AstPattern[]>();
+  // Determine the file's canonical language ONCE from its extension,
+  // then run only patterns whose `languages` array includes it. Without
+  // this, a pattern with languages: ["javascript", "typescript"]
+  // would parse a .ts file with BOTH grammars and emit each finding
+  // twice. v2.10.341 — exposed by the typescript bundle.
+  const fileLang = fileLanguage(file);
+  if (!fileLang) {
+    return { candidates, stats };
+  }
+  // Map pattern language → grammar key. The runner picks tsx for
+  // .tsx files even when the pattern says "typescript".
+  const grammarKey = tsLangFor(fileLang, file);
+  if (!grammarKey) {
+    return { candidates, stats };
+  }
+  const applicable: AstPattern[] = [];
   for (const p of patterns) {
-    for (const lang of p.languages) {
-      const key = tsLangFor(lang);
-      if (!key) continue;
-      const arr = byLang.get(key) ?? [];
-      arr.push(p);
-      byLang.set(key, arr);
+    if (p.languages.includes(fileLang as never)) {
+      applicable.push(p);
     }
   }
+  if (applicable.length === 0) {
+    return { candidates, stats };
+  }
+  const byLang = new Map<string, AstPattern[]>([[grammarKey, applicable]]);
 
   for (const [lang, langPatterns] of byLang) {
     const grammar = await loadGrammar(ts, lang);

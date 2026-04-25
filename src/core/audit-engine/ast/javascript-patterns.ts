@@ -133,6 +133,16 @@ function collectParamNames(param: AstNode, names: Set<string>, depth = 0): void 
       if (rhs) collectParamNames(rhs, names, depth + 1);
       return;
     }
+    case "required_parameter":
+    case "optional_parameter": {
+      // TypeScript-grammar wrappers. The first named child is the
+      // binding (identifier / rest_pattern / object_pattern / ...);
+      // siblings are type_annotation / default value. Recurse into
+      // the binding only — type annotations don't introduce a name.
+      const bind = param.namedChild(0);
+      if (bind) collectParamNames(bind, names, depth + 1);
+      return;
+    }
     default:
       return;
   }
@@ -254,5 +264,60 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
     cwe: "CWE-78",
     fix_template:
       "Use execFile(binary, [arg1, arg2]) with hardcoded binary, or spawn() without shell:true. Validate the parameter against an allowlist before use. Never pass caller-controlled strings to exec / execSync.",
+  },
+
+  {
+    id: "js-ast-003-regexp-construction-of-parameter",
+    title: "new RegExp(p) / RegExp(p) where p is a function parameter (ReDoS sink)",
+    severity: "high",
+    languages: ["javascript", "typescript"],
+    /**
+     * Match both `new RegExp(p)` (new_expression) and `RegExp(p)`
+     * (call_expression) where the constructor / function identifier
+     * is RegExp and the first argument is a bare identifier.
+     * tree-sitter exposes new_expression with a `constructor` field
+     * and call_expression with a `function` field; we match both
+     * shapes in a union.
+     */
+    query: `
+      [
+        (new_expression
+          constructor: (identifier) @callee
+          arguments: (arguments . (identifier) @arg))
+        (call_expression
+          function: (identifier) @callee
+          arguments: (arguments . (identifier) @arg))
+      ]
+    `,
+    match(captures, _source, file): Candidate | null {
+      const callee = captures.callee?.[0];
+      const arg = captures.arg?.[0];
+      if (!callee || !arg) return null;
+      if (callee.node.text !== "RegExp") return null;
+      const enclosing = findEnclosingFunction(callee.node);
+      if (!enclosing) return null;
+      const params = parameterNames(enclosing);
+      if (!params.has(arg.node.text)) return null;
+      const line = arg.node.startPosition.row + 1;
+      return {
+        pattern_id: "js-ast-003-regexp-construction-of-parameter",
+        severity: "high",
+        file,
+        line,
+        matched_text: `new RegExp(${arg.node.text})`,
+        context: `RegExp(${arg.node.text})  // arg is a parameter — caller-controlled regex source is a ReDoS sink`,
+      };
+    },
+    explanation:
+      "RegExp built from a value that AST analysis traces back to a function parameter. A caller-controlled regex source can trigger catastrophic backtracking on benign-looking inputs (e.g. `(a+)+$` against a long matching prefix). Even when the regex isn't pathological, accepting raw regex from a caller leaks the ability to enumerate or fingerprint internal data via crafted patterns.",
+    verify_prompt:
+      "Is the function exposed to external input?\n" +
+      "1. The function is a search / filter / validator endpoint that takes a pattern string from the caller — CONFIRMED.\n" +
+      "2. The parameter is escaped with a regex-escape helper before construction (e.g. wrapped in `[\\^$.|?*+()]\\\\&` replace, or passed through a known escape function) — FALSE_POSITIVE.\n" +
+      "3. The parameter is allowlisted against a fixed set of regex strings — FALSE_POSITIVE.\n" +
+      "Default to CONFIRMED — building a RegExp from caller input without escaping is a top-3 ReDoS root cause.",
+    cwe: "CWE-1333",
+    fix_template:
+      "Either (a) escape the parameter with a regex-escape helper before passing it to RegExp, (b) use String.prototype.includes / indexOf if substring containment is what you need, or (c) bound the input length and reject regex-like control characters.",
   },
 ];
