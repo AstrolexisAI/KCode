@@ -157,6 +157,48 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     else fixSupportSummary.manual++;
   }
 
+  // v2.10.330 (Sprint 5/6) — per-pattern metrics. Counts hits,
+  // confirmed, false_positive, needs_context for every pattern that
+  // produced ≥1 candidate during this run. Compute confirmed_rate
+  // and false_positive_rate when hits > 0. Aggregated across many
+  // runs, these are the inputs to a pattern-quality dashboard
+  // ("which patterns fire heavily but rarely confirm? which never
+  // fire at all?"). For a single run, the report can show the top-N
+  // hit patterns so the user knows where the noise / value came from.
+  const patternMetrics: Record<
+    string,
+    { hits: number; confirmed: number; false_positive: number; needs_context: number; confirmed_rate?: number; false_positive_rate?: number }
+  > = {};
+  for (const r of verified) {
+    const pid = r.candidate.pattern_id;
+    const m = patternMetrics[pid] ??= {
+      hits: 0,
+      confirmed: 0,
+      false_positive: 0,
+      needs_context: 0,
+    };
+    m.hits++;
+    if (r.verification.verdict === "confirmed") m.confirmed++;
+    else if (r.verification.verdict === "false_positive") m.false_positive++;
+    else m.needs_context++;
+  }
+  // Add raw-candidate counts (pre-dedupe) so the report can show
+  // "this pattern fired 12 times in 3 files" not just the 3 dedup'd
+  // verifications. multiples is keyed by `${pattern_id}|${file}` so
+  // we sum across files.
+  for (const [key, count] of multiples) {
+    const pid = key.split("|", 1)[0]!;
+    const m = patternMetrics[pid];
+    if (m) m.hits += count - 1; // dedupe kept 1, multiples are the rest
+  }
+  // Compute rates last so they always reflect the final hit count.
+  for (const m of Object.values(patternMetrics)) {
+    if (m.hits > 0) {
+      m.confirmed_rate = m.confirmed / m.hits;
+      m.false_positive_rate = m.false_positive / m.hits;
+    }
+  }
+
   opts.onPhase?.("reporting");
 
   const result: AuditResult = {
@@ -173,6 +215,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     needs_context_detail: needsContextDetail,
     coverage: scanCoverage,
     fix_support_summary: fixSupportSummary,
+    pattern_metrics: patternMetrics,
     elapsed_ms: Date.now() - startTime,
   };
 
