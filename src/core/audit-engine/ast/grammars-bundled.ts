@@ -25,6 +25,8 @@ import javaWasm from "./grammars/tree-sitter-java.wasm" with { type: "file" };
 import cWasm from "./grammars/tree-sitter-c.wasm" with { type: "file" };
 import cppWasm from "./grammars/tree-sitter-cpp.wasm" with { type: "file" };
 import rustWasm from "./grammars/tree-sitter-rust.wasm" with { type: "file" };
+import rubyWasm from "./grammars/tree-sitter-ruby.wasm" with { type: "file" };
+import phpWasm from "./grammars/tree-sitter-php.wasm" with { type: "file" };
 
 export interface BundledGrammar {
   /** tree-sitter language key (matches tsLangFor in runner.ts) */
@@ -83,6 +85,22 @@ export const BUNDLED_GRAMMARS: readonly BundledGrammar[] = [
     language: "rust",
     path: rustWasm,
     filename: "tree-sitter-rust.wasm",
+  },
+  {
+    language: "ruby",
+    path: rubyWasm,
+    filename: "tree-sitter-ruby.wasm",
+  },
+  {
+    // The bundled file is the upstream `tree-sitter-php_only` build —
+    // it's renamed to tree-sitter-php.wasm so the runner's filename
+    // convention (`tree-sitter-${lang}.wasm`) finds it. Pure-PHP
+    // files parse cleanly; mixed PHP/HTML files parse via tree-
+    // sitter's error recovery. A future revision could bundle the
+    // mixed-mode tree-sitter-php grammar separately.
+    language: "php",
+    path: phpWasm,
+    filename: "tree-sitter-php.wasm",
   },
 ];
 
