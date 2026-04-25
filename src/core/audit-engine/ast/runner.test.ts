@@ -59,3 +59,53 @@ describe("python-patterns shape", () => {
     expect(p.cwe).toBe("CWE-95");
   });
 });
+
+describe("py-ast-001 end-to-end (requires bundled grammar)", () => {
+  it("flags eval(parameter), leaves eval(literal) alone", async () => {
+    _resetAstRunnerForTest();
+    const code = `def safe(): eval("1 + 1")
+def evil(x): eval(x)
+def also_evil(payload): exec(payload)
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/test.py", code);
+    // If the bundled grammar isn't loadable on this platform, the
+    // runner returns grammar_loaded:false and zero candidates. The
+    // earlier "graceful degradation" test covers that path; here we
+    // assert the happy path when the grammar is bundled.
+    if (r.stats.every((s) => !s.grammar_loaded)) {
+      expect(r.candidates.length).toBe(0);
+      return;
+    }
+    expect(r.candidates.length).toBe(2);
+    const lines = r.candidates.map((c) => c.line).sort((a, b) => a - b);
+    expect(lines).toEqual([2, 3]);
+    const matched = r.candidates.map((c) => c.matched_text).sort();
+    expect(matched).toEqual(["eval(x)", "exec(payload)"]);
+  });
+
+  it("does not flag eval() of an internal local variable that's not a parameter", async () => {
+    _resetAstRunnerForTest();
+    const code = `def f():
+    x = "1 + 1"
+    eval(x)
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/local.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    expect(r.candidates.length).toBe(0);
+  });
+
+  it("respects parameter scope: outer-function param should not bleed into nested function", async () => {
+    _resetAstRunnerForTest();
+    const code = `def outer(user_input):
+    def inner():
+        # user_input is captured by closure but NOT a parameter of inner
+        eval("safe")
+    inner()
+    eval(user_input)
+`;
+    const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/scope.py", code);
+    if (r.stats.every((s) => !s.grammar_loaded)) return;
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]!.matched_text).toBe("eval(user_input)");
+  });
+});

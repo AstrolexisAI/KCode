@@ -109,15 +109,26 @@ async function loadGrammar(
   if (cached) return cached;
   const promise = (async () => {
     const { existsSync } = await import("node:fs");
-    const { resolve, join } = await import("node:path");
+    const { resolve, join, dirname } = await import("node:path");
     const { homedir } = await import("node:os");
 
+    // Resolution order — first hit wins:
+    //   1. KCODE_GRAMMARS_DIR env var (CI override).
+    //   2. Bundled grammars/ next to this module (works with
+    //      `bun run src/index.ts`; import.meta.dir resolves to
+    //      the source path).
+    //   3. ~/.kcode/grammars/ — user-installed location, also where
+    //      the compiled binary expects to find grammars.
+    //   4. Next to the running executable — supports a portable
+    //      install where the wasm is shipped beside the binary.
+    const execDir = dirname(process.execPath);
     const candidates = [
       process.env.KCODE_GRAMMARS_DIR
         ? join(process.env.KCODE_GRAMMARS_DIR, `tree-sitter-${lang}.wasm`)
         : null,
-      join(homedir(), ".kcode", "grammars", `tree-sitter-${lang}.wasm`),
       resolve(import.meta.dir, "grammars", `tree-sitter-${lang}.wasm`),
+      join(homedir(), ".kcode", "grammars", `tree-sitter-${lang}.wasm`),
+      join(execDir, "grammars", `tree-sitter-${lang}.wasm`),
     ].filter((p): p is string => p !== null);
 
     for (const p of candidates) {
