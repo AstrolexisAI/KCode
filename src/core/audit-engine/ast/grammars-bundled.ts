@@ -19,6 +19,8 @@
 import pythonWasm from "./grammars/tree-sitter-python.wasm" with { type: "file" };
 import javascriptWasm from "./grammars/tree-sitter-javascript.wasm" with { type: "file" };
 import goWasm from "./grammars/tree-sitter-go.wasm" with { type: "file" };
+import typescriptWasm from "./grammars/tree-sitter-typescript.wasm" with { type: "file" };
+import tsxWasm from "./grammars/tree-sitter-tsx.wasm" with { type: "file" };
 
 export interface BundledGrammar {
   /** tree-sitter language key (matches tsLangFor in runner.ts) */
@@ -44,6 +46,19 @@ export const BUNDLED_GRAMMARS: readonly BundledGrammar[] = [
     language: "go",
     path: goWasm,
     filename: "tree-sitter-go.wasm",
+  },
+  {
+    language: "typescript",
+    path: typescriptWasm,
+    filename: "tree-sitter-typescript.wasm",
+  },
+  {
+    // TSX uses a separate grammar (typescript with JSX). The runner
+    // picks "tsx" over "typescript" when the file ends in .tsx; the
+    // pattern still declares languages: ["typescript"].
+    language: "tsx",
+    path: tsxWasm,
+    filename: "tree-sitter-tsx.wasm",
   },
 ];
 
