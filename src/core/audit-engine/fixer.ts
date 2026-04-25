@@ -1384,6 +1384,14 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "go-023-template-html-bypass": r("html/template safe bypass", W.XSS),
   "cpp-013-snprintf-truncation-ignored": r("snprintf truncation ignored", W.ERR),
   "cpp-014-fread-return-ignored": r("fread/read result ignored", W.ERR),
+
+  // ── v2.10.333 — Phase A round 2 ────────────────────────────
+  "java-019-tls-trust-all": r("TLS trust-all manager", W.HTTPS),
+  "java-020-ssrf-resttemplate": r("RestTemplate SSRF", "Allowlist permitted hosts; block RFC1918 + loopback + cloud metadata."),
+  "java-021-spring-restbody-map": r("Spring @RequestBody Map mass-assignment", "Replace Map<String,Object> with a typed DTO + Bean Validation."),
+  "php-016-ssrf-fetch": r("PHP SSRF", "Allowlist permitted hosts; block RFC1918 + loopback + metadata IPs."),
+  "rb-013-ssrf-net-http": r("Ruby Net::HTTP SSRF", "Allowlist host + restrict scheme to https; block file:/// and metadata IPs."),
+  "rb-014-send-file-traversal": r("Ruby send_file path traversal", W.PATH),
 };
 
 function commentPrefix(path: string): string {
