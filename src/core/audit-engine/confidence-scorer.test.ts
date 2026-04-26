@@ -228,9 +228,10 @@ describe("noise_score", () => {
 });
 
 describe("fixability_score", () => {
-  test("100 with no confirmed findings", () => {
+  test("null with no confirmed findings (nothing to grade)", () => {
     const c = computeAuditConfidence(makeResult());
-    expect(c.fixability_score).toBe(100);
+    expect(c.fixability_score).toBeNull();
+    expect(c.warnings.some((w) => w.includes("fixability"))).toBe(true);
   });
 
   test("100 when every confirmed finding has rewrite strategy", () => {

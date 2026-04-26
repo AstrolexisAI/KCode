@@ -173,7 +173,13 @@ function computeFixabilityScore(result: AuditResult): {
   warning?: string;
 } {
   const confirmed: Finding[] = result.findings;
-  if (confirmed.length === 0) return { score: 100 };
+  // v2.10.367 — was returning 100 (vacuously fixable) for zero
+  // findings, which inflated the headline confidence in clean runs.
+  // Null + drop-from-aggregate is more honest: there's nothing to
+  // grade fixability against.
+  if (confirmed.length === 0) {
+    return { score: null, warning: "No confirmed findings to grade fixability against." };
+  }
 
   const withStrategy = confirmed.filter((f) => !!f.verification.evidence?.suggested_fix_strategy);
   if (withStrategy.length === 0) {

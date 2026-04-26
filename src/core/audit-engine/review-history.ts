@@ -77,7 +77,12 @@ function saveHistory(h: ReviewHistory): void {
   try {
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(path, JSON.stringify(h, null, 2));
+    // v2.10.367 — atomic write: stage to a sibling .tmp then rename.
+    // Two concurrent kcode processes won't truncate each other; readers
+    // never see a partial JSON. Same-fs rename is atomic on POSIX.
+    const tmpPath = `${path}.tmp-${process.pid}`;
+    writeFileSync(tmpPath, JSON.stringify(h, null, 2));
+    require("node:fs").renameSync(tmpPath, path);
   } catch {
     /* best effort — stay silent so audit doesn't fail on a write hiccup */
   }
@@ -97,7 +102,13 @@ function saveHistory(h: ReviewHistory): void {
  *   - otherwise: the project-relative top-level dir, e.g. `src:*`
  */
 export function pathGlob(file: string, projectRoot: string): string {
-  const rel = file.startsWith(projectRoot) ? file.slice(projectRoot.length).replace(/^\//, "") : file;
+  // v2.10.367 — normalize Windows backslashes to forward slashes so
+  // the test/vendor/build heuristics fire on every platform.
+  const normalized = file.replace(/\\/g, "/");
+  const normalizedRoot = projectRoot.replace(/\\/g, "/");
+  const rel = normalized.startsWith(normalizedRoot)
+    ? normalized.slice(normalizedRoot.length).replace(/^\//, "")
+    : normalized;
   const lower = rel.toLowerCase();
 
   if (

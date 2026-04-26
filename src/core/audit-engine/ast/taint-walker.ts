@@ -63,6 +63,12 @@ export const TAINT_ROOTS: ReadonlySet<string> = new Set([
  * Match by callee TEXT — checking against the rightmost member
  * property handles both `validator.escape(x)` and `escape(x)` forms.
  */
+// v2.10.367 — tightened after audit. Earlier versions also included
+// "parse" and "validate", but those are method names on countless
+// unrelated objects (e.g. `userInput.parse(x)` returning the input
+// untouched), creating false-negative risk for the taint walker.
+// The remaining names are specific enough that a same-named method
+// is overwhelmingly likely to be the laundering helper they imply.
 export const SANITIZER_CALLS: ReadonlySet<string> = new Set([
   "escape",          // validator.escape, html-escape
   "sanitize",        // DOMPurify.sanitize, sanitize-html
@@ -74,10 +80,6 @@ export const SANITIZER_CALLS: ReadonlySet<string> = new Set([
   "shellescape",
   "shell-escape",
   "quote",           // shell-quote.quote
-  // Schema validators that throw on bad input — they don't escape,
-  // but they refuse to return tainted data.
-  "parse",           // zod, valibot — return validated shape
-  "validate",
 ]);
 
 /**

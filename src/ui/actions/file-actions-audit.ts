@@ -365,7 +365,10 @@ export async function handleAuditAction(
         review_reason?: string;
         review_tags?: string[];
       };
-      const audit = JSON.parse(readFs(jsonPath, "utf-8")) as {
+      // v2.10.367 — guard against a corrupt AUDIT_REPORT.json (partial
+      // write, manual edit, or version skew). Without try/catch a
+      // truncated JSON crashed the TUI session entirely.
+      let audit: {
         findings: Reviewable[];
         false_positives: number;
         false_positives_detail?: Reviewable[];
@@ -373,6 +376,17 @@ export async function handleAuditAction(
         needs_context_detail?: Reviewable[];
         confirmed_findings: number;
       };
+      try {
+        audit = JSON.parse(readFs(jsonPath, "utf-8")) as typeof audit;
+      } catch (err) {
+        return (
+          `  Could not parse ${jsonPath.replace(projectRoot + "/", "")}: ${(err as Error).message}.\n` +
+          `  Re-run /scan ${pathToken} to regenerate.`
+        );
+      }
+      if (!audit || !Array.isArray(audit.findings)) {
+        return `  ${jsonPath.replace(projectRoot + "/", "")} is missing the "findings" array. Re-run /scan ${pathToken}.`;
+      }
 
       // Build a flat global-index map across all three buckets so commands
       // can refer to any finding by a single integer regardless of which
@@ -846,13 +860,29 @@ export async function handleAuditAction(
         }));
         const summary = {
           total: rows.length,
-          confirmed: rows.filter((r) => r.state === "confirmed" || (r.state === null && true)).length,
+          confirmed: rows.filter((r) => r.state === "confirmed").length,
           promoted: rows.filter((r) => r.state === "promoted").length,
           demoted_fp: rows.filter((r) => r.state === "demoted_fp").length,
           ignored: rows.filter((r) => r.state === "ignored").length,
           untouched: rows.filter((r) => r.state === null).length,
         };
         const exportPath = resolvePath(projectRoot, "AUDIT_REVIEW.json");
+        // v2.10.367 — refuse exports that would write outside the
+        // project root (symlink / .. resolution edge cases). The
+        // resolvePath already collapses `..`, but a symlinked
+        // projectRoot could still escape; realpath confirms.
+        const { realpathSync } = await import("node:fs");
+        try {
+          const realProject = realpathSync(projectRoot);
+          // exportPath may not exist yet — realpath its parent.
+          const { dirname } = await import("node:path");
+          const realParent = realpathSync(dirname(exportPath));
+          if (!realParent.startsWith(realProject)) {
+            return `  Export refused: target ${exportPath} escapes the project root.`;
+          }
+        } catch {
+          /* projectRoot disappeared mid-flight — fall through to write attempt */
+        }
         const payload = JSON.stringify({ summary, reviewed: rows }, null, 2);
         try {
           writeFs(exportPath, payload);
