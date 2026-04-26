@@ -1,7 +1,58 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// Test fixtures mirror the manifest emitted by scripts/release.ts.
+function buildManifest(opts: {
+  latest: string;
+  channels?: { stable?: string; beta?: string };
+  platforms?: Record<string, { url: string; filename: string; sha256: string; size: number }>;
+  released_at?: string;
+  release_notes?: string;
+}) {
+  return {
+    schema_version: 1,
+    latest: opts.latest,
+    released_at: opts.released_at ?? "2026-04-26T12:00:00Z",
+    channels: opts.channels ?? { stable: opts.latest },
+    platforms: opts.platforms ?? {
+      "linux-x64": {
+        url: `https://kulvex.ai/downloads/kcode/kcode-${opts.latest}-linux-x64`,
+        filename: `kcode-${opts.latest}-linux-x64`,
+        sha256: "a".repeat(64),
+        size: 117_000_000,
+      },
+      "linux-arm64": {
+        url: `https://kulvex.ai/downloads/kcode/kcode-${opts.latest}-linux-arm64`,
+        filename: `kcode-${opts.latest}-linux-arm64`,
+        sha256: "b".repeat(64),
+        size: 117_000_000,
+      },
+      "darwin-x64": {
+        url: `https://kulvex.ai/downloads/kcode/kcode-${opts.latest}-darwin-x64`,
+        filename: `kcode-${opts.latest}-darwin-x64`,
+        sha256: "c".repeat(64),
+        size: 117_000_000,
+      },
+      "darwin-arm64": {
+        url: `https://kulvex.ai/downloads/kcode/kcode-${opts.latest}-darwin-arm64`,
+        filename: `kcode-${opts.latest}-darwin-arm64`,
+        sha256: "d".repeat(64),
+        size: 117_000_000,
+      },
+    },
+    release_notes:
+      opts.release_notes ?? `https://github.com/AstrolexisAI/KCode/releases/tag/v${opts.latest}`,
+  };
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 // ─── compareSemver tests ────────────────────────────────────────
 
@@ -59,66 +110,30 @@ describe("compareSemver", () => {
   });
 });
 
-// ─── GitHub API Response Parsing ────────────────────────────────
+// ─── Manifest parsing ───────────────────────────────────────────
 
-describe("GitHub API response parsing", () => {
+describe("manifest response parsing", () => {
   const originalFetch = globalThis.fetch;
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
 
-  test("parses valid GitHub release response", async () => {
-    const mockRelease = {
-      tag_name: "v2.0.0",
-      body: "## What's New\n- Feature A\n- Bug fix B",
-      published_at: "2026-04-01T12:00:00Z",
-      assets: [
-        {
-          name: "kcode-linux-x64",
-          browser_download_url:
-            "https://github.com/astrolexis/kcode/releases/download/v2.0.0/kcode-linux-x64",
-          size: 50_000_000,
-        },
-      ],
-    };
-
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(mockRelease), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+  test("parses a valid manifest and reports update available", async () => {
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))));
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
 
     expect(info.currentVersion).toBe("1.8.0");
     expect(info.latestVersion).toBe("2.0.0");
-    expect(info.updateAvailable).toBe(true);
+    expect(info.channel).toBe("stable");
     expect(info.releaseUrl).toContain("v2.0.0");
-    expect(info.releaseNotes).toContain("Feature A");
-    expect(info.publishedAt).toBe("2026-04-01T12:00:00Z");
+    expect(info.publishedAt).toBe("2026-04-26T12:00:00Z");
   });
 
   test("returns no update when current version is latest", async () => {
-    const mockRelease = {
-      tag_name: "v1.8.0",
-      body: "Current release",
-      published_at: "2026-03-15T12:00:00Z",
-      assets: [],
-    };
-
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(mockRelease), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "1.8.0" }))));
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -127,8 +142,8 @@ describe("GitHub API response parsing", () => {
     expect(info.latestVersion).toBe("1.8.0");
   });
 
-  test("handles GitHub API errors gracefully", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(new Response("Rate limited", { status: 403 })));
+  test("handles HTTP errors gracefully", async () => {
+    globalThis.fetch = mock(() => Promise.resolve(new Response("bad gateway", { status: 502 })));
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -148,51 +163,70 @@ describe("GitHub API response parsing", () => {
     expect(info.currentVersion).toBe("1.8.0");
   });
 
-  test("strips v prefix from tag_name", async () => {
-    const mockRelease = {
-      tag_name: "v3.1.2",
-      body: "",
-      published_at: "2026-04-01T12:00:00Z",
-      assets: [],
-    };
-
+  test("rejects manifest missing required fields", async () => {
     globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(mockRelease), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
-
-    const { checkForUpdate } = await import("./auto-update");
-    const info = await checkForUpdate("1.8.0");
-
-    expect(info.latestVersion).toBe("3.1.2");
-    expect(info.updateAvailable).toBe(true);
-  });
-
-  test("returns updateAvailable false when ahead of latest", async () => {
-    const mockRelease = {
-      tag_name: "v1.7.0",
-      body: "",
-      published_at: "2026-03-01T12:00:00Z",
-      assets: [],
-    };
-
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(mockRelease), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
+      Promise.resolve(jsonResponse({ schema_version: 1 })),
     );
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
 
     expect(info.updateAvailable).toBe(false);
+  });
+
+  test("returns no update when client is ahead of manifest", async () => {
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "1.7.0" }))));
+
+    const { checkForUpdate } = await import("./auto-update");
+    const info = await checkForUpdate("1.8.0");
+
+    expect(info.updateAvailable).toBe(false);
+  });
+
+  test("beta channel returns beta version when manifest has one", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        jsonResponse(
+          buildManifest({
+            latest: "2.0.0",
+            channels: { stable: "2.0.0", beta: "2.1.0-beta.1" },
+            platforms: {
+              "linux-x64": {
+                url: "https://kulvex.ai/downloads/kcode/kcode-2.1.0-beta.1-linux-x64",
+                filename: "kcode-2.1.0-beta.1-linux-x64",
+                sha256: "f".repeat(64),
+                size: 117_000_000,
+              },
+              "darwin-arm64": {
+                url: "https://kulvex.ai/downloads/kcode/kcode-2.1.0-beta.1-darwin-arm64",
+                filename: "kcode-2.1.0-beta.1-darwin-arm64",
+                sha256: "f".repeat(64),
+                size: 117_000_000,
+              },
+            },
+          }),
+        ),
+      ),
+    );
+
+    const { checkForUpdate } = await import("./auto-update");
+    const info = await checkForUpdate("2.0.0", { channel: "beta" });
+
+    expect(info.channel).toBe("beta");
+    expect(info.latestVersion).toBe("2.1.0-beta.1");
+  });
+
+  test("beta channel falls back to stable if manifest lacks beta", async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        jsonResponse(buildManifest({ latest: "2.0.0", channels: { stable: "2.0.0" } })),
+      ),
+    );
+
+    const { checkForUpdate } = await import("./auto-update");
+    const info = await checkForUpdate("1.8.0", { channel: "beta" });
+
+    expect(info.latestVersion).toBe("2.0.0");
   });
 });
 
@@ -214,28 +248,14 @@ describe("update check caching", () => {
     } else {
       delete process.env.KCODE_HOME;
     }
-    globalThis.fetch = globalThis.fetch; // restore if overridden
     await rm(tempDir, { recursive: true, force: true });
   });
 
   test("writes cache file after successful check", async () => {
     const { existsSync } = await import("node:fs");
-    const mockRelease = {
-      tag_name: "v2.0.0",
-      body: "New features",
-      published_at: "2026-04-01T12:00:00Z",
-      assets: [],
-    };
 
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(mockRelease), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))));
 
     try {
       const { checkForUpdate } = await import("./auto-update");
@@ -253,16 +273,14 @@ describe("update check caching", () => {
   });
 
   test("uses cached result within 24h window for notifications", async () => {
-    // Write a fresh cache entry (just checked now)
     const cachePath = join(tempDir, "update-check.json");
     const cacheData = {
       lastCheck: Date.now(),
       lastVersion: "2.5.0",
-      releaseUrl: "https://github.com/astrolexis/kcode/releases/tag/v2.5.0",
+      releaseUrl: "https://github.com/AstrolexisAI/KCode/releases/tag/v2.5.0",
     };
     await writeFile(cachePath, JSON.stringify(cacheData));
 
-    // fetch should NOT be called since cache is fresh
     let fetchCalled = false;
     const origFetch = globalThis.fetch;
     globalThis.fetch = mock(() => {
@@ -284,7 +302,6 @@ describe("update check caching", () => {
   });
 
   test("re-checks when cache is older than 24h", async () => {
-    // Write a stale cache entry (25 hours ago)
     const cachePath = join(tempDir, "update-check.json");
     const cacheData = {
       lastCheck: Date.now() - 25 * 60 * 60 * 1000,
@@ -292,22 +309,8 @@ describe("update check caching", () => {
     };
     await writeFile(cachePath, JSON.stringify(cacheData));
 
-    const mockRelease = {
-      tag_name: "v2.0.0",
-      body: "Fresh check result",
-      published_at: "2026-04-01T12:00:00Z",
-      assets: [],
-    };
-
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() =>
-      Promise.resolve(
-        new Response(JSON.stringify(mockRelease), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      ),
-    );
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))));
 
     try {
       const { getUpdateNotification } = await import("./auto-update");
@@ -324,7 +327,7 @@ describe("update check caching", () => {
     const cachePath = join(tempDir, "update-check.json");
     const cacheData = {
       lastCheck: Date.now(),
-      lastVersion: "1.8.0", // same as current
+      lastVersion: "1.8.0",
     };
     await writeFile(cachePath, JSON.stringify(cacheData));
 
@@ -370,7 +373,7 @@ describe("update notification formatting", () => {
       JSON.stringify({
         lastCheck: Date.now(),
         lastVersion: "2.0.0",
-        releaseUrl: "https://github.com/astrolexis/kcode/releases/tag/v2.0.0",
+        releaseUrl: "https://github.com/AstrolexisAI/KCode/releases/tag/v2.0.0",
       }),
     );
 
@@ -401,7 +404,7 @@ describe("update notification formatting", () => {
   });
 
   test("notification includes release URL when available", async () => {
-    const releaseUrl = "https://github.com/astrolexis/kcode/releases/tag/v2.0.0";
+    const releaseUrl = "https://github.com/AstrolexisAI/KCode/releases/tag/v2.0.0";
     const cachePath = join(tempDir, "update-check.json");
     await writeFile(
       cachePath,
@@ -426,7 +429,6 @@ describe("update notification formatting", () => {
       JSON.stringify({
         lastCheck: Date.now(),
         lastVersion: "2.0.0",
-        // no releaseUrl
       }),
     );
 
@@ -477,7 +479,7 @@ describe("shouldCheckForUpdate", () => {
   });
 });
 
-// ─── getPlatformSuffix tests ────────────────────────────────────
+// ─── getPlatformSuffix / getPlatformKey tests ──────────────────
 
 describe("getPlatformSuffix", () => {
   test("returns a valid platform suffix", async () => {
@@ -489,13 +491,55 @@ describe("getPlatformSuffix", () => {
   });
 });
 
+describe("getPlatformKey", () => {
+  test("returns a manifest-style platform key", async () => {
+    const { getPlatformKey } = await import("./auto-update");
+    const key = getPlatformKey();
+    expect(typeof key).toBe("string");
+    expect(key).toMatch(/^(linux|darwin|win32)-(x64|arm64)$/);
+  });
+});
+
+// ─── hasRollbackAvailable tests ────────────────────────────────
+
+describe("hasRollbackAvailable", () => {
+  let originalHome: string | undefined;
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "kcode-rollback-test-"));
+    originalHome = process.env.KCODE_HOME;
+    process.env.KCODE_HOME = tempDir;
+  });
+
+  afterEach(async () => {
+    if (originalHome !== undefined) {
+      process.env.KCODE_HOME = originalHome;
+    } else {
+      delete process.env.KCODE_HOME;
+    }
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("returns false when no previous binary saved", async () => {
+    const { hasRollbackAvailable } = await import("./auto-update");
+    expect(hasRollbackAvailable()).toBe(false);
+  });
+
+  test("returns true when previous-kcode exists", async () => {
+    await writeFile(join(tempDir, "previous-kcode"), "fake-binary-bytes");
+    const { hasRollbackAvailable } = await import("./auto-update");
+    expect(hasRollbackAvailable()).toBe(true);
+  });
+});
+
 // ─── install.sh validation ──────────────────────────────────────
 
 describe("install.sh", () => {
   test("is valid shell syntax", async () => {
     const { existsSync } = await import("node:fs");
     const installPath = join(import.meta.dir, "../../install.sh");
-    if (!existsSync(installPath)) return; // skip if no install.sh
+    if (!existsSync(installPath)) return;
 
     const proc = Bun.spawn(["sh", "-n", installPath], {
       stdout: "pipe",
@@ -512,7 +556,7 @@ describe("install.sh", () => {
   test("contains required sections", async () => {
     const { existsSync } = await import("node:fs");
     const installPath = join(import.meta.dir, "../../install.sh");
-    if (!existsSync(installPath)) return; // skip if no install.sh
+    if (!existsSync(installPath)) return;
 
     const content = await Bun.file(installPath).text();
     expect(content).toContain("#!/bin/sh");

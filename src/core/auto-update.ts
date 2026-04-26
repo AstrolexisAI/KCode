@@ -1,21 +1,39 @@
 // KCode - Auto-Update System
-// Checks GitHub Releases API for newer versions, downloads with SHA256 verification,
-// and replaces the running binary. Respects user settings (autoUpdate: false).
+//
+// Talks to a self-hosted manifest at kulvex.ai/downloads/kcode/latest.json
+// (emitted by scripts/release.ts) and self-replaces the running binary
+// with the version it advertises. Embedded SHA256 in the manifest is the
+// integrity check; rollback keeps the previous binary at
+// ~/.kcode/previous-kcode so a bad release can be reverted in one command.
+//
+// We left npm publishing in v2.10.357. The npm-publish CI lane stayed
+// stuck on a 401/404 mismatch through ~7 token rotations and it was never
+// the right shape for a 117 MB binary anyway. This module is the
+// replacement distribution channel.
 
 import { execSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, renameSync, unlinkSync } from "node:fs";
-import { arch, homedir, platform } from "node:os";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
 
 // ─── Constants ──────────────────────────────────────────────────
 
-const GITHUB_REPO = "AstrolexisAI/KCode";
+const DEFAULT_MANIFEST_URL = "https://kulvex.ai/downloads/kcode/latest.json";
 const DEFAULT_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const NOTIFICATION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function getManifestUrl(): string {
+  return process.env.KCODE_UPDATE_MANIFEST_URL ?? DEFAULT_MANIFEST_URL;
+}
 
 function getUpdateCheckFile(): string {
   return kcodePath("update-check.json");
+}
+
+function getRollbackBinaryPath(): string {
+  return kcodePath("previous-kcode");
 }
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -24,11 +42,14 @@ export interface UpdateInfo {
   currentVersion: string;
   latestVersion: string;
   updateAvailable: boolean;
+  channel: "stable" | "beta";
   downloadUrl?: string;
+  filename?: string;
+  sha256?: string;
+  size?: number;
   releaseUrl?: string;
   releaseNotes?: string;
   publishedAt?: string;
-  checksumUrl?: string | null;
 }
 
 export interface UpdateResult {
@@ -46,27 +67,24 @@ interface UpdateCheckState {
   publishedAt?: string;
 }
 
-interface ReleaseAsset {
-  name: string;
-  browser_download_url: string;
+interface ManifestPlatform {
+  url: string;
+  filename: string;
+  sha256: string;
+  size: number;
 }
 
-interface ReleaseData {
-  tag_name?: string;
-  version?: string;
-  body?: string;
-  assets?: ReleaseAsset[];
-  published_at?: string;
+interface Manifest {
+  schema_version: number;
+  latest: string;
+  released_at?: string;
+  channels?: { stable: string; beta?: string };
+  platforms: Record<string, ManifestPlatform>;
+  release_notes?: string;
 }
 
 // ─── Version Comparison ─────────────────────────────────────────
 
-/**
- * Compare two semver strings. Returns:
- *  -1 if a < b
- *   0 if a == b
- *   1 if a > b
- */
 export function compareSemver(a: string, b: string): number {
   const pa = a.replace(/^v/, "").split(".").map(Number);
   const pb = b.replace(/^v/, "").split(".").map(Number);
@@ -82,25 +100,39 @@ export function compareSemver(a: string, b: string): number {
 
 // ─── Platform Detection ─────────────────────────────────────────
 
-export function getPlatformSuffix(): string {
-  const os = platform();
-  const cpu = arch();
+/**
+ * Returns the manifest platform key for the current host. Matches the
+ * keys release.ts emits (`${process.platform}-${process.arch}`):
+ * linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64.
+ */
+export function getPlatformKey(): string {
+  const os = process.platform;
+  const cpu = process.arch;
+  if (os === "linux" && cpu === "x64") return "linux-x64";
+  if (os === "linux" && cpu === "arm64") return "linux-arm64";
+  if (os === "darwin" && cpu === "x64") return "darwin-x64";
+  if (os === "darwin" && cpu === "arm64") return "darwin-arm64";
+  if (os === "win32" && cpu === "x64") return "win32-x64";
+  throw new Error(`Unsupported platform: ${os}-${cpu}`);
+}
 
+/**
+ * Legacy human-readable platform suffix kept for install.sh / Homebrew
+ * compatibility (existing tests still pin this format).
+ */
+export function getPlatformSuffix(): string {
+  const os = process.platform;
+  const cpu = process.arch;
   if (os === "linux" && cpu === "x64") return "linux-x64";
   if (os === "linux" && cpu === "arm64") return "linux-arm64";
   if (os === "darwin" && cpu === "x64") return "macos-x64";
   if (os === "darwin" && cpu === "arm64") return "macos-arm64";
   if (os === "win32" && cpu === "x64") return "windows-x64.exe";
-
   throw new Error(`Unsupported platform: ${os}-${cpu}`);
 }
 
 // ─── Settings ───────────────────────────────────────────────────
 
-/**
- * Read the autoUpdate setting from user settings.
- * Returns true by default (opt-out, not opt-in).
- */
 export function isAutoUpdateEnabled(): boolean {
   try {
     const settingsPath = kcodePath("settings.json");
@@ -113,10 +145,6 @@ export function isAutoUpdateEnabled(): boolean {
   return true;
 }
 
-/**
- * Get the update check interval in milliseconds.
- * Defaults to 7 days; configurable via settings.updateCheckIntervalDays.
- */
 export function getUpdateCheckInterval(): number {
   try {
     const settingsPath = kcodePath("settings.json");
@@ -157,139 +185,118 @@ function readCheckState(): UpdateCheckState {
 async function writeCheckState(state: UpdateCheckState): Promise<void> {
   try {
     const dir = kcodePath();
-    if (!existsSync(dir)) {
-      require("node:fs").mkdirSync(dir, { recursive: true });
-    }
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     await Bun.write(getUpdateCheckFile(), JSON.stringify(state, null, 2));
   } catch {
     /* ignore */
   }
 }
 
-// ─── Should Check ───────────────────────────────────────────────
-
-/**
- * Determines if enough time has passed since the last check.
- * Also respects the autoUpdate setting.
- */
 export function shouldCheckForUpdate(): boolean {
   if (!isAutoUpdateEnabled()) return false;
-
   const state = readCheckState();
   const interval = getUpdateCheckInterval();
   return Date.now() - state.lastCheck >= interval;
 }
 
-// ─── GitHub Release Check ───────────────────────────────────────
+// ─── Manifest fetch + parse ─────────────────────────────────────
+
+async function fetchManifest(): Promise<Manifest | null> {
+  try {
+    const resp = await fetch(getManifestUrl(), {
+      headers: { "User-Agent": "KCode-AutoUpdate" },
+      signal: AbortSignal.timeout(10_000),
+      // Bypass intermediate caches so a fresh release is visible
+      // immediately after publish.
+      cache: "no-cache",
+    });
+
+    if (!resp.ok) {
+      log.debug("auto-update", `Manifest returned ${resp.status}`);
+      return null;
+    }
+
+    const data = (await resp.json()) as Manifest;
+    if (!data || typeof data.latest !== "string" || !data.platforms) {
+      log.debug("auto-update", "Manifest shape invalid");
+      return null;
+    }
+    return data;
+  } catch (err) {
+    log.debug("auto-update", `Failed to fetch manifest: ${err}`);
+    return null;
+  }
+}
 
 /**
- * Check GitHub Releases API for a newer version.
- * Returns UpdateInfo if a newer version is available, null otherwise.
+ * Resolve the version this client should consider "latest" given the
+ * channel. `beta` falls back to `stable` if the manifest doesn't
+ * advertise a beta channel.
  */
-export async function checkForUpdate(currentVersion: string): Promise<UpdateInfo> {
+function resolveChannelVersion(m: Manifest, channel: "stable" | "beta"): string {
+  if (channel === "beta" && m.channels?.beta) return m.channels.beta;
+  if (m.channels?.stable) return m.channels.stable;
+  return m.latest;
+}
+
+// ─── checkForUpdate ─────────────────────────────────────────────
+
+export async function checkForUpdate(
+  currentVersion: string,
+  opts: { channel?: "stable" | "beta" } = {},
+): Promise<UpdateInfo> {
+  const channel: "stable" | "beta" = opts.channel ?? "stable";
   const base: UpdateInfo = {
     currentVersion,
     latestVersion: currentVersion,
     updateAvailable: false,
+    channel,
   };
 
-  try {
-    const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
-    const resp = await fetch(url, {
-      headers: { "User-Agent": "KCode-AutoUpdate" },
-      signal: AbortSignal.timeout(10_000),
-    });
+  const manifest = await fetchManifest();
+  if (!manifest) return base;
 
-    if (!resp.ok) {
-      log.debug("auto-update", `GitHub API returned ${resp.status}`);
-      return base;
-    }
+  const latestVersion = resolveChannelVersion(manifest, channel);
+  const releaseUrl = manifest.release_notes;
 
-    const data = (await resp.json()) as ReleaseData;
-    const tag = data.tag_name ?? data.version ?? "";
-    const latestVersion = tag.replace(/^v/, "");
-    const releaseUrl = `https://github.com/${GITHUB_REPO}/releases/tag/${tag}`;
+  await writeCheckState({
+    lastCheck: Date.now(),
+    lastVersion: latestVersion,
+    releaseUrl,
+    releaseNotes: undefined,
+    publishedAt: manifest.released_at,
+  });
 
-    // Save check state regardless of whether update is available
-    await writeCheckState({
-      lastCheck: Date.now(),
-      lastVersion: latestVersion,
-      releaseUrl,
-      releaseNotes: data.body ?? undefined,
-      publishedAt: data.published_at ?? undefined,
-    });
-
-    const isNewer = compareSemver(latestVersion, currentVersion) > 0;
-
-    if (!isNewer) {
-      return { ...base, latestVersion };
-    }
-
-    const suffix = getPlatformSuffix();
-
-    // Prefer the versioned tarball (kcode-<version>-<platform>.tar.gz) that
-    // the publish workflow actually emits. Fall back to a bare
-    // kcode-<platform> binary for older releases that predate the tarball
-    // rollout. Skip .sha256 sidecars on both passes.
-    const assets = data.assets ?? [];
-    const tarball = assets.find(
-      (a) => a.name.includes(suffix) && a.name.endsWith(".tar.gz"),
-    );
-    const bareBinary = assets.find(
-      (a) =>
-        a.name.includes(suffix) &&
-        !a.name.endsWith(".sha256") &&
-        !a.name.endsWith(".tar.gz"),
-    );
-    const asset = tarball ?? bareBinary;
-    if (!asset) {
-      log.warn("auto-update", `No binary found for ${suffix} in release ${tag}`);
-    }
-
-    // Per-file .sha256 sidecar beats the (never-produced) aggregate
-    // checksums.txt. We look for <asset-name>.sha256 first.
-    const sidecarName = asset ? `${asset.name}.sha256` : "";
-    const checksumAsset =
-      assets.find((a) => a.name === sidecarName) ??
-      assets.find((a) => a.name === "checksums.txt" || a.name === "SHA256SUMS");
-
-    return {
-      currentVersion,
-      latestVersion,
-      updateAvailable: true,
-      downloadUrl: asset?.browser_download_url,
-      releaseUrl,
-      releaseNotes: data.body ?? "",
-      publishedAt: data.published_at ?? "",
-      checksumUrl: checksumAsset?.browser_download_url ?? null,
-    };
-  } catch (err) {
-    log.debug("auto-update", `Failed to check for updates: ${err}`);
-    return base;
+  if (compareSemver(latestVersion, currentVersion) <= 0) {
+    return { ...base, latestVersion, releaseUrl, publishedAt: manifest.released_at };
   }
+
+  // Resolve platform-specific binary. If the manifest advertises a newer
+  // version that isn't built for this host yet, treat it as "no update"
+  // — better than telling the user there's an update they can't install.
+  const key = getPlatformKey();
+  const plat = manifest.platforms[key];
+  if (!plat) {
+    log.warn("auto-update", `No binary for ${key} in manifest v${latestVersion}`);
+    return { ...base, latestVersion, releaseUrl, publishedAt: manifest.released_at };
+  }
+
+  return {
+    currentVersion,
+    latestVersion,
+    updateAvailable: true,
+    channel,
+    downloadUrl: plat.url,
+    filename: plat.filename,
+    sha256: plat.sha256,
+    size: plat.size,
+    releaseUrl,
+    releaseNotes: releaseUrl,
+    publishedAt: manifest.released_at,
+  };
 }
 
-// ─── SHA256 Verification ────────────────────────────────────────
-
-/**
- * Fetch a per-file `.sha256` sidecar and return its hash.
- * Accepts both the sha256sum format ("<hash>  <filename>") and a bare hash.
- */
-async function fetchSidecarChecksum(checksumUrl: string): Promise<string | null> {
-  try {
-    const resp = await fetch(checksumUrl, {
-      headers: { "User-Agent": "KCode-AutoUpdate" },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!resp.ok) return null;
-    const text = (await resp.text()).trim();
-    // First whitespace-separated token is the hash in both formats.
-    const hash = text.split(/\s+/)[0];
-    return hash && hash.length === 64 ? hash : null;
-  } catch {
-    return null;
-  }
-}
+// ─── SHA256 ─────────────────────────────────────────────────────
 
 async function computeSha256(filePath: string): Promise<string> {
   const hasher = new Bun.CryptoHasher("sha256");
@@ -301,11 +308,6 @@ async function computeSha256(filePath: string): Promise<string> {
 
 // ─── Download & Install ────────────────────────────────────────
 
-/**
- * Download the update binary, verify SHA256, and replace the current binary.
- * @param info - UpdateInfo from checkForUpdate
- * @param onProgress - Optional progress callback (0-100)
- */
 export async function downloadAndInstall(
   info: UpdateInfo,
   onProgress?: (pct: number) => void,
@@ -316,14 +318,14 @@ export async function downloadAndInstall(
     newVersion: info.latestVersion,
   };
 
-  if (!info.updateAvailable || !info.downloadUrl) {
-    result.error = "No update available or no download URL";
+  if (!info.updateAvailable || !info.downloadUrl || !info.sha256) {
+    result.error = "No update available or manifest missing platform entry.";
     return result;
   }
 
   try {
     const resp = await fetch(info.downloadUrl, {
-      signal: AbortSignal.timeout(300_000), // 5 minutes
+      signal: AbortSignal.timeout(300_000),
       headers: { "User-Agent": "KCode-AutoUpdate" },
       redirect: "follow",
     });
@@ -333,11 +335,13 @@ export async function downloadAndInstall(
       return result;
     }
 
-    const totalSize = parseInt(resp.headers.get("content-length") ?? "0", 10);
+    const totalSize =
+      info.size && info.size > 0
+        ? info.size
+        : parseInt(resp.headers.get("content-length") ?? "0", 10);
     const tmpDir = require("node:os").tmpdir();
     const tmpPath = join(tmpDir, `kcode-update-${process.pid}`);
 
-    // Stream to temp file
     const writer = Bun.file(tmpPath).writer();
     let downloaded = 0;
 
@@ -345,145 +349,85 @@ export async function downloadAndInstall(
       for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
         writer.write(chunk);
         downloaded += chunk.length;
-
         if (onProgress && totalSize > 0) {
           onProgress(Math.round((downloaded / totalSize) * 100));
         }
       }
       await writer.end();
     } catch (err) {
-      // Clean up on error
-      try {
-        unlinkSync(tmpPath);
-      } catch {
-        /* ignore */
-      }
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
       result.error = err instanceof Error ? err.message : "Download stream failed";
       return result;
     }
 
-    // Verify SHA256 checksum against the DOWNLOADED file (tarball or bare
-    // binary, whichever was fetched). checksumUrl points to a per-file
-    // .sha256 sidecar whose body is "<hash>  <filename>\n".
-    const isTarball = (info.downloadUrl ?? "").endsWith(".tar.gz");
-    if (info.checksumUrl) {
-      const expected = await fetchSidecarChecksum(info.checksumUrl);
-      if (expected) {
-        const actual = await computeSha256(tmpPath);
-        if (actual !== expected) {
-          try {
-            unlinkSync(tmpPath);
-          } catch {
-            /* ignore */
-          }
-          result.error = `Checksum verification failed. Expected: ${expected}, Got: ${actual}`;
-          return result;
-        }
-        log.info("auto-update", "SHA256 checksum verified.");
-      }
+    // Verify SHA256 against the value the manifest committed to.
+    const actual = await computeSha256(tmpPath);
+    if (actual !== info.sha256) {
+      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      result.error = `Checksum mismatch. Expected: ${info.sha256}, Got: ${actual}`;
+      return result;
     }
+    log.info("auto-update", "SHA256 verified.");
 
-    // If the asset is a tarball, extract it and use the extracted `kcode`
-    // as the binary source. Older releases shipped a bare binary, in which
-    // case tmpPath itself is the binary — nothing to extract.
-    let binarySource = tmpPath;
-    let extractDir: string | null = null;
-    if (isTarball) {
-      extractDir = join(tmpDir, `kcode-update-${process.pid}-extract`);
-      require("node:fs").mkdirSync(extractDir, { recursive: true });
-      try {
-        execSync(`tar -xzf "${tmpPath}" -C "${extractDir}"`, {
-          stdio: "pipe",
-          timeout: 60_000,
-        });
-      } catch (err) {
-        try { unlinkSync(tmpPath); } catch { /* ignore */ }
-        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
-        result.error = `Failed to extract tarball: ${err instanceof Error ? err.message : err}`;
-        return result;
-      }
-      const extractedBinary = join(extractDir, "kcode");
-      if (!existsSync(extractedBinary)) {
-        try { unlinkSync(tmpPath); } catch { /* ignore */ }
-        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
-        result.error = "Tarball did not contain a 'kcode' binary.";
-        return result;
-      }
-      binarySource = extractedBinary;
-    }
+    chmodSync(tmpPath, 0o755);
 
-    // Make executable
-    chmodSync(binarySource, 0o755);
-
-    // Find and replace binary
     const binaryPaths = findBinaryPaths();
     if (binaryPaths.length === 0) {
       try { unlinkSync(tmpPath); } catch { /* ignore */ }
-      if (extractDir) {
-        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      }
       result.error = "Could not find KCode binary path to replace.";
       return result;
     }
 
-    // Atomic replace: rename binary source -> dest with backup
     const destPath = binaryPaths[0]!;
-    const backupPath = destPath + ".old";
 
+    // Backup current binary so `kcode update --rollback` can restore it.
+    // Stored at ~/.kcode/previous-kcode — same fs as $HOME so rename is
+    // atomic on every common Linux layout.
+    const rollbackPath = getRollbackBinaryPath();
+    try {
+      const dir = kcodePath();
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      if (existsSync(destPath)) {
+        // Prefer copy (preserves the running binary on disk) over rename
+        // so an in-flight execution doesn't lose its image.
+        copyFileSync(destPath, rollbackPath);
+      }
+    } catch (err) {
+      log.warn("auto-update", `Could not back up to ${rollbackPath}: ${err}`);
+    }
+
+    const sidecarBackup = `${destPath}.old`;
     try {
       if (existsSync(destPath)) {
-        renameSync(destPath, backupPath);
+        renameSync(destPath, sidecarBackup);
       }
-      // rename across filesystems (/tmp → ~/.local/bin is common on Linux
-      // when /tmp is tmpfs) throws EXDEV. Fall back to copy+unlink.
+      // tmpfs /tmp → ~/.local/bin crosses filesystems on most distros
+      // and yields EXDEV. Fall back to copy+unlink.
       try {
-        renameSync(binarySource, destPath);
+        renameSync(tmpPath, destPath);
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "EXDEV") {
-          copyFileSync(binarySource, destPath);
-          try {
-            unlinkSync(binarySource);
-          } catch {
-            /* ignore */
-          }
+          copyFileSync(tmpPath, destPath);
+          try { unlinkSync(tmpPath); } catch { /* ignore */ }
         } else {
           throw err;
         }
       }
-      // Clean up the downloaded tarball and extract dir if we extracted.
-      if (isTarball) {
-        try { unlinkSync(tmpPath); } catch { /* ignore */ }
-        if (extractDir) {
-          try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
-        }
-      }
-      // Clean up backup
-      try {
-        unlinkSync(backupPath);
-      } catch {
-        /* may be in use */
-      }
+      try { unlinkSync(sidecarBackup); } catch { /* may be in use */ }
     } catch (err) {
-      // Restore backup if rename failed
       try {
-        if (existsSync(backupPath)) {
-          renameSync(backupPath, destPath);
-        }
-      } catch {
-        /* best effort */
-      }
+        if (existsSync(sidecarBackup)) renameSync(sidecarBackup, destPath);
+      } catch { /* best effort */ }
       try { unlinkSync(tmpPath); } catch { /* ignore */ }
-      if (extractDir) {
-        try { require("node:fs").rmSync(extractDir, { recursive: true, force: true }); } catch { /* ignore */ }
-      }
       result.error = err instanceof Error ? err.message : "Binary replacement failed";
       return result;
     }
 
-    // Copy to additional locations
+    // Mirror to other known install locations so a user with both
+    // ~/.local/bin/kcode and ~/.bun/bin/kcode doesn't end up half-updated.
     for (let i = 1; i < binaryPaths.length; i++) {
       try {
-        require("node:fs").copyFileSync(destPath, binaryPaths[i]!);
+        copyFileSync(destPath, binaryPaths[i]!);
         chmodSync(binaryPaths[i]!, 0o755);
       } catch (err) {
         log.warn("auto-update", `Failed to copy to ${binaryPaths[i]}: ${err}`);
@@ -500,19 +444,67 @@ export async function downloadAndInstall(
   }
 }
 
-// ─── Update Notification ──────────────────────────────────────
-
-const NOTIFICATION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// ─── Rollback ──────────────────────────────────────────────────
 
 /**
- * Returns a user-friendly notification string if an update is available.
- * Checks at most once every 24 hours, using a cached result otherwise.
- * Returns null if no update is available or check was done recently with no update.
+ * Restore the previously-installed binary from ~/.kcode/previous-kcode.
+ * Returns false if no rollback is available.
  */
+export async function rollback(): Promise<{ success: boolean; error?: string }> {
+  const rollbackPath = getRollbackBinaryPath();
+  if (!existsSync(rollbackPath)) {
+    return { success: false, error: "No previous binary to roll back to." };
+  }
+
+  const binaryPaths = findBinaryPaths();
+  if (binaryPaths.length === 0) {
+    return { success: false, error: "Could not locate KCode binary to replace." };
+  }
+  const destPath = binaryPaths[0]!;
+
+  try {
+    const sidecarBackup = `${destPath}.failed`;
+    if (existsSync(destPath)) {
+      renameSync(destPath, sidecarBackup);
+    }
+    try {
+      copyFileSync(rollbackPath, destPath);
+      chmodSync(destPath, 0o755);
+    } catch (err) {
+      try {
+        if (existsSync(sidecarBackup)) renameSync(sidecarBackup, destPath);
+      } catch { /* best effort */ }
+      throw err;
+    }
+    try { unlinkSync(sidecarBackup); } catch { /* may be in use */ }
+
+    for (let i = 1; i < binaryPaths.length; i++) {
+      try {
+        copyFileSync(destPath, binaryPaths[i]!);
+        chmodSync(binaryPaths[i]!, 0o755);
+      } catch (err) {
+        log.warn("auto-update", `Failed to mirror rollback to ${binaryPaths[i]}: ${err}`);
+      }
+    }
+
+    return { success: true };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Rollback failed",
+    };
+  }
+}
+
+export function hasRollbackAvailable(): boolean {
+  return existsSync(getRollbackBinaryPath());
+}
+
+// ─── Update Notification ──────────────────────────────────────
+
 export async function getUpdateNotification(currentVersion: string): Promise<string | null> {
   const state = readCheckState();
 
-  // If we have a recent check, use cached result
   if (state.lastCheck > 0 && Date.now() - state.lastCheck < NOTIFICATION_CHECK_INTERVAL_MS) {
     if (state.lastVersion && compareSemver(state.lastVersion, currentVersion) > 0) {
       return formatNotification(currentVersion, state.lastVersion, state.releaseUrl);
@@ -520,12 +512,10 @@ export async function getUpdateNotification(currentVersion: string): Promise<str
     return null;
   }
 
-  // Otherwise, perform a fresh check
   const info = await checkForUpdate(currentVersion);
   if (info.updateAvailable) {
     return formatNotification(info.currentVersion, info.latestVersion, info.releaseUrl);
   }
-
   return null;
 }
 
@@ -562,15 +552,11 @@ function findBinaryPaths(): string[] {
   }
 
   for (const p of candidates) {
-    if (existsSync(p)) {
-      paths.push(p);
-    }
+    if (existsSync(p)) paths.push(p);
   }
 
-  // Default to ~/.local/bin/kcode if nothing found
   if (paths.length === 0) {
     paths.push(join(homedir(), ".local", "bin", "kcode"));
   }
-
   return paths;
 }
