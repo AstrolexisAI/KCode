@@ -199,8 +199,22 @@ function buildTestingChecklist(ecosystem: Ecosystem): string[] {
  * The narrower the prompt, the less surface area for hallucinated
  * paths / Spanish leaks / chain-of-thought / fabricated counts.
  */
+/**
+ * v2.10.351 P0 — Filter findings to only those that should reach
+ * the PR pipeline. \`ignored\` findings are tagged by the reviewer
+ * as "leave alone" and must not be committed, summarized, or shown
+ * in the PR body. \`demoted_fp\` is also excluded defensively even
+ * though persist() should have moved them out of result.findings
+ * already — a stale on-disk JSON could still carry one.
+ */
+function actionableFindings(result: AuditResult): Finding[] {
+  return result.findings.filter(
+    (f) => f.review_state !== "ignored" && f.review_state !== "demoted_fp",
+  );
+}
+
 function buildExecutiveSummaryPrompt(result: AuditResult): string {
-  const findingsList = result.findings
+  const findingsList = actionableFindings(result)
     .map((f, i) => {
       const rel = f.file.replace(result.project + "/", "");
       return `${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — ${rel}:${f.line}`;
@@ -269,7 +283,7 @@ function sanitizeExecutiveSummary(text: string, projectRoot: string): string {
 }
 
 function buildPrPrompt(result: AuditResult, fixes: string[]): string {
-  const findingsSummary = result.findings
+  const findingsSummary = actionableFindings(result)
     .map((f, i) => {
       const rel = f.file.replace(result.project + "/", "");
       return `${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — ${rel}:${f.line}\n   ${f.verification.reasoning}${f.verification.suggested_fix ? "\n   Fix: " + f.verification.suggested_fix : ""}`;
@@ -399,12 +413,17 @@ function buildStructuredPrBody(
 
   lines.push("### Findings and fixes");
   lines.push("");
-  if (result.findings.length === 0) {
+  // v2.10.351 P0 — render only actionable findings (excludes
+  // ignored and any stray demoted_fp). Counts in the header above
+  // still come from result.confirmed_findings; if the reviewer
+  // wants the header to follow review state, see P0.9.
+  const renderableFindings = actionableFindings(result);
+  if (renderableFindings.length === 0) {
     lines.push("_No confirmed findings — see the methodology section for what was checked._");
     lines.push("");
   } else {
-    for (let i = 0; i < result.findings.length; i++) {
-      const f = result.findings[i]!;
+    for (let i = 0; i < renderableFindings.length; i++) {
+      const f = renderableFindings[i]!;
       const rel = f.file.startsWith(projectRoot + "/")
         ? f.file.slice(projectRoot.length + 1)
         : f.file.replace(result.project + "/", "");
@@ -729,7 +748,12 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
       // allowlist drives the stage, and audit/temp files are excluded
       // unconditionally.
       step("Staging changes...");
-      const auditFiles = auditResult.findings.map((f) =>
+      // v2.10.351 P0 — stage only files referenced by actionable
+      // findings (excludes ignored / demoted_fp). A reviewer who
+      // tagged a finding as 'ignored' meant: don't touch this code,
+      // and that includes not staging any unrelated edits in the
+      // same file just because /fix tried to annotate it.
+      const auditFiles = actionableFindings(auditResult).map((f) =>
         f.file.startsWith(projectRoot + "/")
           ? f.file.slice(projectRoot.length + 1)
           : f.file,

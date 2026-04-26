@@ -428,3 +428,150 @@ Future<void> fetch() async {
     expect(content).toContain("audit-note:dart-001-insecure-http");
   });
 });
+
+// v2.10.351 P0 — applyFixes must respect review_state.
+describe("applyFixes — review_state filtering", () => {
+  test("skips findings tagged review_state='ignored'", () => {
+    // Build a minimal AuditResult by hand — easier than driving a full
+    // runAudit + /review session. We only need applyFixes to see one
+    // finding and decide whether to touch the file.
+    const tmpFile = `/tmp/kcode-applyfixes-ignored-${Date.now()}.cpp`;
+    writeFileSync(
+      tmpFile,
+      `void f(const void *buf) {
+    size_t n = 0;
+    int s = sendto(0, (&buf)[n], 0, 0, NULL, 0);
+}\n`,
+    );
+    const fakeResult = {
+      project: "/tmp",
+      timestamp: "2026-04-25",
+      languages_detected: ["cpp"],
+      files_scanned: 1,
+      candidates_found: 1,
+      confirmed_findings: 1,
+      false_positives: 0,
+      findings: [
+        {
+          pattern_id: "cpp-001-ptr-address-index",
+          pattern_title: "Suspicious pointer arithmetic",
+          severity: "high",
+          file: tmpFile,
+          line: 3,
+          matched_text: "(&buf)[n]",
+          context: "context",
+          verification: { verdict: "confirmed", reasoning: "test" },
+          review_state: "ignored",
+        },
+      ],
+      false_positives_detail: [],
+      needs_context: 0,
+      needs_context_detail: [],
+      coverage: {
+        totalCandidateFiles: 1,
+        scannedFiles: 1,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 1,
+        capSource: "user" as const,
+      },
+      elapsed_ms: 0,
+    };
+    const fixes = applyFixes(fakeResult as unknown as Parameters<typeof applyFixes>[0]);
+    expect(fixes.length).toBe(0); // ignored finding must not be touched
+    // File must be unchanged.
+    const content = readFileSync(tmpFile, "utf-8");
+    expect(content).toContain("(&buf)[n]");
+    expect(content).not.toContain("audit-note");
+    expect(content).not.toContain("(const char*)buf");
+  });
+
+  test("skips findings tagged review_state='demoted_fp' (defensive)", () => {
+    const tmpFile = `/tmp/kcode-applyfixes-demoted-${Date.now()}.cpp`;
+    writeFileSync(tmpFile, `void f(const void *buf) { (&buf)[0]; }\n`);
+    const fakeResult = {
+      project: "/tmp",
+      timestamp: "2026-04-25",
+      languages_detected: ["cpp"],
+      files_scanned: 1,
+      candidates_found: 1,
+      confirmed_findings: 1,
+      false_positives: 0,
+      findings: [
+        {
+          pattern_id: "cpp-001-ptr-address-index",
+          pattern_title: "Suspicious pointer arithmetic",
+          severity: "high",
+          file: tmpFile,
+          line: 1,
+          matched_text: "(&buf)[0]",
+          context: "context",
+          verification: { verdict: "confirmed", reasoning: "test" },
+          review_state: "demoted_fp",
+        },
+      ],
+      false_positives_detail: [],
+      needs_context: 0,
+      needs_context_detail: [],
+      coverage: {
+        totalCandidateFiles: 1,
+        scannedFiles: 1,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 1,
+        capSource: "user" as const,
+      },
+      elapsed_ms: 0,
+    };
+    const fixes = applyFixes(fakeResult as unknown as Parameters<typeof applyFixes>[0]);
+    expect(fixes.length).toBe(0);
+  });
+
+  test("DOES fix findings tagged review_state='promoted' (regression for P0.5)", () => {
+    const tmpFile = `/tmp/kcode-applyfixes-promoted-${Date.now()}.cpp`;
+    writeFileSync(
+      tmpFile,
+      `void f(const void *buf) {
+    size_t n = 0;
+    int s = sendto(0, (&buf)[n], 0, 0, NULL, 0);
+}\n`,
+    );
+    const fakeResult = {
+      project: "/tmp",
+      timestamp: "2026-04-25",
+      languages_detected: ["cpp"],
+      files_scanned: 1,
+      candidates_found: 1,
+      confirmed_findings: 1,
+      false_positives: 0,
+      findings: [
+        {
+          pattern_id: "cpp-001-ptr-address-index",
+          pattern_title: "Suspicious pointer arithmetic",
+          severity: "high",
+          file: tmpFile,
+          line: 3,
+          matched_text: "(&buf)[n]",
+          context: "context",
+          verification: { verdict: "confirmed", reasoning: "test" },
+          review_state: "promoted",
+        },
+      ],
+      false_positives_detail: [],
+      needs_context: 0,
+      needs_context_detail: [],
+      coverage: {
+        totalCandidateFiles: 1,
+        scannedFiles: 1,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 1,
+        capSource: "user" as const,
+      },
+      elapsed_ms: 0,
+    };
+    const fixes = applyFixes(fakeResult as unknown as Parameters<typeof applyFixes>[0]);
+    expect(fixes.length).toBe(1);
+    expect(fixes[0]!.applied).toBe(true);
+  });
+});
