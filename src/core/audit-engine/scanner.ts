@@ -556,7 +556,7 @@ const C_STYLE_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
 const HASH_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
   "python",
   "ruby",
-  "bash",
+  "shell",  // covers .sh / .bash / .zsh / .ksh — the Language type uses "shell" as the canonical id (v2.10.351 P0)
 ]);
 
 /**
