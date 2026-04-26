@@ -396,6 +396,145 @@ describe("generateMarkdownReport — coverage + FP section", () => {
   });
 });
 
+// v2.10.351 P1.1 — Audit Confidence header rendering.
+describe("generateMarkdownReport — Audit Confidence header (v2.10.351 P1)", () => {
+  const baseAudit = (overrides: Record<string, unknown>) => ({
+    project: "/repo",
+    timestamp: "2026-04-25",
+    languages_detected: ["c"],
+    files_scanned: 100,
+    candidates_found: 10,
+    confirmed_findings: 2,
+    false_positives: 8,
+    findings: [],
+    false_positives_detail: [],
+    coverage: {
+      totalCandidateFiles: 100,
+      scannedFiles: 100,
+      skippedByLimit: 0,
+      truncated: false,
+      maxFiles: 500,
+      capSource: "adaptive" as const,
+    },
+    elapsed_ms: 1000,
+    ...overrides,
+  });
+
+  it("renders coverage, verifier, findings, autofix lines for a clean run", () => {
+    const md = renderMd(baseAudit({
+      verification_mode: "verified",
+      fix_support_summary: { rewrite: 1, annotate: 1, manual: 0 },
+    }));
+    expect(md).toContain("## Audit Confidence");
+    expect(md).toContain("**Coverage:** 100 / 100 files (100%) — full scan");
+    expect(md).toContain("**Verifier:** active");
+    expect(md).toContain("**Findings:** 2 confirmed · 8 false-positive · 0 needs-context");
+    expect(md).toContain("**Autofix:** 1 rewrite · 1 annotate · 0 manual-only");
+    // No warnings on a clean run.
+    expect(md).not.toContain("⚠ Warnings");
+  });
+
+  it("emits skip-verify warning + 'static-only' label when verification was skipped", () => {
+    const md = renderMd(baseAudit({
+      verification_mode: "skipped",
+      confirmed_findings: 10,
+      false_positives: 0,
+    }));
+    expect(md).toContain("**Verifier:** skipped (static-only output");
+    expect(md).toContain("⚠ Warnings");
+    expect(md).toContain("Verifier was skipped");
+  });
+
+  it("emits truncation warning when coverage truncated=true", () => {
+    const md = renderMd(baseAudit({
+      coverage: {
+        totalCandidateFiles: 1500,
+        scannedFiles: 500,
+        skippedByLimit: 1000,
+        truncated: true,
+        maxFiles: 500,
+        capSource: "user" as const,
+      },
+    }));
+    expect(md).toContain("Coverage truncated");
+    expect(md).toMatch(/Re-run with `--max-files \d+`/);
+  });
+
+  it("renders diff-mode label when coverage.since is set", () => {
+    const md = renderMd(baseAudit({
+      coverage: {
+        totalCandidateFiles: 100,
+        scannedFiles: 5,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 500,
+        capSource: "adaptive" as const,
+        since: "main",
+        changedFilesInDiff: 5,
+      },
+    }));
+    expect(md).toContain("diff scan since `main`");
+  });
+
+  it("emits AST-degraded warning when at least one grammar failed to load", () => {
+    const md = renderMd(baseAudit({
+      ast_grammar_status: [
+        { language: "python", patterns_attempted: 4, loaded: true },
+        { language: "go", patterns_attempted: 2, loaded: false, last_error: "tree-sitter-go.wasm not found" },
+      ],
+    }));
+    expect(md).toContain("**AST grammars:** 1 loaded, 1 missing (go)");
+    expect(md).toContain("AST coverage degraded");
+    expect(md).toContain("kcode grammars install");
+  });
+
+  it("surfaces top-noise patterns when ≥3 sites with <50% confirm rate", () => {
+    const md = renderMd(baseAudit({
+      pattern_metrics: {
+        "noisy-pattern": {
+          hits: 20,
+          unique_sites: 10,
+          confirmed: 1,
+          false_positive: 9,
+          needs_context: 0,
+          confirmed_rate: 0.1,
+          false_positive_rate: 0.9,
+        },
+        "clean-pattern": {
+          hits: 5,
+          unique_sites: 5,
+          confirmed: 5,
+          false_positive: 0,
+          needs_context: 0,
+          confirmed_rate: 1.0,
+          false_positive_rate: 0.0,
+        },
+        "small-sample": {
+          hits: 1,
+          unique_sites: 1,
+          confirmed: 0,
+          false_positive: 1,
+          needs_context: 0,
+          confirmed_rate: 0.0,
+          false_positive_rate: 1.0,
+        },
+      },
+    }));
+    // Scope assertions to the Audit Confidence section — the lower
+    // 'Pattern hit-rate' table renders every pattern regardless of
+    // signal, so we'd otherwise hit those entries by accident.
+    const confSection = md.split("## Audit Confidence")[1]!.split("---")[0]!;
+    expect(confSection).toContain("Top noise");
+    expect(confSection).toContain("noisy-pattern");
+    expect(confSection).toContain("10% confirm");
+    // small-sample has only 1 site — under the threshold, must NOT
+    // appear in the top-noise line (one-off noise isn't actionable).
+    expect(confSection).not.toContain("small-sample");
+    // clean-pattern has 100% confirm — must NOT appear in noise list.
+    expect(confSection).not.toContain("clean-pattern");
+  });
+});
+
 // v2.10.351 P0.9 — review_state filtering in the Markdown report.
 describe("generateMarkdownReport — review_state filtering", () => {
   const baseFinding = (overrides: Record<string, unknown>) => ({
