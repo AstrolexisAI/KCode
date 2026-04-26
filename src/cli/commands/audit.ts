@@ -21,6 +21,37 @@ const ICONS = {
   needs_context: "\x1b[33m◐\x1b[0m",
 };
 
+/**
+ * Detect a sensible diff base for --ci mode. Tries upstream refs in
+ * order; returns the first that resolves. Falls back to HEAD~1 when
+ * no upstream is configured (still gives a meaningful diff for the
+ * most recent commit), and undefined when the repo has only one
+ * commit (which makes diff mode pointless).
+ *
+ * Uses execFileSync per the v2.10.351 P0.4 hardening — ref text is
+ * pure positional argv, no shell. v2.10.353.
+ */
+async function detectDefaultDiffBase(projectRoot: string): Promise<string | undefined> {
+  const { execFileSync } = await import("node:child_process");
+  const probe = (ref: string): boolean => {
+    try {
+      execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
+        cwd: projectRoot,
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 5_000,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  for (const candidate of ["origin/main", "origin/master", "main", "master"]) {
+    if (probe(candidate)) return candidate;
+  }
+  if (probe("HEAD~1")) return "HEAD~1";
+  return undefined;
+}
+
 export function registerAuditCommand(program: Command): void {
   program
     .command("audit <path>")
@@ -50,6 +81,14 @@ export function registerAuditCommand(program: Command): void {
       "Also write AUDIT.sarif (SARIF v2.1.0, for GitHub Advanced Security / Azure DevOps / SonarQube)",
       false,
     )
+    .option(
+      "--ci",
+      "CI gate mode: auto-detect diff base (origin/main → origin/master → HEAD~1), enable --json + --sarif + --skip-verify by default, " +
+        "suppress per-candidate progress noise, and exit code 1 when actionable findings are present. " +
+        "Override defaults with explicit flags: e.g. `--ci --model mark7` keeps verifier on. " +
+        "v2.10.353 — designed for PR pre-merge gates.",
+      false,
+    )
     .action(async (path: string, opts: {
       output?: string;
       model?: string;
@@ -63,6 +102,7 @@ export function registerAuditCommand(program: Command): void {
       since?: string;
       json: boolean;
       sarif: boolean;
+      ci: boolean;
     }) => {
       const projectRoot = pathResolve(path);
       const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
@@ -74,10 +114,38 @@ export function registerAuditCommand(program: Command): void {
           ? Number.MAX_SAFE_INTEGER
           : parsedMaxFiles;
 
+      // v2.10.353 — --ci sets opinionated defaults for PR-gate
+      // pipelines. Each can still be overridden by an explicit flag
+      // (commander already preserves user values that come AFTER the
+      // option string). What --ci adds:
+      //   1. Auto-detect a diff base when --since is omitted
+      //   2. Default --skip-verify to true (CI usually has no model)
+      //   3. Default --json + --sarif (so the CI can upload artifacts)
+      //   4. Suppress per-candidate progress (noisy in CI logs)
+      //   5. Exit code 1 when actionable findings remain
+      if (opts.ci) {
+        if (!opts.since) {
+          opts.since = await detectDefaultDiffBase(projectRoot);
+        }
+        // Defaults — only apply when user didn't explicitly set them.
+        // The flags are boolean so we can't distinguish "default" from
+        // "explicit false"; but commander gives us false for both. We
+        // default to true unconditionally — the user can opt back out
+        // with `--no-ci` (or skip --ci entirely).
+        if (!opts.skipVerify && !opts.model && !opts.apiBase) {
+          opts.skipVerify = true;
+        }
+        opts.json = true;
+        opts.sarif = true;
+      }
+
       console.log("");
       console.log(`${ICONS.phase} KCode Audit Engine`);
       console.log(`  Project:  ${projectRoot}`);
       console.log(`  Output:   ${outputPath}`);
+      if (opts.ci) {
+        console.log(`  Mode:     CI gate (--since ${opts.since ?? "<none>"}, json+sarif, exit-on-finding)`);
+      }
       console.log("");
 
       // Auto-skip verification for machine-generated projects. The web engine
@@ -149,19 +217,21 @@ export function registerAuditCommand(program: Command): void {
             lastPhase = phase;
           }
         },
-        onCandidate: (cand, ver, i, total) => {
-          verifiedCount++;
-          const icon =
-            ver.verdict === "confirmed"
-              ? ICONS.confirmed
-              : ver.verdict === "false_positive"
-                ? ICONS.false_positive
-                : ICONS.needs_context;
-          const rel = cand.file.replace(projectRoot + "/", "");
-          process.stdout.write(
-            `\r  ${icon} [${verifiedCount}/${total}] ${cand.pattern_id} — ${rel}:${cand.line}          \n`,
-          );
-        },
+        onCandidate: opts.ci
+          ? undefined  // v2.10.353 — silence per-candidate noise in CI logs
+          : (cand, ver, i, total) => {
+              verifiedCount++;
+              const icon =
+                ver.verdict === "confirmed"
+                  ? ICONS.confirmed
+                  : ver.verdict === "false_positive"
+                    ? ICONS.false_positive
+                    : ICONS.needs_context;
+              const rel = cand.file.replace(projectRoot + "/", "");
+              process.stdout.write(
+                `\r  ${icon} [${verifiedCount}/${total}] ${cand.pattern_id} — ${rel}:${cand.line}          \n`,
+              );
+            },
       });
 
       // Write markdown report
@@ -220,5 +290,27 @@ export function registerAuditCommand(program: Command): void {
         );
       }
       console.log("");
+
+      // v2.10.353 — --ci sets the process exit code based on
+      // ACTIONABLE findings (excludes review_state ignored /
+      // demoted_fp). For a fresh scan with no review history, this
+      // equals confirmed_findings; for a re-run that has a prior
+      // review trail in the JSON, this respects the reviewer's
+      // decisions. Exit 1 signals "block the merge"; exit 0 is
+      // green.
+      if (opts.ci) {
+        const actionable = result.findings.filter(
+          (f) =>
+            (f as { review_state?: string }).review_state !== "ignored" &&
+            (f as { review_state?: string }).review_state !== "demoted_fp",
+        ).length;
+        if (actionable > 0) {
+          console.log(`\x1b[31m✗ CI gate: ${actionable} actionable finding${actionable === 1 ? "" : "s"} — failing build.\x1b[0m`);
+          process.exit(1);
+        } else {
+          console.log(`\x1b[32m✓ CI gate: no actionable findings.\x1b[0m`);
+          process.exit(0);
+        }
+      }
     });
 }
