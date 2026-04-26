@@ -145,6 +145,24 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
   lines.push("## Audit Confidence");
   lines.push("");
 
+  // ── Quantitative score (v2.10.362, F2) ────────────────────
+  // Headline number first so a reader skimming the diff/email gets
+  // "is this run trustworthy?" before any prose.
+  const conf = result.audit_confidence;
+  if (conf) {
+    lines.push(`**Score:** ${conf.score} / 100`);
+    lines.push("");
+    const fmt = (n: number | null): string => (n === null ? "n/a" : `${n}`);
+    lines.push("| Subscore | Value | Weight |");
+    lines.push("|----------|-------|--------|");
+    lines.push(`| Coverage | ${fmt(conf.coverage_score)} | 25% |`);
+    lines.push(`| Verifier | ${fmt(conf.verifier_score)} | 20% |`);
+    lines.push(`| AST | ${fmt(conf.ast_score)} | 15% |`);
+    lines.push(`| Noise (FP justification) | ${fmt(conf.noise_score)} | 20% |`);
+    lines.push(`| Fixability (rewrite-class) | ${fmt(conf.fixability_score)} | 20% |`);
+    lines.push("");
+  }
+
   // ── Coverage line ─────────────────────────────────────────
   const cov = result.coverage;
   if (cov) {
