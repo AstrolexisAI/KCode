@@ -234,6 +234,24 @@ describe("/review v2 — promote", () => {
     expect(a.needs_context).toBe(0);
   });
 
+  it("does NOT accumulate reviewer prefixes on round-trips (v2.10.351 audit A.1.1 fix)", async () => {
+    // Pre-fix bug: promote → demote → promote produced the stacked
+    // reasoning "[reviewer promoted] [reviewer demoted] [reviewer promoted] <orig>".
+    // Each transition must own the prefix exactly once — the prefix
+    // describes the CURRENT state, not a transition log.
+    seedAudit();
+    await handleAuditAction("review", ctx(`${TMP} promote 5`));
+    await handleAuditAction("review", ctx(`${TMP} demote 1`));
+    await handleAuditAction("review", ctx(`${TMP} promote 1`));
+    const a = readAudit();
+    const f = a.findings.find((x) => x.pattern_id === "fsw-003-assert");
+    expect(f).toBeDefined();
+    const reasoning = f!.verification.reasoning;
+    // Exactly one prefix at the head — no nested or stacked prefixes.
+    expect(reasoning.match(/\[reviewer (promoted|demoted)\]/g)?.length).toBe(1);
+    expect(reasoning.startsWith("[reviewer promoted]")).toBe(true);
+  });
+
   it("recomputes fix_support_summary after promote (v2.10.351 P0)", async () => {
     seedAudit();
     const before = readAudit();
