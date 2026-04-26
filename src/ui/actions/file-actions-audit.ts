@@ -2,6 +2,7 @@
 // Split out of file-actions.ts.
 
 import type { ActionContext } from "./action-helpers.js";
+import { tokenize } from "./argv-parser.js";
 import { log } from "../../core/logger.js";
 
 export async function handleAuditAction(
@@ -13,7 +14,16 @@ export async function handleAuditAction(
   switch (action) {
     case "scan": {
       // Parse args: first token = path, optional flags
-      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      // CL.4 (v2.10.374) — shell-quote-aware tokenization. Replaces
+      // split(/\s+/) which broke paths with spaces and forced quoted
+      // /review note text to be unquoted. Unterminated-quote errors
+      // bubble up as a friendly message instead of crashing the TUI.
+      let tokens: string[];
+      try {
+        tokens = tokenize(args);
+      } catch (err) {
+        return `  ${(err as Error).message}`;
+      }
       const skipVerify = tokens.includes("--skip-verify");
       let pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
       // Expand ~ to home directory
@@ -337,7 +347,16 @@ export async function handleAuditAction(
       // them in groups so the user always knows what each number maps to.
       // Decisions persist via the v326 fields review_state, review_reason,
       // and review_tags on Finding / FalsePositiveDetail.
-      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      // CL.4 (v2.10.374) — shell-quote-aware tokenization. Replaces
+      // split(/\s+/) which broke paths with spaces and forced quoted
+      // /review note text to be unquoted. Unterminated-quote errors
+      // bubble up as a friendly message instead of crashing the TUI.
+      let tokens: string[];
+      try {
+        tokens = tokenize(args);
+      } catch (err) {
+        return `  ${(err as Error).message}`;
+      }
       const pathToken = tokens.shift() ?? ".";
       const cmd = (tokens.shift() ?? "").toLowerCase();
 
@@ -982,7 +1001,16 @@ export async function handleAuditAction(
       // green audit, --safe-only is the right default — recipe
       // annotations require human review and should not land
       // automatically.
-      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      // CL.4 (v2.10.374) — shell-quote-aware tokenization. Replaces
+      // split(/\s+/) which broke paths with spaces and forced quoted
+      // /review note text to be unquoted. Unterminated-quote errors
+      // bubble up as a friendly message instead of crashing the TUI.
+      let tokens: string[];
+      try {
+        tokens = tokenize(args);
+      } catch (err) {
+        return `  ${(err as Error).message}`;
+      }
       const safeOnly = tokens.includes("--safe-only");
       // F6 (v2.10.369) — three explicit /fix modes:
       //   --safe-only  : only fix_support === "rewrite" findings, run normal fixer
