@@ -877,7 +877,11 @@ export async function handleAuditAction(
           // exportPath may not exist yet — realpath its parent.
           const { dirname } = await import("node:path");
           const realParent = realpathSync(dirname(exportPath));
-          if (!realParent.startsWith(realProject)) {
+          // v2.10.368 — bare startsWith() lets `/proj` match
+          // `/projother/X`. Equality check + separator-suffixed
+          // startsWith eliminates the prefix collision.
+          const sep = require("node:path").sep;
+          if (realParent !== realProject && !realParent.startsWith(realProject + sep)) {
             return `  Export refused: target ${exportPath} escapes the project root.`;
           }
         } catch {
@@ -976,7 +980,17 @@ export async function handleAuditAction(
       let auditResult: import("../../core/audit-engine/types").AuditResult;
 
       if (existsSync(jsonPath)) {
-        auditResult = JSON.parse(readFs(jsonPath, "utf-8"));
+        // v2.10.368 — same crash-safety guard as the /review JSON
+        // parse: a corrupt or partially-written AUDIT_REPORT.json
+        // shouldn't crash the TUI when /fix is invoked.
+        try {
+          auditResult = JSON.parse(readFs(jsonPath, "utf-8"));
+        } catch (err) {
+          return (
+            `  Could not parse ${jsonPath.replace(projectRoot + "/", "")}: ${(err as Error).message}.\n` +
+            `  Re-run /scan ${pathToken} to regenerate.`
+          );
+        }
       } else {
         // Refuse to auto-fix without a verified audit. Previously this
         // re-ran the scan with skipVerification:true and stamped every

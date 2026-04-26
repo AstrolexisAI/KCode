@@ -15,7 +15,7 @@
 // way to surface "this pattern is silenced because you demoted it
 // 47 times" in the report.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { kcodePath } from "../paths";
 
@@ -74,17 +74,24 @@ function loadHistory(): ReviewHistory {
 
 function saveHistory(h: ReviewHistory): void {
   const path = getHistoryPath();
+  // v2.10.367 — atomic write: stage to a sibling .tmp then rename.
+  // Two concurrent kcode processes won't truncate each other; readers
+  // never see a partial JSON. Same-fs rename is atomic on POSIX.
+  // v2.10.368 — clean up our own stale tmp on failure so a crash
+  // mid-write doesn't leak `<path>.tmp-<pid>` files in ~/.kcode.
+  const tmpPath = `${path}.tmp-${process.pid}`;
   try {
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    // v2.10.367 — atomic write: stage to a sibling .tmp then rename.
-    // Two concurrent kcode processes won't truncate each other; readers
-    // never see a partial JSON. Same-fs rename is atomic on POSIX.
-    const tmpPath = `${path}.tmp-${process.pid}`;
     writeFileSync(tmpPath, JSON.stringify(h, null, 2));
-    require("node:fs").renameSync(tmpPath, path);
+    renameSync(tmpPath, path);
   } catch {
-    /* best effort — stay silent so audit doesn't fail on a write hiccup */
+    // Best effort: try to remove the stage file if it was created.
+    try {
+      if (existsSync(tmpPath)) require("node:fs").unlinkSync(tmpPath);
+    } catch {
+      /* leak is acceptable — better than crashing the audit */
+    }
   }
 }
 
