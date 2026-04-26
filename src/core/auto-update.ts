@@ -417,6 +417,19 @@ function isBspatchAvailable(): boolean {
 }
 
 /**
+ * Build a unique temp-file token for this update run. PID alone is
+ * predictable on systems that recycle PIDs quickly, which opens a
+ * window for an attacker who can write to /tmp to swap the file
+ * between SHA256 verification and chmod/rename. The random suffix
+ * adds 36-bit entropy; combined with the PID it's effectively
+ * unguessable for the few seconds the file lives.
+ * v2.10.367.
+ */
+function tmpToken(): string {
+  return `${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
  * Try the delta-update path. Returns the temp path of a freshly-built
  * target binary on success, or null on any failure (caller falls back
  * to a full download).
@@ -462,12 +475,13 @@ async function tryApplyDelta(
 
   const tmpDir = require("node:os").tmpdir();
   let patchPath: string;
+  const token = tmpToken();
   try {
     patchPath = await downloadVerified({
       url: info.delta.url,
       expectedSha256: info.delta.sha256,
       expectedSize: info.delta.size,
-      tmpName: `kcode-update-${process.pid}.bsdiff`,
+      tmpName: `kcode-update-${token}.bsdiff`,
       onProgress,
     });
   } catch (err) {
@@ -475,7 +489,7 @@ async function tryApplyDelta(
     return null;
   }
 
-  const outPath = join(tmpDir, `kcode-update-${process.pid}`);
+  const outPath = join(tmpDir, `kcode-update-${token}`);
   try {
     // bspatch <oldfile> <newfile> <patchfile>
     execSync(
@@ -537,7 +551,7 @@ export async function downloadAndInstall(
           url: info.downloadUrl,
           expectedSha256: info.sha256,
           expectedSize: info.size,
-          tmpName: `kcode-update-${process.pid}`,
+          tmpName: `kcode-update-${tmpToken()}`,
           onProgress,
         });
       } catch (err) {

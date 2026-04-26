@@ -82,15 +82,21 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
             }
             process.stdin.resume();
             process.stdin.setRawMode?.(false);
-            process.stdin.once("data", (data) => {
-              process.stdin.pause();
-              resolve(data.toString().trim().toLowerCase());
-            });
-            // Auto-accept after 30s
-            setTimeout(() => {
+            // v2.10.367 — clear the auto-accept timeout when the user
+            // actually responds. Without clearTimeout the timer kept
+            // firing after promise resolution; the second resolve()
+            // was a no-op but stdin.pause() still ran a second time
+            // and could leave stdin in an undefined state for the
+            // next prompt.
+            const autoAcceptId = setTimeout(() => {
               process.stdin.pause();
               resolve("y");
             }, 30_000);
+            process.stdin.once("data", (data) => {
+              clearTimeout(autoAcceptId);
+              process.stdin.pause();
+              resolve(data.toString().trim().toLowerCase());
+            });
           });
 
           if (answer === "n" || answer === "no") {

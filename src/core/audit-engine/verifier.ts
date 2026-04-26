@@ -235,8 +235,14 @@ function coerceVerification(parsed: unknown): Verification | null {
   if (!parsed || typeof parsed !== "object") return null;
   const obj = parsed as Record<string, unknown>;
 
+  // v2.10.367 — exact-match only. Earlier code accepted substring
+  // inclusion ("needs_confirmation".includes("confirmed") → confirmed)
+  // which silently misclassified verdicts when the model used a
+  // qualifier word. Strict equality forces the model to pick one of
+  // the three valid verdicts; degraded output goes through the
+  // retry-then-degrade path instead.
   const rawVerdict = String(obj.verdict ?? "").toLowerCase().trim();
-  const verdict = VALID_VERDICTS.find((v) => rawVerdict === v || rawVerdict.includes(v));
+  const verdict = VALID_VERDICTS.find((v) => rawVerdict === v);
   if (!verdict) return null;
 
   const reasoning = typeof obj.reasoning === "string" ? obj.reasoning.trim() : "";
