@@ -177,6 +177,15 @@ export function buildSarif(
   audit: AuditResult,
   opts: BuildSarifOptions,
 ): unknown {
+  // v2.10.351 P0 — SARIF results respect review_state. A finding
+  // tagged 'ignored' by the human reviewer must not surface in
+  // GitHub Code Scanning, IDE problem lists, or any other SARIF
+  // consumer. demoted_fp is also excluded defensively even though
+  // persist() should have moved them out of audit.findings already.
+  // promoted, confirmed, and undefined all flow through normally.
+  const actionable = audit.findings.filter(
+    (f) => f.review_state !== "ignored" && f.review_state !== "demoted_fp",
+  );
   return {
     $schema: SARIF_SCHEMA,
     version: SARIF_VERSION,
@@ -188,7 +197,7 @@ export function buildSarif(
             version: opts.toolVersion,
             informationUri: "https://github.com/AstrolexisAI/KCode",
             semanticVersion: opts.toolVersion,
-            rules: buildRules(audit.findings),
+            rules: buildRules(actionable),
           },
         },
         invocations: [
@@ -197,7 +206,7 @@ export function buildSarif(
             endTimeUtc: audit.timestamp,
           },
         ],
-        results: audit.findings.map((f) => buildResult(f, opts.projectRoot)),
+        results: actionable.map((f) => buildResult(f, opts.projectRoot)),
         // SARIF-specific column: language hints used by consumers to
         // default which rule packs apply to which files.
         properties: {
