@@ -62,6 +62,7 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "Unsafe deserialization (pickle/marshal/shelve)",
     severity: "critical",
     languages: ["python"],
+    pack: "ai-ml",
     regex: /\b(?:pickle\.loads?|marshal\.loads?|shelve\.open)\s*\(/g,
     explanation:
       "pickle.load() deserializes arbitrary Python objects. An attacker can craft a pickle payload that executes arbitrary code on load. Never unpickle untrusted data.",
@@ -158,6 +159,7 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "pickle.load() on untrusted data (arbitrary code execution)",
     severity: "critical",
     languages: ["python"],
+    pack: "ai-ml",
     regex: /\bpickle\.loads?\s*\(\s*(?:request|data|payload|body|content|recv|read|input)/g,
     explanation:
       "pickle.load() on data from network, user upload, or any untrusted source allows arbitrary code execution. An attacker can craft a pickle payload that runs shell commands on deserialization.",
@@ -355,6 +357,7 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "torch.load / joblib.load on untrusted bytes (pickle under the hood)",
     severity: "critical",
     languages: ["python"],
+    pack: "ai-ml",
     regex:
       /\b(?:torch\.load|joblib\.load|tf\.keras\.models\.load_model|skops\.io\.load)\s*\([^)]*(?:request|params|body|user|input|args|argv|file|path|url|download)\b/gi,
     explanation:

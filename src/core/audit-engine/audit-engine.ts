@@ -13,6 +13,7 @@ import {
 } from "./scanner";
 import type {
   AuditResult,
+  BugPattern,
   Candidate,
   FalsePositiveDetail,
   Finding,
@@ -39,6 +40,15 @@ export interface AuditEngineOptions {
    * /scan into a CI pre-merge gate. v2.10.335.
    */
   since?: string;
+  /**
+   * F9 (v2.10.370) — restrict the run to a specific vendible pack
+   * (e.g. "ai-ml", "web", "cloud", "supply-chain", "embedded"). When
+   * set, only patterns whose `pack` field matches are loaded. Patterns
+   * with no pack are excluded — they're "general" and outside the
+   * vendible-packs scope. Useful for AI/ML audits where the user only
+   * cares about the LLM/model surface, not generic web XSS.
+   */
+  pack?: import("./types").PatternPack;
   /**
    * Progress reporting. The phase set is the union of stages the
    * runAudit pipeline can be in:
@@ -145,8 +155,16 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // diff. The narrowing happens AFTER scanProject so the report's
   // coverage shape stays internally consistent (totalCandidateFiles
   // = full project, scannedFiles = the diff-filtered subset).
+  // F9 (v2.10.370) — when opts.pack is set, narrow the regex pattern
+  // set to that pack only. AST patterns get the same filter below.
+  let regexPatterns: BugPattern[] | undefined;
+  if (opts.pack) {
+    const { ALL_PATTERNS } = await import("./patterns");
+    regexPatterns = ALL_PATTERNS.filter((p) => p.pack === opts.pack);
+  }
   let scanResult = scanProject(opts.projectRoot, {
     maxFiles: opts.maxFiles,
+    ...(regexPatterns ? { patterns: regexPatterns } : {}),
   });
   let changedFilesInDiff: number | undefined;
   if (opts.since) {
@@ -205,7 +223,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const { RUST_AST_PATTERNS } = await import("./ast/rust-patterns");
     const { RUBY_AST_PATTERNS } = await import("./ast/ruby-patterns");
     const { PHP_AST_PATTERNS } = await import("./ast/php-patterns");
-    const allAstPatterns = [
+    const allAstPatternsRaw = [
       ...PYTHON_AST_PATTERNS,
       ...JAVASCRIPT_AST_PATTERNS,
       ...TYPESCRIPT_AST_PATTERNS,
@@ -216,6 +234,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       ...RUBY_AST_PATTERNS,
       ...PHP_AST_PATTERNS,
     ];
+    // F9 — same pack filter as the regex patterns.
+    const allAstPatterns = opts.pack
+      ? allAstPatternsRaw.filter((p) => p.pack === opts.pack)
+      : allAstPatternsRaw;
     if (allAstPatterns.length > 0 && files.length > 0) {
       const { readFileSync } = await import("node:fs");
       let astTotal = 0;
@@ -452,6 +474,21 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // the verifier outputs + coverage + ast status in one shot.
   const { computeAuditConfidence } = await import("./confidence-scorer");
   result.audit_confidence = computeAuditConfidence(result);
+
+  // F9 (v2.10.370) — pack breakdown of confirmed findings. Resolves
+  // each pattern's pack via the bundled lookup so we don't need to
+  // store the pack on every finding.
+  if (findings.length > 0) {
+    const { getPatternById } = await import("./patterns");
+    const breakdown: Record<string, number> = {};
+    for (const f of findings) {
+      const pat = getPatternById(f.pattern_id);
+      const pk = (pat as { pack?: string } | null)?.pack ?? "general";
+      breakdown[pk] = (breakdown[pk] ?? 0) + 1;
+    }
+    result.pack_breakdown = breakdown;
+  }
+  if (opts.pack) result.scoped_pack = opts.pack;
 
   return result;
 }

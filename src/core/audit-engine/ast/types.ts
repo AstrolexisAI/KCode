@@ -56,6 +56,12 @@ export interface AstPattern {
   verify_prompt: string;
   cwe?: string;
   fix_template?: string;
+  /**
+   * Vendible pack the pattern belongs to. Same taxonomy as
+   * BugPattern.pack — see types.ts for the stable name list.
+   * v2.10.370 (F9 of audit product plan).
+   */
+  pack?: import("../types").PatternPack;
 }
 
 /** Subset of tree-sitter Node we depend on — keeps the contract tiny. */

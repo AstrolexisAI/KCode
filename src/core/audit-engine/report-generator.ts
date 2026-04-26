@@ -231,6 +231,18 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
     );
   }
 
+  // ── Pack breakdown ────────────────────────────────────────
+  // F9 (v2.10.370) — show which vendible packs the findings landed
+  // under. Skipped when no breakdown is present (no findings).
+  const breakdown = (result as { pack_breakdown?: Record<string, number> }).pack_breakdown;
+  const scopedPack = (result as { scoped_pack?: string }).scoped_pack;
+  if (breakdown && Object.keys(breakdown).length > 0) {
+    const entries = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+    const summary = entries.map(([k, v]) => `${v} ${k}`).join(" · ");
+    const scopeNote = scopedPack ? ` (scoped to --pack ${scopedPack})` : "";
+    lines.push(`**Pack breakdown:** ${summary}${scopeNote}`);
+  }
+
   // ── Top-noise line ────────────────────────────────────────
   // Patterns whose verifier-confirmed rate is < 50% are the noisy
   // ones. Show the top 3 ranked by absolute FP count so the reader
