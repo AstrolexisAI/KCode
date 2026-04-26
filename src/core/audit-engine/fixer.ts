@@ -71,6 +71,17 @@ export interface FixResult {
 /**
  * Apply fixes for all confirmed findings in an audit result.
  * Returns a list of what was fixed and what was skipped.
+ *
+ * v2.10.351 P0 — review_state precedence:
+ *   ignored      → skip; reviewer flagged as "leave alone"
+ *   demoted_fp   → skip; reviewer downgraded to FP (defensive — these
+ *                  should already have moved to false_positives_detail
+ *                  via persist(), but if a stale JSON sneaks one
+ *                  through here, do not touch it)
+ *   promoted     → fix; reviewer promoted from uncertain/FP
+ *   confirmed    → fix; reviewer-confirmed (or default for verifier-
+ *                  confirmed when undefined)
+ *   undefined    → fix; verifier-confirmed, no human review yet
  */
 export function applyFixes(result: AuditResult): FixResult[] {
   const results: FixResult[] = [];
@@ -79,6 +90,9 @@ export function applyFixes(result: AuditResult): FixResult[] {
   // (important: apply from bottom to top so line numbers don't shift)
   const byFile = new Map<string, Finding[]>();
   for (const f of result.findings) {
+    if (f.review_state === "ignored" || f.review_state === "demoted_fp") {
+      continue;
+    }
     const arr = byFile.get(f.file) ?? [];
     arr.push(f);
     byFile.set(f.file, arr);
