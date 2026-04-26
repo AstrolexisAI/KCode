@@ -120,12 +120,15 @@ function readAudit(): {
     review_reason?: string;
     review_tags?: string[];
     verification: { verdict: string; reasoning: string };
+    fix_support?: "rewrite" | "annotate" | "manual";
   }>;
   false_positives_detail: Array<{ pattern_id: string; review_state?: string; verification: { verdict: string; reasoning: string } }>;
   needs_context_detail: Array<{ pattern_id: string; review_state?: string }>;
   confirmed_findings: number;
   false_positives: number;
   needs_context: number;
+  // v2.10.351 P0 — persist() recomputes this after promote/demote/etc.
+  fix_support_summary?: { rewrite: number; annotate: number; manual: number };
 } {
   return JSON.parse(readFileSync(`${TMP}/AUDIT_REPORT.json`, "utf-8"));
 }

@@ -102,7 +102,11 @@ export async function detectAuditModels(currentApiBase?: string): Promise<CloudF
     for (const m of all) {
       if (LOCAL_PATTERNS.test(m.baseUrl)) continue;
 
-      const rawTags: string[] = (m as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
+      // ModelEntry doesn't formally declare `tags` but instances
+      // sometimes carry it (legacy field for filtering). Cast through
+      // unknown to satisfy tsc — v2.10.351 P0 typecheck cleanup.
+      const rawTags: string[] =
+        ((m as unknown as Record<string, unknown>).tags as string[]) ?? m.capabilities ?? [];
       const hasAuditTag = rawTags.some((t) => AUDIT_TAGS.has(t));
       if (!hasAuditTag) continue;
 
