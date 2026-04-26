@@ -68,6 +68,26 @@ export interface FixResult {
   description: string;
 }
 
+export interface FixOptions {
+  /**
+   * When true, force every confirmed finding through the annotation
+   * path (`audit-note:<pattern_id>` comment) regardless of whether
+   * the pattern has a bespoke rewriter. The buggy code is left
+   * unchanged. v2.10.369 (F6 of audit product plan).
+   *
+   * Use cases:
+   *   - "I want a marker so future scans skip these without me
+   *     maintaining a separate baseline file."
+   *   - "I want every finding visible in the diff for a reviewer to
+   *     act on — no auto-rewrites that need me to verify code I
+   *     didn't write."
+   *
+   * Patterns with no recipe at all degrade to "manual" — annotation
+   * is opt-in even at the request level.
+   */
+  annotateOnly?: boolean;
+}
+
 /**
  * Apply fixes for all confirmed findings in an audit result.
  * Returns a list of what was fixed and what was skipped.
@@ -83,7 +103,7 @@ export interface FixResult {
  *                  confirmed when undefined)
  *   undefined    → fix; verifier-confirmed, no human review yet
  */
-export function applyFixes(result: AuditResult): FixResult[] {
+export function applyFixes(result: AuditResult, opts: FixOptions = {}): FixResult[] {
   const results: FixResult[] = [];
 
   // Group findings by file so we apply all fixes to a file at once
@@ -122,7 +142,7 @@ export function applyFixes(result: AuditResult): FixResult[] {
     let modified = false;
 
     for (const finding of sorted) {
-      const fixResult = applyOneFix(lines, finding);
+      const fixResult = applyOneFix(lines, finding, opts);
       if (fixResult.applied) {
         lines = fixResult.lines;
         modified = true;
@@ -157,7 +177,22 @@ interface OneFixResult {
   description: string;
 }
 
-function applyOneFix(lines: string[], finding: Finding): OneFixResult {
+function applyOneFix(lines: string[], finding: Finding, opts: FixOptions = {}): OneFixResult {
+  // F6 (v2.10.369) — annotateOnly mode skips the bespoke rewriter
+  // table and goes straight to the recipe (annotation) path. If no
+  // recipe exists we degrade to "manual" — annotation is opt-in at
+  // both the user level (the flag) and the pattern level (the
+  // recipe table).
+  if (opts.annotateOnly) {
+    const recipe = PATTERN_RECIPES[finding.pattern_id];
+    if (recipe) return applyRecipe(lines, finding, recipe);
+    return {
+      applied: false,
+      kind: "manual",
+      lines,
+      description: `No recipe for ${finding.pattern_id} — manual review required.`,
+    };
+  }
   switch (finding.pattern_id) {
     case "cpp-001-ptr-address-index":
       return fixPointerArithmetic(lines, finding);

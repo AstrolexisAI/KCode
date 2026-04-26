@@ -169,3 +169,53 @@ describe("/fix --safe-only", () => {
     expect(out).toContain("--safe-only held back 2 finding(s)");
   });
 });
+
+// F6 (v2.10.369) — --annotate and --all modes.
+describe("/fix --annotate", () => {
+  test("forces every finding into the annotation path; bypasses bespoke rewriters", async () => {
+    seedFix();
+    const result = await handleAuditAction("fix", ctx(`${TMP} --annotate`));
+    const out = result as string;
+    // Header carries the annotate label.
+    expect(out).toContain("--annotate mode");
+    // No bespoke rewriter runs — every confirmed finding either
+    // takes the recipe (annotation) path or degrades to manual when
+    // there's no recipe entry. cpp-001 has a bespoke fixer but no
+    // recipe, so under --annotate it becomes manual.
+    expect(out).toMatch(/✅ Rewritten:\s+0/);
+    expect(out).toMatch(/📝 Annotated:\s+1/); // dart-001-insecure-http (has recipe)
+    expect(out).toMatch(/✋ Manual:\s+2/);     // cpp-001 (no recipe) + non-existent-pattern (no recipe)
+  });
+
+  test("--annotate emits the mode label and the no-rewrites note", async () => {
+    seedFix();
+    const result = await handleAuditAction("fix", ctx(`${TMP} --annotate`));
+    const out = result as string;
+    expect(out).toContain("no code rewrites");
+    expect(out).toContain("audit-note comments only");
+  });
+});
+
+describe("/fix --all", () => {
+  test("--all is an alias for the default behavior", async () => {
+    seedFix();
+    const withAll = await handleAuditAction("fix", ctx(`${TMP} --all`));
+    const out = withAll as string;
+    expect(out).toContain("(--all mode)");
+    // Same counts as the no-flag case: 1 rewrite + 1 annotate + 1 manual.
+    expect(out).toMatch(/✅ Rewritten:\s+1/);
+    expect(out).toMatch(/📝 Annotated:\s+1/);
+    expect(out).toMatch(/✋ Manual:\s+1/);
+  });
+});
+
+describe("/fix mode mutual exclusion", () => {
+  test("--safe-only + --annotate together is rejected", async () => {
+    seedFix();
+    const result = await handleAuditAction("fix", ctx(`${TMP} --safe-only --annotate`));
+    const out = result as string;
+    expect(out).toContain("mutually exclusive");
+    // Should NOT have run the fixer at all.
+    expect(out).not.toContain("KCode Auto-Fixer");
+  });
+});
