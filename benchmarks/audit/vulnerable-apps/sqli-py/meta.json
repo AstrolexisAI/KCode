@@ -1,0 +1,19 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-89",
+  "description": "SQL injection via f-string and % formatting",
+  "expected": [
+    {
+      "pattern_id": "py-004-sql-injection",
+      "file": "db.py",
+      "line": 7,
+      "verdict": "confirmed"
+    },
+    {
+      "pattern_id": "py-004-sql-injection",
+      "file": "db.py",
+      "line": 15,
+      "verdict": "confirmed"
+    }
+  ]
+}

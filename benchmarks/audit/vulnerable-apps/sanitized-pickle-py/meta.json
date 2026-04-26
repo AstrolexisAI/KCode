@@ -1,0 +1,5 @@
+{
+  "kind": "negative",
+  "description": "List operations with no dangerous APIs — should produce zero findings",
+  "expected": []
+}

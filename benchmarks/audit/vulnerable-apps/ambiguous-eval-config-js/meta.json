@@ -1,0 +1,13 @@
+{
+  "kind": "ambiguous",
+  "cwe": "CWE-95",
+  "description": "eval of file contents — verdict depends on whether path is reachable from user input",
+  "expected": [
+    {
+      "pattern_id": "js-001-eval",
+      "file": "loader.js",
+      "line": 10,
+      "verdict": "any"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-95",
+  "description": "User HTTP body passed straight to eval(); also a missing-auth check on the POST route",
+  "expected": [
+    {
+      "pattern_id": "js-001-eval",
+      "file": "server.js",
+      "line": 7,
+      "verdict": "confirmed"
+    },
+    {
+      "pattern_id": "uni-004-missing-auth",
+      "file": "server.js",
+      "line": 6,
+      "verdict": "confirmed"
+    }
+  ]
+}
