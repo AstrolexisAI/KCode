@@ -1,0 +1,5 @@
+{
+  "kind": "negative",
+  "description": "Pure utility helpers — should produce zero findings",
+  "expected": []
+}

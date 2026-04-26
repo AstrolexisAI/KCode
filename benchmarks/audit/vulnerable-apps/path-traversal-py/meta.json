@@ -1,0 +1,13 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-22",
+  "description": "Path traversal via open() with raw query-string name",
+  "expected": [
+    {
+      "pattern_id": "py-008-path-traversal",
+      "file": "files.py",
+      "line": 9,
+      "verdict": "confirmed"
+    }
+  ]
+}

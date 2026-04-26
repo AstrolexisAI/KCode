@@ -1,0 +1,19 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-79",
+  "description": "innerHTML assigned dynamic user input twice",
+  "expected": [
+    {
+      "pattern_id": "js-002-innerhtml",
+      "file": "render.js",
+      "line": 4,
+      "verdict": "confirmed"
+    },
+    {
+      "pattern_id": "js-002-innerhtml",
+      "file": "render.js",
+      "line": 9,
+      "verdict": "confirmed"
+    }
+  ]
+}

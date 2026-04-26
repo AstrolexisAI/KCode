@@ -1,0 +1,19 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-502",
+  "description": "pickle.loads on untrusted bytes",
+  "expected": [
+    {
+      "pattern_id": "py-003-pickle-deserialize",
+      "file": "loader.py",
+      "line": 5,
+      "verdict": "confirmed"
+    },
+    {
+      "pattern_id": "py-003-pickle-deserialize",
+      "file": "loader.py",
+      "line": 9,
+      "verdict": "confirmed"
+    }
+  ]
+}

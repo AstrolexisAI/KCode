@@ -1,0 +1,13 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-78",
+  "description": "Shell injection via exec(string concat with argv)",
+  "expected": [
+    {
+      "pattern_id": "js-007-command-injection",
+      "file": "runner.js",
+      "line": 5,
+      "verdict": "confirmed"
+    }
+  ]
+}
