@@ -964,6 +964,21 @@ export async function handleAuditAction(
       // automatically.
       const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
       const safeOnly = tokens.includes("--safe-only");
+      // F6 (v2.10.369) — three explicit /fix modes:
+      //   --safe-only  : only fix_support === "rewrite" findings, run normal fixer
+      //   --annotate   : every finding becomes an audit-note comment, no logic change
+      //   --all        : explicit name for the default behavior (rewrites + annotates + manual)
+      // --safe-only and --annotate are mutually exclusive — they
+      // disagree on what should happen to rewrite-tier findings.
+      const annotateMode = tokens.includes("--annotate");
+      const allMode = tokens.includes("--all");
+      if (safeOnly && annotateMode) {
+        return (
+          `  --safe-only and --annotate are mutually exclusive.\n` +
+          `  --safe-only applies rewrites; --annotate emits audit-note comments without changing code.\n` +
+          `  Pick one.`
+        );
+      }
       const pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
       const { resolve: resolvePath } = await import("node:path");
       const { existsSync, readFileSync: readFs } = await import("node:fs");
@@ -1055,7 +1070,8 @@ export async function handleAuditAction(
         ...auditResult,
         findings: filteredFindings,
       };
-      const fixes = applyFixes(confirmedOnly);
+      // F6 — annotateOnly forces every finding through the recipe path.
+      const fixes = applyFixes(confirmedOnly, { annotateOnly: annotateMode });
 
       // Four-way split (v2.10.328, Sprint 3): transformed (real code
       // change), annotated (advisory comment), manual (no fixer
@@ -1068,8 +1084,15 @@ export async function handleAuditAction(
       const manual = fixes.filter((f) => f.kind === "manual");
       const skipped = fixes.filter((f) => f.kind === "skipped");
 
+      const modeLabel = safeOnly
+        ? "  (--safe-only mode)"
+        : annotateMode
+          ? "  (--annotate mode — no code rewrites, audit-note comments only)"
+          : allMode
+            ? "  (--all mode)"
+            : "";
       const lines: string[] = [
-        `  KCode Auto-Fixer${safeOnly ? "  (--safe-only mode)" : ""}`,
+        `  KCode Auto-Fixer${modeLabel}`,
         `    Project: ${projectRoot}`,
         "",
         `    ✅ Rewritten: ${transformed.length} (real code transforms)`,
