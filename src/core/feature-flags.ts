@@ -1,25 +1,20 @@
-// Feature Flags System
-// Two types: build-time (DCE via Bun's define) and runtime (settings/env overrides)
+// Runtime Feature Flags — settings/env overrides for opt-in product behaviors.
 //
-// Build-time: src/core/feature-flags/flags.ts (11 flags, 3 profiles)
-// Runtime: this file (5 flags, env/settings overrides)
-
-export {
-  describeProfile,
-  getAvailableProfiles,
-  getDefinesForProfile,
-  getProfileFeatures,
-} from "./feature-flags/build-defines";
-// ─── Build-time Feature Flags ───────────────────────────────────
-// Re-export the enhanced build-time flags from feature-flags/
-export {
-  ALL_FEATURE_NAMES,
-  activeFeatures,
-  Features,
-  inactiveFeatures,
-  isFeatureEnabled as isBuildFeatureEnabled,
-} from "./feature-flags/flags";
-export type { BuildProfile, FeatureName } from "./feature-flags/types";
+// CL.5 (v2.10.376) cleanup: this file used to ALSO re-export the build-time
+// feature flag system (`Features`, `isFeatureEnabled` from
+// ./feature-flags/flags.ts). Nothing in production read those — every
+// `Features.X` reference was in docstrings or in the file itself. The
+// build-time runtime evaluator was deleted; only the `--define` injection
+// at build time (build-defines.ts) remains because build.ts uses it.
+//
+// What stays is what's actually consumed: runtime flags that gate
+// experimental product behaviors based on settings.json + KCODE_FF_*
+// env vars. config.ts:906 calls loadRuntimeFlags(); other modules
+// call getFeatureFlags() / isFeatureEnabled() to gate features.
+//
+// The build profile / build-defines re-exports were moved to
+// './feature-flags/build-defines' direct imports — only build.ts
+// needs them.
 
 // ─── Runtime Feature Flags ──────────────────────────────────────
 
