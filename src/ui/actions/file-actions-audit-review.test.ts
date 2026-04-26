@@ -312,6 +312,105 @@ describe("/review v2 — tag / untag", () => {
   });
 });
 
+// F5 (v2.10.363) — note / assign / ignore / restore / stats / export
+describe("/review F5 — note", () => {
+  it("note <idx> attaches free text to the item", async () => {
+    seedAudit();
+    const out = await handleAuditAction(
+      "review",
+      ctx(`${TMP} note 1 "validated by auth middleware"`),
+    );
+    expect(out).toContain("Note saved on #1");
+    const a = readAudit();
+    expect(
+      (a.findings[0] as { review_note?: string }).review_note,
+    ).toBe("validated by auth middleware");
+  });
+
+  it("rejects empty note", async () => {
+    seedAudit();
+    const out = await handleAuditAction("review", ctx(`${TMP} note 1`));
+    expect(out).toContain("text was empty");
+  });
+});
+
+describe("/review F5 — assign", () => {
+  it("assign overrides severity", async () => {
+    seedAudit();
+    const out = await handleAuditAction("review", ctx(`${TMP} assign 1 critical`));
+    expect(out).toContain("high → critical");
+    const a = readAudit();
+    expect((a.findings[0] as { severity: string }).severity).toBe("critical");
+  });
+
+  it("rejects invalid severity", async () => {
+    seedAudit();
+    const out = await handleAuditAction("review", ctx(`${TMP} assign 1 superhigh`));
+    expect(out).toContain("Unknown severity");
+  });
+});
+
+describe("/review F5 — ignore + restore", () => {
+  it("ignore sets review_state to ignored", async () => {
+    seedAudit();
+    const out = await handleAuditAction(
+      "review",
+      ctx(`${TMP} ignore 1,2 --reason tracked_elsewhere`),
+    );
+    expect(out).toContain("Ignored 2 finding(s)");
+    expect(out).toContain("tracked_elsewhere");
+    const a = readAudit();
+    expect((a.findings[0] as { review_state?: string }).review_state).toBe("ignored");
+    expect((a.findings[1] as { review_state?: string }).review_state).toBe("ignored");
+    expect((a.findings[0] as { review_note?: string }).review_note).toBe("tracked_elsewhere");
+  });
+
+  it("restore clears review_state and review_note", async () => {
+    seedAudit();
+    await handleAuditAction("review", ctx(`${TMP} ignore 1 --reason X`));
+    const out = await handleAuditAction("review", ctx(`${TMP} restore 1`));
+    expect(out).toContain("Restored 1 finding(s)");
+    const a = readAudit();
+    expect((a.findings[0] as { review_state?: string }).review_state).toBeUndefined();
+    expect((a.findings[0] as { review_note?: string }).review_note).toBeUndefined();
+  });
+});
+
+describe("/review F5 — stats", () => {
+  it("stats reports no metrics when audit lacks pattern_metrics", async () => {
+    seedAudit();
+    const out = await handleAuditAction("review", ctx(`${TMP} stats`));
+    expect(out).toContain("No pattern_metrics");
+  });
+});
+
+describe("/review F5 — export", () => {
+  it("export writes AUDIT_REVIEW.json", async () => {
+    seedAudit();
+    const out = await handleAuditAction("review", ctx(`${TMP} export`));
+    expect(out).toContain("AUDIT_REVIEW.json");
+    const exported = JSON.parse(readFileSync(`${TMP}/AUDIT_REVIEW.json`, "utf-8")) as {
+      summary: { total: number; ignored: number; demoted_fp: number };
+      reviewed: Array<{ pattern_id: string; file: string; state: string | null }>;
+    };
+    expect(exported.summary.total).toBe(6);
+    expect(exported.reviewed).toHaveLength(6);
+    expect(exported.reviewed[0]!.pattern_id).toBe("fsw-010-cmd-arg");
+  });
+
+  it("export reflects review state set earlier", async () => {
+    seedAudit();
+    await handleAuditAction("review", ctx(`${TMP} ignore 1`));
+    await handleAuditAction("review", ctx(`${TMP} export`));
+    const exported = JSON.parse(readFileSync(`${TMP}/AUDIT_REVIEW.json`, "utf-8")) as {
+      summary: { ignored: number };
+      reviewed: Array<{ state: string | null }>;
+    };
+    expect(exported.summary.ignored).toBe(1);
+    expect(exported.reviewed[0]!.state).toBe("ignored");
+  });
+});
+
 describe("/review v2 — legacy compat", () => {
   it("legacy keep 1 demotes #2 (the other confirmed)", async () => {
     seedAudit();
