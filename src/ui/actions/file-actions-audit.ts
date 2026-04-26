@@ -25,7 +25,46 @@ export async function handleAuditAction(
         return `  ${(err as Error).message}`;
       }
       const skipVerify = tokens.includes("--skip-verify");
-      let pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
+      // CL.6 (v2.10.376) — /scan now passes through engine flags that
+      // were previously CLI-only. Same parser shape as the audit
+      // command in cli/commands/audit.ts so users get one mental
+      // model regardless of where they invoke /scan.
+      const flagValue = (name: string): string | undefined => {
+        const i = tokens.indexOf(name);
+        if (i === -1 || i + 1 >= tokens.length) return undefined;
+        return tokens[i + 1];
+      };
+      const sinceRef = flagValue("--since");
+      const packArg = flagValue("--pack");
+      const maxFilesArg = flagValue("--max-files");
+      // Validate --pack against the 5 known names. Same set as
+      // cli/commands/audit.ts (kept in sync intentionally — this
+      // is a surface-of-truth duplication that's cheaper than a
+      // shared module).
+      const validPacks = new Set(["web", "ai-ml", "cloud", "supply-chain", "embedded"]);
+      if (packArg && !validPacks.has(packArg)) {
+        return `  --pack must be one of: ${[...validPacks].join(", ")}. Got: "${packArg}".`;
+      }
+      let parsedMaxFiles: number | undefined;
+      if (maxFilesArg !== undefined) {
+        const n = Number.parseInt(maxFilesArg, 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          return `  --max-files must be a positive integer. Got: "${maxFilesArg}".`;
+        }
+        parsedMaxFiles = n;
+      }
+      // pathToken is the first non-flag token AND not the value
+      // following one of the known value-flags. Without this the
+      // user typing `/scan . --since main` would correctly pick `.`
+      // as path, but `/scan --since main /my-project` would pick
+      // `main` as path. Skip the value tokens by index.
+      const valueFlagIndices = new Set<number>();
+      for (const flag of ["--since", "--pack", "--max-files"]) {
+        const i = tokens.indexOf(flag);
+        if (i !== -1 && i + 1 < tokens.length) valueFlagIndices.add(i + 1);
+      }
+      let pathToken =
+        tokens.find((t, i) => !t.startsWith("--") && !valueFlagIndices.has(i)) ?? ".";
       // Expand ~ to home directory
       if (pathToken.startsWith("~/")) pathToken = pathToken.replace("~", process.env.HOME ?? "");
       const { resolve: resolvePath } = await import("node:path");
@@ -98,10 +137,16 @@ export async function handleAuditAction(
             projectRoot,
             llmCallback,
             // NO fallbackCallback here — we'll escalate manually after user approval.
-            // /scan audits the whole project by design — no truncation.
-            // Issue #111 v307 repro: user explicitly asked for unlimited scan.
-            maxFiles: Number.MAX_SAFE_INTEGER,
+            // /scan audits the whole project by design — no truncation
+            // by default (Issue #111 v307). User can cap with
+            // --max-files <n> if they want partial coverage.
+            maxFiles: parsedMaxFiles ?? Number.MAX_SAFE_INTEGER,
             skipVerification: skipVerify,
+            // CL.6 — pass through diff-based audit and pack filter.
+            ...(sinceRef ? { since: sinceRef } : {}),
+            ...(packArg
+              ? { pack: packArg as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }
+              : {}),
             onPhase: (phase, detail) => {
               scanState.phase = detail ? `${phase}: ${detail}` : phase;
               if (phase === "verifying" && detail) {
