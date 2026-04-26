@@ -8,34 +8,38 @@ permissions:
   contents: write
 
 jobs:
-  # ── npm-publish ────────────────────────────────────────────────────────
-  # Disabled (2nd time) at v2.10.357 while debugging a persistent
-  # PUT 404 to https://registry.npmjs.org/@astrolexisai%2fkcode that
-  # neither token rotation nor scope correction has resolved. Plan:
-  # do a manual `npm publish` from a developer laptop (logged in as
-  # the astrolexisai org owner) to isolate workflow-vs-token causes,
-  # then re-enable.
-  #
-  # Re-enable steps (preserved verbatim from v2.10.355 config):
-  # npm-publish:
-  #   name: Publish to npm
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: oven-sh/setup-bun@v2
-  #       with:
-  #         bun-version: latest
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #         registry-url: 'https://registry.npmjs.org'
-  #     - run: bun install
-  #     - name: Build
-  #       run: bun run build
-  #     - name: Publish to npm
-  #       run: npm publish --access public
-  #       env:
-  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  # Re-enabled after diagnosing the failure path on v2.10.356:
+  # the persistent PUT 404 was caused by a Granular Access Token
+  # whose scope didn't include the @astrolexisai org packages.
+  # Once the token's scope was widened to include "Organizations
+  # → astrolexisai → Read and write", local publish succeeded.
+  # The Bypass 2FA checkbox is also required because npm enforces
+  # 2FA on publish registry-wide as of 2023, regardless of whether
+  # the user's account has 2FA enabled for login.
+  npm-publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-release-assets:
     name: Upload binaries (${{ matrix.target }})
