@@ -13,6 +13,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "SQL query built via string concatenation with variables",
     severity: "critical",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby", "rust"],
+    pack: "web",
     regex:
       /(?:execute|query|cursor\.execute|db\.query|connection\.query|Raw|exec_sql)\s*\(\s*[^,)]*\s*(?:\+|\|\||f['"`]|format\s*\(|%\s*\(?)\s*[^,)]+\)/g,
     explanation:
@@ -30,6 +31,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "subprocess.run / Popen with shell=True and variable argument",
     severity: "critical",
     languages: ["python"],
+    pack: "web",
     regex:
       /\b(?:subprocess\.(?:run|Popen|call|check_output|check_call)|os\.system|os\.popen|commands\.getoutput)\s*\([^)]*shell\s*=\s*True[^)]*\)/g,
     explanation:
@@ -47,6 +49,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "os.system / os.popen / exec with concatenated user input",
     severity: "critical",
     languages: ["python", "javascript", "typescript", "ruby", "php", "c", "cpp"],
+    pack: "web",
     regex:
       /\b(?:os\.system|os\.popen|system|exec|popen|Runtime\.getRuntime\(\)\.exec|child_process\.exec|spawn)\s*\(\s*[^)]*(?:\+|\|\||f['"`]|format\s*\()\s*[^)]+\)/g,
     explanation:
@@ -64,6 +67,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "HTTP fetch / urlopen of user-provided URL without allowlist",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    pack: "web",
     regex:
       /\b(requests\.get|requests\.post|urllib\.request\.urlopen|urlopen|fetch|axios\.get|axios\.post|http\.get|http\.post|Http\.newCall|WebClient|HttpClient\.(?:Get|Post)Async)\s*\(\s*[^,)]*(?:request|params|body|user|input|query|url)\b/gi,
     explanation:
@@ -81,6 +85,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "File open on user-controlled path without realpath check",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby", "c", "cpp"],
+    pack: "web",
     regex:
       /\b(open|fopen|readFile|File\.ReadAllText|File\.Open|os\.open|io\.open|Files\.readString|ioutil\.ReadFile)\s*\(\s*[^,)]*(?:request|params|body|user|input|query|args|argv|param)\b/gi,
     explanation:
@@ -98,6 +103,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "MongoDB $where clause with user input",
     severity: "critical",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp"],
+    pack: "web",
     regex:
       /\$where\s*[:=]\s*(?:function\s*\(|\(?.*?\)?\s*=>|['"`].*?\$\{|f['"`].*?\{|`[^`]*\$\{)/g,
     explanation:
@@ -115,6 +121,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "LDAP filter built via string concatenation with user input",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php"],
+    pack: "web",
     regex:
       /\b(search|searchEntries|search_s|ldap\.search|DirectoryEntry|DirSearcher)\s*\([^)]*(?:\(uid=|\(cn=|\(mail=|\(sAMAccountName=)[^)]*(?:\+|\{|%s|%\()/g,
     explanation:
@@ -132,6 +139,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "XML parser configured with external entities enabled",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php"],
+    pack: "web",
     regex:
       /\b(DocumentBuilderFactory|SAXParserFactory|XMLReader|xml\.etree\.ElementTree\.parse|xml\.sax\.parse|lxml\.etree\.parse|libxml_disable_entity_loader\s*\(\s*false\s*\))\b/g,
     explanation:
@@ -149,6 +157,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "Template engine renders a string that contains user input",
     severity: "critical",
     languages: ["python", "javascript", "typescript", "java", "ruby", "php"],
+    pack: "web",
     regex:
       /\b(render_template_string|Template\s*\(\s*(?:request|params|body)|Jinja2\.Environment[^(]*\(\s*[^)]*\)\.from_string\s*\([^)]*(?:request|params|user)|new\s+Function\s*\([^)]*(?:request|params|user))\b/g,
     explanation:
@@ -166,6 +175,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "Redirect to URL taken from query parameter without allowlist",
     severity: "medium",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    pack: "web",
     regex:
       /\b(redirect|Redirect|res\.redirect|response\.redirect|sendRedirect|HttpRedirect)\s*\(\s*(?:request\.(?:args|query|params|GET)|req\.query|params\[['"]redirect|\$_GET\[['"]redirect)[^)]*\)/gi,
     explanation:
@@ -183,6 +193,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "Regex with catastrophic backtracking on user input",
     severity: "medium",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    pack: "web",
     regex:
       /(?:re\.match|re\.search|re\.findall|\.test\s*\(|\.match\s*\(|Regex\.Match|Pattern\.compile)\s*\([^)]*['"`][^'"`]*(?:\(\.\*\)[\+\*]|\(\.\+\)[\+\*]|\([a-z0-9\.\*\+\?\|\[\]\^\$]+\)[\+\*][\+\*]|\([^)]*\|[^)]*\)\+)[^)]*/gi,
     explanation:
@@ -200,6 +211,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "Object merge / assign from user input without __proto__ guard",
     severity: "high",
     languages: ["javascript", "typescript"],
+    pack: "web",
     regex:
       /\b(Object\.assign|_\.merge|_\.defaultsDeep|jQuery\.extend\s*\(\s*true|lodash\.merge|\.\.\.(?:request\.(?:body|query|params)))\b/g,
     explanation:
@@ -217,6 +229,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "Model save / update with raw request body",
     severity: "high",
     languages: ["python", "javascript", "typescript", "java", "ruby", "php"],
+    pack: "web",
     regex:
       /\b(User\(|User\.create|User\.update|Model\(|save\s*\(\s*request\.(?:body|args|params)|update\s*\(\s*request\.(?:body|args|params)|Object\.assign\s*\(\s*user\s*,\s*req\.body)\b/g,
     explanation:
@@ -234,6 +247,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "HTTP header / cookie set with unescaped user input",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    pack: "web",
     regex:
       /\b(set_header|setHeader|setCookie|set_cookie|addHeader|response\.headers\[)\s*\([^)]*(?:request|params|body|user|input)\b/gi,
     explanation:
@@ -251,6 +265,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     title: "Archive extraction without checking entry path (Zip Slip)",
     severity: "high",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "ruby"],
+    pack: "web",
     regex:
       /\b(zipfile\.ZipFile[^.]*\.extractall|tarfile\.open[^.]*\.extractall|ZipInputStream|ZipEntry|TarArchiveEntry|AdmZip\.extractAllTo|yauzl\.open[^.]*\.(?:readEntry|on)|extract\s*\(\s*[^,)]+)/g,
     explanation:
