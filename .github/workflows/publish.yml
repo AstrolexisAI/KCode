@@ -8,33 +8,34 @@ permissions:
   contents: write
 
 jobs:
-  # Re-enabled in v2.10.355 with scoped package name @astrolexis/kcode
-  # and a fresh Automation-type NPM_TOKEN. Was disabled in v2.10.354
-  # because the previous token was rotated after a chat-leak incident.
-  npm-publish:
-    name: Publish to npm
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - run: bun install
-
-      - name: Build
-        run: bun run build
-
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  # ── npm-publish ────────────────────────────────────────────────────────
+  # Disabled (2nd time) at v2.10.357 while debugging a persistent
+  # PUT 404 to https://registry.npmjs.org/@astrolexisai%2fkcode that
+  # neither token rotation nor scope correction has resolved. Plan:
+  # do a manual `npm publish` from a developer laptop (logged in as
+  # the astrolexisai org owner) to isolate workflow-vs-token causes,
+  # then re-enable.
+  #
+  # Re-enable steps (preserved verbatim from v2.10.355 config):
+  # npm-publish:
+  #   name: Publish to npm
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: oven-sh/setup-bun@v2
+  #       with:
+  #         bun-version: latest
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #         registry-url: 'https://registry.npmjs.org'
+  #     - run: bun install
+  #     - name: Build
+  #       run: bun run build
+  #     - name: Publish to npm
+  #       run: npm publish --access public
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-release-assets:
     name: Upload binaries (${{ matrix.target }})
