@@ -380,6 +380,7 @@ async function generateManifest(
   const deltasByPlatform = await generateDeltas(passedTargets, cdnDir);
 
   const platforms: Record<string, ManifestPlatform> = {};
+  const mirrorFailures: string[] = [];
   for (const t of passedTargets) {
     const key = TARGET_TO_PLATFORM_KEY[t.name];
     if (!key) {
@@ -408,13 +409,27 @@ async function generateManifest(
     // generateDeltas() already mirrored its own files. Now the full
     // binary goes through the same mirror so `kcode update` from any
     // starting state works without manual intervention.
+    //
+    // v2.10.372 — fail-closed. If any binary copy fails we abort
+    // the manifest write entirely; publishing a manifest that
+    // points at 404s is exactly the bug v2.10.371 was fixing.
     if (existsSync(cdnDir)) {
       try {
         copyFileSync(filePath, join(cdnDir, t.outFile));
       } catch (err) {
-        console.log(`  (mirror to CDN failed for ${t.outFile}: ${(err as Error).message})`);
+        const msg = `${t.outFile}: ${(err as Error).message}`;
+        console.log(`  (mirror to CDN failed for ${msg})`);
+        mirrorFailures.push(msg);
       }
     }
+  }
+
+  if (mirrorFailures.length > 0) {
+    console.error(`\nABORTING manifest write — ${mirrorFailures.length} binary copy failure(s):`);
+    for (const f of mirrorFailures) console.error(`  ${f}`);
+    console.error("Resolve the failures and re-run. The manifest was NOT updated; existing");
+    console.error("clients on prior versions are unaffected.");
+    process.exit(2);
   }
 
   const manifest: Manifest = {

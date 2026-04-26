@@ -249,7 +249,17 @@ main() {
   fi
 
   printf "\n  ${BOLD}Get started:${RESET} kcode\n"
-  printf "  ${BOLD}Setup guide:${RESET} kcode setup\n\n"
+  printf "  ${BOLD}Setup guide:${RESET} kcode setup\n"
+  # v2.10.372 — bsdiff hint. KCode's self-hosted updater ships
+  # binary deltas (typical 0.5% of full size) when bsdiff is on
+  # PATH; without it the user falls back to the full ~117 MB
+  # download every release. Mention it once at install time so
+  # the user doesn't pay 200x bandwidth on every update.
+  if ! command -v bspatch >/dev/null 2>&1; then
+    printf "\n  ${BOLD}Tip:${RESET} install ${BOLD}bsdiff${RESET} for 99%% smaller updates\n"
+    printf "       (\`apt install bsdiff\` / \`brew install bsdiff\` / \`dnf install bsdiff\`)\n"
+  fi
+  printf "\n"
 }
 
 main "$@"
