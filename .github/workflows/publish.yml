@@ -3,70 +3,60 @@ name: Publish Release
 on:
   release:
     types: [published]
-  # workflow_dispatch — manual trigger added in v2.10.357 debug pass
-  # so we can iterate on the npm-publish path without burning a new
-  # release tag for each attempt. The release-asset jobs guard
-  # themselves with `if: github.event_name == 'release'` so they
-  # don't run on dispatch (no ref_name to push to).
-  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  # Re-enabled after diagnosing the failure path on v2.10.356:
-  # the persistent PUT 404 was caused by a Granular Access Token
-  # whose scope didn't include the @astrolexisai org packages.
-  # Once the token's scope was widened to include "Organizations
-  # → astrolexisai → Read and write", local publish succeeded.
-  # The Bypass 2FA checkbox is also required because npm enforces
-  # 2FA on publish registry-wide as of 2023, regardless of whether
-  # the user's account has 2FA enabled for login.
-  npm-publish:
-    name: Publish to npm
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - run: bun install
-
-      - name: Build
-        run: bun run build
-
-      - name: Diagnose npm auth (v2.10.357 debug)
-        run: |
-          echo "── npm whoami ─────────────"
-          npm whoami --registry=https://registry.npmjs.org/ || echo "WHOAMI_FAILED ($?)"
-          echo "── npm config registry ────"
-          npm config get registry
-          echo "── .npmrc (redacted) ──────"
-          if [ -f ~/.npmrc ]; then
-            sed 's/=.*/=<REDACTED>/' ~/.npmrc
-          else
-            echo "no ~/.npmrc"
-          fi
-          echo "── token first 4 chars ────"
-          echo "${NODE_AUTH_TOKEN:0:4}…${NODE_AUTH_TOKEN: -4}"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  # ── npm-publish ────────────────────────────────────────────────────────
+  # Permanently disabled at v2.10.357 after a cycle of token rotations,
+  # scope corrections, and runner-side diagnostics couldn't bridge a
+  # gap between local CLI publish (succeeds) and GH Actions runner
+  # publish (gets 401 on whoami / 404 on PUT) for the same registry +
+  # same scope. The bug looks token-mismatch-shaped — the secret in
+  # GH Actions and the working token in ~/.npmrc desynced during
+  # rotation — but isolating that consumed enough release tags that
+  # the cost stopped justifying the channel.
+  #
+  # KCode is a 117 MB single-binary CLI; npm was never the right shape
+  # for it. The primary distribution paths (curl install.sh, GH
+  # Releases, Homebrew tap) cover every real use case. v2.10.358+ adds
+  # a self-hosted updater (`kcode update`) that talks to kulvex.ai
+  # directly, which both removes the npm dependency AND gives the user
+  # a one-command upgrade path that doesn't require a package manager.
+  #
+  # The package @astrolexisai/kcode@2.10.356 stays on npm as a flag
+  # for anyone searching there. New versions ship via the kulvex.ai
+  # CDN + the auto-updater.
+  #
+  # If we ever revisit npm distribution: regenerate the token from the
+  # account that owns @astrolexisai (Bypass 2FA, no IP allowlist,
+  # Read+write on the org scope), update NPM_TOKEN secret atomically
+  # via `awk -F= '/_authToken/{print $2}' ~/.npmrc | gh secret set`,
+  # and uncomment the job below.
+  #
+  # npm-publish:
+  #   name: Publish to npm
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: oven-sh/setup-bun@v2
+  #       with:
+  #         bun-version: latest
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #         registry-url: 'https://registry.npmjs.org'
+  #     - run: bun install
+  #     - name: Build
+  #       run: bun run build
+  #     - name: Publish to npm
+  #       run: npm publish --access public
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-release-assets:
     name: Upload binaries (${{ matrix.target }})
-    if: github.event_name == 'release'   # skip on workflow_dispatch
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
