@@ -39,8 +39,21 @@ export interface AuditEngineOptions {
    * /scan into a CI pre-merge gate. v2.10.335.
    */
   since?: string;
-  /** Progress reporting */
-  onPhase?: (phase: "discovery" | "scanning" | "verifying" | "reporting", detail?: string) => void;
+  /**
+   * Progress reporting. The phase set is the union of stages the
+   * runAudit pipeline can be in:
+   *   initializing — fetching git submodules before any scan work
+   *   discovery    — enumerating in-scope files
+   *   scanning     — running regex + AST patterns over the file set
+   *   verifying    — sending each candidate to the LLM verifier
+   *   reporting    — composing the markdown / JSON / SARIF outputs
+   * v2.10.351 P0 — was missing "initializing" so the submodule
+   * preflight phase sent a phase id that didn't satisfy the type.
+   */
+  onPhase?: (
+    phase: "initializing" | "discovery" | "scanning" | "verifying" | "reporting",
+    detail?: string,
+  ) => void;
   onCandidate?: (candidate: Candidate, verification: Verification, index: number, total: number) => void;
 }
 
@@ -106,7 +119,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
 
   // Phase 0: Init submodules if needed (async so progress bar stays alive)
   if (needsSubmoduleInit(opts.projectRoot)) {
-    opts.onPhase?.("initializing submodules", "downloading (this may take a minute)...");
+    opts.onPhase?.("initializing", "submodules: downloading (this may take a minute)...");
     await initSubmodulesAsync(opts.projectRoot);
     opts.onPhase?.("discovery", "Submodules ready");
   } else {
