@@ -418,8 +418,13 @@ export async function handleAuditAction(
           ? ` [tags: ${e.review_tags.join(", ")}]`
           : "";
         const reasonStr = e.review_reason ? ` (reason: ${e.review_reason})` : "";
+        // v2.10.372 (CL.2) — show finding_id alongside the legacy
+        // index. The integer is friendlier to type for ad-hoc
+        // triage; the kc-* hash is the one that survives reruns
+        // and refactors.
+        const idStr = e.finding_id ? `  ${e.finding_id}` : "";
         return [
-          `    ${globalIdx}. ${icon(e.severity)} [${e.severity.toUpperCase()}] ${e.pattern_id}${reasonStr}${tagStr}`,
+          `    ${globalIdx}. ${icon(e.severity)} [${e.severity.toUpperCase()}] ${e.pattern_id}${idStr}${reasonStr}${tagStr}`,
           `       ${rel}:${e.line}`,
           `       ${e.verification.reasoning.slice(0, 220)}`,
         ];
@@ -506,12 +511,27 @@ export async function handleAuditAction(
         return lines.join("\n");
       }
 
-      // Helpers for promote/demote/tag/untag — parse comma-separated indices.
+      // Helpers for promote/demote/tag/untag — parse comma-separated
+      // refs. v2.10.372 (CL.2): each ref can be either a 1-based
+      // integer index OR a stable finding_id like `kc-a3f9b2c14d8e`.
+      // resolveFindingRef returns the 0-based slot or -1; we add 1
+      // so the existing call sites that do `idx - 1` keep working.
+      const { resolveFindingRef } = await import("../../core/audit-engine/finding-id.js");
       const parseIndices = (raw: string): number[] => {
-        return raw
-          .split(",")
-          .map((s) => Number.parseInt(s.trim(), 10))
-          .filter((n) => Number.isFinite(n) && n >= 1 && n <= flat.length);
+        const out: number[] = [];
+        for (const tok of raw.split(",")) {
+          const trimmed = tok.trim();
+          if (!trimmed) continue;
+          const slot = resolveFindingRef(trimmed, flat);
+          if (slot >= 0 && slot < flat.length) out.push(slot + 1);
+        }
+        return out;
+      };
+      // Single-ref parser for note/assign/tag/untag — same dual-form
+      // accept (integer index OR kc-* finding_id). Returns -1 on
+      // invalid so call sites can print a uniform error.
+      const parseRef = (raw: string): number => {
+        return resolveFindingRef(raw, flat);
       };
 
       // v2.10.351 P0 audit fix (A.1.1) — strip any prior reviewer-
@@ -665,29 +685,29 @@ export async function handleAuditAction(
           "build_time_only", "placeholder_secret", "sanitized",
           "manual_confirmation", "other",
         ]);
-        const idx = Number.parseInt(idxArg, 10);
-        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
-          return `  Usage: /review ${pathToken} tag <index> <reason>\n  Valid reasons: ${[...validReasons].join(", ")}`;
+        const slot = parseRef(idxArg);
+        if (slot < 0 || slot >= flat.length) {
+          return `  Usage: /review ${pathToken} tag <index|finding_id> <reason>\n  Valid reasons: ${[...validReasons].join(", ")}`;
         }
         if (!validReasons.has(reasonArg)) {
           return `  Unknown reason "${reasonArg}".\n  Valid: ${[...validReasons].join(", ")}`;
         }
-        const entry = flat[idx - 1]!;
+        const entry = flat[slot]!;
         entry.item.review_reason = reasonArg as Reviewable["review_reason"];
         persist();
-        return `  Tagged #${idx} with reason: ${reasonArg}`;
+        return `  Tagged #${slot + 1} (${entry.item.finding_id ?? "no-id"}) with reason: ${reasonArg}`;
       }
 
       if (cmd === "untag") {
         const idxArg = tokens.shift() ?? "";
-        const idx = Number.parseInt(idxArg, 10);
-        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
-          return `  Usage: /review ${pathToken} untag <index>`;
+        const slot = parseRef(idxArg);
+        if (slot < 0 || slot >= flat.length) {
+          return `  Usage: /review ${pathToken} untag <index|finding_id>`;
         }
-        const entry = flat[idx - 1]!;
+        const entry = flat[slot]!;
         delete entry.item.review_reason;
         persist();
-        return `  Cleared review_reason on #${idx}`;
+        return `  Cleared review_reason on #${slot + 1} (${entry.item.finding_id ?? "no-id"})`;
       }
 
       // ── /review … note <idx> "free text" ─────────────────────
@@ -696,9 +716,9 @@ export async function handleAuditAction(
       // becomes the note. v2.10.363 (F5).
       if (cmd === "note") {
         const idxArg = tokens.shift() ?? "";
-        const idx = Number.parseInt(idxArg, 10);
-        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
-          return `  Usage: /review ${pathToken} note <index> "free text"`;
+        const slot = parseRef(idxArg);
+        if (slot < 0 || slot >= flat.length) {
+          return `  Usage: /review ${pathToken} note <index|finding_id> "free text"`;
         }
         let text = tokens.join(" ").trim();
         // Strip surrounding quotes if the user wrapped the note.
@@ -707,12 +727,12 @@ export async function handleAuditAction(
           text = text.slice(1, -1);
         }
         if (!text) {
-          return `  Usage: /review ${pathToken} note <index> "free text" — text was empty`;
+          return `  Usage: /review ${pathToken} note <index|finding_id> "free text" — text was empty`;
         }
-        const entry = flat[idx - 1]!;
+        const entry = flat[slot]!;
         entry.item.review_note = text;
         persist();
-        return `  Note saved on #${idx}: ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`;
+        return `  Note saved on #${slot + 1} (${entry.item.finding_id ?? "no-id"}): ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`;
       }
 
       // ── /review … assign <idx> <severity> ────────────────────
@@ -723,18 +743,18 @@ export async function handleAuditAction(
         const validSeverities = new Set(["critical", "high", "medium", "low"]);
         const idxArg = tokens.shift() ?? "";
         const sev = (tokens.shift() ?? "").toLowerCase();
-        const idx = Number.parseInt(idxArg, 10);
-        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
-          return `  Usage: /review ${pathToken} assign <index> <severity>\n  Severities: ${[...validSeverities].join(", ")}`;
+        const slot = parseRef(idxArg);
+        if (slot < 0 || slot >= flat.length) {
+          return `  Usage: /review ${pathToken} assign <index|finding_id> <severity>\n  Severities: ${[...validSeverities].join(", ")}`;
         }
         if (!validSeverities.has(sev)) {
           return `  Unknown severity "${sev}".\n  Valid: ${[...validSeverities].join(", ")}`;
         }
-        const entry = flat[idx - 1]!;
+        const entry = flat[slot]!;
         const oldSev = entry.item.severity;
         entry.item.severity = sev as typeof entry.item.severity;
         persist();
-        return `  Severity on #${idx}: ${oldSev} → ${sev}`;
+        return `  Severity on #${slot + 1} (${entry.item.finding_id ?? "no-id"}): ${oldSev} → ${sev}`;
       }
 
       // ── /review … ignore <idx> [--reason X] ──────────────────
