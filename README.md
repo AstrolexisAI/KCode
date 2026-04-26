@@ -43,6 +43,12 @@ curl -fsSL https://kulvex.ai/kcode/install.sh | sh
 
 The script detects your OS + arch, fetches the latest pre-built binary from the KCode CDN, installs it to the first writable dir on `$PATH` (`~/.local/bin` by default), and prints a PATH hint if needed. No telemetry, no shell-config edits, no sudo prompts — [audit the script here](https://kulvex.ai/kcode/install.sh).
 
+**Via npm (Node 18+):**
+
+```bash
+npm install -g @astrolexisai/kcode
+```
+
 **Manual download** (Linux ARM64 / Windows / specific version): [kulvex.ai/kcode#downloads](https://kulvex.ai/kcode#downloads) or [GitHub Releases](https://github.com/AstrolexisAI/KCode/releases).
 
 **From source (Bun):**
