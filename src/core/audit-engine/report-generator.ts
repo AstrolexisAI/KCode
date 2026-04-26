@@ -561,19 +561,64 @@ export function generateMarkdownReport(result: AuditResult): string {
       lines.push("");
     }
 
-    if (f.verification.execution_path) {
+    // Evidence Pack (v2.10.361+). When the verifier emits structured
+    // JSON we render each field as its own labeled block. Falls back
+    // to the legacy single-string fields when evidence is absent.
+    const ev = f.verification.evidence;
+    if (ev?.input_boundary) {
+      lines.push(`**Input boundary:** ${ev.input_boundary}`);
+      lines.push("");
+    }
+
+    if (ev?.sink) {
+      lines.push(`**Sink:** \`${ev.sink}\``);
+      lines.push("");
+    }
+
+    if (ev?.execution_path_steps && ev.execution_path_steps.length > 0) {
+      lines.push("**Execution path:**");
+      ev.execution_path_steps.forEach((step, i) => {
+        lines.push(`${i + 1}. ${step}`);
+      });
+      lines.push("");
+    } else if (f.verification.execution_path) {
       lines.push(`**Execution path:** ${f.verification.execution_path}`);
       lines.push("");
     }
 
-    if (f.verification.suggested_fix) {
-      lines.push("**Suggested fix:**");
+    if (ev?.sanitizers_checked && ev.sanitizers_checked.length > 0) {
+      lines.push("**Sanitizers checked:**");
+      for (const s of ev.sanitizers_checked) {
+        lines.push(`- ${s}`);
+      }
+      lines.push("");
+    }
+
+    if (ev?.mitigations_found && ev.mitigations_found.length > 0) {
+      lines.push("**Mitigations found:**");
+      for (const m of ev.mitigations_found) {
+        lines.push(`- ${m}`);
+      }
+      lines.push("");
+    }
+
+    const fixText = ev?.suggested_fix ?? f.verification.suggested_fix;
+    if (fixText) {
+      const strategy = ev?.suggested_fix_strategy
+        ? ` (${ev.suggested_fix_strategy})`
+        : "";
+      lines.push(`**Suggested fix${strategy}:**`);
       lines.push("```");
-      lines.push(f.verification.suggested_fix);
+      lines.push(fixText);
       lines.push("```");
       lines.push("");
     } else if (pattern?.fix_template) {
       lines.push(`**Fix template:** ${pattern.fix_template}`);
+      lines.push("");
+    }
+
+    if (ev?.test_suggestion) {
+      lines.push(`**Regression test:** ${ev.test_suggestion}`);
       lines.push("");
     }
 
