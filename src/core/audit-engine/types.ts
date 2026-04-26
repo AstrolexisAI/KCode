@@ -278,6 +278,13 @@ export interface Finding {
   verification: Verification;
   cwe?: string;
   /**
+   * Free-text reviewer annotation set via `/review … note <idx> "..."`.
+   * Distinct from `review_tags` (structured taxonomy) — `review_note`
+   * is one-line prose that explains a particular triage decision.
+   * v2.10.363 (F5).
+   */
+  review_note?: string;
+  /**
    * Reviewer-assigned state from /review. Undefined means the
    * reviewer has not touched the finding since the last /scan.
    * Default behaviour for /fix and /pr when undefined is to treat
@@ -332,6 +339,8 @@ export interface FalsePositiveDetail {
   review_state?: ReviewState;
   review_reason?: ReviewReason;
   review_tags?: string[];
+  /** Free-text reviewer annotation. v2.10.363 (F5). */
+  review_note?: string;
 }
 
 /**

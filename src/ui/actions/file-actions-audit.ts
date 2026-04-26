@@ -456,6 +456,12 @@ export async function handleAuditAction(
         lines.push(`    /review ${pathToken} demote 2,3                   — confirmed → FP`);
         lines.push(`    /review ${pathToken} tag 5 trusted_boundary       — annotate (drives report sections)`);
         lines.push(`    /review ${pathToken} untag 5                      — clear annotation`);
+        lines.push(`    /review ${pathToken} note 5 "free text"           — add reviewer note`);
+        lines.push(`    /review ${pathToken} assign 5 high                — override severity`);
+        lines.push(`    /review ${pathToken} ignore 4,8 --reason X        — ignore (excluded from /fix /pr)`);
+        lines.push(`    /review ${pathToken} restore 4                   — clear review_state`);
+        lines.push(`    /review ${pathToken} stats                       — pattern noise table`);
+        lines.push(`    /review ${pathToken} export                      — JSON manifest for CI`);
         lines.push("");
         lines.push("  Legacy aliases: keep / drop / all / none — see /help.");
         return lines.join("\n");
@@ -599,6 +605,7 @@ export async function handleAuditAction(
         if (indices.length === 0) {
           return `  Usage: /review ${pathToken} demote 2,3 — indices from the dashboard.`;
         }
+        const { recordDemotion } = await import("../../core/audit-engine/review-history.js");
         const moved: string[] = [];
         for (const idx of indices) {
           const entry = flat[idx - 1]!;
@@ -616,6 +623,14 @@ export async function handleAuditAction(
             reasoning: `[reviewer demoted] ${stripReviewerPrefix(entry.item.verification.reasoning)}`,
           };
           entry.bucket = "fp";
+          // F5.4 learning loop — record the demotion in
+          // ~/.kcode/review-history.json so future scans can
+          // deprioritize this pattern in similar paths.
+          recordDemotion({
+            projectRoot,
+            patternId: entry.item.pattern_id,
+            file: entry.item.file,
+          });
           moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
         }
         persist();
@@ -659,6 +674,192 @@ export async function handleAuditAction(
         delete entry.item.review_reason;
         persist();
         return `  Cleared review_reason on #${idx}`;
+      }
+
+      // ── /review … note <idx> "free text" ─────────────────────
+      // Free-text annotation persisted on the item. Quoted form is
+      // recommended but plain words work; everything after the index
+      // becomes the note. v2.10.363 (F5).
+      if (cmd === "note") {
+        const idxArg = tokens.shift() ?? "";
+        const idx = Number.parseInt(idxArg, 10);
+        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
+          return `  Usage: /review ${pathToken} note <index> "free text"`;
+        }
+        let text = tokens.join(" ").trim();
+        // Strip surrounding quotes if the user wrapped the note.
+        if ((text.startsWith('"') && text.endsWith('"')) ||
+            (text.startsWith("'") && text.endsWith("'"))) {
+          text = text.slice(1, -1);
+        }
+        if (!text) {
+          return `  Usage: /review ${pathToken} note <index> "free text" — text was empty`;
+        }
+        const entry = flat[idx - 1]!;
+        entry.item.review_note = text;
+        persist();
+        return `  Note saved on #${idx}: ${text.slice(0, 80)}${text.length > 80 ? "…" : ""}`;
+      }
+
+      // ── /review … assign <idx> <severity> ────────────────────
+      // Override severity. Useful when the reviewer disagrees with
+      // the pattern's default — e.g. "this regex match is HIGH in
+      // application code but LOW in vendored deps".
+      if (cmd === "assign") {
+        const validSeverities = new Set(["critical", "high", "medium", "low"]);
+        const idxArg = tokens.shift() ?? "";
+        const sev = (tokens.shift() ?? "").toLowerCase();
+        const idx = Number.parseInt(idxArg, 10);
+        if (!Number.isFinite(idx) || idx < 1 || idx > flat.length) {
+          return `  Usage: /review ${pathToken} assign <index> <severity>\n  Severities: ${[...validSeverities].join(", ")}`;
+        }
+        if (!validSeverities.has(sev)) {
+          return `  Unknown severity "${sev}".\n  Valid: ${[...validSeverities].join(", ")}`;
+        }
+        const entry = flat[idx - 1]!;
+        const oldSev = entry.item.severity;
+        entry.item.severity = sev as typeof entry.item.severity;
+        persist();
+        return `  Severity on #${idx}: ${oldSev} → ${sev}`;
+      }
+
+      // ── /review … ignore <idx> [--reason X] ──────────────────
+      // Mark a finding as "I see this but I'm not acting on it now"
+      // (vs `demote`, which says "the verifier was wrong"). Ignored
+      // findings are excluded from /fix, /pr, SARIF, and the actionable
+      // count, but stay in the JSON for the audit trail.
+      if (cmd === "ignore") {
+        const idxArg = tokens.shift() ?? "";
+        const indices = idxArg
+          .split(",")
+          .map((s) => Number.parseInt(s.trim(), 10))
+          .filter((n) => Number.isFinite(n) && n >= 1 && n <= flat.length);
+        if (indices.length === 0) {
+          return `  Usage: /review ${pathToken} ignore <idx,idx,...> [--reason text]`;
+        }
+        // Optional --reason flag: everything after it is the reason.
+        let reason: string | undefined;
+        const reasonFlagIdx = tokens.indexOf("--reason");
+        if (reasonFlagIdx !== -1) {
+          reason = tokens.slice(reasonFlagIdx + 1).join(" ").trim();
+          if ((reason.startsWith('"') && reason.endsWith('"')) ||
+              (reason.startsWith("'") && reason.endsWith("'"))) {
+            reason = reason.slice(1, -1);
+          }
+        }
+        for (const i of indices) {
+          const entry = flat[i - 1]!;
+          entry.item.review_state = "ignored";
+          if (reason) entry.item.review_note = reason;
+        }
+        persist();
+        return `  Ignored ${indices.length} finding(s)${reason ? ` (reason: ${reason})` : ""}`;
+      }
+
+      // ── /review … restore <idx> ──────────────────────────────
+      // Clear review_state so the finding goes back to its original
+      // verifier verdict. Counterpart of ignore/demote.
+      if (cmd === "restore") {
+        const idxArg = tokens.shift() ?? "";
+        const indices = idxArg
+          .split(",")
+          .map((s) => Number.parseInt(s.trim(), 10))
+          .filter((n) => Number.isFinite(n) && n >= 1 && n <= flat.length);
+        if (indices.length === 0) {
+          return `  Usage: /review ${pathToken} restore <idx,idx,...>`;
+        }
+        for (const i of indices) {
+          const entry = flat[i - 1]!;
+          delete entry.item.review_state;
+          delete entry.item.review_note;
+        }
+        persist();
+        return `  Restored ${indices.length} finding(s) to original verdict.`;
+      }
+
+      // ── /review … stats ──────────────────────────────────────
+      // Top noisy patterns (≥3 sites, <50% confirm rate) ranked by
+      // absolute FP count. Helps the reviewer spot patterns that
+      // need to be tuned, suppressed, or scoped.
+      if (cmd === "stats") {
+        const metrics = audit.pattern_metrics;
+        if (!metrics || Object.keys(metrics).length === 0) {
+          return "  No pattern_metrics on this audit (re-run with verifier active).";
+        }
+        type Row = { id: string; sites: number; conf: number; fp: number; rate: number };
+        const rows: Row[] = [];
+        for (const [id, m] of Object.entries(metrics)) {
+          if (m.unique_sites < 1) continue;
+          const rate = m.confirmed_rate ?? 0;
+          rows.push({
+            id,
+            sites: m.unique_sites,
+            conf: m.confirmed,
+            fp: m.false_positive,
+            rate,
+          });
+        }
+        // Top noise first (low rate, high FP), then total volume.
+        rows.sort((a, b) => {
+          if (a.rate !== b.rate) return a.rate - b.rate;
+          return b.fp - a.fp;
+        });
+        const out: string[] = ["  Pattern stats (lowest confirm rate first):", ""];
+        out.push("  | Pattern                     | Sites | Confirmed | FP  | Confirm rate |");
+        out.push("  |-----------------------------|-------|-----------|-----|--------------|");
+        for (const r of rows.slice(0, 15)) {
+          const pct = `${Math.round(r.rate * 100)}%`;
+          out.push(
+            `  | ${r.id.padEnd(27)} | ${String(r.sites).padStart(5)} | ${String(r.conf).padStart(9)} | ${String(r.fp).padStart(3)} | ${pct.padStart(12)} |`,
+          );
+        }
+        const reviewerActions = (audit.findings.length + (audit.false_positives_detail ?? []).length)
+          ? flat.filter((e) => e.item.review_state).length
+          : 0;
+        out.push("");
+        out.push(`  Total findings reviewed (any state set): ${reviewerActions} of ${flat.length}`);
+        return out.join("\n");
+      }
+
+      // ── /review … export ─────────────────────────────────────
+      // Emit reviewer decisions as JSON for CI gating. Stable shape:
+      //   { reviewed: [{ pattern_id, file, line, state, reason?, note?, severity }, ...],
+      //     summary: { confirmed, ignored, demoted_fp, promoted, untouched } }
+      if (cmd === "export") {
+        type Row = {
+          pattern_id: string;
+          file: string;
+          line: number;
+          state: string | null;
+          reason: string | null;
+          note: string | null;
+          severity: string;
+        };
+        const rows: Row[] = flat.map((e) => ({
+          pattern_id: e.item.pattern_id,
+          file: e.item.file.replace(projectRoot + "/", ""),
+          line: e.item.line,
+          state: e.item.review_state ?? null,
+          reason: e.item.review_reason ?? null,
+          note: e.item.review_note ?? null,
+          severity: e.item.severity,
+        }));
+        const summary = {
+          total: rows.length,
+          confirmed: rows.filter((r) => r.state === "confirmed" || (r.state === null && true)).length,
+          promoted: rows.filter((r) => r.state === "promoted").length,
+          demoted_fp: rows.filter((r) => r.state === "demoted_fp").length,
+          ignored: rows.filter((r) => r.state === "ignored").length,
+          untouched: rows.filter((r) => r.state === null).length,
+        };
+        const exportPath = resolvePath(projectRoot, "AUDIT_REVIEW.json");
+        const payload = JSON.stringify({ summary, reviewed: rows }, null, 2);
+        try {
+          writeFs(exportPath, payload);
+          return `  Exported ${rows.length} reviewed item(s) → ${exportPath.replace(projectRoot + "/", "")}`;
+        } catch (err) {
+          return `  Export failed: ${(err as Error).message}`;
+        }
       }
 
       // ── Legacy: keep / drop / all / none (operate on confirmed bucket only)
@@ -713,7 +914,7 @@ export async function handleAuditAction(
 
       return (
         `  Unknown subcommand "${cmd}".\n` +
-        `  Try: list | promote | demote | tag | untag\n` +
+        `  Try: list | promote | demote | tag | untag | note | assign | ignore | restore | stats | export\n` +
         `  Or run /review ${pathToken} (no args) for the dashboard.`
       );
     }
