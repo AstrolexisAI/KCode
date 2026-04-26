@@ -31,7 +31,7 @@ describe("pattern_metrics", () => {
     w("a.c", `void f(const char* src) { char buf[16]; strcpy(buf, src); }\n`);
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\nREASONING: yes\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     expect(result.pattern_metrics).toBeDefined();
     const ids = Object.keys(result.pattern_metrics ?? {});
@@ -61,7 +61,7 @@ describe("pattern_metrics", () => {
     );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
     if (m) {
@@ -87,7 +87,7 @@ describe("pattern_metrics", () => {
     );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
     if (m) {
@@ -99,7 +99,7 @@ describe("pattern_metrics", () => {
     w("a.c", `void f(const char* src) { char buf[16]; strcpy(buf, src); }\n`);
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\nREASONING: real\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     for (const [, m] of Object.entries(result.pattern_metrics ?? {})) {
       if (m.hits === 0) continue;
@@ -113,7 +113,7 @@ describe("pattern_metrics", () => {
     w("clean.c", "int main(void) { return 0; }\n");
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     // Without any pattern matches, pattern_metrics should be empty.
     // (Some patterns may still fire on innocuous code; the assertion

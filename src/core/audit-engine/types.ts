@@ -175,11 +175,95 @@ export interface Candidate {
 /** Verification result from the model. */
 export type VerifyVerdict = "confirmed" | "false_positive" | "needs_context";
 
+/**
+ * Strategy hint for /fix to pick the right fixer policy without
+ * re-asking the model. `rewrite` = deterministic source change,
+ * `annotate` = audit-note only (no logic change), `manual` = needs
+ * human + design decision.
+ */
+export type FixStrategy = "rewrite" | "annotate" | "manual";
+
+/**
+ * Structured "Evidence Pack" the verifier emits per candidate. The
+ * verifier prompt produces a JSON object matching this shape; the
+ * parser validates and degrades to a partial verdict only on failure.
+ *
+ * v2.10.361 (F3 of audit product plan). Replaces the v1 prose
+ * contract where `reasoning` carried everything in free text and
+ * downstream callers had to scrape it. Lets the report, PR body, and
+ * confidence score read structured fields directly.
+ *
+ * All fields except `sink` are optional because:
+ *   - `false_positive` verdicts often have no `input_boundary` (the
+ *     whole point is there is no exploit path).
+ *   - `needs_context` verdicts have neither path nor sanitizer info
+ *     by definition.
+ *   - Older AUDIT_REPORT.json files predating F3 won't have evidence
+ *     at all; parsers tolerate the absence.
+ */
+export interface VerifierEvidence {
+  /**
+   * Where the untrusted input enters the program. Examples: "HTTP
+   * request body", "CLI argv", "deserialized JSON from network",
+   * "ground command handler". Empty/undefined for false_positive when
+   * there is no external input to name.
+   */
+  input_boundary?: string;
+  /**
+   * Ordered list of code locations between the input boundary and
+   * the sink. Each entry is human-readable: "route handler
+   * /api/upload (server.ts:88)", "service.parseFilename
+   * (service.ts:142)", "child_process.exec call (sink)".
+   */
+  execution_path_steps?: string[];
+  /**
+   * The dangerous operation the input flows into. Required for any
+   * `confirmed` verdict — without naming the sink the finding is
+   * unactionable. Examples: "child_process.exec", "Buffer.alloc",
+   * "eval", "fs.readFile path", "SQL string concat".
+   */
+  sink: string;
+  /**
+   * Sanitizers/validators the verifier explicitly looked for while
+   * triaging. Useful for the report ("we checked these and they were
+   * absent") and for noise tracking ("these patterns rule out 80%").
+   */
+  sanitizers_checked?: string[];
+  /**
+   * Mitigations the verifier *did* find. Populated when the verdict
+   * is false_positive — names the exact line / function / type
+   * constraint that made the candidate safe. Empty array on
+   * confirmed verdicts.
+   */
+  mitigations_found?: string[];
+  /** Strategy hint for /fix to choose its policy. */
+  suggested_fix_strategy?: FixStrategy;
+  /**
+   * Concrete fix prose (the same content as the legacy
+   * `Verification.suggested_fix` field). Lifted into the evidence
+   * pack so report/PR readers get one consistent object.
+   */
+  suggested_fix?: string;
+  /**
+   * One-line recipe for a regression test that would fail without
+   * the fix. Example: "POST /api/upload with body
+   * filename=foo;rm%20-rf%20/ — expect 400, no shell exec".
+   */
+  test_suggestion?: string;
+}
+
 export interface Verification {
   verdict: VerifyVerdict;
   reasoning: string;
+  /** Legacy single-string path. New code reads `evidence.execution_path_steps` first. */
   execution_path?: string;
+  /** Legacy fix string. New code reads `evidence.suggested_fix` first. */
   suggested_fix?: string;
+  /**
+   * Structured Evidence Pack from the JSON verifier (v2.10.361+).
+   * Optional so older serialized verifications still type-check.
+   */
+  evidence?: VerifierEvidence;
 }
 
 /** A confirmed finding ready to go into the report. */

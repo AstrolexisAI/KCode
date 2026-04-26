@@ -174,7 +174,12 @@ export function registerAuditCommand(program: Command): void {
       if (opts.skipVerify) {
         console.log("  \x1b[33m--skip-verify: model verification disabled\x1b[0m");
         console.log("");
-        llmCallback = async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n";
+        llmCallback = async () =>
+          JSON.stringify({
+            verdict: "confirmed",
+            reasoning: "static-only mode",
+            evidence: { sink: "static-only bypass" },
+          });
       } else {
         const settings = await loadSettings(projectRoot);
         // Pick a default provider based on which API key is actually
