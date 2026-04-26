@@ -50,6 +50,16 @@ export interface UpdateInfo {
   releaseUrl?: string;
   releaseNotes?: string;
   publishedAt?: string;
+  // Optional delta from the user's current version. When present and
+  // bspatch is available locally, the updater downloads + applies the
+  // delta instead of the full binary. Always falls back to full
+  // download if anything in the delta path fails.
+  delta?: {
+    url: string;
+    sha256: string;
+    size: number;
+    from_sha256: string;
+  };
 }
 
 export interface UpdateResult {
@@ -67,11 +77,25 @@ interface UpdateCheckState {
   publishedAt?: string;
 }
 
+interface ManifestDelta {
+  url: string;
+  sha256: string;
+  size: number;
+  // SHA256 of the source binary the patch was generated against. Lets
+  // the client refuse to apply a delta to a binary it didn't expect
+  // (e.g. user's local install diverged or was hand-patched).
+  from_sha256: string;
+}
+
 interface ManifestPlatform {
   url: string;
   filename: string;
   sha256: string;
   size: number;
+  // Optional bsdiff-format binary deltas keyed by `from` version. Each
+  // delta produces the same target binary (same `sha256` above) when
+  // applied to the matching `from_sha256` source.
+  deltas?: Record<string, ManifestDelta>;
 }
 
 interface Manifest {
@@ -281,6 +305,12 @@ export async function checkForUpdate(
     return { ...base, latestVersion, releaseUrl, publishedAt: manifest.released_at };
   }
 
+  // Pick the delta from the user's current version if the manifest
+  // advertises one. The delta is opportunistic — `downloadAndInstall`
+  // will fall back to a full download whenever it isn't usable
+  // (bspatch missing, current binary mismatched, network blip, etc.).
+  const deltaForCurrent = plat.deltas?.[currentVersion];
+
   return {
     currentVersion,
     latestVersion,
@@ -293,6 +323,14 @@ export async function checkForUpdate(
     releaseUrl,
     releaseNotes: releaseUrl,
     publishedAt: manifest.released_at,
+    delta: deltaForCurrent
+      ? {
+          url: deltaForCurrent.url,
+          sha256: deltaForCurrent.sha256,
+          size: deltaForCurrent.size,
+          from_sha256: deltaForCurrent.from_sha256,
+        }
+      : undefined,
   };
 }
 
@@ -307,6 +345,173 @@ async function computeSha256(filePath: string): Promise<string> {
 }
 
 // ─── Download & Install ────────────────────────────────────────
+
+/**
+ * Stream a URL to a temp file, optionally reporting progress, and verify
+ * the resulting file's SHA256 matches the expected hash.
+ *
+ * Returns the temp path on success; throws (caller catches) on download,
+ * write, or checksum failure. Cleans up its temp file on error.
+ */
+async function downloadVerified(opts: {
+  url: string;
+  expectedSha256: string;
+  expectedSize?: number;
+  tmpName: string;
+  onProgress?: (pct: number) => void;
+}): Promise<string> {
+  const { url, expectedSha256, expectedSize, tmpName, onProgress } = opts;
+  const resp = await fetch(url, {
+    signal: AbortSignal.timeout(300_000),
+    headers: { "User-Agent": "KCode-AutoUpdate" },
+    redirect: "follow",
+  });
+  if (!resp.ok) {
+    throw new Error(`Download failed: HTTP ${resp.status}`);
+  }
+
+  const totalSize =
+    expectedSize && expectedSize > 0
+      ? expectedSize
+      : parseInt(resp.headers.get("content-length") ?? "0", 10);
+  const tmpDir = require("node:os").tmpdir();
+  const tmpPath = join(tmpDir, tmpName);
+
+  const writer = Bun.file(tmpPath).writer();
+  let downloaded = 0;
+
+  try {
+    for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
+      writer.write(chunk);
+      downloaded += chunk.length;
+      if (onProgress && totalSize > 0) {
+        onProgress(Math.round((downloaded / totalSize) * 100));
+      }
+    }
+    await writer.end();
+  } catch (err) {
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    throw err;
+  }
+
+  const actual = await computeSha256(tmpPath);
+  if (actual !== expectedSha256) {
+    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    throw new Error(`Checksum mismatch. Expected: ${expectedSha256}, Got: ${actual}`);
+  }
+  return tmpPath;
+}
+
+/**
+ * Returns true if `bspatch` is available on PATH. We don't ship it
+ * bundled — it's a tiny utility (`apt install bsdiff` /
+ * `brew install bsdiff`) and the delta path is opportunistic anyway.
+ */
+function isBspatchAvailable(): boolean {
+  try {
+    execSync("command -v bspatch >/dev/null 2>&1", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Try the delta-update path. Returns the temp path of a freshly-built
+ * target binary on success, or null on any failure (caller falls back
+ * to a full download).
+ *
+ * Failure modes that yield null (not an error):
+ *   - bspatch is not installed
+ *   - Current binary's SHA256 doesn't match the delta's `from_sha256`
+ *   - Patch download fails or fails its own SHA256
+ *   - bspatch exits non-zero
+ *   - Result binary's SHA256 doesn't match the manifest's target hash
+ */
+async function tryApplyDelta(
+  info: UpdateInfo,
+  onProgress?: (pct: number) => void,
+): Promise<string | null> {
+  if (!info.delta || !info.sha256) return null;
+  if (!isBspatchAvailable()) {
+    log.debug("auto-update", "bspatch not on PATH, skipping delta path");
+    return null;
+  }
+
+  // Locate the user's current binary so we can compute its SHA256 and
+  // feed it to bspatch. If we can't find one, the user is running from
+  // a non-standard location (e.g. straight off `bun run`) — full
+  // download still makes sense.
+  const binaryPaths = findBinaryPaths();
+  const currentBinary = binaryPaths.find((p) => existsSync(p));
+  if (!currentBinary) {
+    log.debug("auto-update", "No current binary to patch against, skipping delta");
+    return null;
+  }
+
+  const currentSha = await computeSha256(currentBinary);
+  if (currentSha !== info.delta.from_sha256) {
+    log.info(
+      "auto-update",
+      `Current binary SHA mismatch (have ${currentSha.slice(0, 12)}…, ` +
+        `delta expects ${info.delta.from_sha256.slice(0, 12)}…). ` +
+        `Falling back to full download.`,
+    );
+    return null;
+  }
+
+  const tmpDir = require("node:os").tmpdir();
+  let patchPath: string;
+  try {
+    patchPath = await downloadVerified({
+      url: info.delta.url,
+      expectedSha256: info.delta.sha256,
+      expectedSize: info.delta.size,
+      tmpName: `kcode-update-${process.pid}.bsdiff`,
+      onProgress,
+    });
+  } catch (err) {
+    log.warn("auto-update", `Delta download failed: ${err}. Falling back to full.`);
+    return null;
+  }
+
+  const outPath = join(tmpDir, `kcode-update-${process.pid}`);
+  try {
+    // bspatch <oldfile> <newfile> <patchfile>
+    execSync(
+      `bspatch ${JSON.stringify(currentBinary)} ${JSON.stringify(outPath)} ${JSON.stringify(patchPath)}`,
+      { stdio: "pipe", timeout: 120_000 },
+    );
+  } catch (err) {
+    log.warn("auto-update", `bspatch failed: ${err}. Falling back to full.`);
+    try { unlinkSync(patchPath); } catch { /* ignore */ }
+    try { unlinkSync(outPath); } catch { /* ignore */ }
+    return null;
+  }
+
+  // bspatch succeeded — verify the result is the binary the manifest
+  // promised. If this fails the patch was tampered with or applied to
+  // the wrong source despite the from_sha256 check passing.
+  const resultSha = await computeSha256(outPath);
+  if (resultSha !== info.sha256) {
+    log.warn(
+      "auto-update",
+      `Patched binary SHA mismatch (${resultSha.slice(0, 12)}… vs ${info.sha256.slice(0, 12)}…). Falling back to full.`,
+    );
+    try { unlinkSync(patchPath); } catch { /* ignore */ }
+    try { unlinkSync(outPath); } catch { /* ignore */ }
+    return null;
+  }
+
+  try { unlinkSync(patchPath); } catch { /* ignore */ }
+  log.info(
+    "auto-update",
+    `Delta applied: ${(info.delta.size / 1024 / 1024).toFixed(1)} MB patch ` +
+      `vs ${((info.size ?? 0) / 1024 / 1024).toFixed(1)} MB full ` +
+      `(saved ~${Math.round((1 - info.delta.size / Math.max(1, info.size ?? 1)) * 100)}%)`,
+  );
+  return outPath;
+}
 
 export async function downloadAndInstall(
   info: UpdateInfo,
@@ -324,48 +529,21 @@ export async function downloadAndInstall(
   }
 
   try {
-    const resp = await fetch(info.downloadUrl, {
-      signal: AbortSignal.timeout(300_000),
-      headers: { "User-Agent": "KCode-AutoUpdate" },
-      redirect: "follow",
-    });
+    let tmpPath: string | null = await tryApplyDelta(info, onProgress);
 
-    if (!resp.ok) {
-      result.error = `Download failed: HTTP ${resp.status}`;
-      return result;
-    }
-
-    const totalSize =
-      info.size && info.size > 0
-        ? info.size
-        : parseInt(resp.headers.get("content-length") ?? "0", 10);
-    const tmpDir = require("node:os").tmpdir();
-    const tmpPath = join(tmpDir, `kcode-update-${process.pid}`);
-
-    const writer = Bun.file(tmpPath).writer();
-    let downloaded = 0;
-
-    try {
-      for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
-        writer.write(chunk);
-        downloaded += chunk.length;
-        if (onProgress && totalSize > 0) {
-          onProgress(Math.round((downloaded / totalSize) * 100));
-        }
+    if (!tmpPath) {
+      try {
+        tmpPath = await downloadVerified({
+          url: info.downloadUrl,
+          expectedSha256: info.sha256,
+          expectedSize: info.size,
+          tmpName: `kcode-update-${process.pid}`,
+          onProgress,
+        });
+      } catch (err) {
+        result.error = err instanceof Error ? err.message : "Download failed";
+        return result;
       }
-      await writer.end();
-    } catch (err) {
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
-      result.error = err instanceof Error ? err.message : "Download stream failed";
-      return result;
-    }
-
-    // Verify SHA256 against the value the manifest committed to.
-    const actual = await computeSha256(tmpPath);
-    if (actual !== info.sha256) {
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
-      result.error = `Checksum mismatch. Expected: ${info.sha256}, Got: ${actual}`;
-      return result;
     }
     log.info("auto-update", "SHA256 verified.");
 

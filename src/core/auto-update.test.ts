@@ -216,6 +216,87 @@ describe("manifest response parsing", () => {
     expect(info.latestVersion).toBe("2.1.0-beta.1");
   });
 
+  test("populates info.delta when manifest has a delta for current version", async () => {
+    const m = buildManifest({ latest: "2.0.0" });
+    // Inject a delta entry on whichever platform the host runs on so
+    // the test passes regardless of OS/arch.
+    const mod = await import("./auto-update");
+    const key = mod.getPlatformKey();
+    const platforms = m.platforms as Record<
+      string,
+      { url: string; filename: string; sha256: string; size: number; deltas?: unknown }
+    >;
+    if (!platforms[key]) {
+      platforms[key] = {
+        url: "https://kulvex.ai/downloads/kcode/kcode-2.0.0",
+        filename: "kcode-2.0.0",
+        sha256: "e".repeat(64),
+        size: 117_000_000,
+      };
+    }
+    platforms[key].deltas = {
+      "1.8.0": {
+        url: "https://kulvex.ai/downloads/kcode/kcode-1.8.0-to-2.0.0.bsdiff",
+        sha256: "1".repeat(64),
+        size: 1_500_000,
+        from_sha256: "f".repeat(64),
+      },
+    };
+
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(m)));
+
+    const info = await mod.checkForUpdate("1.8.0");
+
+    expect(info.updateAvailable).toBe(true);
+    expect(info.delta).toBeDefined();
+    expect(info.delta?.size).toBe(1_500_000);
+    expect(info.delta?.from_sha256).toBe("f".repeat(64));
+    expect(info.delta?.url).toContain(".bsdiff");
+  });
+
+  test("info.delta is undefined when manifest has deltas but none for current version", async () => {
+    const m = buildManifest({ latest: "2.0.0" });
+    const mod = await import("./auto-update");
+    const key = mod.getPlatformKey();
+    const platforms = m.platforms as Record<
+      string,
+      { url: string; filename: string; sha256: string; size: number; deltas?: unknown }
+    >;
+    if (!platforms[key]) {
+      platforms[key] = {
+        url: "https://kulvex.ai/downloads/kcode/kcode-2.0.0",
+        filename: "kcode-2.0.0",
+        sha256: "e".repeat(64),
+        size: 117_000_000,
+      };
+    }
+    platforms[key].deltas = {
+      "1.9.0": {
+        url: "https://kulvex.ai/downloads/kcode/kcode-1.9.0-to-2.0.0.bsdiff",
+        sha256: "1".repeat(64),
+        size: 1_500_000,
+        from_sha256: "f".repeat(64),
+      },
+    };
+
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(m)));
+
+    const info = await mod.checkForUpdate("1.8.0");
+
+    expect(info.updateAvailable).toBe(true);
+    expect(info.delta).toBeUndefined();
+  });
+
+  test("info.delta is undefined when manifest has no deltas field", async () => {
+    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))));
+
+    const { checkForUpdate } = await import("./auto-update");
+    const info = await checkForUpdate("1.8.0");
+
+    expect(info.updateAvailable).toBe(true);
+    expect(info.delta).toBeUndefined();
+  });
+
   test("beta channel falls back to stable if manifest lacks beta", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(
