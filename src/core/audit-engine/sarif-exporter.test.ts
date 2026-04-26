@@ -241,3 +241,55 @@ describe("buildSarif — empty audit", () => {
     expect(run.tool.driver.rules).toEqual([]);
   });
 });
+
+// v2.10.351 P0 — review_state filtering at the SARIF boundary.
+describe("buildSarif — review_state filtering (v2.10.351 P0)", () => {
+  test("excludes findings tagged 'ignored'", () => {
+    const audit = makeAudit([
+      makeFinding({ pattern_id: "py-001-eval-exec", review_state: "ignored" }),
+      makeFinding({
+        pattern_id: "py-002-yaml-load",
+        line: 60,
+        matched_text: "yaml.load(s)",
+      }),
+    ]);
+    const doc = buildSarif(audit, {
+      toolVersion: "2.10.351",
+      projectRoot: "/home/user/proj",
+    }) as Record<string, unknown>;
+    const run = (doc.runs as Array<{
+      results: Array<{ ruleId: string }>;
+      tool: { driver: { rules: Array<{ id: string }> } };
+    }>)[0]!;
+    expect(run.results.length).toBe(1);
+    expect(run.results[0]!.ruleId).toBe("py-002-yaml-load");
+    // The rule registry must also drop the ignored pattern's rule
+    // entry — SARIF consumers won't list a pattern with no findings.
+    expect(run.tool.driver.rules.find((r) => r.id === "py-001-eval-exec")).toBeUndefined();
+  });
+
+  test("excludes 'demoted_fp' as a defensive guard", () => {
+    const audit = makeAudit([
+      makeFinding({ pattern_id: "p1", review_state: "demoted_fp" }),
+    ]);
+    const doc = buildSarif(audit, {
+      toolVersion: "2.10.351",
+      projectRoot: "/home/user/proj",
+    }) as Record<string, unknown>;
+    const run = (doc.runs as Array<{ results: unknown[] }>)[0]!;
+    expect(run.results).toEqual([]);
+  });
+
+  test("includes 'promoted' findings (regression for P0.5+P0.7)", () => {
+    const audit = makeAudit([
+      makeFinding({ pattern_id: "p1", review_state: "promoted" }),
+    ]);
+    const doc = buildSarif(audit, {
+      toolVersion: "2.10.351",
+      projectRoot: "/home/user/proj",
+    }) as Record<string, unknown>;
+    const run = (doc.runs as Array<{ results: Array<{ ruleId: string }> }>)[0]!;
+    expect(run.results.length).toBe(1);
+    expect(run.results[0]!.ruleId).toBe("p1");
+  });
+});
