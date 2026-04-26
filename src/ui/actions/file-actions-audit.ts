@@ -506,6 +506,21 @@ export async function handleAuditAction(
         audit.confirmed_findings = newConfirmed.length;
         audit.false_positives = newFp.length;
         audit.needs_context = newNc.length;
+        // v2.10.351 P0 — recompute fix_support_summary from the new
+        // confirmed array so downstream /fix and the report header
+        // see counts that match the post-review state. Pre-fix, the
+        // summary stayed at its scan-time value: a promoted finding
+        // would land in /fix without being counted in the
+        // "X rewrite, Y annotate, Z manual" announcement.
+        const summary = { rewrite: 0, annotate: 0, manual: 0 };
+        for (const f of newConfirmed) {
+          const tier = (f as { fix_support?: "rewrite" | "annotate" | "manual" }).fix_support;
+          if (tier === "rewrite") summary.rewrite++;
+          else if (tier === "annotate") summary.annotate++;
+          else summary.manual++;
+        }
+        (audit as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
+          .fix_support_summary = summary;
         writeFs(jsonPath, JSON.stringify(audit, null, 2));
       };
 
@@ -515,6 +530,15 @@ export async function handleAuditAction(
         if (indices.length === 0) {
           return `  Usage: /review ${pathToken} promote 7,8 — indices from the dashboard.`;
         }
+        // v2.10.351 P0 — promote now mirrors demote: it updates BOTH
+        // review_state AND verification.verdict. Without the verdict
+        // update, /fix and /pr (which still filter by
+        // verification.verdict, not review_state) would skip
+        // promoted findings. Same shape as the demote path below.
+        // Also populate fix_support if missing — entries promoted
+        // from needs_context / fp may lack the field (it lives on
+        // Finding, not on FalsePositiveDetail).
+        const { fixSupportFor } = await import("../../core/audit-engine/fixer.js");
         const moved: string[] = [];
         for (const idx of indices) {
           const entry = flat[idx - 1]!;
@@ -524,6 +548,19 @@ export async function handleAuditAction(
           }
           entry.item.review_state = "promoted";
           if (!entry.item.review_reason) entry.item.review_reason = "manual_confirmation";
+          entry.item.verification = {
+            ...entry.item.verification,
+            verdict: "confirmed",
+            reasoning: `[reviewer promoted] ${entry.item.verification.reasoning}`,
+          };
+          // fix_support lives on Finding but is absent on
+          // FalsePositiveDetail / NeedsContextDetail. Populate it
+          // from the pattern registry so downstream /fix can route
+          // the entry to the right tier.
+          const item = entry.item as { fix_support?: "rewrite" | "annotate" | "manual"; pattern_id: string };
+          if (!item.fix_support) {
+            item.fix_support = fixSupportFor(item.pattern_id);
+          }
           entry.bucket = "confirmed";
           moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
         }

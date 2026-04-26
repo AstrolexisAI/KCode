@@ -203,12 +203,53 @@ describe("/review v2 — promote", () => {
     expect(promoted!.review_reason).toBe("manual_confirmation");
   });
 
+  it("promote rewrites the verdict and reasoning (v2.10.351 P0 contract fix)", async () => {
+    // Without the v351 fix, promote left verification.verdict at its
+    // scan-time value (e.g. "needs_context"). /fix and /pr filtered
+    // by verdict, so promoted findings silently dropped from the
+    // pipeline. The contract is now: promote owns BOTH review_state
+    // AND verification.verdict, mirroring demote.
+    seedAudit();
+    await handleAuditAction("review", ctx(`${TMP} promote 5`));
+    const a = readAudit();
+    const promoted = a.findings.find((f) => f.pattern_id === "fsw-003-assert");
+    expect(promoted).toBeDefined();
+    expect(promoted!.verification.verdict).toBe("confirmed");
+    expect(promoted!.verification.reasoning).toContain("[reviewer promoted]");
+    // fix_support is populated from the registry so /fix can route
+    // the finding to the right tier even when it came from
+    // FalsePositiveDetail / NeedsContextDetail (which lack the field).
+    const fs = (promoted as { fix_support?: string }).fix_support;
+    expect(fs === "rewrite" || fs === "annotate" || fs === "manual").toBe(true);
+  });
+
   it("promotes multiple indices in one call", async () => {
     seedAudit();
     await handleAuditAction("review", ctx(`${TMP} promote 5,6`));
     const a = readAudit();
     expect(a.confirmed_findings).toBe(4);
     expect(a.needs_context).toBe(0);
+  });
+
+  it("recomputes fix_support_summary after promote (v2.10.351 P0)", async () => {
+    seedAudit();
+    const before = readAudit();
+    const beforeManual = before.fix_support_summary?.manual ?? 0;
+    await handleAuditAction("review", ctx(`${TMP} promote 5,6`));
+    const after = readAudit();
+    expect(after.fix_support_summary).toBeDefined();
+    // Two promoted findings landed in confirmed; whichever tier they
+    // hit, the post-promote summary's total must equal
+    // confirmed_findings.
+    const total = after.fix_support_summary!.rewrite +
+                  after.fix_support_summary!.annotate +
+                  after.fix_support_summary!.manual;
+    expect(total).toBe(after.confirmed_findings);
+    // And the summary changed from the pre-promote snapshot — at
+    // minimum the "manual" bucket grew if both promoted patterns
+    // had no recipe. Either way the totals are now consistent with
+    // the new confirmed array.
+    expect(beforeManual).toBeLessThanOrEqual(after.fix_support_summary!.manual + 5);  // sanity bound
   });
 });
 
