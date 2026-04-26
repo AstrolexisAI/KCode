@@ -1,0 +1,19 @@
+{
+  "kind": "positive",
+  "cwe": "CWE-95+CWE-79",
+  "description": "Taint propagation: req.body → local var → eval, and req.body → concat → innerHTML. Demonstrates value of AST taint walker over regex.",
+  "expected": [
+    {
+      "pattern_id": "js-ast-005-eval-of-tainted-expression",
+      "file": "handler.js",
+      "line": 10,
+      "verdict": "confirmed"
+    },
+    {
+      "pattern_id": "js-ast-007-innerhtml-of-tainted-expression",
+      "file": "handler.js",
+      "line": 18,
+      "verdict": "confirmed"
+    }
+  ]
+}

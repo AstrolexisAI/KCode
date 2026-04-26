@@ -349,6 +349,9 @@ describe("javascript-patterns shape", () => {
       "js-ast-001-eval-of-parameter",
       "js-ast-002-child-process-exec-of-parameter",
       "js-ast-003-regexp-construction-of-parameter",
+      "js-ast-005-eval-of-tainted-expression",
+      "js-ast-006-exec-of-tainted-expression",
+      "js-ast-007-innerhtml-of-tainted-expression",
     ]);
     for (const p of JAVASCRIPT_AST_PATTERNS) {
       expect(p.languages).toContain("javascript");
