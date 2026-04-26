@@ -331,6 +331,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // lookups for no reason. Now resolved once.
   const { getPatternById } = await import("./patterns");
   const { fixSupportFor } = await import("./fixer");
+  // v2.10.372 (CL.2) — stamp every finding with a stable hash so
+  // /review can address it across runs without relying on the
+  // shifting integer index.
+  const { computeFindingId } = await import("./finding-id");
   for (const r of verified) {
     const pattern = getPatternById(r.candidate.pattern_id);
     const key = `${r.candidate.pattern_id}|${r.candidate.file}`;
@@ -349,6 +353,12 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       verification: { ...r.verification, reasoning: extraReasoning },
       cwe: pattern?.cwe,
       fix_support: fixSupportFor(r.candidate.pattern_id),
+      finding_id: computeFindingId({
+        pattern_id: r.candidate.pattern_id,
+        file: r.candidate.file,
+        matched_text: r.candidate.matched_text,
+        projectRoot: opts.projectRoot,
+      }),
     };
     if (r.verification.verdict === "confirmed") {
       findings.push(base);

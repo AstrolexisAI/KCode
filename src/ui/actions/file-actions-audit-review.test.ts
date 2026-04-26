@@ -411,6 +411,71 @@ describe("/review F5 — export", () => {
   });
 });
 
+// CL.2 (v2.10.372) — finding_id estable. /review subcommands accept
+// either the legacy 1-based integer index OR the kc-* hash from
+// AUDIT_REPORT.json. Both forms address the same finding so the
+// reviewer can use whichever is cheaper.
+describe("/review CL.2 — finding_id stable refs", () => {
+  it("dashboard shows kc-* id alongside the integer", async () => {
+    seedAudit();
+    // Inject finding_ids since seedAudit() doesn't include them by default.
+    const audit = readAudit() as { findings: Array<{ finding_id?: string }> };
+    audit.findings[0]!.finding_id = "kc-deadbeef0001";
+    audit.findings[1]!.finding_id = "kc-deadbeef0002";
+    writeFileSync(`${TMP}/AUDIT_REPORT.json`, JSON.stringify(audit, null, 2));
+    const out = await handleAuditAction("review", ctx(TMP));
+    expect(out).toContain("kc-deadbeef0001");
+    expect(out).toContain("kc-deadbeef0002");
+  });
+
+  it("note accepts kc-* id in place of integer", async () => {
+    seedAudit();
+    const audit = readAudit() as { findings: Array<{ finding_id?: string }> };
+    audit.findings[0]!.finding_id = "kc-abc123def456";
+    writeFileSync(`${TMP}/AUDIT_REPORT.json`, JSON.stringify(audit, null, 2));
+
+    const out = await handleAuditAction(
+      "review",
+      ctx(`${TMP} note kc-abc123def456 "validated"`),
+    );
+    expect(out).toContain("Note saved");
+    expect(out).toContain("kc-abc123def456");
+    const after = readAudit() as { findings: Array<{ review_note?: string }> };
+    expect(after.findings[0]!.review_note).toBe("validated");
+  });
+
+  it("note accepts a kc-* prefix when unambiguous", async () => {
+    seedAudit();
+    const audit = readAudit() as { findings: Array<{ finding_id?: string }> };
+    audit.findings[0]!.finding_id = "kc-abc123def456";
+    audit.findings[1]!.finding_id = "kc-fff999000111";
+    writeFileSync(`${TMP}/AUDIT_REPORT.json`, JSON.stringify(audit, null, 2));
+
+    // kc-abc is a unique prefix.
+    const out = await handleAuditAction("review", ctx(`${TMP} note kc-abc "x"`));
+    expect(out).toContain("Note saved");
+    const after = readAudit() as { findings: Array<{ review_note?: string }> };
+    expect(after.findings[0]!.review_note).toBe("x");
+  });
+
+  it("integer index still works after CL.2 (back-compat)", async () => {
+    seedAudit();
+    const out = await handleAuditAction("review", ctx(`${TMP} note 1 "still works"`));
+    expect(out).toContain("Note saved");
+    const after = readAudit() as { findings: Array<{ review_note?: string }> };
+    expect(after.findings[0]!.review_note).toBe("still works");
+  });
+
+  it("unknown finding_id returns usage error, not crash", async () => {
+    seedAudit();
+    const out = await handleAuditAction(
+      "review",
+      ctx(`${TMP} note kc-doesnotexist "x"`),
+    );
+    expect(out).toContain("Usage:");
+  });
+});
+
 describe("/review v2 — legacy compat", () => {
   it("legacy keep 1 demotes #2 (the other confirmed)", async () => {
     seedAudit();

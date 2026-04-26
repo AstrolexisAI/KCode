@@ -300,6 +300,16 @@ export interface Finding {
   verification: Verification;
   cwe?: string;
   /**
+   * Stable, deterministic identifier for this finding across audit
+   * runs. Computed from sha256(pattern_id + relativePath + normalized
+   * matched_text). Survives line-number drift after edits because
+   * it doesn't include the line number in the hash. Lets /review
+   * commands address findings by an ID that doesn't shift between
+   * runs — the legacy integer index still works as a fallback.
+   * v2.10.372 (CL.2 of the close-the-loops sweep).
+   */
+  finding_id?: string;
+  /**
    * Free-text reviewer annotation set via `/review … note <idx> "..."`.
    * Distinct from `review_tags` (structured taxonomy) — `review_note`
    * is one-line prose that explains a particular triage decision.
@@ -352,6 +362,12 @@ export interface FalsePositiveDetail {
   context: string;
   verification: Verification;
   cwe?: string;
+  /**
+   * Stable finding ID — same semantics as Finding.finding_id.
+   * Lets a reviewer reference an FP across runs without relying
+   * on its bucket-local index. v2.10.372 (CL.2).
+   */
+  finding_id?: string;
   /**
    * /review state — same semantics as on Finding. Lets a reviewer
    * promote a false_positive back to confirmed if they suspect the
