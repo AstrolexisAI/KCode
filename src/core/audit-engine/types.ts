@@ -584,6 +584,14 @@ export interface AuditResult {
    */
   audit_confidence?: AuditConfidence;
   /**
+   * Number of candidates the learning loop pre-marked as
+   * needs_context (so the verifier was skipped) because the pattern
+   * has been demoted >=10 times in similar paths in this project.
+   * v2.10.373 (CL.3). Absent when zero suppressions, so legacy
+   * report renderers don't have to special-case the field.
+   */
+  learning_loop_suppressed?: number;
+  /**
    * F9 (v2.10.370) — counts of confirmed findings broken down by
    * vendible pack. Lets the report show "3 ai-ml, 5 web, 0 cloud"
    * so the reader sees which security lens each finding came from.

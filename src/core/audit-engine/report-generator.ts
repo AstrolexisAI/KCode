@@ -231,6 +231,20 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
     );
   }
 
+  // ── Learning loop suppression line ────────────────────────
+  // CL.3 (v2.10.373) — surface when prior /review demotions caused
+  // candidates to be pre-marked needs_context this run. Tells the
+  // reader which findings showed up because the project's history
+  // explicitly deprioritized them, not because the verifier saw
+  // them and was uncertain.
+  const suppressedCount = (result as { learning_loop_suppressed?: number })
+    .learning_loop_suppressed;
+  if (suppressedCount && suppressedCount > 0) {
+    lines.push(
+      `**Learning loop:** ${suppressedCount} candidate(s) pre-marked needs_context based on prior demotions in similar paths.`,
+    );
+  }
+
   // ── Pack breakdown ────────────────────────────────────────
   // F9 (v2.10.370) — show which vendible packs the findings landed
   // under. Skipped when no breakdown is present (no findings).
