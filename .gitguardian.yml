@@ -1,0 +1,29 @@
+# GitGuardian / ggshield config.
+#
+# Project policy: real secrets in test files trigger an immediate
+# rotate (see feedback_test_fixtures_never_live_secrets in the
+# project memory). Every `sk-*`-shaped string in the paths below is
+# a hand-built synthetic fixture with explicit FAKE / EXAMPLE /
+# NOTREAL markers — these silence false-positive alerts so real
+# leaks stand out.
+
+version: 2
+
+# Per-path allowlist for files that intentionally embed
+# secret-shaped strings to test the regex patterns that detect
+# them. Keep this list narrow — every entry should be a verified
+# synthetic-fixture file, not a wildcard.
+paths-ignore:
+  - "src/core/audit-engine/patterns/ai-ml.test.ts"
+  - "src/core/audit-engine/patterns/secrets.test.ts"
+  - "src/core/auth/claude-code-bridge.test.ts"
+  - "src/core/enterprise/audit-export.test.ts"
+  - "src/core/write-content-scanner.test.ts"
+  - "src/core/model-discovery.test.ts"
+
+# Match-level allowlist for synthetic fixtures we never want
+# scanners to flag. Add new entries with an obvious FAKE / EXAMPLE
+# marker so anyone reading the diff sees they're not real keys.
+matches-ignore:
+  - name: ai-ml-pack-test-fixtures
+    match: "sk-(?:ant-|proj-)?(FAKE|EXAMPLE|YOUR_KEY|XXXX|placeholder)"
