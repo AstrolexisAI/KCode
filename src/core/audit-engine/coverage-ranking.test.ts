@@ -13,6 +13,17 @@ import {
 } from "./scanner";
 import { generateMarkdownReport } from "./report-generator";
 
+// v2.10.351 P0 — AuditResult grew several fields since these test
+// fixtures were written (needs_context, needs_context_detail,
+// fix_support_summary, pattern_metrics, etc.). The tests below
+// only exercise Markdown rendering, so we cast the partial fixture
+// to the runtime input type — keeps the assertions readable
+// without forcing every test to thread fields it doesn't care
+// about.
+type _MdInput = Parameters<typeof generateMarkdownReport>[0];
+const renderMd = (partial: Partial<_MdInput>): string =>
+  generateMarkdownReport(partial as _MdInput);
+
 // ─── Fixture helpers ─────────────────────────────────────────────
 
 let TMP: string;
@@ -262,7 +273,7 @@ void f(char *p) {
 
 describe("generateMarkdownReport — coverage + FP section", () => {
   it("includes Coverage section with truncated=yes warning", () => {
-    const md = generateMarkdownReport({
+    const md = renderMd({
       project: "/repo",
       timestamp: "2026-04-24",
       languages_detected: ["c"],
@@ -291,7 +302,7 @@ describe("generateMarkdownReport — coverage + FP section", () => {
   });
 
   it("omits truncation warning when truncated=false", () => {
-    const md = generateMarkdownReport({
+    const md = renderMd({
       project: "/repo",
       timestamp: "2026-04-24",
       languages_detected: ["c"],
@@ -331,7 +342,7 @@ describe("generateMarkdownReport — coverage + FP section", () => {
       },
       cwe: undefined,
     }));
-    const md = generateMarkdownReport({
+    const md = renderMd({
       project: "/repo",
       timestamp: "2026-04-24",
       languages_detected: ["c"],
@@ -361,7 +372,7 @@ describe("generateMarkdownReport — coverage + FP section", () => {
   });
 
   it("does NOT render FP section when false_positives_detail is empty", () => {
-    const md = generateMarkdownReport({
+    const md = renderMd({
       project: "/repo",
       timestamp: "2026-04-24",
       languages_detected: ["c"],

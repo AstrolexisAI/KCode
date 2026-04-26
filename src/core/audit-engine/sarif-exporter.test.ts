@@ -154,10 +154,11 @@ describe("buildSarif — top-level structure", () => {
 
   test("declares KCode as the tool driver", () => {
     const run = (doc.runs as Array<Record<string, unknown>>)[0]!;
-    const tool = run.tool as Record<string, Record<string, unknown>>;
-    expect(tool.driver.name).toBe("KCode");
-    expect(tool.driver.version).toBe("2.10.119");
-    expect(tool.driver.informationUri).toContain("github.com");
+    const tool = run.tool as { driver?: Record<string, unknown> };
+    expect(tool.driver).toBeDefined();
+    expect(tool.driver!.name).toBe("KCode");
+    expect(tool.driver!.version).toBe("2.10.119");
+    expect(tool.driver!.informationUri).toContain("github.com");
   });
 
   test("embeds a rule for every pattern referenced by a finding", () => {

@@ -26,6 +26,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ALL_PATTERNS, getPatternById } from "./patterns";
 import { scanPatternAgainstContent } from "./scanner";
+import type { BugPattern } from "./types";
 
 const FIXTURES_ROOT = join(import.meta.dir, "../../..", "tests", "patterns");
 
@@ -82,7 +83,14 @@ describe("fixture harness — coverage", () => {
 // instead of a single aggregate test that just says "something broke".
 for (const dir of fixtureDirs) {
   describe(`fixtures: ${dir}`, () => {
-    const pattern = getPatternById(dir);
+    // v2.10.351 — getPatternById's return type widened to
+    // LookupPattern (a structural subset of BugPattern that AST
+    // patterns also satisfy). The fixture harness iterates only
+    // regex pattern ids (filtered via ALL_PATTERNS at line 65), so
+    // every result here is a real BugPattern. The cast is safe and
+    // narrow.
+    const lookup = getPatternById(dir);
+    const pattern = lookup as BugPattern | undefined;
 
     test(`pattern "${dir}" is registered`, () => {
       expect(pattern, `No pattern with id=${dir}. Did you add the fixture dir before the pattern?`).toBeDefined();
@@ -125,7 +133,7 @@ for (const dir of fixtureDirs) {
           `pattern ${dir} should NOT match ${name} but returned ${hits.length} candidate(s): ` +
             hits
               .slice(0, 3)
-              .map((h) => `line ${h.line}: "${h.match.slice(0, 60)}"`)
+              .map((h) => `line ${h.line}: "${h.matched_text.slice(0, 60)}"`)
               .join("; "),
         ).toBe(0);
       });

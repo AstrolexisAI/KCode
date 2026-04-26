@@ -2,6 +2,7 @@
 // Split out of file-actions.ts.
 
 import type { ActionContext } from "./action-helpers.js";
+import { log } from "../../core/logger.js";
 
 export async function handleAuditAction(
   action: string,

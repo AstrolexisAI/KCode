@@ -394,7 +394,12 @@ describe("report-generator", () => {
       ],
     };
 
-    const md = generateMarkdownReport(result);
+    // v2.10.351 P0 — AuditResult grew several fields since these
+    // fixtures were written (false_positives_detail,
+    // needs_context_detail, coverage, fix_support_summary,
+    // pattern_metrics). The test only exercises Markdown rendering,
+    // not field completeness; cast to keep the fixture readable.
+    const md = generateMarkdownReport(result as unknown as Parameters<typeof generateMarkdownReport>[0]);
     expect(md).toContain("Audit Report — test");
     expect(md).toContain("Astrolexis.space");
     expect(md).toContain("2026-04-05");
@@ -417,7 +422,7 @@ describe("report-generator", () => {
       elapsed_ms: 100,
       findings: [],
     };
-    const md = generateMarkdownReport(result);
+    const md = generateMarkdownReport(result as unknown as Parameters<typeof generateMarkdownReport>[0]);
     expect(md).toContain("No confirmed findings");
   });
 });
