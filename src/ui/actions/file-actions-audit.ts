@@ -714,7 +714,17 @@ export async function handleAuditAction(
     }
 
     case "fix": {
-      const pathToken = (args ?? "").trim() || ".";
+      // v2.10.353 — `/fix <path> --safe-only` restricts the fixer
+      // to bespoke rewrites only (fix_support === "rewrite"). The
+      // annotate-only and manual-only buckets are skipped with an
+      // explicit message telling the reviewer how to apply them
+      // later. For PR gate flows where you want auto-merge on a
+      // green audit, --safe-only is the right default — recipe
+      // annotations require human review and should not land
+      // automatically.
+      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      const safeOnly = tokens.includes("--safe-only");
+      const pathToken = tokens.find((t) => !t.startsWith("--")) ?? ".";
       const { resolve: resolvePath } = await import("node:path");
       const { existsSync, readFileSync: readFs } = await import("node:fs");
       const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
@@ -774,13 +784,26 @@ export async function handleAuditAction(
       const { applyFixes } = await import("../../core/audit-engine/fixer.js");
       // Only pass the confirmed subset so mixed reports can't leak
       // unverified findings through applyFixes.
+      // v2.10.353 — when --safe-only is set, narrow further to only
+      // bespoke rewrites (fix_support === "rewrite"). Annotate /
+      // manual entries get tracked in a separate counter so the
+      // summary tells the user what was held back.
+      const confirmedFindings = auditResult.findings.filter(
+        (f) =>
+          (f as { verification?: { verdict?: string } }).verification?.verdict ===
+          "confirmed",
+      );
+      const filteredFindings = safeOnly
+        ? confirmedFindings.filter(
+            (f) => (f as { fix_support?: string }).fix_support === "rewrite",
+          )
+        : confirmedFindings;
+      const heldBackForSafeOnly = safeOnly
+        ? confirmedFindings.length - filteredFindings.length
+        : 0;
       const confirmedOnly = {
         ...auditResult,
-        findings: auditResult.findings.filter(
-          (f) =>
-            (f as { verification?: { verdict?: string } }).verification?.verdict ===
-            "confirmed",
-        ),
+        findings: filteredFindings,
       };
       const fixes = applyFixes(confirmedOnly);
 
@@ -796,7 +819,7 @@ export async function handleAuditAction(
       const skipped = fixes.filter((f) => f.kind === "skipped");
 
       const lines: string[] = [
-        `  KCode Auto-Fixer`,
+        `  KCode Auto-Fixer${safeOnly ? "  (--safe-only mode)" : ""}`,
         `    Project: ${projectRoot}`,
         "",
         `    ✅ Rewritten: ${transformed.length} (real code transforms)`,
@@ -848,6 +871,17 @@ export async function handleAuditAction(
         if (skipped.length > 10) {
           lines.push(`    ... and ${skipped.length - 10} more`);
         }
+      }
+
+      // v2.10.353 — show what --safe-only held back so the reviewer
+      // knows there's a follow-up step.
+      if (safeOnly && heldBackForSafeOnly > 0) {
+        lines.push(
+          "",
+          `  ⚠ --safe-only held back ${heldBackForSafeOnly} finding(s) (annotate / manual tier).`,
+          `    To apply them: re-run \`/fix ${pathToken}\` (without --safe-only).`,
+          "    The held-back set requires human review before landing.",
+        );
       }
 
       // Pick a build/test command based on the files present in the project
