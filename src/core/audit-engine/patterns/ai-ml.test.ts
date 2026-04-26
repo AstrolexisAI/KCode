@@ -3,6 +3,15 @@
 // Each pattern's regex tested against a positive and a negative
 // fixture so regressions surface at unit-test time. Plus a
 // pack-filter test that proves --pack narrows the loaded patterns.
+//
+// SYNTHETIC FIXTURES — every `sk-*` literal in this file is a
+// purpose-built test string. They contain explicit FAKE / EXAMPLE /
+// NOTREAL markers so secret scanners (GitGuardian, gitleaks,
+// trufflehog) recognize them as fixtures rather than real keys.
+// If you ever need to test against the *shape* of a real key, use
+// these synthetic forms — never paste a real or recently-rotated key
+// into a test file. Per project policy: real secrets in test files
+// trigger an immediate rotate.
 
 import { describe, expect, test } from "bun:test";
 import { AI_ML_PATTERNS } from "./ai-ml";
@@ -81,13 +90,15 @@ m = AutoModel.from_pretrained("repo/name", trust_remote_code=True)
 describe("ai-002-openai-api-key-hardcoded", () => {
   const p = getPattern("ai-002-openai-api-key-hardcoded");
 
-  test("hits a project-scoped OpenAI key", () => {
-    const code = `const k = "sk-proj-abcdefghijklmnopqrstuvwxyz1234"`;
+  test("hits a project-scoped OpenAI key shape", () => {
+    // Synthetic — explicit FAKE/EXAMPLE markers so secret scanners
+    // recognize this as a fixture rather than a leaked key.
+    const code = `const k = "sk-proj-FAKE-EXAMPLE-NOT-A-REAL-KEY-FIXTURE"`;
     expect(regexHits(p.regex, code).length).toBe(1);
   });
 
-  test("hits a classic OpenAI key", () => {
-    const code = `OPENAI_API_KEY = "sk-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789ABCDEF1234"`;
+  test("hits a classic OpenAI key shape", () => {
+    const code = `OPENAI_API_KEY = "sk-FAKE-EXAMPLE-NOT-REAL-KEY-FOR-TESTING-XXXX1234"`;
     expect(regexHits(p.regex, code).length).toBe(1);
   });
 
@@ -105,13 +116,14 @@ const placeholder = "sk-YOUR_KEY_HERE";
 describe("ai-003-anthropic-api-key-hardcoded", () => {
   const p = getPattern("ai-003-anthropic-api-key-hardcoded");
 
-  test("hits sk-ant-* literal", () => {
-    const code = `ANTHROPIC_API_KEY = "sk-ant-abcdefghijklmnopqrstuv1234"`;
+  test("hits sk-ant-* literal shape", () => {
+    // Synthetic — explicit FAKE markers for secret scanners.
+    const code = `ANTHROPIC_API_KEY = "sk-ant-FAKE-EXAMPLE-NOT-REAL-KEY-FIXTURE"`;
     expect(regexHits(p.regex, code).length).toBe(1);
   });
 
-  test("does NOT hit a non-Anthropic key", () => {
-    const code = `const k = "sk-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"`;
+  test("does NOT hit a non-Anthropic key shape", () => {
+    const code = `const k = "sk-FAKE-EXAMPLE-NOT-REAL-KEY-NO-ANT-PREFIX"`;
     expect(regexHits(p.regex, code).length).toBe(0);
   });
 });
