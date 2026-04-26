@@ -286,6 +286,38 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     `Found ${rawCandidates.length} raw matches → ${candidates.length} unique (pattern,file) pairs across ${files.length} files`,
   );
 
+  // CL.3 (v2.10.373) — learning loop. review-history persists every
+  // /review demote_fp action keyed by (project, pattern, path-glob).
+  // Before sending each candidate to the verifier, check if this
+  // (pattern, path-glob) combo has been demoted ≥10 times in this
+  // project. If so, pre-mark as needs_context with a reasoning that
+  // explains the suppression — saves verifier tokens AND surfaces
+  // the decision so the user can override with /review promote.
+  // The candidate still appears in the report; it's just routed to
+  // a different bucket without a model call.
+  const { isHighNoise, getDemotionCount } = await import("./review-history");
+  const learningLoopSuppressed: Candidate[] = [];
+  const candidatesToVerify: Candidate[] = [];
+  for (const c of candidates) {
+    if (
+      isHighNoise({
+        projectRoot: opts.projectRoot,
+        patternId: c.pattern_id,
+        file: c.file,
+      })
+    ) {
+      learningLoopSuppressed.push(c);
+    } else {
+      candidatesToVerify.push(c);
+    }
+  }
+  if (learningLoopSuppressed.length > 0) {
+    opts.onPhase?.(
+      "scanning",
+      `learning loop: ${learningLoopSuppressed.length} candidate(s) pre-marked needs_context based on prior demotions`,
+    );
+  }
+
   // Phase 2: Verification (optional)
   let verified: Array<{ candidate: Candidate; verification: Verification }>;
   let falsePositives = 0;
@@ -301,8 +333,8 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     }));
   } else {
     const verifyHint = opts.fallbackCallback
-      ? `${candidates.length} candidates (primary + fallback on ambiguity)`
-      : `${candidates.length} candidates`;
+      ? `${candidatesToVerify.length} candidates (primary + fallback on ambiguity)`
+      : `${candidatesToVerify.length} candidates`;
     opts.onPhase?.("verifying", verifyHint);
     const verifyOpts: VerifyOptions = {
       llmCallback: opts.llmCallback,
@@ -315,7 +347,24 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
           }
         : undefined,
     };
-    verified = await verifyAllCandidates(candidates, verifyOpts);
+    const verifiedSubset = await verifyAllCandidates(candidatesToVerify, verifyOpts);
+    // Stitch suppressed candidates back into the result with a
+    // synthetic needs_context verdict that names the cause.
+    const suppressed = learningLoopSuppressed.map((c) => {
+      const count = getDemotionCount({
+        projectRoot: opts.projectRoot,
+        patternId: c.pattern_id,
+        file: c.file,
+      });
+      return {
+        candidate: c,
+        verification: {
+          verdict: "needs_context" as const,
+          reasoning: `[learning loop] pattern demoted ${count} times in similar paths in this project — verifier skipped to save tokens. /review promote ${c.pattern_id} to override.`,
+        },
+      };
+    });
+    verified = [...verifiedSubset, ...suppressed];
   }
 
   // Filter to confirmed findings AND keep rejected candidates as
@@ -499,6 +548,9 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     result.pack_breakdown = breakdown;
   }
   if (opts.pack) result.scoped_pack = opts.pack;
+  if (learningLoopSuppressed.length > 0) {
+    result.learning_loop_suppressed = learningLoopSuppressed.length;
+  }
 
   return result;
 }
