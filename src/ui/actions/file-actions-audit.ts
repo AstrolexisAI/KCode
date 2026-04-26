@@ -489,6 +489,19 @@ export async function handleAuditAction(
           .filter((n) => Number.isFinite(n) && n >= 1 && n <= flat.length);
       };
 
+      // v2.10.351 P0 audit fix (A.1.1) — strip any prior reviewer-
+      // state prefix from the reasoning before adding a new one.
+      // Without this, round-trips (promote → demote → promote)
+      // accumulated a stack of prefixes:
+      //   [reviewer promoted] [reviewer demoted] [reviewer promoted] <reason>
+      // which adds zero information — the reviewer's intent is the
+      // CURRENT state's reason, not a log of every transition. The
+      // strip is intentionally narrow: only \`[reviewer X]\` shapes
+      // KCode itself produces, never the underlying verifier text.
+      const stripReviewerPrefix = (reasoning: string): string => {
+        return reasoning.replace(/^(?:\[reviewer (?:promoted|demoted)\]\s*)+/u, "");
+      };
+
       const persist = (): void => {
         // Re-derive arrays from `flat` snapshots — consumers will do
         // their own indexing on next /review run, but we must keep the
@@ -552,7 +565,7 @@ export async function handleAuditAction(
           entry.item.verification = {
             ...entry.item.verification,
             verdict: "confirmed",
-            reasoning: `[reviewer promoted] ${entry.item.verification.reasoning}`,
+            reasoning: `[reviewer promoted] ${stripReviewerPrefix(entry.item.verification.reasoning)}`,
           };
           // fix_support lives on Finding but is absent on
           // FalsePositiveDetail / NeedsContextDetail. Populate it
@@ -595,7 +608,7 @@ export async function handleAuditAction(
           entry.item.verification = {
             ...entry.item.verification,
             verdict: "false_positive",
-            reasoning: `[reviewer demoted] ${entry.item.verification.reasoning}`,
+            reasoning: `[reviewer demoted] ${stripReviewerPrefix(entry.item.verification.reasoning)}`,
           };
           entry.bucket = "fp";
           moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
