@@ -127,6 +127,147 @@ function renderPatternMetricsSection(result: AuditResult, lines: string[]): void
  *
  * v2.10.339.
  */
+/**
+ * v2.10.351 P1 — single-glance trustworthiness header rendered at
+ * the very top of AUDIT_REPORT.md. Tells the reader at a glance:
+ *   - how much was covered (files, mode)
+ *   - whether the verifier ran or was skipped
+ *   - which AST grammars loaded vs degraded
+ *   - which patterns are noisy (top FP-rate)
+ *   - autofix coverage breakdown
+ *   - explicit warnings (truncated, skip-verify, missing grammars)
+ *
+ * Plain prose lines, no table — keeps it friendly for diff-viewers
+ * and email digests. Warnings are emitted last so they're the final
+ * thing the reader sees before the rest of the report.
+ */
+function renderAuditConfidence(result: AuditResult, lines: string[]): void {
+  lines.push("## Audit Confidence");
+  lines.push("");
+
+  // ── Coverage line ─────────────────────────────────────────
+  const cov = result.coverage;
+  if (cov) {
+    const pct = cov.totalCandidateFiles > 0
+      ? Math.round((cov.scannedFiles / cov.totalCandidateFiles) * 100)
+      : 100;
+    const since = (cov as { since?: string }).since;
+    const mode = since ? `diff scan since \`${since}\`` : "full scan";
+    lines.push(
+      `**Coverage:** ${cov.scannedFiles} / ${cov.totalCandidateFiles} files ` +
+        `(${pct}%) — ${mode}`,
+    );
+  }
+
+  // ── Verifier line ─────────────────────────────────────────
+  const vm = (result as { verification_mode?: "verified" | "skipped" }).verification_mode;
+  if (vm === "skipped") {
+    lines.push("**Verifier:** skipped (static-only output — see warnings)");
+  } else if (vm === "verified") {
+    lines.push("**Verifier:** active");
+  }
+
+  // ── AST grammars line ─────────────────────────────────────
+  const astStatus = result.ast_grammar_status ?? [];
+  if (astStatus.length > 0) {
+    const loaded = astStatus.filter((s) => s.loaded).length;
+    const missing = astStatus.length - loaded;
+    if (missing === 0) {
+      lines.push(`**AST grammars:** ${loaded} loaded`);
+    } else {
+      const missingLangs = astStatus
+        .filter((s) => !s.loaded)
+        .map((s) => s.language)
+        .join(", ");
+      lines.push(
+        `**AST grammars:** ${loaded} loaded, ${missing} missing (${missingLangs})`,
+      );
+    }
+  }
+
+  // ── Findings line ─────────────────────────────────────────
+  // After v2.10.351 P0.9 the actionable count can differ from
+  // confirmed_findings; surface both when they diverge.
+  const ignoredCount = result.findings.filter((f) => f.review_state === "ignored").length;
+  const actionableCount = result.findings.filter(
+    (f) => f.review_state !== "ignored" && f.review_state !== "demoted_fp",
+  ).length;
+  const fpCount = result.false_positives ?? 0;
+  const ncCount = result.needs_context ?? 0;
+  if (ignoredCount > 0) {
+    lines.push(
+      `**Findings:** ${actionableCount} actionable (${result.confirmed_findings} pre-review, ${ignoredCount} ignored) · ${fpCount} false-positive · ${ncCount} needs-context`,
+    );
+  } else {
+    lines.push(
+      `**Findings:** ${result.confirmed_findings} confirmed · ${fpCount} false-positive · ${ncCount} needs-context`,
+    );
+  }
+
+  // ── Autofix line ──────────────────────────────────────────
+  const fs = (result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
+    .fix_support_summary;
+  if (fs) {
+    lines.push(
+      `**Autofix:** ${fs.rewrite} rewrite · ${fs.annotate} annotate · ${fs.manual} manual-only`,
+    );
+  }
+
+  // ── Top-noise line ────────────────────────────────────────
+  // Patterns whose verifier-confirmed rate is < 50% are the noisy
+  // ones. Show the top 3 ranked by absolute FP count so the reader
+  // sees what's eating verifier time.
+  const metrics = result.pattern_metrics;
+  if (metrics) {
+    type N = { id: string; fp: number; conf: number; rate: number };
+    const noisy: N[] = [];
+    for (const [id, m] of Object.entries(metrics)) {
+      if (m.unique_sites < 3) continue; // ignore one-off noise
+      const rate = m.confirmed_rate ?? 0;
+      if (rate >= 0.5) continue;
+      noisy.push({ id, fp: m.false_positive, conf: m.confirmed, rate });
+    }
+    noisy.sort((a, b) => b.fp - a.fp);
+    const top = noisy.slice(0, 3);
+    if (top.length > 0) {
+      const summary = top
+        .map((n) => `\`${n.id}\` (${Math.round(n.rate * 100)}% confirm)`)
+        .join(", ");
+      lines.push(
+        `**Top noise (≥3 sites, <50% confirm):** ${summary}`,
+      );
+    }
+  }
+
+  lines.push("");
+
+  // ── Warnings ──────────────────────────────────────────────
+  const warnings: string[] = [];
+  if (vm === "skipped") {
+    warnings.push(
+      "Verifier was skipped — every candidate is reported without LLM filtering. The 'confirmed' bucket contains raw regex hits; treat counts as upper-bound noise.",
+    );
+  }
+  if (cov?.truncated) {
+    warnings.push(
+      `Coverage truncated — only ${cov.scannedFiles} / ${cov.totalCandidateFiles} files scanned. Re-run with \`--max-files ${Math.min(cov.totalCandidateFiles, cov.maxFiles * 4)}\` for full coverage.`,
+    );
+  }
+  if (astStatus.some((s) => !s.loaded)) {
+    warnings.push(
+      "AST coverage degraded — at least one grammar failed to load. Run `kcode grammars install` and re-run the audit.",
+    );
+  }
+  if (warnings.length > 0) {
+    lines.push("**⚠ Warnings:**");
+    for (const w of warnings) lines.push(`- ${w}`);
+    lines.push("");
+  }
+
+  lines.push("---");
+  lines.push("");
+}
+
 function renderAstGrammarStatus(result: AuditResult, lines: string[]): void {
   const status = result.ast_grammar_status ?? [];
   if (status.length === 0) return;
@@ -245,6 +386,13 @@ export function generateMarkdownReport(result: AuditResult): string {
   lines.push("");
   lines.push("---");
   lines.push("");
+
+  // v2.10.351 P1 — Audit Confidence header up front. Tells the
+  // reader at a glance how much of the project was covered, whether
+  // the verifier ran, what the AST grammar state is, and which
+  // patterns are noisy. Warnings (truncation, skip-verify, missing
+  // grammars) appear inline so a skim catches them before the data.
+  renderAuditConfidence(result, lines);
 
   // Coverage — always emitted so a user can tell "scanned everything"
   // apart from "scanned the first 500 in traversal order". Critical for

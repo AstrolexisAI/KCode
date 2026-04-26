@@ -381,6 +381,15 @@ export interface AuditResult {
   pattern_metrics?: Record<string, PatternMetrics>;
   exploits?: ExploitProof[];
   /**
+   * Whether the LLM verifier was run on each candidate or skipped
+   * entirely (--skip-verify). When "skipped", every candidate is
+   * marked confirmed without a real verdict — the report should
+   * surface this prominently because the false-positive rate is
+   * essentially the regex's own precision, not the verifier's.
+   * v2.10.351 P1.
+   */
+  verification_mode?: "verified" | "skipped";
+  /**
    * Per-language AST grammar load status. Present when at least one
    * AST pattern was attempted during the run. Lets the report tell the
    * user that AST coverage is degraded for a specific language and

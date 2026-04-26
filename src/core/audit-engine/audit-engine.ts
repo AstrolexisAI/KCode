@@ -427,6 +427,11 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     },
     fix_support_summary: fixSupportSummary,
     pattern_metrics: patternMetrics,
+    // v2.10.351 P1 — surface whether the LLM verifier ran. Used by
+    // the Audit Confidence header to warn the reader when --skip-verify
+    // produced a static-only output (false-positive rate is the
+    // regex's precision, not the verifier's).
+    verification_mode: opts.skipVerification ? "skipped" as const : "verified" as const,
     ...(astLangAgg.size > 0
       ? {
           ast_grammar_status: Array.from(astLangAgg.entries())
