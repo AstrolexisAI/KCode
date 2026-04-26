@@ -729,7 +729,7 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
       // allowlist drives the stage, and audit/temp files are excluded
       // unconditionally.
       step("Staging changes...");
-      const auditFiles = result.findings.map((f) =>
+      const auditFiles = auditResult.findings.map((f) =>
         f.file.startsWith(projectRoot + "/")
           ? f.file.slice(projectRoot.length + 1)
           : f.file,
