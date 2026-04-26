@@ -161,6 +161,42 @@ function renderAstGrammarStatus(result: AuditResult, lines: string[]): void {
   lines.push("");
 }
 
+/**
+ * v2.10.351 P0.9 — list reviewer-ignored findings. Rendered as a
+ * dedicated section so a reader can see WHAT was set aside and WHY,
+ * without those entries polluting severity / count / fix sections.
+ *
+ * Called from BOTH the "no actionable findings" early-return path
+ * AND the main render path, so the section appears regardless of
+ * whether anything else is left to commit.
+ */
+function renderIgnoredFindingsSection(
+  ignored: Finding[],
+  projectRoot: string,
+  lines: string[],
+): void {
+  if (ignored.length === 0) return;
+  lines.push("## Reviewer-ignored findings");
+  lines.push("");
+  lines.push(
+    `${ignored.length} finding${ignored.length === 1 ? "" : "s"} ` +
+      "tagged as ignored by the reviewer. These were excluded from /fix, /pr, " +
+      "SARIF output, and the severity breakdown above.",
+  );
+  lines.push("");
+  for (const f of ignored) {
+    const rel = f.file.startsWith(projectRoot + "/")
+      ? f.file.slice(projectRoot.length + 1)
+      : f.file;
+    const reason = f.review_reason ? ` — ${f.review_reason}` : "";
+    const tags = f.review_tags && f.review_tags.length > 0
+      ? ` [${f.review_tags.join(", ")}]`
+      : "";
+    lines.push(`- \`${rel}:${f.line}\` — ${f.pattern_id}${reason}${tags}`);
+  }
+  lines.push("");
+}
+
 function renderNeedsContextSection(result: AuditResult, lines: string[]): void {
   const details = result.needs_context_detail ?? [];
   if (details.length === 0) return;
@@ -254,12 +290,30 @@ export function generateMarkdownReport(result: AuditResult): string {
     lines.push("");
   }
 
+  // v2.10.351 P0 — review_state is the source of truth for which
+  // findings reach the actionable list. ignored / demoted_fp are
+  // dropped from severity breakdown, sort, and per-finding sections;
+  // they get a dedicated 'Reviewer-ignored' row in the summary so
+  // the human reader can see WHY the actionable count differs from
+  // result.confirmed_findings.
+  const ignoredFindings = result.findings.filter((f) => f.review_state === "ignored");
+  const actionableFindings = result.findings.filter(
+    (f) => f.review_state !== "ignored" && f.review_state !== "demoted_fp",
+  );
+
   // Executive summary
   lines.push("## Summary");
   lines.push("");
   lines.push(`- Files scanned: **${result.files_scanned}**`);
   lines.push(`- Candidates found: **${result.candidates_found}**`);
-  lines.push(`- Confirmed findings: **${result.confirmed_findings}**`);
+  if (ignoredFindings.length > 0 || actionableFindings.length !== result.confirmed_findings) {
+    lines.push(`- Confirmed findings: **${actionableFindings.length}** (of ${result.confirmed_findings} pre-review)`);
+    if (ignoredFindings.length > 0) {
+      lines.push(`- Reviewer-ignored: **${ignoredFindings.length}** (excluded from /fix, /pr, SARIF, severity breakdown)`);
+    }
+  } else {
+    lines.push(`- Confirmed findings: **${result.confirmed_findings}**`);
+  }
   lines.push(`- False positives: **${result.false_positives}**`);
   const needsCtx = result.needs_context ?? 0;
   if (needsCtx > 0) {
@@ -270,24 +324,35 @@ export function generateMarkdownReport(result: AuditResult): string {
 
   renderAstGrammarStatus(result, lines);
 
-  if (result.findings.length === 0) {
-    lines.push("No confirmed findings. Either the code is clean for the checked patterns,");
-    lines.push("or the pattern library needs expansion for this codebase's language/style.");
+  if (actionableFindings.length === 0) {
+    if (ignoredFindings.length > 0) {
+      lines.push(
+        `All ${result.confirmed_findings} confirmed finding(s) were tagged as ignored by the reviewer. ` +
+          "Nothing to commit; see the JSON report for the full review trail.",
+      );
+    } else {
+      lines.push("No confirmed findings. Either the code is clean for the checked patterns,");
+      lines.push("or the pattern library needs expansion for this codebase's language/style.");
+    }
     lines.push("");
     renderFalsePositiveSection(result, lines);
     renderNeedsContextSection(result, lines);
     renderPatternMetricsSection(result, lines);
+    // v2.10.351 P0.9 — even when actionable is empty (e.g. all
+    // findings tagged ignored), surface the ignored section so the
+    // reader can still see what was set aside.
+    renderIgnoredFindingsSection(ignoredFindings, result.project, lines);
     return lines.join("\n");
   }
 
-  // Severity breakdown
+  // Severity breakdown — counts the actionable bucket only.
   const bySev: Record<Severity, Finding[]> = {
     critical: [],
     high: [],
     medium: [],
     low: [],
   };
-  for (const f of result.findings) bySev[f.severity].push(f);
+  for (const f of actionableFindings) bySev[f.severity].push(f);
 
   lines.push("### Severity breakdown");
   lines.push("");
@@ -302,8 +367,10 @@ export function generateMarkdownReport(result: AuditResult): string {
   lines.push("---");
   lines.push("");
 
-  // Sort findings: critical → low, then by file, then by line
-  const sorted = [...result.findings].sort((a, b) => {
+  // Sort findings: critical → low, then by file, then by line.
+  // Iterate the actionable subset only — ignored / demoted_fp are
+  // listed separately at the bottom for transparency.
+  const sorted = [...actionableFindings].sort((a, b) => {
     const sevCmp = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
     if (sevCmp !== 0) return sevCmp;
     const fileCmp = a.file.localeCompare(b.file);
@@ -414,6 +481,8 @@ export function generateMarkdownReport(result: AuditResult): string {
   // And the needs_context bucket so "33 candidates / 0 confirmed /
   // 0 FP" can't hide 33 undecided results.
   renderNeedsContextSection(result, lines);
+  // Reviewer-ignored section — see helper docstring. v2.10.351 P0.9.
+  renderIgnoredFindingsSection(ignoredFindings, result.project, lines);
   // Pattern hit-rate breakdown — shows which patterns fired heavily
   // and which had high FP rates. v2.10.330.
   renderPatternMetricsSection(result, lines);

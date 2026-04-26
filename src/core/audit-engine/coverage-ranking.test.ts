@@ -396,5 +396,124 @@ describe("generateMarkdownReport — coverage + FP section", () => {
   });
 });
 
+// v2.10.351 P0.9 — review_state filtering in the Markdown report.
+describe("generateMarkdownReport — review_state filtering", () => {
+  const baseFinding = (overrides: Record<string, unknown>) => ({
+    pattern_id: "test-001",
+    pattern_title: "Test pattern",
+    severity: "high" as const,
+    file: "/repo/src/x.c",
+    line: 10,
+    matched_text: "bad();",
+    context: "ctx",
+    verification: { verdict: "confirmed" as const, reasoning: "test" },
+    cwe: undefined,
+    ...overrides,
+  });
+
+  it("excludes 'ignored' findings from severity breakdown and Findings list", () => {
+    const md = renderMd({
+      project: "/repo",
+      timestamp: "2026-04-25",
+      languages_detected: ["c"],
+      files_scanned: 5,
+      candidates_found: 2,
+      confirmed_findings: 2,
+      false_positives: 0,
+      findings: [
+        baseFinding({ pattern_id: "p1", line: 10 }),
+        baseFinding({
+          pattern_id: "p2-ignored",
+          line: 20,
+          review_state: "ignored",
+          review_reason: "trusted_boundary",
+        }),
+      ],
+      false_positives_detail: [],
+      coverage: {
+        totalCandidateFiles: 5,
+        scannedFiles: 5,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 500,
+        capSource: "adaptive",
+      },
+      elapsed_ms: 100,
+    });
+    // Counts header shows the post-review delta.
+    expect(md).toContain("Confirmed findings: **1** (of 2 pre-review)");
+    expect(md).toContain("Reviewer-ignored: **1**");
+    // Severity breakdown counts the actionable bucket only.
+    const severityRow = md.match(/HIGH \| (\d+)/);
+    expect(severityRow?.[1]).toBe("1");
+    // The ignored finding does NOT appear in the main Findings list.
+    expect(md).not.toMatch(/### \d+\..*p2-ignored/);
+    // But it DOES appear in the Reviewer-ignored section.
+    expect(md).toContain("## Reviewer-ignored findings");
+    expect(md).toContain("p2-ignored");
+    expect(md).toContain("trusted_boundary");
+  });
+
+  it("renders 'all ignored' message when every finding is ignored", () => {
+    const md = renderMd({
+      project: "/repo",
+      timestamp: "2026-04-25",
+      languages_detected: ["c"],
+      files_scanned: 5,
+      candidates_found: 1,
+      confirmed_findings: 1,
+      false_positives: 0,
+      findings: [
+        baseFinding({
+          pattern_id: "p1",
+          review_state: "ignored",
+          review_reason: "test_only",
+        }),
+      ],
+      false_positives_detail: [],
+      coverage: {
+        totalCandidateFiles: 5,
+        scannedFiles: 5,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 500,
+        capSource: "adaptive",
+      },
+      elapsed_ms: 50,
+    });
+    expect(md).toContain("All 1 confirmed finding(s) were tagged as ignored");
+    // Still shows the Reviewer-ignored section so the reader sees the
+    // detail.
+    expect(md).toContain("## Reviewer-ignored findings");
+  });
+
+  it("renders the standard summary when there are NO ignored findings", () => {
+    const md = renderMd({
+      project: "/repo",
+      timestamp: "2026-04-25",
+      languages_detected: ["c"],
+      files_scanned: 5,
+      candidates_found: 1,
+      confirmed_findings: 1,
+      false_positives: 0,
+      findings: [baseFinding({})],
+      false_positives_detail: [],
+      coverage: {
+        totalCandidateFiles: 5,
+        scannedFiles: 5,
+        skippedByLimit: 0,
+        truncated: false,
+        maxFiles: 500,
+        capSource: "adaptive",
+      },
+      elapsed_ms: 50,
+    });
+    // Plain count, no parenthetical or ignored row.
+    expect(md).toContain("Confirmed findings: **1**");
+    expect(md).not.toContain("pre-review");
+    expect(md).not.toContain("Reviewer-ignored");
+  });
+});
+
 // Unused imports kept for completeness
 void enumerateSourceFiles;
