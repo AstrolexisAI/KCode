@@ -8,30 +8,51 @@ permissions:
   contents: write
 
 jobs:
-  npm-publish:
-    name: Publish to npm
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - run: bun install
-
-      - name: Build
-        run: bun run build
-
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  # ── npm-publish ────────────────────────────────────────────────────────
+  # Disabled in v2.10.354. The job has been failing on every release
+  # since v249 (PUT 404 on registry.npmjs.org/kcode) — the immediate
+  # cause was an invalid / under-permissioned NPM_TOKEN, not a name
+  # collision (both `kcode` and `@astrolexis/kcode` are unclaimed).
+  #
+  # KCode's primary distribution channels are working fine without
+  # npm:
+  #   - `curl -fsSL https://kulvex.ai/install.sh | bash`
+  #   - GitHub Releases (binaries for 5 platforms)
+  #   - Homebrew tap (auto-updated by github-release-assets job below)
+  #
+  # No real user is installing via `npm install -g kcode` because that
+  # path has never worked. Removing the failing job from the workflow
+  # cleans up the release notification feed (every release was
+  # marked "failure" by GitHub even though the assets were published
+  # correctly).
+  #
+  # To re-enable in the future:
+  #   1. Generate an Automation-type NPM_TOKEN under the @astrolexis
+  #      org (creates the org if needed)
+  #   2. Add it as a GitHub Actions secret on this repo
+  #   3. Change package.json `name` from "kcode" to "@astrolexis/kcode"
+  #      (scoped is the standard for org packages)
+  #   4. Uncomment this job
+  #
+  # npm-publish:
+  #   name: Publish to npm
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: oven-sh/setup-bun@v2
+  #       with:
+  #         bun-version: latest
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #         registry-url: 'https://registry.npmjs.org'
+  #     - run: bun install
+  #     - name: Build
+  #       run: bun run build
+  #     - name: Publish to npm
+  #       run: npm publish --access public
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   github-release-assets:
     name: Upload binaries (${{ matrix.target }})
