@@ -9,9 +9,18 @@
 //   bun run scripts/release.ts --windows    # Windows only
 
 import { join } from "node:path";
-import { mkdirSync, existsSync, writeFileSync, readFileSync, statSync, copyFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
+import { execSync } from "node:child_process";
 import pkg from "../package.json";
 
 const ENTRY = "src/index.ts";
@@ -165,11 +174,19 @@ const TARGET_TO_PLATFORM_KEY: Record<string, string> = {
   "Windows x64": "win32-x64",
 };
 
+interface ManifestDelta {
+  url: string;
+  sha256: string;
+  size: number;
+  from_sha256: string;
+}
+
 interface ManifestPlatform {
   url: string;
   filename: string;
   sha256: string;
   size: number;
+  deltas?: Record<string, ManifestDelta>;
 }
 
 interface Manifest {
@@ -181,9 +198,171 @@ interface Manifest {
   release_notes: string;
 }
 
+// How many previous releases to generate per-platform deltas against.
+// Three is enough for "I'm upgrading to a release published this month
+// without a fresh install" while keeping the per-release CDN write
+// budget bounded (3 platforms × 3 deltas = 9 patches per release in the
+// common case).
+const DELTA_HISTORY = 3;
+
 async function sha256(filePath: string): Promise<string> {
   const buf = readFileSync(filePath);
   return createHash("sha256").update(buf).digest("hex");
+}
+
+/**
+ * Returns true if the `bsdiff` CLI is on PATH. Delta generation is
+ * opportunistic — if the host doesn't have bsdiff installed we just
+ * skip patches and the client falls back to full downloads.
+ */
+function isBsdiffAvailable(): boolean {
+  try {
+    execSync("command -v bsdiff >/dev/null 2>&1", { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find prior release binaries for `platformSuffix` in the CDN dir,
+ * sorted newest-first, excluding the current version. We use the
+ * filename format `kcode-X.Y.Z-<suffix>` that release.ts has always
+ * emitted. Returns up to `limit` entries.
+ */
+function findPriorBinaries(
+  cdnDir: string,
+  platformSuffix: string,
+  limit: number,
+): Array<{ version: string; path: string }> {
+  if (!existsSync(cdnDir)) return [];
+  const prefix = "kcode-";
+  const results: Array<{ version: string; path: string }> = [];
+
+  for (const name of readdirSync(cdnDir)) {
+    if (!name.startsWith(prefix)) continue;
+    if (!name.endsWith(`-${platformSuffix}`)) continue;
+    if (name.includes(".bsdiff")) continue;
+    if (name.endsWith(".sha256")) continue;
+    if (name.endsWith(".tar.gz")) continue;
+    // kcode-<version>-<suffix>
+    const middle = name.slice(prefix.length, name.length - `-${platformSuffix}`.length);
+    if (!/^\d+\.\d+\.\d+/.test(middle)) continue;
+    if (middle === VERSION) continue;
+    results.push({ version: middle, path: join(cdnDir, name) });
+  }
+
+  // Newest-first: simple lexicographic sort works because we always
+  // pad to N.N.N (no missing parts in our release tags).
+  results.sort((a, b) => semverCompareDesc(a.version, b.version));
+  return results.slice(0, limit);
+}
+
+function semverCompareDesc(a: string, b: string): number {
+  const pa = a.split(".").map((n) => Number.parseInt(n, 10));
+  const pb = b.split(".").map((n) => Number.parseInt(n, 10));
+  for (let i = 0; i < 3; i++) {
+    const na = pa[i] ?? 0;
+    const nb = pb[i] ?? 0;
+    if (na !== nb) return nb - na; // descending
+  }
+  return 0;
+}
+
+/**
+ * Generate a bsdiff patch from `oldPath` → `newPath` written to
+ * `outPath`. Returns the patch's size on success or null on failure.
+ */
+function generatePatch(oldPath: string, newPath: string, outPath: string): number | null {
+  try {
+    execSync(
+      `bsdiff ${JSON.stringify(oldPath)} ${JSON.stringify(newPath)} ${JSON.stringify(outPath)}`,
+      { stdio: "pipe", timeout: 600_000 }, // bsdiff is CPU-heavy; 10 min cap
+    );
+    if (!existsSync(outPath)) return null;
+    return statSync(outPath).size;
+  } catch (err) {
+    console.log(`    bsdiff failed: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * For each freshly-built target, generate deltas against the last
+ * DELTA_HISTORY prior releases that exist on the CDN. Returns a
+ * platform-keyed map of deltas to merge into the manifest.
+ */
+async function generateDeltas(
+  passedTargets: Target[],
+  cdnDir: string,
+): Promise<Record<string, Record<string, ManifestDelta>>> {
+  if (!isBsdiffAvailable()) {
+    console.log("\nbsdiff not on PATH — skipping delta generation.");
+    console.log("  Install: dnf install bsdiff (Fedora) / brew install bsdiff (macOS)\n");
+    return {};
+  }
+  if (!existsSync(cdnDir)) {
+    console.log(`\nCDN dir ${cdnDir} not found — skipping delta generation.\n`);
+    return {};
+  }
+
+  console.log("\nGenerating binary deltas...");
+
+  const out: Record<string, Record<string, ManifestDelta>> = {};
+  for (const t of passedTargets) {
+    const platformKey = TARGET_TO_PLATFORM_KEY[t.name];
+    if (!platformKey) continue;
+
+    const newBinaryPath = join(RELEASE_DIR, t.outFile);
+    if (!existsSync(newBinaryPath)) continue;
+
+    // The platformSuffix in the filename is the legacy form
+    // (linux-x64, macos-arm64, windows-x64.exe) — derive it from the
+    // outFile pattern which already encodes it.
+    const filenameSuffix = t.outFile.slice(`kcode-${VERSION}-`.length);
+    const priors = findPriorBinaries(cdnDir, filenameSuffix, DELTA_HISTORY);
+    if (priors.length === 0) {
+      console.log(`  ${t.name.padEnd(28)} no prior releases on CDN`);
+      continue;
+    }
+
+    const deltasForPlatform: Record<string, ManifestDelta> = {};
+    for (const prior of priors) {
+      const patchName = `kcode-${prior.version}-to-${VERSION}-${filenameSuffix}.bsdiff`;
+      const patchPath = join(RELEASE_DIR, patchName);
+      process.stdout.write(`  ${t.name.padEnd(28)} ${prior.version} → ${VERSION}  `);
+      const start = performance.now();
+      const patchSize = generatePatch(prior.path, newBinaryPath, patchPath);
+      if (patchSize === null) continue;
+
+      const elapsed = ((performance.now() - start) / 1000).toFixed(1);
+      const fromSha = await sha256(prior.path);
+      const patchSha = await sha256(patchPath);
+      const newSize = statSync(newBinaryPath).size;
+      const ratio = ((patchSize / newSize) * 100).toFixed(1);
+
+      deltasForPlatform[prior.version] = {
+        url: `https://kulvex.ai/downloads/kcode/${patchName}`,
+        sha256: patchSha,
+        size: patchSize,
+        from_sha256: fromSha,
+      };
+      console.log(`${(patchSize / 1024 / 1024).toFixed(1).padStart(6)} MB  (${ratio}%)  ${elapsed}s`);
+
+      // Mirror the patch to the CDN dir alongside the binaries.
+      try {
+        copyFileSync(patchPath, join(cdnDir, patchName));
+      } catch (err) {
+        console.log(`    (copy to CDN dir failed: ${(err as Error).message})`);
+      }
+    }
+
+    if (Object.keys(deltasForPlatform).length > 0) {
+      out[platformKey] = deltasForPlatform;
+    }
+  }
+  console.log();
+  return out;
 }
 
 async function generateManifest(
@@ -193,6 +372,12 @@ async function generateManifest(
   const passedTargets = targets.filter((t) =>
     results.some((r) => r.name === t.name && r.ok),
   );
+
+  const cdnDir = join(homedir(), "kulvex-models", "kcode");
+  // Generate deltas before building the platforms map so we can attach
+  // them in the same shot. Failures here just yield an empty map and
+  // the manifest still ships full-download links.
+  const deltasByPlatform = await generateDeltas(passedTargets, cdnDir);
 
   const platforms: Record<string, ManifestPlatform> = {};
   for (const t of passedTargets) {
@@ -210,6 +395,9 @@ async function generateManifest(
       filename: t.outFile,
       sha256: hash,
       size: stat.size,
+      ...(deltasByPlatform[key] && Object.keys(deltasByPlatform[key]).length > 0
+        ? { deltas: deltasByPlatform[key] }
+        : {}),
     };
   }
 
@@ -228,8 +416,7 @@ async function generateManifest(
 
   // Mirror to /home/curly/kulvex-models/kcode/ which Cloudflare serves
   // at https://kulvex.ai/kcode/latest.json (and where the binaries
-  // already live).
-  const cdnDir = join(homedir(), "kulvex-models", "kcode");
+  // already live). cdnDir was computed earlier for delta generation.
   if (existsSync(cdnDir)) {
     const cdnPath = join(cdnDir, "latest.json");
     copyFileSync(localPath, cdnPath);
