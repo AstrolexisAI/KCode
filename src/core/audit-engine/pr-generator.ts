@@ -286,7 +286,18 @@ function buildPrPrompt(result: AuditResult, fixes: string[]): string {
   const findingsSummary = actionableFindings(result)
     .map((f, i) => {
       const rel = f.file.replace(result.project + "/", "");
-      return `${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — ${rel}:${f.line}\n   ${f.verification.reasoning}${f.verification.suggested_fix ? "\n   Fix: " + f.verification.suggested_fix : ""}`;
+      const ev = f.verification.evidence;
+      const fixText = ev?.suggested_fix ?? f.verification.suggested_fix;
+      const sinkLine = ev?.sink ? `\n   Sink: ${ev.sink}` : "";
+      const boundaryLine = ev?.input_boundary ? `\n   Input: ${ev.input_boundary}` : "";
+      const fixLine = fixText ? `\n   Fix: ${fixText}` : "";
+      return (
+        `${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — ${rel}:${f.line}\n` +
+        `   ${f.verification.reasoning}` +
+        sinkLine +
+        boundaryLine +
+        fixLine
+      );
     })
     .join("\n\n");
 
@@ -444,16 +455,38 @@ function buildStructuredPrBody(
       if (f.verification.reasoning) {
         lines.push(`**Bug.** ${f.verification.reasoning.slice(0, 500).replace(/\n/g, " ")}`);
       }
-      if (f.verification.execution_path) {
+      // Evidence Pack (v2.10.361+) — terse one-line-per-field on PR
+      // body to keep review-time scanning fast. Falls back to legacy
+      // string fields when evidence is absent.
+      const ev = f.verification.evidence;
+      if (ev?.sink) {
+        lines.push("");
+        lines.push(`**Sink.** \`${ev.sink}\``);
+      }
+      if (ev?.input_boundary) {
+        lines.push("");
+        lines.push(`**Input boundary.** ${ev.input_boundary}`);
+      }
+      if (ev?.execution_path_steps && ev.execution_path_steps.length > 0) {
+        lines.push("");
+        lines.push(
+          `**Execution path.** ${ev.execution_path_steps.join(" → ").slice(0, 500)}`,
+        );
+      } else if (f.verification.execution_path) {
         lines.push("");
         lines.push(
           `**Execution path.** ${f.verification.execution_path.slice(0, 500).replace(/\n/g, " ")}`,
         );
       }
-      if (f.verification.suggested_fix) {
+      const fixText = ev?.suggested_fix ?? f.verification.suggested_fix;
+      if (fixText) {
+        lines.push("");
+        lines.push(`**Fix applied.** ${fixText.slice(0, 500).replace(/\n/g, " ")}`);
+      }
+      if (ev?.test_suggestion) {
         lines.push("");
         lines.push(
-          `**Fix applied.** ${f.verification.suggested_fix.slice(0, 500).replace(/\n/g, " ")}`,
+          `**Regression test.** ${ev.test_suggestion.slice(0, 300).replace(/\n/g, " ")}`,
         );
       }
       lines.push("");

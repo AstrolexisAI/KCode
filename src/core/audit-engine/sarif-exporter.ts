@@ -118,17 +118,26 @@ function buildResult(
   projectRoot: string,
 ): unknown {
   const relPath = relativize(finding.file, projectRoot);
+  const ev = finding.verification.evidence;
   const reasoning = finding.verification.reasoning
     ? `\n\nVerifier: ${finding.verification.reasoning}`
     : "";
-  const fix = finding.verification.suggested_fix
-    ? `\n\nSuggested fix: ${finding.verification.suggested_fix}`
-    : "";
+  // Surface the structured evidence inline in the SARIF message so
+  // GH Code Scanning UI shows it without requiring a property
+  // sidecar most viewers don't render.
+  const sink = ev?.sink ? `\n\nSink: ${ev.sink}` : "";
+  const boundary = ev?.input_boundary ? `\n\nInput boundary: ${ev.input_boundary}` : "";
+  const path =
+    ev?.execution_path_steps && ev.execution_path_steps.length > 0
+      ? `\n\nExecution path:\n${ev.execution_path_steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
+      : "";
+  const fixText = ev?.suggested_fix ?? finding.verification.suggested_fix;
+  const fix = fixText ? `\n\nSuggested fix: ${fixText}` : "";
   return {
     ruleId: finding.pattern_id,
     level: severityToSarif(finding.severity),
     message: {
-      text: `${finding.pattern_title}${reasoning}${fix}`,
+      text: `${finding.pattern_title}${reasoning}${sink}${boundary}${path}${fix}`,
     },
     locations: [
       {
