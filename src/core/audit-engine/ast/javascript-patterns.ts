@@ -331,4 +331,229 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
     fix_template:
       "Either (a) escape the parameter with a regex-escape helper before passing it to RegExp, (b) use String.prototype.includes / indexOf if substring containment is what you need, or (c) bound the input length and reject regex-like control characters.",
   },
+
+  // ── F4 (v2.10.366) — taint-lite patterns ─────────────────────
+  // These complement js-ast-001/002/003 (which catch the
+  // function-parameter case) by also catching member-access
+  // sources (req.body, process.argv, etc.) and assignment-propagated
+  // taint (`const x = req.body; eval(x);`). The taint walker lives
+  // in ./taint-walker.ts and recognizes a small set of sanitizers
+  // that launder the value (validator.escape, DOMPurify.sanitize,
+  // shell-escape, etc.).
+
+  {
+    id: "js-ast-005-eval-of-tainted-expression",
+    title: "eval / Function / setTimeout(string) of a tainted expression (taint-lite)",
+    severity: "critical",
+    languages: ["javascript", "typescript"],
+    /**
+     * Match call_expression and new_expression where the callee is
+     * `eval`, `Function`, `setTimeout`, or `setInterval`. We match
+     * the whole expression so the taint walker can inspect the
+     * argument shape (member access, assignment, concat, etc.).
+     */
+    query: `
+      [
+        (call_expression
+          function: (identifier) @callee
+          arguments: (arguments) @args)
+        (new_expression
+          constructor: (identifier) @callee
+          arguments: (arguments) @args)
+      ]
+    `,
+    match(captures, _source, file): Candidate | null {
+      const callee = captures.callee?.[0];
+      const args = captures.args?.[0];
+      if (!callee || !args) return null;
+      const fn = callee.node.text;
+      const isCodeExec = JS_DANGEROUS_GLOBALS.has(fn);
+      const isTimerString = JS_DANGEROUS_TIMER_GLOBALS.has(fn);
+      if (!isCodeExec && !isTimerString) return null;
+
+      // Skip the bare-parameter shape — js-ast-001 already covers it
+      // and we don't want to double-flag the same site.
+      const firstArg = args.node.namedChild(0);
+      if (!firstArg) return null;
+      if (firstArg.type === "identifier") {
+        // Could be either: bare param (js-ast-001's territory) OR a
+        // local that earlier was assigned tainted data. Defer to
+        // js-ast-001 for the parameter case; here we only emit if
+        // the identifier is a *local* tainted variable, which means
+        // collectTaintedLocals saw a tainted assignment to it.
+        const enclosing = findEnclosingFunction(callee.node);
+        if (!enclosing) return null;
+        const body = findFunctionBody(enclosing);
+        if (!body) return null;
+        // Need to import lazily because of test-time module ordering.
+        const { collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const tainted = collectTaintedLocals(body);
+        if (!tainted.has(firstArg.text)) return null;
+      } else {
+        // Non-identifier argument — check directly via the walker.
+        const enclosing = findEnclosingFunction(callee.node);
+        const body = enclosing ? findFunctionBody(enclosing) : null;
+        const { isTainted, collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const tainted = body ? collectTaintedLocals(body) : new Set<string>();
+        if (!isTainted(firstArg, tainted)) return null;
+      }
+
+      const line = firstArg.startPosition.row + 1;
+      const isNewExpr = callee.node.parent?.type === "new_expression";
+      const prefix = isNewExpr ? "new " : "";
+      const snippet = firstArg.text.length > 80 ? `${firstArg.text.slice(0, 77)}…` : firstArg.text;
+      return {
+        pattern_id: "js-ast-005-eval-of-tainted-expression",
+        severity: "critical",
+        file,
+        line,
+        matched_text: `${prefix}${fn}(${snippet})`,
+        context: `${prefix}${fn}(${snippet})  // expression is tainted (member access / assignment / concat from req/request/process/ctx/document/location)`,
+      };
+    },
+    explanation:
+      "eval / Function / setTimeout-string with an argument the taint walker traces back to an external source (HTTP request, process.argv, process.env, document, location) — possibly through an intermediate `const x = req.body` style assignment. js-ast-001 catches the parameter case; this catches the assignment + member-access cases the regex pattern can't prove.",
+    verify_prompt:
+      "Does the expression carry attacker-controlled data into eval / Function?\n" +
+      "1. The argument is a member of req/request/process/document/location (directly or via assignment) — CONFIRMED.\n" +
+      "2. The argument is wrapped by a parser that throws on unexpected shapes (zod.parse, ajv) — FALSE_POSITIVE.\n" +
+      "3. The argument is built from compile-time constants concatenated with the tainted value — CONFIRMED (concatenation does not launder taint).\n" +
+      "Default to CONFIRMED — eval of attacker-reachable data is RCE.",
+    cwe: "CWE-95",
+    fix_template:
+      "Replace eval(x) with JSON.parse(x) for data, a dispatch table for command names, or a parser that validates structure before use. Concatenation does not sanitize.",
+  },
+
+  {
+    id: "js-ast-006-exec-of-tainted-expression",
+    title: "child_process.exec / spawn / execFile of a tainted expression (taint-lite)",
+    severity: "critical",
+    languages: ["javascript", "typescript"],
+    query: `
+      (call_expression
+        function: (member_expression property: (property_identifier) @method)
+        arguments: (arguments) @args)
+    `,
+    match(captures, _source, file): Candidate | null {
+      const method = captures.method?.[0];
+      const args = captures.args?.[0];
+      if (!method || !args) return null;
+      if (!JS_DANGEROUS_CHILD_PROCESS_METHODS.has(method.node.text)) return null;
+      const firstArg = args.node.namedChild(0);
+      if (!firstArg) return null;
+      if (firstArg.type === "identifier") {
+        const enclosing = findEnclosingFunction(method.node);
+        if (!enclosing) return null;
+        const body = findFunctionBody(enclosing);
+        if (!body) return null;
+        const { collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const tainted = collectTaintedLocals(body);
+        // Skip bare parameters — js-ast-002 covers them.
+        const params = parameterNames(enclosing);
+        if (params.has(firstArg.text)) return null;
+        if (!tainted.has(firstArg.text)) return null;
+      } else {
+        const enclosing = findEnclosingFunction(method.node);
+        const body = enclosing ? findFunctionBody(enclosing) : null;
+        const { isTainted, collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const tainted = body ? collectTaintedLocals(body) : new Set<string>();
+        if (!isTainted(firstArg, tainted)) return null;
+      }
+      const line = firstArg.startPosition.row + 1;
+      const snippet = firstArg.text.length > 80 ? `${firstArg.text.slice(0, 77)}…` : firstArg.text;
+      return {
+        pattern_id: "js-ast-006-exec-of-tainted-expression",
+        severity: "critical",
+        file,
+        line,
+        matched_text: `.${method.node.text}(${snippet})`,
+        context: `.${method.node.text}(${snippet})  // command string is tainted from req/request/process/ctx/document/location (possibly via assignment + concat)`,
+      };
+    },
+    explanation:
+      "child_process.exec / spawn / execFile with a command string the taint walker traces back to an external source. js-ast-002 catches the bare-parameter case; this catches concat (`'ls ' + userPath`) and assignment-propagated taint patterns that regex misses.",
+    verify_prompt:
+      "Does the command string carry attacker input?\n" +
+      "1. The command embeds a member of req/request/process/document/location (directly, via assignment, or concatenated) — CONFIRMED.\n" +
+      "2. The argument is wrapped by `shell-escape` / `shell-quote.quote` / `escapeShellArg` — FALSE_POSITIVE.\n" +
+      "3. The exec uses `execFile`/`spawn` with the args array form, where the command is a hardcoded literal and only argv entries are tainted — still CONFIRMED if any tainted entry isn't shell-quoted.\n" +
+      "Default to CONFIRMED — exec of attacker-reachable data is shell-injection.",
+    cwe: "CWE-78",
+    fix_template:
+      "Use execFile/spawn with the args array form and a hardcoded command, then shell-escape every tainted argv entry. Never build the shell command via string concat with external input.",
+  },
+
+  {
+    id: "js-ast-007-innerhtml-of-tainted-expression",
+    title: "innerHTML / outerHTML assigned a tainted expression (taint-lite)",
+    severity: "high",
+    languages: ["javascript", "typescript"],
+    /**
+     * Match `<expr>.innerHTML = <rhs>` and `.outerHTML = <rhs>`. The
+     * taint walker inspects rhs for member access rooted in a taint
+     * source, with sanitizer recognition for DOMPurify.sanitize etc.
+     */
+    query: `
+      (assignment_expression
+        left: (member_expression property: (property_identifier) @prop)
+        right: (_) @rhs)
+    `,
+    match(captures, _source, file): Candidate | null {
+      const prop = captures.prop?.[0];
+      const rhs = captures.rhs?.[0];
+      if (!prop || !rhs) return null;
+      const propName = prop.node.text;
+      if (propName !== "innerHTML" && propName !== "outerHTML") return null;
+      const enclosing = findEnclosingFunction(prop.node);
+      const body = enclosing ? findFunctionBody(enclosing) : null;
+      const { isTainted, collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+      const tainted = body ? collectTaintedLocals(body) : new Set<string>();
+      if (!isTainted(rhs.node, tainted)) return null;
+      const line = rhs.node.startPosition.row + 1;
+      const snippet = rhs.node.text.length > 80 ? `${rhs.node.text.slice(0, 77)}…` : rhs.node.text;
+      return {
+        pattern_id: "js-ast-007-innerhtml-of-tainted-expression",
+        severity: "high",
+        file,
+        line,
+        matched_text: `.${propName} = ${snippet}`,
+        context: `.${propName} = ${snippet}  // RHS is tainted from req/request/process/ctx/document/location (XSS sink)`,
+      };
+    },
+    explanation:
+      "innerHTML / outerHTML assigned a value the taint walker traces back to an external source — XSS. The regex pattern (js-002-innerhtml) catches the assignment but can't prove the value is attacker-controlled. The AST taint walker can.",
+    verify_prompt:
+      "Does the assigned HTML carry attacker-controlled content?\n" +
+      "1. The expression is a member of req/request/document.cookie/location.search (directly or via concat) — CONFIRMED.\n" +
+      "2. The value is wrapped by DOMPurify.sanitize / sanitize-html / a strict allowlist before assignment — FALSE_POSITIVE.\n" +
+      "3. The expression is built from compile-time HTML concatenated with the tainted value — CONFIRMED (concatenation does not launder).\n" +
+      "Default to CONFIRMED — innerHTML of attacker-reachable data is XSS.",
+    cwe: "CWE-79",
+    fix_template:
+      "Use textContent for plain text or DOMPurify.sanitize(value) before innerHTML. Concatenation with literal HTML does not sanitize the value.",
+  },
 ];
+
+/**
+ * Find the body node of a function — the children include the
+ * formal_parameters and a statement_block / arrow body. We need the
+ * statement_block (or single-expression body) for taint analysis to
+ * scope to the right region.
+ */
+function findFunctionBody(func: AstNode): AstNode | null {
+  for (let i = 0; i < func.namedChildCount; i++) {
+    const child = func.namedChild(i);
+    if (!child) continue;
+    if (
+      child.type === "statement_block" ||
+      child.type === "function_body" ||
+      // Arrow functions can have an expression body — return the
+      // arrow function itself so collectTaintedLocals walks the
+      // expression (no declarations there but still safe).
+      (func.type === "arrow_function" && i === func.namedChildCount - 1)
+    ) {
+      return child;
+    }
+  }
+  return func;
+}

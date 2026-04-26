@@ -8,16 +8,16 @@
 // so noise from pattern micro-tunings doesn't fail the build, but
 // any structural drop is caught.
 //
-// Live baseline at v2.10.364:
+// Live baseline at v2.10.366 (after F4 taint-lite + propagation-js fixture):
 //   precision = 1.000  (100.0%)
-//   recall    = 0.636  (63.6%)
-//   f1        = 0.778
-//   mean scan = ~9 ms / fixture
+//   recall    = 0.692  (69.2%)
+//   f1        = 0.818
+//   mean scan = ~12 ms / fixture
 //
 // Regression thresholds:
 //   precision ≥ 0.95
-//   recall    ≥ 0.55
-//   f1        ≥ 0.70
+//   recall    ≥ 0.60
+//   f1        ≥ 0.75
 
 import { describe, expect, test } from "bun:test";
 import { runBenchmark } from "./run";
@@ -28,14 +28,14 @@ describe("audit benchmark — static-only regression", () => {
     expect(out.json.metrics.precision).toBeGreaterThanOrEqual(0.95);
   });
 
-  test("recall >= 0.55", async () => {
+  test("recall >= 0.60", async () => {
     const out = await runBenchmark({ withVerifier: false });
-    expect(out.json.metrics.recall).toBeGreaterThanOrEqual(0.55);
+    expect(out.json.metrics.recall).toBeGreaterThanOrEqual(0.6);
   });
 
-  test("f1 >= 0.70", async () => {
+  test("f1 >= 0.75", async () => {
     const out = await runBenchmark({ withVerifier: false });
-    expect(out.json.metrics.f1).toBeGreaterThanOrEqual(0.7);
+    expect(out.json.metrics.f1).toBeGreaterThanOrEqual(0.75);
   });
 
   test("every fixture runs in < 1 second (static-only)", async () => {
