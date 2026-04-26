@@ -69,19 +69,30 @@ export async function listChangedFilesSinceRef(
   projectRoot: string,
   ref: string,
 ): Promise<string[]> {
-  const { execSync } = await import("node:child_process");
+  const { execFileSync } = await import("node:child_process");
   const { resolve } = await import("node:path");
-  // Validate the ref upfront so a typo gets a clear error instead of
-  // silently scanning the whole project (the `;` chain below would
-  // otherwise swallow non-zero exits from the diff against an
-  // invalid ref).
-  try {
-    execSync(`git rev-parse --verify ${JSON.stringify(ref)}^{commit}`, {
+  // v2.10.351 P0 — switched from execSync (shell) to execFileSync
+  // (argv array). The previous implementation interpolated ref via
+  // JSON.stringify — shell-quote was correct in practice but the
+  // ergonomic was fragile: any future refactor that drops the
+  // quoting reintroduces a shell-injection sink. Argv-style
+  // invocation eliminates the shell parser entirely; ref is now a
+  // pure positional argument that git treats as text regardless of
+  // its content.
+  const runGit = (args: string[], timeout: number): string => {
+    return execFileSync("git", args, {
       cwd: projectRoot,
       encoding: "utf-8",
-      timeout: 10_000,
+      timeout,
       stdio: ["pipe", "pipe", "pipe"],
     });
+  };
+  // Validate the ref upfront so a typo gets a clear error instead of
+  // silently scanning the whole project (the chained diffs below
+  // would otherwise swallow non-zero exits from the diff against
+  // an invalid ref).
+  try {
+    runGit(["rev-parse", "--verify", `${ref}^{commit}`], 10_000);
   } catch (err) {
     const e = err as { stderr?: string; message?: string };
     throw new Error(
@@ -92,15 +103,16 @@ export async function listChangedFilesSinceRef(
   // "files changed in HEAD that are NOT in <ref>". Combined with
   // separate diffs against the unstaged and staged working-tree
   // so a developer can audit work in progress.
-  const out = execSync(
-    `git diff --name-only ${JSON.stringify(ref)}...HEAD; git diff --name-only HEAD; git diff --name-only --cached`,
-    {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      timeout: 30_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
+  //
+  // Three separate git invocations instead of one shell-chained
+  // command — each gives us a real exit code, and any failure
+  // surfaces with its own error rather than being masked by the
+  // success of a later step.
+  const parts: string[] = [];
+  parts.push(runGit(["diff", "--name-only", `${ref}...HEAD`], 30_000));
+  parts.push(runGit(["diff", "--name-only", "HEAD"], 15_000));
+  parts.push(runGit(["diff", "--name-only", "--cached"], 15_000));
+  const out = parts.join("\n");
   const seen = new Set<string>();
   for (const line of out.split("\n")) {
     const rel = line.trim();
