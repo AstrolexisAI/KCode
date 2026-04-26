@@ -399,6 +399,22 @@ async function generateManifest(
         ? { deltas: deltasByPlatform[key] }
         : {}),
     };
+
+    // v2.10.371 — copy the full binary to the CDN dir alongside the
+    // manifest. Latent bug fix: prior versions of this script wrote
+    // the manifest with kulvex.ai URLs but never published the actual
+    // binary to that path, so a fresh user who couldn't apply a delta
+    // got a 404 on the full download. The deltas worked because
+    // generateDeltas() already mirrored its own files. Now the full
+    // binary goes through the same mirror so `kcode update` from any
+    // starting state works without manual intervention.
+    if (existsSync(cdnDir)) {
+      try {
+        copyFileSync(filePath, join(cdnDir, t.outFile));
+      } catch (err) {
+        console.log(`  (mirror to CDN failed for ${t.outFile}: ${(err as Error).message})`);
+      }
+    }
   }
 
   const manifest: Manifest = {
