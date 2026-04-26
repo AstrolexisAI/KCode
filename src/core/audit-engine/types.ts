@@ -160,7 +160,29 @@ export interface BugPattern {
    * fixture coverage. v2.10.326.
    */
   fixture_covered?: boolean;
+  /**
+   * Vendible pack the pattern belongs to. Lets users scope an audit
+   * to a specific concern (`--pack ai-ml`) and lets the report show
+   * a per-pack finding breakdown. Patterns without a pack land in
+   * "general". v2.10.370 (F9 of audit product plan).
+   *
+   * Stable pack names (additions go through the patterns review):
+   *   - "web"          XSS, SQLi, command injection, prototype pollution, SSRF, path traversal
+   *   - "ai-ml"        pickle.loads, torch.load, LLM prompt injection, AI API keys, vector DB
+   *   - "cloud"        Terraform, IAM, exposed secrets, security groups, Docker root
+   *   - "supply-chain" dependency confusion, install scripts, GH Actions poisoning
+   *   - "embedded"     flight software (FW_ASSERT, port handlers, command framers)
+   */
+  pack?: PatternPack;
 }
+
+/** Stable pack names for the F9 vendible-packs taxonomy. */
+export type PatternPack =
+  | "web"
+  | "ai-ml"
+  | "cloud"
+  | "supply-chain"
+  | "embedded";
 
 /** A candidate finding — a pattern match that hasn't been verified yet. */
 export interface Candidate {
@@ -545,5 +567,15 @@ export interface AuditResult {
    * snapshots. v2.10.362 (F2).
    */
   audit_confidence?: AuditConfidence;
+  /**
+   * F9 (v2.10.370) — counts of confirmed findings broken down by
+   * vendible pack. Lets the report show "3 ai-ml, 5 web, 0 cloud"
+   * so the reader sees which security lens each finding came from.
+   * Findings with no pack land in `general`. Absent when no findings
+   * exist; the renderer skips the section.
+   */
+  pack_breakdown?: Record<string, number>;
+  /** F9 — the pack the run was scoped to via --pack, if any. */
+  scoped_pack?: PatternPack;
   elapsed_ms: number;
 }

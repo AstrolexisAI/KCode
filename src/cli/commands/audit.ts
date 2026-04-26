@@ -85,6 +85,11 @@ export function registerAuditCommand(program: Command): void {
       "Diff-based audit: only scan files changed since <ref> (e.g. main, HEAD~10, origin/main). " +
         "10x+ speedup on large repos and the right default for CI pre-merge gates.",
     )
+    .option(
+      "--pack <name>",
+      "Restrict to a vendible pack: web | ai-ml | cloud | supply-chain | embedded. " +
+        "Only patterns tagged with that pack are loaded. v2.10.370 (F9).",
+    )
     .option("--json", "Also write AUDIT_REPORT.json alongside the markdown", false)
     .option(
       "--sarif",
@@ -110,6 +115,7 @@ export function registerAuditCommand(program: Command): void {
       maxFiles: string;
       skipVerify: boolean;
       since?: string;
+      pack?: string;
       json: boolean;
       sarif: boolean;
       ci: boolean;
@@ -219,6 +225,14 @@ export function registerAuditCommand(program: Command): void {
       // Run pipeline with progress output
       let lastPhase = "";
       let verifiedCount = 0;
+      // F9 (v2.10.370) — validate --pack before passing through.
+      const validPacks = new Set(["web", "ai-ml", "cloud", "supply-chain", "embedded"]);
+      if (opts.pack && !validPacks.has(opts.pack)) {
+        console.error(
+          `  --pack must be one of: ${[...validPacks].join(", ")}. Got: "${opts.pack}".`,
+        );
+        process.exit(1);
+      }
       const result = await runAudit({
         projectRoot,
         llmCallback,
@@ -226,6 +240,9 @@ export function registerAuditCommand(program: Command): void {
         maxFiles,
         skipVerification: opts.skipVerify,
         since: opts.since,
+        ...(opts.pack
+          ? { pack: opts.pack as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }
+          : {}),
         onPhase: (phase, detail) => {
           if (phase !== lastPhase) {
             console.log(`${ICONS.phase} ${phase}${detail ? `: ${detail}` : "..."}`);

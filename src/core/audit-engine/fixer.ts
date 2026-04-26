@@ -1444,6 +1444,22 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "rb-013-ssrf-net-http": r("Ruby Net::HTTP SSRF", "Allowlist host + restrict scheme to https; block file:/// and metadata IPs."),
   "rb-014-send-file-traversal": r("Ruby send_file path traversal", W.PATH),
 
+  // ── v2.10.370 — F9 AI/ML Security Pack ─────────────────────
+  "ai-001-trust-remote-code": r(
+    "trust_remote_code=True executes arbitrary repo Python on model load",
+    "Drop trust_remote_code=True. If custom code is required, mirror the repo, audit the .py files, and pin a specific revision SHA.",
+  ),
+  "ai-002-openai-api-key-hardcoded": r("OpenAI key hardcoded", W.SECRET, "Rotate the leaked key immediately — assume any key that ever lived in a commit is compromised."),
+  "ai-003-anthropic-api-key-hardcoded": r("Anthropic key hardcoded", W.SECRET, "Rotate the leaked key immediately."),
+  "ai-004-prompt-injection-sink": r(
+    "prompt built from untrusted input without delimiter",
+    "Wrap user input in delimited blocks the system prompt explicitly forbids overriding (<user_input>...</user_input>) and use the API's structured roles instead of concatenated strings.",
+  ),
+  "ai-005-vector-db-untrusted-query": r(
+    "vector DB query without metadata filter",
+    "Add a metadata filter scoping results to the calling user (filter={\"user_id\": current_user.id}). Escape retrieved chunks before feeding back into a prompt.",
+  ),
+
   // ── v2.10.334 — Phase B: deeper flight-software pack ───────
   "fsw-016-frame-length-as-offset": r("frame length as offset", "Cap header.get_lengthField() against MAX_PAYLOAD_SIZE before calling moveDeserToOffset / setBuffSize."),
   "fsw-017-component-array-id-no-check": r("array indexed by external ID", "FW_ASSERT(id < ARRAY_SIZE) before indexing the channels/packets/ports array."),
