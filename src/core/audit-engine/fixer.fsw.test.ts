@@ -25,7 +25,7 @@ async function scanAndFix(file: string, content: string) {
   writeFileSync(full, content);
   const result = await runAudit({
     projectRoot: TMP,
-    llmCallback: async () => "VERDICT: confirmed\nREASONING: test\n",
+    llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     skipVerification: true,
   });
   applyFixes(result);

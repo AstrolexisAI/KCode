@@ -70,7 +70,12 @@ async function stepScan(cwd: string, ctx: Map<string, string>): Promise<{ output
 
   const result = await runAudit({
     projectRoot: cwd,
-    llmCallback: async () => "VERDICT: CONFIRMED\nREASONING: static-only\n",
+    llmCallback: async () =>
+      JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "static-only",
+        evidence: { sink: "static-only bypass" },
+      }),
     skipVerification: true,
   });
 

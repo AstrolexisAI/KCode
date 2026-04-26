@@ -106,7 +106,7 @@ describe("runAudit({ since })", () => {
 
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\nREASONING: yes\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       since: "base",
     });
 
@@ -136,7 +136,7 @@ describe("runAudit({ since })", () => {
 
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     expect((result.coverage as { since?: string }).since).toBeUndefined();
     expect(result.coverage.scannedFiles).toBe(2);
@@ -153,7 +153,7 @@ describe("renderMarkdown — diff coverage section", () => {
 
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       since: "base",
     });
     const md = generateMarkdownReport(result);
@@ -166,7 +166,7 @@ describe("renderMarkdown — diff coverage section", () => {
     commit("a");
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => "VERDICT: confirmed\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     const md = generateMarkdownReport(result);
     expect(md).not.toContain("Mode:** diff-based audit");

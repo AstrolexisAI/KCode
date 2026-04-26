@@ -31,7 +31,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -58,7 +58,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -85,7 +85,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -109,7 +109,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -153,7 +153,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -186,7 +186,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -231,7 +231,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -269,7 +269,7 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -326,7 +326,7 @@ class _MyScreenState extends State<MyScreen> {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -366,7 +366,7 @@ Future<void> fetch() async {
     // First /fix run — adds one annotation.
     const r1 = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     applyFixes(r1);
@@ -386,7 +386,7 @@ Future<void> fetch() async {
     // still catch it because the window check looks ±3 lines.
     const r3 = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     applyFixes(r3);
@@ -412,7 +412,7 @@ Future<void> fetch() async {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => "VERDICT: CONFIRMED\n",
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
       skipVerification: true,
     });
     const fixes = applyFixes(result);

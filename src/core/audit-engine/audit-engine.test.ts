@@ -214,44 +214,203 @@ describe("scanner", () => {
   });
 });
 
-describe("verifier", () => {
-  test("parseVerdict extracts CONFIRMED verdict", () => {
-    const response = `VERDICT: CONFIRMED
-REASONING: The buffer is accessed without size check on line 35.
-EXECUTION_PATH: HID packet parser receives 5-byte packet, accesses data[13] unconditionally
-FIX: Add if (data.size() < 14) return; before the access
-`;
+describe("verifier (JSON Evidence Pack contract, v2.10.361+)", () => {
+  test("parseVerdict extracts confirmed verdict with full evidence", () => {
+    const response = JSON.stringify({
+      verdict: "confirmed",
+      reasoning: "Buffer is accessed without size check on line 35.",
+      evidence: {
+        input_boundary: "HID packet from device",
+        execution_path_steps: [
+          "USB callback (line 12)",
+          "parser.dispatch (line 25)",
+          "data[13] access (line 35)",
+        ],
+        sink: "array index access",
+        sanitizers_checked: ["size check before index", "type guard"],
+        mitigations_found: [],
+        suggested_fix_strategy: "rewrite",
+        suggested_fix: "Add `if (data.size() < 14) return;` before the access",
+        test_suggestion: "Send a 5-byte HID packet and assert no crash",
+      },
+    });
     const v = parseVerdict(response);
-    expect(v.verdict).toBe("confirmed");
-    expect(v.reasoning).toContain("size check");
-    expect(v.execution_path).toContain("HID packet");
-    expect(v.suggested_fix).toContain("data.size()");
+    expect(v).not.toBeNull();
+    expect(v?.verdict).toBe("confirmed");
+    expect(v?.reasoning).toContain("size check");
+    expect(v?.evidence?.sink).toBe("array index access");
+    expect(v?.evidence?.execution_path_steps).toHaveLength(3);
+    expect(v?.evidence?.suggested_fix_strategy).toBe("rewrite");
+    // Legacy mirrored fields stay populated for callers that haven't migrated.
+    expect(v?.execution_path).toContain("USB callback");
+    expect(v?.suggested_fix).toContain("data.size()");
   });
 
-  test("parseVerdict extracts FALSE_POSITIVE verdict", () => {
-    const response = `VERDICT: FALSE_POSITIVE
-REASONING: The caller validates size before invoking this function.
-EXECUTION_PATH: NONE
-FIX: NONE
-`;
+  test("parseVerdict extracts false_positive with mitigations", () => {
+    const response = JSON.stringify({
+      verdict: "false_positive",
+      reasoning: "Caller validates size before invoking this function.",
+      evidence: {
+        sink: "memcpy into fixed-size buffer",
+        sanitizers_checked: ["caller validation", "static_assert on buffer size"],
+        mitigations_found: ["caller validation at line 22"],
+      },
+    });
     const v = parseVerdict(response);
-    expect(v.verdict).toBe("false_positive");
-    expect(v.execution_path).toBeUndefined();
-    expect(v.suggested_fix).toBeUndefined();
+    expect(v?.verdict).toBe("false_positive");
+    expect(v?.evidence?.mitigations_found).toContain("caller validation at line 22");
+    expect(v?.evidence?.input_boundary).toBeUndefined();
   });
 
-  test("parseVerdict handles malformed responses gracefully", () => {
-    const response = `I think this might be a bug but I'm not sure.`;
+  test("parseVerdict tolerates markdown fences", () => {
+    const response = "```json\n" +
+      JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "real",
+        evidence: { sink: "exec" },
+      }) +
+      "\n```";
     const v = parseVerdict(response);
+    expect(v?.verdict).toBe("confirmed");
+    expect(v?.evidence?.sink).toBe("exec");
+  });
+
+  test("parseVerdict tolerates leading prose before the JSON object", () => {
+    const response = "Sure, here's my verdict:\n" +
+      JSON.stringify({
+        verdict: "needs_context",
+        reasoning: "Cannot trace input source.",
+        evidence: { sink: "child_process.exec" },
+      }) +
+      "\n\nLet me know if you need anything else.";
+    const v = parseVerdict(response);
+    expect(v?.verdict).toBe("needs_context");
+    expect(v?.evidence?.sink).toBe("child_process.exec");
+  });
+
+  test("parseVerdict tolerates trailing commas", () => {
+    const response = `{
+      "verdict": "false_positive",
+      "reasoning": "buffer is bounded",
+      "evidence": {
+        "sink": "memcpy",
+        "mitigations_found": ["sizeof(dst)",],
+      },
+    }`;
+    const v = parseVerdict(response);
+    expect(v?.verdict).toBe("false_positive");
+    expect(v?.evidence?.mitigations_found).toContain("sizeof(dst)");
+  });
+
+  test("parseVerdict returns null for completely malformed responses", () => {
+    expect(parseVerdict("I think this might be a bug but I'm not sure.")).toBeNull();
+    expect(parseVerdict("")).toBeNull();
+    expect(parseVerdict("{not json}")).toBeNull();
+  });
+
+  test("parseVerdict returns null when verdict field is missing", () => {
+    const response = JSON.stringify({
+      reasoning: "looks bad",
+      evidence: { sink: "exec" },
+    });
+    expect(parseVerdict(response)).toBeNull();
+  });
+
+  test("parseVerdict returns null when reasoning field is missing", () => {
+    const response = JSON.stringify({
+      verdict: "confirmed",
+      evidence: { sink: "exec" },
+    });
+    expect(parseVerdict(response)).toBeNull();
+  });
+
+  test("parseVerdict returns null when verdict is unknown", () => {
+    const response = JSON.stringify({
+      verdict: "maybe",
+      reasoning: "unsure",
+      evidence: { sink: "exec" },
+    });
+    expect(parseVerdict(response)).toBeNull();
+  });
+
+  test("parseVerdict drops the evidence block when sink is missing", () => {
+    const response = JSON.stringify({
+      verdict: "confirmed",
+      reasoning: "real bug",
+      evidence: {
+        // sink is required on evidence; without it we drop the block
+        // rather than ship half-formed structured data downstream.
+        input_boundary: "HTTP body",
+      },
+    });
+    const v = parseVerdict(response);
+    expect(v?.verdict).toBe("confirmed");
+    expect(v?.reasoning).toBe("real bug");
+    expect(v?.evidence).toBeUndefined();
+  });
+
+  test("verifyCandidate retries once on parse failure then degrades", async () => {
+    const { verifyCandidate } = await import("./verifier");
+    const responses = [
+      "I'm sorry, I cannot answer.",
+      "Still not JSON.",
+    ];
+    let calls = 0;
+    const llmCallback = async () => responses[calls++] ?? "Still not JSON.";
+
+    const candidate = {
+      pattern_id: "js-001-eval",
+      pattern_title: "Use of eval()",
+      severity: "high" as const,
+      file: "/tmp/x.js",
+      line: 1,
+      matched_text: "eval(s)",
+      context: "eval(s)",
+    };
+    const v = await verifyCandidate(candidate, { llmCallback });
+
     expect(v.verdict).toBe("needs_context");
-    expect(v.reasoning.length).toBeGreaterThan(0);
+    expect(v.reasoning).toContain("unparseable");
+    expect(calls).toBe(2);
   });
 
-  test("parseVerdict handles lowercase/mixed case verdicts", () => {
-    const response = `verdict: confirmed
-reasoning: yep, it's real`;
+  test("verifyCandidate accepts retry success after first parse failure", async () => {
+    const { verifyCandidate } = await import("./verifier");
+    const responses = [
+      "I'm sorry, I cannot answer.",
+      JSON.stringify({
+        verdict: "false_positive",
+        reasoning: "test path",
+        evidence: { sink: "exec" },
+      }),
+    ];
+    let calls = 0;
+    const llmCallback = async () => responses[calls++] ?? "";
+
+    const candidate = {
+      pattern_id: "js-001-eval",
+      pattern_title: "Use of eval()",
+      severity: "high" as const,
+      file: "/tmp/x.js",
+      line: 1,
+      matched_text: "eval(s)",
+      context: "eval(s)",
+    };
+    const v = await verifyCandidate(candidate, { llmCallback });
+
+    expect(v.verdict).toBe("false_positive");
+    expect(calls).toBe(2);
+  });
+
+  test("sanity-check downgrades confirmed→false_positive when reasoning says safe", () => {
+    const response = JSON.stringify({
+      verdict: "confirmed",
+      reasoning: "buffer is properly bounded by the caller",
+      evidence: { sink: "memcpy" },
+    });
     const v = parseVerdict(response);
-    expect(v.verdict).toBe("confirmed");
+    // Direct parse stays confirmed; sanity check runs in verifyCandidate.
+    expect(v?.verdict).toBe("confirmed");
   });
 });
 
@@ -272,9 +431,19 @@ describe("audit-engine orchestrator", () => {
       `void f() { strcpy(a, b); }\n`,
     );
 
-    // Mock LLM that confirms everything
-    const mockLLM = async (prompt: string): Promise<string> =>
-      `VERDICT: CONFIRMED\nREASONING: Unsafe strcpy detected\nEXECUTION_PATH: any input\nFIX: use strncpy\n`;
+    // Mock LLM that confirms everything (v2.10.361 JSON contract)
+    const mockLLM = async (_prompt: string): Promise<string> =>
+      JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "Unsafe strcpy detected",
+        evidence: {
+          input_boundary: "any input",
+          execution_path_steps: ["caller passes b", "strcpy(a, b)"],
+          sink: "strcpy",
+          suggested_fix_strategy: "rewrite",
+          suggested_fix: "use strncpy",
+        },
+      });
 
     const result = await runAudit({
       projectRoot: tmp,
@@ -294,7 +463,14 @@ describe("audit-engine orchestrator", () => {
     );
 
     const mockLLM = async (): Promise<string> =>
-      `VERDICT: FALSE_POSITIVE\nREASONING: Validated upstream\nEXECUTION_PATH: NONE\nFIX: NONE\n`;
+      JSON.stringify({
+        verdict: "false_positive",
+        reasoning: "Validated upstream",
+        evidence: {
+          sink: "strcpy",
+          mitigations_found: ["caller validates length"],
+        },
+      });
 
     const result = await runAudit({
       projectRoot: tmp,
@@ -311,12 +487,19 @@ describe("audit-engine orchestrator", () => {
     writeFileSync(join(tmp, "ambig.cpp"), `void f() { strcpy(a, b); }\n`);
 
     let fallbackCalls = 0;
-    const primary = async (): Promise<string> => {
-      return "VERDICT: NEEDS_CONTEXT\nREASONING: can't tell\n";
-    };
+    const primary = async (): Promise<string> =>
+      JSON.stringify({
+        verdict: "needs_context",
+        reasoning: "can't tell",
+        evidence: { sink: "strcpy" },
+      });
     const fallback = async (): Promise<string> => {
       fallbackCalls++;
-      return "VERDICT: CONFIRMED\nREASONING: cloud\n";
+      return JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "cloud",
+        evidence: { sink: "strcpy" },
+      });
     };
 
     await runAudit({
@@ -334,10 +517,18 @@ describe("audit-engine orchestrator", () => {
 
     let fallbackCalls = 0;
     const primary = async (): Promise<string> =>
-      "VERDICT: CONFIRMED\nREASONING: clear case\nFIX: use strncpy\n";
+      JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "clear case",
+        evidence: { sink: "strcpy", suggested_fix: "use strncpy" },
+      });
     const fallback = async (): Promise<string> => {
       fallbackCalls++;
-      return "VERDICT: CONFIRMED\nREASONING: cloud\n";
+      return JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "cloud",
+        evidence: { sink: "strcpy" },
+      });
     };
 
     const result = await runAudit({

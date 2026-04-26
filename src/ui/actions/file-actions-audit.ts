@@ -64,7 +64,12 @@ export async function handleAuditAction(
       scanState.phase = "discovery";
 
       const llmCallback = skipVerify
-        ? async () => "VERDICT: CONFIRMED\nREASONING: static-only mode\n"
+        ? async () =>
+            JSON.stringify({
+              verdict: "confirmed",
+              reasoning: "static-only mode",
+              evidence: { sink: "static-only bypass" },
+            })
         : await buildAuditLlmCallbackFromConfigAsync(appConfig);
 
       // Detect available audit models (tagged [analysis]/[reasoning] with valid keys)

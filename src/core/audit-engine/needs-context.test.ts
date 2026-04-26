@@ -60,7 +60,7 @@ void f(char *p) {
     const result = await runAudit({
       projectRoot: TMP,
       llmCallback: async () =>
-        "VERDICT: confirmed\nREASONING: test\n",
+        JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
     });
     expect(
       result.confirmed_findings + result.false_positives + result.needs_context,
