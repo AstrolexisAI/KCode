@@ -67,8 +67,8 @@ describe("computeCommentRanges — hash-style languages", () => {
     expect(ranges).toHaveLength(2);
   });
 
-  test("applies to ruby and bash too", () => {
-    for (const lang of ["ruby", "bash"] as const) {
+  test("applies to ruby and shell too", () => {
+    for (const lang of ["ruby", "shell"] as const) {
       const ranges = computeCommentRanges("cmd # comment", lang);
       expect(ranges).toHaveLength(1);
     }
