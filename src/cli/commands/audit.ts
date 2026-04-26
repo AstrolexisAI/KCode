@@ -23,13 +23,23 @@ const ICONS = {
 
 /**
  * Detect a sensible diff base for --ci mode. Tries upstream refs in
- * order; returns the first that resolves. Falls back to HEAD~1 when
- * no upstream is configured (still gives a meaningful diff for the
- * most recent commit), and undefined when the repo has only one
- * commit (which makes diff mode pointless).
+ * order; returns the first that resolves. The order is:
+ *
+ *   1. origin/HEAD — the symbolic ref the upstream itself points
+ *      to as default. Catches projects that use non-conventional
+ *      default branch names (devel, develop, dev, trunk, etc.).
+ *      v2.10.353 follow-up: discovered while validating against
+ *      NASA's fprime repo, whose default is `devel`.
+ *   2. origin/main — modern convention
+ *   3. origin/master — legacy convention
+ *   4. main / master — local-only branches when no remote is set
+ *   5. HEAD~1 — last-ditch fallback for repos with no remote
+ *
+ * Returns undefined when the repo has only one commit (diff would
+ * be meaningless and we proceed full).
  *
  * Uses execFileSync per the v2.10.351 P0.4 hardening — ref text is
- * pure positional argv, no shell. v2.10.353.
+ * pure positional argv, no shell.
  */
 async function detectDefaultDiffBase(projectRoot: string): Promise<string | undefined> {
   const { execFileSync } = await import("node:child_process");
@@ -45,7 +55,7 @@ async function detectDefaultDiffBase(projectRoot: string): Promise<string | unde
       return false;
     }
   };
-  for (const candidate of ["origin/main", "origin/master", "main", "master"]) {
+  for (const candidate of ["origin/HEAD", "origin/main", "origin/master", "main", "master"]) {
     if (probe(candidate)) return candidate;
   }
   if (probe("HEAD~1")) return "HEAD~1";
