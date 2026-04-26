@@ -390,6 +390,12 @@ function buildStructuredPrBody(
 
   lines.push("## Security and code-quality audit");
   lines.push("");
+  // F2 (v2.10.362) — quantitative confidence first so PR reviewers
+  // see "is this run trustworthy?" before any counts.
+  const conf = result.audit_confidence;
+  if (conf) {
+    lines.push(`**Audit confidence:** ${conf.score} / 100`);
+  }
   lines.push(
     `**Findings:** ${result.confirmed_findings} confirmed (${result.false_positives} false positives filtered${result.needs_context ? `, ${result.needs_context} uncertain` : ""})`,
   );

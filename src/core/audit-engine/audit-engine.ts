@@ -447,5 +447,11 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     elapsed_ms: Date.now() - startTime,
   };
 
+  // F2 (v2.10.362) — quantitative trustworthiness score derived from
+  // the just-built result. Late-binds the field so we can read all
+  // the verifier outputs + coverage + ast status in one shot.
+  const { computeAuditConfidence } = await import("./confidence-scorer");
+  result.audit_confidence = computeAuditConfidence(result);
+
   return result;
 }

@@ -410,6 +410,43 @@ export interface ExploitProof {
   cwe?: string;
 }
 
+/**
+ * Quantitative trustworthiness score for an audit run, computed at
+ * the end of `runAudit` from the verifier output, coverage, AST
+ * grammar status, and FP-quality data the verifier already ships.
+ *
+ * Five subscores, each in [0, 100]:
+ *   - coverage_score    — what fraction of in-scope files actually got scanned
+ *   - verifier_score    — what fraction of verifier outputs parsed cleanly
+ *   - ast_score         — what fraction of AST grammars loaded successfully
+ *   - noise_score       — what fraction of false_positives carry a real mitigation reason
+ *   - fixability_score  — what fraction of confirmed findings have a `rewrite`-class fix
+ *
+ * The aggregate `score` is a weighted average. When a subscore is
+ * not derivable for a given run (e.g. `verifier_score` when
+ * `--skip-verify` was used) the field is null and the contribution
+ * is dropped from the weighted average — the headline number stays
+ * meaningful instead of pretending zero.
+ *
+ * v2.10.362 (F2 of audit product plan).
+ */
+export interface AuditConfidence {
+  /** Aggregate weighted score 0-100. */
+  score: number;
+  coverage_score: number | null;
+  verifier_score: number | null;
+  ast_score: number | null;
+  noise_score: number | null;
+  fixability_score: number | null;
+  /**
+   * One-line strings describing why subscores are degraded or null.
+   * Same flavor as the existing prose warnings (truncation,
+   * skipVerify, missing grammars), but tied to the numeric score so
+   * the reader knows what's pulling the headline down.
+   */
+  warnings: string[];
+}
+
 /** Result of the full audit pipeline. */
 export interface AuditResult {
   project: string;
@@ -493,5 +530,11 @@ export interface AuditResult {
     /** Most recent load_error seen for this language (when loaded === false). */
     last_error?: string;
   }>;
+  /**
+   * Quantitative trustworthiness score for this run. Populated by
+   * `confidence-scorer.ts` post-audit; absent on legacy AuditResult
+   * snapshots. v2.10.362 (F2).
+   */
+  audit_confidence?: AuditConfidence;
   elapsed_ms: number;
 }
