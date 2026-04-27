@@ -14,6 +14,12 @@ export interface ScanProgress {
   falsePositives: number;
   escalated: number; // candidates sent to cloud fallback
   startTime: number;
+  /**
+   * Set by the UI when the user requests cancellation (Esc during /scan).
+   * The /scan handler watches this and aborts the underlying audit run.
+   * Stays true until resetScanState() clears it.
+   */
+  cancelled: boolean;
   cloudProvider?: string; // "anthropic" | "openai" | "" if no fallback
   /** Set when FPs or NEEDS_CONTEXT exist and cloud is available */
   pendingEscalation?: {
@@ -56,6 +62,7 @@ export const scanState: ScanProgress = {
   falsePositives: 0,
   escalated: 0,
   startTime: 0,
+  cancelled: false,
 };
 
 export function resetScanState(): void {
@@ -67,10 +74,34 @@ export function resetScanState(): void {
   scanState.falsePositives = 0;
   scanState.escalated = 0;
   scanState.startTime = 0;
+  scanState.cancelled = false;
   scanState.cloudProvider = undefined;
   scanState.pendingEscalation = undefined;
   scanState.escalationModelChoice = undefined;
   scanState.result = undefined;
   scanState.error = undefined;
   scanState.cloudAbortError = undefined;
+}
+
+/**
+ * Sentinel error thrown by the audit pipeline when the user cancels via
+ * Esc (or any other path that calls requestScanCancel). Distinguished
+ * from real errors so the /scan handler can produce a soft "cancelled
+ * by user" message instead of an error report. v2.10.385.
+ */
+export class ScanCancelledError extends Error {
+  constructor(message = "Scan cancelled by user") {
+    super(message);
+    this.name = "ScanCancelledError";
+  }
+}
+
+/** True if the active scan has been cancelled by the user. */
+export function isScanCancelled(): boolean {
+  return scanState.cancelled === true;
+}
+
+/** Request cancellation of the active scan (idempotent). */
+export function requestScanCancel(): void {
+  if (scanState.active) scanState.cancelled = true;
 }

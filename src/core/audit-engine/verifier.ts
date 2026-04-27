@@ -46,6 +46,13 @@ export interface VerifyOptions {
     index: number,
     total: number,
   ) => void;
+  /**
+   * Optional cancellation signal. Checked at the top of each iteration
+   * of the verification loop. When aborted, the loop throws
+   * ScanCancelledError so the caller can short-circuit reporting and
+   * surface a "cancelled by user" message. v2.10.385.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -457,6 +464,12 @@ export async function verifyAllCandidates(
   let consecutiveTransportFailures = 0;
   const TRANSPORT_FAIL_LIMIT = 3;
   for (let i = 0; i < candidates.length; i++) {
+    if (opts.signal?.aborted) {
+      const { ScanCancelledError } = await import("./scan-state");
+      throw new ScanCancelledError(
+        `Scan cancelled at candidate ${i}/${candidates.length}`,
+      );
+    }
     const c = candidates[i]!;
     opts.onProgress?.(i, candidates.length, c);
     let verification: Verification;

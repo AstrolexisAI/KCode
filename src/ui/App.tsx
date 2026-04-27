@@ -278,6 +278,7 @@ export default function App({ config, conversationManager, tools, initialSession
     total: number;
     confirmed: number;
     elapsed: number;
+    cancelled: boolean;
   } | null>(null);
   const [escalationData, setEscalationData] = useState<{
     count: number;
@@ -411,6 +412,7 @@ export default function App({ config, conversationManager, tools, initialSession
             total: scanState.total,
             confirmed: scanState.confirmed,
             elapsed: (Date.now() - scanState.startTime) / 1000,
+            cancelled: scanState.cancelled === true,
           });
           // Switch to escalation mode when prompt is pending
           if (scanState.pendingEscalation && !escalationData) {
@@ -459,6 +461,7 @@ export default function App({ config, conversationManager, tools, initialSession
             total: 0,
             confirmed: 0,
             elapsed: (Date.now() - prState.startTime) / 1000,
+            cancelled: false,
           });
         } else if (prState.result) {
           // Capture before clearing to avoid race with React render
@@ -1071,6 +1074,14 @@ export default function App({ config, conversationManager, tools, initialSession
                 </Text>
               );
             })()}
+            {/* v2.10.385 — cancellation hint. Without this, the only
+                way out of a long scan was Ctrl+C, which exits KCode.
+                Esc is wired in InputPrompt.tsx + file-actions-audit.ts. */}
+            <Text color="gray" dimColor>
+              {scanProgress.cancelled
+                ? "    ⏸ cancelling..."
+                : "    Press Esc to cancel"}
+            </Text>
           </Box>
         )}
 

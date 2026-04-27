@@ -451,6 +451,25 @@ export default function InputPrompt({
       // paste handler — Ink's character events must be ignored.
       if (isPasting) return;
 
+      // v2.10.385 — Esc cancels an in-flight /scan instead of falling
+      // through to vim-mode handling. Without this the only way to stop
+      // a long /scan was Ctrl+C, which kills KCode entirely. The check
+      // is synchronous: scanState is a polled-singleton already shared
+      // between App.tsx and file-actions-audit.ts, so importing it here
+      // is consistent with how the rest of the TUI reads scan progress.
+      if (key.escape) {
+        // Static (non-await) reference to scanState. Imported lazily so
+        // existing tests that mock InputPrompt without an audit engine
+        // continue to typecheck.
+        // biome-ignore lint/style/noNonNullAssertion: require'd module is always present at runtime
+        const scanState = require("../../core/audit-engine/scan-state.js")
+          .scanState as { active: boolean; cancelled: boolean };
+        if (scanState.active && !scanState.cancelled) {
+          scanState.cancelled = true;
+          return;
+        }
+      }
+
       // Vim normal mode handling
       if (vimMode === "normal") {
         if (input === "i") {

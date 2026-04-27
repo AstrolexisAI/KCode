@@ -112,6 +112,19 @@ export async function handleAuditAction(
       scanState.startTime = Date.now();
       scanState.phase = "discovery";
 
+      // v2.10.385 — cancellation: TUI sets scanState.cancelled = true on
+      // Esc; this watcher mirrors it onto an AbortController that
+      // runAudit propagates to the verifier loop. We poll instead of
+      // wiring an event because scanState is already a polled-singleton
+      // pattern (App.tsx polls it for progress) — keeps the model
+      // consistent.
+      const controller = new AbortController();
+      const cancelWatcher = setInterval(() => {
+        if (scanState.cancelled && !controller.signal.aborted) {
+          controller.abort();
+        }
+      }, 100);
+
       const llmCallback = skipVerify
         ? async () =>
             JSON.stringify({
@@ -136,6 +149,7 @@ export async function handleAuditAction(
           const result = await runAudit({
             projectRoot,
             llmCallback,
+            signal: controller.signal,
             // NO fallbackCallback here — we'll escalate manually after user approval.
             // /scan audits the whole project by design — no truncation
             // by default (Issue #111 v307). User can cap with
@@ -217,6 +231,7 @@ export async function handleAuditAction(
                 cloudResult = await runAudit({
                   projectRoot,
                   llmCallback: fallbackCallback,
+                  signal: controller.signal,
                   maxFiles: parsedMaxFiles ?? Number.MAX_SAFE_INTEGER,
                   skipVerification: false,
                   ...(sinceRef ? { since: sinceRef } : {}),
@@ -384,8 +399,30 @@ export async function handleAuditAction(
             reportText: reportLines.join("\n"),
           };
         } catch (err) {
-          scanState.error = err instanceof Error ? err.message : String(err);
+          // v2.10.385 — distinguish user cancellation from real errors.
+          // ScanCancelledError surfaces as a soft "cancelled" message
+          // (no AUDIT_REPORT.json written, no error banner). Other
+          // errors still bubble up via scanState.error.
+          const { ScanCancelledError } = await import(
+            "../../core/audit-engine/scan-state.js"
+          );
+          if (err instanceof ScanCancelledError) {
+            scanState.phase = "cancelled by user";
+            scanState.result = {
+              outputPath: "",
+              filesScanned: 0,
+              candidates: 0,
+              findings: 0,
+              falsePositives: 0,
+              elapsedMs: Date.now() - scanState.startTime,
+              topFindings: [],
+              reportText: `  ◆ /scan cancelled (Esc) after ${((Date.now() - scanState.startTime) / 1000).toFixed(1)}s.`,
+            };
+          } else {
+            scanState.error = err instanceof Error ? err.message : String(err);
+          }
         } finally {
+          clearInterval(cancelWatcher);
           scanState.active = false;
         }
       })();
