@@ -6,19 +6,10 @@
 // branches without grammar dependencies.
 
 import { describe, expect, test } from "bun:test";
-import {
-  collectTaintedLocals,
-  isTainted,
-  SANITIZER_CALLS,
-  TAINT_ROOTS,
-} from "./taint-walker";
+import { collectTaintedLocals, isTainted, SANITIZER_CALLS, TAINT_ROOTS } from "./taint-walker";
 import type { AstNode } from "./types";
 
-function node(opts: {
-  type: string;
-  text?: string;
-  children?: AstNode[];
-}): AstNode {
+function node(opts: { type: string; text?: string; children?: AstNode[] }): AstNode {
   const children = opts.children ?? [];
   const n: AstNode = {
     type: opts.type,
@@ -57,7 +48,11 @@ const callExpr = (callee: AstNode, ...args: AstNode[]) =>
     children: [callee, ...args],
   });
 const binary = (left: AstNode, right: AstNode) =>
-  node({ type: "binary_expression", text: `${left.text} + ${right.text}`, children: [left, right] });
+  node({
+    type: "binary_expression",
+    text: `${left.text} + ${right.text}`,
+    children: [left, right],
+  });
 const string = (text: string) => node({ type: "string", text });
 
 describe("TAINT_ROOTS / SANITIZER_CALLS sanity", () => {
@@ -117,7 +112,10 @@ describe("isTainted", () => {
 
   test("member-form sanitizer wrapping launders taint", () => {
     // DOMPurify.sanitize(req.body)
-    const sanitize = memberExpr(ident("DOMPurify"), node({ type: "property_identifier", text: "sanitize" }));
+    const sanitize = memberExpr(
+      ident("DOMPurify"),
+      node({ type: "property_identifier", text: "sanitize" }),
+    );
     const reqBody = memberExpr(ident("req"), ident("body"));
     const call = callExpr(sanitize, reqBody);
     expect(isTainted(call, new Set())).toBe(false);

@@ -18,36 +18,20 @@ describe("MessageList render", () => {
   });
 
   test("renders user text message", () => {
-    const entries: MessageEntry[] = [
-      { kind: "text", role: "user", text: "Hello KCode" },
-    ];
-    instance = renderWithTheme(
-      <MessageList
-        completed={entries}
-        streamingText=""
-       
-      />,
-    );
+    const entries: MessageEntry[] = [{ kind: "text", role: "user", text: "Hello KCode" }];
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     expect(instance.lastFrame()).toContain("Hello KCode");
   });
 
   test("renders assistant text message", () => {
-    const entries: MessageEntry[] = [
-      { kind: "text", role: "assistant", text: "Hi there" },
-    ];
-    instance = renderWithTheme(
-      <MessageList completed={entries} streamingText="" />,
-    );
+    const entries: MessageEntry[] = [{ kind: "text", role: "assistant", text: "Hi there" }];
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     expect(instance.lastFrame()).toContain("Hi there");
   });
 
   test("renders tool_use entry with name", () => {
-    const entries: MessageEntry[] = [
-      { kind: "tool_use", name: "Read", summary: "/tmp/file.ts" },
-    ];
-    instance = renderWithTheme(
-      <MessageList completed={entries} streamingText="" />,
-    );
+    const entries: MessageEntry[] = [{ kind: "tool_use", name: "Read", summary: "/tmp/file.ts" }];
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("Read");
   });
@@ -61,9 +45,7 @@ describe("MessageList render", () => {
         isError: false,
       },
     ];
-    instance = renderWithTheme(
-      <MessageList completed={entries} streamingText="" />,
-    );
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("line 1 matches");
   });
@@ -77,9 +59,7 @@ describe("MessageList render", () => {
         isError: true,
       },
     ];
-    instance = renderWithTheme(
-      <MessageList completed={entries} streamingText="" />,
-    );
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("command not found");
     // Error indicator — usually ✗ or "Error"
@@ -87,12 +67,8 @@ describe("MessageList render", () => {
   });
 
   test("renders banner entry", () => {
-    const entries: MessageEntry[] = [
-      { kind: "banner", title: "Welcome", subtitle: "v2.6.16" },
-    ];
-    instance = renderWithTheme(
-      <MessageList completed={entries} streamingText="" />,
-    );
+    const entries: MessageEntry[] = [{ kind: "banner", title: "Welcome", subtitle: "v2.6.16" }];
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("Welcome");
     expect(out).toContain("v2.6.16");
@@ -100,24 +76,13 @@ describe("MessageList render", () => {
 
   test("shows streaming text while loading", () => {
     instance = renderWithTheme(
-      <MessageList
-        completed={[]}
-        streamingText="Generating response..."
-       
-      />,
+      <MessageList completed={[]} streamingText="Generating response..." />,
     );
     expect(instance.lastFrame()).toContain("Generating response");
   });
 
   test("does not render loading message inside the message flow", () => {
-    instance = renderWithTheme(
-      <MessageList
-        completed={[]}
-        streamingText=""
-       
-       
-      />,
-    );
+    instance = renderWithTheme(<MessageList completed={[]} streamingText="" />);
     expect(instance.lastFrame()).not.toContain("Connecting");
   });
 
@@ -127,9 +92,7 @@ describe("MessageList render", () => {
       { kind: "text", role: "assistant", text: "Second" },
       { kind: "text", role: "user", text: "Third" },
     ];
-    instance = renderWithTheme(
-      <MessageList completed={entries} streamingText="" />,
-    );
+    instance = renderWithTheme(<MessageList completed={entries} streamingText="" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("First");
     expect(out).toContain("Second");
@@ -140,9 +103,7 @@ describe("MessageList render", () => {
   });
 
   test("empty state renders without error", () => {
-    instance = renderWithTheme(
-      <MessageList completed={[]} streamingText="" />,
-    );
+    instance = renderWithTheme(<MessageList completed={[]} streamingText="" />);
     expect(typeof instance.lastFrame()).toBe("string");
   });
 });

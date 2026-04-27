@@ -11,10 +11,12 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["csharp"],
     regex: /\b(?:ExecuteNonQuery|ExecuteReader|ExecuteScalar|SqlCommand)\s*\(\s*(?:\$"|".*\+)/g,
-    explanation: "SQL queries with string interpolation ($\"\") or concatenation are vulnerable to injection.",
-    verify_prompt: "Is user input interpolated? If using SqlParameter/@param, respond FALSE_POSITIVE.",
+    explanation:
+      'SQL queries with string interpolation ($"") or concatenation are vulnerable to injection.',
+    verify_prompt:
+      "Is user input interpolated? If using SqlParameter/@param, respond FALSE_POSITIVE.",
     cwe: "CWE-89",
-    fix_template: "Use SqlCommand with Parameters.AddWithValue(\"@id\", userId).",
+    fix_template: 'Use SqlCommand with Parameters.AddWithValue("@id", userId).',
   },
   {
     id: "cs-002-deserialization",
@@ -22,8 +24,10 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["csharp"],
     regex: /\bBinaryFormatter\s*\(\s*\)|\.Deserialize\s*\(/g,
-    explanation: "BinaryFormatter deserializes arbitrary .NET objects. Microsoft marks it as dangerous — attackers can execute code via crafted payloads.",
-    verify_prompt: "Is the deserialized data from a trusted source? If from network/user input, respond CONFIRMED." +
+    explanation:
+      "BinaryFormatter deserializes arbitrary .NET objects. Microsoft marks it as dangerous — attackers can execute code via crafted payloads.",
+    verify_prompt:
+      "Is the deserialized data from a trusted source? If from network/user input, respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The data comes from a trusted internal source (local file written by the same app, internal service)\n" +
       "2. A type binder or whitelist restricts deserializable types\n" +
@@ -40,7 +44,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     languages: ["csharp"],
     regex: /(?:connectionString|ConnectionString)\s*=\s*"[^"]*(?:Password|Pwd|password)=[^"]+"/gi,
     explanation: "Connection strings with embedded passwords are exposed in source code.",
-    verify_prompt: "Is this a real connection string with credentials or a placeholder? If real, respond CONFIRMED." +
+    verify_prompt:
+      "Is this a real connection string with credentials or a placeholder? If real, respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The password is a placeholder ('changeme', 'xxx', 'password', 'TODO', 'REPLACE_ME')\n" +
       "2. This is in test, example, or documentation code\n" +
@@ -74,7 +79,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     title: "Task-returning method called without await",
     severity: "high",
     languages: ["csharp"],
-    regex: /(?<!\bawait\s)(?<!\breturn\s)(?<!\bvar\s+\w+\s*=\s*)(?<!\bTask\s+\w+\s*=\s*)\b\w+Async\s*\([^)]*\)\s*;/g,
+    regex:
+      /(?<!\bawait\s)(?<!\breturn\s)(?<!\bvar\s+\w+\s*=\s*)(?<!\bTask\s+\w+\s*=\s*)\b\w+Async\s*\([^)]*\)\s*;/g,
     explanation:
       "Calling an async method without await means the task runs as fire-and-forget. Exceptions are silently swallowed, and the caller proceeds before the operation completes.",
     verify_prompt:
@@ -91,7 +97,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     title: "IDisposable object not in using statement",
     severity: "medium",
     languages: ["csharp"],
-    regex: /(?:new\s+(?:SqlConnection|SqlCommand|HttpClient|StreamReader|StreamWriter|FileStream|MemoryStream|BinaryReader|BinaryWriter|WebClient|TcpClient|SmtpClient)\s*\([^)]*\))(?![\s\S]{0,10}?\busing\b)/g,
+    regex:
+      /(?:new\s+(?:SqlConnection|SqlCommand|HttpClient|StreamReader|StreamWriter|FileStream|MemoryStream|BinaryReader|BinaryWriter|WebClient|TcpClient|SmtpClient)\s*\([^)]*\))(?![\s\S]{0,10}?\busing\b)/g,
     explanation:
       "IDisposable objects not wrapped in a using statement may not be properly disposed, leading to resource leaks (connections, file handles, memory).",
     verify_prompt:
@@ -99,7 +106,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
       "If using/using var is present, respond FALSE_POSITIVE. " +
       "If the object is created without using and no Dispose() call exists, respond CONFIRMED.",
     cwe: "CWE-772",
-    fix_template: "Wrap in using: using var conn = new SqlConnection(cs); or using (var conn = new SqlConnection(cs)) { }",
+    fix_template:
+      "Wrap in using: using var conn = new SqlConnection(cs); or using (var conn = new SqlConnection(cs)) { }",
   },
 
   // ── SQL injection with interpolation ───────────────────────────
@@ -110,13 +118,14 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     languages: ["csharp"],
     regex: /\b(?:CommandText|SqlCommand)\s*(?:=|\()\s*\$"/g,
     explanation:
-      "SQL queries built with C# string interpolation ($\"\") are vulnerable to injection. Use SqlParameter for user values.",
+      'SQL queries built with C# string interpolation ($"") are vulnerable to injection. Use SqlParameter for user values.',
     verify_prompt:
       "Is user input interpolated in the SQL string? " +
       "If only constants/config values are interpolated (table names), respond FALSE_POSITIVE. " +
       "If user-controlled values are interpolated, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: "Use parameters: cmd.Parameters.AddWithValue(\"@id\", userId); with CommandText = \"SELECT * FROM t WHERE id = @id\";",
+    fix_template:
+      'Use parameters: cmd.Parameters.AddWithValue("@id", userId); with CommandText = "SELECT * FROM t WHERE id = @id";',
   },
 
   // ── LINQ multiple enumeration ──────────────────────────────────
@@ -125,7 +134,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
     title: "IEnumerable enumerated multiple times (LINQ deferred execution)",
     severity: "low",
     languages: ["csharp"],
-    regex: /(?:IEnumerable\s*<[^>]+>\s+(\w+)\s*=[\s\S]{0,200}?(?:Where|Select|OrderBy|GroupBy))[\s\S]{0,500}?\1\s*\.\s*\w+[\s\S]{0,200}?\1\s*\.\s*\w+/g,
+    regex:
+      /(?:IEnumerable\s*<[^>]+>\s+(\w+)\s*=[\s\S]{0,200}?(?:Where|Select|OrderBy|GroupBy))[\s\S]{0,500}?\1\s*\.\s*\w+[\s\S]{0,200}?\1\s*\.\s*\w+/g,
     explanation:
       "An IEnumerable query is enumerated multiple times. Due to LINQ's deferred execution, each enumeration re-executes the query (database call, file read, computation), causing performance issues or inconsistent results.",
     verify_prompt:
@@ -133,7 +143,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
       "If materialized, respond FALSE_POSITIVE. " +
       "If the raw IEnumerable is accessed multiple times, respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Materialize the query: var items = query.ToList(); then use items multiple times.",
+    fix_template:
+      "Materialize the query: var items = query.ToList(); then use items multiple times.",
   },
 
   // ── Lock on this/typeof ────────────────────────────────────────
@@ -150,7 +161,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
       "If locking on a private readonly object field, respond FALSE_POSITIVE. " +
       "If locking on this or typeof, respond CONFIRMED.",
     cwe: "CWE-764",
-    fix_template: "Use a private lock object: private readonly object _lock = new object(); lock (_lock) { }",
+    fix_template:
+      "Use a private lock object: private readonly object _lock = new object(); lock (_lock) { }",
   },
 
   // ── ConfigureAwait(false) missing ──────────────────────────────
@@ -184,7 +196,8 @@ export const CSHARP_PATTERNS: BugPattern[] = [
       "If null-checked or using null-conditional, respond FALSE_POSITIVE. " +
       "If accessed directly without check, respond CONFIRMED.",
     cwe: "CWE-476",
-    fix_template: "Use null-conditional: obj?.Method() or add guard: if (obj is not null) { obj.Method(); }",
+    fix_template:
+      "Use null-conditional: obj?.Method() or add guard: if (obj is not null) { obj.Method(); }",
   },
 
   // ── Dictionary key not found ───────────────────────────────────
@@ -201,6 +214,7 @@ export const CSHARP_PATTERNS: BugPattern[] = [
       "If checked or guaranteed, respond FALSE_POSITIVE. " +
       "If accessing without validation, respond CONFIRMED.",
     cwe: "CWE-754",
-    fix_template: "Use TryGetValue: if (dict.TryGetValue(key, out var value)) { ... } or dict.GetValueOrDefault(key).",
+    fix_template:
+      "Use TryGetValue: if (dict.TryGetValue(key, out var value)) { ... } or dict.GetValueOrDefault(key).",
   },
 ];

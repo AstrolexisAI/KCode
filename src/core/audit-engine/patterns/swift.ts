@@ -11,8 +11,10 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["swift"],
     regex: /\w+!\s*\./g,
-    explanation: "Force unwrapping with ! crashes at runtime if the value is nil. Use guard let, if let, or ?? instead.",
-    verify_prompt: "Is this force unwrap in production code where nil is a realistic possibility? If the value is guaranteed non-nil (e.g. IBOutlet after viewDidLoad, known-good constant), respond FALSE_POSITIVE.",
+    explanation:
+      "Force unwrapping with ! crashes at runtime if the value is nil. Use guard let, if let, or ?? instead.",
+    verify_prompt:
+      "Is this force unwrap in production code where nil is a realistic possibility? If the value is guaranteed non-nil (e.g. IBOutlet after viewDidLoad, known-good constant), respond FALSE_POSITIVE.",
     cwe: "CWE-476",
     fix_template: "Replace var! with guard let var = var else { return } or var ?? defaultValue.",
   },
@@ -22,8 +24,10 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["swift"],
     regex: /\btry!\s/g,
-    explanation: "try! crashes the app if the function throws. Use do/catch or try? for graceful error handling.",
-    verify_prompt: "Is this try! in production code or test code? If the throwing function is guaranteed to succeed (e.g. known-good regex), respond FALSE_POSITIVE. If it could fail at runtime, respond CONFIRMED.",
+    explanation:
+      "try! crashes the app if the function throws. Use do/catch or try? for graceful error handling.",
+    verify_prompt:
+      "Is this try! in production code or test code? If the throwing function is guaranteed to succeed (e.g. known-good regex), respond FALSE_POSITIVE. If it could fail at runtime, respond CONFIRMED.",
     cwe: "CWE-754",
     fix_template: "Replace try! with do { try ... } catch { handle error } or try? with default.",
   },
@@ -33,12 +37,13 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["swift"],
     regex: /URL\s*\(\s*string:\s*"http:\/\/(?!localhost|127\.0\.0\.1)/g,
-    explanation: "Using HTTP instead of HTTPS exposes data to man-in-the-middle attacks. App Transport Security (ATS) blocks this by default on iOS.",
+    explanation:
+      "Using HTTP instead of HTTPS exposes data to man-in-the-middle attacks. App Transport Security (ATS) blocks this by default on iOS.",
     verify_prompt:
       "Does this HTTP URL carry real data at runtime in the production app? " +
       "Respond FALSE_POSITIVE for ALL of these safe cases: " +
       "(1) Template boilerplate or Xcode-generated scaffold — specifically " +
-      "`.widgetURL(URL(string: \"http://www.apple.com\"))` and similar " +
+      '`.widgetURL(URL(string: "http://www.apple.com"))` and similar ' +
       "Apple-provided placeholder URLs in WidgetKit/ActivityKit templates; " +
       "(2) deep-link URLs for widgetURL/openURL that just open a browser " +
       "(no credentials, no session data transmitted); " +
@@ -60,10 +65,13 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["swift"],
     regex: /UserDefaults\b.*(?:password|token|secret|key|credential|auth)/gi,
-    explanation: "UserDefaults is stored unencrypted on disk. Sensitive data (passwords, tokens) should use Keychain Services.",
-    verify_prompt: "Is the value being stored actually sensitive (password, auth token, API key)? If it's a non-sensitive preference, respond FALSE_POSITIVE.",
+    explanation:
+      "UserDefaults is stored unencrypted on disk. Sensitive data (passwords, tokens) should use Keychain Services.",
+    verify_prompt:
+      "Is the value being stored actually sensitive (password, auth token, API key)? If it's a non-sensitive preference, respond FALSE_POSITIVE.",
     cwe: "CWE-312",
-    fix_template: "Use KeychainAccess library or Security framework: SecItemAdd/SecItemCopyMatching.",
+    fix_template:
+      "Use KeychainAccess library or Security framework: SecItemAdd/SecItemCopyMatching.",
   },
   {
     id: "swift-005-hardcoded-secret",
@@ -71,8 +79,10 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["swift"],
     regex: /(?:apiKey|secretKey|password|token|authToken)\s*[:=]\s*"[A-Za-z0-9+/=_-]{16,}"/g,
-    explanation: "Hardcoded secrets in source code are exposed to anyone with app binary access (strings can be extracted from .ipa).",
-    verify_prompt: "Is this a real API key or a placeholder/example? If it looks like a real key (long random string), respond CONFIRMED." +
+    explanation:
+      "Hardcoded secrets in source code are exposed to anyone with app binary access (strings can be extracted from .ipa).",
+    verify_prompt:
+      "Is this a real API key or a placeholder/example? If it looks like a real key (long random string), respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The value is a placeholder ('changeme', 'xxx', 'your-api-key-here', 'TODO', 'REPLACE_ME', 'test')\n" +
       "2. This is in test, example, or documentation code\n" +
@@ -88,8 +98,10 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["swift"],
     regex: /WKWebViewConfiguration\b[\s\S]{0,200}?javaScriptEnabled\s*=\s*true/g,
-    explanation: "WKWebView with JavaScript enabled loading untrusted content can execute malicious scripts with access to native bridges.",
-    verify_prompt: "Does this WebView load external/untrusted URLs? If it only loads local HTML or trusted internal content, respond FALSE_POSITIVE.",
+    explanation:
+      "WKWebView with JavaScript enabled loading untrusted content can execute malicious scripts with access to native bridges.",
+    verify_prompt:
+      "Does this WebView load external/untrusted URLs? If it only loads local HTML or trusted internal content, respond FALSE_POSITIVE.",
     cwe: "CWE-79",
     fix_template: "Disable JS if not needed, or restrict navigation with WKNavigationDelegate.",
   },
@@ -107,7 +119,8 @@ export const SWIFT_PATTERNS: BugPattern[] = [
       "known-good constant, or immediately after a nil check), respond FALSE_POSITIVE. " +
       "If nil could occur at runtime, respond CONFIRMED.",
     cwe: "CWE-476",
-    fix_template: "Use guard let unwrapped = optional else { return } or if let, or provide a default with ??.",
+    fix_template:
+      "Use guard let unwrapped = optional else { return } or if let, or provide a default with ??.",
   },
   {
     id: "swift-008-retain-cycle",
@@ -123,14 +136,16 @@ export const SWIFT_PATTERNS: BugPattern[] = [
       "If the closure is short-lived (e.g., DispatchQueue.main.async, map/filter), " +
       "respond FALSE_POSITIVE. If it's stored as a property or completion handler, respond CONFIRMED.",
     cwe: "CWE-401",
-    fix_template: "Add [weak self] or [unowned self] capture list: { [weak self] in guard let self else { return } ... }",
+    fix_template:
+      "Add [weak self] or [unowned self] capture list: { [weak self] in guard let self else { return } ... }",
   },
   {
     id: "swift-009-main-thread-violation",
     title: "UI update from background thread",
     severity: "high",
     languages: ["swift"],
-    regex: /DispatchQueue\.global\b[\s\S]{0,300}?(?:\.text\s*=|\.isHidden\s*=|\.alpha\s*=|\.image\s*=|\.reloadData\(\)|\.setTitle\(|\.backgroundColor\s*=|\.frame\s*=|\.addSubview\()/g,
+    regex:
+      /DispatchQueue\.global\b[\s\S]{0,300}?(?:\.text\s*=|\.isHidden\s*=|\.alpha\s*=|\.image\s*=|\.reloadData\(\)|\.setTitle\(|\.backgroundColor\s*=|\.frame\s*=|\.addSubview\()/g,
     explanation:
       "Updating UIKit/AppKit views from a background queue causes undefined behavior: visual glitches, crashes, or data corruption. All UI updates must happen on the main thread.",
     verify_prompt:
@@ -175,7 +190,8 @@ export const SWIFT_PATTERNS: BugPattern[] = [
     title: "Unowned reference to potentially deallocated object",
     severity: "high",
     languages: ["swift"],
-    regex: /\[unowned\s+self\][\s\S]{0,300}?(?:DispatchQueue|Timer|URLSession|NotificationCenter|after\(deadline)/g,
+    regex:
+      /\[unowned\s+self\][\s\S]{0,300}?(?:DispatchQueue|Timer|URLSession|NotificationCenter|after\(deadline)/g,
     explanation:
       "Unowned references crash if the referenced object is deallocated. Using [unowned self] in async callbacks (network requests, timers, delayed dispatch) is dangerous because self may be deallocated before the callback fires.",
     verify_prompt:
@@ -183,14 +199,16 @@ export const SWIFT_PATTERNS: BugPattern[] = [
       "is guaranteed to complete while self is alive (e.g., synchronous operation), " +
       "respond FALSE_POSITIVE. If it's async (network, timer, delayed), respond CONFIRMED.",
     cwe: "CWE-416",
-    fix_template: "Use [weak self] instead of [unowned self] for async callbacks: { [weak self] in guard let self else { return } }",
+    fix_template:
+      "Use [weak self] instead of [unowned self] for async callbacks: { [weak self] in guard let self else { return } }",
   },
   {
     id: "swift-013-missing-main-actor",
     title: "Missing @MainActor annotation on UI-related class",
     severity: "medium",
     languages: ["swift"],
-    regex: /class\s+\w+(?:ViewController|View|Cell|Controller)\s*(?::\s*\w+)?\s*\{(?![\s\S]{0,50}?@MainActor)/g,
+    regex:
+      /class\s+\w+(?:ViewController|View|Cell|Controller)\s*(?::\s*\w+)?\s*\{(?![\s\S]{0,50}?@MainActor)/g,
     explanation:
       "UI-related classes (ViewControllers, Views, Cells) should be annotated with @MainActor to ensure all property access and method calls happen on the main thread. Without it, concurrent access from Swift concurrency can cause data races.",
     verify_prompt:
@@ -199,14 +217,16 @@ export const SWIFT_PATTERNS: BugPattern[] = [
       "respond FALSE_POSITIVE. If it's a plain data model, respond FALSE_POSITIVE. " +
       "If it's a UI class without @MainActor, respond CONFIRMED.",
     cwe: "CWE-362",
-    fix_template: "Add @MainActor annotation: @MainActor class MyViewController: UIViewController { }",
+    fix_template:
+      "Add @MainActor annotation: @MainActor class MyViewController: UIViewController { }",
   },
   {
     id: "swift-014-hardcoded-secret-swift",
     title: "Hardcoded secret or API key in Swift source",
     severity: "high",
     languages: ["swift"],
-    regex: /(?:apiKey|secretKey|password|authToken|privateKey|accessToken)\s*[:=]\s*"[A-Za-z0-9+/=_\-]{16,}"/g,
+    regex:
+      /(?:apiKey|secretKey|password|authToken|privateKey|accessToken)\s*[:=]\s*"[A-Za-z0-9+/=_-]{16,}"/g,
     explanation:
       "Hardcoded secrets in Swift source code can be extracted from the compiled binary using the strings command. Anyone with access to the .ipa/.app can recover them.",
     verify_prompt:
@@ -214,7 +234,8 @@ export const SWIFT_PATTERNS: BugPattern[] = [
       "real credential (long random string), respond CONFIRMED. If placeholder, " +
       "test value, or loaded from Info.plist/Keychain, respond FALSE_POSITIVE.",
     cwe: "CWE-798",
-    fix_template: "Load from Info.plist (excluded from repo), Keychain, or a remote config service.",
+    fix_template:
+      "Load from Info.plist (excluded from repo), Keychain, or a remote config service.",
   },
   {
     id: "swift-015-missing-async-error-handling",
@@ -229,6 +250,7 @@ export const SWIFT_PATTERNS: BugPattern[] = [
       "marked as throws? If error handling exists (try/catch, Task with error handling), " +
       "respond FALSE_POSITIVE. If no error handling, respond CONFIRMED.",
     cwe: "CWE-755",
-    fix_template: "Wrap in do/catch: do { let result = try await fetchData() } catch { handleError(error) }",
+    fix_template:
+      "Wrap in do/catch: do { let result = try await fetchData() } catch { handleError(error) }",
   },
 ];

@@ -263,9 +263,7 @@ export function reconcilePlanFromScope(
     /(?:index|main|app|dashboard|server)\.(?:ts|tsx|js|jsx|py|mjs)$/i.test(p),
   );
   const lastRuntimeVerified =
-    !!last &&
-    !last.runtimeFailed &&
-    (last.status === undefined || last.status === "verified");
+    !!last && !last.runtimeFailed && (last.status === undefined || last.status === "verified");
 
   let flipped = 0;
   for (const step of _activePlan.steps) {
@@ -285,15 +283,23 @@ export function reconcilePlanFromScope(
       if (hasTransactionsFile) {
         derived = "done";
       }
-    } else if (/(live|refresh|actualiz|vivo|tiempo.?real|real.?time|auto.?refresh|setInterval)/i.test(t)) {
+    } else if (
+      /(live|refresh|actualiz|vivo|tiempo.?real|real.?time|auto.?refresh|setInterval)/i.test(t)
+    ) {
       if (hasRefreshCode) {
         derived = "done";
       }
-    } else if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci|implement|implementar|rpc|client|cliente)/i.test(t)) {
+    } else if (
+      /(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci|implement|implementar|rpc|client|cliente)/i.test(
+        t,
+      )
+    ) {
       if (anyFileWritten) {
         derived = "done";
       }
-    } else if (/(test|verify|verific|run|ejecut|check|revis|connect|conect|probar|prueba)/i.test(t)) {
+    } else if (
+      /(test|verify|verific|run|ejecut|check|revis|connect|conect|probar|prueba)/i.test(t)
+    ) {
       if (lastRuntimeVerified) {
         derived = "done";
       } else if (last) {
@@ -686,36 +692,19 @@ export function formatPlanForPrompt(): string | null {
   lines.push("");
   lines.push(`Progress: ${done}/${total} complete`);
   lines.push("");
-  lines.push(
-    "MANDATORY plan hygiene (do NOT ignore — this is a hard rule):",
-  );
-  lines.push(
-    "  1. As soon as you finish a step, mark it done with the Plan tool:",
-  );
+  lines.push("MANDATORY plan hygiene (do NOT ignore — this is a hard rule):");
+  lines.push("  1. As soon as you finish a step, mark it done with the Plan tool:");
   lines.push(`        Plan(mode="update", step_id="N", status="done")`);
-  lines.push(
-    "  2. You MUST NOT declare the overall task complete (with text like",
-  );
-  lines.push(
-    "     \"Task completed\", \"Delivered\", \"Summary of changes\", etc.) while",
-  );
-  lines.push(
-    "     ANY step is still pending or in_progress. Before writing that",
-  );
-  lines.push(
-    "     text, either mark the remaining steps done OR explain precisely",
-  );
+  lines.push("  2. You MUST NOT declare the overall task complete (with text like");
+  lines.push('     "Task completed", "Delivered", "Summary of changes", etc.) while');
+  lines.push("     ANY step is still pending or in_progress. Before writing that");
+  lines.push("     text, either mark the remaining steps done OR explain precisely");
   lines.push("     which steps are NOT done and why.");
-  lines.push(
-    "  3. If you realized mid-task that a step is no longer needed, mark",
-  );
+  lines.push("  3. If you realized mid-task that a step is no longer needed, mark");
   lines.push(`        Plan(mode="update", step_id="N", status="skipped") `);
   lines.push("     with a reason — do not leave it pending.");
-  lines.push(
-    "  4. If the plan is fully done, the Plan tool will automatically clear",
-  );
-  lines.push("     it on your next Plan(mode=\"update\") call — you do not need to",
-  );
+  lines.push("  4. If the plan is fully done, the Plan tool will automatically clear");
+  lines.push('     it on your next Plan(mode="update") call — you do not need to');
   lines.push("     delete it manually.");
 
   return lines.join("\n");
@@ -754,9 +743,7 @@ export function detectAbandonedPlan(assistantText: string): {
   completionPhrase?: string;
 } {
   if (!_activePlan) return { abandoned: false, pendingSteps: [] };
-  const pending = _activePlan.steps.filter(
-    (s) => s.status !== "done" && s.status !== "skipped",
-  );
+  const pending = _activePlan.steps.filter((s) => s.status !== "done" && s.status !== "skipped");
   if (pending.length === 0) return { abandoned: false, pendingSteps: [] };
   if (!assistantText) return { abandoned: false, pendingSteps: pending };
 
@@ -784,15 +771,9 @@ export function buildPlanReconciliationReminder(
   const lines: string[] = [];
   lines.push(`[PLAN RECONCILIATION]`);
   lines.push(``);
-  lines.push(
-    `Your previous turn contained "${completionPhrase}" — that reads as a`,
-  );
-  lines.push(
-    `task-complete declaration. But the active plan still has ${pendingSteps.length}`,
-  );
-  lines.push(
-    `step(s) NOT marked done or skipped:`,
-  );
+  lines.push(`Your previous turn contained "${completionPhrase}" — that reads as a`);
+  lines.push(`task-complete declaration. But the active plan still has ${pendingSteps.length}`);
+  lines.push(`step(s) NOT marked done or skipped:`);
   lines.push(``);
   for (const step of pendingSteps) {
     lines.push(`  [${step.status}] ${step.id}. ${step.title}`);
@@ -802,19 +783,11 @@ export function buildPlanReconciliationReminder(
   lines.push(
     `  a) Mark each finished step done with Plan(mode="update", step_id="N", status="done").`,
   );
-  lines.push(
-    `  b) Mark each no-longer-needed step skipped with the same Plan call.`,
-  );
-  lines.push(
-    `  c) Explain precisely which steps are actually NOT done yet and why.`,
-  );
+  lines.push(`  b) Mark each no-longer-needed step skipped with the same Plan call.`);
+  lines.push(`  c) Explain precisely which steps are actually NOT done yet and why.`);
   lines.push(``);
-  lines.push(
-    `This message is NOT a failure — KCode is asking you to reconcile the`,
-  );
-  lines.push(
-    `plan state with what you just claimed. Your next response must either`,
-  );
+  lines.push(`This message is NOT a failure — KCode is asking you to reconcile the`);
+  lines.push(`plan state with what you just claimed. Your next response must either`);
   lines.push(`call the Plan tool or clarify the pending steps in text.`);
   return lines.join("\n");
 }

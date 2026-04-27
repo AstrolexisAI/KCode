@@ -23,17 +23,32 @@ export type RecoveryCause =
 
 const PATTERNS: Array<[RegExp, RecoveryCause]> = [
   // ENOENT variants (English + Spanish localization)
-  [/\bENOENT\b|no such file or directory|cannot stat|cannot access|no existe el (?:fichero|archivo) o el directorio/i, "missing_directory"],
+  [
+    /\bENOENT\b|no such file or directory|cannot stat|cannot access|no existe el (?:fichero|archivo) o el directorio/i,
+    "missing_directory",
+  ],
   // Permissions (English + Spanish)
-  [/\bEACCES\b|permission denied|operation not permitted|EPERM\b|permiso denegado|no permitido/i, "permission_denied"],
+  [
+    /\bEACCES\b|permission denied|operation not permitted|EPERM\b|permiso denegado|no permitido/i,
+    "permission_denied",
+  ],
   // Runtime error signatures
-  [/\bTraceback\b|\bReferenceError\b|\bpanic:|\bNullPointerException\b|\bSyntaxError\b/i, "runtime_traceback"],
+  [
+    /\bTraceback\b|\bReferenceError\b|\bpanic:|\bNullPointerException\b|\bSyntaxError\b/i,
+    "runtime_traceback",
+  ],
   // Dependency missing (Python/Node/Go)
-  [/\bModuleNotFoundError\b|\bImportError\b|\bno module named\b|cannot find module|could not resolve dependency/i, "dependency_missing"],
+  [
+    /\bModuleNotFoundError\b|\bImportError\b|\bno module named\b|cannot find module|could not resolve dependency/i,
+    "dependency_missing",
+  ],
   // Syntax
   [/\bunexpected token\b|\bparse error\b|\binvalid syntax\b/i, "syntax_error"],
   // Network
-  [/\bECONNREFUSED\b|\bENETUNREACH\b|\bEHOSTUNREACH\b|connection refused|network unreachable|no route to host/i, "network"],
+  [
+    /\bECONNREFUSED\b|\bENETUNREACH\b|\bEHOSTUNREACH\b|connection refused|network unreachable|no route to host/i,
+    "network",
+  ],
   // Timeout
   [/\btimeout\b|\btimed out\b|exit code 124|ETIMEDOUT/i, "timeout"],
 ];

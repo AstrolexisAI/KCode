@@ -91,7 +91,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   // set to true in the nudge path. All other return paths inherit
   // this value unchanged, avoiding the need to add actionNudgeUsed
   // to every single return statement.
-  let actionNudgeUsed = ctx.actionNudgeUsed;
+  const actionNudgeUsed = ctx.actionNudgeUsed;
   // Same pattern as actionNudgeUsed: most returns inherit this unchanged,
   // only the reasoning-loop detection path mutates it. Hoisted here so
   // every return doesn't have to re-spell ctx.consecutiveTextOnlyTurns.
@@ -206,7 +206,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     // it never executes. Added intention-without-execution patterns
     // alongside the original question-based deferral patterns.
     const DEFERRAL_PATTERNS = [
-      /\?[\s\n]*$/,                                          // ends with ?
+      /\?[\s\n]*$/, // ends with ?
       /¿(?:Deseas|Quieres|Prefieres|Cómo quieres|Te gustaría)\b/i,
       /\b(?:Would you like|Do you want|Shall I|Should I|How would you like)\b/i,
       /\b(?:¿(?:Empiezo|Procedo|Continúo|Inicio))\b/i,
@@ -304,8 +304,12 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       const { getActivePlan } = await import("../tools/plan.js");
       const plan = getActivePlan();
       if (plan) {
-        const usedPlanTool = ctx.toolCalls.some((tc) => tc.name === "Plan" || tc.name === "PlanMode");
-        const inProgressSteps = plan.steps.filter((s: { status: string }) => s.status === "in_progress");
+        const usedPlanTool = ctx.toolCalls.some(
+          (tc) => tc.name === "Plan" || tc.name === "PlanMode",
+        );
+        const inProgressSteps = plan.steps.filter(
+          (s: { status: string }) => s.status === "in_progress",
+        );
         if (!usedPlanTool && inProgressSteps.length > 0) {
           injectMessages.push({
             role: "user",
@@ -313,7 +317,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           });
         }
       }
-    } catch { /* plan module not loaded */ }
+    } catch {
+      /* plan module not loaded */
+    }
   }
 
   // Safety net: classify empty responses and retry with context-aware prompts
@@ -324,7 +330,10 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   const hasToolOutput = ctx.toolCalls.length > 0;
 
   // Classify empty responses — persisted so the final turn_end carries it
-  if (!hasTextOutput && (ctx.stopReason === "end_turn" || ctx.stopReason === "repetition_aborted")) {
+  if (
+    !hasTextOutput &&
+    (ctx.stopReason === "end_turn" || ctx.stopReason === "repetition_aborted")
+  ) {
     lastEmptyType =
       hasThinkingOutput && !hasToolOutput
         ? "thinking_only"
@@ -339,10 +348,13 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
 
   // Reasoning models (kimi, grok-reasoning, o1/o3) need more retries when mid-task:
   // they produce multiple thinking-only turns while planning before emitting the tool call.
-  const maxEmptyRetries =
-    lastEmptyType === "thinking_only" && ctx.toolUseCount > 0 ? 4 : 2;
+  const maxEmptyRetries = lastEmptyType === "thinking_only" && ctx.toolUseCount > 0 ? 4 : 2;
 
-  if (!hasTextOutput && (ctx.stopReason === "end_turn" || ctx.stopReason === "repetition_aborted") && emptyEndTurnCount < maxEmptyRetries) {
+  if (
+    !hasTextOutput &&
+    (ctx.stopReason === "end_turn" || ctx.stopReason === "repetition_aborted") &&
+    emptyEndTurnCount < maxEmptyRetries
+  ) {
     emptyEndTurnCount++;
 
     // If context is near full, emergency compact before retrying — otherwise the retry
@@ -639,10 +651,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       completion: Partial<typeof cur.completion>;
     } = { completion: {} };
     if (opts.mayClaimReady === false) updates.completion.mayClaimReady = false;
-    if (opts.mayClaimImplemented === false)
-      updates.completion.mayClaimImplemented = false;
-    if (opts.mustUsePartialLanguage === true)
-      updates.completion.mustUsePartialLanguage = true;
+    if (opts.mayClaimImplemented === false) updates.completion.mayClaimImplemented = false;
+    if (opts.mustUsePartialLanguage === true) updates.completion.mustUsePartialLanguage = true;
     if (opts.phase) updates.phase = opts.phase as typeof cur.phase;
     if (!cur.completion.reasons.includes(reason)) {
       updates.completion.reasons = [...cur.completion.reasons, reason];
@@ -699,17 +709,20 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               (b as { type?: unknown }).type === "tool_result"
             ) {
               const content = (b as { content?: unknown }).content;
-              const text = typeof content === "string"
-                ? content
-                : Array.isArray(content)
+              const text =
+                typeof content === "string"
                   ? content
-                      .filter((c: unknown): c is { type: string; text: string } =>
-                        typeof c === "object" && c !== null &&
-                        (c as { type?: unknown }).type === "text",
-                      )
-                      .map((c) => c.text)
-                      .join(" ")
-                  : "";
+                  : Array.isArray(content)
+                    ? content
+                        .filter(
+                          (c: unknown): c is { type: string; text: string } =>
+                            typeof c === "object" &&
+                            c !== null &&
+                            (c as { type?: unknown }).type === "text",
+                        )
+                        .map((c) => c.text)
+                        .join(" ")
+                    : "";
               if (/\bBLOCKED\b/.test(text)) {
                 blockFound = true;
                 break;
@@ -723,7 +736,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           // Reached a non-tool-result user message (the prior turn boundary) — stop scanning.
           const isToolResultsOnly = m.content.every(
             (b) =>
-              typeof b === "object" && b !== null &&
+              typeof b === "object" &&
+              b !== null &&
               (b as { type?: unknown }).type === "tool_result",
           );
           if (!isToolResultsOnly) break;
@@ -797,15 +811,15 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           for (const m of ctx.messages) {
             if (m.role === "assistant" && Array.isArray(m.content)) {
               for (const b of m.content) {
-                const t = typeof b === "object" && b !== null
-                  ? (b as { type?: unknown }).type
-                  : undefined;
+                const t =
+                  typeof b === "object" && b !== null ? (b as { type?: unknown }).type : undefined;
                 if (t !== "tool_use") continue;
                 if (String((b as { name?: unknown }).name ?? "") !== "Bash") continue;
                 const inp = (b as { input?: unknown }).input;
-                const cmd = typeof inp === "object" && inp !== null
-                  ? String((inp as { command?: unknown }).command ?? "")
-                  : "";
+                const cmd =
+                  typeof inp === "object" && inp !== null
+                    ? String((inp as { command?: unknown }).command ?? "")
+                    : "";
                 if (cmd.includes("mkdir") && cmd.includes(s.projectRoot.path)) {
                   mkdirSucceeded = true;
                   break;
@@ -856,14 +870,11 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             title: "Partial implementation detected",
             subtitle: warning.split("\n").slice(0, 4).join("\n"),
           });
-          flagScope(
-            `${findings.length} placeholder/stub marker(s) in generated code`,
-            {
-              mayClaimImplemented: false,
-              mustUsePartialLanguage: true,
-              phase: "partial",
-            },
-          );
+          flagScope(`${findings.length} placeholder/stub marker(s) in generated code`, {
+            mayClaimImplemented: false,
+            mustUsePartialLanguage: true,
+            phase: "partial",
+          });
 
           // Phase 8: for broad-scope requests, a placeholder-laden
           // scaffold is NOT a valid stopping point. Inject a
@@ -900,24 +911,18 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       const mismatch = detectCreationClaimMismatch(finalText, filesOnDiskCount);
       if (mismatch) {
         const warning = formatClaimMismatchWarning(mismatch);
-        log.warn(
-          "grounding",
-          `creation-claim mismatch: "${mismatch.snippet}" but 0 files written`,
-        );
+        log.warn("grounding", `creation-claim mismatch: "${mismatch.snippet}" but 0 files written`);
         events.push({
           type: "banner",
           title: "Ungrounded completion claim",
           subtitle: warning,
         });
-        flagScope(
-          "creation claimed in response but zero files landed on disk",
-          {
-            mayClaimReady: false,
-            mayClaimImplemented: false,
-            mustUsePartialLanguage: true,
-            phase: "partial",
-          },
-        );
+        flagScope("creation claimed in response but zero files landed on disk", {
+          mayClaimReady: false,
+          mayClaimImplemented: false,
+          mustUsePartialLanguage: true,
+          phase: "partial",
+        });
       }
 
       // Check 3 — auth/network operational claim that isn't provable
@@ -926,10 +931,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       const authFinding = detectAuthClaim(finalText);
       if (authFinding) {
         const warning = formatAuthClaimWarning(authFinding);
-        log.warn(
-          "grounding",
-          `unverifiable auth claim: "${authFinding.snippet}"`,
-        );
+        log.warn("grounding", `unverifiable auth claim: "${authFinding.snippet}"`);
         events.push({
           type: "banner",
           title: "Unverified auth/network assumption",
@@ -948,8 +950,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       // in stdout. The existing errorsEncountered counter misses
       // this because it only tracks is_error from tool results.
       {
-        const { detectRuntimeFailureInOutput, formatRuntimeFailureInOutputWarning } =
-          await import("./grounding-gate.js");
+        const { detectRuntimeFailureInOutput, formatRuntimeFailureInOutputWarning } = await import(
+          "./grounding-gate.js"
+        );
         // Build (command, output) pairs from this turn's Bash calls.
         const bashOutputs: Array<{ command: string; output: string }> = [];
         for (let i = 0; i < ctx.messages.length; i++) {
@@ -957,38 +960,42 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           if (!m) continue;
           if (m.role === "assistant" && Array.isArray(m.content)) {
             for (const b of m.content) {
-              const type = typeof b === "object" && b !== null
-                ? (b as { type?: unknown }).type
-                : undefined;
+              const type =
+                typeof b === "object" && b !== null ? (b as { type?: unknown }).type : undefined;
               if (type !== "tool_use") continue;
               if (String((b as { name?: unknown }).name ?? "") !== "Bash") continue;
               const useId = String((b as { id?: unknown }).id ?? "");
               const inp = (b as { input?: unknown }).input;
-              const cmd = typeof inp === "object" && inp !== null
-                ? String((inp as { command?: unknown }).command ?? "")
-                : "";
+              const cmd =
+                typeof inp === "object" && inp !== null
+                  ? String((inp as { command?: unknown }).command ?? "")
+                  : "";
               // Find matching tool_result in later user messages
               for (let j = i + 1; j < ctx.messages.length; j++) {
                 const n = ctx.messages[j];
                 if (!n || n.role !== "user" || !Array.isArray(n.content)) continue;
                 for (const rb of n.content) {
                   if (
-                    typeof rb === "object" && rb !== null &&
+                    typeof rb === "object" &&
+                    rb !== null &&
                     (rb as { type?: unknown }).type === "tool_result" &&
                     (rb as { tool_use_id?: unknown }).tool_use_id === useId
                   ) {
                     const raw = (rb as { content?: unknown }).content;
-                    const output = typeof raw === "string"
-                      ? raw
-                      : Array.isArray(raw)
+                    const output =
+                      typeof raw === "string"
                         ? raw
-                            .filter((c: unknown): c is { type: string; text: string } =>
-                              typeof c === "object" && c !== null &&
-                              (c as { type?: unknown }).type === "text",
-                            )
-                            .map((c) => c.text)
-                            .join("\n")
-                        : "";
+                        : Array.isArray(raw)
+                          ? raw
+                              .filter(
+                                (c: unknown): c is { type: string; text: string } =>
+                                  typeof c === "object" &&
+                                  c !== null &&
+                                  (c as { type?: unknown }).type === "text",
+                              )
+                              .map((c) => c.text)
+                              .join("\n")
+                          : "";
                     bashOutputs.push({ command: cmd, output });
                     break;
                   }
@@ -1027,8 +1034,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       // Edit/Write/GrepReplace/sed -i applied → no successful rerun →
       // final text claims success. Issue #104.
       {
-        const { detectPatchWithoutRerun, formatPatchWithoutRerunWarning } =
-          await import("./grounding-gate.js");
+        const { detectPatchWithoutRerun, formatPatchWithoutRerunWarning } = await import(
+          "./grounding-gate.js"
+        );
         // Build tool-event list from this turn's messages.
         const toolEvents: {
           name: string;
@@ -1039,24 +1047,24 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           if (!m) continue;
           if (m.role === "assistant" && Array.isArray(m.content)) {
             for (const b of m.content) {
-              const type = typeof b === "object" && b !== null
-                ? (b as { type?: unknown }).type
-                : undefined;
+              const type =
+                typeof b === "object" && b !== null ? (b as { type?: unknown }).type : undefined;
               if (type === "tool_use") {
                 const name = String((b as { name?: unknown }).name ?? "?");
                 const inp = (b as { input?: unknown }).input;
                 let summary = "";
                 if (typeof inp === "object" && inp !== null) {
                   const rec = inp as Record<string, unknown>;
-                  summary = typeof rec.command === "string"
-                    ? rec.command
-                    : typeof rec.file_path === "string"
-                      ? rec.file_path
-                      : typeof rec.path === "string"
-                        ? rec.path
-                        : typeof rec.pattern === "string"
-                          ? `pattern=${rec.pattern}`
-                          : JSON.stringify(inp).slice(0, 120);
+                  summary =
+                    typeof rec.command === "string"
+                      ? rec.command
+                      : typeof rec.file_path === "string"
+                        ? rec.file_path
+                        : typeof rec.path === "string"
+                          ? rec.path
+                          : typeof rec.pattern === "string"
+                            ? `pattern=${rec.pattern}`
+                            : JSON.stringify(inp).slice(0, 120);
                 }
                 toolEvents.push({ name, isError: false, summary });
               }
@@ -1064,9 +1072,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           }
           if (m.role === "user" && Array.isArray(m.content)) {
             for (const b of m.content) {
-              const type = typeof b === "object" && b !== null
-                ? (b as { type?: unknown }).type
-                : undefined;
+              const type =
+                typeof b === "object" && b !== null ? (b as { type?: unknown }).type : undefined;
               if (type === "tool_result") {
                 const isError = (b as { is_error?: unknown }).is_error === true;
                 // Attach isError retroactively to the last matching tool_use.
@@ -1122,9 +1129,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         // The unsolicited-docs gate produces this exact BLOCKED
         // message. If we see that in the tool-result stream AND the
         // final prose mentions README, the claim is fabricated.
-        if (
-          /\breadme\b|setup\s+instructions|basic\s+readme/i.test(finalText)
-        ) {
+        if (/\breadme\b|setup\s+instructions|basic\s+readme/i.test(finalText)) {
           let readmeBlocked = false;
           let readmeActuallyCreated = false;
           for (const m of ctx.messages) {
@@ -1134,9 +1139,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               if (
                 (b as { type?: unknown }).type === "tool_result" &&
                 typeof (b as { content?: unknown }).content === "string" &&
-                /BLOCKED — FILE NOT CREATED:.*README/i.test(
-                  (b as { content: string }).content,
-                )
+                /BLOCKED — FILE NOT CREATED:.*README/i.test((b as { content: string }).content)
               ) {
                 readmeBlocked = true;
               }
@@ -1218,10 +1221,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         }
 
         if (fabricatedReasons.length > 0) {
-          log.warn(
-            "grounding",
-            `fabricated claim(s) detected: ${fabricatedReasons.join("; ")}`,
-          );
+          log.warn("grounding", `fabricated claim(s) detected: ${fabricatedReasons.join("; ")}`);
           events.push({
             type: "banner",
             title: "Fabricated claim detected",
@@ -1341,9 +1341,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         !scope.verification.rerunPassedAfterPatch &&
         scope.verification.rerunAttempts < 3
       ) {
-        const { buildRerunDirective, deriveRerunCommand } = await import(
-          "./rerun-directive.js"
-        );
+        const { buildRerunDirective, deriveRerunCommand } = await import("./rerun-directive.js");
         const directive = buildRerunDirective(scope);
         const cmd = deriveRerunCommand(scope);
         if (directive && cmd) {
@@ -1379,10 +1377,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         }
       }
     } catch (err) {
-      log.debug(
-        "forced-rerun",
-        `gate error: ${err instanceof Error ? err.message : err}`,
-      );
+      log.debug("forced-rerun", `gate error: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -1425,7 +1420,10 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
                     status: result.status,
                     probeId: result.probeId,
                     evidence: result.status === "pass" ? result.evidence : undefined,
-                    error: result.status !== "pass" && result.status !== "not_applicable" ? result.error : undefined,
+                    error:
+                      result.status !== "pass" && result.status !== "not_applicable"
+                        ? result.error
+                        : undefined,
                     tier: result.status === "pass" ? result.tier : undefined,
                   },
                 },
@@ -1437,10 +1435,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
                   mustUsePartialLanguage: true,
                   phase: "blocked",
                 });
-              } else if (
-                result.status === "fail_connection" ||
-                result.status === "fail_runtime"
-              ) {
+              } else if (result.status === "fail_connection" || result.status === "fail_runtime") {
                 flagScope(`functional probe failed: ${result.error}`, {
                   mayClaimReady: false,
                   mustUsePartialLanguage: true,
@@ -1461,10 +1456,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
                   completion: { mayClaimReady: true, mayClaimImplemented: true },
                   phase: "done",
                 });
-                log.info(
-                  "probe",
-                  `pass (tier ${result.tier}) — overriding phase to done`,
-                );
+                log.info("probe", `pass (tier ${result.tier}) — overriding phase to done`);
               }
             }
           } catch (err) {
@@ -1532,9 +1524,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
               // layer: catches fabrications BEFORE they reach the user.
               if (process.env.KCODE_DISABLE_REPO_GROUNDING !== "1") {
                 try {
-                  const { groundGithubRepoClaims } = await import(
-                    "./github-claim-grounding.js"
-                  );
+                  const { groundGithubRepoClaims } = await import("./github-claim-grounding.js");
                   const grounded = await groundGithubRepoClaims(working, {
                     timeoutMs: 2500,
                   });
@@ -1600,14 +1590,11 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         // Flag scope when fabricated repos were detected so the
         // closeout renders "partial" + surfaces the reason.
         if (missingRepos.length > 0) {
-          flagScope(
-            `fabricated repo reference(s): ${missingRepos.map((r) => r.repo).join(", ")}`,
-            {
-              mayClaimReady: false,
-              mayClaimImplemented: false,
-              mustUsePartialLanguage: true,
-            },
-          );
+          flagScope(`fabricated repo reference(s): ${missingRepos.map((r) => r.repo).join(", ")}`, {
+            mayClaimReady: false,
+            mayClaimImplemented: false,
+            mustUsePartialLanguage: true,
+          });
         }
 
         const correction = renderCloseoutFromScope(freshScope);
@@ -1673,10 +1660,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         }
       }
     } catch (err) {
-      log.debug(
-        "closeout-renderer",
-        `render error: ${err instanceof Error ? err.message : err}`,
-      );
+      log.debug("closeout-renderer", `render error: ${err instanceof Error ? err.message : err}`);
     }
   }
 
@@ -1690,10 +1674,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   // KCODE_DISABLE_SELF_CRITIQUE=1.
   {
     const sc_draftText = ctx.textChunks.join("");
-    if (
-      process.env.KCODE_DISABLE_SELF_CRITIQUE !== "1" &&
-      sc_draftText.trim().length >= 40
-    ) {
+    if (process.env.KCODE_DISABLE_SELF_CRITIQUE !== "1" && sc_draftText.trim().length >= 40) {
       try {
         // Compute the signals the critique needs, independent of
         // whether the regex-gate block above ran.
@@ -1709,25 +1690,27 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             let foundBlock = false;
             let allToolResults = true;
             for (const b of m.content) {
-              const type = typeof b === "object" && b !== null
-                ? (b as { type?: unknown }).type
-                : undefined;
+              const type =
+                typeof b === "object" && b !== null ? (b as { type?: unknown }).type : undefined;
               if (type !== "tool_result") {
                 allToolResults = false;
                 continue;
               }
               const raw = (b as { content?: unknown }).content;
-              const txt = typeof raw === "string"
-                ? raw
-                : Array.isArray(raw)
+              const txt =
+                typeof raw === "string"
                   ? raw
-                      .filter((c: unknown): c is { type: string; text: string } =>
-                        typeof c === "object" && c !== null &&
-                        (c as { type?: unknown }).type === "text",
-                      )
-                      .map((c) => c.text)
-                      .join(" ")
-                  : "";
+                  : Array.isArray(raw)
+                    ? raw
+                        .filter(
+                          (c: unknown): c is { type: string; text: string } =>
+                            typeof c === "object" &&
+                            c !== null &&
+                            (c as { type?: unknown }).type === "text",
+                        )
+                        .map((c) => c.text)
+                        .join(" ")
+                    : "";
               if (/\bBLOCKED\b/.test(txt)) foundBlock = true;
             }
             if (foundBlock) {
@@ -1758,9 +1741,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           }
         }
 
-        const { runSelfCritique, formatCritiqueBanner } = await import(
-          "./self-critique.js"
-        );
+        const { runSelfCritique, formatCritiqueBanner } = await import("./self-critique.js");
         // Prefer tertiaryModel; fall back to the primary model which
         // is guaranteed reachable (the conversation just ran on it).
         // Without this fallback, runForkedAgent resolves "model=undefined"
@@ -1797,10 +1778,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           });
         }
       } catch (err) {
-        log.debug(
-          "self-critique",
-          `pass error: ${err instanceof Error ? err.message : err}`,
-        );
+        log.debug("self-critique", `pass error: ${err instanceof Error ? err.message : err}`);
       }
     }
   }
@@ -1813,8 +1791,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   // v306 extends the capture shapes: bullets, markdown links, and
   // tables (not just 1./2./3. numbered). See reference-extractor.ts.
   try {
-    const { bumpTurnCounter, extractRankedListFromText, recordRankedList } =
-      await import("./reference-memory.js");
+    const { bumpTurnCounter, extractRankedListFromText, recordRankedList } = await import(
+      "./reference-memory.js"
+    );
     bumpTurnCounter();
     const turnText = ctx.textChunks.join("");
     if (turnText.length > 0) {

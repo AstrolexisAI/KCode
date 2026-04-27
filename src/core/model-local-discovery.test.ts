@@ -17,8 +17,9 @@ describe("deriveGgufLabel", () => {
   });
 
   test("keeps quant/variant suffixes intact", () => {
-    expect(deriveGgufLabel("/a/Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M.gguf"))
-      .toBe("Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M");
+    expect(deriveGgufLabel("/a/Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M.gguf")).toBe(
+      "Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M",
+    );
   });
 
   test("works on bare file names", () => {
@@ -78,10 +79,10 @@ describe("getLocalModelLabel", () => {
     let seenUrl = "";
     globalThis.fetch = (async (url: string) => {
       seenUrl = url;
-      return new Response(
-        JSON.stringify({ model_path: "/p/m.gguf" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ model_path: "/p/m.gguf" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }) as unknown as typeof fetch;
 
     await getLocalModelLabel("http://localhost:8090///");

@@ -1,12 +1,7 @@
 // Tests for Stash tool — save/restore conversation state
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Message } from "../core/types";
-import {
-  clearStashes,
-  executeStash,
-  setStashCallbacks,
-  stashDefinition,
-} from "./stash";
+import { clearStashes, executeStash, setStashCallbacks, stashDefinition } from "./stash";
 
 let mockMessages: Message[] = [];
 let restoredMessages: Message[] | null = null;

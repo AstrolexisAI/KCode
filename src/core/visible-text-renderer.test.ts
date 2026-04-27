@@ -51,8 +51,9 @@ describe("renderVisibleText", () => {
     renderVisibleText("rpcpassword=tronco", { source: "tool_output" });
     const detected = mgr.current()?.secrets.detected ?? [];
     // Manager dedups by kind+source
-    expect(detected.filter((s) => s.kind === "rpcpassword" && s.source === "tool_output").length)
-      .toBe(1);
+    expect(
+      detected.filter((s) => s.kind === "rpcpassword" && s.source === "tool_output").length,
+    ).toBe(1);
   });
 
   test("skipScopeRecord=true does not pollute scope", () => {

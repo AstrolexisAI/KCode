@@ -44,9 +44,7 @@ describe("IncompleteResponseBanner render", () => {
   });
 
   test("shows generic incomplete for other stop reasons", () => {
-    instance = renderWithTheme(
-      <IncompleteResponseBanner continuations={0} stopReason="error" />,
-    );
+    instance = renderWithTheme(<IncompleteResponseBanner continuations={0} stopReason="error" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("Response may be incomplete");
     expect(out).toContain("error");
@@ -60,9 +58,7 @@ describe("IncompleteResponseBanner render", () => {
   });
 
   test("surrounds message with dashes", () => {
-    instance = renderWithTheme(
-      <IncompleteResponseBanner continuations={0} stopReason="test" />,
-    );
+    instance = renderWithTheme(<IncompleteResponseBanner continuations={0} stopReason="test" />);
     const out = instance.lastFrame()!;
     expect(out).toContain("---");
   });

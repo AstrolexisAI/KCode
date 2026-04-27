@@ -11,15 +11,15 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export type CppProjectType =
-  | "library"      // Static/shared library
-  | "cli"          // Command-line tool
-  | "server"       // Network server (HTTP, TCP, UDP)
-  | "embedded"     // Embedded/microcontroller
-  | "game"         // Game / graphics
-  | "system"       // System utility / daemon
-  | "driver"       // Device driver / kernel module
-  | "gui"          // Desktop GUI app
-  | "scientific"   // Scientific / numerical computing
+  | "library" // Static/shared library
+  | "cli" // Command-line tool
+  | "server" // Network server (HTTP, TCP, UDP)
+  | "embedded" // Embedded/microcontroller
+  | "game" // Game / graphics
+  | "system" // System utility / daemon
+  | "driver" // Device driver / kernel module
+  | "gui" // Desktop GUI app
+  | "scientific" // Scientific / numerical computing
   | "custom";
 
 export interface CppProjectConfig {
@@ -47,12 +47,16 @@ function detectCppProject(message: string): CppProjectConfig {
   // Detect type
   if (/\b(?:lib|library|biblioteca)\b/i.test(lower)) type = "library";
   else if (/\b(?:server|servidor|http|tcp|udp|socket|network|red)\b/i.test(lower)) type = "server";
-  else if (/\b(?:embedded|microcontroller|arduino|stm32|esp32|firmware)\b/i.test(lower)) type = "embedded";
-  else if (/\b(?:game|juego|opengl|vulkan|sdl|sfml|graphics|gráficos)\b/i.test(lower)) type = "game";
-  else if (/\b(?:system|daemon|service|servicio|utility|herramienta)\b/i.test(lower)) type = "system";
+  else if (/\b(?:embedded|microcontroller|arduino|stm32|esp32|firmware)\b/i.test(lower))
+    type = "embedded";
+  else if (/\b(?:game|juego|opengl|vulkan|sdl|sfml|graphics|gráficos)\b/i.test(lower))
+    type = "game";
+  else if (/\b(?:system|daemon|service|servicio|utility|herramienta)\b/i.test(lower))
+    type = "system";
   else if (/\b(?:driver|kernel|módulo|module)\b/i.test(lower)) type = "driver";
   else if (/\b(?:gui|desktop|gtk|qt|imgui|interfaz)\b/i.test(lower)) type = "gui";
-  else if (/\b(?:scientific|numerical|math|fft|matrix|simulation|simulación)\b/i.test(lower)) type = "scientific";
+  else if (/\b(?:scientific|numerical|math|fft|matrix|simulation|simulación)\b/i.test(lower))
+    type = "scientific";
 
   // Detect language standard
   if (/\bc\b(?!\+)/.test(lower) && !/c\+\+/.test(lower)) standard = "c17";
@@ -129,27 +133,30 @@ interface GenFile {
 }
 
 function generateCMake(cfg: CppProjectConfig): GenFile {
-  const deps = cfg.dependencies.map(d => `find_package(${d} REQUIRED)`).join("\n");
-  const links = cfg.dependencies.map(d => {
-    const targets: Record<string, string> = {
-      "OpenSSL": "OpenSSL::SSL OpenSSL::Crypto",
-      "CURL": "CURL::libcurl",
-      "SQLite3": "SQLite::SQLite3",
-      "Boost": "Boost::boost",
-      "OpenCV": "${OpenCV_LIBS}",
-      "SDL2": "SDL2::SDL2",
-      "SFML": "sfml-graphics sfml-window sfml-system",
-      "OpenGL": "OpenGL::GL",
-      "GLFW": "glfw",
-      "Qt6": "Qt6::Widgets",
-      "Protobuf": "protobuf::libprotobuf",
-    };
-    return targets[d] ?? d.toLowerCase();
-  }).join(" ");
+  const deps = cfg.dependencies.map((d) => `find_package(${d} REQUIRED)`).join("\n");
+  const links = cfg.dependencies
+    .map((d) => {
+      const targets: Record<string, string> = {
+        OpenSSL: "OpenSSL::SSL OpenSSL::Crypto",
+        CURL: "CURL::libcurl",
+        SQLite3: "SQLite::SQLite3",
+        Boost: "Boost::boost",
+        OpenCV: "${OpenCV_LIBS}",
+        SDL2: "SDL2::SDL2",
+        SFML: "sfml-graphics sfml-window sfml-system",
+        OpenGL: "OpenGL::GL",
+        GLFW: "glfw",
+        Qt6: "Qt6::Widgets",
+        Protobuf: "protobuf::libprotobuf",
+      };
+      return targets[d] ?? d.toLowerCase();
+    })
+    .join(" ");
 
-  const targetType = cfg.type === "library"
-    ? `add_library(\${PROJECT_NAME} STATIC \${SOURCES})`
-    : `add_executable(\${PROJECT_NAME} \${SOURCES})`;
+  const targetType =
+    cfg.type === "library"
+      ? `add_library(\${PROJECT_NAME} STATIC \${SOURCES})`
+      : `add_executable(\${PROJECT_NAME} \${SOURCES})`;
 
   return {
     path: "CMakeLists.txt",
@@ -178,8 +185,12 @@ install(TARGETS \${PROJECT_NAME} DESTINATION bin)
 ${cfg.type === "library" ? `install(DIRECTORY include/ DESTINATION include)` : ""}
 
 # Tests
-${cfg.hasTesting ? `enable_testing()
-add_subdirectory(tests)` : ""}
+${
+  cfg.hasTesting
+    ? `enable_testing()
+add_subdirectory(tests)`
+    : ""
+}
 `,
     needsLlm: false,
   };
@@ -187,7 +198,8 @@ add_subdirectory(tests)` : ""}
 
 function generateMain(cfg: CppProjectConfig): GenFile {
   const templates: Record<string, string> = {
-    cli: isCpp(cfg) ? `#include <iostream>
+    cli: isCpp(cfg)
+      ? `#include <iostream>
 #include <string>
 #include "${cfg.name}.${hext(cfg)}"
 
@@ -202,7 +214,8 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-` : `#include <stdio.h>
+`
+      : `#include <stdio.h>
 #include <stdlib.h>
 #include "${cfg.name}.${hext(cfg)}"
 
@@ -462,11 +475,13 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 `,
-    library: isCpp(cfg) ? `// Library entry point — implement in src/${cfg.name}.${ext(cfg)}
+    library: isCpp(cfg)
+      ? `// Library entry point — implement in src/${cfg.name}.${ext(cfg)}
 #include "${cfg.name}.${hext(cfg)}"
 
 // See include/${cfg.name}.${hext(cfg)} for public API
-` : `#include "${cfg.name}.${hext(cfg)}"
+`
+      : `#include "${cfg.name}.${hext(cfg)}"
 `,
     system: `#include <iostream>
 #include <csignal>
@@ -506,7 +521,8 @@ function generateHeader(cfg: CppProjectConfig): GenFile {
 
   return {
     path: `include/${cfg.name}.${hext(cfg)}`,
-    content: isCpp(cfg) ? `#pragma once
+    content: isCpp(cfg)
+      ? `#pragma once
 #ifndef ${guard}
 #define ${guard}
 
@@ -547,7 +563,8 @@ private:
 } // namespace ${cfg.name}
 
 #endif // ${guard}
-` : `#pragma once
+`
+      : `#pragma once
 #ifndef ${guard}
 #define ${guard}
 
@@ -583,7 +600,8 @@ int ${cfg.name}_run(${cfg.name}_ctx_t* ctx);
 function generateImpl(cfg: CppProjectConfig): GenFile {
   return {
     path: `src/${cfg.name}.${ext(cfg)}`,
-    content: isCpp(cfg) ? `#include "${cfg.name}.${hext(cfg)}"
+    content: isCpp(cfg)
+      ? `#include "${cfg.name}.${hext(cfg)}"
 #include <iostream>
 
 namespace ${cfg.name} {
@@ -608,7 +626,8 @@ void ${capitalize(cfg.name)}::shutdown() {
 }
 
 } // namespace ${cfg.name}
-` : `#include "${cfg.name}.${hext(cfg)}"
+`
+      : `#include "${cfg.name}.${hext(cfg)}"
 #include <stdlib.h>
 #include <string.h>
 
@@ -674,7 +693,8 @@ gtest_discover_tests(${cfg.name}_tests)
     },
     {
       path: `tests/test_main.${ext(cfg)}`,
-      content: isCpp(cfg) ? `#include <gtest/gtest.h>
+      content: isCpp(cfg)
+        ? `#include <gtest/gtest.h>
 #include "${cfg.name}.${hext(cfg)}"
 
 using namespace ${cfg.name};
@@ -707,7 +727,8 @@ TEST_F(${capitalize(cfg.name)}Test, RunWithoutInitThrows) {
 }
 
 // TODO: add domain-specific tests
-` : `#include <gtest/gtest.h>
+`
+        : `#include <gtest/gtest.h>
 extern "C" {
 #include "${cfg.name}.${hext(cfg)}"
 }
@@ -798,7 +819,7 @@ compile_commands.json
 WORKDIR /app
 RUN apt-get update && apt-get install -y cmake
 COPY . .
-RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j\$(nproc)
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j$(nproc)
 
 FROM debian:bookworm-slim
 COPY --from=builder /app/build/${cfg.name} /usr/local/bin/
@@ -820,7 +841,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j\$(nproc)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build build -j$(nproc)
       - name: Test
         run: cd build && ctest --output-on-failure
 `,
@@ -839,7 +860,7 @@ ${cfg.type === "library" ? "A C" + (isCpp(cfg) ? "++" : "") + " library." : "A C
 
 \`\`\`bash
 cmake -B build
-cmake --build build -j\$(nproc)
+cmake --build build -j$(nproc)
 \`\`\`
 
 ## Test
@@ -847,7 +868,7 @@ cmake --build build -j\$(nproc)
 \`\`\`bash
 cd build && ctest --output-on-failure
 \`\`\`
-${cfg.dependencies.length > 0 ? "\n## Dependencies\n\n" + cfg.dependencies.map(d => `- ${d}`).join("\n") + "\n" : ""}
+${cfg.dependencies.length > 0 ? "\n## Dependencies\n\n" + cfg.dependencies.map((d) => `- ${d}`).join("\n") + "\n" : ""}
 ## Structure
 
 \`\`\`
@@ -871,7 +892,10 @@ ${cfg.hasDocker ? "├── Dockerfile\n" : ""}└── README.md
 }
 
 function capitalize(s: string): string {
-  return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
 }
 
 // ── Main Creator ───────────────────────────────────────────────
@@ -902,8 +926,8 @@ export function createCppProject(userRequest: string, cwd: string): CppProjectRe
     writeFileSync(fullPath, file.content);
   }
 
-  const machineFiles = files.filter(f => !f.needsLlm).length;
-  const llmFiles = files.filter(f => f.needsLlm).length;
+  const machineFiles = files.filter((f) => !f.needsLlm).length;
+  const llmFiles = files.filter((f) => f.needsLlm).length;
 
   const prompt = `You are implementing a ${config.type} in ${isCpp(config) ? "C++" + config.standard.replace("cpp", "") : "C" + config.standard.replace("c", "")}.
 
@@ -915,7 +939,10 @@ DEPENDENCIES: ${config.dependencies.join(", ") || "none"}
 The machine already created ${machineFiles} files (CMake, structure, tests, CI, Docker).
 You need to implement the business logic in ${llmFiles} files:
 
-${files.filter(f => f.needsLlm).map(f => `- ${f.path}`).join("\n")}
+${files
+  .filter((f) => f.needsLlm)
+  .map((f) => `- ${f.path}`)
+  .join("\n")}
 
 USER REQUEST: "${userRequest}"
 

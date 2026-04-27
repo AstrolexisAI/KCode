@@ -213,11 +213,7 @@ describe("v2.10.326 contract — discriminated unions are exhaustive", () => {
   });
 
   it("PatternMaturity has experimental/stable/high_precision", () => {
-    const tiers: PatternMaturity[] = [
-      "experimental",
-      "stable",
-      "high_precision",
-    ];
+    const tiers: PatternMaturity[] = ["experimental", "stable", "high_precision"];
     expect(tiers.length).toBe(3);
   });
 });

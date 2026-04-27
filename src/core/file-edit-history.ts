@@ -171,10 +171,7 @@ export function detectImmediateEditRetry(
  * Mark the warning as shown, so the very next call with the same
  * fingerprint runs normally. Same pattern as bash-spawn-history.
  */
-export function acknowledgeEditWarning(
-  toolName: string,
-  input: Record<string, unknown>,
-): void {
+export function acknowledgeEditWarning(toolName: string, input: Record<string, unknown>): void {
   if (!isFileEditTool(toolName)) return;
   const key = fingerprintEditInput(toolName, input);
   for (let i = _attempts.length - 1; i >= 0; i--) {

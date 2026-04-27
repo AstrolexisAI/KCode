@@ -21,7 +21,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /_handler\s*\(\s*(?:const\s+)?FwIndexType\s+portNum[^)]*\)\s*\{(?![\s\S]{0,500}?(?:FW_ASSERT\s*\(\s*portNum|portNum\s*<\s*this->getNum_|this->isConnected_))/g,
+    regex:
+      /_handler\s*\(\s*(?:const\s+)?FwIndexType\s+portNum[^)]*\)\s*\{(?![\s\S]{0,500}?(?:FW_ASSERT\s*\(\s*portNum|portNum\s*<\s*this->getNum_|this->isConnected_))/g,
     explanation:
       "fprime port handlers receive a `FwIndexType portNum` that identifies which input port fired. If the component has N ports and portNum is used to index an array without FW_ASSERT(portNum < N), out-of-bounds. fprime framework code guards this but custom components sometimes skip it.",
     verify_prompt:
@@ -38,7 +39,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\.deserialize\s*\([^)]+\)\s*;(?![\s\S]{0,200}?(?:FW_ASSERT|if\s*\(\s*(?:stat|status|result|ser_?stat)\s*(?:!=|==)\s*Fw::SerializeStatus))/g,
+    regex:
+      /\.deserialize\s*\([^)]+\)\s*;(?![\s\S]{0,200}?(?:FW_ASSERT|if\s*\(\s*(?:stat|status|result|ser_?stat)\s*(?:!=|==)\s*Fw::SerializeStatus))/g,
     explanation:
       "fprime's SerializeBufferBase::deserialize() returns a Fw::SerializeStatus — it MUST be checked. If the buffer was truncated, the value left in the destination is undefined / attacker-controlled. Unchecked deserialize is the #1 class of parsing bugs in framework-based flight software.",
     verify_prompt:
@@ -55,7 +57,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\bFW_ASSERT\s*\(\s*(?:request|cmd|msg|packet|buffer|arg|input|user)[^,)]*(?:->|\.)[^,)]+/gi,
+    regex:
+      /\bFW_ASSERT\s*\(\s*(?:request|cmd|msg|packet|buffer|arg|input|user)[^,)]*(?:->|\.)[^,)]+/gi,
     explanation:
       "FW_ASSERT compiles out when FW_ASSERT_LEVEL is set to FW_NO_ASSERT (some deployed flight builds). Using it to validate command arguments means validation disappears in release. This is a common flight-software trap.",
     verify_prompt:
@@ -72,7 +75,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\bstatic_cast\s*<\s*(?:U8|U16|FwChanIdType|FwEventIdType|FwPacketDescriptorType|FwTlmPacketizeIdType|FwIndexType)\s*>\s*\(\s*[^)]+(?:msg->|cmd->|buf->|->\w+\.count|->\w+\.size)/g,
+    regex:
+      /\bstatic_cast\s*<\s*(?:U8|U16|FwChanIdType|FwEventIdType|FwPacketDescriptorType|FwTlmPacketizeIdType|FwIndexType)\s*>\s*\(\s*[^)]+(?:msg->|cmd->|buf->|->\w+\.count|->\w+\.size)/g,
     explanation:
       "Narrowing cast from a larger integer to U8/U16 silently truncates on overflow. In flight SW this often bridges a wire protocol (U32 sequence count) to an in-memory index (U8 slot), and the truncation wraps to 0 on the 256th command.",
     verify_prompt:
@@ -89,7 +93,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\b(\w+)\.getData\s*\(\s*\)\s*(?:\[|->|\+)(?![\s\S]{0,300}?FW_ASSERT\s*\(\s*\1\.getData)/g,
+    regex:
+      /\b(\w+)\.getData\s*\(\s*\)\s*(?:\[|->|\+)(?![\s\S]{0,300}?FW_ASSERT\s*\(\s*\1\.getData)/g,
     explanation:
       "Fw::Buffer can be null-allocated if BufferManager was exhausted. getData() returns nullptr in that case. Indexing into or dereferencing the pointer without a null check will crash the component (or worse, the flight computer if the SoC doesn't page-fault cleanly).",
     verify_prompt:
@@ -159,7 +164,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\bMsgDispatchStatus\s+[a-zA-Z_]\w*::doDispatch\s*\(\s*\)\s*\{[\s\S]{0,2000}?while\s*\(\s*(?:true|1)\s*\)/g,
+    regex:
+      /\bMsgDispatchStatus\s+[a-zA-Z_]\w*::doDispatch\s*\(\s*\)\s*\{[\s\S]{0,2000}?while\s*\(\s*(?:true|1)\s*\)/g,
     explanation:
       "An active component's doDispatch() with an unbounded `while(true)` can starve other threads on the same priority if one port's input is consistently busy. Flight software often needs a bounded drain-and-yield pattern.",
     verify_prompt:
@@ -193,7 +199,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\b(lastTick|startTime|epochTick|lastPacketTime|lastCmd(?:Time|Tick))\s*(?:\+|-)\s*\w+\s*(?:>|<|>=|<=)/g,
+    regex:
+      /\b(lastTick|startTime|epochTick|lastPacketTime|lastCmd(?:Time|Tick))\s*(?:\+|-)\s*\w+\s*(?:>|<|>=|<=)/g,
     explanation:
       "Direct subtraction of tick counts breaks at the rollover of the underlying type (U32 ticks at 1kHz rolls over in ~49 days, U16 in ~65 seconds). Flight missions hit this in production more than once.",
     verify_prompt:
@@ -210,7 +217,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "low",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\bswitch\s*\(\s*(?:this->m_state|state\s*\.)\s*[^)]*\)\s*\{(?![\s\S]{0,3000}?(?:default\s*:|case\s+FWXXX_STATE_COUNT|FW_ASSERT\s*\(\s*0\s*\)))/g,
+    regex:
+      /\bswitch\s*\(\s*(?:this->m_state|state\s*\.)\s*[^)]*\)\s*\{(?![\s\S]{0,3000}?(?:default\s*:|case\s+FWXXX_STATE_COUNT|FW_ASSERT\s*\(\s*0\s*\)))/g,
     explanation:
       "Flight state machines must handle ALL states. A switch on state without `default:` (or without FW_ASSERT(0) catching unknown values) silently does nothing when a new state is added but this site isn't updated. The bug manifests as 'component ignores commands in state X' long after deploy.",
     verify_prompt:
@@ -227,7 +235,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\b([A-Z_]\w+)_cmdHandler\s*\([^)]*const\s+(?:char\s*\*|Fw::CmdStringArg&|\w+StringArg&)\s+(\w+)[^)]*\)\s*\{[\s\S]{0,500}?\2(?![\s\S]{0,500}?this->cmdResponse_out)/g,
+    regex:
+      /\b([A-Z_]\w+)_cmdHandler\s*\([^)]*const\s+(?:char\s*\*|Fw::CmdStringArg&|\w+StringArg&)\s+(\w+)[^)]*\)\s*\{[\s\S]{0,500}?\2(?![\s\S]{0,500}?this->cmdResponse_out)/g,
     explanation:
       "Ground commands arrive over the flight-link and are inherently untrusted. Using a command string argument (path, mode, sequence) before emitting cmdResponse_OK or at least length-checking it lets a malformed command corrupt state.",
     verify_prompt:
@@ -250,8 +259,7 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     verify_prompt:
       "Is the numeric literal actually an opcode, priority, or other non-ID argument? If the first argument is semantically a severity/priority (not an event ID), FALSE_POSITIVE. If it's the event ID slot, CONFIRMED.",
     cwe: "CWE-1059",
-    fix_template:
-      "Use the autocoded enum: `EVENTID_<COMPONENT>_<NAME>` instead of a literal.",
+    fix_template: "Use the autocoded enum: `EVENTID_<COMPONENT>_<NAME>` instead of a literal.",
   },
 
   // ── Missing FW_ASSERT after configure() in RAM partition setup ──
@@ -266,14 +274,15 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     // matches every helper function in the codebase, drowning real
     // findings in noise. Match the subset of members that require
     // configure() to have run: allocator, buffers, memory, ports.
-    regex: /\bvoid\s+\w+::(?!configure|init|~)[a-z_]\w*\s*\([^)]*\)\s*\{(?=[\s\S]{0,1500}?this->m_(?:allocator|buffers?|memPtr|freeList|stateFileData|ports|pool|queue))(?![\s\S]{0,500}?(?:FW_ASSERT\s*\(\s*this->m_(?:configured|initialized|ready|setup)|if\s*\(\s*!\s*this->m_(?:configured|initialized|ready|setup)))/g,
+    regex:
+      /\bvoid\s+\w+::(?!configure|init|~)[a-z_]\w*\s*\([^)]*\)\s*\{(?=[\s\S]{0,1500}?this->m_(?:allocator|buffers?|memPtr|freeList|stateFileData|ports|pool|queue))(?![\s\S]{0,500}?(?:FW_ASSERT\s*\(\s*this->m_(?:configured|initialized|ready|setup)|if\s*\(\s*!\s*this->m_(?:configured|initialized|ready|setup)))/g,
     explanation:
       "Flight components have a two-phase init: constructor → configure(). Calling a method before configure() was called uses uninitialized member state — pointers are null, sizes are zero, buffers are unallocated.",
     verify_prompt:
       "Is this a method that can only be called after configure() (as opposed to getters, setters, the configure method itself, or handlers that are safe pre-config)? If it's a handler that would never fire before the port is connected, FALSE_POSITIVE. If it manipulates the allocator or configure-initialized state without guarding, CONFIRMED.",
     cwe: "CWE-665",
     fix_template:
-      "Add at method start: `FW_ASSERT(this->m_configured, \"configure() must be called first\");`",
+      'Add at method start: `FW_ASSERT(this->m_configured, "configure() must be called first");`',
   },
 
   // ── Dangerous cast in handler ──────────────────────────────────
@@ -283,7 +292,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\breinterpret_cast\s*<\s*(?:const\s+)?\w+\s*\*\s*>\s*\(\s*(?:buf|buffer|data|packet|payload|msg)[^)]*\.getData\s*\(\s*\)/g,
+    regex:
+      /\breinterpret_cast\s*<\s*(?:const\s+)?\w+\s*\*\s*>\s*\(\s*(?:buf|buffer|data|packet|payload|msg)[^)]*\.getData\s*\(\s*\)/g,
     explanation:
       "Reinterpret-casting a received buffer to a struct pointer without first verifying the buffer length ≥ sizeof(struct) reads off the end of the buffer. Common pattern in telemetry/packet decoders.",
     verify_prompt:
@@ -300,14 +310,15 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\bsnprintf\s*\([^,]*Fw::TextLogString[^,]*,[^,]*,\s*"\s*%s[^"]*"\s*,\s*(?:request|msg->|cmd->|buf)/g,
+    regex:
+      /\bsnprintf\s*\([^,]*Fw::TextLogString[^,]*,[^,]*,\s*"\s*%s[^"]*"\s*,\s*(?:request|msg->|cmd->|buf)/g,
     explanation:
       "Writing an untrusted string into a fixed-size log buffer with %s can truncate mid-UTF8 or leak parts of adjacent memory if the source isn't null-terminated. Telemetry downlinks are visible ground-side, so truncation artifacts can leak information.",
     verify_prompt:
       "Is the source guaranteed to be null-terminated (a Fw::StringBase derivative, a literal, or a value fresh from a null-terminating API)? If yes, FALSE_POSITIVE. If it's a raw buffer with unknown termination, CONFIRMED.",
     cwe: "CWE-170",
     fix_template:
-      "Use Fw::StringBase::format with width specifier: `logStr.format(\"%.*s\", maxLen, src)`, or copy into a staging buffer with explicit terminator.",
+      'Use Fw::StringBase::format with width specifier: `logStr.format("%.*s", maxLen, src)`, or copy into a staging buffer with explicit terminator.',
   },
 
   // ── Heap allocation in real-time context ────────────────────────
@@ -317,7 +328,8 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex: /\b(?:_handler|_cycleHandler)\s*\([^)]*\)\s*\{[\s\S]{0,1000}?\b(?:malloc|new\s+(?!(?:\w+::\w+)?\[)|calloc|realloc|std::make_unique|std::make_shared)\s*[(<]/g,
+    regex:
+      /\b(?:_handler|_cycleHandler)\s*\([^)]*\)\s*\{[\s\S]{0,1000}?\b(?:malloc|new\s+(?!(?:\w+::\w+)?\[)|calloc|realloc|std::make_unique|std::make_shared)\s*[(<]/g,
     explanation:
       "Heap allocation in a timing-critical path breaks determinism: malloc can take unbounded time on fragmented heaps, and some embedded allocators lock globally. Flight software convention uses pre-allocated pools.",
     verify_prompt:
@@ -410,13 +422,13 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
       "Fw::Logger::log and CFE_EVS_SendEvent treat their first format argument as a printf-style format string. If that argument comes from a command parameter, packet field, or ground-controllable source, an attacker controls format specifiers — `%n` writes to memory, `%s` reads arbitrary pointers, `%x` leaks stack contents.",
     verify_prompt:
       "Is the matched argument a STRING LITERAL or a function parameter?\n" +
-      "1. The first arg is a literal `\"some format %s\"` or a `static const char*` constant → FALSE_POSITIVE.\n" +
+      '1. The first arg is a literal `"some format %s"` or a `static const char*` constant → FALSE_POSITIVE.\n' +
       "2. The first arg is a non-format argument (severity enum, event ID, return value) — this regex over-matched → FALSE_POSITIVE.\n" +
       "3. The arg is captured from a function parameter that's documented as a format string only used internally → FALSE_POSITIVE (still flag for review).\n" +
       "Only CONFIRMED when a format-string argument flows from external input (command arg, deserialized packet field, ground parameter) into the logger call.",
     cwe: "CWE-134",
     fix_template:
-      "Always pass a literal format string: `log_WARNING_HI_BadInput(\"%s\", user_value);` — never `log_WARNING_HI_BadInput(user_format, ...)`.",
+      'Always pass a literal format string: `log_WARNING_HI_BadInput("%s", user_value);` — never `log_WARNING_HI_BadInput(user_format, ...)`.',
   },
 
   {
@@ -425,8 +437,7 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["c", "cpp"],
     pack: "embedded",
-    regex:
-      /\b(\w+)\.getSeconds\s*\(\s*\)\s*[-+]\s*(\w+)\.getSeconds\s*\(\s*\)/g,
+    regex: /\b(\w+)\.getSeconds\s*\(\s*\)\s*[-+]\s*(\w+)\.getSeconds\s*\(\s*\)/g,
     explanation:
       "Fw::Time has a TimeBase field (TB_NONE / TB_PROC_TIME / TB_WORKSTATION_TIME / TB_DONT_CARE / mission-specific). Subtracting Time values without first checking they share a TimeBase produces meaningless results when the spacecraft transitions across boot epochs or syncs to UTC mid-mission. Subtle bug — works in unit tests, breaks in flight.",
     verify_prompt:

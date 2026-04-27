@@ -18,48 +18,36 @@ describe("SudoPasswordPrompt render", () => {
   });
 
   test("shows password required header", () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     expect(instance.lastFrame()).toContain("Sudo Password Required");
   });
 
   test("shows lock emoji", () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     expect(instance.lastFrame()).toContain("🔒");
   });
 
   test("shows explanation text", () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     expect(instance.lastFrame()).toContain("elevated privileges");
   });
 
   test("shows input cursor initially with no dots", () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     const out = instance.lastFrame()!;
     expect(out).toContain("Password:");
     expect(out).not.toContain("•");
   });
 
   test("shows Submit and Cancel hints", () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     const out = instance.lastFrame()!;
     expect(out).toContain("Submit");
     expect(out).toContain("Cancel");
   });
 
   test("masks typed characters with dots", async () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     instance.stdin.write("secret");
     await new Promise((r) => setTimeout(r, 100));
     const out = instance.lastFrame()!;
@@ -68,9 +56,7 @@ describe("SudoPasswordPrompt render", () => {
   });
 
   test("backspace removes characters", async () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={true} />);
     instance.stdin.write("abcde");
     await new Promise((r) => setTimeout(r, 50));
     instance.stdin.write("\x7f"); // backspace
@@ -129,9 +115,7 @@ describe("SudoPasswordPrompt render", () => {
   });
 
   test("ignores input when inactive", async () => {
-    instance = renderWithTheme(
-      <SudoPasswordPrompt onSubmit={() => {}} isActive={false} />,
-    );
+    instance = renderWithTheme(<SudoPasswordPrompt onSubmit={() => {}} isActive={false} />);
     instance.stdin.write("abc");
     await new Promise((r) => setTimeout(r, 50));
     const out = instance.lastFrame()!;

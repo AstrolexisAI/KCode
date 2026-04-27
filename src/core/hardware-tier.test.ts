@@ -46,26 +46,20 @@ describe("classifyHardware — discrete GPU", () => {
 
 describe("classifyHardware — Apple Silicon", () => {
   test("M3 Max 64GB = strong", () => {
-    const r = classifyHardware(
-      hw({ platform: "darwin", arch: "arm64", ramMB: 64 * 1024 }),
-    );
+    const r = classifyHardware(hw({ platform: "darwin", arch: "arm64", ramMB: 64 * 1024 }));
     expect(r.tier).toBe("strong");
     expect(r.primary).toBe("local");
     expect(r.reason).toContain("Apple Silicon");
   });
 
   test("M3 Pro 18GB = medium", () => {
-    const r = classifyHardware(
-      hw({ platform: "darwin", arch: "arm64", ramMB: 18 * 1024 }),
-    );
+    const r = classifyHardware(hw({ platform: "darwin", arch: "arm64", ramMB: 18 * 1024 }));
     expect(r.tier).toBe("medium");
     expect(r.primary).toBe("local");
   });
 
   test("M3 8GB = weak (cloud-first)", () => {
-    const r = classifyHardware(
-      hw({ platform: "darwin", arch: "arm64", ramMB: 8 * 1024 }),
-    );
+    const r = classifyHardware(hw({ platform: "darwin", arch: "arm64", ramMB: 8 * 1024 }));
     expect(r.tier).toBe("weak");
     expect(r.primary).toBe("cloud");
   });
@@ -97,10 +91,7 @@ describe("classifyHardware — CPU only", () => {
 
 describe("classifyHardware with live VRAM override", () => {
   test("12GB card with 1GB free → unusable (no model fits)", () => {
-    const r = classifyHardware(
-      hw({ totalVramMB: 12 * 1024 }),
-      { liveUsableVramMB: 1024 },
-    );
+    const r = classifyHardware(hw({ totalVramMB: 12 * 1024 }), { liveUsableVramMB: 1024 });
     expect(r.tier).toBe("unusable");
     expect(r.primary).toBe("cloud");
     expect(r.offerAlternative).toBe(false);
@@ -108,39 +99,27 @@ describe("classifyHardware with live VRAM override", () => {
   });
 
   test("12GB card with 2GB free → weak (can still force local)", () => {
-    const r = classifyHardware(
-      hw({ totalVramMB: 12 * 1024 }),
-      { liveUsableVramMB: 2 * 1024 },
-    );
+    const r = classifyHardware(hw({ totalVramMB: 12 * 1024 }), { liveUsableVramMB: 2 * 1024 });
     expect(r.tier).toBe("weak");
     expect(r.primary).toBe("cloud");
     expect(r.offerAlternative).toBe(true);
   });
 
   test("24GB card with only 6GB free → weak (downgraded from strong)", () => {
-    const r = classifyHardware(
-      hw({ totalVramMB: 24 * 1024 }),
-      { liveUsableVramMB: 6 * 1024 },
-    );
+    const r = classifyHardware(hw({ totalVramMB: 24 * 1024 }), { liveUsableVramMB: 6 * 1024 });
     expect(r.tier).toBe("weak");
     expect(r.primary).toBe("cloud");
     expect(r.reason).toContain("6GB free of 24GB");
   });
 
   test("12GB card with 9.5GB free → medium (healthy local)", () => {
-    const r = classifyHardware(
-      hw({ totalVramMB: 12 * 1024 }),
-      { liveUsableVramMB: 9.5 * 1024 },
-    );
+    const r = classifyHardware(hw({ totalVramMB: 12 * 1024 }), { liveUsableVramMB: 9.5 * 1024 });
     expect(r.tier).toBe("medium");
     expect(r.primary).toBe("local");
   });
 
   test("24GB card with 22GB free → strong (confirmed by live)", () => {
-    const r = classifyHardware(
-      hw({ totalVramMB: 24 * 1024 }),
-      { liveUsableVramMB: 22 * 1024 },
-    );
+    const r = classifyHardware(hw({ totalVramMB: 24 * 1024 }), { liveUsableVramMB: 22 * 1024 });
     expect(r.tier).toBe("strong");
     expect(r.primary).toBe("local");
   });

@@ -206,7 +206,7 @@ export const TYPESCRIPT_AST_PATTERNS: AstPattern[] = [
     verify_prompt:
       "Is the function exposed to caller-controlled input?\n" +
       "1. HTTP/RPC handler, deserializer, or merge/set utility called by such a handler — CONFIRMED.\n" +
-      "2. The function explicitly checks key against [\"__proto__\", \"constructor\", \"prototype\"] (or uses Object.create(null) for the target, or Object.hasOwn before reading it back) — FALSE_POSITIVE.\n" +
+      '2. The function explicitly checks key against ["__proto__", "constructor", "prototype"] (or uses Object.create(null) for the target, or Object.hasOwn before reading it back) — FALSE_POSITIVE.\n' +
       "3. Internal-only callers always pass a hardcoded string — FALSE_POSITIVE.\n" +
       "Default to CONFIRMED for any code that resembles a generic merge/set helper.",
     cwe: "CWE-1321",

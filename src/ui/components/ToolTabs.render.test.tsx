@@ -34,9 +34,7 @@ describe("ToolTabs render", () => {
   });
 
   test("renders single tab with name", () => {
-    instance = renderWithTheme(
-      <ToolTabs tabs={[makeTab({ name: "Grep" })]} selectedIndex={0} />,
-    );
+    instance = renderWithTheme(<ToolTabs tabs={[makeTab({ name: "Grep" })]} selectedIndex={0} />);
     expect(instance.lastFrame()).toContain("Grep");
   });
 
@@ -59,10 +57,7 @@ describe("ToolTabs render", () => {
 
   test("shows done indicator for completed tabs", () => {
     instance = renderWithTheme(
-      <ToolTabs
-        tabs={[makeTab({ status: "done", durationMs: 1500 })]}
-        selectedIndex={0}
-      />,
+      <ToolTabs tabs={[makeTab({ status: "done", durationMs: 1500 })]} selectedIndex={0} />,
     );
     const out = instance.lastFrame()!;
     expect(out).toContain("✓");
@@ -95,10 +90,7 @@ describe("ToolTabs render", () => {
     // We can't assert on colors, but we can verify both tabs render
     instance = renderWithTheme(
       <ToolTabs
-        tabs={[
-          makeTab({ name: "TabOne" }),
-          makeTab({ name: "TabTwo" }),
-        ]}
+        tabs={[makeTab({ name: "TabOne" }), makeTab({ name: "TabTwo" })]}
         selectedIndex={1}
       />,
     );

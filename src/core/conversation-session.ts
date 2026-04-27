@@ -69,23 +69,26 @@ function sanitizeToolPairing(messages: Message[]): Message[] {
   );
 
   // Filter out orphaned blocks
-  return messages.map((msg) => {
-    if (!Array.isArray(msg.content)) return msg;
-    const filtered = msg.content.filter((block) => {
-      if (block.type === "tool_use" && orphanedToolUseIds.has(block.id)) return false;
-      if (block.type === "tool_result" && orphanedToolResultIds.has(block.tool_use_id)) return false;
-      return true;
+  return messages
+    .map((msg) => {
+      if (!Array.isArray(msg.content)) return msg;
+      const filtered = msg.content.filter((block) => {
+        if (block.type === "tool_use" && orphanedToolUseIds.has(block.id)) return false;
+        if (block.type === "tool_result" && orphanedToolResultIds.has(block.tool_use_id))
+          return false;
+        return true;
+      });
+      // If all blocks were removed, replace with a placeholder text
+      if (filtered.length === 0) {
+        return { ...msg, content: "[Session restored — some tool data was cleaned up]" };
+      }
+      return { ...msg, content: filtered };
+    })
+    .filter((msg) => {
+      // Remove completely empty messages
+      if (typeof msg.content === "string") return msg.content.length > 0;
+      return Array.isArray(msg.content) && msg.content.length > 0;
     });
-    // If all blocks were removed, replace with a placeholder text
-    if (filtered.length === 0) {
-      return { ...msg, content: "[Session restored — some tool data was cleaned up]" };
-    }
-    return { ...msg, content: filtered };
-  }).filter((msg) => {
-    // Remove completely empty messages
-    if (typeof msg.content === "string") return msg.content.length > 0;
-    return Array.isArray(msg.content) && msg.content.length > 0;
-  });
 }
 
 // ─── Functions ───────────────────────────────────────────────────

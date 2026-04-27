@@ -3,9 +3,21 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type ElixirProjectType = "api" | "web" | "cli" | "library" | "worker" | "liveview" | "custom";
+export type ElixirProjectType =
+  | "api"
+  | "web"
+  | "cli"
+  | "library"
+  | "worker"
+  | "liveview"
+  | "custom";
 
-interface ElixirConfig { name: string; type: ElixirProjectType; framework?: string; deps: Array<{ name: string; version: string }>; }
+interface ElixirConfig {
+  name: string;
+  type: ElixirProjectType;
+  framework?: string;
+  deps: Array<{ name: string; version: string }>;
+}
 
 function detectElixirProject(msg: string): ElixirConfig {
   const lower = msg.toLowerCase();
@@ -15,20 +27,30 @@ function detectElixirProject(msg: string): ElixirConfig {
 
   if (/\b(?:phoenix|liveview|live.?view)\b/i.test(lower)) {
     if (/\b(?:liveview|live.?view|realtime|interactive)\b/i.test(lower)) {
-      type = "liveview"; framework = "phoenix";
+      type = "liveview";
+      framework = "phoenix";
     } else {
-      type = "web"; framework = "phoenix";
+      type = "web";
+      framework = "phoenix";
     }
-    deps.push({ name: "phoenix", version: "~> 1.7" }, { name: "phoenix_html", version: "~> 4.1" }, { name: "phoenix_live_view", version: "~> 1.0" }, { name: "jason", version: "~> 1.4" }, { name: "plug_cowboy", version: "~> 2.7" });
-  }
-  else if (/\b(?:api|rest|server|http|plug)\b/i.test(lower)) {
-    type = "api"; framework = "plug";
+    deps.push(
+      { name: "phoenix", version: "~> 1.7" },
+      { name: "phoenix_html", version: "~> 4.1" },
+      { name: "phoenix_live_view", version: "~> 1.0" },
+      { name: "jason", version: "~> 1.4" },
+      { name: "plug_cowboy", version: "~> 2.7" },
+    );
+  } else if (/\b(?:api|rest|server|http|plug)\b/i.test(lower)) {
+    type = "api";
+    framework = "plug";
     deps.push({ name: "plug_cowboy", version: "~> 2.7" }, { name: "jason", version: "~> 1.4" });
-  }
-  else if (/\b(?:cli|escript|command|tool)\b/i.test(lower)) { type = "cli"; }
-  else if (/\b(?:lib|library|hex|package)\b/i.test(lower)) { type = "library"; }
-  else if (/\b(?:worker|genserver|otp|agent|supervisor)\b/i.test(lower)) { type = "worker"; }
-  else {
+  } else if (/\b(?:cli|escript|command|tool)\b/i.test(lower)) {
+    type = "cli";
+  } else if (/\b(?:lib|library|hex|package)\b/i.test(lower)) {
+    type = "library";
+  } else if (/\b(?:worker|genserver|otp|agent|supervisor)\b/i.test(lower)) {
+    type = "worker";
+  } else {
     framework = "plug";
     deps.push({ name: "plug_cowboy", version: "~> 2.7" }, { name: "jason", version: "~> 1.4" });
   }
@@ -36,9 +58,12 @@ function detectElixirProject(msg: string): ElixirConfig {
   if (/\b(?:ecto|database|db|postgres|mysql)\b/i.test(lower)) {
     deps.push({ name: "ecto_sql", version: "~> 3.12" }, { name: "postgrex", version: "~> 0.19" });
   }
-  if (/\b(?:tesla|http\s*client|request)\b/i.test(lower)) deps.push({ name: "tesla", version: "~> 1.12" });
-  if (/\b(?:oban|job|queue|background)\b/i.test(lower)) deps.push({ name: "oban", version: "~> 2.18" });
-  if (/\b(?:broadway|pipeline|event)\b/i.test(lower)) deps.push({ name: "broadway", version: "~> 1.1" });
+  if (/\b(?:tesla|http\s*client|request)\b/i.test(lower))
+    deps.push({ name: "tesla", version: "~> 1.12" });
+  if (/\b(?:oban|job|queue|background)\b/i.test(lower))
+    deps.push({ name: "oban", version: "~> 2.18" });
+  if (/\b(?:broadway|pipeline|event)\b/i.test(lower))
+    deps.push({ name: "broadway", version: "~> 1.1" });
 
   const nameMatch = msg.match(/(?:called|named|nombre)\s+(\w[\w-]*)/i);
   const name = nameMatch?.[1] ?? (type === "library" ? "mylib" : "myapp");
@@ -46,13 +71,28 @@ function detectElixirProject(msg: string): ElixirConfig {
   return { name, type, framework, deps: dedup(deps) };
 }
 
-function dedup(deps: Array<{ name: string; version: string }>): Array<{ name: string; version: string }> {
+function dedup(
+  deps: Array<{ name: string; version: string }>,
+): Array<{ name: string; version: string }> {
   const seen = new Set<string>();
-  return deps.filter(d => { if (seen.has(d.name)) return false; seen.add(d.name); return true; });
+  return deps.filter((d) => {
+    if (seen.has(d.name)) return false;
+    seen.add(d.name);
+    return true;
+  });
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface ElixirProjectResult { config: ElixirConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface ElixirProjectResult {
+  config: ElixirConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createElixirProject(userRequest: string, cwd: string): ElixirProjectResult {
   const cfg = detectElixirProject(userRequest);
@@ -61,7 +101,9 @@ export function createElixirProject(userRequest: string, cwd: string): ElixirPro
   const snake = cfg.name.replace(/-/g, "_");
 
   // mix.exs
-  files.push({ path: "mix.exs", content: `defmodule ${mod}.MixProject do
+  files.push({
+    path: "mix.exs",
+    content: `defmodule ${mod}.MixProject do
   use Mix.Project
 
   def project do
@@ -70,27 +112,31 @@ export function createElixirProject(userRequest: string, cwd: string): ElixirPro
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
-      deps: deps()${cfg.type === "cli" ? ',\n      escript: [main_module: ' + mod + '.CLI]' : ""}
+      deps: deps()${cfg.type === "cli" ? ",\n      escript: [main_module: " + mod + ".CLI]" : ""}
     ]
   end
 
   def application do
     [
-      extra_applications: [:logger]${cfg.type !== "library" && cfg.type !== "cli" ? ',\n      mod: {' + mod + '.Application, []}' : ""}
+      extra_applications: [:logger]${cfg.type !== "library" && cfg.type !== "cli" ? ",\n      mod: {" + mod + ".Application, []}" : ""}
     ]
   end
 
   defp deps do
     [
-${cfg.deps.map(d => `      {:${d.name}, "${d.version}"},`).join("\n")}
+${cfg.deps.map((d) => `      {:${d.name}, "${d.version}"},`).join("\n")}
     ]
   end
 end
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Source code
   if (cfg.type === "api" && cfg.framework === "plug") {
-    files.push({ path: `lib/${snake}/application.ex`, content: `defmodule ${mod}.Application do
+    files.push({
+      path: `lib/${snake}/application.ex`,
+      content: `defmodule ${mod}.Application do
   use Application
   require Logger
 
@@ -106,9 +152,13 @@ end
     Supervisor.start_link(children, opts)
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `lib/${snake}/item.ex`, content: `defmodule ${mod}.Item do
+    files.push({
+      path: `lib/${snake}/item.ex`,
+      content: `defmodule ${mod}.Item do
   @moduledoc "Item struct with id, name, description, and inserted_at fields."
 
   @derive Jason.Encoder
@@ -131,9 +181,13 @@ end
     }
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `lib/${snake}/store.ex`, content: `defmodule ${mod}.Store do
+    files.push({
+      path: `lib/${snake}/store.ex`,
+      content: `defmodule ${mod}.Store do
   @moduledoc "Agent-based in-memory store for items."
 
   use Agent
@@ -201,9 +255,13 @@ end
     Agent.update(__MODULE__, fn _state -> %{items: %{}, next_id: 1} end)
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `lib/${snake}/router.ex`, content: `defmodule ${mod}.Router do
+    files.push({
+      path: `lib/${snake}/router.ex`,
+      content: `defmodule ${mod}.Router do
   use Plug.Router
   require Logger
 
@@ -242,10 +300,10 @@ end
     case validate_create(conn.body_params) do
       {:ok, name, description} ->
         item = Store.create(name, description)
-        Logger.info("Created item \#{item.id}")
+        Logger.info("Created item #{item.id}")
         send_json(conn, 201, item)
       {:error, errors} ->
-        Logger.info("Validation failed: \#{inspect(errors)}")
+        Logger.info("Validation failed: #{inspect(errors)}")
         send_json(conn, 422, %{error: true, errors: errors})
     end
   end
@@ -256,7 +314,7 @@ end
         {:ok, attrs} ->
           case Store.update(id_int, attrs) do
             {:ok, item} ->
-              Logger.info("Updated item \#{id_int}")
+              Logger.info("Updated item #{id_int}")
               send_json(conn, 200, item)
             :not_found ->
               send_json(conn, 404, %{error: true, message: "Item not found"})
@@ -273,7 +331,7 @@ end
     with {id_int, ""} <- Integer.parse(id) do
       case Store.delete(id_int) do
         :ok ->
-          Logger.info("Deleted item \#{id_int}")
+          Logger.info("Deleted item #{id_int}")
           send_json(conn, 200, %{deleted: true})
         :not_found ->
           send_json(conn, 404, %{error: true, message: "Item not found"})
@@ -331,10 +389,13 @@ end
     end
   end
 end
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "cli") {
-    files.push({ path: `lib/${snake}/cli.ex`, content: `defmodule ${mod}.CLI do
+    files.push({
+      path: `lib/${snake}/cli.ex`,
+      content: `defmodule ${mod}.CLI do
   def main(args) do
     case args do
       [input | _rest] ->
@@ -350,10 +411,13 @@ end
     end
   end
 end
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "library") {
-    files.push({ path: `lib/${snake}.ex`, content: `defmodule ${mod} do
+    files.push({
+      path: `lib/${snake}.ex`,
+      content: `defmodule ${mod} do
   @moduledoc """
   ${mod} — Main module.
   """
@@ -381,10 +445,13 @@ end
     {:error, "Not initialized. Call setup/1 first."}
   end
 end
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "worker") {
-    files.push({ path: `lib/${snake}/application.ex`, content: `defmodule ${mod}.Application do
+    files.push({
+      path: `lib/${snake}/application.ex`,
+      content: `defmodule ${mod}.Application do
   use Application
 
   @impl true
@@ -397,9 +464,13 @@ end
     Supervisor.start_link(children, opts)
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `lib/${snake}/worker.ex`, content: `defmodule ${mod}.Worker do
+    files.push({
+      path: `lib/${snake}/worker.ex`,
+      content: `defmodule ${mod}.Worker do
   use GenServer
   require Logger
 
@@ -428,11 +499,14 @@ end
     Process.send_after(self(), :work, :timer.seconds(10))
   end
 end
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else {
     // Phoenix/LiveView — simplified scaffold
-    files.push({ path: `lib/${snake}/application.ex`, content: `defmodule ${mod}.Application do
+    files.push({
+      path: `lib/${snake}/application.ex`,
+      content: `defmodule ${mod}.Application do
   use Application
 
   @impl true
@@ -445,9 +519,13 @@ end
     Supervisor.start_link(children, opts)
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `lib/${snake}/router.ex`, content: `defmodule ${mod}.Router do
+    files.push({
+      path: `lib/${snake}/router.ex`,
+      content: `defmodule ${mod}.Router do
   use Plug.Router
 
   plug :match
@@ -465,12 +543,16 @@ end
     send_resp(conn, 404, "Not found")
   end
 end
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Tests
   if (cfg.type === "api" && cfg.framework === "plug") {
-    files.push({ path: `test/${snake}_test.exs`, content: `defmodule ${mod}Test do
+    files.push({
+      path: `test/${snake}_test.exs`,
+      content: `defmodule ${mod}Test do
   use ExUnit.Case, async: false
   use Plug.Test
 
@@ -530,7 +612,7 @@ end
 
     %{"id" => id} = Jason.decode!(conn.resp_body)
 
-    conn = conn(:get, "/api/items/\#{id}") |> Router.call(@opts)
+    conn = conn(:get, "/api/items/#{id}") |> Router.call(@opts)
     assert conn.status == 200
     assert %{"name" => "Gadget"} = Jason.decode!(conn.resp_body)
   end
@@ -549,7 +631,7 @@ end
     %{"id" => id} = Jason.decode!(conn.resp_body)
 
     conn =
-      conn(:put, "/api/items/\#{id}", Jason.encode!(%{name: "New"}))
+      conn(:put, "/api/items/#{id}", Jason.encode!(%{name: "New"}))
       |> put_req_header("content-type", "application/json")
       |> Router.call(@opts)
 
@@ -576,11 +658,11 @@ end
 
     %{"id" => id} = Jason.decode!(conn.resp_body)
 
-    conn = conn(:delete, "/api/items/\#{id}") |> Router.call(@opts)
+    conn = conn(:delete, "/api/items/#{id}") |> Router.call(@opts)
     assert conn.status == 200
     assert %{"deleted" => true} = Jason.decode!(conn.resp_body)
 
-    conn = conn(:get, "/api/items/\#{id}") |> Router.call(@opts)
+    conn = conn(:get, "/api/items/#{id}") |> Router.call(@opts)
     assert conn.status == 404
   end
 
@@ -606,9 +688,13 @@ end
     assert conn.status == 404
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
   } else {
-    files.push({ path: `test/${snake}_test.exs`, content: `defmodule ${mod}Test do
+    files.push({
+      path: `test/${snake}_test.exs`,
+      content: `defmodule ${mod}Test do
   use ExUnit.Case
 
   test "basic" do
@@ -617,33 +703,73 @@ end
 
   # TODO: add tests
 end
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   files.push({ path: "test/test_helper.exs", content: `ExUnit.start()\n`, needsLlm: false });
 
   // Config
-  files.push({ path: "config/config.exs", content: `import Config
+  files.push({
+    path: "config/config.exs",
+    content: `import Config
 
 config :${snake},
   port: 10080
 
 config :logger, :console,
   format: "$time $metadata[$level] $message\\n"
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Extras
-  files.push({ path: ".gitignore", content: "_build/\ndeps/\n*.beam\n.env\n*.ez\nerl_crash.dump\n", needsLlm: false });
-  files.push({ path: ".formatter.exs", content: `[\n  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]\n]\n`, needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM elixir:1.17-slim AS builder\nWORKDIR /app\nENV MIX_ENV=prod\nCOPY mix.exs mix.lock ./\nRUN mix deps.get --only prod && mix deps.compile\nCOPY . .\nRUN mix compile && mix release\n\nFROM debian:bookworm-slim\nRUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses5 locales && rm -rf /var/lib/apt/lists/*\nCOPY --from=builder /app/_build/prod/rel/${snake} /app\nEXPOSE 10080\nCMD ["/app/bin/${snake}", "start"]\n`, needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: erlef/setup-beam@v1\n        with: { elixir-version: "1.17", otp-version: "27" }\n      - run: mix deps.get\n      - run: mix test\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nElixir ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nmix deps.get\nmix run --no-halt\nmix test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+  files.push({
+    path: ".gitignore",
+    content: "_build/\ndeps/\n*.beam\n.env\n*.ez\nerl_crash.dump\n",
+    needsLlm: false,
+  });
+  files.push({
+    path: ".formatter.exs",
+    content: `[\n  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]\n]\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "Dockerfile",
+    content: `FROM elixir:1.17-slim AS builder\nWORKDIR /app\nENV MIX_ENV=prod\nCOPY mix.exs mix.lock ./\nRUN mix deps.get --only prod && mix deps.compile\nCOPY . .\nRUN mix compile && mix release\n\nFROM debian:bookworm-slim\nRUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses5 locales && rm -rf /var/lib/apt/lists/*\nCOPY --from=builder /app/_build/prod/rel/${snake} /app\nEXPOSE 10080\nCMD ["/app/bin/${snake}", "start"]\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: erlef/setup-beam@v1\n        with: { elixir-version: "1.17", otp-version: "27" }\n      - run: mix deps.get\n      - run: mix test\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nElixir ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nmix deps.get\nmix run --no-halt\nmix test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement Elixir ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement Elixir ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }
 
-function cap(s: string): string { return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(""); }
+function cap(s: string): string {
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

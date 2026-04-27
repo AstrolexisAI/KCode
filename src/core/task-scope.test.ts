@@ -9,9 +9,7 @@ import {
 describe("classifyIntent", () => {
   test("detects scaffold intent", () => {
     expect(
-      classifyIntent(
-        "Necesito crear un proyecto nuevo, quiero un dashboard de TUI de bitcoin",
-      ),
+      classifyIntent("Necesito crear un proyecto nuevo, quiero un dashboard de TUI de bitcoin"),
     ).toBe("scaffold");
     expect(classifyIntent("Build a new Rust CLI from scratch")).toBe("scaffold");
     expect(classifyIntent("scaffold a Next.js app")).toBe("scaffold");

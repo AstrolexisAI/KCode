@@ -18,9 +18,7 @@ export async function handleAnalysisAction(
 
       const { resolve: resolvePath } = await import("node:path");
       const { existsSync } = await import("node:fs");
-      const { collectEvidence } = await import(
-        "../../core/debug-engine/evidence-collector.js"
-      );
+      const { collectEvidence } = await import("../../core/debug-engine/evidence-collector.js");
 
       // Parse: if first arg is a file, treat as target. Otherwise it's an error description.
       const tokens = targetArgs.split(/\s+/);
@@ -49,8 +47,10 @@ export async function handleAnalysisAction(
       ];
 
       if (evidence.testOutput) {
-        const passed = evidence.testOutput.includes("PASS") || evidence.testOutput.includes("passed");
-        const failed = evidence.testOutput.includes("FAIL") || evidence.testOutput.includes("failed");
+        const passed =
+          evidence.testOutput.includes("PASS") || evidence.testOutput.includes("passed");
+        const failed =
+          evidence.testOutput.includes("FAIL") || evidence.testOutput.includes("failed");
         lines.push(`    ✅ Tests run:          ${passed ? "PASS" : failed ? "FAIL" : "completed"}`);
       }
 

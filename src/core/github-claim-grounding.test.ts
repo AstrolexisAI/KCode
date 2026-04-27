@@ -10,8 +10,8 @@ import {
   groundGithubRepoClaims,
   rewriteUnverifiedRepoClaims,
   seedVerifiedRepo,
-  verifyRepoClaims,
   type VerifiedRepoClaim,
+  verifyRepoClaims,
 } from "./github-claim-grounding";
 
 // biome-ignore lint/suspicious/noExplicitAny: fetch stub
@@ -39,11 +39,7 @@ describe("detectGithubRepoClaims", () => {
   it("captures bare owner/repo tokens", () => {
     const text = "Los repos son nasa/openmct, nasa/fprime, y nasa/trick.";
     const claims = detectGithubRepoClaims(text);
-    expect(claims.map((c) => c.repo)).toEqual([
-      "nasa/openmct",
-      "nasa/fprime",
-      "nasa/trick",
-    ]);
+    expect(claims.map((c) => c.repo)).toEqual(["nasa/openmct", "nasa/fprime", "nasa/trick"]);
   });
 
   it("captures backticked owner/repo", () => {

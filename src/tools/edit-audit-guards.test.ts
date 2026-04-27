@@ -78,10 +78,7 @@ describe("audit-session Edit guard", () => {
     setAuditIntent(true);
     const file = join(tmp, "foo.cpp");
     writeFileSync(file, "int x = 1;\n");
-    writeFileSync(
-      join(tmp, "AUDIT_REPORT.md"),
-      "# Audit\n\nBug in foo.cpp:1 — wrong value\n",
-    );
+    writeFileSync(join(tmp, "AUDIT_REPORT.md"), "# Audit\n\nBug in foo.cpp:1 — wrong value\n");
 
     const result = await executeEdit({
       file_path: file,
@@ -133,10 +130,7 @@ describe("audit-session Edit guard", () => {
     mkdirSync(nested, { recursive: true });
     const file = join(nested, "deep.cpp");
     writeFileSync(file, "int x = 1;\n");
-    writeFileSync(
-      join(tmp, "AUDIT_REPORT.md"),
-      "# Audit\n\nBug in deep.cpp:1 — issue\n",
-    );
+    writeFileSync(join(tmp, "AUDIT_REPORT.md"), "# Audit\n\nBug in deep.cpp:1 — issue\n");
 
     const result = await executeEdit({
       file_path: file,
@@ -153,10 +147,7 @@ describe("audit-session Edit guard", () => {
     const fileB = join(tmp, "b.cpp");
     writeFileSync(fileA, "int a = 1;\n");
     writeFileSync(fileB, "int b = 1;\n");
-    writeFileSync(
-      join(tmp, "AUDIT_REPORT.md"),
-      "# Audit\n\nBug in a.cpp:1 — issue\n",
-    );
+    writeFileSync(join(tmp, "AUDIT_REPORT.md"), "# Audit\n\nBug in a.cpp:1 — issue\n");
 
     const result = await executeMultiEdit({
       edits: [
@@ -176,10 +167,7 @@ describe("audit-session Edit guard", () => {
     const fileB = join(tmp, "b.cpp");
     writeFileSync(fileA, "int a = 1;\n");
     writeFileSync(fileB, "int b = 1;\n");
-    writeFileSync(
-      join(tmp, "AUDIT_REPORT.md"),
-      "# Audit\n\nBug in a.cpp:1\nBug in b.cpp:1\n",
-    );
+    writeFileSync(join(tmp, "AUDIT_REPORT.md"), "# Audit\n\nBug in a.cpp:1\nBug in b.cpp:1\n");
 
     const result = await executeMultiEdit({
       edits: [

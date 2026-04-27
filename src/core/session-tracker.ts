@@ -296,9 +296,10 @@ export function recordUserText(text: string): void {
     const intent = classifyIntent(text);
     const mgr = getTaskScopeManager();
     if (shouldOpenNewScope(mgr.current(), intent)) {
-      const broadRequest = /\b(?:todo|toda|completo|completa|completamente|integral|full(?:ly)?|complete(?:ly)?|entire(?:ly)?|comprehensive|end[-\s]to[-\s]end|tiempo\s+real|real[-\s]time|mucho\s+m[aá]s)\b/i.test(
-        text,
-      );
+      const broadRequest =
+        /\b(?:todo|toda|completo|completa|completamente|integral|full(?:ly)?|complete(?:ly)?|entire(?:ly)?|comprehensive|end[-\s]to[-\s]end|tiempo\s+real|real[-\s]time|mucho\s+m[aá]s)\b/i.test(
+          text,
+        );
       mgr.beginNewScope({
         type: intent,
         userPrompt: text,

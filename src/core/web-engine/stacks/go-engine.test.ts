@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createGoProject } from "./go-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createGoProject } from "./go-engine";
 
 describe("go-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-go-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Chi API project", () => {
@@ -60,7 +64,7 @@ describe("go-engine", () => {
   test("adds database deps", () => {
     withTmp((dir) => {
       const r = createGoProject("API with SQLite database", dir);
-      expect(r.config.dependencies.some(d => d.includes("sqlx"))).toBe(true);
+      expect(r.config.dependencies.some((d) => d.includes("sqlx"))).toBe(true);
     });
   });
 

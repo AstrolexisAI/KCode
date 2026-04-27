@@ -23,7 +23,7 @@ export const CLOUD_PATTERNS: BugPattern[] = [
   // ─── Terraform ────────────────────────────────────────────────
   {
     id: "cloud-001-iam-wildcard-action",
-    title: "IAM policy with Action = \"*\" (full account-takeover surface)",
+    title: 'IAM policy with Action = "*" (full account-takeover surface)',
     severity: "high",
     languages: ["terraform"],
     pack: "cloud",
@@ -31,15 +31,15 @@ export const CLOUD_PATTERNS: BugPattern[] = [
     // inside aws_iam_*_policy blocks. Allow heredoc body too.
     regex: /\b[Aa]ction(?:s)?\s*=?\s*\[?\s*"\*"\s*\]?/g,
     explanation:
-      "An IAM policy that grants Action = \"*\" lets the principal call ANY API in the account — IAM, EC2, S3, RDS, billing. Compromise of the role's credentials becomes total account takeover. Even when scoped to a single resource, the action wildcard is the single most exploited mis-grant in cloud incident reports.",
+      'An IAM policy that grants Action = "*" lets the principal call ANY API in the account — IAM, EC2, S3, RDS, billing. Compromise of the role\'s credentials becomes total account takeover. Even when scoped to a single resource, the action wildcard is the single most exploited mis-grant in cloud incident reports.',
     verify_prompt:
       "Is this an IAM policy or a comment / fixture / IAM-trust block?\n" +
       "1. The string is inside a comment, a markdown doc, or a *_test.tf fixture — FALSE_POSITIVE.\n" +
-      "2. The string is the only Action in a real policy block (data \"aws_iam_policy_document\", aws_iam_role_policy, etc.) — CONFIRMED. Even with Resource scoping the action wildcard is the vulnerability: it lets the principal manage IAM (escalate), run EC2 (lateral), and read S3 (exfiltrate).\n" +
+      '2. The string is the only Action in a real policy block (data "aws_iam_policy_document", aws_iam_role_policy, etc.) — CONFIRMED. Even with Resource scoping the action wildcard is the vulnerability: it lets the principal manage IAM (escalate), run EC2 (lateral), and read S3 (exfiltrate).\n' +
       "3. The wildcard is one of multiple actions and the rest scope it (e.g. NotAction excludes IAM) — borderline; mark as CONFIRMED so the reviewer takes a look.",
     cwe: "CWE-269",
     fix_template:
-      "Replace Action = \"*\" with the explicit list of API calls the role actually needs (s3:GetObject, dynamodb:Query, etc.). When in doubt, start with read-only actions and grant write only after a deliberate review.",
+      'Replace Action = "*" with the explicit list of API calls the role actually needs (s3:GetObject, dynamodb:Query, etc.). When in doubt, start with read-only actions and grant write only after a deliberate review.',
   },
   {
     id: "cloud-002-tf-public-s3",
@@ -59,7 +59,7 @@ export const CLOUD_PATTERNS: BugPattern[] = [
       "3. The bucket name has 'public' / 'cdn' / 'static' in it AND a comment explicitly justifies public access — borderline; mark as NEEDS_CONTEXT so the reviewer documents the decision.",
     cwe: "CWE-732",
     fix_template:
-      "Set acl = \"private\" (default) and serve via CloudFront with an Origin Access Identity. If the bucket genuinely needs public access (e.g. static website hosting), use a bucket policy with a documented justification.",
+      'Set acl = "private" (default) and serve via CloudFront with an Origin Access Identity. If the bucket genuinely needs public access (e.g. static website hosting), use a bucket policy with a documented justification.',
   },
 
   // ─── Kubernetes ──────────────────────────────────────────────

@@ -31,7 +31,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -58,7 +59,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -85,7 +87,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -109,7 +112,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -159,7 +163,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -192,7 +197,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -237,7 +243,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -275,7 +282,8 @@ describe("fixer", () => {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -332,7 +340,8 @@ class _MyScreenState extends State<MyScreen> {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);
@@ -372,7 +381,8 @@ Future<void> fetch() async {
     // First /fix run — adds one annotation.
     const r1 = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     applyFixes(r1);
@@ -392,7 +402,8 @@ Future<void> fetch() async {
     // still catch it because the window check looks ±3 lines.
     const r3 = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     applyFixes(r3);
@@ -424,7 +435,8 @@ Future<void> fetch() async {
     );
     const r = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     applyFixes(r, { annotateOnly: true });
@@ -450,7 +462,8 @@ Future<void> fetch() async {
     );
     const r = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     applyFixes(r, { annotateOnly: true });
@@ -477,15 +490,14 @@ Future<void> fetch() async {
     );
     const r = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     applyFixes(r, { annotateOnly: true });
     const after = readFileSync(join(tmp, "Test.cpp"), "utf-8");
     // Short-form `audit-fix:fsw-005` blocks the full-id recipe insertion.
-    expect(
-      (after.match(/audit-note:fsw-005-buffer-getdata-unchecked/g) ?? []).length,
-    ).toBe(0);
+    expect((after.match(/audit-note:fsw-005-buffer-getdata-unchecked/g) ?? []).length).toBe(0);
   });
 
   test("generic recipes are reported as 'annotated', not 'transformed'", async () => {
@@ -505,7 +517,8 @@ Future<void> fetch() async {
 
     const result = await runAudit({
       projectRoot: tmp,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       skipVerification: true,
     });
     const fixes = applyFixes(result);

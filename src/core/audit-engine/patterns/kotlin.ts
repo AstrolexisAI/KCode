@@ -11,8 +11,10 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["kotlin"],
     regex: /\w+!!\./g,
-    explanation: "!! throws NullPointerException if the value is null. Use safe calls (?.) or elvis (?:) instead.",
-    verify_prompt: "Is this !! in production code where null is possible? If guaranteed non-null by contract, respond FALSE_POSITIVE.",
+    explanation:
+      "!! throws NullPointerException if the value is null. Use safe calls (?.) or elvis (?:) instead.",
+    verify_prompt:
+      "Is this !! in production code where null is possible? If guaranteed non-null by contract, respond FALSE_POSITIVE.",
     cwe: "CWE-476",
     fix_template: "Replace val!! with val?.method() ?: fallback, or guard with if (val != null).",
   },
@@ -42,7 +44,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If the value is guaranteed non-null by language contract (e.g., after a null check, inside a let block), respond FALSE_POSITIVE. " +
       "If it could be null at runtime, respond CONFIRMED.",
     cwe: "CWE-476",
-    fix_template: "Replace x!! with x?.method() ?: fallback, or guard with requireNotNull(x) { \"message\" }.",
+    fix_template:
+      'Replace x!! with x?.method() ?: fallback, or guard with requireNotNull(x) { "message" }.',
   },
 
   // ── lateinit never initialized ─────────────────────────────────
@@ -76,7 +79,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If it's in a component with a lifecycle (Activity, Fragment, ViewModel), respond CONFIRMED. " +
       "If it's truly application-scoped, respond FALSE_POSITIVE.",
     cwe: "CWE-772",
-    fix_template: "Use viewModelScope, lifecycleScope, or a custom CoroutineScope tied to the component's lifecycle.",
+    fix_template:
+      "Use viewModelScope, lifecycleScope, or a custom CoroutineScope tied to the component's lifecycle.",
   },
 
   // ── Blocking call in coroutine ─────────────────────────────────
@@ -85,7 +89,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
     title: "Blocking call inside coroutine scope",
     severity: "high",
     languages: ["kotlin"],
-    regex: /(?:suspend\s+fun|launch\s*\{|async\s*\{)[\s\S]{0,300}?\b(?:Thread\.sleep|\.join\(\)|\.get\(\)|\.await\(\))\b/g,
+    regex:
+      /(?:suspend\s+fun|launch\s*\{|async\s*\{)[\s\S]{0,300}?\b(?:Thread\.sleep|\.join\(\)|\.get\(\)|\.await\(\))\b/g,
     explanation:
       "Calling Thread.sleep(), Future.get(), or other blocking calls inside a coroutine blocks the dispatcher thread, defeating the purpose of coroutines and potentially freezing the UI or exhausting the thread pool.",
     verify_prompt:
@@ -93,7 +98,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If dispatched to IO, respond FALSE_POSITIVE. " +
       "If blocking on Main or Default dispatcher, respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Use delay() instead of Thread.sleep(), or wrap in withContext(Dispatchers.IO) { }.",
+    fix_template:
+      "Use delay() instead of Thread.sleep(), or wrap in withContext(Dispatchers.IO) { }.",
   },
 
   // ── Platform type null crash ───────────────────────────────────
@@ -110,7 +116,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If @NonNull or the method contract guarantees non-null, respond FALSE_POSITIVE. " +
       "If the Java method can return null and no safe call (?.) is used, respond CONFIRMED.",
     cwe: "CWE-476",
-    fix_template: "Use safe call: javaObj.method()?.property, or declare the type as nullable: val x: String? = javaObj.method().",
+    fix_template:
+      "Use safe call: javaObj.method()?.property, or declare the type as nullable: val x: String? = javaObj.method().",
   },
 
   // ── Mutable collection exposed ─────────────────────────────────
@@ -119,7 +126,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
     title: "Mutable collection returned directly from function/property",
     severity: "low",
     languages: ["kotlin"],
-    regex: /(?:fun\s+\w+\s*\([^)]*\)\s*(?::\s*(?:Mutable)?List|:\s*(?:Mutable)?Map|:\s*(?:Mutable)?Set)[\s\S]{0,100}?return\s+\w+|get\(\)\s*=\s*(?:_\w+|mutable\w+))/g,
+    regex:
+      /(?:fun\s+\w+\s*\([^)]*\)\s*(?::\s*(?:Mutable)?List|:\s*(?:Mutable)?Map|:\s*(?:Mutable)?Set)[\s\S]{0,100}?return\s+\w+|get\(\)\s*=\s*(?:_\w+|mutable\w+))/g,
     explanation:
       "Returning a mutable collection directly allows callers to modify the internal state of the class, breaking encapsulation. This can lead to unexpected behavior and bugs.",
     verify_prompt:
@@ -127,7 +135,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If it returns .toList(), .toMap(), Collections.unmodifiable*(), or the return type is immutable (List, not MutableList), respond FALSE_POSITIVE. " +
       "If the internal mutable collection is exposed, respond CONFIRMED.",
     cwe: "CWE-495",
-    fix_template: "Return a defensive copy: return _items.toList(), or use a read-only return type.",
+    fix_template:
+      "Return a defensive copy: return _items.toList(), or use a read-only return type.",
   },
 
   // ── Hardcoded secrets in Kotlin ────────────────────────────────
@@ -140,10 +149,11 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
     explanation:
       "Hardcoded secrets in Kotlin source code are compiled into bytecode where strings are trivially extractable.",
     verify_prompt:
-      "Is this a REAL secret or a placeholder/test value (\"changeme\", \"test123\", \"TODO\")? " +
+      'Is this a REAL secret or a placeholder/test value ("changeme", "test123", "TODO")? ' +
       "If it looks like a real credential, respond CONFIRMED. If test/placeholder, respond FALSE_POSITIVE.",
     cwe: "CWE-798",
-    fix_template: "Use BuildConfig fields, environment variables, or Android Keystore/EncryptedSharedPreferences.",
+    fix_template:
+      "Use BuildConfig fields, environment variables, or Android Keystore/EncryptedSharedPreferences.",
   },
 
   // ── SQL injection in Kotlin ────────────────────────────────────
@@ -160,7 +170,8 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If using parameterized queries with ? and selectionArgs, respond FALSE_POSITIVE. " +
       "If user-controlled values are template-interpolated, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: "Use parameterized queries: db.rawQuery(\"SELECT * FROM t WHERE id = ?\", arrayOf(userId)).",
+    fix_template:
+      'Use parameterized queries: db.rawQuery("SELECT * FROM t WHERE id = ?", arrayOf(userId)).',
   },
 
   // ── runBlocking on main thread ─────────────────────────────────
@@ -194,6 +205,7 @@ export const KOTLIN_PATTERNS: BugPattern[] = [
       "If it's in a component with a shorter lifecycle (Activity, ViewModel, request handler), respond CONFIRMED. " +
       "If genuinely application-scoped, respond FALSE_POSITIVE.",
     cwe: "CWE-772",
-    fix_template: "Use a CoroutineScope tied to the component lifecycle: viewModelScope, lifecycleScope, or custom scope with SupervisorJob().",
+    fix_template:
+      "Use a CoroutineScope tied to the component lifecycle: viewModelScope, lifecycleScope, or custom scope with SupervisorJob().",
   },
 ];

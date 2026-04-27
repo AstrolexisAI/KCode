@@ -44,11 +44,7 @@ describe("InteractiveDiff render", () => {
 
   test("shows file path", () => {
     instance = renderWithTheme(
-      <InteractiveDiff
-        diff={makeDiff([makeHunk("h1")])}
-        onComplete={() => {}}
-        isActive={true}
-      />,
+      <InteractiveDiff diff={makeDiff([makeHunk("h1")])} onComplete={() => {}} isActive={true} />,
     );
     expect(instance.lastFrame()).toContain("test.ts");
   });
@@ -67,11 +63,7 @@ describe("InteractiveDiff render", () => {
 
   test("shows added lines with + prefix", () => {
     instance = renderWithTheme(
-      <InteractiveDiff
-        diff={makeDiff([makeHunk("h1")])}
-        onComplete={() => {}}
-        isActive={true}
-      />,
+      <InteractiveDiff diff={makeDiff([makeHunk("h1")])} onComplete={() => {}} isActive={true} />,
     );
     const out = instance.lastFrame()!;
     expect(out).toContain("new line 1");
@@ -79,11 +71,7 @@ describe("InteractiveDiff render", () => {
 
   test("shows removed lines with - prefix", () => {
     instance = renderWithTheme(
-      <InteractiveDiff
-        diff={makeDiff([makeHunk("h1")])}
-        onComplete={() => {}}
-        isActive={true}
-      />,
+      <InteractiveDiff diff={makeDiff([makeHunk("h1")])} onComplete={() => {}} isActive={true} />,
     );
     const out = instance.lastFrame()!;
     expect(out).toContain("old line 1");
@@ -91,11 +79,7 @@ describe("InteractiveDiff render", () => {
 
   test("empty hunks renders without crashing", () => {
     instance = renderWithTheme(
-      <InteractiveDiff
-        diff={makeDiff([])}
-        onComplete={() => {}}
-        isActive={true}
-      />,
+      <InteractiveDiff diff={makeDiff([])} onComplete={() => {}} isActive={true} />,
     );
     expect(typeof instance.lastFrame()).toBe("string");
   });
@@ -107,7 +91,7 @@ describe("InteractiveDiff render", () => {
     );
     const out = instance.lastFrame()!;
     // Stats usually shown as +N/-N
-    expect(out).toMatch(/[+\-]\d/);
+    expect(out).toMatch(/[+-]\d/);
   });
 
   test("inactive doesn't respond to input", async () => {

@@ -256,9 +256,7 @@ export function extractSignificantTokens(path: string): string[] {
       .replace(/([a-z])([A-Z])/g, "$1 $2")
       .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2") // HTMLParser → HTML Parser
       .toLowerCase();
-    const parts = split
-      .split(/[\s_\-]+/)
-      .filter((p) => p.length > 1 && !/^\d+$/.test(p));
+    const parts = split.split(/[\s_-]+/).filter((p) => p.length > 1 && !/^\d+$/.test(p));
     for (const p of parts) {
       if (BORING_PATH_SEGMENTS.has(p)) continue;
       tokens.push(p);
@@ -282,10 +280,7 @@ export function extractSignificantTokens(path: string): string[] {
  *   - Paths with novel tokens that never appeared in context — these
  *     are candidates for fabrication warnings.
  */
-export function wasPathReferenced(
-  path: string,
-  historyTexts: string[],
-): boolean {
+export function wasPathReferenced(path: string, historyTexts: string[]): boolean {
   if (!path) return true; // empty paths aren't fabricated
   const basename = path.split(/[\\/]/).pop() ?? path;
   if (CONVENTIONAL_PROBES.has(basename)) return true;
@@ -350,25 +345,15 @@ export function wrapFabricatedError(
   lines.push(originalContent.trimEnd());
   lines.push("");
   lines.push("⚠ POSSIBLE FABRICATION:");
-  lines.push(
-    `  The path '${attemptedPath}' does not exist on disk and was NOT`,
-  );
+  lines.push(`  The path '${attemptedPath}' does not exist on disk and was NOT`);
   lines.push(
     `  mentioned in this conversation. Significant tokens [${unreferencedTokens.join(", ")}]`,
   );
   lines.push(`  have no match in prior messages or tool results.`);
-  lines.push(
-    `  Before probing further or referencing this in your response:`,
-  );
-  lines.push(
-    `    - Did you invent this path? If yes, STOP and discard it.`,
-  );
-  lines.push(
-    `    - If you believe it SHOULD exist, ask the user explicitly.`,
-  );
-  lines.push(
-    `  Do NOT offer follow-up tasks based on fictional files.`,
-  );
+  lines.push(`  Before probing further or referencing this in your response:`);
+  lines.push(`    - Did you invent this path? If yes, STOP and discard it.`);
+  lines.push(`    - If you believe it SHOULD exist, ask the user explicitly.`);
+  lines.push(`  Do NOT offer follow-up tasks based on fictional files.`);
   return lines.join("\n");
 }
 

@@ -120,7 +120,9 @@ describe("manifest response parsing", () => {
   });
 
   test("parses a valid manifest and reports update available", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" })))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))),
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -133,7 +135,9 @@ describe("manifest response parsing", () => {
   });
 
   test("returns no update when current version is latest", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "1.8.0" })))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(buildManifest({ latest: "1.8.0" }))),
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -143,7 +147,9 @@ describe("manifest response parsing", () => {
   });
 
   test("handles HTTP errors gracefully", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(new Response("bad gateway", { status: 502 }))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("bad gateway", { status: 502 })),
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -154,7 +160,9 @@ describe("manifest response parsing", () => {
   });
 
   test("handles network failure gracefully", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("Network unreachable"))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.reject(new Error("Network unreachable")),
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -175,7 +183,9 @@ describe("manifest response parsing", () => {
   });
 
   test("returns no update when client is ahead of manifest", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "1.7.0" })))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(buildManifest({ latest: "1.7.0" }))),
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -184,7 +194,7 @@ describe("manifest response parsing", () => {
   });
 
   test("beta channel returns beta version when manifest has one", async () => {
-    globalThis.fetch = (mock(() =>
+    globalThis.fetch = mock(() =>
       Promise.resolve(
         jsonResponse(
           buildManifest({
@@ -207,7 +217,7 @@ describe("manifest response parsing", () => {
           }),
         ),
       ),
-    )) as unknown as typeof globalThis.fetch;
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("2.0.0", { channel: "beta" });
@@ -243,7 +253,9 @@ describe("manifest response parsing", () => {
       },
     };
 
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(m))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(m)),
+    ) as unknown as typeof globalThis.fetch;
 
     const info = await mod.checkForUpdate("1.8.0");
 
@@ -279,7 +291,9 @@ describe("manifest response parsing", () => {
       },
     };
 
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(m))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(m)),
+    ) as unknown as typeof globalThis.fetch;
 
     const info = await mod.checkForUpdate("1.8.0");
 
@@ -288,7 +302,9 @@ describe("manifest response parsing", () => {
   });
 
   test("info.delta is undefined when manifest has no deltas field", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" })))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))),
+    ) as unknown as typeof globalThis.fetch;
 
     const { checkForUpdate } = await import("./auto-update");
     const info = await checkForUpdate("1.8.0");
@@ -336,7 +352,9 @@ describe("update check caching", () => {
     const { existsSync } = await import("node:fs");
 
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" })))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))),
+    ) as unknown as typeof globalThis.fetch;
 
     try {
       const { checkForUpdate } = await import("./auto-update");
@@ -391,7 +409,9 @@ describe("update check caching", () => {
     await writeFile(cachePath, JSON.stringify(cacheData));
 
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" })))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(buildManifest({ latest: "2.0.0" }))),
+    ) as unknown as typeof globalThis.fetch;
 
     try {
       const { getUpdateNotification } = await import("./auto-update");
@@ -413,7 +433,9 @@ describe("update check caching", () => {
     await writeFile(cachePath, JSON.stringify(cacheData));
 
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => Promise.resolve(new Response("{}", { status: 200 }))) as unknown as typeof globalThis.fetch;
+    globalThis.fetch = mock(() =>
+      Promise.resolve(new Response("{}", { status: 200 })),
+    ) as unknown as typeof globalThis.fetch;
 
     try {
       const { getUpdateNotification } = await import("./auto-update");

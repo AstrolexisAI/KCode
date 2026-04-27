@@ -18,7 +18,8 @@ describe("rerun-directive", () => {
     mgr.recordRuntimeCommand({
       command: "python test_connection.py",
       exitCode: null,
-      output: "Traceback (most recent call last):\n  File \"test_connection.py\", line 2\nModuleNotFoundError: No module named 'bitcoinrpc'",
+      output:
+        "Traceback (most recent call last):\n  File \"test_connection.py\", line 2\nModuleNotFoundError: No module named 'bitcoinrpc'",
       runtimeFailed: true,
       timestamp: Date.now(),
     });
@@ -121,7 +122,7 @@ describe("rerun-directive", () => {
     mgr.recordRuntimeCommand({
       command: "python main.py",
       exitCode: null,
-      output: "  File \"main.py\"\nImportError",
+      output: '  File "main.py"\nImportError',
       runtimeFailed: true,
       timestamp: Date.now(),
     });
@@ -137,7 +138,7 @@ describe("rerun-directive", () => {
     mgr.recordRuntimeCommand({
       command: "python main.py",
       exitCode: null,
-      output: "  File \"main.py\"\nImportError",
+      output: '  File "main.py"\nImportError',
       runtimeFailed: true,
       timestamp: Date.now(),
     });
@@ -152,7 +153,7 @@ describe("rerun-directive", () => {
     mgr.recordRuntimeCommand({
       command: "python main.py",
       exitCode: null,
-      output: "File \"main.py\"\nImportError",
+      output: 'File "main.py"\nImportError',
       runtimeFailed: true,
       timestamp: Date.now(),
     });
@@ -177,7 +178,7 @@ describe("rerun-directive", () => {
     mgr.recordRuntimeCommand({
       command: "python main.py",
       exitCode: null,
-      output: "File \"main.py\"\nImportError A",
+      output: 'File "main.py"\nImportError A',
       runtimeFailed: true,
       timestamp: Date.now(),
     });
@@ -186,7 +187,7 @@ describe("rerun-directive", () => {
     mgr.recordRuntimeCommand({
       command: "python test_connection.py",
       exitCode: null,
-      output: "File \"test_connection.py\"\nConnectionError B",
+      output: 'File "test_connection.py"\nConnectionError B',
       runtimeFailed: true,
       timestamp: Date.now(),
     });

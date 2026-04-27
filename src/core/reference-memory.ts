@@ -116,13 +116,10 @@ const HEAD_RE =
 const URL_RE = /\b(https?:\/\/[^\s)]+)/i;
 const SHORT_URL_RE = /\b([a-z0-9.-]+\.[a-z]{2,}\/[\w./-]+)\b/i;
 
-export function extractRankedListFromText(
-  text: string,
-  label: string = "items",
-): RankedListItem[] {
+export function extractRankedListFromText(text: string, label: string = "items"): RankedListItem[] {
   const items: RankedListItem[] = [];
   const lines = text.split(/\r?\n/);
-  let seenRanks = new Set<number>();
+  const seenRanks = new Set<number>();
   for (const line of lines) {
     const m = line.match(HEAD_RE);
     if (!m) continue;
@@ -172,19 +169,43 @@ export function extractRankedListFromText(
  *   "#4"                  → 4
  */
 const SPANISH_ORDINALS: Record<string, number> = {
-  primero: 1, primera: 1, segundo: 2, segunda: 2, tercero: 3, tercera: 3,
-  cuarto: 4, cuarta: 4, quinto: 5, quinta: 5, sexto: 6, sexta: 6,
-  séptimo: 7, septima: 7, séptima: 7, octavo: 8, octava: 8,
-  noveno: 9, novena: 9, décimo: 10, decima: 10, décima: 10,
+  primero: 1,
+  primera: 1,
+  segundo: 2,
+  segunda: 2,
+  tercero: 3,
+  tercera: 3,
+  cuarto: 4,
+  cuarta: 4,
+  quinto: 5,
+  quinta: 5,
+  sexto: 6,
+  sexta: 6,
+  séptimo: 7,
+  septima: 7,
+  séptima: 7,
+  octavo: 8,
+  octava: 8,
+  noveno: 9,
+  novena: 9,
+  décimo: 10,
+  decima: 10,
+  décima: 10,
 };
 const ENGLISH_ORDINALS: Record<string, number> = {
-  first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
-  sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  fifth: 5,
+  sixth: 6,
+  seventh: 7,
+  eighth: 8,
+  ninth: 9,
+  tenth: 10,
 };
 
-export function detectOrdinalReference(
-  text: string,
-): { rank: number; snippet: string } | null {
+export function detectOrdinalReference(text: string): { rank: number; snippet: string } | null {
   const lower = text.toLowerCase();
 
   // "#N" form (explicit anchor)

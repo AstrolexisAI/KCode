@@ -17,7 +17,7 @@ describe("decodeBashHtmlEntities", () => {
   });
 
   test("decodes &quot; in strings", () => {
-    expect(decodeBashHtmlEntities('echo &quot;hello&quot;')).toBe('echo "hello"');
+    expect(decodeBashHtmlEntities("echo &quot;hello&quot;")).toBe('echo "hello"');
   });
 
   test("decodes &#39; and &apos;", () => {

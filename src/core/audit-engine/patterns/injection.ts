@@ -12,7 +12,17 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     id: "inj-001-sql-string-concat",
     title: "SQL query built via string concatenation with variables",
     severity: "critical",
-    languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby", "rust"],
+    languages: [
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+      "rust",
+    ],
     pack: "web",
     regex:
       /(?:execute|query|cursor\.execute|db\.query|connection\.query|Raw|exec_sql)\s*\(\s*[^,)]*\s*(?:\+|\|\||f['"`]|format\s*\(|%\s*\(?)\s*[^,)]+\)/g,
@@ -84,7 +94,18 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     id: "inj-005-path-traversal",
     title: "File open on user-controlled path without realpath check",
     severity: "high",
-    languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby", "c", "cpp"],
+    languages: [
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+      "c",
+      "cpp",
+    ],
     pack: "web",
     regex:
       /\b(open|fopen|readFile|File\.ReadAllText|File\.Open|os\.open|io\.open|Files\.readString|ioutil\.ReadFile)\s*\(\s*[^,)]*(?:request|params|body|user|input|query|args|argv|param)\b/gi,
@@ -104,8 +125,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp"],
     pack: "web",
-    regex:
-      /\$where\s*[:=]\s*(?:function\s*\(|\(?.*?\)?\s*=>|['"`].*?\$\{|f['"`].*?\{|`[^`]*\$\{)/g,
+    regex: /\$where\s*[:=]\s*(?:function\s*\(|\(?.*?\)?\s*=>|['"`].*?\$\{|f['"`].*?\{|`[^`]*\$\{)/g,
     explanation:
       "MongoDB's `$where` operator runs arbitrary JavaScript on the server. Combined with user input, it's equivalent to eval on the database. Similar: `$function`, `mapReduce` with user-provided JS.",
     verify_prompt:
@@ -195,7 +215,7 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
     pack: "web",
     regex:
-      /(?:re\.match|re\.search|re\.findall|\.test\s*\(|\.match\s*\(|Regex\.Match|Pattern\.compile)\s*\([^)]*['"`][^'"`]*(?:\(\.\*\)[\+\*]|\(\.\+\)[\+\*]|\([a-z0-9\.\*\+\?\|\[\]\^\$]+\)[\+\*][\+\*]|\([^)]*\|[^)]*\)\+)[^)]*/gi,
+      /(?:re\.match|re\.search|re\.findall|\.test\s*\(|\.match\s*\(|Regex\.Match|Pattern\.compile)\s*\([^)]*['"`][^'"`]*(?:\(\.\*\)[+*]|\(\.\+\)[+*]|\([a-z0-9.*+?|[\]^$]+\)[+*][+*]|\([^)]*\|[^)]*\)\+)[^)]*/gi,
     explanation:
       "Regexes with nested quantifiers like `(a+)+`, `(a|a)+`, `.*.*` exhibit catastrophic backtracking on pathological inputs — seconds to minutes to match a short string, causing DoS. CVE-2019-5413 (ms package), CVE-2020-7598 (minimist).",
     verify_prompt:

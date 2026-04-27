@@ -1,8 +1,8 @@
 // KCode - Plain HTML/CSS/JS Stack Templates
 // No framework, no build step. Just open in browser.
 
-import { CINEMATIC_CSS, REVEAL_SCRIPT, PALETTES, paletteToCSS } from "../effects";
 import type { DetectedIntent } from "../detector";
+import { CINEMATIC_CSS, PALETTES, paletteToCSS, REVEAL_SCRIPT } from "../effects";
 import type { FileTemplate } from "../templates";
 
 export function htmlBase(intent: DetectedIntent): FileTemplate[] {

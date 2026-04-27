@@ -20,7 +20,7 @@ import type {
   NeedsContextDetail,
   Verification,
 } from "./types";
-import { verifyAllCandidates, type VerifyOptions } from "./verifier";
+import { type VerifyOptions, verifyAllCandidates } from "./verifier";
 
 export interface AuditEngineOptions {
   /** Project root to audit */
@@ -96,7 +96,12 @@ export interface AuditEngineOptions {
     phase: "initializing" | "discovery" | "scanning" | "verifying" | "reporting",
     detail?: string,
   ) => void;
-  onCandidate?: (candidate: Candidate, verification: Verification, index: number, total: number) => void;
+  onCandidate?: (
+    candidate: Candidate,
+    verification: Verification,
+    index: number,
+    total: number,
+  ) => void;
 }
 
 /**
@@ -518,13 +523,13 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   > = {};
   for (const r of verified) {
     const pid = r.candidate.pattern_id;
-    const m = patternMetrics[pid] ??= {
+    const m = (patternMetrics[pid] ??= {
       hits: 0,
       unique_sites: 0,
       confirmed: 0,
       false_positive: 0,
       needs_context: 0,
-    };
+    });
     m.unique_sites++;
     m.hits++; // first match in the (pattern, file) is +1
     if (r.verification.verdict === "confirmed") m.confirmed++;
@@ -617,7 +622,9 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     } catch (err) {
       // SBOM scan is additive; failure must not break the audit.
       // eslint-disable-next-line no-console
-      console.warn(`[audit-engine] SBOM scan failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(
+        `[audit-engine] SBOM scan failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -628,7 +635,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // PoC data the report renders for the user/reviewer.
   let exploits: Awaited<ReturnType<typeof import("./exploit-gen").generateExploits>> | undefined;
   if (opts.generateExploits && findings.length > 0) {
-    opts.onPhase?.("verifying", `generating exploit proofs for ${findings.length} confirmed findings`);
+    opts.onPhase?.(
+      "verifying",
+      `generating exploit proofs for ${findings.length} confirmed findings`,
+    );
     try {
       const { generateExploits: genExploits } = await import("./exploit-gen");
       // Pass the verifier callback so patterns without a deterministic
@@ -638,7 +648,9 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       // Exploit generation is opt-in and additive — failure here must
       // not break the audit. Log and continue with no exploits attached.
       // eslint-disable-next-line no-console
-      console.warn(`[audit-engine] exploit generation failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(
+        `[audit-engine] exploit generation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -668,7 +680,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     // the Audit Confidence header to warn the reader when --skip-verify
     // produced a static-only output (false-positive rate is the
     // regex's precision, not the verifier's).
-    verification_mode: opts.skipVerification ? "skipped" as const : "verified" as const,
+    verification_mode: opts.skipVerification ? ("skipped" as const) : ("verified" as const),
     ...(astLangAgg.size > 0
       ? {
           ast_grammar_status: Array.from(astLangAgg.entries())

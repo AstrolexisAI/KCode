@@ -4,13 +4,18 @@
 // The LLM receives a focused diagnostic package, not raw "figure it out".
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import type { DebugContext, ErrorPattern } from "./types";
 
 function run(cmd: string, cwd: string, timeout = 10_000): string {
   try {
-    return execSync(cmd, { cwd, encoding: "utf-8", timeout, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execSync(cmd, {
+      cwd,
+      encoding: "utf-8",
+      timeout,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
   } catch {
     return "";
   }
@@ -29,9 +34,12 @@ function readSafe(path: string, maxLines = 150): string {
 const ERROR_PATTERNS: Array<{ type: ErrorPattern["type"]; regex: RegExp }> = [
   { type: "try-catch", regex: /\bcatch\s*\(.*\)\s*\{/g },
   { type: "throw", regex: /\bthrow\s+(?:new\s+)?\w+/g },
-  { type: "error-log", regex: /\bconsole\.error\s*\(|\.error\s*\(|log\.error\s*\(|logging\.error\s*\(/g },
+  {
+    type: "error-log",
+    regex: /\bconsole\.error\s*\(|\.error\s*\(|log\.error\s*\(|logging\.error\s*\(/g,
+  },
   { type: "todo-fixme", regex: /\/\/\s*(?:TODO|FIXME|BUG|HACK|XXX)\b/gi },
-  { type: "assert", regex: /\bassert\s*[\.(]/g },
+  { type: "assert", regex: /\bassert\s*[.(]/g },
   { type: "return-null", regex: /return\s+(?:null|None|nil|undefined)\s*;/g },
   { type: "exception", regex: /raise\s+\w+|throw\s+new\s+\w+Error/g },
 ];
@@ -105,7 +113,12 @@ function findCallers(filePath: string, cwd: string): string[] {
     `grep -rn "import.*${base}\\|require.*${base}\\|from.*${base}" --include="*.ts" --include="*.js" --include="*.py" --include="*.go" -l 2>/dev/null | head -10`,
     cwd,
   );
-  return result ? result.split("\n").filter(Boolean).map(f => relative(cwd, resolve(cwd, f))) : [];
+  return result
+    ? result
+        .split("\n")
+        .filter(Boolean)
+        .map((f) => relative(cwd, resolve(cwd, f)))
+    : [];
 }
 
 // ── Main Evidence Collector ────────────────────────────────────
@@ -141,11 +154,11 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
 
   // Step 1: Resolve target files
   step("Resolving target files...");
-  let targetFiles = files.map(f => resolve(cwd, f)).filter(f => existsSync(f));
+  let targetFiles = files.map((f) => resolve(cwd, f)).filter((f) => existsSync(f));
 
   // If no files specified, try to find them from the error message
   if (targetFiles.length === 0 && errorMessage) {
-    const fileRefs = errorMessage.match(/[\w./\\-]+\.\w+(?::\d+)?/g) ?? [];
+    const fileRefs = errorMessage.match(/[\w./-]+\.\w+(?::\d+)?/g) ?? [];
     for (const ref of fileRefs) {
       const cleanRef = ref.split(":")[0]!;
       const full = resolve(cwd, cleanRef);
@@ -159,12 +172,9 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
   if (targetFiles.length === 0 && matchedPatterns.length > 0) {
     step("Smart search using behavior pattern...");
     const pat = matchedPatterns[0]!;
-    const globArgs = pat.searchStrategy.fileGlobs.map(g => `--include="${g}"`).join(" ");
+    const globArgs = pat.searchStrategy.fileGlobs.map((g) => `--include="${g}"`).join(" ");
     for (const gp of pat.searchStrategy.grepPatterns.slice(0, 6)) {
-      const grepResult = run(
-        `grep -rn "${gp}" ${globArgs} -l 2>/dev/null | head -3`,
-        cwd,
-      );
+      const grepResult = run(`grep -rn "${gp}" ${globArgs} -l 2>/dev/null | head -3`, cwd);
       if (grepResult) {
         for (const f of grepResult.split("\n").filter(Boolean)) {
           const full = resolve(cwd, f);
@@ -196,13 +206,16 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
   // Fallback: grep for error keyword from error message
   if (targetFiles.length === 0 && errorMessage) {
     step("Searching for error source...");
-    const keyword = errorMessage.split(/[\s:]+/).find(w => w.length > 4) ?? "error";
+    const keyword = errorMessage.split(/[\s:]+/).find((w) => w.length > 4) ?? "error";
     const grepResult = run(
       `grep -rn "${keyword}" --include="*.ts" --include="*.js" --include="*.py" --include="*.go" --include="*.cpp" -l 2>/dev/null | head -5`,
       cwd,
     );
     if (grepResult) {
-      targetFiles = grepResult.split("\n").filter(Boolean).map(f => resolve(cwd, f));
+      targetFiles = grepResult
+        .split("\n")
+        .filter(Boolean)
+        .map((f) => resolve(cwd, f));
     }
   }
 
@@ -233,7 +246,7 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
 
   // Step 5: Recent changes
   step("Checking recent changes...");
-  const recentFiles = targetFiles.map(f => `"${relative(cwd, f)}"`).join(" ");
+  const recentFiles = targetFiles.map((f) => `"${relative(cwd, f)}"`).join(" ");
   const recentChanges = recentFiles
     ? run(`git log --oneline -10 -- ${recentFiles} 2>/dev/null`, cwd)
     : run("git log --oneline -10 2>/dev/null", cwd);
@@ -252,7 +265,11 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
     const testFile = testFiles[0]!;
     // Detect test runner
     if (existsSync(join(cwd, "package.json"))) {
-      testOutput = run(`npx jest "${testFile}" --no-coverage 2>&1 || npx vitest run "${testFile}" 2>&1 || bun test "${testFile}" 2>&1`, cwd, 30_000);
+      testOutput = run(
+        `npx jest "${testFile}" --no-coverage 2>&1 || npx vitest run "${testFile}" 2>&1 || bun test "${testFile}" 2>&1`,
+        cwd,
+        30_000,
+      );
     } else if (testFile.endsWith(".py")) {
       testOutput = run(`python -m pytest "${testFile}" -x 2>&1`, cwd, 30_000);
     } else if (testFile.endsWith("_test.go")) {
@@ -289,7 +306,7 @@ export async function collectEvidence(opts: CollectOptions): Promise<DebugContex
   }
 
   return {
-    targetFiles: targetFiles.map(f => relative(cwd, f)),
+    targetFiles: targetFiles.map((f) => relative(cwd, f)),
     fileContents,
     errorPatterns,
     recentChanges,
@@ -351,12 +368,14 @@ export function formatEvidenceForLLM(ctx: DebugContext): string {
 
   // Callers
   if (ctx.callers.length > 0) {
-    parts.push(`## Files that import/call this code\n${ctx.callers.map(c => `- ${c}`).join("\n")}\n`);
+    parts.push(
+      `## Files that import/call this code\n${ctx.callers.map((c) => `- ${c}`).join("\n")}\n`,
+    );
   }
 
   // Test files
   if (ctx.testFiles.length > 0) {
-    parts.push(`## Related test files\n${ctx.testFiles.map(t => `- ${t}`).join("\n")}\n`);
+    parts.push(`## Related test files\n${ctx.testFiles.map((t) => `- ${t}`).join("\n")}\n`);
   }
 
   return parts.join("\n");

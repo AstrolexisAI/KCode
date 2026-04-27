@@ -22,9 +22,15 @@ export function decodeBashHtmlEntities(cmd: string): string {
 }
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync as _existsSync,
+  statSync as _statSync,
+  existsSync,
+  readdirSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { existsSync as _existsSync, statSync as _statSync } from "node:fs";
 import {
   auditGuardsEnabled,
   checkMutationAllowed,
@@ -82,7 +88,7 @@ export const bashDefinition: ToolDefinition = {
     "While the Bash tool can do similar things, it's better to use the built-in tools as they provide a better user experience and make it easier to review tool calls and give permission.\n\n" +
     "# Instructions\n" +
     " - If your command will create new directories or files, first use this tool to run `ls` to verify the parent directory exists and is the correct location.\n" +
-    " - Always quote file paths that contain spaces with double quotes in your command (e.g., cd \"path with spaces/file.txt\")\n" +
+    ' - Always quote file paths that contain spaces with double quotes in your command (e.g., cd "path with spaces/file.txt")\n' +
     " - Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of `cd`. You may use `cd` if the User explicitly requests it.\n" +
     " - This is a non-interactive shell — there is no TTY. Always use non-interactive flags (--yes, -y, --no-input, etc.) for commands that would otherwise prompt for input.\n" +
     " - For commands requiring elevated privileges, use 'sudo <command>' WITHOUT the -S flag — the system will prompt the user securely. NEVER pipe passwords, use here-strings, or pass passwords via variables to sudo.\n" +
@@ -292,7 +298,12 @@ export async function executeBash(input: Record<string, unknown>): Promise<ToolR
 }
 
 async function _executeBashInner(input: Record<string, unknown>): Promise<ToolResult> {
-  const { command: rawCommand, timeout, run_in_background, sandbox } = input as unknown as BashInput & {
+  const {
+    command: rawCommand,
+    timeout,
+    run_in_background,
+    sandbox,
+  } = input as unknown as BashInput & {
     sandbox?: boolean;
   };
   // Decode HTML entities some local models (mark7 / Qwen3-family) emit in
@@ -341,17 +352,27 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
   // Rewrites to: find <dir> -maxdepth 3 -not -path '*/node_modules/*' ...
   // Does NOT block — the model gets its listing, just filtered.
   const isRecursiveLs =
-    /^\s*ls\b/.test(command) &&
-    (/\s-\w*R/.test(command) || /--recursive/.test(command));
+    /^\s*ls\b/.test(command) && (/\s-\w*R/.test(command) || /--recursive/.test(command));
   if (isRecursiveLs) {
     // Extract target directory: split on whitespace, pick the first
     // token that isn't `ls` and doesn't start with `-`.
     const parts = command.trim().split(/\s+/);
     const targetDir = parts.find((p, i) => i > 0 && !p.startsWith("-"))?.replace(/\/+$/, "") || ".";
     const HEAVY_DIRS = [
-      "node_modules", ".git", "dist", "build", ".next", "vendor",
-      "__pycache__", ".cache", "coverage", ".turbo", ".nuxt", "out",
-      "target", ".svelte-kit",
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      ".next",
+      "vendor",
+      "__pycache__",
+      ".cache",
+      "coverage",
+      ".turbo",
+      ".nuxt",
+      "out",
+      "target",
+      ".svelte-kit",
     ];
     const excludes = HEAVY_DIRS.map((d) => `-not -path '*/${d}/*'`).join(" ");
     const safeCmd = `find ${targetDir} -maxdepth 3 ${excludes} | sort | head -300`;
@@ -367,77 +388,83 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
   // Prevents the model from bypassing the Write tool's audit guards by
   // using `cat > AUDIT_REPORT.md << EOF`, `echo ... > FIXES_SUMMARY.txt`,
   // or `tee FINAL_AUDIT.md`. Skip when audit guards are globally disabled.
-  if (auditGuardsEnabled()) try {
-    const redirTargets = extractRedirectionTargets(command);
-    const auditTargets = redirTargets.filter((t) => isAuditFilename(t));
-    if (auditTargets.length > 0) {
-      const target = auditTargets[0]!;
-      const absTarget = resolve(target);
-      const dir = dirname(absTarget);
-      // Scan dir for existing audit-named files
-      let existing: string | null = null;
-      if (existsSync(dir)) {
-        try {
-          for (const entry of readdirSync(dir)) {
-            if (isAuditFilename(entry) && entry !== basename(absTarget)) {
-              existing = join(dir, entry);
-              break;
+  if (auditGuardsEnabled())
+    try {
+      const redirTargets = extractRedirectionTargets(command);
+      const auditTargets = redirTargets.filter((t) => isAuditFilename(t));
+      if (auditTargets.length > 0) {
+        const target = auditTargets[0]!;
+        const absTarget = resolve(target);
+        const dir = dirname(absTarget);
+        // Scan dir for existing audit-named files
+        let existing: string | null = null;
+        if (existsSync(dir)) {
+          try {
+            for (const entry of readdirSync(dir)) {
+              if (isAuditFilename(entry) && entry !== basename(absTarget)) {
+                existing = join(dir, entry);
+                break;
+              }
             }
+          } catch {
+            /* dir not readable */
           }
-        } catch {
-          /* dir not readable */
         }
+        const bullet = existing
+          ? `An audit report already exists at "${existing}". UPDATE it with Edit, don't create companions.`
+          : `Use the Write tool to create "${target}" — not Bash redirection. The Write tool enforces audit discipline.`;
+        return {
+          tool_use_id: "",
+          content:
+            `BLOCKED — FILE NOT CREATED: Shell redirection to audit-report file ` +
+            `"${basename(target)}" is refused. ${bullet}\n\nAudit reports must go ` +
+            `through the Write tool, which enforces:\n` +
+            `  - at least one Grep reconnaissance pass before the report\n` +
+            `  - at least 8 source files Read in full\n` +
+            `  - no fabricated "proof of work" checklists\n` +
+            `  - no uncited file:line references\n` +
+            `  - one authoritative AUDIT_REPORT.md per directory\n\n` +
+            `IMPORTANT: The file does NOT exist. Do NOT tell the user that the ` +
+            `audit was "created" or "generated" — retry with the Write tool first.`,
+          is_error: true,
+        };
       }
-      const bullet = existing
-        ? `An audit report already exists at "${existing}". UPDATE it with Edit, don't create companions.`
-        : `Use the Write tool to create "${target}" — not Bash redirection. The Write tool enforces audit discipline.`;
-      return {
-        tool_use_id: "",
-        content:
-          `BLOCKED — FILE NOT CREATED: Shell redirection to audit-report file ` +
-          `"${basename(target)}" is refused. ${bullet}\n\nAudit reports must go ` +
-          `through the Write tool, which enforces:\n` +
-          `  - at least one Grep reconnaissance pass before the report\n` +
-          `  - at least 8 source files Read in full\n` +
-          `  - no fabricated "proof of work" checklists\n` +
-          `  - no uncited file:line references\n` +
-          `  - one authoritative AUDIT_REPORT.md per directory\n\n` +
-          `IMPORTANT: The file does NOT exist. Do NOT tell the user that the ` +
-          `audit was "created" or "generated" — retry with the Write tool first.`,
-        is_error: true,
-      };
+    } catch {
+      /* redirection analysis is best-effort */
     }
-  } catch {
-    /* redirection analysis is best-effort */
-  }
 
   // Guard: apply the audit-edit policy to ANY bash file-mutation the
   // model emits (sed -i, perl -i, awk -i inplace, > redirection to a
   // source file). Without this, `sed -i app.py` bypasses the Edit
   // tool's audit-mode restriction. GitHub issue #102.
-  if (auditGuardsEnabled()) try {
-    const mutations = extractBashFileMutations(command);
-    for (const target of mutations) {
-      // Skip audit-named targets — they're handled above with a more
-      // specific audit-report-companion message.
-      if (isAuditFilename(target)) continue;
-      const absTarget = resolve(target);
-      // Classify which bash-mutation kind this is so diagnostics are clear.
-      const mutationKind: Parameters<typeof checkMutationAllowed>[1] =
-        /\bsed\s+.*-i/.test(command) ? "Bash-sed-i"
-        : /\bperl\s+.*-i/.test(command) ? "Bash-perl-i"
-        : /\bawk\s+-i\s+inplace/.test(command) ? "Bash-awk-inplace"
-        : "Bash-redirect";
-      const policy = checkMutationAllowed(absTarget, mutationKind);
-      if (!policy.allowed) {
-        log.warn("tool", `Blocked bash file-mutation of ${target} (${mutationKind}): policy`);
-        return { tool_use_id: "", content: policy.reason!, is_error: true };
+  if (auditGuardsEnabled())
+    try {
+      const mutations = extractBashFileMutations(command);
+      for (const target of mutations) {
+        // Skip audit-named targets — they're handled above with a more
+        // specific audit-report-companion message.
+        if (isAuditFilename(target)) continue;
+        const absTarget = resolve(target);
+        // Classify which bash-mutation kind this is so diagnostics are clear.
+        const mutationKind: Parameters<typeof checkMutationAllowed>[1] = /\bsed\s+.*-i/.test(
+          command,
+        )
+          ? "Bash-sed-i"
+          : /\bperl\s+.*-i/.test(command)
+            ? "Bash-perl-i"
+            : /\bawk\s+-i\s+inplace/.test(command)
+              ? "Bash-awk-inplace"
+              : "Bash-redirect";
+        const policy = checkMutationAllowed(absTarget, mutationKind);
+        if (!policy.allowed) {
+          log.warn("tool", `Blocked bash file-mutation of ${target} (${mutationKind}): policy`);
+          return { tool_use_id: "", content: policy.reason!, is_error: true };
+        }
       }
+    } catch (err) {
+      log.debug("tool", `bash file-mutation audit check failed: ${err}`);
+      /* best-effort — don't crash the tool on analysis errors */
     }
-  } catch (err) {
-    log.debug("tool", `bash file-mutation audit check failed: ${err}`);
-    /* best-effort — don't crash the tool on analysis errors */
-  }
 
   // Guard: block dangerous pkill/killall with broad patterns that could kill system services
   // Matches: pkill -f "serve", pkill serve, killall node, etc. anywhere in the command
@@ -956,7 +983,8 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
       // commands. Lets step 1 of scaffold plans only complete on
       // verified-exists, not abstract mkdir success. Issue #109.
       try {
-        const { getTaskScopeManager } = require("../core/task-scope") as typeof import("../core/task-scope");
+        const { getTaskScopeManager } =
+          require("../core/task-scope") as typeof import("../core/task-scope");
         const { resolve: resolvePath } = require("node:path") as typeof import("node:path");
         const mgr = getTaskScopeManager();
         if (mgr.current()) {
@@ -988,7 +1016,11 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
             const target = cdMatch[1]?.replace(/^['"]|['"]$/g, "") ?? "";
             if (target) {
               const abs = resolvePath(process.cwd(), target);
-              if (/no such file or directory|no existe el (?:fichero|archivo) o el directorio|ENOENT/i.test(output)) {
+              if (
+                /no such file or directory|no existe el (?:fichero|archivo) o el directorio|ENOENT/i.test(
+                  output,
+                )
+              ) {
                 mgr.recordDirectoryMissing(abs, output.slice(0, 200));
               }
             }

@@ -71,14 +71,15 @@ export const SUPPLY_CHAIN_PATTERNS: BugPattern[] = [
     // Match --extra-index-url <url> in pip commands. Index URLs that
     // are NOT pypi.org allow attackers to register a higher-version
     // package on their own index and have pip prefer it.
-    regex: /\bpip\s+(?:install|--user|-U|--upgrade)\s+(?:[^|;&\n]*\s+)?--extra-index-url[\s=]+(\S+)/g,
+    regex:
+      /\bpip\s+(?:install|--user|-U|--upgrade)\s+(?:[^|;&\n]*\s+)?--extra-index-url[\s=]+(\S+)/g,
     explanation:
       "--extra-index-url adds a SECONDARY package source. pip resolves the highest version across ALL configured indices — so if an attacker registers `your-private-pkg @ 9999.0.0` on a public index they control, pip pulls THEIR package over your private one. The Microsoft / Apple / Yelp 2021 dependency-confusion incidents were exactly this.",
     verify_prompt:
       "Is the extra index a private mirror you control, or attacker-reachable?\n" +
       "1. The URL is your team's private mirror (artifactory.<company>.com, nexus, etc.) AND the workflow runs in a context that resolves it on a private network — borderline; mark CONFIRMED so the reviewer documents why this is OK.\n" +
       "2. The URL is on the public internet OR could be reached by attacker DNS poisoning — CONFIRMED.\n" +
-      "3. The URL string is interpolated from an env var (\"$INDEX_URL\") — NEEDS_CONTEXT (depends on where the env var is sourced).",
+      '3. The URL string is interpolated from an env var ("$INDEX_URL") — NEEDS_CONTEXT (depends on where the env var is sourced).',
     cwe: "CWE-1357",
     fix_template:
       "Replace --extra-index-url with --index-url (single source). Set the index to your private mirror only; mirror PyPI packages you need rather than letting pip resolve across multiple indices. Use hash-pinned requirements (`pip install --require-hashes`) for production installs.",

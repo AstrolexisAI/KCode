@@ -15,7 +15,9 @@ describe("classifier", () => {
 
   // Debug
   test("classifies 'why does it crash' as debug", () => {
-    expect(classifyTask("why does the login crash when I enter email?")).toMatchObject({ type: "debug" });
+    expect(classifyTask("why does the login crash when I enter email?")).toMatchObject({
+      type: "debug",
+    });
   });
   test("classifies 'por qué falla' as debug", () => {
     expect(classifyTask("por qué falla el login?")).toMatchObject({ type: "debug" });
@@ -34,10 +36,14 @@ describe("classifier", () => {
     expect(classifyTask("add a REST endpoint for users")).toMatchObject({ type: "implement" });
   });
   test("classifies 'crea una función' as implement", () => {
-    expect(classifyTask("crea una función para validar emails")).toMatchObject({ type: "implement" });
+    expect(classifyTask("crea una función para validar emails")).toMatchObject({
+      type: "implement",
+    });
   });
   test("classifies 'create a new component' as implement", () => {
-    expect(classifyTask("create a new React component for the dashboard")).toMatchObject({ type: "implement" });
+    expect(classifyTask("create a new React component for the dashboard")).toMatchObject({
+      type: "implement",
+    });
   });
 
   // Review
@@ -50,7 +56,9 @@ describe("classifier", () => {
 
   // Refactor
   test("classifies 'refactor this function' as refactor", () => {
-    expect(classifyTask("refactor this function it's too complex")).toMatchObject({ type: "refactor" });
+    expect(classifyTask("refactor this function it's too complex")).toMatchObject({
+      type: "refactor",
+    });
   });
   test("classifies 'simplifica el código' as refactor", () => {
     expect(classifyTask("simplifica el código de auth.py")).toMatchObject({ type: "refactor" });

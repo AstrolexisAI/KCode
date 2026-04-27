@@ -88,8 +88,7 @@ const RULES: RedactionRule[] = [
   // "rpcuser X" / "rpc user X" without the equals sign.
   {
     name: "rpcuser_prose",
-    pattern:
-      /\b(rpc[-_\s]?user\s+['"]?)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
+    pattern: /\b(rpc[-_\s]?user\s+['"]?)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
   },
   {
     name: "secret_assign",

@@ -32,20 +32,61 @@ const OVERCLAIM_RULES: Array<{
   replacement: string;
 }> = [
   // Spanish
-  { name: "vision_profunda",       pattern: /\bvisi[oó]n\s+profunda\b/gi,                       replacement: "lectura inicial" },
-  { name: "analisis_profundo",     pattern: /\ban[aá]lisis\s+profundo\b/gi,                     replacement: "análisis parcial" },
-  { name: "ahora_tengo",           pattern: /\bahora\s+tengo\s+(?:una\s+)?(?:visi[oó]n|comprensi[oó]n|entendimiento)\b/gi, replacement: "tengo una lectura parcial" },
-  { name: "completo",              pattern: /\b(?:el\s+)?proyecto\s+est[aá]\s+completo\b/gi,    replacement: "el proyecto está en revisión inicial" },
-  { name: "ya_quedo",              pattern: /\bya\s+qued[oó]\b/gi,                              replacement: "revisión parcial hecha" },
-  { name: "listo_solo",            pattern: /(?<!\w)listo[,.\s]/gi,                             replacement: "revisión inicial. " },
-  { name: "funcional",             pattern: /\best[aá]\s+funcional\b/gi,                        replacement: "fue revisado parcialmente" },
-  { name: "operativo",             pattern: /\best[aá]\s+operativo\b/gi,                        replacement: "fue revisado parcialmente" },
+  {
+    name: "vision_profunda",
+    pattern: /\bvisi[oó]n\s+profunda\b/gi,
+    replacement: "lectura inicial",
+  },
+  {
+    name: "analisis_profundo",
+    pattern: /\ban[aá]lisis\s+profundo\b/gi,
+    replacement: "análisis parcial",
+  },
+  {
+    name: "ahora_tengo",
+    pattern: /\bahora\s+tengo\s+(?:una\s+)?(?:visi[oó]n|comprensi[oó]n|entendimiento)\b/gi,
+    replacement: "tengo una lectura parcial",
+  },
+  {
+    name: "completo",
+    pattern: /\b(?:el\s+)?proyecto\s+est[aá]\s+completo\b/gi,
+    replacement: "el proyecto está en revisión inicial",
+  },
+  { name: "ya_quedo", pattern: /\bya\s+qued[oó]\b/gi, replacement: "revisión parcial hecha" },
+  { name: "listo_solo", pattern: /(?<!\w)listo[,.\s]/gi, replacement: "revisión inicial. " },
+  {
+    name: "funcional",
+    pattern: /\best[aá]\s+funcional\b/gi,
+    replacement: "fue revisado parcialmente",
+  },
+  {
+    name: "operativo",
+    pattern: /\best[aá]\s+operativo\b/gi,
+    replacement: "fue revisado parcialmente",
+  },
   // English
-  { name: "deep_understanding",    pattern: /\bdeep\s+(?:understanding|insight|analysis)\b/gi,  replacement: "initial reading" },
-  { name: "now_have_full",         pattern: /\bnow\s+(?:have|possess)\s+(?:a\s+)?(?:full|complete|deep)\s+(?:understanding|view|picture)\b/gi, replacement: "have a partial reading" },
-  { name: "is_ready",              pattern: /\bis\s+ready\b/gi,                                 replacement: "has a partial scaffold" },
-  { name: "fully_functional",      pattern: /\bfully\s+functional\b/gi,                         replacement: "partially reviewed" },
-  { name: "project_complete",      pattern: /\bproject\s+(?:is\s+)?complete(?:d)?\b/gi,         replacement: "project has initial scaffold" },
+  {
+    name: "deep_understanding",
+    pattern: /\bdeep\s+(?:understanding|insight|analysis)\b/gi,
+    replacement: "initial reading",
+  },
+  {
+    name: "now_have_full",
+    pattern:
+      /\bnow\s+(?:have|possess)\s+(?:a\s+)?(?:full|complete|deep)\s+(?:understanding|view|picture)\b/gi,
+    replacement: "have a partial reading",
+  },
+  { name: "is_ready", pattern: /\bis\s+ready\b/gi, replacement: "has a partial scaffold" },
+  {
+    name: "fully_functional",
+    pattern: /\bfully\s+functional\b/gi,
+    replacement: "partially reviewed",
+  },
+  {
+    name: "project_complete",
+    pattern: /\bproject\s+(?:is\s+)?complete(?:d)?\b/gi,
+    replacement: "project has initial scaffold",
+  },
 ];
 
 /**
@@ -57,10 +98,7 @@ const OVERCLAIM_RULES: Array<{
  * mustUsePartialLanguage=false). Otherwise strips/replaces each
  * matching pattern.
  */
-export function rewriteFinalTextForGrounding(
-  text: string,
-  scope: TaskScope,
-): RewriteResult {
+export function rewriteFinalTextForGrounding(text: string, scope: TaskScope): RewriteResult {
   const shouldRewrite =
     scope.phase === "failed" ||
     scope.phase === "partial" ||

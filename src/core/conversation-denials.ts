@@ -5,7 +5,7 @@
 // reached, otherwise injects a SYSTEM message pointing the model
 // away from retrying the same tool.
 
-import { MAX_CONSECUTIVE_DENIALS, type LoopGuardState } from "./agent-loop-guards";
+import { type LoopGuardState, MAX_CONSECUTIVE_DENIALS } from "./agent-loop-guards";
 import { log } from "./logger";
 import type { ConversationState, KCodeConfig, StreamEvent } from "./types";
 

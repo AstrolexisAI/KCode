@@ -149,9 +149,7 @@ export async function discoverContextSize({
  * unknown to us and not exposed by the API) — caller picks a
  * default.
  */
-export async function resolveContextSize(
-  input: DiscoveryInput,
-): Promise<number | undefined> {
+export async function resolveContextSize(input: DiscoveryInput): Promise<number | undefined> {
   const discovered = await discoverContextSize(input);
   if (discovered && discovered > 0) return discovered;
   return guessContextSize(input.modelName);

@@ -17,9 +17,9 @@
 //   - "coding" if T4 passes
 //   - "tool-use" if T2 passes (NOT a hallucinator)
 
-import { log } from "./logger";
 import type { BenchmarkResult } from "./benchmark-store";
-import { recordBenchmarkResult, BENCHMARK_SUITE_VERSION } from "./benchmark-store";
+import { BENCHMARK_SUITE_VERSION, recordBenchmarkResult } from "./benchmark-store";
+import { log } from "./logger";
 
 interface TestDefinition {
   id: string;
@@ -51,8 +51,7 @@ const TESTS: TestDefinition[] = [
       toolCalls.length > 0 &&
       (toolCalls as Array<Record<string, unknown>>).some((tc) => {
         const name =
-          (tc as { name?: string }).name ??
-          ((tc as { function?: { name?: string } }).function?.name);
+          (tc as { name?: string }).name ?? (tc as { function?: { name?: string } }).function?.name;
         return typeof name === "string" && name.toLowerCase() === "read";
       }),
   },
@@ -143,9 +142,7 @@ async function runSingleTest(
 ): Promise<SingleTestResult> {
   const url = baseUrl.toLowerCase();
   const isAnthropic = url.includes("anthropic.com");
-  const endpoint = isAnthropic
-    ? `${baseUrl}/v1/messages`
-    : `${baseUrl}/v1/chat/completions`;
+  const endpoint = isAnthropic ? `${baseUrl}/v1/messages` : `${baseUrl}/v1/chat/completions`;
 
   const includeTools = test.id === "T2_tool_use" && tools.length > 0;
 

@@ -8,10 +8,10 @@
 //     body stays correct.
 //   - sanitizeExecutiveSummary strips paths and wraps brand terms.
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { createPr } from "./pr-generator";
 import { execSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createPr } from "./pr-generator";
 import type { AuditResult } from "./types";
 
 let TMP: string;
@@ -20,10 +20,10 @@ beforeEach(() => {
   TMP = `/tmp/kcode-pr-structured-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   mkdirSync(TMP, { recursive: true });
   // Make TMP a tiny git repo so createPr's git/status calls don't fail.
-  execSync(
-    "git init -q -b main && git config user.email t@t && git config user.name t",
-    { cwd: TMP, stdio: ["pipe", "pipe", "pipe"] },
-  );
+  execSync("git init -q -b main && git config user.email t@t && git config user.name t", {
+    cwd: TMP,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 });
 afterEach(() => {
   try {
@@ -38,11 +38,11 @@ function seedAudit(
 ): AuditResult {
   // Drop a marker file so detectEcosystem picks the requested one.
   if (ecosystem === "cmake") writeFileSync(`${TMP}/CMakeLists.txt`, "project(t)");
-  if (ecosystem === "cargo") writeFileSync(`${TMP}/Cargo.toml`, "[package]\nname = \"t\"\n");
+  if (ecosystem === "cargo") writeFileSync(`${TMP}/Cargo.toml`, '[package]\nname = "t"\n');
   if (ecosystem === "go") writeFileSync(`${TMP}/go.mod`, "module t\ngo 1.21\n");
   if (ecosystem === "bun") writeFileSync(`${TMP}/bun.lockb`, "");
   if (ecosystem === "npm") writeFileSync(`${TMP}/package.json`, "{}");
-  if (ecosystem === "pip") writeFileSync(`${TMP}/pyproject.toml`, "[project]\nname=\"t\"\n");
+  if (ecosystem === "pip") writeFileSync(`${TMP}/pyproject.toml`, '[project]\nname="t"\n');
 
   // Add a real source file + uncommitted change so /pr's "uncommitted"
   // check passes without going through resume mode.
@@ -133,8 +133,7 @@ describe("/pr v2.10.329 — structured-first body", () => {
   it("body comes from JSON even when LLM returns chain-of-thought garbage", async () => {
     seedAudit("cmake");
     // LLM that emits the v320-class garbage we're guarding against.
-    const llm = async () =>
-      "Here's a thinking process:\n1. Analyze...\n2. ...";
+    const llm = async () => "Here's a thinking process:\n1. Analyze...\n2. ...";
     const result = await createPr({
       projectRoot: TMP,
       llmCallback: llm,
@@ -215,7 +214,9 @@ describe("/pr v2.10.329 — LLM summary fallback", () => {
     expect(result.prDescription).toContain("See findings below");
     // CL.7 — "Findings and fixes" was split into Fixed/Manual/Ignored
     // sections. At least one of the bucketed headers must appear.
-    expect(result.prDescription).toMatch(/### Fixed findings|### Manual findings|### Ignored \/ demoted/);
+    expect(result.prDescription).toMatch(
+      /### Fixed findings|### Manual findings|### Ignored \/ demoted/,
+    );
     expect(result.prDescription).toContain("Methodology");
     expect(result.prDescription).toContain("Testing");
   });

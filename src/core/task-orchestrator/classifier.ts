@@ -117,7 +117,8 @@ const RULES: Rule[] = [
 function extractFiles(msg: string): string[] {
   const files: string[] = [];
   // Match paths like src/foo.ts, ./bar.py, file.cpp, etc.
-  const pathRe = /(?:^|\s)((?:\.\/|\.\.\/|\/|[a-zA-Z][\w-]*\/)*[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|cpp|c|h|hh|java|kt|swift|rb|php|cs|dart|scala|sql|vue|svelte))\b/gi;
+  const pathRe =
+    /(?:^|\s)((?:\.\/|\.\.\/|\/|[a-zA-Z][\w-]*\/)*[\w.-]+\.(?:ts|tsx|js|jsx|py|go|rs|cpp|c|h|hh|java|kt|swift|rb|php|cs|dart|scala|sql|vue|svelte))\b/gi;
   let m: RegExpExecArray | null;
   while ((m = pathRe.exec(msg)) !== null) {
     files.push(m[1]!.trim());

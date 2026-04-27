@@ -139,7 +139,7 @@ export async function processStreamEvents(
         // Live activity: show what the model is writing about
         if (currentText.length > 0 && currentText.length % 200 < event.text.length) {
           // Extract a brief activity hint from the last line being written
-          const lastLines = currentText.split("\n").filter(l => l.trim());
+          const lastLines = currentText.split("\n").filter((l) => l.trim());
           const lastLine = lastLines[lastLines.length - 1] ?? "";
           if (lastLine.length > 10) {
             const hint = lastLine.slice(0, 50).trim();
@@ -229,11 +229,7 @@ export async function processStreamEvents(
           const keptInWindow = prev
             .slice(boundary)
             .filter((e) => !(e.kind === "text" && e.role === "assistant"));
-          return [
-            ...kept,
-            ...keptInWindow,
-            { kind: "text", role: "assistant", text: event.text },
-          ];
+          return [...kept, ...keptInWindow, { kind: "text", role: "assistant", text: event.text }];
         });
         break;
 
@@ -713,7 +709,11 @@ export async function processStreamEvents(
           // Thinking repetition loop — a retry will be injected automatically.
           setCompleted((prev) => [
             ...prev,
-            { kind: "text", role: "assistant", text: "  \u26a0 Reasoning loop detected \u2014 retrying\u2026" },
+            {
+              kind: "text",
+              role: "assistant",
+              text: "  \u26a0 Reasoning loop detected \u2014 retrying\u2026",
+            },
           ]);
         } else if (
           !hadPartialProgress &&
@@ -735,7 +735,10 @@ export async function processStreamEvents(
               : emptyType === "tools_only"
                 ? "Model used tools but gave no text response \u2014 try rephrasing."
                 : "Model returned no output.\n  Run /compact if context is large, or try rephrasing.";
-          setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text: `  \u26a0 ${hint}` }]);
+          setCompleted((prev) => [
+            ...prev,
+            { kind: "text", role: "assistant", text: `  \u26a0 ${hint}` },
+          ]);
         }
         // Show incomplete response banner if the session ended incomplete
         try {

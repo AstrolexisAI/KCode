@@ -71,10 +71,7 @@ export function getReliabilityReport(): Array<{
   reasoningLoops: number;
   blacklisted: boolean;
 }> {
-  const models = new Set([
-    ...hallucinationCounts.keys(),
-    ...reasoningLoopCounts.keys(),
-  ]);
+  const models = new Set([...hallucinationCounts.keys(), ...reasoningLoopCounts.keys()]);
   return [...models].map((m) => ({
     model: m,
     hallucinations: hallucinationCounts.get(m) ?? 0,

@@ -51,51 +51,37 @@ describe("Kodi render", () => {
   });
 
   test("shows tokens and tool count when > 0", () => {
-    instance = renderWithTheme(
-      <KodiCompanion {...baseProps} tokenCount={1234} toolUseCount={5} />,
-    );
+    instance = renderWithTheme(<KodiCompanion {...baseProps} tokenCount={1234} toolUseCount={5} />);
     const out = instance.lastFrame()!;
     expect(out).toContain("1,234");
     expect(out).toContain("tools:5");
   });
 
   test("shows agent count when agents running", () => {
-    instance = renderWithTheme(
-      <KodiCompanion {...baseProps} runningAgents={2} />,
-    );
+    instance = renderWithTheme(<KodiCompanion {...baseProps} runningAgents={2} />);
     expect(instance.lastFrame()).toContain("agents:2");
   });
 
   test("shows permission mode", () => {
-    instance = renderWithTheme(
-      <KodiCompanion {...baseProps} permissionMode="auto" />,
-    );
+    instance = renderWithTheme(<KodiCompanion {...baseProps} permissionMode="auto" />);
     expect(instance.lastFrame()).toContain("auto");
   });
 
   test("shows context bar when contextWindowSize set", () => {
     instance = renderWithTheme(
-      <KodiCompanion
-        {...baseProps}
-        tokenCount={50_000}
-        contextWindowSize={200_000}
-      />,
+      <KodiCompanion {...baseProps} tokenCount={50_000} contextWindowSize={200_000} />,
     );
     expect(instance.lastFrame()).toContain("25%");
   });
 
   test("shows 5h usage bar when subscriptionUsage5h provided", () => {
-    instance = renderWithTheme(
-      <KodiCompanion {...baseProps} subscriptionUsage5h={0.45} />,
-    );
+    instance = renderWithTheme(<KodiCompanion {...baseProps} subscriptionUsage5h={0.45} />);
     expect(instance.lastFrame()).toContain("5h:");
     expect(instance.lastFrame()).toContain("45%");
   });
 
   test("shows session name when provided", () => {
-    instance = renderWithTheme(
-      <KodiCompanion {...baseProps} sessionName="debugging" />,
-    );
+    instance = renderWithTheme(<KodiCompanion {...baseProps} sessionName="debugging" />);
     expect(instance.lastFrame()).toContain("debugging");
   });
 
@@ -107,9 +93,7 @@ describe("Kodi render", () => {
   });
 
   test("shows active profile when provided", () => {
-    instance = renderWithTheme(
-      <KodiCompanion {...baseProps} activeProfile="secure" />,
-    );
+    instance = renderWithTheme(<KodiCompanion {...baseProps} activeProfile="secure" />);
     expect(instance.lastFrame()).toContain("secure");
   });
 
@@ -121,7 +105,12 @@ describe("Kodi render", () => {
           type: "agent_progress",
           agentStatuses: [
             { name: "fix-auth", stepTitle: "Fix auth module", status: "running" },
-            { name: "add-tests", stepTitle: "Add test coverage", status: "done", durationMs: 12000 },
+            {
+              name: "add-tests",
+              stepTitle: "Add test coverage",
+              status: "done",
+              durationMs: 12000,
+            },
           ],
         }}
       />,

@@ -1,30 +1,34 @@
 // KCode - Astro Stack Templates
 // Ideal for: blogs, portfolios, docs, content-heavy static sites
 
-import { CINEMATIC_CSS, REVEAL_SCRIPT, PALETTES, paletteToCSS } from "../effects";
 import type { DetectedIntent } from "../detector";
+import { CINEMATIC_CSS, PALETTES, paletteToCSS, REVEAL_SCRIPT } from "../effects";
 import type { FileTemplate } from "../templates";
 
 export function astroBase(intent: DetectedIntent): FileTemplate[] {
   return [
     {
       path: "package.json",
-      content: JSON.stringify({
-        name: intent.name,
-        type: "module",
-        version: "0.1.0",
-        scripts: {
-          dev: "astro dev",
-          build: "astro build",
-          preview: "astro preview",
+      content: JSON.stringify(
+        {
+          name: intent.name,
+          type: "module",
+          version: "0.1.0",
+          scripts: {
+            dev: "astro dev",
+            build: "astro build",
+            preview: "astro preview",
+          },
+          dependencies: {
+            astro: "^5.7.0",
+            "@astrojs/mdx": "^4.0.0",
+            tailwindcss: "^4.0.0",
+            "@tailwindcss/vite": "^4.0.0",
+          },
         },
-        dependencies: {
-          astro: "^5.7.0",
-          "@astrojs/mdx": "^4.0.0",
-          tailwindcss: "^4.0.0",
-          "@tailwindcss/vite": "^4.0.0",
-        },
-      }, null, 2),
+        null,
+        2,
+      ),
       needsLlm: false,
     },
     {
@@ -43,10 +47,14 @@ export default defineConfig({
     },
     {
       path: "tsconfig.json",
-      content: JSON.stringify({
-        extends: "astro/tsconfigs/strict",
-        compilerOptions: { jsx: "preserve" },
-      }, null, 2),
+      content: JSON.stringify(
+        {
+          extends: "astro/tsconfigs/strict",
+          compilerOptions: { jsx: "preserve" },
+        },
+        null,
+        2,
+      ),
       needsLlm: false,
     },
     {

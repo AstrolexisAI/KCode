@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  classifyRuntimeStatus,
-  isFailedStatus,
-  phaseForStatus,
-} from "./runtime-classifier";
+import { classifyRuntimeStatus, isFailedStatus, phaseForStatus } from "./runtime-classifier";
 
 describe("runtime-classifier", () => {
   test("401 Unauthorized → failed_auth (EXACT #111 v273 line)", () => {
@@ -12,21 +8,17 @@ describe("runtime-classifier", () => {
       "Testing Bitcoin RPC connection...\n" +
       "❌ RPC Error: -342: non-JSON HTTP response with '401 Unauthorized' from server\n" +
       "Please check your RPC credentials and Bitcoin node configuration.";
-    expect(classifyRuntimeStatus("python test_connection.py", 0, output)).toBe(
-      "failed_auth",
-    );
+    expect(classifyRuntimeStatus("python test_connection.py", 0, output)).toBe("failed_auth");
   });
 
   test("403 Forbidden → failed_auth", () => {
-    expect(classifyRuntimeStatus("curl api", 0, "HTTP 403 Forbidden")).toBe(
-      "failed_auth",
-    );
+    expect(classifyRuntimeStatus("curl api", 0, "HTTP 403 Forbidden")).toBe("failed_auth");
   });
 
   test("Invalid credentials phrase → failed_auth", () => {
-    expect(
-      classifyRuntimeStatus("auth", 1, "Login failed: invalid credentials"),
-    ).toBe("failed_auth");
+    expect(classifyRuntimeStatus("auth", 1, "Login failed: invalid credentials")).toBe(
+      "failed_auth",
+    );
   });
 
   test("ModuleNotFoundError → failed_dependency (before traceback)", () => {
@@ -35,32 +27,38 @@ describe("runtime-classifier", () => {
       '  File "test_connection.py", line 2, in <module>\n' +
       "    from bitcoinrpc.authproxy import AuthServiceProxy\n" +
       "ModuleNotFoundError: No module named 'bitcoinrpc'";
-    expect(classifyRuntimeStatus("python test_connection.py", 1, output)).toBe(
+    expect(classifyRuntimeStatus("python test_connection.py", 1, output)).toBe("failed_dependency");
+  });
+
+  test("ImportError → failed_dependency", () => {
+    expect(classifyRuntimeStatus("python m.py", 1, "ImportError: cannot import name 'X'")).toBe(
       "failed_dependency",
     );
   });
 
-  test("ImportError → failed_dependency", () => {
-    expect(
-      classifyRuntimeStatus("python m.py", 1, "ImportError: cannot import name 'X'"),
-    ).toBe("failed_dependency");
-  });
-
   test("Connection refused → failed_connection", () => {
     expect(
-      classifyRuntimeStatus("python m.py", 1, "ConnectionRefusedError: [Errno 111] Connection refused"),
+      classifyRuntimeStatus(
+        "python m.py",
+        1,
+        "ConnectionRefusedError: [Errno 111] Connection refused",
+      ),
     ).toBe("failed_connection");
   });
 
   test("ECONNREFUSED → failed_connection", () => {
-    expect(classifyRuntimeStatus("node s.js", 1, "Error: connect ECONNREFUSED 127.0.0.1:8332")).toBe(
-      "failed_connection",
-    );
+    expect(
+      classifyRuntimeStatus("node s.js", 1, "Error: connect ECONNREFUSED 127.0.0.1:8332"),
+    ).toBe("failed_connection");
   });
 
   test("SyntaxError → failed_traceback", () => {
     expect(
-      classifyRuntimeStatus("python m.py", 1, "  File \"m.py\", line 5\n    x ==\n        ^\nSyntaxError: invalid syntax"),
+      classifyRuntimeStatus(
+        "python m.py",
+        1,
+        '  File "m.py", line 5\n    x ==\n        ^\nSyntaxError: invalid syntax',
+      ),
     ).toBe("failed_traceback");
   });
 
@@ -75,9 +73,7 @@ describe("runtime-classifier", () => {
   });
 
   test("unclassified non-zero → failed_unknown", () => {
-    expect(classifyRuntimeStatus("python m.py", 2, "some weird output")).toBe(
-      "failed_unknown",
-    );
+    expect(classifyRuntimeStatus("python m.py", 2, "some weird output")).toBe("failed_unknown");
   });
 
   test("isFailedStatus matches all failed_ variants", () => {
@@ -102,22 +98,24 @@ describe("runtime-classifier", () => {
   });
 
   test("exit 0 with 'error:' prose and no positive signal → started_unverified", () => {
-    expect(
-      classifyRuntimeStatus("python m.py", 0, "error: could not connect to host"),
-    ).toBe("started_unverified");
+    expect(classifyRuntimeStatus("python m.py", 0, "error: could not connect to host")).toBe(
+      "started_unverified",
+    );
   });
 
   test("exit 0 with positive signal overrides ambiguous error text", () => {
     // App said it connected/is ready — ambiguity resolved in favor of verified.
     expect(
-      classifyRuntimeStatus("python m.py", 0, "Error: old log line\nConnected to node, height=820000"),
+      classifyRuntimeStatus(
+        "python m.py",
+        0,
+        "Error: old log line\nConnected to node, height=820000",
+      ),
     ).toBe("verified");
   });
 
   test("exit 0 with bare 'verified' output → verified (no false started_unverified)", () => {
-    expect(classifyRuntimeStatus("python m.py", 0, "All good\nheight: 820000")).toBe(
-      "verified",
-    );
+    expect(classifyRuntimeStatus("python m.py", 0, "All good\nheight: 820000")).toBe("verified");
   });
 
   test("bash preflight refusal → runner_misfire (v275 EXACT repro)", () => {
@@ -126,18 +124,12 @@ describe("runtime-classifier", () => {
       "  occupant: PID 2040642 (node)\n" +
       "  occupant cwd: /home/curly/projects\n" +
       "  Spawning bun-direct on this port would race and fail.";
-    expect(classifyRuntimeStatus("bun run index.ts", null, output)).toBe(
-      "runner_misfire",
-    );
+    expect(classifyRuntimeStatus("bun run index.ts", null, output)).toBe("runner_misfire");
   });
 
   test("'race and fail' message alone → runner_misfire", () => {
     expect(
-      classifyRuntimeStatus(
-        "bun run app.ts",
-        null,
-        "bun-direct on this port would race and fail",
-      ),
+      classifyRuntimeStatus("bun run app.ts", null, "bun-direct on this port would race and fail"),
     ).toBe("runner_misfire");
   });
 
@@ -147,9 +139,7 @@ describe("runtime-classifier", () => {
     // preflight mentions them.
     const output =
       "✗ Port 3000 is already in use. Spawning bun-direct on this port would race and fail. (hint: Next.js)";
-    expect(classifyRuntimeStatus("bun run index.ts", null, output)).toBe(
-      "runner_misfire",
-    );
+    expect(classifyRuntimeStatus("bun run index.ts", null, output)).toBe("runner_misfire");
   });
 
   test("v297 P0-1: bare 'PID: N (3.0s)' wrapper output → started_unverified", () => {
@@ -157,9 +147,9 @@ describe("runtime-classifier", () => {
     // (3.0s)' and nothing else. The classifier used to treat this
     // as verified. Now it requires at least one app-level positive
     // signal (Connected/Ready/height=N/etc).
-    expect(
-      classifyRuntimeStatus("bun run index.ts", 0, "PID: 1172909 (3.0s)"),
-    ).toBe("started_unverified");
+    expect(classifyRuntimeStatus("bun run index.ts", 0, "PID: 1172909 (3.0s)")).toBe(
+      "started_unverified",
+    );
   });
 
   test("v297 P0-1: PID output WITH positive signal → verified", () => {
@@ -178,11 +168,7 @@ describe("runtime-classifier", () => {
     // The shell fallback can mask failing commands. Without a positive
     // signal in output, downgrade.
     expect(
-      classifyRuntimeStatus(
-        "timeout 5s bun run index.ts || echo failed",
-        0,
-        "PID: 12345 (3.0s)",
-      ),
+      classifyRuntimeStatus("timeout 5s bun run index.ts || echo failed", 0, "PID: 12345 (3.0s)"),
     ).toBe("started_unverified");
   });
 
@@ -201,11 +187,7 @@ describe("runtime-classifier", () => {
   test("v297 P0-2: pipe (|) alone does NOT trigger fallback downgrade", () => {
     // Only '||' (logical OR) triggers; a single pipe is fine.
     expect(
-      classifyRuntimeStatus(
-        "bun run build 2>&1 | tee build.log",
-        0,
-        "Build complete\nReady",
-      ),
+      classifyRuntimeStatus("bun run build 2>&1 | tee build.log", 0, "Build complete\nReady"),
     ).toBe("verified");
   });
 

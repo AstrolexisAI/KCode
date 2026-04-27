@@ -8,10 +8,10 @@
 
 import { describe, expect, test } from "bun:test";
 import {
-  KODI_CANDIDATES,
-  KODI_SERVER_PORT,
   candidatePath,
   getCandidate,
+  KODI_CANDIDATES,
+  KODI_SERVER_PORT,
   pickDefaultCandidate,
 } from "./kodi-model";
 

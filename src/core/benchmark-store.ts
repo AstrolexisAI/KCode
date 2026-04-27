@@ -6,8 +6,8 @@
 // `kcode benchmark <model>` or `/benchmark <model>`.
 
 import { existsSync, readFileSync } from "node:fs";
-import { kcodePath } from "./paths";
 import { log } from "./logger";
+import { kcodePath } from "./paths";
 
 export interface BenchmarkResult {
   /** Model name */

@@ -66,9 +66,7 @@ describe("extractClaims", () => {
 
 describe("countSuccessfulMutations", () => {
   test("returns 0 for an empty turn", () => {
-    const r = countSuccessfulMutations([
-      { role: "user", content: "make the change" },
-    ] as Message[]);
+    const r = countSuccessfulMutations([{ role: "user", content: "make the change" }] as Message[]);
     expect(r.successful).toBe(0);
   });
 
@@ -78,13 +76,23 @@ describe("countSuccessfulMutations", () => {
       {
         role: "assistant",
         content: [
-          { type: "tool_use", id: "t1", name: "Write", input: { file_path: "/x.html", content: "a" } },
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Write",
+            input: { file_path: "/x.html", content: "a" },
+          },
         ],
       } as unknown as Message,
       {
         role: "user",
         content: [
-          { type: "tool_result", tool_use_id: "t1", content: "Created /x.html (1 lines)", is_error: false },
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            content: "Created /x.html (1 lines)",
+            is_error: false,
+          },
         ],
       } as unknown as Message,
     ];
@@ -99,13 +107,23 @@ describe("countSuccessfulMutations", () => {
       {
         role: "assistant",
         content: [
-          { type: "tool_use", id: "t1", name: "Edit", input: { file_path: "/x", old_string: "a", new_string: "b" } },
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Edit",
+            input: { file_path: "/x", old_string: "a", new_string: "b" },
+          },
         ],
       } as unknown as Message,
       {
         role: "user",
         content: [
-          { type: "tool_result", tool_use_id: "t1", content: "Error: old_string not found", is_error: true },
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            content: "Error: old_string not found",
+            is_error: true,
+          },
         ],
       } as unknown as Message,
     ];
@@ -136,9 +154,7 @@ describe("countSuccessfulMutations", () => {
       { role: "user", content: "first task" },
       {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "t1", name: "Write", input: { file_path: "/a" } },
-        ],
+        content: [{ type: "tool_use", id: "t1", name: "Write", input: { file_path: "/a" } }],
       } as unknown as Message,
       {
         role: "user",
@@ -154,9 +170,7 @@ describe("countSuccessfulMutations", () => {
       } as unknown as Message,
       {
         role: "user",
-        content: [
-          { type: "tool_result", tool_use_id: "t2", content: "contents", is_error: false },
-        ],
+        content: [{ type: "tool_result", tool_use_id: "t2", content: "contents", is_error: false }],
       } as unknown as Message,
     ];
     const r = countSuccessfulMutations(messages);
@@ -175,18 +189,24 @@ describe("checkClaimReality", () => {
       { role: "user", content: "edit the file" },
       {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "t1", name: "Write", input: { file_path: "/x" } },
-        ],
+        content: [{ type: "tool_use", id: "t1", name: "Write", input: { file_path: "/x" } }],
       } as unknown as Message,
       {
         role: "user",
         content: [
-          { type: "tool_result", tool_use_id: "t1", content: "Created /x (1 lines)", is_error: false },
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            content: "Created /x (1 lines)",
+            is_error: false,
+          },
         ],
       } as unknown as Message,
     ];
-    const v = checkClaimReality("Updated the file. Successfully changed version to 2026.", messages);
+    const v = checkClaimReality(
+      "Updated the file. Successfully changed version to 2026.",
+      messages,
+    );
     expect(v.isHallucinatedCompletion).toBe(false);
     expect(v.successfulMutations).toBe(1);
   });
@@ -203,9 +223,7 @@ describe("checkClaimReality", () => {
       { role: "user", content: "refactor the nasa file" },
       {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "t1", name: "Edit", input: { file_path: "/nasa" } },
-        ],
+        content: [{ type: "tool_use", id: "t1", name: "Edit", input: { file_path: "/nasa" } }],
       } as unknown as Message,
       {
         role: "user",
@@ -226,10 +244,7 @@ describe("checkClaimReality", () => {
   });
 
   test("does NOT fire on a single soft claim without completion marker", () => {
-    const v = checkClaimReality(
-      "Added a note about the layout — will continue next turn.",
-      [],
-    );
+    const v = checkClaimReality("Added a note about the layout — will continue next turn.", []);
     expect(v.isHallucinatedCompletion).toBe(false);
   });
 
@@ -530,9 +545,7 @@ describe("phase 20: checkContentMismatch", () => {
     const v = checkContentMismatch(text, messages);
     expect(v.isContentMismatch).toBe(true);
     expect(v.missingLiterals.length).toBeGreaterThanOrEqual(2);
-    expect(
-      v.missingLiterals.some((u) => u.includes("picsum.photos/id/1015")),
-    ).toBe(true);
+    expect(v.missingLiterals.some((u) => u.includes("picsum.photos/id/1015"))).toBe(true);
   });
 
   test("does NOT fire when prose URLs match what was in the Edit", () => {
@@ -568,8 +581,7 @@ describe("phase 20: checkContentMismatch", () => {
             input: {
               file_path: "/tmp/f.html",
               old_string: "nomatch",
-              new_string:
-                "url: 'https://attempted1.com/a.jpg' and 'https://attempted2.com/b.jpg'",
+              new_string: "url: 'https://attempted1.com/a.jpg' and 'https://attempted2.com/b.jpg'",
             },
           } as unknown as never,
         ],

@@ -295,7 +295,11 @@ export async function runSetup(options?: {
   // Pre-compute live usable VRAM so both tier classification (here)
   // and model recommendation (below) use the same figure.
   let wizardUsableVramMB: number | undefined;
-  let wizardVramAvailability: { usedMB: number | null; freeMB: number | null; totalMB: number } | null = null;
+  let wizardVramAvailability: {
+    usedMB: number | null;
+    freeMB: number | null;
+    totalMB: number;
+  } | null = null;
   if (hw.totalVramMB > 0) {
     try {
       const { detectGpuAvailability, effectiveUsableVramMB } = await import(
@@ -317,7 +321,9 @@ export async function runSetup(options?: {
       console.log(
         `    ${C.yellow}⚡${C.reset} Hardware tier: ${C.bold}${tier.tier}${C.reset} — ${tier.reason}`,
       );
-      console.log(`    ${C.dim}Local inference would be slow on this hardware. Routing to cloud setup.${C.reset}`);
+      console.log(
+        `    ${C.dim}Local inference would be slow on this hardware. Routing to cloud setup.${C.reset}`,
+      );
       console.log();
 
       const { runCloudSetup } = await import("./cloud-setup.js");
@@ -357,9 +363,7 @@ export async function runSetup(options?: {
         }
 
         console.log();
-        console.log(
-          `    ${C.green}✓${C.reset} ${C.bold}Setup complete (cloud mode)${C.reset}`,
-        );
+        console.log(`    ${C.green}✓${C.reset} ${C.bold}Setup complete (cloud mode)${C.reset}`);
         console.log(`    Default model: ${C.cyan}${cloudResult.defaultModel}${C.reset}`);
         console.log(`    Run ${C.bold}kcode${C.reset} to start.`);
         console.log();
@@ -430,9 +434,7 @@ export async function runSetup(options?: {
             /* non-fatal */
           }
 
-          console.log(
-            `    ${C.green}✓${C.reset} ${C.bold}Setup complete (cloud mode)${C.reset}`,
-          );
+          console.log(`    ${C.green}✓${C.reset} ${C.bold}Setup complete (cloud mode)${C.reset}`);
           console.log(`    Default model: ${C.cyan}${cloudResult.defaultModel}${C.reset}`);
           console.log();
           return;
@@ -676,8 +678,7 @@ export async function runSetup(options?: {
   //   - user passed --yes or --model explicitly (they know what they want)
   //   - model is already downloaded (not re-downloading anything)
   //   - KCODE_SKIP_DOWNLOAD_CONFIRM=1 is set (CI / scripted installs)
-  const modelAlreadyDownloaded =
-    !useMlx && isModelDownloaded(entry.codename) && !options?.force;
+  const modelAlreadyDownloaded = !useMlx && isModelDownloaded(entry.codename) && !options?.force;
   const skipConfirm =
     options?.yes ||
     options?.model ||
@@ -686,8 +687,7 @@ export async function runSetup(options?: {
 
   if (!skipConfirm) {
     const { createInterface } = await import("node:readline");
-    const willUseMmap =
-      hw.totalVramMB > 0 && entry.sizeGB * 1024 > hw.totalVramMB * 0.9;
+    const willUseMmap = hw.totalVramMB > 0 && entry.sizeGB * 1024 > hw.totalVramMB * 0.9;
     const warnLine = willUseMmap
       ? `    ${C.yellow}⚠${C.reset} This model (${entry.sizeGB} GB) exceeds your VRAM (${(hw.totalVramMB / 1024).toFixed(0)} GB). It will run via partial GPU + SSD streaming — noticeably slower than a fully-in-VRAM model.`
       : null;
@@ -700,13 +700,10 @@ export async function runSetup(options?: {
     }
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     const answer = await new Promise<string>((resolve) => {
-      rl.question(
-        `    Download ${entry.codename} (${entry.sizeGB} GB)? [Y/n]: `,
-        (a) => {
-          rl.close();
-          resolve(a.trim().toLowerCase());
-        },
-      );
+      rl.question(`    Download ${entry.codename} (${entry.sizeGB} GB)? [Y/n]: `, (a) => {
+        rl.close();
+        resolve(a.trim().toLowerCase());
+      });
     });
     if (answer && !(answer.startsWith("y") || answer === "s" || answer === "si")) {
       console.log();

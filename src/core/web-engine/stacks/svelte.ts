@@ -1,33 +1,37 @@
 // KCode - SvelteKit Stack Templates
 
-import { CINEMATIC_CSS, REVEAL_SCRIPT, PALETTES, paletteToCSS } from "../effects";
 import type { DetectedIntent } from "../detector";
+import { CINEMATIC_CSS, PALETTES, paletteToCSS, REVEAL_SCRIPT } from "../effects";
 import type { FileTemplate } from "../templates";
 
 export function svelteBase(intent: DetectedIntent): FileTemplate[] {
   return [
     {
       path: "package.json",
-      content: JSON.stringify({
-        name: intent.name,
-        version: "0.1.0",
-        private: true,
-        scripts: {
-          dev: "vite dev",
-          build: "vite build",
-          preview: "vite preview",
+      content: JSON.stringify(
+        {
+          name: intent.name,
+          version: "0.1.0",
+          private: true,
+          scripts: {
+            dev: "vite dev",
+            build: "vite build",
+            preview: "vite preview",
+          },
+          devDependencies: {
+            "@sveltejs/adapter-auto": "^4.0.0",
+            "@sveltejs/kit": "^2.15.0",
+            "@sveltejs/vite-plugin-svelte": "^5.0.0",
+            svelte: "^5.0.0",
+            typescript: "^5.8.0",
+            vite: "^6.0.0",
+            tailwindcss: "^4.0.0",
+            "@tailwindcss/vite": "^4.0.0",
+          },
         },
-        devDependencies: {
-          "@sveltejs/adapter-auto": "^4.0.0",
-          "@sveltejs/kit": "^2.15.0",
-          "@sveltejs/vite-plugin-svelte": "^5.0.0",
-          svelte: "^5.0.0",
-          typescript: "^5.8.0",
-          vite: "^6.0.0",
-          tailwindcss: "^4.0.0",
-          "@tailwindcss/vite": "^4.0.0",
-        },
-      }, null, 2),
+        null,
+        2,
+      ),
       needsLlm: false,
     },
     {

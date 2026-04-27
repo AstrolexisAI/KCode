@@ -17,8 +17,7 @@
 // This guard catches the inversion at Edit time, regardless of audit session.
 
 /** The C comparison function family. All return 0 on match, nonzero on differ. */
-const CMP_FAMILY_REGEX =
-  /!\s*(?:str|wcs|strn|wcsn|mem|strcase|strncase|strcoll|wcscoll)cmp\s*\(/g;
+const CMP_FAMILY_REGEX = /!\s*(?:str|wcs|strn|wcsn|mem|strcase|strncase|strcoll|wcscoll)cmp\s*\(/g;
 
 /** Check if `on` toggle is explicitly off via env var. */
 function semanticGuardsEnabled(): boolean {

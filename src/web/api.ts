@@ -197,7 +197,10 @@ async function handleReadFile(encodedPath: string): Promise<Response> {
   // either equal the cwd exactly or be prefixed with cwd + path
   // separator so sibling-directory traversal is impossible.
   const resolved = resolve(cwd, requestedPath);
-  const normalizedCwd = normalize(cwd).replace(new RegExp(`${sep.replace(/[/\\]/g, "\\$&")}+$`), "");
+  const normalizedCwd = normalize(cwd).replace(
+    new RegExp(`${sep.replace(/[/\\]/g, "\\$&")}+$`),
+    "",
+  );
   const cwdWithSep = normalizedCwd + sep;
   if (resolved !== normalizedCwd && !resolved.startsWith(cwdWithSep)) {
     return error("Path traversal denied", 403);

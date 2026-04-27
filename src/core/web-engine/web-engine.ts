@@ -6,33 +6,32 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { detectWebIntent, type DetectedIntent } from "./detector";
+import { type DetectedIntent, detectWebIntent } from "./detector";
 import { buildProjectTemplate, type FileTemplate, type ProjectTemplate } from "./templates";
-import type { SiteType } from "./types";
-
-// Import all templates statically — no dynamic require that breaks in bundled builds
-import { tradingDashboardComponents } from "./templates/trading-dashboard";
-import { analyticsDashboardComponents } from "./templates/analytics-dashboard";
 import { adminPanelComponents } from "./templates/admin-panel";
-import { ecommerceComponents } from "./templates/ecommerce";
-import { socialFeedComponents } from "./templates/social-feed";
-import { crmComponents } from "./templates/crm";
-import { projectManagementComponents } from "./templates/project-management";
+import { analyticsDashboardComponents } from "./templates/analytics-dashboard";
 import { chatAppComponents } from "./templates/chat-app";
+import { crmComponents } from "./templates/crm";
+import { ecommerceComponents } from "./templates/ecommerce";
 import { educationLmsComponents } from "./templates/education-lms";
 import { iotMonitoringComponents } from "./templates/iot-monitoring";
+import { projectManagementComponents } from "./templates/project-management";
+import { socialFeedComponents } from "./templates/social-feed";
+// Import all templates statically — no dynamic require that breaks in bundled builds
+import { tradingDashboardComponents } from "./templates/trading-dashboard";
+import type { SiteType } from "./types";
 
 const SPECIALIZED_TEMPLATES: Partial<Record<SiteType, () => FileTemplate[]>> = {
   "trading-dashboard": tradingDashboardComponents,
-  "analytics": analyticsDashboardComponents,
+  analytics: analyticsDashboardComponents,
   "admin-panel": adminPanelComponents,
-  "ecommerce": ecommerceComponents,
+  ecommerce: ecommerceComponents,
   "social-feed": socialFeedComponents,
-  "crm": crmComponents,
+  crm: crmComponents,
   "project-mgmt": projectManagementComponents,
-  "chat": chatAppComponents,
-  "education": educationLmsComponents,
-  "iot": iotMonitoringComponents,
+  chat: chatAppComponents,
+  education: educationLmsComponents,
+  iot: iotMonitoringComponents,
 };
 
 function getSpecializedTemplate(siteType: SiteType): FileTemplate[] | null {
@@ -43,20 +42,17 @@ function getSpecializedTemplate(siteType: SiteType): FileTemplate[] | null {
 export interface WebEngineResult {
   intent: DetectedIntent;
   template: ProjectTemplate;
-  machineFiles: number;    // files written by machine (0 tokens)
-  llmFiles: number;        // files that need LLM customization
+  machineFiles: number; // files written by machine (0 tokens)
+  llmFiles: number; // files that need LLM customization
   projectPath: string;
-  prompt: string;           // focused prompt for LLM to customize
+  prompt: string; // focused prompt for LLM to customize
 }
 
 /**
  * Run the web engine: detect intent → generate template → write files
  * Returns a focused prompt for the LLM to customize content-specific files.
  */
-export function createWebProject(
-  userRequest: string,
-  cwd: string,
-): WebEngineResult {
+export function createWebProject(userRequest: string, cwd: string): WebEngineResult {
   // Step 1: Detect intent from natural language
   const intent = detectWebIntent(userRequest);
 
@@ -66,13 +62,18 @@ export function createWebProject(
   if (specializedFiles) {
     // Specialized template: merge with base project files (package.json, configs)
     const baseTemplate = buildProjectTemplate(intent);
-    const specialPaths = new Set(specializedFiles.map(f => f.path));
-    const baseConfigFiles = baseTemplate.files.filter(f =>
-      !specialPaths.has(f.path) && (
-        f.path === "package.json" || f.path === "next.config.ts" || f.path === "tsconfig.json" ||
-        f.path === "postcss.config.mjs" || f.path === "tailwind.config.ts" || f.path === ".gitignore" ||
-        f.path === "README.md" || f.path === "src/app/globals.css"
-      )
+    const specialPaths = new Set(specializedFiles.map((f) => f.path));
+    const baseConfigFiles = baseTemplate.files.filter(
+      (f) =>
+        !specialPaths.has(f.path) &&
+        (f.path === "package.json" ||
+          f.path === "next.config.ts" ||
+          f.path === "tsconfig.json" ||
+          f.path === "postcss.config.mjs" ||
+          f.path === "tailwind.config.ts" ||
+          f.path === ".gitignore" ||
+          f.path === "README.md" ||
+          f.path === "src/app/globals.css"),
     );
     // Add SVG icon if template doesn't have one
     if (!specialPaths.has("src/app/icon.svg")) {
@@ -133,9 +134,16 @@ export function createWebProject(
   // Remove old src/ to avoid stale files from different template types.
   // Only runs when projectPath is KCode-owned (cwd was generated, or
   // we just created a fresh subdirectory). Never nukes a user's src/.
-  if (cwdIsKcodeGenerated || !pathExists(projectPath) || pathExists(join(projectPath, ".kcode-generated"))) {
+  if (
+    cwdIsKcodeGenerated ||
+    !pathExists(projectPath) ||
+    pathExists(join(projectPath, ".kcode-generated"))
+  ) {
     const srcPath = join(projectPath, "src");
-    try { const { rmSync } = require("fs"); rmSync(srcPath, { recursive: true, force: true }); } catch {}
+    try {
+      const { rmSync } = require("fs");
+      rmSync(srcPath, { recursive: true, force: true });
+    } catch {}
   }
 
   let machineFiles = 0;
@@ -147,12 +155,16 @@ export function createWebProject(
   mkdirSync(projectPath, { recursive: true });
   writeFileSync(
     join(projectPath, ".kcode-generated"),
-    JSON.stringify({
-      generator: "kcode-web-engine",
-      siteType: intent.siteType,
-      stack: intent.stack,
-      createdAt: new Date().toISOString(),
-    }, null, 2),
+    JSON.stringify(
+      {
+        generator: "kcode-web-engine",
+        siteType: intent.siteType,
+        stack: intent.stack,
+        createdAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
   );
 
   for (const file of template.files) {
@@ -171,9 +183,7 @@ export function createWebProject(
   }
 
   // Step 4: Build focused LLM prompt (ONLY for content customization)
-  const llmFileList = template.files
-    .filter(f => f.needsLlm)
-    .map(f => f.path);
+  const llmFileList = template.files.filter((f) => f.needsLlm).map((f) => f.path);
 
   const prompt = buildWebPrompt(intent, llmFileList, projectPath);
 
@@ -187,11 +197,7 @@ export function createWebProject(
   };
 }
 
-function buildWebPrompt(
-  intent: DetectedIntent,
-  llmFiles: string[],
-  projectPath: string,
-): string {
+function buildWebPrompt(intent: DetectedIntent, llmFiles: string[], projectPath: string): string {
   return `You are customizing a ${intent.siteType} website that was already scaffolded by the machine.
 
 PROJECT: ${intent.name}
@@ -205,7 +211,7 @@ dependencies, and component templates. You need to CUSTOMIZE these files
 with real content:
 
 FILES TO CUSTOMIZE:
-${llmFiles.map(f => `- ${f}`).join("\n")}
+${llmFiles.map((f) => `- ${f}`).join("\n")}
 
 PROJECT PATH: ${projectPath}
 

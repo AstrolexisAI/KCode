@@ -211,14 +211,23 @@ export function convertToAnthropicMessages(messages: Message[]): AnthropicMessag
     const hasToolResult = blocks.some((b) => b.type === "tool_result");
     const hasToolUse = blocks.some((b) => b.type === "tool_use");
     const last = result[result.length - 1];
-    const lastHasToolResult = last && Array.isArray(last.content) &&
+    const lastHasToolResult =
+      last &&
+      Array.isArray(last.content) &&
       last.content.some((b: { type: string }) => b.type === "tool_result");
-    const lastHasToolUse = last && Array.isArray(last.content) &&
+    const lastHasToolUse =
+      last &&
+      Array.isArray(last.content) &&
       last.content.some((b: { type: string }) => b.type === "tool_use");
 
     // Only merge if neither side has tool blocks (safe text-only merge)
-    const canMerge = last && last.role === msg.role &&
-      !hasToolResult && !hasToolUse && !lastHasToolResult && !lastHasToolUse;
+    const canMerge =
+      last &&
+      last.role === msg.role &&
+      !hasToolResult &&
+      !hasToolUse &&
+      !lastHasToolResult &&
+      !lastHasToolUse;
 
     if (canMerge) {
       if (typeof last.content === "string") {
@@ -296,7 +305,8 @@ function sanitizeOrphanToolUses(messages: AnthropicMessage[]): void {
     const synthetic = orphans.map((id) => ({
       type: "tool_result" as const,
       tool_use_id: id,
-      content: "(execution not completed: tool run was interrupted before a result could be produced)",
+      content:
+        "(execution not completed: tool run was interrupted before a result could be produced)",
       is_error: true,
     }));
 

@@ -4,10 +4,10 @@
 // The machine generates ALL boilerplate. LLM only customizes content.
 
 import type { DetectedIntent } from "./detector";
-import { CINEMATIC_CSS, REVEAL_SCRIPT, PALETTES, paletteToCSS } from "./effects";
+import { CINEMATIC_CSS, PALETTES, paletteToCSS, REVEAL_SCRIPT } from "./effects";
 import { astroBase, astroBlogPages, astroPortfolioPages } from "./stacks/astro";
-import { svelteBase } from "./stacks/svelte";
 import { htmlBase } from "./stacks/html";
+import { svelteBase } from "./stacks/svelte";
 
 export interface FileTemplate {
   path: string;
@@ -30,59 +30,67 @@ function nextjsBase(intent: DetectedIntent): FileTemplate[] {
   return [
     {
       path: "package.json",
-      content: JSON.stringify({
-        name,
-        version: "0.1.0",
-        private: true,
-        scripts: {
-          dev: "next dev",
-          build: "next build",
-          start: "next start",
-          lint: "next lint",
+      content: JSON.stringify(
+        {
+          name,
+          version: "0.1.0",
+          private: true,
+          scripts: {
+            dev: "next dev",
+            build: "next build",
+            start: "next start",
+            lint: "next lint",
+          },
+          dependencies: {
+            next: "15.3.0",
+            react: "19.1.0",
+            "react-dom": "19.1.0",
+            "lucide-react": "^0.469.0",
+            ...(intent.hasAuth ? { "next-auth": "^4.24.0" } : {}),
+            ...(intent.hasPayments ? { stripe: "^17.0.0" } : {}),
+          },
+          devDependencies: {
+            typescript: "^5.8.0",
+            "@types/node": "^22.0.0",
+            "@types/react": "^19.0.0",
+            "@types/react-dom": "^19.0.0",
+            tailwindcss: "^4.0.0",
+            "@tailwindcss/postcss": "^4.0.0",
+            postcss: "^8.4.0",
+          },
         },
-        dependencies: {
-          next: "15.3.0",
-          react: "19.1.0",
-          "react-dom": "19.1.0",
-          "lucide-react": "^0.469.0",
-          ...(intent.hasAuth ? { "next-auth": "^4.24.0" } : {}),
-          ...(intent.hasPayments ? { stripe: "^17.0.0" } : {}),
-        },
-        devDependencies: {
-          typescript: "^5.8.0",
-          "@types/node": "^22.0.0",
-          "@types/react": "^19.0.0",
-          "@types/react-dom": "^19.0.0",
-          tailwindcss: "^4.0.0",
-          "@tailwindcss/postcss": "^4.0.0",
-          postcss: "^8.4.0",
-        },
-      }, null, 2),
+        null,
+        2,
+      ),
       needsLlm: false,
     },
     {
       path: "tsconfig.json",
-      content: JSON.stringify({
-        compilerOptions: {
-          target: "ES2017",
-          lib: ["dom", "dom.iterable", "esnext"],
-          allowJs: true,
-          skipLibCheck: true,
-          strict: true,
-          noEmit: true,
-          esModuleInterop: true,
-          module: "esnext",
-          moduleResolution: "bundler",
-          resolveJsonModule: true,
-          isolatedModules: true,
-          jsx: "preserve",
-          incremental: true,
-          plugins: [{ name: "next" }],
-          paths: { "@/*": ["./src/*"] },
+      content: JSON.stringify(
+        {
+          compilerOptions: {
+            target: "ES2017",
+            lib: ["dom", "dom.iterable", "esnext"],
+            allowJs: true,
+            skipLibCheck: true,
+            strict: true,
+            noEmit: true,
+            esModuleInterop: true,
+            module: "esnext",
+            moduleResolution: "bundler",
+            resolveJsonModule: true,
+            isolatedModules: true,
+            jsx: "preserve",
+            incremental: true,
+            plugins: [{ name: "next" }],
+            paths: { "@/*": ["./src/*"] },
+          },
+          include: ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+          exclude: ["node_modules"],
         },
-        include: ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-        exclude: ["node_modules"],
-      }, null, 2),
+        null,
+        2,
+      ),
       needsLlm: false,
     },
     {
@@ -293,9 +301,10 @@ export default function Features() {
 // ── Pricing Component ──────────────────────────────────────────
 
 function statsComponent(intent: DetectedIntent): FileTemplate[] {
-  return [{
-    path: "src/components/stats.tsx",
-    content: `const stats = [
+  return [
+    {
+      path: "src/components/stats.tsx",
+      content: `const stats = [
   { value: "10K+", label: "Active Users" },
   { value: "99.9%", label: "Uptime" },
   { value: "150+", label: "Countries" },
@@ -319,14 +328,16 @@ export default function Stats() {
   );
 }
 `,
-    needsLlm: true,
-  }];
+      needsLlm: true,
+    },
+  ];
 }
 
 function testimonialsComponent(intent: DetectedIntent): FileTemplate[] {
-  return [{
-    path: "src/components/testimonials.tsx",
-    content: `const testimonials = [
+  return [
+    {
+      path: "src/components/testimonials.tsx",
+      content: `const testimonials = [
   { name: "Name", role: "CEO at Company", text: "Quote here.", avatar: "🧑" },
   { name: "Name", role: "CTO at Company", text: "Quote here.", avatar: "👩" },
   { name: "Name", role: "Developer", text: "Quote here.", avatar: "🧑‍💻" },
@@ -361,14 +372,16 @@ export default function Testimonials() {
   );
 }
 `,
-    needsLlm: true,
-  }];
+      needsLlm: true,
+    },
+  ];
 }
 
 function ctaComponent(intent: DetectedIntent): FileTemplate[] {
-  return [{
-    path: "src/components/cta.tsx",
-    content: `export default function CTA() {
+  return [
+    {
+      path: "src/components/cta.tsx",
+      content: `export default function CTA() {
   return (
     <section className="py-32 px-6">
       <div className="max-w-4xl mx-auto text-center reveal">
@@ -393,14 +406,16 @@ function ctaComponent(intent: DetectedIntent): FileTemplate[] {
   );
 }
 `,
-    needsLlm: true,
-  }];
+      needsLlm: true,
+    },
+  ];
 }
 
 function navComponent(intent: DetectedIntent): FileTemplate[] {
-  return [{
-    path: "src/components/nav.tsx",
-    content: `"use client";
+  return [
+    {
+      path: "src/components/nav.tsx",
+      content: `"use client";
 import { useState, useEffect } from "react";
 
 export default function Nav() {
@@ -433,15 +448,17 @@ export default function Nav() {
   );
 }
 `,
-    needsLlm: false,
-  }];
+      needsLlm: false,
+    },
+  ];
 }
 
 function pricingComponent(intent: DetectedIntent): FileTemplate[] {
   if (!intent.features.includes("pricing")) return [];
-  return [{
-    path: "src/components/pricing.tsx",
-    content: `const plans = [
+  return [
+    {
+      path: "src/components/pricing.tsx",
+      content: `const plans = [
   { name: "Free", price: "$0", features: ["Feature 1", "Feature 2"], cta: "Get Started" },
   { name: "Pro", price: "$19", features: ["Everything in Free", "Feature 3", "Feature 4"], cta: "Start Trial", popular: true },
   { name: "Enterprise", price: "Custom", features: ["Everything in Pro", "Feature 5", "Support"], cta: "Contact Us" },
@@ -475,8 +492,9 @@ export default function Pricing() {
   );
 }
 `,
-    needsLlm: true,
-  }];
+      needsLlm: true,
+    },
+  ];
 }
 
 // ── Auth Components ────────────────────────────────────────────
@@ -653,11 +671,23 @@ export function buildProjectTemplate(intent: DetectedIntent): ProjectTemplate {
       files.push(...astroBlogPages(intent)); // default to blog structure
     }
     files.push({ path: ".gitignore", content: "node_modules/\ndist/\n.astro/\n", needsLlm: false });
-    files.push({ path: "README.md", content: `# ${intent.name}\n\nBuilt with Astro + KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`, needsLlm: false });
+    files.push({
+      path: "README.md",
+      content: `# ${intent.name}\n\nBuilt with Astro + KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+      needsLlm: false,
+    });
   } else if (intent.stack === "svelte") {
     files.push(...svelteBase(intent));
-    files.push({ path: ".gitignore", content: "node_modules/\n.svelte-kit/\nbuild/\n", needsLlm: false });
-    files.push({ path: "README.md", content: `# ${intent.name}\n\nBuilt with SvelteKit + KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`, needsLlm: false });
+    files.push({
+      path: ".gitignore",
+      content: "node_modules/\n.svelte-kit/\nbuild/\n",
+      needsLlm: false,
+    });
+    files.push({
+      path: "README.md",
+      content: `# ${intent.name}\n\nBuilt with SvelteKit + KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n`,
+      needsLlm: false,
+    });
   } else if (intent.stack === "html") {
     files.push(...htmlBase(intent));
   }

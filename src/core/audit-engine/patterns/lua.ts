@@ -63,7 +63,8 @@ export const LUA_PATTERNS: BugPattern[] = [
       "If the loop iterates a fixed small number of times (< 10), respond FALSE_POSITIVE. " +
       "If it processes variable-length data (file lines, records), respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Collect in table, join at end: local parts = {}; for ... do parts[#parts+1] = chunk end; result = table.concat(parts)",
+    fix_template:
+      "Collect in table, join at end: local parts = {}; for ... do parts[#parts+1] = chunk end; result = table.concat(parts)",
   },
   {
     id: "lua-005-os-execute-injection",
@@ -78,7 +79,8 @@ export const LUA_PATTERNS: BugPattern[] = [
       "If entirely hardcoded, respond FALSE_POSITIVE. " +
       "If user input is concatenated into the command, respond CONFIRMED.",
     cwe: "CWE-78",
-    fix_template: "Avoid os.execute with user data. Use io.popen with proper escaping, or avoid shell entirely.",
+    fix_template:
+      "Avoid os.execute with user data. Use io.popen with proper escaping, or avoid shell entirely.",
   },
   {
     id: "lua-006-pcall-no-error-handling",
@@ -100,7 +102,8 @@ export const LUA_PATTERNS: BugPattern[] = [
     title: "Infinite loop without yield in coroutine",
     severity: "high",
     languages: ["lua"],
-    regex: /coroutine\.create\s*\(\s*function[\s\S]{0,200}?while\s+true\s+do(?![\s\S]{0,200}?coroutine\.yield)/g,
+    regex:
+      /coroutine\.create\s*\(\s*function[\s\S]{0,200}?while\s+true\s+do(?![\s\S]{0,200}?coroutine\.yield)/g,
     explanation:
       "A coroutine with while-true and no yield will never return control to the caller, effectively hanging the program.",
     verify_prompt:
@@ -123,6 +126,7 @@ export const LUA_PATTERNS: BugPattern[] = [
       "If it's an internal variable set from a trusted whitelist, respond FALSE_POSITIVE. " +
       "If it could be user-controlled, respond CONFIRMED.",
     cwe: "CWE-98",
-    fix_template: "Whitelist modules: local ALLOWED = {mod1=true, mod2=true}; if ALLOWED[name] then require(name) end",
+    fix_template:
+      "Whitelist modules: local ALLOWED = {mod1=true, mod2=true}; if ALLOWED[name] then require(name) end",
   },
 ];

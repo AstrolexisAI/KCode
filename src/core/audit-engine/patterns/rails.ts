@@ -14,7 +14,8 @@ export const RAILS_PATTERNS: BugPattern[] = [
     pack: "web",
     // .send(params[:x]) / .public_send(params[:x]) / object.send(method)
     // where method comes from params/request.
-    regex: /\b\.(?:send|public_send|__send__)\s*\(\s*(?:[^)]*?\bparams\[|[^)]*?\brequest\.(?:params|GET|POST))/g,
+    regex:
+      /\b\.(?:send|public_send|__send__)\s*\(\s*(?:[^)]*?\bparams\[|[^)]*?\brequest\.(?:params|GET|POST))/g,
     explanation:
       "Ruby's send/public_send invokes ANY method on the receiver by name. With a user-controlled method name the caller picks the method — including dangerous ones like `system`, `eval`, `instance_eval`, or removing every record. Rails' params hash regularly carries un-validated strings, so `User.find(1).send(params[:method])` is an RCE primitive disguised as ergonomic dispatch. Real incidents: GitHub's 2012 mass-assignment, several DHH-era Rails apps.",
     verify_prompt:
@@ -34,7 +35,8 @@ export const RAILS_PATTERNS: BugPattern[] = [
     pack: "web",
     // Match params.permit! (without args — wildcard permit) or
     // User.update(params[:user]) without a permit call.
-    regex: /\bparams\.permit!|\b(?:update|update_attributes|create|new|attributes\s*=)\s*\(\s*params\[/g,
+    regex:
+      /\bparams\.permit!|\b(?:update|update_attributes|create|new|attributes\s*=)\s*\(\s*params\[/g,
     explanation:
       "Mass assignment ships in Rails apps that use the legacy `update_attributes(params[:user])` pattern (whitelisting nothing) or `params.permit!` (whitelisting everything). An attacker submits a form with `user[admin]=true` or `user[role]=owner` and the model sets the attribute. The 2012 GitHub-on-Rails incident gave an attacker push access to rails/rails via this exact shape.",
     verify_prompt:
@@ -53,7 +55,8 @@ export const RAILS_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["ruby"],
     pack: "web",
-    regex: /\b(?:eval|instance_eval|class_eval|module_eval)\s*\(\s*(?:[^)]*?\bparams\[|[^)]*?\brequest\.|[^)]*?#\{)/g,
+    regex:
+      /\b(?:eval|instance_eval|class_eval|module_eval)\s*\(\s*(?:[^)]*?\bparams\[|[^)]*?\brequest\.|[^)]*?#\{)/g,
     explanation:
       "Ruby's eval-family methods run arbitrary Ruby code. With user input — params, request, or string-interpolated `\"...#{user_input}...\"` — the caller gets full process access. instance_eval and class_eval are even worse because they run in the receiver's context, so attackers can monkey-patch the model layer.",
     verify_prompt:

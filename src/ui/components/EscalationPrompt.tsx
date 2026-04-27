@@ -66,10 +66,7 @@ export default function EscalationPrompt({
   const total = availableModels.length;
   const windowStart = Math.max(
     0,
-    Math.min(
-      selectedIdx - Math.floor(VISIBLE_ROWS / 2),
-      total - VISIBLE_ROWS,
-    ),
+    Math.min(selectedIdx - Math.floor(VISIBLE_ROWS / 2), total - VISIBLE_ROWS),
   );
   const windowEnd = Math.min(total, windowStart + VISIBLE_ROWS);
   const visibleModels = availableModels.slice(windowStart, windowEnd);
@@ -89,7 +86,9 @@ export default function EscalationPrompt({
     >
       <Text color={theme.warning} bold>
         {"☁  Second Opinion Available — "}
-        <Text color={theme.dimmed}>{count} finding{count !== 1 ? "s" : ""} need review</Text>
+        <Text color={theme.dimmed}>
+          {count} finding{count !== 1 ? "s" : ""} need review
+        </Text>
       </Text>
       <Text color={theme.dimmed}>{reason}</Text>
       <Text color={theme.dimmed}>{""}</Text>

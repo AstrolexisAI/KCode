@@ -35,7 +35,9 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
   // in models.json can lag behind the actual weights.
   const [runtimeLabels, setRuntimeLabels] = useState<Record<string, string>>({});
   // Per-model benchmark state: "passed" / "failed" / "new" (untested, cloud only)
-  const [benchmarkState, setBenchmarkState] = useState<Record<string, "passed" | "failed" | "new">>({});
+  const [benchmarkState, setBenchmarkState] = useState<Record<string, "passed" | "failed" | "new">>(
+    {},
+  );
 
   useEffect(() => {
     (async () => {
@@ -48,10 +50,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
         const { getInFlightDiscovery } = await import("../../core/model-discovery.js");
         const inFlight = getInFlightDiscovery();
         if (inFlight) {
-          await Promise.race([
-            inFlight,
-            new Promise((resolve) => setTimeout(resolve, 2000)),
-          ]);
+          await Promise.race([inFlight, new Promise((resolve) => setTimeout(resolve, 2000))]);
         }
       } catch {
         /* discovery module absent — safe to skip */
@@ -80,7 +79,6 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
       const idx = all.findIndex((m) => m.name === currentModel);
       if (idx >= 0) setSelectedIndex(idx);
       setLoading(false);
-
 
       // Async: fetch canonical runtime labels for local models so the
       // list reflects whatever GGUF is actually loaded, not a stale
@@ -114,7 +112,9 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           }
         }
         if (Object.keys(state).length > 0) setBenchmarkState(state);
-      } catch { /* benchmark store absent — safe */ }
+      } catch {
+        /* benchmark store absent — safe */
+      }
     })();
   }, []);
 
@@ -138,7 +138,8 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     if (baseUrl.includes("groq.com")) return "GROQ";
     if (baseUrl.includes("deepseek.com")) return "DEEPSEEK";
     if (baseUrl.includes("together.xyz")) return "TOGETHER";
-    if (baseUrl.includes("googleapis.com") || baseUrl.includes("generativelanguage")) return "GEMINI";
+    if (baseUrl.includes("googleapis.com") || baseUrl.includes("generativelanguage"))
+      return "GEMINI";
     return "CLOUD";
   };
 
@@ -182,7 +183,10 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
 
   // Navigate in visual order — arrow keys follow sorted display, not raw array order
   const navigableItems = useMemo(
-    () => items.filter((it): it is { type: "model"; model: ModelInfo; globalIndex: number } => it.type === "model"),
+    () =>
+      items.filter(
+        (it): it is { type: "model"; model: ModelInfo; globalIndex: number } => it.type === "model",
+      ),
     [items],
   );
   const currentVisualIdx = navigableItems.findIndex((it) => it.globalIndex === selectedIndex);
@@ -248,18 +252,20 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
     >
       <Text bold color={theme.primary}>
         {"⚡ Model Switcher  "}
-        <Text dimColor>{`${models.length} models · ↑↓ navegar · Enter seleccionar · Esc salir`}</Text>
+        <Text
+          dimColor
+        >{`${models.length} models · ↑↓ navegar · Enter seleccionar · Esc salir`}</Text>
       </Text>
       <Box flexDirection="column" marginTop={1}>
-        {aboveCount > 0 && (
-          <Text dimColor>{`  ↑ ${aboveCount} more above`}</Text>
-        )}
+        {aboveCount > 0 && <Text dimColor>{`  ↑ ${aboveCount} more above`}</Text>}
         {visibleItems.map((item, i) => {
           if (item.type === "header") {
             return (
               <Box key={`hdr-${item.label}-${i}`} marginTop={i > 0 ? 1 : 0}>
                 <Text bold dimColor>
-                  {"─── "}{item.label}{" ───"}
+                  {"─── "}
+                  {item.label}
+                  {" ───"}
                 </Text>
               </Box>
             );
@@ -269,7 +275,8 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
           const isSelected = item.globalIndex === selectedIndex;
           const isCurrent = m.name === currentModel;
           const runtimeLabel = runtimeLabels[m.name];
-          const tagLine = m.tags && m.tags.length > 0 ? "  " + m.tags.map(t => `[${t}]`).join(" ") : "";
+          const tagLine =
+            m.tags && m.tags.length > 0 ? "  " + m.tags.map((t) => `[${t}]`).join(" ") : "";
 
           const benchState = benchmarkState[m.name];
 
@@ -286,15 +293,20 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
                 {tagLine && <Text dimColor>{tagLine}</Text>}
               </Box>
               {isSelected && m.description && (
-                <Text dimColor>{"    "}{m.description}</Text>
+                <Text dimColor>
+                  {"    "}
+                  {m.description}
+                </Text>
               )}
-              {isSelected && m.gpu && <Text dimColor>{"    "}[{m.gpu}]</Text>}
+              {isSelected && m.gpu && (
+                <Text dimColor>
+                  {"    "}[{m.gpu}]
+                </Text>
+              )}
             </Box>
           );
         })}
-        {belowCount > 0 && (
-          <Text dimColor>{`  ↓ ${belowCount} more below`}</Text>
-        )}
+        {belowCount > 0 && <Text dimColor>{`  ↓ ${belowCount} more below`}</Text>}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>

@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createElixirProject } from "./elixir-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createElixirProject } from "./elixir-engine";
 
 describe("elixir-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-ex-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Plug API project", () => {
@@ -55,7 +59,7 @@ describe("elixir-engine", () => {
   test("adds Ecto for database keyword", () => {
     withTmp((dir) => {
       const r = createElixirProject("API with Postgres database", dir);
-      expect(r.config.deps.some(d => d.name === "ecto_sql")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "ecto_sql")).toBe(true);
     });
   });
 

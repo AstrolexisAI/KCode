@@ -9,23 +9,15 @@
 // Once the dep is available + at least one .wasm grammar is bundled,
 // the same runner serves AST patterns transparently.
 
-import type { Candidate } from "../types";
-import type {
-  AstCapture,
-  AstNode,
-  AstPattern,
-  AstRunner,
-  AstScanStats,
-} from "./types";
 // Embed web-tree-sitter's runtime wasm via Bun's `with { type: "file" }`.
 // In `bun run` mode this resolves to the path under node_modules; in
 // `bun build --compile` mode Bun copies the file into the binary and
 // the import returns a path inside the embedded virtual filesystem
 // (/$bunfs/...). Either way, Parser.init({ locateFile }) below can
 // hand the runtime a real path. v2.10.339.
-import runtimeWasm from "web-tree-sitter/web-tree-sitter.wasm" with {
-  type: "file",
-};
+import runtimeWasm from "web-tree-sitter/web-tree-sitter.wasm" with { type: "file" };
+import type { Candidate } from "../types";
+import type { AstCapture, AstNode, AstPattern, AstRunner, AstScanStats } from "./types";
 
 // ── Lazy module + grammar cache ──────────────────────────────────
 
@@ -85,11 +77,17 @@ async function loadModule(): Promise<TreeSitterModule | null> {
       // The dynamic import lets us ship the audit engine without a
       // hard dependency on web-tree-sitter. When the package is not
       // installed, we degrade silently to "AST patterns disabled".
-      const mod = (await import("web-tree-sitter")) as { default?: unknown } & Record<string, unknown>;
+      const mod = (await import("web-tree-sitter")) as { default?: unknown } & Record<
+        string,
+        unknown
+      >;
       // web-tree-sitter exposes Parser as a top-level export with
       // an .init() static. Initialize once, then return the module.
       const Parser = (mod as { default?: unknown }).default ?? (mod as { Parser?: unknown }).Parser;
-      if (typeof Parser === "function" && typeof (Parser as { init?: unknown }).init === "function") {
+      if (
+        typeof Parser === "function" &&
+        typeof (Parser as { init?: unknown }).init === "function"
+      ) {
         // locateFile lets the Emscripten module find its sibling
         // .wasm without relying on the CWD or import.meta.url —
         // critical for the compiled binary (`bun build --compile`),
@@ -210,14 +208,31 @@ function tsLangFor(language: string, file?: string): string | null {
 function fileLanguage(file: string): string | null {
   const lower = file.toLowerCase();
   if (lower.endsWith(".py") || lower.endsWith(".pyi")) return "python";
-  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs") || lower.endsWith(".jsx")) return "javascript";
-  if (lower.endsWith(".ts") || lower.endsWith(".tsx") || lower.endsWith(".mts") || lower.endsWith(".cts")) return "typescript";
+  if (
+    lower.endsWith(".js") ||
+    lower.endsWith(".mjs") ||
+    lower.endsWith(".cjs") ||
+    lower.endsWith(".jsx")
+  )
+    return "javascript";
+  if (
+    lower.endsWith(".ts") ||
+    lower.endsWith(".tsx") ||
+    lower.endsWith(".mts") ||
+    lower.endsWith(".cts")
+  )
+    return "typescript";
   if (lower.endsWith(".go")) return "go";
   if (lower.endsWith(".c") || lower.endsWith(".h")) return "c";
   if (
-    lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx") ||
-    lower.endsWith(".hpp") || lower.endsWith(".hh") || lower.endsWith(".hxx")
-  ) return "cpp";
+    lower.endsWith(".cpp") ||
+    lower.endsWith(".cc") ||
+    lower.endsWith(".cxx") ||
+    lower.endsWith(".hpp") ||
+    lower.endsWith(".hh") ||
+    lower.endsWith(".hxx")
+  )
+    return "cpp";
   if (lower.endsWith(".rs")) return "rust";
   if (lower.endsWith(".java")) return "java";
   if (lower.endsWith(".rb")) return "ruby";

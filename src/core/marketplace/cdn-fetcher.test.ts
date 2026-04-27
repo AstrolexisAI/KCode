@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { CDNFetcher, IntegrityError } from "./cdn-fetcher";
 import { SHATracker } from "./sha-tracker";
 
-
 const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
 
 let tempDir: string;

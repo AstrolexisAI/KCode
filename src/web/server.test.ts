@@ -86,9 +86,7 @@ describe("WebServer", () => {
 
   test("prevents path traversal in static files", async () => {
     await server.start();
-    const res = await fetch(
-      `${base(server)}/..%2F..%2Fetc%2Fpasswd?token=test-token-12345`,
-    );
+    const res = await fetch(`${base(server)}/..%2F..%2Fetc%2Fpasswd?token=test-token-12345`);
     // Path traversal dots are stripped, so it won't escape static dir
     expect(res.status).not.toBe(500);
   });
@@ -174,7 +172,7 @@ describe("WebServer", () => {
   test("WebSocket connects with valid token", async () => {
     await server.start();
 
-    const ws = new WebSocket(`${base(server).replace("http","ws")}/ws?token=test-token-12345`);
+    const ws = new WebSocket(`${base(server).replace("http", "ws")}/ws?token=test-token-12345`);
 
     const connected = await new Promise<boolean>((resolve) => {
       ws.onopen = () => resolve(true);

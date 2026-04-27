@@ -3,9 +3,22 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type GoProjectType = "cli" | "api" | "library" | "grpc" | "worker" | "microservice" | "custom";
+export type GoProjectType =
+  | "cli"
+  | "api"
+  | "library"
+  | "grpc"
+  | "worker"
+  | "microservice"
+  | "custom";
 
-interface GoConfig { name: string; type: GoProjectType; module: string; dependencies: string[]; framework?: string; }
+interface GoConfig {
+  name: string;
+  type: GoProjectType;
+  module: string;
+  dependencies: string[];
+  framework?: string;
+}
 
 function detectGoProject(msg: string): GoConfig {
   const lower = msg.toLowerCase();
@@ -15,18 +28,35 @@ function detectGoProject(msg: string): GoConfig {
 
   if (/\b(?:api|server|http|rest|gin|echo|fiber|chi)\b/i.test(lower)) {
     type = "api";
-    if (/\bgin\b/i.test(lower)) { framework = "gin"; deps.push("github.com/gin-gonic/gin"); }
-    else if (/\becho\b/i.test(lower)) { framework = "echo"; deps.push("github.com/labstack/echo/v4"); }
-    else if (/\bfiber\b/i.test(lower)) { framework = "fiber"; deps.push("github.com/gofiber/fiber/v2"); }
-    else { framework = "chi"; deps.push("github.com/go-chi/chi/v5", "github.com/go-chi/cors"); }
+    if (/\bgin\b/i.test(lower)) {
+      framework = "gin";
+      deps.push("github.com/gin-gonic/gin");
+    } else if (/\becho\b/i.test(lower)) {
+      framework = "echo";
+      deps.push("github.com/labstack/echo/v4");
+    } else if (/\bfiber\b/i.test(lower)) {
+      framework = "fiber";
+      deps.push("github.com/gofiber/fiber/v2");
+    } else {
+      framework = "chi";
+      deps.push("github.com/go-chi/chi/v5", "github.com/go-chi/cors");
+    }
+  } else if (/\b(?:grpc|protobuf|proto)\b/i.test(lower)) {
+    type = "grpc";
+    deps.push("google.golang.org/grpc", "google.golang.org/protobuf");
+  } else if (/\b(?:worker|queue|job|consumer)\b/i.test(lower)) {
+    type = "worker";
+  } else if (/\b(?:microservice|micro)\b/i.test(lower)) {
+    type = "microservice";
+    deps.push("github.com/go-chi/chi/v5");
+  } else if (/\b(?:lib|library|package|pkg)\b/i.test(lower)) {
+    type = "library";
+  } else {
+    deps.push("github.com/spf13/cobra");
   }
-  else if (/\b(?:grpc|protobuf|proto)\b/i.test(lower)) { type = "grpc"; deps.push("google.golang.org/grpc", "google.golang.org/protobuf"); }
-  else if (/\b(?:worker|queue|job|consumer)\b/i.test(lower)) { type = "worker"; }
-  else if (/\b(?:microservice|micro)\b/i.test(lower)) { type = "microservice"; deps.push("github.com/go-chi/chi/v5"); }
-  else if (/\b(?:lib|library|package|pkg)\b/i.test(lower)) { type = "library"; }
-  else { deps.push("github.com/spf13/cobra"); }
 
-  if (/\b(?:sql|postgres|mysql|sqlite|database|db)\b/i.test(lower)) deps.push("github.com/jmoiron/sqlx", "github.com/mattn/go-sqlite3");
+  if (/\b(?:sql|postgres|mysql|sqlite|database|db)\b/i.test(lower))
+    deps.push("github.com/jmoiron/sqlx", "github.com/mattn/go-sqlite3");
   if (/\b(?:redis)\b/i.test(lower)) deps.push("github.com/redis/go-redis/v9");
   if (/\b(?:mongo)\b/i.test(lower)) deps.push("go.mongodb.org/mongo-driver/v2");
   if (/\b(?:jwt|auth|token)\b/i.test(lower)) deps.push("github.com/golang-jwt/jwt/v5");
@@ -36,26 +66,45 @@ function detectGoProject(msg: string): GoConfig {
   const nameMatch = msg.match(/(?:called|named|nombre)\s+(\w[\w-]*)/i);
   const name = nameMatch?.[1] ?? (type === "library" ? "mylib" : "myapp");
 
-  return { name, type, module: `github.com/user/${name}`, dependencies: [...new Set(deps)], framework };
+  return {
+    name,
+    type,
+    module: `github.com/user/${name}`,
+    dependencies: [...new Set(deps)],
+    framework,
+  };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
 
-export interface GoProjectResult { config: GoConfig; files: GenFile[]; projectPath: string; prompt: string; }
+export interface GoProjectResult {
+  config: GoConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createGoProject(userRequest: string, cwd: string): GoProjectResult {
   const cfg = detectGoProject(userRequest);
   const files: GenFile[] = [];
 
   // go.mod
-  files.push({ path: "go.mod", content: `module ${cfg.module}
+  files.push({
+    path: "go.mod",
+    content: `module ${cfg.module}
 
 go 1.23
 
 require (
-${cfg.dependencies.map(d => `\t${d} v0.0.0`).join("\n")}
+${cfg.dependencies.map((d) => `\t${d} v0.0.0`).join("\n")}
 )
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Main
   const mains: Record<string, string> = {
@@ -76,7 +125,9 @@ func main() {
 \tfmt.Printf("${cfg.name} v0.1.0\\n")
 }
 `,
-    api: cfg.framework === "gin" ? `package main
+    api:
+      cfg.framework === "gin"
+        ? `package main
 
 import (
 \t"context"
@@ -320,7 +371,8 @@ func main() {
 \t}
 \tslog.Info("server stopped")
 }
-` : `package main
+`
+        : `package main
 
 import (
 \t"context"
@@ -637,10 +689,17 @@ func (m *${cap(cfg.name)}) Run() error {
 
   const isLib = cfg.type === "library";
   const isApi = cfg.type === "api";
-  files.push({ path: isLib ? `${cfg.name.replace(/-/g, "")}.go` : "main.go", content: mains[cfg.type] ?? mains["cli"]!, needsLlm: !isApi });
+  files.push({
+    path: isLib ? `${cfg.name.replace(/-/g, "")}.go` : "main.go",
+    content: mains[cfg.type] ?? mains["cli"]!,
+    needsLlm: !isApi,
+  });
 
   // Test
-  files.push({ path: isLib ? `${cfg.name.replace(/-/g, "")}_test.go` : "main_test.go", content: isLib ? `package ${cfg.name.replace(/-/g, "")}
+  files.push({
+    path: isLib ? `${cfg.name.replace(/-/g, "")}_test.go` : "main_test.go",
+    content: isLib
+      ? `package ${cfg.name.replace(/-/g, "")}
 
 import "testing"
 
@@ -667,7 +726,9 @@ func TestRunWithoutInit(t *testing.T) {
 \t\tt.Fatal("Run() should fail without Init()")
 \t}
 }
-` : isApi ? `package main
+`
+      : isApi
+        ? `package main
 
 import (
 \t"bytes"
@@ -1069,28 +1130,61 @@ func TestEnvOrDefault(t *testing.T) {
 \t\tt.Fatalf("expected 'fallback', got %q", val)
 \t}
 }
-` : `package main
+`
+        : `package main
 
 import "testing"
 
 func TestBasic(t *testing.T) {
 \t// TODO: add tests
 }
-`, needsLlm: isApi ? false : true });
+`,
+    needsLlm: isApi ? false : true,
+  });
 
   // Extras
   files.push({ path: ".gitignore", content: `bin/\n*.exe\n.env\ntmp/\n`, needsLlm: false });
-  files.push({ path: "Makefile", content: `build:\n\tgo build -o bin/${cfg.name} ${isLib ? "." : "."}\n\ntest:\n\tgo test -v -race ./...\n\nlint:\n\tgo vet ./...\n\tgolangci-lint run\n\nrun:\n\tgo run ${isLib ? "." : "."}\n`, needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM golang:1.23-alpine AS builder\nWORKDIR /app\nCOPY go.* ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /bin/${cfg.name}\n\nFROM alpine:3.20\nCOPY --from=builder /bin/${cfg.name} /usr/local/bin/\nENTRYPOINT ["${cfg.name}"]\n`, needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-go@v5\n        with: { go-version: "1.23" }\n      - run: go test -v -race ./...\n      - run: go vet ./...\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nBuilt with KCode.\n\n${"```"}bash\nmake build\nmake test\nmake run\n${"```"}\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+  files.push({
+    path: "Makefile",
+    content: `build:\n\tgo build -o bin/${cfg.name} ${isLib ? "." : "."}\n\ntest:\n\tgo test -v -race ./...\n\nlint:\n\tgo vet ./...\n\tgolangci-lint run\n\nrun:\n\tgo run ${isLib ? "." : "."}\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "Dockerfile",
+    content: `FROM golang:1.23-alpine AS builder\nWORKDIR /app\nCOPY go.* ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /bin/${cfg.name}\n\nFROM alpine:3.20\nCOPY --from=builder /bin/${cfg.name} /usr/local/bin/\nENTRYPOINT ["${cfg.name}"]\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-go@v5\n        with: { go-version: "1.23" }\n      - run: go test -v -race ./...\n      - run: go vet ./...\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nBuilt with KCode.\n\n${"```"}bash\nmake build\nmake test\nmake run\n${"```"}\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  const l = files.filter(f => f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement a Go ${cfg.type}. ${m} files machine, ${l} for LLM. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  const l = files.filter((f) => f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement a Go ${cfg.type}. ${m} files machine, ${l} for LLM. USER: "${userRequest}"`,
+  };
 }
 
-function cap(s: string): string { return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(""); }
+function cap(s: string): string {
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

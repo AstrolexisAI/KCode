@@ -71,7 +71,10 @@ function detectImageContent(text: string): boolean {
   // ../pics/shot.jpg and bare image.png all match. End boundary: whitespace,
   // quote, paren, bracket, comma, colon, or end-of-string.
   for (const ext of IMAGE_EXTENSIONS) {
-    const re = new RegExp(`(?:^|[\\w/.])[\\w.-]*?${ext.replace(".", "\\.")}(?=[\\s"')\\],;:]|$)`, "i");
+    const re = new RegExp(
+      `(?:^|[\\w/.])[\\w.-]*?${ext.replace(".", "\\.")}(?=[\\s"')\\],;:]|$)`,
+      "i",
+    );
     if (re.test(text)) {
       // Extra guard: skip if the match is clearly inside a config line
       // (e.g. "VISION_SUPPORTED_FORMATS=png,jpg,jpeg")
@@ -129,13 +132,13 @@ export function classifyTask(userMessage: string): TaskType {
  * Maps to the tag system: coding, fast, analysis, reasoning, structured, local, cheap.
  */
 export type BenchmarkTaskType =
-  | "analysis"     // deep analysis, audit, review, debug → [analysis, reasoning]
+  | "analysis" // deep analysis, audit, review, debug → [analysis, reasoning]
   | "complex-edit" // must find location in code → [coding]
-  | "simple-edit"  // old_string given or trivial change → [coding, fast]
-  | "multi-step"   // numbered/structured workflow → [structured, coding]
-  | "chat"         // question, explain, discuss → [fast, cheap, local]
-  | "vision"       // image input → [vision]
-  | "general";     // default
+  | "simple-edit" // old_string given or trivial change → [coding, fast]
+  | "multi-step" // numbered/structured workflow → [structured, coding]
+  | "chat" // question, explain, discuss → [fast, cheap, local]
+  | "vision" // image input → [vision]
+  | "general"; // default
 
 const ANALYSIS_PATTERNS = [
   // Spanish imperatives (with/without accent). Note: \b breaks on accented chars in JS,
@@ -191,9 +194,9 @@ export function isWholeScopeEdit(userMessage: string): boolean {
 }
 
 const MULTI_STEP_PATTERNS = [
-  /^\s*[1-9]\.\s/m,                              // numbered list: "1. do this"
-  /\b(paso\s+[1-9]|step\s+[1-9])\b/i,           // "paso 1", "step 1"
-  /\b(tarea|task)\s+[1-9]\b/i,                   // "tarea 1" / "task 1"
+  /^\s*[1-9]\.\s/m, // numbered list: "1. do this"
+  /\b(paso\s+[1-9]|step\s+[1-9])\b/i, // "paso 1", "step 1"
+  /\b(tarea|task)\s+[1-9]\b/i, // "tarea 1" / "task 1"
   /\b(primero|luego|despu[eé]s|finalmente|segundo|tercero)\b.*\b(luego|despu[eé]s|finalmente|segundo|tercero)\b/i,
   /\b(first|then|next|finally|second|third)\b.*\b(then|next|finally|second|third)\b/i,
   // "Hacé N cosas" / "Do N things"
@@ -201,8 +204,8 @@ const MULTI_STEP_PATTERNS = [
 ];
 
 const SIMPLE_EDIT_PATTERNS = [
-  /old_string|new_string/i,            // explicit old/new string
-  /l[ií]nea\s+\d+/i,                  // "línea 42"
+  /old_string|new_string/i, // explicit old/new string
+  /l[ií]nea\s+\d+/i, // "línea 42"
   /line\s+\d+/i,
   /\bagregá\s+(?:este|esta|el|la)\s+(?:bloque|línea|comentario)\b/i,
 ];
@@ -233,9 +236,16 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
 
   // Complex edit: code modification without exact location
   // Two patterns: non-accented (word boundary works) + accented Spanish imperatives
-  const COMPLEX_EDIT_BASE = /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|agregar?|añadir?|insertar?|quitar?|corregir|corrige|arreglar?|arregla|repara|repar[aá]r?|refactoriz[aá]r?|refactor\b|optimiz[aá]r?|fix\b|replace|rename|remove|delete|update|add|insert|append|remove|enhance|improve|clean\s*up)\b/i;
-  const COMPLEX_EDIT_ACCENTED = /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá]|agreg[aá]|añad[ií]|insert[aá]|quit[aá]|corrig[eií]|correg[ií]|arregl[aá]|repar[aá]|refactor[ií][aá]|optimiz[aá]|mejor[aá])/i;
-  if (detectCodeTask(userMessage) || COMPLEX_EDIT_BASE.test(userMessage) || COMPLEX_EDIT_ACCENTED.test(userMessage)) return "complex-edit";
+  const COMPLEX_EDIT_BASE =
+    /\b(cambiar?|modificar?|actualizar?|renombrar?|eliminar?|borrar?|reemplazar?|agregar?|añadir?|insertar?|quitar?|corregir|corrige|arreglar?|arregla|repara|repar[aá]r?|refactoriz[aá]r?|refactor\b|optimiz[aá]r?|fix\b|replace|rename|remove|delete|update|add|insert|append|remove|enhance|improve|clean\s*up)\b/i;
+  const COMPLEX_EDIT_ACCENTED =
+    /(cambi[aá]|modific[aá]|actualiz[aá]|renombr[aá]|elimin[aá]|borr[aá]|reemplaz[aá]|agreg[aá]|añad[ií]|insert[aá]|quit[aá]|corrig[eií]|correg[ií]|arregl[aá]|repar[aá]|refactor[ií][aá]|optimiz[aá]|mejor[aá])/i;
+  if (
+    detectCodeTask(userMessage) ||
+    COMPLEX_EDIT_BASE.test(userMessage) ||
+    COMPLEX_EDIT_ACCENTED.test(userMessage)
+  )
+    return "complex-edit";
 
   // Chat/question: only truly short/conversational — NOT technical questions
   // Threshold reduced to 80 chars (greetings, simple lookups)
@@ -246,13 +256,13 @@ export function classifyBenchmarkTask(userMessage: string): BenchmarkTaskType {
 
 /** Tags required per benchmark task type (in priority order) */
 const BENCHMARK_TAG_MAP: Record<BenchmarkTaskType, string[][]> = {
-  "analysis":     [["analysis", "reasoning"], ["reasoning"], ["analysis"]],
+  analysis: [["analysis", "reasoning"], ["reasoning"], ["analysis"]],
   "complex-edit": [["coding", "fast"], ["coding"]],
-  "simple-edit":  [["coding", "fast"], ["fast"], ["coding"]],
-  "multi-step":   [["structured"], ["coding"]],
-  "chat":         [["local"], ["fast", "cheap"], ["fast"], ["cheap"]],
-  "vision":       [["vision"]],
-  "general":      [["coding"], ["fast"]],
+  "simple-edit": [["coding", "fast"], ["fast"], ["coding"]],
+  "multi-step": [["structured"], ["coding"]],
+  chat: [["local"], ["fast", "cheap"], ["fast"], ["cheap"]],
+  vision: [["vision"]],
+  general: [["coding"], ["fast"]],
 };
 
 /**
@@ -311,7 +321,8 @@ export async function selectBenchmarkModel(
     const matched = models.filter((m) => {
       if (LOCAL_PATTERNS.test(m.baseUrl)) return false;
       if (isBlacklisted(m.name)) return false;
-      const modelTags: string[] = (m as unknown as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
+      const modelTags: string[] =
+        ((m as unknown as Record<string, unknown>).tags as string[]) ?? m.capabilities ?? [];
       return requiredTags.every((t) => modelTags.includes(t));
     });
 
@@ -323,7 +334,11 @@ export async function selectBenchmarkModel(
         const { resolveApiKey } = await import("./request-builder.js");
         const { loadUserSettingsRaw } = await import("./config.js");
         let settings: Record<string, unknown> = {};
-        try { settings = await loadUserSettingsRaw(); } catch { /* */ }
+        try {
+          settings = await loadUserSettingsRaw();
+        } catch {
+          /* */
+        }
         const fakeConfig = {
           apiKey: String(settings.apiKey ?? ""),
           anthropicApiKey: String(settings.anthropicApiKey ?? ""),
@@ -334,8 +349,15 @@ export async function selectBenchmarkModel(
           togetherApiKey: String(settings.togetherApiKey ?? ""),
           kimiApiKey: String(settings.kimiApiKey ?? ""),
         };
-        const apiKey = resolveApiKey(chosen.name, chosen.baseUrl, fakeConfig as Parameters<typeof resolveApiKey>[2]);
-        log.info("router/multi", `${taskType} [${requiredTags.join("+")}] → ${chosen.name} @ ${chosen.baseUrl}`);
+        const apiKey = resolveApiKey(
+          chosen.name,
+          chosen.baseUrl,
+          fakeConfig as Parameters<typeof resolveApiKey>[2],
+        );
+        log.info(
+          "router/multi",
+          `${taskType} [${requiredTags.join("+")}] → ${chosen.name} @ ${chosen.baseUrl}`,
+        );
         return { model: chosen.name, baseUrl: chosen.baseUrl, apiKey };
       }
       return null; // already on the best model
@@ -475,13 +497,16 @@ export async function routeToModel(
     const testStart = Date.now();
     const matched = rule.compiled.test(userMessage.slice(0, 1000));
     if (Date.now() - testStart > 50) {
-      log.warn("router", `Rule "${rule.description ?? rule.pattern}" took ${Date.now() - testStart}ms — suspected ReDoS, disabling`);
+      log.warn(
+        "router",
+        `Rule "${rule.description ?? rule.pattern}" took ${Date.now() - testStart}ms — suspected ReDoS, disabling`,
+      );
       (rule as { compiled: RegExp | null }).compiled = null;
       continue;
     }
     if (matched) {
       // Validate that the model exists before using it
-      const modelExists = models.some(m => m.name === rule.model);
+      const modelExists = models.some((m) => m.name === rule.model);
       if (!modelExists) {
         log.warn(
           "router",

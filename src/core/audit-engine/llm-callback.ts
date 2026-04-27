@@ -22,9 +22,7 @@ export interface AuditLlmOptions {
  * returns its response text. Works with Anthropic-native or OpenAI-
  * compatible endpoints (llama.cpp, Ollama, vLLM, OpenAI).
  */
-export function makeAuditLlmCallback(
-  opts: AuditLlmOptions,
-): (prompt: string) => Promise<string> {
+export function makeAuditLlmCallback(opts: AuditLlmOptions): (prompt: string) => Promise<string> {
   const { model, apiBase } = opts;
   const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_API_KEY ?? "";
   // Bumped to 4096 in v2.10.311 — reasoning models like mark7 / qwen-r1
@@ -35,13 +33,16 @@ export function makeAuditLlmCallback(
   const maxTokens = opts.maxTokens ?? 4096;
   const temperature = opts.temperature ?? 0.1;
 
-  const isAnthropic =
-    apiBase.includes("anthropic.com") || /\bclaude\b/i.test(model);
+  const isAnthropic = apiBase.includes("anthropic.com") || /\bclaude\b/i.test(model);
   const isOAuthToken = apiKey.startsWith("sk-ant-oat01-");
 
   return async (prompt: string): Promise<string> => {
     // Retry wrapper for 429 rate limits
-    const fetchWithRetry = async (url: string, init: RequestInit, maxRetries = 3): Promise<Response> => {
+    const fetchWithRetry = async (
+      url: string,
+      init: RequestInit,
+      maxRetries = 3,
+    ): Promise<Response> => {
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const res = await fetch(url, init);
         if (res.status === 429 && attempt < maxRetries) {

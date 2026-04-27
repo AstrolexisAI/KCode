@@ -21,7 +21,8 @@ export const CPP_PATTERNS: BugPattern[] = [
       "array or the intent is genuinely to index into an array-of-that-thing, " +
       "respond FALSE_POSITIVE. Otherwise show the stack layout and confirm CONFIRMED.",
     cwe: "CWE-125",
-    fix_template: "Replace `(&VAR)[IDX]` with `(char*)VAR + IDX` (for pointers) or verify VAR is an array.",
+    fix_template:
+      "Replace `(&VAR)[IDX]` with `(char*)VAR + IDX` (for pointers) or verify VAR is an array.",
   },
 
   // ── Unreachable code ────────────────────────────────────────────
@@ -96,7 +97,8 @@ export const CPP_PATTERNS: BugPattern[] = [
     title: "Signed int used as size_t (possible signedness bug)",
     severity: "medium",
     languages: ["c", "cpp"],
-    regex: /\bint\s+(\w+)\s*=\s*\w+\([^)]*\)\s*;[\s\S]{0,200}?\b(std::vector|std::string|std::array)\s*<[^>]+>\s*\w+\s*\(\s*\1/g,
+    regex:
+      /\bint\s+(\w+)\s*=\s*\w+\([^)]*\)\s*;[\s\S]{0,200}?\b(std::vector|std::string|std::array)\s*<[^>]+>\s*\w+\s*\(\s*\1/g,
     explanation:
       "An int (which can be negative) is used as the size argument to a container constructor that expects size_t. If the function returned -1 on error, the cast to size_t produces a huge number → DoS via gigantic allocation.",
     verify_prompt:
@@ -118,7 +120,7 @@ export const CPP_PATTERNS: BugPattern[] = [
       "strcpy/strcat/sprintf/gets have no bounds checking. If the source can exceed the destination size, heap/stack buffer overflow. Use the `_s` or `n` variants.",
     verify_prompt:
       "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
-      "1. Is the source a short string LITERAL (e.g. \"key:\", \"(*)\", \"sometime\")? → FALSE_POSITIVE\n" +
+      '1. Is the source a short string LITERAL (e.g. "key:", "(*)", "sometime")? → FALSE_POSITIVE\n' +
       "2. Is there a malloc/calloc BEFORE this call that allocates strlen(src)+1 or more? → FALSE_POSITIVE\n" +
       "3. Is the destination a fixed-size buffer AND the source is a known-short constant? → FALSE_POSITIVE\n" +
       "4. Is this in test code, example code, or documentation? → FALSE_POSITIVE\n" +
@@ -137,7 +139,8 @@ export const CPP_PATTERNS: BugPattern[] = [
     // Match ptr->field followed by if (ptr == NULL) within 100 chars,
     // BUT exclude when there's a return/break/goto between them
     // (those exit the scope, so the null check is for a different path).
-    regex: /\b(\w+)\s*->\s*\w+(?![\s\S]{0,100}?\b(?:return|break|goto)\b)[\s\S]{0,100}?\bif\s*\(\s*\1\s*(?:==|!=)\s*(?:NULL|nullptr|0)\s*\)/g,
+    regex:
+      /\b(\w+)\s*->\s*\w+(?![\s\S]{0,100}?\b(?:return|break|goto)\b)[\s\S]{0,100}?\bif\s*\(\s*\1\s*(?:==|!=)\s*(?:NULL|nullptr|0)\s*\)/g,
     explanation:
       "A pointer is dereferenced with `->` and THEN checked for null. If it's ever null, the deref already crashed before the check could help.",
     verify_prompt:
@@ -200,7 +203,8 @@ export const CPP_PATTERNS: BugPattern[] = [
       "Is `count` bounded to prevent overflow (e.g. `count < SIZE_MAX/sizeof(T)`)? " +
       "If there's such a check, respond FALSE_POSITIVE. Otherwise CONFIRMED.",
     cwe: "CWE-190",
-    fix_template: "Use calloc(count, sizeof(T)) which handles overflow, or add explicit bounds check.",
+    fix_template:
+      "Use calloc(count, sizeof(T)) which handles overflow, or add explicit bounds check.",
   },
 
   // ── Signed/unsigned comparison ──────────────────────────────────
@@ -247,14 +251,13 @@ export const CPP_PATTERNS: BugPattern[] = [
     title: "snprintf return value ignored (silent truncation)",
     severity: "medium",
     languages: ["c", "cpp"],
-    regex:
-      /(?:^|\n)\s*snprintf\s*\(/g,
+    regex: /(?:^|\n)\s*snprintf\s*\(/g,
     explanation:
       "snprintf returns the number of bytes that WOULD have been written (excluding the null). If the return value ≥ buffer size, the output was truncated. Code that ignores the return and treats the buffer as a complete formatted string mishandles long inputs — common in log formatters, command builders, and serializers.",
     verify_prompt:
       "Check the surrounding context. FALSE_POSITIVE if ANY:\n" +
       "1. The return is captured into a variable that's checked against the buffer size → FALSE_POSITIVE.\n" +
-      "2. The format string contains only fixed-width specifiers whose total can never exceed the buffer (e.g. \"%04d\" into a 16-byte buffer) → FALSE_POSITIVE.\n" +
+      '2. The format string contains only fixed-width specifiers whose total can never exceed the buffer (e.g. "%04d" into a 16-byte buffer) → FALSE_POSITIVE.\n' +
       "3. The buffer is later treated as untrusted and bounds-checked before use → FALSE_POSITIVE.\n" +
       "4. This is in test code or a known-safe internal log path → FALSE_POSITIVE.\n" +
       "Only CONFIRMED when the call is `snprintf(buf, sizeof buf, fmt, %s/%d untrusted_value)` with the return value discarded AND the result is treated as a complete string downstream.",

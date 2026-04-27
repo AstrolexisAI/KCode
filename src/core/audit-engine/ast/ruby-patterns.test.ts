@@ -1,8 +1,8 @@
 // KCode - Ruby AST patterns tests (v2.10.349)
 
 import { describe, expect, it } from "bun:test";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 import { RUBY_AST_PATTERNS } from "./ruby-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T): T | undefined {
   if (stats.every((s) => !s.grammar_loaded)) return undefined;

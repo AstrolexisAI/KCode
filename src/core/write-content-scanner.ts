@@ -51,11 +51,11 @@ const SECRET_PATTERNS: SecretPattern[] = [
   // GitHub fine-grained PAT
   { name: "github-pat-fg", regex: /\bgithub_pat_[A-Za-z0-9_]{82}\b/ },
   // Slack bot token
-  { name: "slack-bot-token", regex: /\bxoxb-[A-Za-z0-9\-]{40,}\b/ },
+  { name: "slack-bot-token", regex: /\bxoxb-[A-Za-z0-9-]{40,}\b/ },
   // Stripe live secret key
   { name: "stripe-secret", regex: /\bsk_live_[A-Za-z0-9]{24,}\b/ },
   // Google OAuth client secret (GOCSPX- prefix)
-  { name: "google-oauth-secret", regex: /\bGOCSPX-[A-Za-z0-9_\-]{28,}\b/ },
+  { name: "google-oauth-secret", regex: /\bGOCSPX-[A-Za-z0-9_-]{28,}\b/ },
   // Generic assignment of "api_key" / "apikey" / "access_token" /
   // "auth_token" / "secret_key" followed by a string literal of
   // ≥20 chars. Matches both camelCase and snake_case variants.
@@ -137,17 +137,17 @@ export interface SecretVerdict {
  * Scan file content for plausible secrets. Returns every distinct
  * hit with a truncated snippet and 1-based line number.
  */
-export function detectSecrets(
-  filePath: string,
-  content: string,
-): SecretVerdict {
+export function detectSecrets(filePath: string, content: string): SecretVerdict {
   if (pathIsExempt(filePath)) return { hasSecret: false, hits: [] };
 
   const hits: SecretHit[] = [];
   const seen = new Set<string>();
 
   for (const { name, regex } of SECRET_PATTERNS) {
-    const globalRegex = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : regex.flags + "g");
+    const globalRegex = new RegExp(
+      regex.source,
+      regex.flags.includes("g") ? regex.flags : regex.flags + "g",
+    );
     let m: RegExpExecArray | null;
     while ((m = globalRegex.exec(content)) !== null) {
       const full = m[0];
@@ -157,8 +157,7 @@ export function detectSecrets(
       seen.add(full);
       // Compute 1-based line number
       const line = content.slice(0, m.index).split("\n").length;
-      const snippet =
-        full.length > 60 ? full.slice(0, 20) + "…" + full.slice(-12) : full;
+      const snippet = full.length > 60 ? full.slice(0, 20) + "…" + full.slice(-12) : full;
       hits.push({ name, snippet, line });
       if (m.index === globalRegex.lastIndex) globalRegex.lastIndex++;
     }
@@ -167,10 +166,7 @@ export function detectSecrets(
   return { hasSecret: hits.length > 0, hits };
 }
 
-export function buildSecretReport(
-  filePath: string,
-  verdict: SecretVerdict,
-): string {
+export function buildSecretReport(filePath: string, verdict: SecretVerdict): string {
   const lines: string[] = [];
   lines.push(
     `BLOCKED — FILE NOT CREATED: "${basename(filePath)}" contains ${verdict.hits.length} plausible credential(s).`,
@@ -184,41 +180,21 @@ export function buildSecretReport(
     lines.push(`  ...and ${verdict.hits.length - 6} more`);
   }
   lines.push("");
-  lines.push(
-    `Hardcoding credentials in source files is a production-grade`,
-  );
-  lines.push(
-    `security risk. The user's API keys belong in environment variables,`,
-  );
-  lines.push(
-    `not in HTML/JS/config files that might get committed to git or`,
-  );
+  lines.push(`Hardcoding credentials in source files is a production-grade`);
+  lines.push(`security risk. The user's API keys belong in environment variables,`);
+  lines.push(`not in HTML/JS/config files that might get committed to git or`);
   lines.push(`shipped to clients.`);
   lines.push("");
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) Replace the literal credential with an env-var reference`,
-  );
-  lines.push(
-    `     (process.env.API_KEY, Deno.env.get("API_KEY"), import.meta.env.VAR,`,
-  );
+  lines.push(`  a) Replace the literal credential with an env-var reference`);
+  lines.push(`     (process.env.API_KEY, Deno.env.get("API_KEY"), import.meta.env.VAR,`);
   lines.push(`     etc.) and retry the Write.`);
-  lines.push(
-    `  b) If this is an example/template file, rename it to`,
-  );
-  lines.push(
-    `     \`.env.example\` / \`config.sample.json\` / similar — those`,
-  );
+  lines.push(`  b) If this is an example/template file, rename it to`);
+  lines.push(`     \`.env.example\` / \`config.sample.json\` / similar — those`);
   lines.push(`     paths are exempt from the secret scanner.`);
-  lines.push(
-    `  c) If the "secret" is actually a public demo key (e.g. NASA`,
-  );
-  lines.push(
-    `     DEMO_KEY, Mapbox public token), replace it with a placeholder`,
-  );
-  lines.push(
-    `     like \`YOUR_API_KEY_HERE\` — placeholders are ignored by the`,
-  );
+  lines.push(`  c) If the "secret" is actually a public demo key (e.g. NASA`);
+  lines.push(`     DEMO_KEY, Mapbox public token), replace it with a placeholder`);
+  lines.push(`     like \`YOUR_API_KEY_HERE\` — placeholders are ignored by the`);
   lines.push(`     scanner.`);
   return lines.join("\n");
 }
@@ -237,12 +213,34 @@ const DEBUG_PATTERNS: DebugPattern[] = [
   {
     name: "console.log",
     regex: /\bconsole\.(?:log|debug|trace|dir)\s*\(/g,
-    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".html", ".vue", ".svelte", ".astro"],
+    extensions: [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mjs",
+      ".cjs",
+      ".html",
+      ".vue",
+      ".svelte",
+      ".astro",
+    ],
   },
   {
     name: "debugger",
     regex: /^\s*debugger\s*;?\s*$/gm,
-    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".html", ".vue", ".svelte", ".astro"],
+    extensions: [
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".mjs",
+      ".cjs",
+      ".html",
+      ".vue",
+      ".svelte",
+      ".astro",
+    ],
   },
   // Python
   {
@@ -306,10 +304,7 @@ function fileExt(filePath: string): string {
  * should append the result as a warning to a successful-write
  * message, not use it as a rejection signal.
  */
-export function detectDebugStatements(
-  filePath: string,
-  content: string,
-): DebugVerdict {
+export function detectDebugStatements(filePath: string, content: string): DebugVerdict {
   if (debugPathIsExempt(filePath)) return { hasDebug: false, hits: [] };
 
   const ext = fileExt(filePath);
@@ -340,9 +335,7 @@ export function detectDebugStatements(
 export function buildDebugWarning(verdict: DebugVerdict): string {
   const lines: string[] = [];
   lines.push("");
-  lines.push(
-    `⚠️  ${verdict.hits.length} debug statement(s) detected in the written content:`,
-  );
+  lines.push(`⚠️  ${verdict.hits.length} debug statement(s) detected in the written content:`);
   for (const h of verdict.hits.slice(0, 6)) {
     lines.push(`   [${h.name}] line ${h.line}: ${h.snippet}`);
   }
@@ -350,15 +343,9 @@ export function buildDebugWarning(verdict: DebugVerdict): string {
     lines.push(`   ...and ${verdict.hits.length - 6} more`);
   }
   lines.push("");
-  lines.push(
-    `   These are non-blocking but usually leftover from development.`,
-  );
-  lines.push(
-    `   Before shipping this file, consider removing them or gating`,
-  );
-  lines.push(
-    `   behind a DEBUG flag. Tests, examples, and scripts/bin/ paths`,
-  );
+  lines.push(`   These are non-blocking but usually leftover from development.`);
+  lines.push(`   Before shipping this file, consider removing them or gating`);
+  lines.push(`   behind a DEBUG flag. Tests, examples, and scripts/bin/ paths`);
   lines.push(`   are exempt from this check.`);
   return lines.join("\n");
 }
@@ -473,10 +460,7 @@ function getExt(filePath: string): string {
  * extension. Returns 0 for unknown extensions so we don't warn
  * on file types we can't parse cheaply.
  */
-export function countDeclarations(
-  content: string,
-  filePath: string,
-): number {
+export function countDeclarations(content: string, filePath: string): number {
   const ext = getExt(filePath);
   let total = 0;
   for (const { regex, extensions } of DECLARATION_PATTERNS) {
@@ -522,47 +506,28 @@ export function detectDeclarationLoss(
   return { hasLoss, oldCount, newCount, lost, lossRatio };
 }
 
-export function buildDeclarationLossWarning(
-  verdict: DeclarationLossVerdict,
-): string {
+export function buildDeclarationLossWarning(verdict: DeclarationLossVerdict): string {
   const lines: string[] = [];
   const pct = Math.round(verdict.lossRatio * 100);
   lines.push("");
-  lines.push(
-    `⚠️  DECLARATION LOSS (non-blocking warning)`,
-  );
+  lines.push(`⚠️  DECLARATION LOSS (non-blocking warning)`);
   lines.push(
     `   Old file had ${verdict.oldCount} top-level declarations` +
       ` (functions, classes, types, structs).`,
   );
   lines.push(
-    `   New file has ${verdict.newCount}. You dropped ${verdict.lost}` +
-      ` declarations (${pct}%).`,
+    `   New file has ${verdict.newCount}. You dropped ${verdict.lost}` + ` declarations (${pct}%).`,
   );
   lines.push("");
-  lines.push(
-    `   This could be a legitimate consolidation — merging 5 helpers`,
-  );
-  lines.push(
-    `   into 3 is fine if behavior is preserved. But it could also`,
-  );
-  lines.push(
-    `   mean silently dropped features. Phase 19 didn't fire because`,
-  );
-  lines.push(
-    `   line count is within range; phase 17 didn't fire because there`,
-  );
+  lines.push(`   This could be a legitimate consolidation — merging 5 helpers`);
+  lines.push(`   into 3 is fine if behavior is preserved. But it could also`);
+  lines.push(`   mean silently dropped features. Phase 19 didn't fire because`);
+  lines.push(`   line count is within range; phase 17 didn't fire because there`);
   lines.push(`   are no placeholder stubs. That's the gap this warns about.`);
   lines.push("");
-  lines.push(
-    `   Before claiming "refactor complete" or "behavior is identical",`,
-  );
-  lines.push(
-    `   either (a) list every function/class that was merged into a`,
-  );
-  lines.push(
-    `   replacement so the user can verify, or (b) re-add the dropped`,
-  );
+  lines.push(`   Before claiming "refactor complete" or "behavior is identical",`);
+  lines.push(`   either (a) list every function/class that was merged into a`);
+  lines.push(`   replacement so the user can verify, or (b) re-add the dropped`);
   lines.push(`   declarations.`);
   return lines.join("\n");
 }

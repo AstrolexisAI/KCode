@@ -35,7 +35,8 @@ export const SPRING_PATTERNS: BugPattern[] = [
     // SpelExpressionParser().parseExpression(<user input>).getValue()
     // OR @Value/@PreAuthorize SpEL injection (less common via static
     // grep but the .parseExpression form is the runtime hot one).
-    regex: /\b(?:Spel|Standard)?ExpressionParser\s*\([^)]*\)[\s\S]{0,200}?\.parseExpression\s*\(\s*[^)"']*\b(?:request|input|params|payload|body)\b[^)]*\)/g,
+    regex:
+      /\b(?:Spel|Standard)?ExpressionParser\s*\([^)]*\)[\s\S]{0,200}?\.parseExpression\s*\(\s*[^)"']*\b(?:request|input|params|payload|body)\b[^)]*\)/g,
     explanation:
       "Spring's Expression Language can call arbitrary methods (`T(java.lang.Runtime).getRuntime().exec(...)`) when evaluated. parseExpression with user-controlled input is a single-line RCE — well-known gadgets like `T(Runtime).getRuntime().exec(${cmd})` work out of the box on Spring Boot defaults. CVE-2022-22963 (Spring Cloud Function) was exactly this shape and was exploited at scale within a week of disclosure.",
     verify_prompt:
@@ -57,7 +58,8 @@ export const SPRING_PATTERNS: BugPattern[] = [
     // the method definition, with no security annotation in between.
     // The lookahead avoids matching cases where @PreAuthorize sits
     // before @PostMapping on the same method.
-    regex: /^\s*@(?:PostMapping|PutMapping|PatchMapping|DeleteMapping)\s*\([^)]*\)\s*\n(?!\s*@(?:PreAuthorize|Secured|RolesAllowed|Authenticated))\s*public\s+\S+\s+\w+\s*\(/gm,
+    regex:
+      /^\s*@(?:PostMapping|PutMapping|PatchMapping|DeleteMapping)\s*\([^)]*\)\s*\n(?!\s*@(?:PreAuthorize|Secured|RolesAllowed|Authenticated))\s*public\s+\S+\s+\w+\s*\(/gm,
     explanation:
       "Spring's mutation endpoints (@PostMapping etc.) are public unless an authorization annotation gates them or a SecurityFilterChain rule covers the path. Without either, ANY caller can POST. The framework provides @PreAuthorize / @Secured precisely so this gate is visible at the method declaration; missing it is the 2024-2025 most common controller bug.",
     verify_prompt:
@@ -67,6 +69,6 @@ export const SPRING_PATTERNS: BugPattern[] = [
       "3. Path is covered by SecurityFilterChain.requestMatchers().authenticated() in the security config — FALSE_POSITIVE.",
     cwe: "CWE-862",
     fix_template:
-      "Add `@PreAuthorize(\"isAuthenticated()\")` (or a more specific role check like `hasRole('ADMIN')`) directly above the mapping. For class-wide enforcement, annotate the controller class once and use @PreAuthorize(\"permitAll()\") on the few public methods that need it.",
+      'Add `@PreAuthorize("isAuthenticated()")` (or a more specific role check like `hasRole(\'ADMIN\')`) directly above the mapping. For class-wide enforcement, annotate the controller class once and use @PreAuthorize("permitAll()") on the few public methods that need it.',
   },
 ];

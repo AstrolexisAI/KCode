@@ -5,8 +5,7 @@ import { lookupMarkByGgufBasename } from "./mark-registry";
 
 describe("lookupMarkByGgufBasename", () => {
   test("maps Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M to mark7", () => {
-    expect(lookupMarkByGgufBasename("Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M"))
-      .toBe("mark7");
+    expect(lookupMarkByGgufBasename("Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M")).toBe("mark7");
   });
 
   test("maps a bare Qwen3.6 checkpoint to mark7", () => {
@@ -20,8 +19,7 @@ describe("lookupMarkByGgufBasename", () => {
   });
 
   test("maps a Qwen3 (no minor) build to mark5", () => {
-    expect(lookupMarkByGgufBasename("Qwen3-Coder-30B-A3B-Instruct-Q4_K_M"))
-      .toBe("mark5");
+    expect(lookupMarkByGgufBasename("Qwen3-Coder-30B-A3B-Instruct-Q4_K_M")).toBe("mark5");
   });
 
   test("maps Qwen3.5 to mark6", () => {

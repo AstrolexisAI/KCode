@@ -53,8 +53,7 @@ export function getEffectiveMaxTurns(config: KCodeConfig, messages: Message[]): 
   // tasks involve iterative edit→compile→test cycles that regularly need 40+.
   if (!level) {
     try {
-      const { isAuditSession } =
-        require("./session-tracker") as typeof import("./session-tracker");
+      const { isAuditSession } = require("./session-tracker") as typeof import("./session-tracker");
       if (!isAuditSession()) return 40;
     } catch {
       /* session-tracker not available */

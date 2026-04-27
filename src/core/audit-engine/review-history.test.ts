@@ -138,9 +138,13 @@ describe("review-history persistence", () => {
       "./review-history"
     );
     recordDemotion({ projectRoot: "/p", patternId: "x", file: "/p/test/a.test.js" });
-    expect(getDemotionCount({ projectRoot: "/p", patternId: "x", file: "/p/test/a.test.js" })).toBe(1);
+    expect(getDemotionCount({ projectRoot: "/p", patternId: "x", file: "/p/test/a.test.js" })).toBe(
+      1,
+    );
     forgetProjectHistory("/p");
-    expect(getDemotionCount({ projectRoot: "/p", patternId: "x", file: "/p/test/a.test.js" })).toBe(0);
+    expect(getDemotionCount({ projectRoot: "/p", patternId: "x", file: "/p/test/a.test.js" })).toBe(
+      0,
+    );
   });
 
   test("two projects keep separate histories", async () => {

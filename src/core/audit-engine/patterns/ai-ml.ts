@@ -89,7 +89,8 @@ export const AI_ML_PATTERNS: BugPattern[] = [
     //   `prompt = f"... {request.args.get(...)} ..."`  (Python Flask)
     // We match the literal+input pattern and let the verifier decide
     // whether it actually reaches a generate / chat call.
-    regex: /(?:prompt|system|messages|content|completion)\s*[:=]\s*(?:f["']|.*\+\s*(?:request\.|req\.|process\.argv|input\(|sys\.argv))/g,
+    regex:
+      /(?:prompt|system|messages|content|completion)\s*[:=]\s*(?:f["']|.*\+\s*(?:request\.|req\.|process\.argv|input\(|sys\.argv))/g,
     explanation:
       "User input concatenated into an LLM prompt without delimiter / structure / explicit framing lets the user override the system prompt. They can read the system instructions, exfiltrate variables in the prompt, or steer the model into producing content the deploying app didn't intend. This is XSS for LLM apps.",
     verify_prompt:
@@ -111,7 +112,8 @@ export const AI_ML_PATTERNS: BugPattern[] = [
     // Common vector DB query shapes — pinecone, chroma, weaviate, qdrant,
     // milvus. Match the .query / .similarity_search / .search method on
     // an obvious DB object, with a string built from user input.
-    regex: /(?:pinecone|chroma|weaviate|qdrant|milvus|vector_?store)\.(?:query|search|similarity_search|similar)/gi,
+    regex:
+      /(?:pinecone|chroma|weaviate|qdrant|milvus|vector_?store)\.(?:query|search|similarity_search|similar)/gi,
     explanation:
       "Vector DBs return whatever's most-similar — including content from other tenants if metadata filters aren't applied. Concatenating user input into the query string can also cause prompt injection downstream if the retrieved chunks are fed back into an LLM. The risk is per-tenant data leakage and prompt-injection-via-RAG.",
     verify_prompt:
@@ -121,6 +123,6 @@ export const AI_ML_PATTERNS: BugPattern[] = [
       "3. Search is over an explicitly public corpus (e.g. documentation only) — FALSE_POSITIVE.",
     cwe: "CWE-200",
     fix_template:
-      "Add a metadata filter that scopes results to the calling user (filter={\"user_id\": current_user.id}). For RAG flows, also escape retrieved chunks before feeding them back into the prompt.",
+      'Add a metadata filter that scopes results to the calling user (filter={"user_id": current_user.id}). For RAG flows, also escape retrieved chunks before feeding them back into the prompt.',
   },
 ];

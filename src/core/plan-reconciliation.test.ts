@@ -11,9 +11,9 @@ import {
   buildPlanReconciliationReminder,
   clearActivePlan,
   detectAbandonedPlan,
-  setActivePlanForTesting,
   type Plan,
   type PlanStep,
+  setActivePlanForTesting,
 } from "../tools/plan";
 
 function makePlan(steps: PlanStep[]): Plan {
@@ -60,9 +60,7 @@ describe("detectAbandonedPlan", () => {
   });
 
   test("returns not-abandoned when text has no completion phrase", () => {
-    setActivePlanForTesting(
-      makePlan([{ id: "1", title: "a", status: "pending" }]),
-    );
+    setActivePlanForTesting(makePlan([{ id: "1", title: "a", status: "pending" }]));
     const r = detectAbandonedPlan("Still working on step 1, will continue next turn.");
     expect(r.abandoned).toBe(false);
     expect(r.pendingSteps.length).toBe(1);
@@ -83,34 +81,26 @@ describe("detectAbandonedPlan", () => {
   });
 
   test("detects abandonment with 'Summary of changes' phrase", () => {
-    setActivePlanForTesting(
-      makePlan([{ id: "1", title: "a", status: "in_progress" }]),
-    );
+    setActivePlanForTesting(makePlan([{ id: "1", title: "a", status: "in_progress" }]));
     const r = detectAbandonedPlan("Summary of changes:\n- Did X\n- Did Y");
     expect(r.abandoned).toBe(true);
     expect(r.completionPhrase).toMatch(/summary of changes/i);
   });
 
   test("detects abandonment with 'Delivered' phrase", () => {
-    setActivePlanForTesting(
-      makePlan([{ id: "1", title: "a", status: "pending" }]),
-    );
+    setActivePlanForTesting(makePlan([{ id: "1", title: "a", status: "pending" }]));
     const r = detectAbandonedPlan("Delivered as requested.");
     expect(r.abandoned).toBe(true);
   });
 
   test("detects abandonment with 'the site is live' phrase", () => {
-    setActivePlanForTesting(
-      makePlan([{ id: "1", title: "a", status: "pending" }]),
-    );
+    setActivePlanForTesting(makePlan([{ id: "1", title: "a", status: "pending" }]));
     const r = detectAbandonedPlan("The site is live at http://localhost:25632.");
     expect(r.abandoned).toBe(true);
   });
 
   test("detects abandonment with Spanish 'Tarea completada'", () => {
-    setActivePlanForTesting(
-      makePlan([{ id: "1", title: "a", status: "pending" }]),
-    );
+    setActivePlanForTesting(makePlan([{ id: "1", title: "a", status: "pending" }]));
     const r = detectAbandonedPlan("Tarea completada. El archivo está listo.");
     expect(r.abandoned).toBe(true);
   });

@@ -122,8 +122,7 @@ export function detectLargeBlockRepetition(text: string): string | null {
   const samplePoint = text.length - LARGE_BLOCK_SAMPLE_OFFSET;
   if (samplePoint < 0) return null;
 
-  const rawFingerprint = text
-    .slice(samplePoint, samplePoint + LARGE_BLOCK_FINGERPRINT_LEN);
+  const rawFingerprint = text.slice(samplePoint, samplePoint + LARGE_BLOCK_FINGERPRINT_LEN);
   const fingerprint = rawFingerprint.replace(/\s+/g, " ").trim();
   if (fingerprint.length < 40) return null; // degenerate / whitespace
   // Skip fingerprints that are mostly punctuation or box-drawing
@@ -142,9 +141,7 @@ export function detectLargeBlockRepetition(text: string): string | null {
     if (found === -1) break;
     count++;
     if (count >= LARGE_BLOCK_MIN_OCCURRENCES) {
-      return fingerprint.length > 60
-        ? fingerprint.slice(0, 60) + "..."
-        : fingerprint;
+      return fingerprint.length > 60 ? fingerprint.slice(0, 60) + "..." : fingerprint;
     }
     searchIdx = found + fingerprint.length;
   }
@@ -188,7 +185,7 @@ const COMPLETION_MARKER_MIN_OCCURRENCES = 3;
 const COMPLETION_MARKER_PATTERNS: RegExp[] = [
   // ✅ ¡Completada! / ✅ Task complete! / ✅ Done! (must have emoji
   // followed within 80 chars by a completion verb)
-  /[✅✔✓🎉🚀]\s*[¡!]?[^\n]{0,80}\b(?:completad[ao]|complete[d]?|creada|creado|generad[ao]|finalizad[ao]|listo|lista|done|finished|ready|terminad[ao])\b/gi,
+  /[✅✔✓🎉🚀]\s*[¡!]?[^\n]{0,80}\b(?:completad[ao]|complete[d]?|creada|creado|generad[ao]|finalizad[ao]|listo|lista|done|finished|ready|terminad[ao])\b/giu,
   // Explicit "task complete", "aplicación creada", "done!", "listo!"
   /\b(?:task\s+complete|aplicaci[oó]n\s+(?:completad[ao]|creada|lista|generad[ao]|terminad[ao])|done[.!]?\s*[¡!]?\s*$|listo\s*[¡!]?\s*$)/gim,
 ];
@@ -257,21 +254,123 @@ const LOW_ENTROPY_REPEAT_THRESHOLD = 0.35;
 // this list short — aggressive stop-word removal hides signal.
 const LOW_ENTROPY_STOP_WORDS = new Set([
   // English
-  "the", "and", "that", "this", "for", "with", "are", "from", "have",
-  "has", "will", "not", "can", "but", "out", "more", "some", "what",
-  "you", "your", "they", "their", "them", "also", "into", "over",
-  "than", "then", "when", "which", "who", "how", "why", "where",
-  "while", "each", "both", "most", "such", "just", "like", "much",
-  "very", "only", "other", "another", "first", "next", "many", "few",
-  "own", "made", "make", "way", "our", "its", "been", "being", "were",
-  "was", "there", "here", "would", "could", "should", "may", "might",
-  "must", "one", "two", "three", "all", "any", "new", "get", "use",
+  "the",
+  "and",
+  "that",
+  "this",
+  "for",
+  "with",
+  "are",
+  "from",
+  "have",
+  "has",
+  "will",
+  "not",
+  "can",
+  "but",
+  "out",
+  "more",
+  "some",
+  "what",
+  "you",
+  "your",
+  "they",
+  "their",
+  "them",
+  "also",
+  "into",
+  "over",
+  "than",
+  "then",
+  "when",
+  "which",
+  "who",
+  "how",
+  "why",
+  "where",
+  "while",
+  "each",
+  "both",
+  "most",
+  "such",
+  "just",
+  "like",
+  "much",
+  "very",
+  "only",
+  "other",
+  "another",
+  "first",
+  "next",
+  "many",
+  "few",
+  "own",
+  "made",
+  "make",
+  "way",
+  "our",
+  "its",
+  "been",
+  "being",
+  "were",
+  "was",
+  "there",
+  "here",
+  "would",
+  "could",
+  "should",
+  "may",
+  "might",
+  "must",
+  "one",
+  "two",
+  "three",
+  "all",
+  "any",
+  "new",
+  "get",
+  "use",
   // Spanish
-  "para", "con", "los", "las", "que", "son", "por", "una", "pero",
-  "como", "esta", "este", "tiene", "ser", "desde", "más", "mas",
-  "hacer", "sobre", "entre", "hasta", "donde", "cuando", "porque",
-  "muy", "ya", "también", "todo", "toda", "todos", "todas", "sin",
-  "hay", "han", "fue", "son", "será", "sería", "podría", "debería",
+  "para",
+  "con",
+  "los",
+  "las",
+  "que",
+  "son",
+  "por",
+  "una",
+  "pero",
+  "como",
+  "esta",
+  "este",
+  "tiene",
+  "ser",
+  "desde",
+  "más",
+  "mas",
+  "hacer",
+  "sobre",
+  "entre",
+  "hasta",
+  "donde",
+  "cuando",
+  "porque",
+  "muy",
+  "ya",
+  "también",
+  "todo",
+  "toda",
+  "todos",
+  "todas",
+  "sin",
+  "hay",
+  "han",
+  "fue",
+  "son",
+  "será",
+  "sería",
+  "podría",
+  "debería",
 ]);
 
 /**
@@ -602,7 +701,9 @@ export async function* processSSEStream(
       try {
         const { recordToolHallucination } = await import("./model-reliability.js");
         recordToolHallucination();
-      } catch { /* module absent — tracking optional */ }
+      } catch {
+        /* module absent — tracking optional */
+      }
 
       if (extracted[0]!.prefixText.trim()) {
         assistantContent.push({ type: "text", text: extracted[0]!.prefixText.trim() });

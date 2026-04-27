@@ -5,7 +5,7 @@
 // calls yet — candidates are just regex matches in files.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { getAllPatterns } from "./patterns";
 import type { BugPattern, Candidate, Language } from "./types";
@@ -20,9 +20,7 @@ export function needsSubmoduleInit(projectRoot: string): boolean {
   try {
     const content = readFileSync(gitmodulesPath, "utf-8");
     const paths =
-      content
-        .match(/path\s*=\s*(.+)/g)
-        ?.map((m) => m.replace(/path\s*=\s*/, "").trim()) ?? [];
+      content.match(/path\s*=\s*(.+)/g)?.map((m) => m.replace(/path\s*=\s*/, "").trim()) ?? [];
     return paths.some((p) => {
       const dir = join(projectRoot, p);
       try {
@@ -42,7 +40,8 @@ export function needsSubmoduleInit(projectRoot: string): boolean {
  */
 export function initSubmodulesAsync(projectRoot: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const { spawn: spawnProc } = require("node:child_process") as typeof import("node:child_process");
+    const { spawn: spawnProc } =
+      require("node:child_process") as typeof import("node:child_process");
     const proc = spawnProc("git", ["submodule", "update", "--init", "--recursive"], {
       cwd: projectRoot,
       stdio: ["pipe", "pipe", "pipe"],
@@ -439,7 +438,9 @@ export function scoreFileForAudit(filePath: string): number {
   let score = 0;
 
   // Extension bucket.
-  if (/\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|py|rs|go|java|kt|swift|ts|tsx|js|jsx|cs|rb|php)$/.test(ext)) {
+  if (
+    /\.(c|cc|cpp|cxx|h|hh|hpp|hxx|m|mm|py|rs|go|java|kt|swift|ts|tsx|js|jsx|cs|rb|php)$/.test(ext)
+  ) {
     score += 50;
   } else if (/\.(sh|bash|zsh|ps1|pl|lua|r|jl|sql)$/.test(ext)) {
     score += 20;
@@ -451,13 +452,36 @@ export function scoreFileForAudit(filePath: string): number {
 
   // Security-relevant directory hints (first-class, each worth +30).
   const hotDirs = [
-    "/src/", "/lib/", "/core/", "/runtime/", "/engine/",
-    "/auth/", "/crypto/", "/security/", "/net/", "/network/",
-    "/parser/", "/serialize/", "/deserialize/", "/protocol/",
-    "/ipc/", "/rpc/", "/kernel/", "/driver/", "/firmware/",
+    "/src/",
+    "/lib/",
+    "/core/",
+    "/runtime/",
+    "/engine/",
+    "/auth/",
+    "/crypto/",
+    "/security/",
+    "/net/",
+    "/network/",
+    "/parser/",
+    "/serialize/",
+    "/deserialize/",
+    "/protocol/",
+    "/ipc/",
+    "/rpc/",
+    "/kernel/",
+    "/driver/",
+    "/firmware/",
     // Embedded / flight-software layouts (fprime, NASA cFS, zephyr):
-    "/fw/", "/svc/", "/drv/", "/subsystems/", "/bsp/",
-    "/deframer/", "/framer/", "/comqueue/", "/telemetry/", "/command/",
+    "/fw/",
+    "/svc/",
+    "/drv/",
+    "/subsystems/",
+    "/bsp/",
+    "/deframer/",
+    "/framer/",
+    "/comqueue/",
+    "/telemetry/",
+    "/command/",
   ];
   if (hotDirs.some((d) => p.includes(d))) score += 30;
 
@@ -467,23 +491,53 @@ export function scoreFileForAudit(filePath: string): number {
 
   // Penalty zones.
   const coldDirs = [
-    "/test/", "/tests/", "/spec/", "/specs/", "/__tests__/",
-    "/fixtures/", "/fixture/", "/examples/", "/example/", "/sample/",
-    "/samples/", "/demo/", "/demos/", "/docs/", "/doc/", "/tutorial/",
-    "/tutorials/", "/benchmark/", "/benchmarks/", "/generated/",
-    "/third_party/", "/vendor/", "/node_modules/", "/_generated/",
+    "/test/",
+    "/tests/",
+    "/spec/",
+    "/specs/",
+    "/__tests__/",
+    "/fixtures/",
+    "/fixture/",
+    "/examples/",
+    "/example/",
+    "/sample/",
+    "/samples/",
+    "/demo/",
+    "/demos/",
+    "/docs/",
+    "/doc/",
+    "/tutorial/",
+    "/tutorials/",
+    "/benchmark/",
+    "/benchmarks/",
+    "/generated/",
+    "/third_party/",
+    "/vendor/",
+    "/node_modules/",
+    "/_generated/",
     // Build-time / tooling — outside the runtime threat model for
     // most flight / embedded / server projects. v313 addition after
     // fprime scan confirmed a false-positive in cmake/autocoder.
-    "/cmake/", "/scripts/", "/autocoder/", "/ci/", "/build/",
-    "/tools/", "/.github/", "/packaging/", "/installer/",
+    "/cmake/",
+    "/scripts/",
+    "/autocoder/",
+    "/ci/",
+    "/build/",
+    "/tools/",
+    "/.github/",
+    "/packaging/",
+    "/installer/",
     // Project-named test trees (FppTestProject, MyAppTests, etc.) —
     // path tokens with `Test` or `Tests` as a subdirectory component
     // are test infrastructure even when the parent dir doesn't match
     // a /tests/ literal. v321 addition after fprime scan confirmed a
     // false-positive in FppTestProject/FppTest/topology/types/.
-    "/fpptest", "/fpptestproject", "/testproject", "/testharness",
-    "/testutils", "/testtools",
+    "/fpptest",
+    "/fpptestproject",
+    "/testproject",
+    "/testharness",
+    "/testutils",
+    "/testtools",
   ];
   if (coldDirs.some((d) => p.includes(d))) score -= 40;
   // Generic test-tree heuristic: any path component that ends with
@@ -600,7 +654,7 @@ const C_STYLE_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
 const HASH_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
   "python",
   "ruby",
-  "shell",  // covers .sh / .bash / .zsh / .ksh — the Language type uses "shell" as the canonical id (v2.10.351 P0)
+  "shell", // covers .sh / .bash / .zsh / .ksh — the Language type uses "shell" as the canonical id (v2.10.351 P0)
 ]);
 
 /**
@@ -616,10 +670,7 @@ const HASH_COMMENT_LANGS: ReadonlySet<Language> = new Set<Language>([
  * kill the common fixture regression without requiring a full
  * lexer for every supported language.
  */
-export function computeCommentRanges(
-  content: string,
-  language: Language,
-): Array<[number, number]> {
+export function computeCommentRanges(content: string, language: Language): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   const cStyle = C_STYLE_COMMENT_LANGS.has(language);
   const hash = HASH_COMMENT_LANGS.has(language);
@@ -658,10 +709,7 @@ export function computeCommentRanges(
 
 /** True when `matchIndex` falls inside any comment range. O(log n)
  * — binary search to stay fast on long files. */
-export function isInsideComment(
-  ranges: Array<[number, number]>,
-  matchIndex: number,
-): boolean {
+export function isInsideComment(ranges: Array<[number, number]>, matchIndex: number): boolean {
   // Linear scan is fine for typical comment counts; if we see
   // hot-path issues on huge files, swap for binary search.
   for (const [start, end] of ranges) {
@@ -737,13 +785,19 @@ function applyPattern(
     // low-severity patterns, so the test-file suppression would
     // hide regressions we want to catch.
     if (!bypassPathFilters) {
-      const isTestFile = path.includes("test") || path.includes("spec") || path.includes("__tests__");
+      const isTestFile =
+        path.includes("test") || path.includes("spec") || path.includes("__tests__");
       const isConfig = path.includes("config") || path.includes(".config.");
-      const isGenerated = path.includes(".next/") || path.includes("dist/") || path.includes("build/");
+      const isGenerated =
+        path.includes(".next/") || path.includes("dist/") || path.includes("build/");
       // Skip low-severity findings in test/config/generated files
       if ((isTestFile || isConfig || isGenerated) && pattern.severity === "low") continue;
       // Skip hardcoded-secret patterns if the value looks like a placeholder
-      if (pattern.id.includes("hardcoded") && /changeme|placeholder|example|xxx|YOUR_|TODO/i.test(matched_text)) continue;
+      if (
+        pattern.id.includes("hardcoded") &&
+        /changeme|placeholder|example|xxx|YOUR_|TODO/i.test(matched_text)
+      )
+        continue;
     }
 
     // Skip matches inside JSX className attributes (Tailwind utility strings
@@ -753,7 +807,10 @@ function applyPattern(
     const isJsx = path.endsWith(".tsx") || path.endsWith(".jsx");
     if (isJsx) {
       const lineStart = content.lastIndexOf("\n", m.index - 1) + 1;
-      const lineText = content.slice(lineStart, content.indexOf("\n", m.index) === -1 ? content.length : content.indexOf("\n", m.index));
+      const lineText = content.slice(
+        lineStart,
+        content.indexOf("\n", m.index) === -1 ? content.length : content.indexOf("\n", m.index),
+      );
       const offsetInLine = m.index - lineStart;
       const before = lineText.slice(0, offsetInLine);
       // Match is inside className="..." or className={`...`} if the last
@@ -841,9 +898,7 @@ export async function scanProject(
   // user sees "scanned X of Y deliberately" (the FullCandidateCount
   // var captures the pre-restriction count). External audit P1.
   const FullCandidateCount = all.length;
-  const restricted = opts?.restrictToFiles
-    ? all.filter((f) => opts.restrictToFiles!.has(f))
-    : all;
+  const restricted = opts?.restrictToFiles ? all.filter((f) => opts.restrictToFiles!.has(f)) : all;
 
   const userSetMax = opts?.maxFiles !== undefined;
   const maxFiles = userSetMax ? opts!.maxFiles! : defaultMaxFiles(restricted.length);
@@ -968,9 +1023,10 @@ export function groupCandidatesByFile(candidates: Candidate[]): Map<string, Cand
  * that exact site (≥2 means there were multiple matches on the same
  * line).
  */
-export function dedupByPatternAndFile(
-  candidates: Candidate[],
-): { dedup: Candidate[]; multiples: Map<string, number> } {
+export function dedupByPatternAndFile(candidates: Candidate[]): {
+  dedup: Candidate[];
+  multiples: Map<string, number>;
+} {
   const byKey = new Map<string, Candidate[]>();
   for (const c of candidates) {
     const key = `${c.pattern_id}|${c.file}|${c.line}`;

@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createTerraformProject } from "./terraform-engine";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTerraformProject } from "./terraform-engine";
 
 describe("terraform-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-terraform-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates AWS infrastructure project", () => {
@@ -67,7 +71,7 @@ describe("terraform-engine", () => {
   test("detects VPC component", () => {
     withTmp((dir) => {
       const r = createTerraformProject("AWS with VPC and EC2 compute instances", dir);
-      expect(r.config.components.find(c => c.kind === "vpc")).toBeTruthy();
+      expect(r.config.components.find((c) => c.kind === "vpc")).toBeTruthy();
       expect(existsSync(join(dir, "infra", "modules/vpc/main.tf"))).toBe(true);
       const vpcMain = readFileSync(join(dir, "infra", "modules/vpc/main.tf"), "utf-8");
       expect(vpcMain).toContain("aws_vpc");
@@ -78,7 +82,7 @@ describe("terraform-engine", () => {
   test("detects RDS database", () => {
     withTmp((dir) => {
       const r = createTerraformProject("AWS with RDS database", dir);
-      expect(r.config.components.find(c => c.kind === "database")).toBeTruthy();
+      expect(r.config.components.find((c) => c.kind === "database")).toBeTruthy();
       const main = readFileSync(join(dir, "infra", "main.tf"), "utf-8");
       expect(main).toContain("aws_db_instance");
       const vars = readFileSync(join(dir, "infra", "variables.tf"), "utf-8");
@@ -90,7 +94,7 @@ describe("terraform-engine", () => {
   test("detects S3 storage", () => {
     withTmp((dir) => {
       const r = createTerraformProject("AWS with S3 bucket for storage", dir);
-      expect(r.config.components.find(c => c.kind === "storage")).toBeTruthy();
+      expect(r.config.components.find((c) => c.kind === "storage")).toBeTruthy();
       const main = readFileSync(join(dir, "infra", "main.tf"), "utf-8");
       expect(main).toContain("aws_s3_bucket");
       expect(main).toContain("aws_s3_bucket_versioning");

@@ -35,7 +35,8 @@ export function extractRelevantPaths(scope: TaskScope): Set<string> {
   if (!last) return out;
 
   // Tokens from the command that look like file paths.
-  const CMD_FILE_RE = /(?:^|[\s=])([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs|java|sh|php|pl|lua))(?=[\s&|;<>]|$)/gi;
+  const CMD_FILE_RE =
+    /(?:^|[\s=])([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs|java|sh|php|pl|lua))(?=[\s&|;<>]|$)/gi;
   for (const m of last.command.matchAll(CMD_FILE_RE)) {
     if (m[1]) out.add(basename(m[1]));
   }
@@ -76,13 +77,15 @@ export function isRelevantPatch(filePath: string, scope: TaskScope): boolean {
   if (relevant.has(base)) return true;
 
   // Non-code files never arm the gate.
-  const DOC_OR_CONFIG_FILES = /^(?:README|CHANGELOG|LICENSE|CONTRIBUTING|TODO|\.gitignore|\.npmignore|\.dockerignore)(?:\.md|\.txt|\.rst)?$/i;
+  const DOC_OR_CONFIG_FILES =
+    /^(?:README|CHANGELOG|LICENSE|CONTRIBUTING|TODO|\.gitignore|\.npmignore|\.dockerignore)(?:\.md|\.txt|\.rst)?$/i;
   if (DOC_OR_CONFIG_FILES.test(base)) return false;
 
   const DOC_EXT = /\.(?:md|mdx|txt|rst|adoc|html)$/i;
   if (DOC_EXT.test(base)) return false;
 
-  const CODE_EXT = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|scala|swift|php|pl|lua|sh|bash|zsh|fish|c|cpp|cc|h|hpp|cs|fs|ex|exs|erl|clj|cljs|hs|ml|dart|r|nim|zig|v|vala|sql|json|yaml|yml|toml)$/i;
+  const CODE_EXT =
+    /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|scala|swift|php|pl|lua|sh|bash|zsh|fish|c|cpp|cc|h|hpp|cs|fs|ex|exs|erl|clj|cljs|hs|ml|dart|r|nim|zig|v|vala|sql|json|yaml|yml|toml)$/i;
   if (CODE_EXT.test(base)) return true;
 
   return false;
@@ -111,10 +114,7 @@ export function deriveRerunCommand(scope: TaskScope): string | null {
     scope.verification.runtimeCommands[scope.verification.runtimeCommands.length - 1];
   if (lastRuntime?.status === "runner_misfire") return null;
 
-  const allTouched = [
-    ...scope.verification.filesWritten,
-    ...scope.verification.filesEdited,
-  ];
+  const allTouched = [...scope.verification.filesWritten, ...scope.verification.filesEdited];
 
   // Prefer a connection-sanity script when present.
   const sanity = allTouched.find((p) => /\b(test_connection|connection_test|sanity)\.py$/i.test(p));

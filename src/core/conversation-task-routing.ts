@@ -36,7 +36,7 @@
 //         userMessage) to state and proceed to the LLM.
 
 import { log } from "./logger";
-import type { KCodeConfig, StreamEvent, ConversationState } from "./types";
+import type { ConversationState, KCodeConfig, StreamEvent } from "./types";
 
 /**
  * Normalize content for an assistant message. If the orchestrator produced
@@ -190,15 +190,15 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
           state.messages.push({ role: "assistant", content: safeAssistantContent(l1.output) });
           log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
           return handled([
-              { type: "turn_start" } as unknown as StreamEvent,
-              { type: "text_delta", text: l1.output } as unknown as StreamEvent,
-              {
-                type: "turn_end",
-                inputTokens: 0,
-                outputTokens: 0,
-                stopReason: "end_turn",
-              } as unknown as StreamEvent,
-            ]);
+            { type: "turn_start" } as unknown as StreamEvent,
+            { type: "text_delta", text: l1.output } as unknown as StreamEvent,
+            {
+              type: "turn_end",
+              inputTokens: 0,
+              outputTokens: 0,
+              stopReason: "end_turn",
+            } as unknown as StreamEvent,
+          ]);
         }
         engineState.active = false;
       } else {
@@ -208,15 +208,15 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
           state.messages.push({ role: "assistant", content: safeAssistantContent(l1.output) });
           log.info("orchestrator", `Level 1 handled: "${userMessage.slice(0, 40)}..." → 0 tokens`);
           return handled([
-              { type: "turn_start" } as unknown as StreamEvent,
-              { type: "text_delta", text: l1.output } as unknown as StreamEvent,
-              {
-                type: "turn_end",
-                inputTokens: 0,
-                outputTokens: 0,
-                stopReason: "end_turn",
-              } as unknown as StreamEvent,
-            ]);
+            { type: "turn_start" } as unknown as StreamEvent,
+            { type: "text_delta", text: l1.output } as unknown as StreamEvent,
+            {
+              type: "turn_end",
+              inputTokens: 0,
+              outputTokens: 0,
+              stopReason: "end_turn",
+            } as unknown as StreamEvent,
+          ]);
         }
       }
     } catch (err) {
@@ -237,8 +237,7 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
       const isModification =
         /\b(?:make|hazlo|fix|arregla|change|cambia|update|actualiza|add|agrega|remove|quita|improve|mejora|refactor|move|mueve|delete|borra|resize|collaps|expand|drag)\b/i.test(
           userMessage,
-        ) &&
-        !/\b(?:create|crea|build|construye|scaffold|genera|new|nueva?o?)\b/i.test(userMessage);
+        ) && !/\b(?:create|crea|build|construye|scaffold|genera|new|nueva?o?)\b/i.test(userMessage);
 
       // Explicit non-web stack mention nukes the web-engine path.
       // "Python 3.11+ terminal dashboard" must NOT trigger a Next.js
@@ -288,15 +287,15 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
                   `Engine handled 100% machine: ${engineMatch.engine} (0 tokens)`,
                 );
                 return handled([
-                    { type: "turn_start" } as unknown as StreamEvent,
-                    { type: "text_delta", text: result } as unknown as StreamEvent,
-                    {
-                      type: "turn_end",
-                      inputTokens: 0,
-                      outputTokens: 0,
-                      stopReason: "end_turn",
-                    } as unknown as StreamEvent,
-                  ]);
+                  { type: "turn_start" } as unknown as StreamEvent,
+                  { type: "text_delta", text: result } as unknown as StreamEvent,
+                  {
+                    type: "turn_end",
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    stopReason: "end_turn",
+                  } as unknown as StreamEvent,
+                ]);
               }
               orchestratedMessage = result;
               engineHandled = true;
@@ -363,7 +362,10 @@ export async function runTaskRouting(deps: TaskRoutingDeps): Promise<TaskRouting
         // correctly rejected the mismatch, sub-tasks wasted tokens).
         const { isMonolithicCreation } = await import("./router.js");
         if (isMonolithicCreation(userMessage)) {
-          log.info("orchestrator", "Debug engine skipped — prompt is monolithic creation, not debug");
+          log.info(
+            "orchestrator",
+            "Debug engine skipped — prompt is monolithic creation, not debug",
+          );
         } else {
           try {
             const { collectEvidence, buildDebugPrompt } = await import(
@@ -478,7 +480,9 @@ async function runWebEngine(deps: {
         /* last-project marker best-effort */
       }
 
-      const runMatch = userMessage.match(/(?:levant|run|start|launch|arranca|ejecuta|inicia|lanza)/i);
+      const runMatch = userMessage.match(
+        /(?:levant|run|start|launch|arranca|ejecuta|inicia|lanza)/i,
+      );
       const portMatch = userMessage.match(/(?:(?:en|on|at)\s+)?(?:(?:el\s+)?puerto|port)\s+(\d+)/i);
       let runOutput = "";
       if (runMatch) {
@@ -507,9 +511,7 @@ async function runWebEngine(deps: {
       ].join("\n");
 
       const finalText =
-        summary +
-        runOutput +
-        (runMatch ? "" : `\n\n  To run: "levantalo en el puerto 15623"`);
+        summary + runOutput + (runMatch ? "" : `\n\n  To run: "levantalo en el puerto 15623"`);
       events.push({ type: "text_delta", text: finalText + "\n" } as StreamEvent);
 
       state.messages.push({ role: "user", content: userMessage });

@@ -1,9 +1,10 @@
 // Tests for Task tools — CRUD + dependencies
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+
 import { Database } from "bun:sqlite";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   executeTaskCreate,
   executeTaskGet,

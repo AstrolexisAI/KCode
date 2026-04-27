@@ -1,18 +1,18 @@
 // Tests for operator-dashboard (phase 5 of operator-mind).
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { clearBashHistory, recordBashAttempt } from "./bash-spawn-history";
+import { clearEditHistory, recordEditAttempt } from "./file-edit-history";
 import {
   clearOperatorDashboardState,
-  formatOperatorBanner,
   type Finding,
+  formatOperatorBanner,
   probeInotifySaturation,
   probeOperatorState,
   probeOrphanDevServers,
   probeRecentRetries,
   selectFindingsForTurn,
 } from "./operator-dashboard";
-import { clearBashHistory, recordBashAttempt } from "./bash-spawn-history";
-import { clearEditHistory, recordEditAttempt } from "./file-edit-history";
 
 describe("formatOperatorBanner", () => {
   test("returns empty string when no findings", () => {
@@ -93,12 +93,7 @@ describe("probeRecentRetries", () => {
   test("fires at 3 failures", () => {
     recordBashAttempt("npm run dev", "/x", true, "boom");
     recordEditAttempt("Edit", { file_path: "/y", old_string: "a", new_string: "b" }, true, "boom");
-    recordEditAttempt(
-      "Write",
-      { file_path: "/z", content: "x" },
-      true,
-      "EACCES",
-    );
+    recordEditAttempt("Write", { file_path: "/z", content: "x" }, true, "EACCES");
     const f = probeRecentRetries();
     expect(f).not.toBeNull();
     expect(f!.code).toBe("RECENT_RETRIES");

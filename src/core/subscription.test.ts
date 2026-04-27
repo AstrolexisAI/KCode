@@ -22,7 +22,10 @@ let origFetch: typeof globalThis.fetch;
 beforeEach(() => {
   origHome = process.env.KCODE_HOME;
   origFetch = globalThis.fetch;
-  testHome = join(tmpdir(), `kcode-sub-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  testHome = join(
+    tmpdir(),
+    `kcode-sub-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  );
   mkdirSync(testHome, { recursive: true });
   process.env.KCODE_HOME = testHome;
   invalidateSubscriptionCache();
@@ -56,11 +59,7 @@ describe("getSubscription — network paths", () => {
       customer: { email: "test@example.com" },
       fetchedAt: Date.now() - 2 * 60 * 60 * 1000, // 2h old — past TTL
     };
-    writeFileSync(
-      join(testHome, "subscription-cache.json"),
-      JSON.stringify(cachedSub),
-      "utf-8",
-    );
+    writeFileSync(join(testHome, "subscription-cache.json"), JSON.stringify(cachedSub), "utf-8");
 
     // Network fails
     globalThis.fetch = asFetch(async () => {
@@ -82,11 +81,7 @@ describe("getSubscription — network paths", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 86400,
       fetchedAt: Date.now() - 1000, // 1s old — well within TTL
     };
-    writeFileSync(
-      join(testHome, "subscription-cache.json"),
-      JSON.stringify(freshSub),
-      "utf-8",
-    );
+    writeFileSync(join(testHome, "subscription-cache.json"), JSON.stringify(freshSub), "utf-8");
 
     let fetchCalls = 0;
     globalThis.fetch = asFetch(async () => {

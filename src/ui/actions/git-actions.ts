@@ -30,11 +30,11 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         // The old execSync template literal was CWE-78 — relPath comes
         // from user input and $() or backticks inside double quotes
         // still execute in shell mode.
-        const shortOutput = execFileSync(
-          "git",
-          ["blame", "--date=short", relPath],
-          { cwd, timeout: 10000, stdio: ["pipe", "pipe", "pipe"] },
-        )
+        const shortOutput = execFileSync("git", ["blame", "--date=short", relPath], {
+          cwd,
+          timeout: 10000,
+          stdio: ["pipe", "pipe", "pipe"],
+        })
           .toString()
           .trim();
         const rawLines = shortOutput.split("\n");

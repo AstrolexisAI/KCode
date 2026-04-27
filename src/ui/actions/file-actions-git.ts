@@ -4,10 +4,7 @@
 import type { ActionContext } from "./action-helpers.js";
 import { tokenize } from "./argv-parser.js";
 
-export async function handleGitAction(
-  action: string,
-  ctx: ActionContext,
-): Promise<string | null> {
+export async function handleGitAction(action: string, ctx: ActionContext): Promise<string | null> {
   const { appConfig, args } = ctx;
 
   switch (action) {
@@ -30,8 +27,7 @@ export async function handleGitAction(
       // pathToken is the first non-flag, non-flag-value token. Skip
       // the value token after --repo so `/pr --repo owner/x .` picks
       // `.` as path, not `owner/x`.
-      const pathToken =
-        tokens.find((t, i) => !t.startsWith("--") && i !== repoFlag + 1) ?? ".";
+      const pathToken = tokens.find((t, i) => !t.startsWith("--") && i !== repoFlag + 1) ?? ".";
       const { resolve: resolvePath } = await import("node:path");
       const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
 
@@ -61,7 +57,9 @@ export async function handleGitAction(
             repo,
             dryRun,
             compact,
-            onStep: (step) => { prState.step = step; },
+            onStep: (step) => {
+              prState.step = step;
+            },
           });
 
           const lines: string[] = [
@@ -103,8 +101,12 @@ export async function handleGitAction(
             lines.push(`    Re-running /pr ${pathToken} will resume from this branch.`);
             lines.push(`    Or push + open the PR manually:`);
             lines.push(`      ! cd ${pathToken} && git push -u fork ${result.branchName} --force`);
-            lines.push(`      ! cd ${pathToken} && gh pr create --repo ${upstream} --head YOUR_USER:${result.branchName}`);
-            lines.push(`    (Replace YOUR_USER with your GitHub username; ${repoName} fork must already exist.)`);
+            lines.push(
+              `      ! cd ${pathToken} && gh pr create --repo ${upstream} --head YOUR_USER:${result.branchName}`,
+            );
+            lines.push(
+              `    (Replace YOUR_USER with your GitHub username; ${repoName} fork must already exist.)`,
+            );
           } else if (result.prUrl) {
             lines.push(`    ✅ PR created: ${result.prUrl}`);
           }
@@ -146,7 +148,9 @@ export async function handleGitAction(
       try {
         execSync("gh --version", { encoding: "utf-8", timeout: 5000 });
         ghInstalled = true;
-      } catch { /* not installed */ }
+      } catch {
+        /* not installed */
+      }
 
       if (!ghInstalled) {
         return [
@@ -176,15 +180,17 @@ export async function handleGitAction(
               "  To logout: ! gh auth logout",
             ].join("\n");
           }
-        } catch { /* not logged in */ }
+        } catch {
+          /* not logged in */
+        }
 
         // Start device flow login
         try {
           // gh auth login --web does device flow: shows URL + code
-          const result = execSync(
-            "gh auth login -h github.com -p https --web 2>&1 || true",
-            { encoding: "utf-8", timeout: 60000 },
-          );
+          const result = execSync("gh auth login -h github.com -p https --web 2>&1 || true", {
+            encoding: "utf-8",
+            timeout: 60000,
+          });
 
           // Parse the one-time code and URL from gh output
           const codeMatch = result.match(/one-time code[:\s]+([A-Z0-9-]+)/i);
@@ -201,7 +207,9 @@ export async function handleGitAction(
               "  Waiting for authorization...",
               "  (If browser didn't open, copy the URL manually)",
               "",
-              result.includes("Logged in") ? "  ✅ Authenticated!" : "  Run /github status to verify.",
+              result.includes("Logged in")
+                ? "  ✅ Authenticated!"
+                : "  Run /github status to verify.",
             ].join("\n");
           }
 
@@ -232,18 +240,19 @@ export async function handleGitAction(
               encoding: "utf-8",
               timeout: 10000,
             }).trim();
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
           try {
             scopes = execSync("gh auth status 2>&1 | grep -i scope || true", {
               encoding: "utf-8",
               timeout: 5000,
             }).trim();
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
 
-          const lines = [
-            "  GitHub Status",
-            "  ─".repeat(30),
-          ];
+          const lines = ["  GitHub Status", "  ─".repeat(30)];
           if (user) lines.push(`    User:    ${user}`);
           if (status.includes("Logged in")) {
             lines.push("    Auth:    ✅ Authenticated");

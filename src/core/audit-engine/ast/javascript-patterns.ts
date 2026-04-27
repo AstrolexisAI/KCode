@@ -232,7 +232,8 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
 
   {
     id: "js-ast-002-child-process-exec-of-parameter",
-    title: "child_process.exec / spawn / execFile of a function parameter (command injection via AST)",
+    title:
+      "child_process.exec / spawn / execFile of a function parameter (command injection via AST)",
     severity: "critical",
     languages: ["javascript", "typescript"],
     /**
@@ -386,14 +387,16 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
         const body = findFunctionBody(enclosing);
         if (!body) return null;
         // Need to import lazily because of test-time module ordering.
-        const { collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const { collectTaintedLocals } =
+          require("./taint-walker") as typeof import("./taint-walker");
         const tainted = collectTaintedLocals(body);
         if (!tainted.has(firstArg.text)) return null;
       } else {
         // Non-identifier argument — check directly via the walker.
         const enclosing = findEnclosingFunction(callee.node);
         const body = enclosing ? findFunctionBody(enclosing) : null;
-        const { isTainted, collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const { isTainted, collectTaintedLocals } =
+          require("./taint-walker") as typeof import("./taint-walker");
         const tainted = body ? collectTaintedLocals(body) : new Set<string>();
         if (!isTainted(firstArg, tainted)) return null;
       }
@@ -446,7 +449,8 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
         if (!enclosing) return null;
         const body = findFunctionBody(enclosing);
         if (!body) return null;
-        const { collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const { collectTaintedLocals } =
+          require("./taint-walker") as typeof import("./taint-walker");
         const tainted = collectTaintedLocals(body);
         // Skip bare parameters — js-ast-002 covers them.
         const params = parameterNames(enclosing);
@@ -455,7 +459,8 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
       } else {
         const enclosing = findEnclosingFunction(method.node);
         const body = enclosing ? findFunctionBody(enclosing) : null;
-        const { isTainted, collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+        const { isTainted, collectTaintedLocals } =
+          require("./taint-walker") as typeof import("./taint-walker");
         const tainted = body ? collectTaintedLocals(body) : new Set<string>();
         if (!isTainted(firstArg, tainted)) return null;
       }
@@ -506,7 +511,8 @@ export const JAVASCRIPT_AST_PATTERNS: AstPattern[] = [
       if (propName !== "innerHTML" && propName !== "outerHTML") return null;
       const enclosing = findEnclosingFunction(prop.node);
       const body = enclosing ? findFunctionBody(enclosing) : null;
-      const { isTainted, collectTaintedLocals } = require("./taint-walker") as typeof import("./taint-walker");
+      const { isTainted, collectTaintedLocals } =
+        require("./taint-walker") as typeof import("./taint-walker");
       const tainted = body ? collectTaintedLocals(body) : new Set<string>();
       if (!isTainted(rhs.node, tainted)) return null;
       const line = rhs.node.startPosition.row + 1;

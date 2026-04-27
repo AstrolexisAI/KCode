@@ -15,9 +15,9 @@ import { executeGrep } from "../tools/grep";
 import { executeRead } from "../tools/read";
 import { setToolWorkspace } from "../tools/workspace";
 import { executeWrite } from "../tools/write";
-import { ToolRegistry } from "./tool-registry";
 import { executeToolsSequential } from "./tool-executor";
-import type { ToolUseBlock, ContentBlock } from "./types";
+import { ToolRegistry } from "./tool-registry";
+import type { ContentBlock, ToolUseBlock } from "./types";
 
 // ─── Shared State ────────────────────────────────────────────────
 
@@ -301,7 +301,11 @@ describe("Tool E2E: Safety net for thrown errors", () => {
       config: { model: "test", workingDirectory: "/tmp" } as any,
       tools: registry,
       permissions: { checkPermission: async () => ({ allowed: true }) } as any,
-      hooks: { hasHooks: () => false, runPreToolUse: async () => ({ allowed: true }), runPostToolUse: async () => {} } as any,
+      hooks: {
+        hasHooks: () => false,
+        runPreToolUse: async () => ({ allowed: true }),
+        runPostToolUse: async () => {},
+      } as any,
       undoManager: { captureSnapshot: () => null, pushAction: () => {} } as any,
       sessionId: "test-session",
       contextWindowSize: 128000,
@@ -339,9 +343,7 @@ describe("Tool E2E: Safety net for thrown errors", () => {
 
     // The returned toolResultBlocks must also include a block
     const { toolResultBlocks } = result.value;
-    const block: any = toolResultBlocks.find(
-      (b: any) => b.tool_use_id === "call_throwing_1",
-    );
+    const block: any = toolResultBlocks.find((b: any) => b.tool_use_id === "call_throwing_1");
     expect(block).toBeDefined();
     expect(block.is_error).toBe(true);
   });

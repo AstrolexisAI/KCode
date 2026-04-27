@@ -29,9 +29,7 @@ describe("classifyBenchmarkTask — scaffold routing (issue #101)", () => {
   });
 
   test("pure analysis prompt still routes to analysis", () => {
-    expect(classifyBenchmarkTask("analiza el código de /tmp/foo.py para bugs")).toBe(
-      "analysis",
-    );
+    expect(classifyBenchmarkTask("analiza el código de /tmp/foo.py para bugs")).toBe("analysis");
     expect(classifyBenchmarkTask("audit this codebase")).toBe("analysis");
   });
 

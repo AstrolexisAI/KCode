@@ -1,8 +1,8 @@
 // Tests for LS tool — directory listing
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import { executeLs, lsDefinition } from "./ls";
 
 // LS validates paths must be in home or project dir — use a subdir of HOME

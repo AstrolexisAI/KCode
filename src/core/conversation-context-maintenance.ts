@@ -69,10 +69,7 @@ export async function* runContextMaintenance(
   //
   // Opt-out: KCODE_DISABLE_AUTO_COMPACT=1.
   if (process.env.KCODE_DISABLE_AUTO_COMPACT !== "1") {
-    const postPruneTokens = estimateContextTokens(
-      args.systemPrompt,
-      args.state.messages,
-    );
+    const postPruneTokens = estimateContextTokens(args.systemPrompt, args.state.messages);
     const usage = postPruneTokens / args.contextWindowSize;
     // Trigger multi-strategy at 75% — same as full-compact phase
     // inside the orchestrator. Below that, plain microcompact is
@@ -90,10 +87,7 @@ export async function* runContextMaintenance(
           args.config,
         );
       } catch (err) {
-        log.warn(
-          "session",
-          `auto-compact failed: ${err instanceof Error ? err.message : err}`,
-        );
+        log.warn("session", `auto-compact failed: ${err instanceof Error ? err.message : err}`);
       }
     }
   }

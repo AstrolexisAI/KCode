@@ -111,9 +111,7 @@ describe("detectServerSpawn", () => {
     // documentation test for the conservative behavior. If you need to
     // detect the spawn in the second half, run them as separate Bash
     // calls, which is the safer pattern anyway.)
-    const r = detectServerSpawn(
-      "pkill -f 'next-server' || true && PORT=3000 npm run dev",
-    );
+    const r = detectServerSpawn("pkill -f 'next-server' || true && PORT=3000 npm run dev");
     // Conservative: when ANY segment looks like introspection we bail.
     // The model should run cleanup and spawn in separate Bash calls
     // so the spawn-verifier and preflight can probe each independently.

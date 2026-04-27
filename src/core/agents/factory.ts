@@ -11,11 +11,11 @@
 // agents when the task is simple, more when it's complex, and never
 // exceeds the pool's maxConcurrent.
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { executorForRole } from "./executor";
-import { AgentPool, getAgentPool } from "./pool";
-import { roleFromTask, ROLES } from "./roles";
+import { type AgentPool, getAgentPool } from "./pool";
+import { ROLES, roleFromTask } from "./roles";
 import type { Agent, AgentExecutor, AgentRole, AgentSpec } from "./types";
 
 /** Detected project characteristics used to pick roles. */
@@ -299,14 +299,12 @@ export function dispatchFromInstruction(
   opts: Omit<DispatchOptions, "task">,
 ): Agent[] {
   // "N agentes" → pick N
-  const countMatch = instruction.match(
-    /(\d+)\s+(?:agente|agent|worker|bot)/i,
-  );
+  const countMatch = instruction.match(/(\d+)\s+(?:agente|agent|worker|bot)/i);
   const requestedCount = countMatch ? parseInt(countMatch[1]!, 10) : undefined;
 
   // "grupo X" / "group X" → assign group name
   const groupMatch = instruction.match(/grupo\s+(\w+)|group\s+(\w+)/i);
-  const groupName = groupMatch ? groupMatch[1] ?? groupMatch[2] : undefined;
+  const groupName = groupMatch ? (groupMatch[1] ?? groupMatch[2]) : undefined;
 
   // Strip the "N agentes para" prefix so we have a cleaner task description
   const task = instruction

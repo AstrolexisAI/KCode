@@ -112,10 +112,7 @@ function writeRegistry(entries: DevServerEntry[]): void {
     // entries are almost always already-dead processes that can be
     // safely forgotten — cleanupStaleDevServers would reap them next
     // run anyway.
-    const bounded =
-      entries.length > MAX_ENTRIES
-        ? entries.slice(-MAX_ENTRIES)
-        : entries;
+    const bounded = entries.length > MAX_ENTRIES ? entries.slice(-MAX_ENTRIES) : entries;
     writeFileSync(path, JSON.stringify(bounded, null, 2), "utf-8");
   } catch (err) {
     log.warn("dev-registry", `failed to write dev-servers.json: ${err}`);
@@ -130,7 +127,9 @@ function writeRegistry(entries: DevServerEntry[]): void {
  * case on a race is losing one very recent entry, which the next
  * successful call will overwrite correctly.
  */
-export function registerSpawnedServer(entry: Omit<DevServerEntry, "startedAt" | "parentKcodePid">): void {
+export function registerSpawnedServer(
+  entry: Omit<DevServerEntry, "startedAt" | "parentKcodePid">,
+): void {
   const existing = readRegistry();
   const full: DevServerEntry = {
     ...entry,
@@ -139,10 +138,7 @@ export function registerSpawnedServer(entry: Omit<DevServerEntry, "startedAt" | 
   };
   existing.push(full);
   writeRegistry(existing);
-  log.debug(
-    "dev-registry",
-    `registered pid=${full.pid} port=${full.port} cwd=${full.cwd}`,
-  );
+  log.debug("dev-registry", `registered pid=${full.pid} port=${full.port} cwd=${full.cwd}`);
 }
 
 /**
@@ -243,10 +239,7 @@ export function cleanupStaleDevServers(cwd: string): CleanupResult {
           killedStale++;
         } catch {
           // Best-effort: swallow and just drop from registry
-          log.debug(
-            "dev-registry",
-            `couldn't kill stale pid=${e.pid}: ${err}`,
-          );
+          log.debug("dev-registry", `couldn't kill stale pid=${e.pid}: ${err}`);
         }
       }
       continue;

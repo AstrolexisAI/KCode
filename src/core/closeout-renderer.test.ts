@@ -103,7 +103,10 @@ describe("renderCloseoutFromScope", () => {
       phase: "partial",
       completion: {
         mustUsePartialLanguage: true,
-        reasons: ["placeholder markers in generated code", "strong completion claim on broad request"],
+        reasons: [
+          "placeholder markers in generated code",
+          "strong completion claim on broad request",
+        ],
       },
     });
     const out = renderCloseoutFromScope(mgr.current()!)!;
@@ -146,7 +149,8 @@ describe("renderCloseoutFromScope", () => {
     mgr.recordRuntimeCommand({
       command: "python3 app.py",
       exitCode: 0,
-      output: "Traceback (most recent call last):\n  ModuleNotFoundError: No module named 'bitcoin'",
+      output:
+        "Traceback (most recent call last):\n  ModuleNotFoundError: No module named 'bitcoin'",
       runtimeFailed: true,
       timestamp: 2,
     });

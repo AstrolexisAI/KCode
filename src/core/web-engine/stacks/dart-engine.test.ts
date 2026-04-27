@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createDartProject } from "./dart-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createDartProject } from "./dart-engine";
 
 describe("dart-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-dart-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Flutter mobile app", () => {
@@ -57,14 +61,14 @@ describe("dart-engine", () => {
   test("detects riverpod dependency", () => {
     withTmp((dir) => {
       const r = createDartProject("Flutter app with riverpod", dir);
-      expect(r.config.deps.some(d => d.name.includes("riverpod"))).toBe(true);
+      expect(r.config.deps.some((d) => d.name.includes("riverpod"))).toBe(true);
     });
   });
 
   test("detects dio dependency", () => {
     withTmp((dir) => {
       const r = createDartProject("Flutter app with dio", dir);
-      expect(r.config.deps.some(d => d.name === "dio")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "dio")).toBe(true);
     });
   });
 

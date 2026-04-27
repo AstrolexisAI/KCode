@@ -28,10 +28,7 @@
 import type { Candidate } from "../types";
 import type { AstNode, AstPattern } from "./types";
 
-const RUST_FUNCTION_NODE_TYPES = new Set([
-  "function_item",
-  "closure_expression",
-]);
+const RUST_FUNCTION_NODE_TYPES = new Set(["function_item", "closure_expression"]);
 
 function findEnclosingFunction(node: AstNode): AstNode | null {
   let cur: AstNode | null = node.parent;

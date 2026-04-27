@@ -114,7 +114,10 @@ function computeAstScore(result: AuditResult): {
   const loaded = status.filter((s) => s.loaded).length;
   const score = pct(loaded, status.length);
   if (loaded < status.length) {
-    const missing = status.filter((s) => !s.loaded).map((s) => s.language).join(", ");
+    const missing = status
+      .filter((s) => !s.loaded)
+      .map((s) => s.language)
+      .join(", ");
     return {
       score,
       warning: `AST grammars degraded for: ${missing}.`,
@@ -214,7 +217,13 @@ export function computeAuditConfidence(result: AuditResult): AuditConfidence {
   const fixability = computeFixabilityScore(result);
 
   const warnings: string[] = [];
-  for (const w of [coverage.warning, verifier.warning, ast.warning, noise.warning, fixability.warning]) {
+  for (const w of [
+    coverage.warning,
+    verifier.warning,
+    ast.warning,
+    noise.warning,
+    fixability.warning,
+  ]) {
     if (w) warnings.push(w);
   }
 
@@ -232,7 +241,8 @@ export function computeAuditConfidence(result: AuditResult): AuditConfidence {
   // headline can't exceed 60 even if everything else is perfect.
   // The numeric cap reinforces the explicit `warnings[]` text without
   // letting users glance at a headline and miss the gap.
-  const TOTAL_WEIGHT = WEIGHTS.coverage + WEIGHTS.verifier + WEIGHTS.ast + WEIGHTS.noise + WEIGHTS.fixability;
+  const TOTAL_WEIGHT =
+    WEIGHTS.coverage + WEIGHTS.verifier + WEIGHTS.ast + WEIGHTS.noise + WEIGHTS.fixability;
   let weightedSum = 0;
   if (coverage.score !== null) weightedSum += coverage.score * WEIGHTS.coverage;
   if (verifier.score !== null) weightedSum += verifier.score * WEIGHTS.verifier;

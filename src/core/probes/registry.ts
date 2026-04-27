@@ -32,9 +32,7 @@ export function listProbes(): readonly VerificationProbe[] {
  * probe applies, returns null. Callers should treat null as
  * "no verification capability for this task shape".
  */
-export async function resolveApplicableProbe(
-  scope: TaskScope,
-): Promise<VerificationProbe | null> {
+export async function resolveApplicableProbe(scope: TaskScope): Promise<VerificationProbe | null> {
   for (const probe of _probes) {
     try {
       const applies = await probe.applies(scope);
@@ -54,9 +52,7 @@ export async function resolveApplicableProbe(
  * never throws, always resolves to a ProbeResult or null. Call
  * from post-turn with a small timeout budget.
  */
-export async function runApplicableProbe(
-  scope: TaskScope,
-): Promise<ProbeResult | null> {
+export async function runApplicableProbe(scope: TaskScope): Promise<ProbeResult | null> {
   const probe = await resolveApplicableProbe(scope);
   if (!probe) return null;
   log.info("probe", `running ${probe.id}: ${probe.description}`);
@@ -68,10 +64,7 @@ export async function runApplicableProbe(
     );
     return result;
   } catch (err) {
-    log.warn(
-      "probe",
-      `${probe.id} threw: ${err instanceof Error ? err.message : err}`,
-    );
+    log.warn("probe", `${probe.id} threw: ${err instanceof Error ? err.message : err}`);
     return {
       status: "fail_runtime",
       error: err instanceof Error ? err.message : String(err),

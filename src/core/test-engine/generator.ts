@@ -10,7 +10,12 @@ import { basename, dirname, extname, join, relative } from "node:path";
 
 function run(cmd: string, cwd: string): string {
   try {
-    return execSync(cmd, { cwd, encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execSync(cmd, {
+      cwd,
+      encoding: "utf-8",
+      timeout: 10_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
   } catch {
     return "";
   }
@@ -77,7 +82,8 @@ function extractFunctions(content: string, language: string): FunctionInfo[] {
     // Go
     if (language === "go") {
       const m = line.match(/^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)\s*\(([^)]*)\)\s*(.*)/);
-      if (m && m[1]![0] === m[1]![0]!.toUpperCase()) { // exported = capitalized
+      if (m && m[1]![0] === m[1]![0]!.toUpperCase()) {
+        // exported = capitalized
         fns.push({
           name: m[1]!,
           params: m[2] ?? "",
@@ -102,19 +108,23 @@ function detectEdgeCases(content: string, fns: FunctionInfo[]): string[] {
   if (/null|undefined|None|nil/.test(content)) edges.push("null/undefined input");
 
   // Empty collections
-  if (/\.length\s*===?\s*0|len\(\w+\)\s*==\s*0|\.is_empty\(\)/.test(content)) edges.push("empty collection");
+  if (/\.length\s*===?\s*0|len\(\w+\)\s*==\s*0|\.is_empty\(\)/.test(content))
+    edges.push("empty collection");
 
   // Boundary values
-  if (/MAX_|MIN_|overflow|underflow|INT_MAX|Number\.MAX/.test(content)) edges.push("boundary values (max/min)");
+  if (/MAX_|MIN_|overflow|underflow|INT_MAX|Number\.MAX/.test(content))
+    edges.push("boundary values (max/min)");
 
   // Error handling
-  if (/try|catch|except|rescue|\.unwrap|\.expect/.test(content)) edges.push("error/exception paths");
+  if (/try|catch|except|rescue|\.unwrap|\.expect/.test(content))
+    edges.push("error/exception paths");
 
   // Auth/permissions
   if (/auth|permission|role|admin|token|session/i.test(content)) edges.push("unauthorized access");
 
   // Concurrency
-  if (/async|await|Promise|goroutine|thread|mutex|lock/i.test(content)) edges.push("concurrent/async behavior");
+  if (/async|await|Promise|goroutine|thread|mutex|lock/i.test(content))
+    edges.push("concurrent/async behavior");
 
   // Negative numbers
   if (/amount|price|quantity|count|size/i.test(content)) edges.push("negative numbers");
@@ -238,12 +248,18 @@ export function buildTestPrompt(
   const fullPath = join(cwd, targetFile);
   const content = readSafe(fullPath);
   const ext = extname(targetFile);
-  const language = ext === ".ts" || ext === ".tsx" ? "typescript"
-    : ext === ".js" || ext === ".jsx" ? "javascript"
-    : ext === ".py" ? "python"
-    : ext === ".go" ? "go"
-    : ext === ".rs" ? "rust"
-    : "unknown";
+  const language =
+    ext === ".ts" || ext === ".tsx"
+      ? "typescript"
+      : ext === ".js" || ext === ".jsx"
+        ? "javascript"
+        : ext === ".py"
+          ? "python"
+          : ext === ".go"
+            ? "go"
+            : ext === ".rs"
+              ? "rust"
+              : "unknown";
 
   const functions = extractFunctions(content, language);
   const edgeCases = detectEdgeCases(content, functions);
@@ -286,10 +302,10 @@ ${content}
 \`\`\`
 
 ## Functions to Test (extracted by machine)
-${functions.map(f => `- ${f.isAsync ? "async " : ""}${f.name}(${f.params})${f.returnType !== "unknown" ? " → " + f.returnType : ""} [line ${f.line}]${f.isExported ? " (exported)" : ""}`).join("\n")}
+${functions.map((f) => `- ${f.isAsync ? "async " : ""}${f.name}(${f.params})${f.returnType !== "unknown" ? " → " + f.returnType : ""} [line ${f.line}]${f.isExported ? " (exported)" : ""}`).join("\n")}
 
 ## Edge Cases to Cover (detected by machine)
-${edgeCases.map(e => `- ${e}`).join("\n")}
+${edgeCases.map((e) => `- ${e}`).join("\n")}
 
 ## Test Framework: ${framework.name}
 Import: ${framework.importLine}

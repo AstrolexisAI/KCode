@@ -114,22 +114,9 @@ const RUBY_EVAL_METHODS = new Set([
   "binding_eval",
 ]);
 
-const RUBY_SHELL_METHODS = new Set([
-  "system",
-  "exec",
-  "spawn",
-  "popen",
-  "syscall",
-]);
+const RUBY_SHELL_METHODS = new Set(["system", "exec", "spawn", "popen", "syscall"]);
 
-const RUBY_FILE_METHODS = new Set([
-  "open",
-  "read",
-  "readlines",
-  "readline",
-  "delete",
-  "unlink",
-]);
+const RUBY_FILE_METHODS = new Set(["open", "read", "readlines", "readline", "delete", "unlink"]);
 
 const RUBY_FILE_RECEIVERS = new Set(["File", "IO", "Pathname", "Dir", "FileUtils"]);
 

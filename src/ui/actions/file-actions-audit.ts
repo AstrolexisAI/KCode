@@ -1,9 +1,9 @@
 // Audit-related actions: /scan and /fix.
 // Split out of file-actions.ts.
 
+import { log } from "../../core/logger.js";
 import type { ActionContext } from "./action-helpers.js";
 import { tokenize } from "./argv-parser.js";
-import { log } from "../../core/logger.js";
 
 export async function handleAuditAction(
   action: string,
@@ -70,15 +70,16 @@ export async function handleAuditAction(
         const i = tokens.indexOf(flag);
         if (i !== -1 && i + 1 < tokens.length) valueFlagIndices.add(i + 1);
       }
-      let pathToken =
-        tokens.find((t, i) => !t.startsWith("--") && !valueFlagIndices.has(i)) ?? ".";
+      let pathToken = tokens.find((t, i) => !t.startsWith("--") && !valueFlagIndices.has(i)) ?? ".";
       // Expand ~ to home directory
       if (pathToken.startsWith("~/")) pathToken = pathToken.replace("~", process.env.HOME ?? "");
       const { resolve: resolvePath } = await import("node:path");
       const { join: joinPath } = await import("node:path");
       const { writeFileSync, existsSync, statSync, readFileSync: readFs } = await import("node:fs");
 
-      let projectRoot = pathToken.startsWith("/") ? pathToken : resolvePath(appConfig.workingDirectory, pathToken);
+      let projectRoot = pathToken.startsWith("/")
+        ? pathToken
+        : resolvePath(appConfig.workingDirectory, pathToken);
 
       // Guard: if scanning home directory, try last-project instead
       const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
@@ -105,9 +106,7 @@ export async function handleAuditAction(
       // App.tsx's 200ms poll picks up the active state and the
       // indeterminate bar (introduced same release) renders within
       // ~200ms of the user pressing Enter — no perceived "dead air".
-      const { scanState, resetScanState } = await import(
-        "../../core/audit-engine/scan-state.js"
-      );
+      const { scanState, resetScanState } = await import("../../core/audit-engine/scan-state.js");
       resetScanState();
       scanState.active = true;
       scanState.startTime = Date.now();
@@ -147,7 +146,9 @@ export async function handleAuditAction(
         : await buildAuditLlmCallbackFromConfigAsync(appConfig);
 
       // Detect available audit models (tagged [analysis]/[reasoning] with valid keys)
-      let auditModels: Awaited<ReturnType<typeof import("../../core/audit-engine/cloud-fallback.js")["detectAuditModels"]>>["models"] = [];
+      let auditModels: Awaited<
+        ReturnType<typeof import("../../core/audit-engine/cloud-fallback.js")["detectAuditModels"]>
+      >["models"] = [];
       if (!skipVerify) {
         const { detectAuditModels } = await import("../../core/audit-engine/cloud-fallback.js");
         const cloudConfig = await detectAuditModels(appConfig.apiBase);
@@ -191,13 +192,15 @@ export async function handleAuditAction(
 
           // Phase 2: if there are FPs or NEEDS_CONTEXT and audit models available, offer escalation
           const fpCount = result.false_positives;
-          const ncCount = result.candidates_found - result.confirmed_findings - result.false_positives;
+          const ncCount =
+            result.candidates_found - result.confirmed_findings - result.false_positives;
           const reviewable = fpCount + ncCount;
 
           if (reviewable > 0 && auditModels.length > 0) {
-            const reason = fpCount > 0
-              ? `${fpCount} marked as false positive${ncCount > 0 ? `, ${ncCount} uncertain` : ""}`
-              : `${ncCount} need deeper analysis`;
+            const reason =
+              fpCount > 0
+                ? `${fpCount} marked as false positive${ncCount > 0 ? `, ${ncCount} uncertain` : ""}`
+                : `${ncCount} need deeper analysis`;
             scanState.phase = reason;
             scanState.pendingEscalation = {
               count: reviewable,
@@ -217,7 +220,9 @@ export async function handleAuditAction(
             const chosenModelName = scanState.escalationModelChoice;
             const chosenModel = auditModels.find((m) => m.name === chosenModelName);
             if (chosenModel) {
-              const { buildAuditCallbackForModel } = await import("../../core/audit-engine/cloud-fallback.js");
+              const { buildAuditCallbackForModel } = await import(
+                "../../core/audit-engine/cloud-fallback.js"
+              );
               const fallbackCallback = await buildAuditCallbackForModel(chosenModel);
               scanState.cloudProvider = chosenModel.provider;
               scanState.phase = `☁ Re-verifying with ${chosenModel.name}...`;
@@ -269,10 +274,7 @@ export async function handleAuditAction(
               } catch (err) {
                 cloudAbortError = err instanceof Error ? err.message : String(err);
                 scanState.phase = `☁ cloud verification aborted: ${cloudAbortError.slice(0, 120)}`;
-                log.warn(
-                  "audit",
-                  `cloud escalation aborted: ${cloudAbortError}`,
-                );
+                log.warn("audit", `cloud escalation aborted: ${cloudAbortError}`);
               }
 
               // Merge: keep original confirmed + add cloud-confirmed.
@@ -282,38 +284,45 @@ export async function handleAuditAction(
               // aborted — primary results stay untouched and the error
               // is surfaced.
               if (cloudResult) {
-              const sameFinding = (a: typeof result.findings[number], b: typeof result.findings[number]): boolean => {
-                if (a.finding_id && b.finding_id) return a.finding_id === b.finding_id;
-                return a.file === b.file && a.line === b.line;
-              };
-              for (const f of cloudResult.findings) {
-                if (!result.findings.some((e) => sameFinding(e, f))) {
-                  f.verification.reasoning = `[☁ second opinion] ${f.verification.reasoning}`;
-                  result.findings.push(f);
+                const sameFinding = (
+                  a: (typeof result.findings)[number],
+                  b: (typeof result.findings)[number],
+                ): boolean => {
+                  if (a.finding_id && b.finding_id) return a.finding_id === b.finding_id;
+                  return a.file === b.file && a.line === b.line;
+                };
+                for (const f of cloudResult.findings) {
+                  if (!result.findings.some((e) => sameFinding(e, f))) {
+                    f.verification.reasoning = `[☁ second opinion] ${f.verification.reasoning}`;
+                    result.findings.push(f);
+                  }
                 }
-              }
-              result.confirmed_findings = result.findings.length;
-              // Replace FP detail with cloud's (authoritative second-opinion).
-              // Previously this code recomputed result.false_positives without
-              // touching false_positives_detail, producing a report with
-              // "false_positives: 33" and "false_positives_detail: []" — a
-              // contradiction that made the rejections unauditable. Issue
-              // #111 v2.10.309.
-              // HD.3 — dedupe by finding_id when present.
-              const sameAsConfirmed = (entry: { finding_id?: string; file: string; line: number }): boolean =>
-                result.findings.some((conf) =>
-                  conf.finding_id && entry.finding_id
-                    ? conf.finding_id === entry.finding_id
-                    : conf.file === entry.file && conf.line === entry.line,
+                result.confirmed_findings = result.findings.length;
+                // Replace FP detail with cloud's (authoritative second-opinion).
+                // Previously this code recomputed result.false_positives without
+                // touching false_positives_detail, producing a report with
+                // "false_positives: 33" and "false_positives_detail: []" — a
+                // contradiction that made the rejections unauditable. Issue
+                // #111 v2.10.309.
+                // HD.3 — dedupe by finding_id when present.
+                const sameAsConfirmed = (entry: {
+                  finding_id?: string;
+                  file: string;
+                  line: number;
+                }): boolean =>
+                  result.findings.some((conf) =>
+                    conf.finding_id && entry.finding_id
+                      ? conf.finding_id === entry.finding_id
+                      : conf.file === entry.file && conf.line === entry.line,
+                  );
+                result.false_positives_detail = cloudResult.false_positives_detail.filter(
+                  (fp) => !sameAsConfirmed(fp),
                 );
-              result.false_positives_detail = cloudResult.false_positives_detail.filter(
-                (fp) => !sameAsConfirmed(fp),
-              );
-              result.false_positives = result.false_positives_detail.length;
-              result.needs_context_detail = (cloudResult.needs_context_detail ?? []).filter(
-                (nc) => !sameAsConfirmed(nc),
-              );
-              result.needs_context = result.needs_context_detail.length;
+                result.false_positives = result.false_positives_detail.length;
+                result.needs_context_detail = (cloudResult.needs_context_detail ?? []).filter(
+                  (nc) => !sameAsConfirmed(nc),
+                );
+                result.needs_context = result.needs_context_detail.length;
               } // end if (cloudResult)
               // Surface cloud-abort error in the scan state so the
               // user-visible report includes the reason instead of a
@@ -343,7 +352,9 @@ export async function handleAuditAction(
           const reportLines: string[] = [
             `  KCode Audit Engine`,
             `    Project:  ${projectRoot}`,
-            skipVerify ? `    Mode:     static-only` : `    Model:    ${appConfig.model ?? "default"}`,
+            skipVerify
+              ? `    Mode:     static-only`
+              : `    Model:    ${appConfig.model ?? "default"}`,
             "",
             `    ✓ Report written: ${outputPath}`,
             "",
@@ -363,16 +374,17 @@ export async function handleAuditAction(
           // "5 confirmed" then "Fixed: 1 / Annotated: 2 / Skipped: 2"
           // and feeling /fix underdelivered — when really only 1 was
           // ever auto-fixable.
-          const fixSupport = (result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
-            .fix_support_summary;
-          if (fixSupport && (fixSupport.rewrite + fixSupport.annotate + fixSupport.manual) > 0) {
+          const fixSupport = (
+            result as {
+              fix_support_summary?: { rewrite: number; annotate: number; manual: number };
+            }
+          ).fix_support_summary;
+          if (fixSupport && fixSupport.rewrite + fixSupport.annotate + fixSupport.manual > 0) {
             reportLines.push(
               `    Fix support:        ${fixSupport.rewrite} rewrite · ${fixSupport.annotate} annotate · ${fixSupport.manual} manual-only`,
             );
           }
-          reportLines.push(
-            `    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`,
-          );
+          reportLines.push(`    Duration:           ${(result.elapsed_ms / 1000).toFixed(1)}s`);
           if (scanState.cloudAbortError) {
             reportLines.push(
               "",
@@ -395,11 +407,19 @@ export async function handleAuditAction(
             reportLines.push("", `  Top findings:`);
             for (const f of topFindings) {
               const icon =
-                f.severity === "critical" ? "🔴" : f.severity === "high" ? "🟠" : f.severity === "medium" ? "🟡" : "🟢";
+                f.severity === "critical"
+                  ? "🔴"
+                  : f.severity === "high"
+                    ? "🟠"
+                    : f.severity === "medium"
+                      ? "🟡"
+                      : "🟢";
               reportLines.push(`    ${icon} ${f.file}:${f.line}  ${f.patternId}`);
             }
             if (result.findings.length > 5) {
-              reportLines.push(`    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`);
+              reportLines.push(
+                `    ... and ${result.findings.length - 5} more (see AUDIT_REPORT.md)`,
+              );
             }
           }
 
@@ -418,9 +438,7 @@ export async function handleAuditAction(
           // ScanCancelledError surfaces as a soft "cancelled" message
           // (no AUDIT_REPORT.json written, no error banner). Other
           // errors still bubble up via scanState.error.
-          const { ScanCancelledError } = await import(
-            "../../core/audit-engine/scan-state.js"
-          );
+          const { ScanCancelledError } = await import("../../core/audit-engine/scan-state.js");
           if (err instanceof ScanCancelledError) {
             scanState.phase = "cancelled by user";
             scanState.result = {
@@ -477,16 +495,12 @@ export async function handleAuditAction(
       const cmd = (tokens.shift() ?? "").toLowerCase();
 
       const { resolve: resolvePath } = await import("node:path");
-      const { existsSync, readFileSync: readFs, writeFileSync: writeFs } =
-        await import("node:fs");
+      const { existsSync, readFileSync: readFs, writeFileSync: writeFs } = await import("node:fs");
       const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
       const jsonPath = resolvePath(projectRoot, "AUDIT_REPORT.json");
 
       if (!existsSync(jsonPath)) {
-        return (
-          `  No AUDIT_REPORT.json in ${pathToken}/\n` +
-          `  Run /scan ${pathToken} first.`
-        );
+        return `  No AUDIT_REPORT.json in ${pathToken}/\n` + `  Run /scan ${pathToken} first.`;
       }
 
       // v2.10.394 (external audit P1) — fields the code below uses
@@ -518,14 +532,17 @@ export async function handleAuditAction(
         needs_context?: number;
         needs_context_detail?: Reviewable[];
         confirmed_findings: number;
-        pattern_metrics?: Record<string, {
-          hits: number;
-          unique_sites: number;
-          confirmed: number;
-          false_positive: number;
-          confirmed_rate?: number;
-          false_positive_rate?: number;
-        }>;
+        pattern_metrics?: Record<
+          string,
+          {
+            hits: number;
+            unique_sites: number;
+            confirmed: number;
+            false_positive: number;
+            confirmed_rate?: number;
+            false_positive_rate?: number;
+          }
+        >;
       };
       try {
         audit = JSON.parse(readFs(jsonPath, "utf-8")) as typeof audit;
@@ -557,9 +574,7 @@ export async function handleAuditAction(
       }
 
       const icon = (sev: string): string =>
-        sev === "critical" ? "🔴" :
-        sev === "high" ? "🟠" :
-        sev === "medium" ? "🟡" : "🟢";
+        sev === "critical" ? "🔴" : sev === "high" ? "🟠" : sev === "medium" ? "🟡" : "🟢";
       // P2.5 (v2.10.389) — surface pattern_metrics noise hints inline.
       // External audit asked for "this pattern is 80% FP in your past
       // reviews — likely false positive" prompts during triage. We
@@ -575,14 +590,10 @@ export async function handleAuditAction(
         const pct = Math.round(fpRate * 100);
         return ` ⚠ ${pct}% FP this run (${m.false_positive}/${m.unique_sites} sites)`;
       };
-      const fmtItem = (
-        globalIdx: number,
-        e: Reviewable,
-      ): string[] => {
+      const fmtItem = (globalIdx: number, e: Reviewable): string[] => {
         const rel = e.file.replace(projectRoot + "/", "");
-        const tagStr = e.review_tags && e.review_tags.length > 0
-          ? ` [tags: ${e.review_tags.join(", ")}]`
-          : "";
+        const tagStr =
+          e.review_tags && e.review_tags.length > 0 ? ` [tags: ${e.review_tags.join(", ")}]` : "";
         const reasonStr = e.review_reason ? ` (reason: ${e.review_reason})` : "";
         // v2.10.372 (CL.2) — show finding_id alongside the legacy
         // index. The integer is friendlier to type for ad-hoc
@@ -621,7 +632,9 @@ export async function handleAuditAction(
             lines.push("");
           }
           if (ncDetail.length > 10) {
-            lines.push(`    …and ${ncDetail.length - 10} more — /review ${pathToken} list uncertain`);
+            lines.push(
+              `    …and ${ncDetail.length - 10} more — /review ${pathToken} list uncertain`,
+            );
             lines.push("");
           }
         }
@@ -633,18 +646,26 @@ export async function handleAuditAction(
             lines.push("");
           }
         } else if (fpDetail.length > 10) {
-          lines.push(`  ── False positives: ${fpDetail.length} (use /review ${pathToken} list fp to inspect) ──`);
+          lines.push(
+            `  ── False positives: ${fpDetail.length} (use /review ${pathToken} list fp to inspect) ──`,
+          );
           lines.push("");
         }
         lines.push("  Commands:");
         lines.push(`    /review ${pathToken} list confirmed|fp|uncertain   — show one bucket`);
-        lines.push(`    /review ${pathToken} promote 7,8                  — uncertain or FP → confirmed`);
+        lines.push(
+          `    /review ${pathToken} promote 7,8                  — uncertain or FP → confirmed`,
+        );
         lines.push(`    /review ${pathToken} demote 2,3                   — confirmed → FP`);
-        lines.push(`    /review ${pathToken} tag 5 trusted_boundary       — annotate (drives report sections)`);
+        lines.push(
+          `    /review ${pathToken} tag 5 trusted_boundary       — annotate (drives report sections)`,
+        );
         lines.push(`    /review ${pathToken} untag 5                      — clear annotation`);
         lines.push(`    /review ${pathToken} note 5 "free text"           — add reviewer note`);
         lines.push(`    /review ${pathToken} assign 5 high                — override severity`);
-        lines.push(`    /review ${pathToken} ignore 4,8 --reason X        — ignore (excluded from /fix /pr)`);
+        lines.push(
+          `    /review ${pathToken} ignore 4,8 --reason X        — ignore (excluded from /fix /pr)`,
+        );
         lines.push(`    /review ${pathToken} restore 4                   — clear review_state`);
         lines.push(`    /review ${pathToken} stats                       — pattern noise table`);
         lines.push(`    /review ${pathToken} export                      — JSON manifest for CI`);
@@ -745,8 +766,9 @@ export async function handleAuditAction(
           else if (tier === "annotate") summary.annotate++;
           else summary.manual++;
         }
-        (audit as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
-          .fix_support_summary = summary;
+        (
+          audit as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } }
+        ).fix_support_summary = summary;
         writeFs(jsonPath, JSON.stringify(audit, null, 2));
       };
 
@@ -783,12 +805,17 @@ export async function handleAuditAction(
           // FalsePositiveDetail / NeedsContextDetail. Populate it
           // from the pattern registry so downstream /fix can route
           // the entry to the right tier.
-          const item = entry.item as { fix_support?: "rewrite" | "annotate" | "manual"; pattern_id: string };
+          const item = entry.item as {
+            fix_support?: "rewrite" | "annotate" | "manual";
+            pattern_id: string;
+          };
           if (!item.fix_support) {
             item.fix_support = fixSupportFor(item.pattern_id);
           }
           entry.bucket = "confirmed";
-          moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
+          moved.push(
+            `#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`,
+          );
         }
         persist();
         return [
@@ -832,7 +859,9 @@ export async function handleAuditAction(
             patternId: entry.item.pattern_id,
             file: entry.item.file,
           });
-          moved.push(`#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
+          moved.push(
+            `#${idx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`,
+          );
         }
         persist();
         return [
@@ -848,9 +877,14 @@ export async function handleAuditAction(
         const idxArg = tokens.shift() ?? "";
         const reasonArg = (tokens.join(" ").trim() || "").toLowerCase();
         const validReasons = new Set([
-          "trusted_boundary", "test_only", "generated_code",
-          "build_time_only", "placeholder_secret", "sanitized",
-          "manual_confirmation", "other",
+          "trusted_boundary",
+          "test_only",
+          "generated_code",
+          "build_time_only",
+          "placeholder_secret",
+          "sanitized",
+          "manual_confirmation",
+          "other",
         ]);
         const slot = parseRef(idxArg);
         if (slot < 0 || slot >= flat.length) {
@@ -889,8 +923,10 @@ export async function handleAuditAction(
         }
         let text = tokens.join(" ").trim();
         // Strip surrounding quotes if the user wrapped the note.
-        if ((text.startsWith('"') && text.endsWith('"')) ||
-            (text.startsWith("'") && text.endsWith("'"))) {
+        if (
+          (text.startsWith('"') && text.endsWith('"')) ||
+          (text.startsWith("'") && text.endsWith("'"))
+        ) {
           text = text.slice(1, -1);
         }
         if (!text) {
@@ -942,9 +978,14 @@ export async function handleAuditAction(
         let reason: string | undefined;
         const reasonFlagIdx = tokens.indexOf("--reason");
         if (reasonFlagIdx !== -1) {
-          reason = tokens.slice(reasonFlagIdx + 1).join(" ").trim();
-          if ((reason.startsWith('"') && reason.endsWith('"')) ||
-              (reason.startsWith("'") && reason.endsWith("'"))) {
+          reason = tokens
+            .slice(reasonFlagIdx + 1)
+            .join(" ")
+            .trim();
+          if (
+            (reason.startsWith('"') && reason.endsWith('"')) ||
+            (reason.startsWith("'") && reason.endsWith("'"))
+          ) {
             reason = reason.slice(1, -1);
           }
         }
@@ -1014,9 +1055,10 @@ export async function handleAuditAction(
             `  | ${r.id.padEnd(27)} | ${String(r.sites).padStart(5)} | ${String(r.conf).padStart(9)} | ${String(r.fp).padStart(3)} | ${pct.padStart(12)} |`,
           );
         }
-        const reviewerActions = (audit.findings.length + (audit.false_positives_detail ?? []).length)
-          ? flat.filter((e) => e.item.review_state).length
-          : 0;
+        const reviewerActions =
+          audit.findings.length + (audit.false_positives_detail ?? []).length
+            ? flat.filter((e) => e.item.review_state).length
+            : 0;
         out.push("");
         out.push(`  Total findings reviewed (any state set): ${reviewerActions} of ${flat.length}`);
         return out.join("\n");
@@ -1105,9 +1147,13 @@ export async function handleAuditAction(
               `  Example: /review ${pathToken} keep 1,3`
             );
           }
-          dropLocalIdx = cmd === "keep"
-            ? audit.findings.map((_, i) => i + 1).filter((n) => !parsed.includes(n)).map((n) => n - 1)
-            : parsed.map((n) => n - 1);
+          dropLocalIdx =
+            cmd === "keep"
+              ? audit.findings
+                  .map((_, i) => i + 1)
+                  .filter((n) => !parsed.includes(n))
+                  .map((n) => n - 1)
+              : parsed.map((n) => n - 1);
         }
         // Translate confirmed-local indices to global indices and demote.
         const moved: string[] = [];
@@ -1122,7 +1168,9 @@ export async function handleAuditAction(
             reasoning: `[reviewer demoted via ${cmd}] ${entry.item.verification.reasoning}`,
           };
           entry.bucket = "fp";
-          moved.push(`#${globalIdx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`);
+          moved.push(
+            `#${globalIdx}: ${entry.item.pattern_id} @ ${entry.item.file.replace(projectRoot + "/", "")}:${entry.item.line}`,
+          );
         }
         persist();
         return [
@@ -1236,7 +1284,8 @@ export async function handleAuditAction(
       // Static-only scans produce findings with no verification, and
       // applyFixes should not act on them.
       const unverified = auditResult.findings.filter(
-        (f) => !(f as { verification?: { verdict?: string } }).verification?.verdict ||
+        (f) =>
+          !(f as { verification?: { verdict?: string } }).verification?.verdict ||
           (f as { verification: { verdict: string } }).verification.verdict !== "confirmed",
       );
       if (unverified.length > 0 && unverified.length === auditResult.findings.length) {
@@ -1258,18 +1307,12 @@ export async function handleAuditAction(
       // manual entries get tracked in a separate counter so the
       // summary tells the user what was held back.
       const confirmedFindings = auditResult.findings.filter(
-        (f) =>
-          (f as { verification?: { verdict?: string } }).verification?.verdict ===
-          "confirmed",
+        (f) => (f as { verification?: { verdict?: string } }).verification?.verdict === "confirmed",
       );
       const filteredFindings = safeOnly
-        ? confirmedFindings.filter(
-            (f) => (f as { fix_support?: string }).fix_support === "rewrite",
-          )
+        ? confirmedFindings.filter((f) => (f as { fix_support?: string }).fix_support === "rewrite")
         : confirmedFindings;
-      const heldBackForSafeOnly = safeOnly
-        ? confirmedFindings.length - filteredFindings.length
-        : 0;
+      const heldBackForSafeOnly = safeOnly ? confirmedFindings.length - filteredFindings.length : 0;
       const confirmedOnly = {
         ...auditResult,
         findings: filteredFindings,
@@ -1320,7 +1363,10 @@ export async function handleAuditAction(
       try {
         writeFs2(fixResultPath, JSON.stringify(fixResultPayload, null, 2));
       } catch (err) {
-        log.warn("audit", `failed to write FIX_RESULT.json: ${err instanceof Error ? err.message : String(err)}`);
+        log.warn(
+          "audit",
+          `failed to write FIX_RESULT.json: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
 
       const modeLabel = safeOnly
@@ -1360,9 +1406,7 @@ export async function handleAuditAction(
         if (annotated.length > 10) {
           lines.push(`    ... and ${annotated.length - 10} more`);
         }
-        lines.push(
-          "    (Use `grep -rn audit-note` to list all advisories in the project.)",
-        );
+        lines.push("    (Use `grep -rn audit-note` to list all advisories in the project.)");
       }
 
       if (manual.length > 0) {
@@ -1405,8 +1449,8 @@ export async function handleAuditAction(
       const hint = (() => {
         if (fsExists(pJoin(projectRoot, "package.json"))) {
           // Bun moved from binary bun.lockb to text bun.lock — check both.
-          const hasBun = fsExists(pJoin(projectRoot, "bun.lock")) ||
-            fsExists(pJoin(projectRoot, "bun.lockb"));
+          const hasBun =
+            fsExists(pJoin(projectRoot, "bun.lock")) || fsExists(pJoin(projectRoot, "bun.lockb"));
           if (hasBun) return "bun test";
           if (fsExists(pJoin(projectRoot, "pnpm-lock.yaml"))) return "pnpm test";
           if (fsExists(pJoin(projectRoot, "yarn.lock"))) return "yarn test";
@@ -1414,18 +1458,27 @@ export async function handleAuditAction(
         }
         if (fsExists(pJoin(projectRoot, "Cargo.toml"))) return "cargo test";
         if (fsExists(pJoin(projectRoot, "go.mod"))) return "go test ./...";
-        if (fsExists(pJoin(projectRoot, "pyproject.toml")) || fsExists(pJoin(projectRoot, "setup.py"))) {
+        if (
+          fsExists(pJoin(projectRoot, "pyproject.toml")) ||
+          fsExists(pJoin(projectRoot, "setup.py"))
+        ) {
           return "pytest";
         }
         if (fsExists(pJoin(projectRoot, "Gemfile"))) return "bundle exec rspec";
         if (fsExists(pJoin(projectRoot, "pom.xml"))) return "mvn test";
-        if (fsExists(pJoin(projectRoot, "build.gradle")) || fsExists(pJoin(projectRoot, "build.gradle.kts"))) {
+        if (
+          fsExists(pJoin(projectRoot, "build.gradle")) ||
+          fsExists(pJoin(projectRoot, "build.gradle.kts"))
+        ) {
           return "gradle test";
         }
         if (fsExists(pJoin(projectRoot, "mix.exs"))) return "mix test";
         if (fsExists(pJoin(projectRoot, "build.zig"))) return "zig build test";
         if (fsExists(pJoin(projectRoot, "dune-project"))) return "dune runtest";
-        if (fsExists(pJoin(projectRoot, "stack.yaml")) || fsExists(pJoin(projectRoot, "cabal.project"))) {
+        if (
+          fsExists(pJoin(projectRoot, "stack.yaml")) ||
+          fsExists(pJoin(projectRoot, "cabal.project"))
+        ) {
           return "cabal test";
         }
         if (fsExists(pJoin(projectRoot, "pubspec.yaml"))) return "flutter test";

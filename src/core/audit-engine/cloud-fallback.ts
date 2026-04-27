@@ -37,12 +37,12 @@ async function loadSavedKeys(): Promise<Record<string, string>> {
     const s = (await loadUserSettingsRaw()) as Record<string, unknown>;
     return {
       anthropic: String(s.anthropicApiKey ?? ""),
-      xai:       String(s.xaiApiKey ?? ""),
-      openai:    String(s.apiKey ?? ""),
-      kimi:      String(s.kimiApiKey ?? ""),
-      groq:      String(s.groqApiKey ?? ""),
-      deepseek:  String(s.deepseekApiKey ?? ""),
-      together:  String(s.togetherApiKey ?? ""),
+      xai: String(s.xaiApiKey ?? ""),
+      openai: String(s.apiKey ?? ""),
+      kimi: String(s.kimiApiKey ?? ""),
+      groq: String(s.groqApiKey ?? ""),
+      deepseek: String(s.deepseekApiKey ?? ""),
+      together: String(s.togetherApiKey ?? ""),
     };
   } catch {
     return {};
@@ -53,7 +53,9 @@ async function loadSavedKeys(): Promise<Record<string, string>> {
 function resolveApiKey(baseUrl: string, modelName: string, saved: Record<string, string>): string {
   const url = baseUrl.toLowerCase();
   if (url.includes("anthropic.com")) {
-    return process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_ANTHROPIC_KEY ?? saved.anthropic ?? "";
+    return (
+      process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_ANTHROPIC_KEY ?? saved.anthropic ?? ""
+    );
   }
   if (url.includes("api.x.ai") || modelName.toLowerCase().startsWith("grok")) {
     return process.env.XAI_API_KEY ?? saved.xai ?? "";
@@ -96,7 +98,9 @@ export async function detectAuditModels(currentApiBase?: string): Promise<CloudF
     try {
       const { getClaudeCodeToken } = await import("../auth/claude-code-bridge.js");
       oauthKey = (await getClaudeCodeToken()) ?? "";
-    } catch { /* not available */ }
+    } catch {
+      /* not available */
+    }
 
     const auditModels: AuditCloudModel[] = [];
     for (const m of all) {
@@ -192,4 +196,3 @@ export async function buildCloudFallbackCallback(
     temperature: 0.05,
   });
 }
-

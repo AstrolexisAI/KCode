@@ -9,10 +9,10 @@
 // receive PoolEvent objects as agents spawn, run tools, and finish.
 // The TUI panel uses this to live-update.
 
-import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { EventEmitter } from "node:events";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { NameGenerator } from "./names";
 import { ROLES } from "./roles";
 import type {
@@ -148,11 +148,7 @@ export class AgentPool {
    * Inner runner that invokes the executor and manages lifecycle
    * transitions. Any thrown error becomes an "error" event.
    */
-  private async runAgent(
-    agent: Agent,
-    executor: AgentExecutor,
-    _maxTurns: number,
-  ): Promise<void> {
+  private async runAgent(agent: Agent, executor: AgentExecutor, _maxTurns: number): Promise<void> {
     agent.status = "running";
     try {
       const result = await executor(agent, (event) => {
@@ -422,4 +418,4 @@ export function _resetAgentPoolForTests(): void {
 }
 
 // Re-export types from a single place for convenient imports
-export type { Agent, AgentSpec, AgentGroup, AgentStatus, PoolEvent, PoolStatus };
+export type { Agent, AgentGroup, AgentSpec, AgentStatus, PoolEvent, PoolStatus };

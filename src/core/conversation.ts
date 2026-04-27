@@ -11,25 +11,18 @@ import {
   LoopGuardState,
   MAX_AGENT_TURNS,
 } from "./agent-loop-guards";
+import { type AgentStatus, AutoAgentManager } from "./auto-agents";
 import { getMemoryTitles, runAutoMemoryExtraction } from "./auto-memory/extractor";
 import { parseAutoMemoryConfig } from "./auto-memory/types";
 // getBranchManager moved to conversation-session.ts
 import { estimateContextTokens } from "./context-manager";
+import { autoLaunchDevServerPhase22 } from "./conversation-auto-launch";
 import { replayFromCache } from "./conversation-cache-replay";
 import { runContextMaintenance } from "./conversation-context-maintenance";
 import { handleConsecutiveDenials } from "./conversation-denials";
 import { getEffectiveMaxTurns as _getEffectiveMaxTurns } from "./conversation-effort";
 import { augmentFabricationWarnings as _augmentFabricationWarnings } from "./conversation-fabrication";
 import { handleInlineWarnings } from "./conversation-inline-warnings";
-import { autoLaunchDevServerPhase22 } from "./conversation-auto-launch";
-import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
-import { checkRealityPhase28 } from "./conversation-reality-check";
-import { validateJsonSchemaForTurn } from "./conversation-schema-validation";
-import { acquireSseStream } from "./conversation-stream-acquire";
-import { createStreamingToolExecutor } from "./conversation-streaming-executor-setup";
-import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
-import { recordTurnCost } from "./conversation-turn-cost";
-import { checkAborted, enforceTurnLimit } from "./conversation-turn-limits";
 import {
   checkBudgetLimit,
   detectCheckpointMode,
@@ -37,13 +30,12 @@ import {
   evaluateOutputBudgetHint,
   injectSmartContext,
 } from "./conversation-message-prep";
+import { detectPhantomTypoForTurn } from "./conversation-phantom-typo";
+import { buildErrorRecoveryMessage, runPostEditFeedback } from "./conversation-post-edit-hook";
 import { handlePostTurn, type PostTurnContext } from "./conversation-post-turn";
-import {
-  buildErrorRecoveryMessage,
-  runPostEditFeedback,
-} from "./conversation-post-edit-hook";
 import { runPreTurnChecks } from "./conversation-pre-turn-checks";
-import { runTaskRouting } from "./conversation-task-routing";
+import { checkRealityPhase28 } from "./conversation-reality-check";
+import { validateJsonSchemaForTurn } from "./conversation-schema-validation";
 // routeToModel moved to conversation-retry.ts
 import {
   accumulateUsage as _accumulateUsage,
@@ -51,10 +43,15 @@ import {
   getRecentMessageText as _getRecentMessageText,
   hashString as _hashString,
 } from "./conversation-state";
+import { acquireSseStream } from "./conversation-stream-acquire";
 import { processSSEStream, type StreamAccumulator } from "./conversation-streaming";
+import { createStreamingToolExecutor } from "./conversation-streaming-executor-setup";
+import { runTaskRouting } from "./conversation-task-routing";
+import { recordTranscriptEvent as _recordTranscriptEvent } from "./conversation-transcript";
+import { recordTurnCost } from "./conversation-turn-cost";
+import { checkAborted, enforceTurnLimit } from "./conversation-turn-limits";
 import type { DebugTracer } from "./debug-tracer";
 import { HookManager } from "./hooks";
-import { AutoAgentManager, type AgentStatus } from "./auto-agents";
 import { getIntentionEngine } from "./intentions";
 import { log } from "./logger";
 import { PermissionManager } from "./permissions";
@@ -208,19 +205,22 @@ export class ConversationManager {
       /* module not loaded */
     }
     try {
-      const { clearEditHistory } = require("./file-edit-history") as typeof import("./file-edit-history");
+      const { clearEditHistory } =
+        require("./file-edit-history") as typeof import("./file-edit-history");
       clearEditHistory();
     } catch {
       /* module not loaded */
     }
     try {
-      const { resetAutoLaunchState } = require("./auto-launch-dev-server") as typeof import("./auto-launch-dev-server");
+      const { resetAutoLaunchState } =
+        require("./auto-launch-dev-server") as typeof import("./auto-launch-dev-server");
       resetAutoLaunchState();
     } catch {
       /* module not loaded */
     }
     try {
-      const { resetSessionState } = require("./response-session") as typeof import("./response-session");
+      const { resetSessionState } =
+        require("./response-session") as typeof import("./response-session");
       resetSessionState();
     } catch {
       /* module not loaded */
@@ -430,15 +430,18 @@ export class ConversationManager {
     // wrong repo on drift). Opt-out: KCODE_DISABLE_ORDINAL_RESOLVE=1.
     try {
       if (process.env.KCODE_DISABLE_ORDINAL_RESOLVE !== "1") {
-        const { resolveOrdinal, detectOrdinalReference, hasDestructiveActionIntent, getLastRankedList } =
-          await import("./reference-memory.js");
+        const {
+          resolveOrdinal,
+          detectOrdinalReference,
+          hasDestructiveActionIntent,
+          getLastRankedList,
+        } = await import("./reference-memory.js");
         const hasOrdinal = detectOrdinalReference(userMessage) !== null;
         const isDestructive = hasDestructiveActionIntent(userMessage);
         if (hasOrdinal && isDestructive) {
           const resolved = resolveOrdinal(userMessage);
           if (resolved) {
-            const target =
-              resolved.item.url ?? resolved.item.title;
+            const target = resolved.item.url ?? resolved.item.title;
             const anchor =
               `[kcode] Ordinal anchor: #${resolved.rank} → ${target}. ` +
               `(from recent list "${resolved.listLabel}"). ` +
@@ -703,7 +706,10 @@ export class ConversationManager {
       }
 
       // Sync contextWindowSize from config in case model was switched mid-session (e.g. /model)
-      if (this.config.contextWindowSize && this.config.contextWindowSize !== this.contextWindowSize) {
+      if (
+        this.config.contextWindowSize &&
+        this.config.contextWindowSize !== this.contextWindowSize
+      ) {
         this.contextWindowSize = this.config.contextWindowSize;
       }
 
@@ -803,9 +809,10 @@ export class ConversationManager {
               yield { type: "text_delta" as const, text: result.finalResponse.slice(i, i + 20) };
             }
             assistantContent.push({ type: "text", text: result.finalResponse });
-            const safeFinalResponse = (typeof result.finalResponse === "string" && result.finalResponse.trim().length > 0)
-              ? result.finalResponse
-              : "[ensemble produced no response]";
+            const safeFinalResponse =
+              typeof result.finalResponse === "string" && result.finalResponse.trim().length > 0
+                ? result.finalResponse
+                : "[ensemble produced no response]";
             this.state.messages.push({ role: "assistant", content: safeFinalResponse });
             log.info("ensemble", `Ensemble response via ${result.strategy}: ${result.reasoning}`);
             yield { type: "turn_end", stopReason: "end_turn" };
@@ -888,20 +895,25 @@ export class ConversationManager {
       // inject a placeholder so subsequent API calls don't fail with
       // "Each message must have at least one content element" (400 Bad Request).
       let safeContent: string | ContentBlock[] = assistantContent;
-      const isEmpty = !safeContent ||
+      const isEmpty =
+        !safeContent ||
         (Array.isArray(safeContent) && safeContent.length === 0) ||
-        (Array.isArray(safeContent) && safeContent.every((b) => {
-          if (b.type === "text") return !(b as { text?: string }).text?.trim();
-          return false;
-        })) ||
+        (Array.isArray(safeContent) &&
+          safeContent.every((b) => {
+            if (b.type === "text") return !(b as { text?: string }).text?.trim();
+            return false;
+          })) ||
         (typeof safeContent === "string" && !(safeContent as string).trim());
       if (isEmpty) {
-        safeContent = [{
-          type: "text",
-          text: stopReason === "repetition_aborted"
-            ? "[response aborted due to repetition loop]"
-            : "[empty response]",
-        }];
+        safeContent = [
+          {
+            type: "text",
+            text:
+              stopReason === "repetition_aborted"
+                ? "[response aborted due to repetition loop]"
+                : "[empty response]",
+          },
+        ];
       }
       this.state.messages.push({ role: "assistant", content: safeContent });
 
@@ -1076,10 +1088,11 @@ export class ConversationManager {
               const { isAuditSession } =
                 require("./session-tracker") as typeof import("./session-tracker");
               return isAuditSession();
-            } catch { return false; }
+            } catch {
+              return false;
+            }
           })();
-          const threshold =
-            hasThinkingNow && turnCount === 1 && !isAudit ? 1 : 3;
+          const threshold = hasThinkingNow && turnCount === 1 && !isAudit ? 1 : 3;
           if (guardState.consecutiveTextOnlyTurns >= threshold) {
             const isFirstTurn = turnCount === 1;
             log.warn(
@@ -1095,21 +1108,25 @@ export class ConversationManager {
             // Issue #105.
             const scaffoldWriteStuck = (() => {
               try {
-                const { isMonolithicCreation } =
-                  require("./router") as typeof import("./router");
+                const { isMonolithicCreation } = require("./router") as typeof import("./router");
                 // Find the most recent user-typed prompt
                 let userPrompt = "";
                 for (let i = this.state.messages.length - 1; i >= 0; i--) {
                   const m = this.state.messages[i];
                   if (!m || m.role !== "user") continue;
                   const c = m.content;
-                  if (typeof c === "string" && !c.startsWith("[SYSTEM]") && !c.startsWith("[REALITY")) {
+                  if (
+                    typeof c === "string" &&
+                    !c.startsWith("[SYSTEM]") &&
+                    !c.startsWith("[REALITY")
+                  ) {
                     userPrompt = c;
                     break;
                   }
                   if (Array.isArray(c)) {
-                    const textBlocks = (c as Array<{ type?: string; text?: string }>)
-                      .filter((b) => b?.type === "text" && typeof b.text === "string");
+                    const textBlocks = (c as Array<{ type?: string; text?: string }>).filter(
+                      (b) => b?.type === "text" && typeof b.text === "string",
+                    );
                     if (textBlocks.length > 0) {
                       const joined = textBlocks.map((b) => b.text!).join(" ");
                       if (!joined.startsWith("[SYSTEM]") && !joined.startsWith("[REALITY")) {
@@ -1126,16 +1143,23 @@ export class ConversationManager {
                 for (const m of this.state.messages) {
                   if (m.role === "assistant" && Array.isArray(m.content)) {
                     for (const b of m.content) {
-                      const t = typeof b === "object" && b !== null
-                        ? (b as { type?: unknown }).type
-                        : undefined;
+                      const t =
+                        typeof b === "object" && b !== null
+                          ? (b as { type?: unknown }).type
+                          : undefined;
                       if (t === "tool_use") {
                         const name = String((b as { name?: unknown }).name ?? "");
                         const inp = (b as { input?: unknown }).input;
-                        const cmd = typeof inp === "object" && inp !== null
-                          ? String((inp as { command?: unknown }).command ?? "")
-                          : "";
-                        if (name === "Bash" && /\b(?:mkdir|venv|pip\s+install|npm\s+install|cargo\s+init|git\s+init)\b/.test(cmd)) {
+                        const cmd =
+                          typeof inp === "object" && inp !== null
+                            ? String((inp as { command?: unknown }).command ?? "")
+                            : "";
+                        if (
+                          name === "Bash" &&
+                          /\b(?:mkdir|venv|pip\s+install|npm\s+install|cargo\s+init|git\s+init)\b/.test(
+                            cmd,
+                          )
+                        ) {
                           sawSetup = true;
                         }
                         if (name === "Write" || name === "MultiEdit") {
@@ -1155,9 +1179,10 @@ export class ConversationManager {
               ? Math.round((this.state.tokenCount / this.config.contextWindowSize) * 100)
               : 0;
 
-            const contextWarning = contextPct >= 90
-              ? ` Context is at ${contextPct}% — if the action below doesn't fit, respond with /compact first.`
-              : "";
+            const contextWarning =
+              contextPct >= 90
+                ? ` Context is at ${contextPct}% — if the action below doesn't fit, respond with /compact first.`
+                : "";
 
             // Phase 7: pull currentStep from TaskScope to inject a
             // step-specific directive. Generic "call a tool" doesn't
@@ -1363,7 +1388,8 @@ export class ConversationManager {
       if (filteredToolCalls.length === 0) {
         this.augmentFabricationWarnings(toolResultBlocks, toolCalls);
         this.state.messages.push({ role: "user", content: toolResultBlocks });
-        for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
+        for (const msg of deferredPlanMessages)
+          this.state.messages.push({ role: "user", content: msg });
         continue;
       }
       toolCalls = filteredToolCalls;
@@ -1372,14 +1398,25 @@ export class ConversationManager {
       guardState.consecutiveTextOnlyTurns = 0;
 
       // Track read-only vs write tool calls for reconnaissance loop guard
-      const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "GitLog", "GitStatus"]);
+      const READ_ONLY_TOOLS = new Set([
+        "Read",
+        "Grep",
+        "Glob",
+        "LS",
+        "WebFetch",
+        "WebSearch",
+        "GitLog",
+        "GitStatus",
+      ]);
       const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "GrepReplace", "Rename", "Bash"]);
       const hasWriteCall = toolCalls.some((tc) => WRITE_TOOLS.has(tc.name));
       const hasReadOnlyCall = toolCalls.some((tc) => READ_ONLY_TOOLS.has(tc.name));
       if (hasWriteCall) {
         guardState.readOnlyToolCount = 0;
       } else if (hasReadOnlyCall) {
-        guardState.readOnlyToolCount += toolCalls.filter((tc) => READ_ONLY_TOOLS.has(tc.name)).length;
+        guardState.readOnlyToolCount += toolCalls.filter((tc) =>
+          READ_ONLY_TOOLS.has(tc.name),
+        ).length;
         // Reconnaissance loop: if the model has read 20+ files without writing anything,
         // inject a directive to start implementing. Only for non-audit, coding sessions.
         if (guardState.readOnlyToolCount >= 20) {
@@ -1388,10 +1425,15 @@ export class ConversationManager {
               const { isAuditSession } =
                 require("./session-tracker") as typeof import("./session-tracker");
               return isAuditSession();
-            } catch { return false; }
+            } catch {
+              return false;
+            }
           })();
           if (!isAuditRecon) {
-            log.warn("session", `Reconnaissance loop: ${guardState.readOnlyToolCount} read-only tools without any write — injecting implementation directive`);
+            log.warn(
+              "session",
+              `Reconnaissance loop: ${guardState.readOnlyToolCount} read-only tools without any write — injecting implementation directive`,
+            );
             this.state.messages.push({
               role: "user",
               content:
@@ -1437,7 +1479,8 @@ export class ConversationManager {
         toolResultBlocks.push(...parallelResults);
         this.augmentFabricationWarnings(toolResultBlocks, toolCalls);
         this.state.messages.push({ role: "user", content: toolResultBlocks });
-        for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
+        for (const msg of deferredPlanMessages)
+          this.state.messages.push({ role: "user", content: msg });
         continue;
       }
 
@@ -1493,11 +1536,12 @@ export class ConversationManager {
         const { detectBadKeyError } = await import("./request-builder.js");
         for (const block of toolResultBlocks) {
           if (block.type !== "tool_result" || !block.is_error) continue;
-          const text = typeof block.content === "string"
-            ? block.content
-            : Array.isArray(block.content)
-              ? (block.content as Array<{ text?: string }>).map((b) => b.text ?? "").join(" ")
-              : "";
+          const text =
+            typeof block.content === "string"
+              ? block.content
+              : Array.isArray(block.content)
+                ? (block.content as Array<{ text?: string }>).map((b) => b.text ?? "").join(" ")
+                : "";
           const keyErr = detectBadKeyError(400, text) ?? detectBadKeyError(401, text);
           if (keyErr) {
             yield {
@@ -1553,8 +1597,9 @@ export class ConversationManager {
             this.config.workingDirectory ?? process.cwd(),
             {
               runTests: true,
-              runBuild: (this.config as KCodeConfig & { postEditTypeCheck?: boolean })
-                .postEditTypeCheck === true,
+              runBuild:
+                (this.config as KCodeConfig & { postEditTypeCheck?: boolean }).postEditTypeCheck ===
+                true,
             },
           );
           if (feedback) {
@@ -1564,7 +1609,8 @@ export class ConversationManager {
         }
       }
 
-      for (const msg of deferredPlanMessages) this.state.messages.push({ role: "user", content: msg });
+      for (const msg of deferredPlanMessages)
+        this.state.messages.push({ role: "user", content: msg });
 
       // Auto-agent evaluation: if a Plan was just created/updated with many pending steps,
       // spawn background agents to work on them in parallel
@@ -1589,22 +1635,31 @@ export class ConversationManager {
               .map((m) => (m.content as string).slice(0, 200))
               .join("\n");
             // Fire and forget — agents run in background
-            mgr.spawn(steps, contextSummary).then(() => {
-              // When agents complete, inject results into next turn
-              const results = mgr.getResults();
-              if (results.length > 0) {
-                const summary = results
-                  .map((r) => `[Agent result for step "${r.stepTitle}"]:\n${r.output.slice(0, 1000)}`)
-                  .join("\n\n");
-                this.state.messages.push({
-                  role: "user",
-                  content: `[SYSTEM] ${results.length} background agents completed:\n\n${summary}\n\nUpdate the plan to mark these steps as done.`,
-                });
-                log.info("auto-agents", `Injected ${results.length} agent results into conversation`);
-              }
-            }).catch((err) => {
-              log.warn("auto-agents", `Auto-agent spawn failed: ${err}`);
-            });
+            mgr
+              .spawn(steps, contextSummary)
+              .then(() => {
+                // When agents complete, inject results into next turn
+                const results = mgr.getResults();
+                if (results.length > 0) {
+                  const summary = results
+                    .map(
+                      (r) =>
+                        `[Agent result for step "${r.stepTitle}"]:\n${r.output.slice(0, 1000)}`,
+                    )
+                    .join("\n\n");
+                  this.state.messages.push({
+                    role: "user",
+                    content: `[SYSTEM] ${results.length} background agents completed:\n\n${summary}\n\nUpdate the plan to mark these steps as done.`,
+                  });
+                  log.info(
+                    "auto-agents",
+                    `Injected ${results.length} agent results into conversation`,
+                  );
+                }
+              })
+              .catch((err) => {
+                log.warn("auto-agents", `Auto-agent spawn failed: ${err}`);
+              });
             log.info("auto-agents", `Auto-spawned ${steps.length} agents for plan steps`);
           }
         } catch (err) {
@@ -1787,9 +1842,7 @@ export class ConversationManager {
     try {
       const { getModelPricing, calculateCost } = await import("./pricing.js");
       const pricing = await getModelPricing(args.model);
-      const costUsd = pricing
-        ? calculateCost(pricing, args.inputTokens, args.outputTokens)
-        : 0;
+      const costUsd = pricing ? calculateCost(pricing, args.inputTokens, args.outputTokens) : 0;
       this.turnCosts.push({
         turnIndex: this.turnCosts.length + 1,
         model: args.model,
@@ -1807,7 +1860,9 @@ export class ConversationManager {
         try {
           const { recordSpend } = await import("./balance/index.js");
           await recordSpend(args.model, this.config.apiBase, costUsd);
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
       }
     } catch {
       /* pricing module failed — silent */

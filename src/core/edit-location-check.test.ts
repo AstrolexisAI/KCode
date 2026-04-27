@@ -43,27 +43,20 @@ describe("extractLocationHints", () => {
   });
 
   test("extracts backtick-quoted identifiers", () => {
-    const hints = extractLocationHints([
-      "`updateMarsChartWithRealData` is broken",
-    ]);
+    const hints = extractLocationHints(["`updateMarsChartWithRealData` is broken"]);
     const names = hints.symbolHints.map((h) => h.value);
     expect(names).toContain("updateMarsChartWithRealData");
   });
 
   test("filters generic identifiers from quoted names", () => {
-    const hints = extractLocationHints([
-      "`data` is undefined",
-      "`error` should be null",
-    ]);
+    const hints = extractLocationHints(["`data` is undefined", "`error` should be null"]);
     const names = hints.symbolHints.map((h) => h.value);
     expect(names).not.toContain("data");
     expect(names).not.toContain("error");
   });
 
   test("extracts file paths", () => {
-    const hints = extractLocationHints([
-      "check orbital.html and server.js for the bug",
-    ]);
+    const hints = extractLocationHints(["check orbital.html and server.js for the bug"]);
     expect(hints.fileHints).toContain("orbital.html");
     expect(hints.fileHints).toContain("server.js");
   });
@@ -81,26 +74,20 @@ describe("extractLocationHints", () => {
   });
 
   test("ignores React.js, Vue.js, jQuery, etc. from blocklist", () => {
-    const hints = extractLocationHints([
-      "build it with react.js and jquery.js, avoid vue.js",
-    ]);
+    const hints = extractLocationHints(["build it with react.js and jquery.js, avoid vue.js"]);
     expect(hints.fileHints).not.toContain("react.js");
     expect(hints.fileHints).not.toContain("jquery.js");
     expect(hints.fileHints).not.toContain("vue.js");
   });
 
   test("ignores library mentions with 'via CDN' context even if not in blocklist", () => {
-    const hints = extractLocationHints([
-      "load some-obscure-lib.js via CDN from unpkg",
-    ]);
+    const hints = extractLocationHints(["load some-obscure-lib.js via CDN from unpkg"]);
     expect(hints.fileHints).not.toContain("some-obscure-lib.js");
   });
 
   test("DOES treat path-prefixed mentions as real files even if name matches a library", () => {
     // `./chart.js` or `src/chart.js` are user's own files — not CDN
-    const hints = extractLocationHints([
-      "the bug is in src/chart.js line 42",
-    ]);
+    const hints = extractLocationHints(["the bug is in src/chart.js line 42"]);
     expect(hints.fileHints.some((f) => f.endsWith("chart.js"))).toBe(true);
   });
 
@@ -141,9 +128,7 @@ describe("extractLocationHints", () => {
   });
 
   test("still keeps quoted identifiers with ≥6 chars (Dashboard, renderChart)", () => {
-    const hints = extractLocationHints([
-      '`Dashboard` and "renderChart" are broken',
-    ]);
+    const hints = extractLocationHints(['`Dashboard` and "renderChart" are broken']);
     const names = hints.symbolHints.map((h) => h.value);
     expect(names).toContain("Dashboard");
     expect(names).toContain("renderChart");
@@ -155,29 +140,19 @@ describe("extractLocationHints", () => {
     // Previously was captured as a bare long identifier and fired
     // location mismatches on every Edit near the input element.
     const nasaKey = "MggS1tgGe29s9KTnR10fCPanURyxOy3QkDpHZsO0";
-    const hints = extractLocationHints([
-      `esta es la api de la nasa: ${nasaKey}`,
-    ]);
+    const hints = extractLocationHints([`esta es la api de la nasa: ${nasaKey}`]);
     expect(hints.symbolHints.map((h) => h.value)).not.toContain(nasaKey);
   });
 
   test("still keeps bare long identifiers with few digits (updateMarsChartWithRealData)", () => {
-    const hints = extractLocationHints([
-      "updateMarsChartWithRealData is broken",
-    ]);
-    expect(hints.symbolHints.map((h) => h.value)).toContain(
-      "updateMarsChartWithRealData",
-    );
+    const hints = extractLocationHints(["updateMarsChartWithRealData is broken"]);
+    expect(hints.symbolHints.map((h) => h.value)).toContain("updateMarsChartWithRealData");
   });
 
   test("keeps legit identifiers that happen to contain a single digit (render3DScene)", () => {
     // 1/14 = 7% digit ratio, below 15% threshold
-    const hints = extractLocationHints([
-      "the bug is in render3DSceneAsync",
-    ]);
-    expect(hints.symbolHints.map((h) => h.value)).toContain(
-      "render3DSceneAsync",
-    );
+    const hints = extractLocationHints(["the bug is in render3DSceneAsync"]);
+    expect(hints.symbolHints.map((h) => h.value)).toContain("render3DSceneAsync");
   });
 
   test("ignores hex hashes and UUIDs (≥20 chars with digit heavy)", () => {
@@ -187,9 +162,7 @@ describe("extractLocationHints", () => {
     ]);
     const names = hints.symbolHints.map((h) => h.value);
     // These high-digit tokens should not be treated as symbols
-    expect(
-      names.some((n) => n.includes("5f3e2a") || n.includes("550e8400")),
-    ).toBe(false);
+    expect(names.some((n) => n.includes("5f3e2a") || n.includes("550e8400"))).toBe(false);
   });
 
   test("respects lookback window", () => {
@@ -292,16 +265,9 @@ describe("checkEditLocationMismatch — Orbital chart scenario", () => {
   });
 
   test("does NOT flag edit near mentioned symbol", () => {
-    const hints = extractLocationHints([
-      "updateMarsChartWithRealData is broken",
-    ]);
+    const hints = extractLocationHints(["updateMarsChartWithRealData is broken"]);
     // Function is at line ~202, edit at line 205 — within 30-line window
-    const verdict = checkEditLocationMismatch(
-      hints,
-      205,
-      "/tmp/orbital.html",
-      fileContent,
-    );
+    const verdict = checkEditLocationMismatch(hints, 205, "/tmp/orbital.html", fileContent);
     expect(verdict.isMismatch).toBe(false);
   });
 });
@@ -335,9 +301,7 @@ describe("checkEditLocationMismatch — line number mismatches", () => {
     // When the user mentions multiple line ranges, landing near ONE
     // of them is enough to satisfy the intent — we don't warn just
     // because the other hints weren't targeted.
-    const hints = extractLocationHints([
-      "check lines 100 and line 500 for bugs",
-    ]);
+    const hints = extractLocationHints(["check lines 100 and line 500 for bugs"]);
     const verdict = checkEditLocationMismatch(
       hints,
       105, // close to 100
@@ -348,9 +312,7 @@ describe("checkEditLocationMismatch — line number mismatches", () => {
   });
 
   test("fires when edit is far from every mentioned line", () => {
-    const hints = extractLocationHints([
-      "the bug is at line 100 and line 500",
-    ]);
+    const hints = extractLocationHints(["the bug is at line 100 and line 500"]);
     const verdict = checkEditLocationMismatch(
       hints,
       10, // 90+ away from both
@@ -363,9 +325,7 @@ describe("checkEditLocationMismatch — line number mismatches", () => {
 
 describe("checkEditLocationMismatch — file mismatches", () => {
   test("flags single-file mismatch", () => {
-    const hints = extractLocationHints([
-      "the bug is in server.js line 42",
-    ]);
+    const hints = extractLocationHints(["the bug is in server.js line 42"]);
     const verdict = checkEditLocationMismatch(
       hints,
       42,
@@ -379,22 +339,13 @@ describe("checkEditLocationMismatch — file mismatches", () => {
   });
 
   test("does not flag when editing the mentioned file", () => {
-    const hints = extractLocationHints([
-      "check orbital.html line 42",
-    ]);
-    const verdict = checkEditLocationMismatch(
-      hints,
-      42,
-      "/tmp/orbital.html",
-      "//".repeat(100),
-    );
+    const hints = extractLocationHints(["check orbital.html line 42"]);
+    const verdict = checkEditLocationMismatch(hints, 42, "/tmp/orbital.html", "//".repeat(100));
     expect(verdict.isMismatch).toBe(false);
   });
 
   test("does not flag when user mentioned multiple files (ambiguous)", () => {
-    const hints = extractLocationHints([
-      "check orbital.html, server.js, and package.json",
-    ]);
+    const hints = extractLocationHints(["check orbital.html, server.js, and package.json"]);
     const verdict = checkEditLocationMismatch(
       hints,
       42,
@@ -409,25 +360,13 @@ describe("checkEditLocationMismatch — file mismatches", () => {
 describe("checkEditLocationMismatch — negative cases", () => {
   test("returns no mismatch when there are no hints at all", () => {
     const hints = extractLocationHints(["fix the bug"]);
-    const verdict = checkEditLocationMismatch(
-      hints,
-      42,
-      "/tmp/app.ts",
-      "content",
-    );
+    const verdict = checkEditLocationMismatch(hints, 42, "/tmp/app.ts", "content");
     expect(verdict.isMismatch).toBe(false);
   });
 
   test("returns no mismatch when symbol isn't in the file", () => {
-    const hints = extractLocationHints([
-      "broken in mysteriousUnknownFunction",
-    ]);
-    const verdict = checkEditLocationMismatch(
-      hints,
-      42,
-      "/tmp/app.ts",
-      "// no symbols here",
-    );
+    const hints = extractLocationHints(["broken in mysteriousUnknownFunction"]);
+    const verdict = checkEditLocationMismatch(hints, 42, "/tmp/app.ts", "// no symbols here");
     expect(verdict.isMismatch).toBe(false);
   });
 });
@@ -469,9 +408,27 @@ describe("buildLocationWarning", () => {
       editLine: 10,
       unmatchedLineHints: [],
       unmatchedSymbolHints: [
-        { kind: "symbol" as const, value: "first", phrase: "first", messageIndex: 0, symbolLine: 100 },
-        { kind: "symbol" as const, value: "second", phrase: "second", messageIndex: 0, symbolLine: 200 },
-        { kind: "symbol" as const, value: "third", phrase: "third", messageIndex: 0, symbolLine: 300 },
+        {
+          kind: "symbol" as const,
+          value: "first",
+          phrase: "first",
+          messageIndex: 0,
+          symbolLine: 100,
+        },
+        {
+          kind: "symbol" as const,
+          value: "second",
+          phrase: "second",
+          messageIndex: 0,
+          symbolLine: 200,
+        },
+        {
+          kind: "symbol" as const,
+          value: "third",
+          phrase: "third",
+          messageIndex: 0,
+          symbolLine: 300,
+        },
       ],
       fileMismatch: null,
       reason: 'User mentioned "first" (at line 100) but Edit is ~90 lines away (at line 10).',

@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createCppProject } from "./cpp-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createCppProject } from "./cpp-engine";
 
 describe("cpp-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-cpp-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates library project", () => {
@@ -57,7 +61,7 @@ describe("cpp-engine", () => {
   test("has CI and Dockerfile", () => {
     withTmp((dir) => {
       const r = createCppProject("server app", dir);
-      expect(r.files.some(f => f.path.includes("ci.yml"))).toBe(true);
+      expect(r.files.some((f) => f.path.includes("ci.yml"))).toBe(true);
     });
   });
 });

@@ -246,10 +246,7 @@ function stripQuotedStrings(command: string): string {
  */
 function stripSingleQuotedHeredocs(command: string): string {
   // Match <<'DELIM' or <<-'DELIM' up to a line containing just DELIM
-  return command.replace(
-    /<<-?\s*'([A-Za-z_][A-Za-z0-9_]*)'[\s\S]*?^\s*\1\s*$/gm,
-    "<<''",
-  );
+  return command.replace(/<<-?\s*'([A-Za-z_][A-Za-z0-9_]*)'[\s\S]*?^\s*\1\s*$/gm, "<<''");
 }
 
 /**
@@ -478,9 +475,7 @@ export function validateFileWritePath(
   // All downstream checks (sensitive dirs, symlink traversal, working
   // directory bounds) still apply after resolution, so the relaxation
   // does not weaken security — it just makes the tool accept the common case.
-  let resolved = isAbsolute(filePath)
-    ? resolve(filePath)
-    : resolve(workingDirectory, filePath);
+  let resolved = isAbsolute(filePath) ? resolve(filePath) : resolve(workingDirectory, filePath);
 
   // Resolve symlinks to prevent directory traversal via symlink chains
   try {

@@ -253,7 +253,8 @@ const PATTERN_REGISTRY: DangerousPattern[] = [
     category: "destruction",
     severity: "critical",
     pattern: /\bgit\s+reflog\s+expire\s+--expire=now\b|\bgit\s+gc\s+--prune=now\b/,
-    description: "git reflog/gc with --expire=now or --prune=now — eliminates the safety net for recovering lost commits",
+    description:
+      "git reflog/gc with --expire=now or --prune=now — eliminates the safety net for recovering lost commits",
     remediation: "This is the LAST step of intentional secret removal — never run by default",
   },
   {
@@ -274,14 +275,17 @@ const PATTERN_REGISTRY: DangerousPattern[] = [
     severity: "critical",
     pattern: /\bvolumeDelete\b|\bdeleteVolume\b/,
     description: "Railway/cloud volumeDelete mutation — IRREVERSIBLE storage destruction",
-    remediation: "Volume deletion is the exact shape of the 2026 PocketOS incident. Never invoke without explicit human confirmation.",
+    remediation:
+      "Volume deletion is the exact shape of the 2026 PocketOS incident. Never invoke without explicit human confirmation.",
   },
   {
     id: "destr-cloud-kubectl-delete",
     category: "destruction",
     severity: "critical",
-    pattern: /\bkubectl\s+delete\s+(?:namespace|ns|pv|pvc|deployment|deploy|sts|statefulset|all|--all\b)/,
-    description: "kubectl delete on namespace/PV/PVC/deployment/statefulset/all — destroys cluster state",
+    pattern:
+      /\bkubectl\s+delete\s+(?:namespace|ns|pv|pvc|deployment|deploy|sts|statefulset|all|--all\b)/,
+    description:
+      "kubectl delete on namespace/PV/PVC/deployment/statefulset/all — destroys cluster state",
     remediation: "Run with --dry-run=server first; ensure backups exist for stateful resources",
   },
   {
@@ -328,7 +332,8 @@ const PATTERN_REGISTRY: DangerousPattern[] = [
     id: "destr-cloud-gcloud-delete",
     category: "destruction",
     severity: "critical",
-    pattern: /\bgcloud\s+(?:compute\s+(?:instances|disks)\s+delete|sql\s+instances\s+delete|projects\s+delete)\b/,
+    pattern:
+      /\bgcloud\s+(?:compute\s+(?:instances|disks)\s+delete|sql\s+instances\s+delete|projects\s+delete)\b/,
     description: "gcloud compute/sql/projects delete — production resource destruction",
     remediation: "Verify resource is not in production traffic path; ensure snapshots",
   },
@@ -350,16 +355,21 @@ const PATTERN_REGISTRY: DangerousPattern[] = [
     id: "destr-graphql-delete-mutation",
     category: "destruction",
     severity: "danger",
-    pattern: /\bcurl\s+[^|;&\n]*-X\s+(?:POST|DELETE)[^|;&\n]*\b(?:delete|destroy|drop|terminate|wipe|purge|remove)[A-Z]\w+/,
-    description: "HTTP API call invoking a destructive mutation by name (delete*/destroy*/drop*/terminate*/wipe*)",
-    remediation: "Confirm the destructive remote API call with the user; check that the API token is scoped",
+    pattern:
+      /\bcurl\s+[^|;&\n]*-X\s+(?:POST|DELETE)[^|;&\n]*\b(?:delete|destroy|drop|terminate|wipe|purge|remove)[A-Z]\w+/,
+    description:
+      "HTTP API call invoking a destructive mutation by name (delete*/destroy*/drop*/terminate*/wipe*)",
+    remediation:
+      "Confirm the destructive remote API call with the user; check that the API token is scoped",
   },
   {
     id: "destr-database-drop",
     category: "destruction",
     severity: "critical",
-    pattern: /\b(?:psql|mysql|mongo|mongosh|redis-cli|sqlite3)\s+[^|;&\n]*\b(?:DROP\s+(?:DATABASE|TABLE|SCHEMA)|TRUNCATE\s+TABLE|FLUSHALL|FLUSHDB|drop\(\))/i,
-    description: "Database client invoking DROP DATABASE/TABLE/SCHEMA, TRUNCATE, FLUSHALL, or .drop()",
+    pattern:
+      /\b(?:psql|mysql|mongo|mongosh|redis-cli|sqlite3)\s+[^|;&\n]*\b(?:DROP\s+(?:DATABASE|TABLE|SCHEMA)|TRUNCATE\s+TABLE|FLUSHALL|FLUSHDB|drop\(\))/i,
+    description:
+      "Database client invoking DROP DATABASE/TABLE/SCHEMA, TRUNCATE, FLUSHALL, or .drop()",
     remediation: "Confirm with user; verify backup exists; run on staging first",
   },
   {
@@ -367,7 +377,8 @@ const PATTERN_REGISTRY: DangerousPattern[] = [
     category: "destruction",
     severity: "danger",
     pattern: /\bdocker\s+(?:system\s+prune\s+(?:-a|--all)|volume\s+prune\s+(?:-a|--all|--force))\b/,
-    description: "docker system/volume prune --all — deletes unused images, containers, volumes (data loss for unmounted volumes)",
+    description:
+      "docker system/volume prune --all — deletes unused images, containers, volumes (data loss for unmounted volumes)",
   },
 
   // Network/system

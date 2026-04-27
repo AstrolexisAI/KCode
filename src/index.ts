@@ -548,9 +548,13 @@ async function runMain(
         console.log(`\n\x1b[33m⚠ ${startup.message}\x1b[0m\n`);
         console.log("  Available cloud providers:");
         for (const p of providers) {
-          console.log(`    ${p.configured ? "\x1b[32m✓\x1b[0m" : "\x1b[2m○\x1b[0m"} ${p.name} ${p.configured ? "(configured)" : `(set ${p.envVar})`}`);
+          console.log(
+            `    ${p.configured ? "\x1b[32m✓\x1b[0m" : "\x1b[2m○\x1b[0m"} ${p.name} ${p.configured ? "(configured)" : `(set ${p.envVar})`}`,
+          );
         }
-        console.log(`\n  Run \x1b[1mkcode setup\x1b[0m or \x1b[1m/cloud\x1b[0m inside KCode to configure.\n`);
+        console.log(
+          `\n  Run \x1b[1mkcode setup\x1b[0m or \x1b[1m/cloud\x1b[0m inside KCode to configure.\n`,
+        );
         // Don't exit — let it fall through to setup wizard or TUI
       } else if (startup.mode === "cloud" && startup.message) {
         process.stderr.write(`\x1b[36mℹ\x1b[0m ${startup.message}\n`);
@@ -570,8 +574,7 @@ async function runMain(
         const { getModelBaseUrl, getModelProvider, getDefaultModel } = await import(
           "./core/models"
         );
-        const modelName =
-          opts.model || process.env.KCODE_MODEL || (await getDefaultModel()) || "";
+        const modelName = opts.model || process.env.KCODE_MODEL || (await getDefaultModel()) || "";
         const modelBase = await getModelBaseUrl(modelName);
         const provider = await getModelProvider(modelName);
         // If the model has a non-default baseUrl or a non-openai provider, it's external
@@ -701,12 +704,14 @@ async function runMain(
           }
         } else {
           // Model failed to load — suggest cloud fallback
-          console.error(
-            `\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s.\x1b[0m`,
-          );
+          console.error(`\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s.\x1b[0m`);
           console.error(`  Check: \x1b[2m~/.kcode/server.log\x1b[0m`);
-          console.error(`\n  \x1b[33mTip:\x1b[0m If your hardware can't run local models, use cloud inference:`);
-          console.error(`  Run \x1b[1mkcode setup\x1b[0m or use \x1b[1m/cloud\x1b[0m to configure Anthropic, OpenAI, or other providers.\n`);
+          console.error(
+            `\n  \x1b[33mTip:\x1b[0m If your hardware can't run local models, use cloud inference:`,
+          );
+          console.error(
+            `  Run \x1b[1mkcode setup\x1b[0m or use \x1b[1m/cloud\x1b[0m to configure Anthropic, OpenAI, or other providers.\n`,
+          );
           process.exit(1);
         }
       } // close else (local llama.cpp server management)
@@ -1533,7 +1538,9 @@ async function runMain(
       sessionId: conversationManager.getSessionId(),
       version: VERSION,
     });
-  } catch { /* non-fatal */ }
+  } catch {
+    /* non-fatal */
+  }
 
   // Interactive mode: start the Ink-based terminal UI
   profileCheckpoint("ui_rendering");
@@ -1552,7 +1559,9 @@ async function runMain(
       sessionId: conversationManager.getSessionId(),
       totalTurns: conversationManager.getState().toolUseCount,
     });
-  } catch { /* non-fatal */ }
+  } catch {
+    /* non-fatal */
+  }
 
   log.info("session", "Session ended");
   await lazyShutdownLsp();
@@ -1571,8 +1580,9 @@ async function runNonInteractive(
 
   // Apply multi-model routing in non-interactive mode too
   try {
-    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
-      await import("./core/router.js");
+    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } = await import(
+      "./core/router.js"
+    );
     if (isMultimodelEnabled()) {
       const taskType = classifyBenchmarkTask(prompt);
       const cfg = conversationManager.getConfig();

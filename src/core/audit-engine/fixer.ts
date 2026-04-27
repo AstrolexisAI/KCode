@@ -5,8 +5,8 @@
 //
 // Flow: read finding → read source file → apply fix rule → write file
 
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import type { AuditResult, Finding } from "./types";
 
 /**
@@ -30,7 +30,11 @@ function atomicWriteFileSync(targetPath: string, content: string): void {
     // Best-effort cleanup of the temp file if the rename failed. We
     // swallow errors from unlinkSync because the temp file may not
     // exist (writeFileSync itself may have thrown before creating it).
-    try { unlinkSync(tmp); } catch { /* ignore */ }
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
     throw err;
   }
 }
@@ -261,7 +265,12 @@ function fixPointerArithmetic(lines: string[], finding: Finding): OneFixResult {
   const re = /\(\s*&\s*(\w+)\s*\)\s*\[\s*(\w+)\s*\]/;
   const m = line.match(re);
   if (!m) {
-    return { applied: false, kind: "skipped", lines, description: "Pattern not found on this line" };
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "Pattern not found on this line",
+    };
   }
 
   const varName = m[1];
@@ -294,8 +303,10 @@ function fixUnreachableCode(lines: string[], finding: Finding): OneFixResult {
     const curr = lines[i]!.trim();
     const next = lines[i + 1]?.trim() ?? "";
     if (
-      (curr.startsWith("return ") || curr.startsWith("throw ") ||
-       curr === "continue;" || curr === "break;") &&
+      (curr.startsWith("return ") ||
+        curr.startsWith("throw ") ||
+        curr === "continue;" ||
+        curr === "break;") &&
       curr.endsWith(";") &&
       next.length > 0 &&
       !next.startsWith("//") &&
@@ -318,7 +329,12 @@ function fixUnreachableCode(lines: string[], finding: Finding): OneFixResult {
     }
   }
 
-  return { applied: false, kind: "skipped", lines, description: "Could not locate return+unreachable pair" };
+  return {
+    applied: false,
+    kind: "skipped",
+    lines,
+    description: "Could not locate return+unreachable pair",
+  };
 }
 
 /**
@@ -351,7 +367,12 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
     }
   }
   if (funcStart < 0) {
-    return { applied: false, kind: "skipped", lines, description: "Could not find decode() function" };
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "Could not find decode() function",
+    };
   }
 
   // Find the opening brace
@@ -382,7 +403,10 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
   let funcEnd = lines.length - 1;
   for (let i = braceIdx; i < lines.length; i++) {
     for (const ch of lines[i]!) {
-      if (ch === "{") { depth++; seenOpen = true; }
+      if (ch === "{") {
+        depth++;
+        seenOpen = true;
+      }
       if (ch === "}") depth--;
       if (seenOpen && depth === 0) {
         funcEnd = i;
@@ -402,7 +426,12 @@ function fixUncheckedDataIndex(lines: string[], finding: Finding): OneFixResult 
   }
 
   if (maxIndex === 0) {
-    return { applied: false, kind: "skipped", lines, description: "No data[N] access found in function" };
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "No data[N] access found in function",
+    };
   }
 
   // Determine indentation from the line after the brace
@@ -461,7 +490,12 @@ function fixFdLeakThrow(lines: string[], finding: Finding): OneFixResult {
     }
   }
 
-  return { applied: false, kind: "skipped", lines, description: "Could not find throw without preceding close()" };
+  return {
+    applied: false,
+    kind: "skipped",
+    lines,
+    description: "Could not find throw without preceding close()",
+  };
 }
 
 /**
@@ -486,7 +520,12 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
     // Replace the entire strcpy(...) call using the exact matched text
     const fullMatch = strcpyMatch[0];
     result[idx] = line.replace(fullMatch, `strncpy(${dst}, ${src}, ${len})`);
-    return { applied: true, kind: "transformed", lines: result, description: `strcpy → strncpy (${src}, ${len} bytes)` };
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: `strcpy → strncpy (${src}, ${len} bytes)`,
+    };
   }
 
   // strcat(dst, "literal") → strncat(dst, "literal", len)
@@ -495,29 +534,38 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
     const dst = strcatMatch[1]!.trim();
     const src = strcatMatch[2]!;
     const len = src.length - 2;
-    result[idx] = line.replace(
-      /\bstrcat\s*\([^)]+\)/,
-      `strncat(${dst}, ${src}, ${len})`,
-    );
-    return { applied: true, kind: "transformed", lines: result, description: `strcat → strncat (${src}, ${len} chars)` };
+    result[idx] = line.replace(/\bstrcat\s*\([^)]+\)/, `strncat(${dst}, ${src}, ${len})`);
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: `strcat → strncat (${src}, ${len} chars)`,
+    };
   }
 
   // sprintf(dst, "fmt", ...) → snprintf(dst, sizeof(dst), "fmt", ...)
   const sprintfMatch = line.match(/\bsprintf\s*\(\s*(\w+)\s*,/);
   if (sprintfMatch) {
     const dst = sprintfMatch[1]!;
-    result[idx] = line.replace(
-      /\bsprintf\s*\(/,
-      `snprintf(${dst}, sizeof(${dst}), `,
-    ).replace(
+    result[idx] = line.replace(/\bsprintf\s*\(/, `snprintf(${dst}, sizeof(${dst}), `).replace(
       // Remove duplicate first arg since snprintf already has it
       new RegExp(`snprintf\\(${dst}, sizeof\\(${dst}\\), ${dst},`),
       `snprintf(${dst}, sizeof(${dst}),`,
     );
-    return { applied: true, kind: "transformed", lines: result, description: `sprintf → snprintf(${dst}, sizeof(${dst}), ...)` };
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: `sprintf → snprintf(${dst}, sizeof(${dst}), ...)`,
+    };
   }
 
-  return { applied: false, kind: "skipped", lines, description: "Non-literal source — manual fix needed" };
+  return {
+    applied: false,
+    kind: "skipped",
+    lines,
+    description: "Non-literal source — manual fix needed",
+  };
 }
 
 // ── Python auto-fixes ─────────────────────────────────────────
@@ -527,7 +575,8 @@ function fixStrcpyFamily(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length)
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const result = [...lines];
 
@@ -535,34 +584,71 @@ function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
   const osSystemMatch = line.match(/\bos\.system\s*\(\s*(.+)\s*\)/);
   if (osSystemMatch) {
     const cmd = osSystemMatch[1]!.trim();
-    result[idx] = line.replace(/os\.system\s*\([^)]+\)/, `subprocess.run(${cmd}, shell=False)  # FIXED: was os.system`);
-    return { applied: true, kind: "transformed", lines: result, description: "os.system → subprocess.run(shell=False)" };
+    result[idx] = line.replace(
+      /os\.system\s*\([^)]+\)/,
+      `subprocess.run(${cmd}, shell=False)  # FIXED: was os.system`,
+    );
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "os.system → subprocess.run(shell=False)",
+    };
   }
 
   // subprocess.call(..., shell=True) → shell=False
   if (line.includes("shell=True") || line.includes("shell = True")) {
     result[idx] = line.replace(/shell\s*=\s*True/g, "shell=False  # FIXED: was shell=True");
-    return { applied: true, kind: "transformed", lines: result, description: "shell=True → shell=False" };
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "shell=True → shell=False",
+    };
   }
 
   // subprocess with f-string → add comment warning
   if (line.match(/subprocess\.\w+\s*\(\s*f["']/)) {
     const indent = line.match(/^(\s*)/)?.[1] ?? "";
-    result.splice(idx, 0, `${indent}# SECURITY: Use list args instead of f-string to prevent injection`);
-    return { applied: true, kind: "transformed", lines: result, description: "Added security warning for f-string in subprocess" };
+    result.splice(
+      idx,
+      0,
+      `${indent}# SECURITY: Use list args instead of f-string to prevent injection`,
+    );
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "Added security warning for f-string in subprocess",
+    };
   }
 
   // List args with f-strings/format — add input validation warning
-  if (line.match(/subprocess\.\w+\s*\(\s*\[/) && (line.includes("f'") || line.includes('f"') || line.includes(".format("))) {
+  if (
+    line.match(/subprocess\.\w+\s*\(\s*\[/) &&
+    (line.includes("f'") || line.includes('f"') || line.includes(".format("))
+  ) {
     const indent = line.match(/^(\s*)/)?.[1] ?? "";
-    result.splice(idx, 0,
+    result.splice(
+      idx,
+      0,
       `${indent}# SECURITY: Validate user-controlled args before passing to subprocess`,
       `${indent}# Sanitize: strip shell metacharacters, validate expected format`,
     );
-    return { applied: true, kind: "transformed", lines: result, description: "Added input validation warning for subprocess args" };
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "Added input validation warning for subprocess args",
+    };
   }
 
-  return { applied: false, kind: "skipped", lines, description: "Complex shell injection — manual fix needed" };
+  return {
+    applied: false,
+    kind: "skipped",
+    lines,
+    description: "Complex shell injection — manual fix needed",
+  };
 }
 
 /**
@@ -570,17 +656,25 @@ function fixPyShellInjection(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyPathTraversal(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length)
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const indent = line.match(/^(\s*)/)?.[1] ?? "";
   const result = [...lines];
 
   // Insert os.path validation before the open() call
-  result.splice(idx, 0,
+  result.splice(
+    idx,
+    0,
     `${indent}# SECURITY: Validate path to prevent traversal`,
     `${indent}import os; _path = os.path.abspath(_path); assert _path.startswith(os.getcwd()), "Path traversal blocked"`,
   );
-  return { applied: true, kind: "transformed", lines: result, description: "Added path traversal guard" };
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: "Added path traversal guard",
+  };
 }
 
 /**
@@ -588,20 +682,40 @@ function fixPyPathTraversal(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyEval(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length)
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const result = [...lines];
 
   if (line.includes("eval(")) {
     result[idx] = line.replace(/\beval\s*\(/, "ast.literal_eval(  # FIXED: was eval(");
-    return { applied: true, kind: "transformed", lines: result, description: "eval() → ast.literal_eval()" };
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "eval() → ast.literal_eval()",
+    };
   }
   if (line.includes("exec(")) {
     const indent = line.match(/^(\s*)/)?.[1] ?? "";
-    result.splice(idx, 0, `${indent}# SECURITY WARNING: exec() executes arbitrary code — remove or sandbox`);
-    return { applied: true, kind: "transformed", lines: result, description: "Added exec() security warning" };
+    result.splice(
+      idx,
+      0,
+      `${indent}# SECURITY WARNING: exec() executes arbitrary code — remove or sandbox`,
+    );
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "Added exec() security warning",
+    };
   }
-  return { applied: false, kind: "skipped", lines, description: "Complex eval/exec — manual fix needed" };
+  return {
+    applied: false,
+    kind: "skipped",
+    lines,
+    description: "Complex eval/exec — manual fix needed",
+  };
 }
 
 /**
@@ -609,13 +723,21 @@ function fixPyEval(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPySqlInjection(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length)
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const indent = lines[idx]!.match(/^(\s*)/)?.[1] ?? "";
   const result = [...lines];
-  result.splice(idx, 0,
+  result.splice(
+    idx,
+    0,
     `${indent}# SECURITY: Use parameterized query: cursor.execute("... WHERE id = %s", (id,))`,
   );
-  return { applied: true, kind: "transformed", lines: result, description: "Added SQL injection warning + fix template" };
+  return {
+    applied: true,
+    kind: "transformed",
+    lines: result,
+    description: "Added SQL injection warning + fix template",
+  };
 }
 
 /**
@@ -623,15 +745,26 @@ function fixPySqlInjection(lines: string[], finding: Finding): OneFixResult {
  */
 function fixPyYamlLoad(lines: string[], finding: Finding): OneFixResult {
   const idx = finding.line - 1;
-  if (idx < 0 || idx >= lines.length) return { applied: false, kind: "skipped", lines, description: "Line out of range" };
+  if (idx < 0 || idx >= lines.length)
+    return { applied: false, kind: "skipped", lines, description: "Line out of range" };
   const line = lines[idx]!;
   const result = [...lines];
 
   if (line.includes("yaml.load(")) {
     result[idx] = line.replace(/yaml\.load\s*\(/, "yaml.safe_load(  # FIXED: was yaml.load(");
-    return { applied: true, kind: "transformed", lines: result, description: "yaml.load() → yaml.safe_load()" };
+    return {
+      applied: true,
+      kind: "transformed",
+      lines: result,
+      description: "yaml.load() → yaml.safe_load()",
+    };
   }
-  return { applied: false, kind: "skipped", lines, description: "Complex YAML load — manual fix needed" };
+  return {
+    applied: false,
+    kind: "skipped",
+    lines,
+    description: "Complex YAML load — manual fix needed",
+  };
 }
 
 /**
@@ -654,11 +787,21 @@ function fixPyBareExcept(lines: string[], finding: Finding): OneFixResult {
   // Match `except:` with optional leading whitespace and optional
   // trailing comment. Don't match `except SomeType:` (already specific).
   if (!/^\s*except\s*:/.test(line)) {
-    return { applied: false, kind: "skipped", lines, description: "No bare `except:` on this line" };
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "No bare `except:` on this line",
+    };
   }
   // Already narrowed to Exception — skip.
   if (/except\s+Exception\s*:/.test(line)) {
-    return { applied: false, kind: "skipped", lines, description: "Already uses `except Exception:`" };
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "Already uses `except Exception:`",
+    };
   }
   const result = [...lines];
   result[idx] = line.replace(/\bexcept\s*:/, "except Exception:");
@@ -692,7 +835,12 @@ function fixLoopBound(lines: string[], finding: Finding): OneFixResult {
   // Check if there's already a validation above
   const prev = lines[idx - 1]?.trim() ?? "";
   if (prev.includes(boundExpr) && (prev.includes("if") || prev.includes("max"))) {
-    return { applied: false, kind: "skipped", lines, description: "Bound validation already exists" };
+    return {
+      applied: false,
+      kind: "skipped",
+      lines,
+      description: "Bound validation already exists",
+    };
   }
 
   const result = [...lines];
@@ -991,9 +1139,7 @@ function fixFswCmdArgBeforeValidate(lines: string[], finding: Finding): OneFixRe
     const l = lines[i]!;
     if (
       l.includes(`${argName}.length()`) &&
-      lines.slice(i, Math.min(lines.length, i + 4)).some((x) =>
-        x.includes("VALIDATION_ERROR"),
-      )
+      lines.slice(i, Math.min(lines.length, i + 4)).some((x) => x.includes("VALIDATION_ERROR"))
     ) {
       return {
         applied: false,
@@ -1063,42 +1209,91 @@ const W = {
   REDOS: "Rewrite this regex to avoid catastrophic backtracking.",
   ERR: "Handle this error explicitly instead of ignoring it.",
   HTTPS: "Use HTTPS and enable certificate verification.",
-  OVERFLOW: "Use bounded copy primitives (strlcpy / strncpy_s) and size by destination, not source.",
+  OVERFLOW:
+    "Use bounded copy primitives (strlcpy / strncpy_s) and size by destination, not source.",
   FORMAT: "Use a literal format string; never let user input be the format argument.",
 };
 
 const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   // ── C/C++ (bespoke covers 001-004, 006, 012) ───────────────
-  "cpp-005-int-returned-as-size": r("int→size_t cast", "Return size_t or validate the int is non-negative before casting."),
-  "cpp-007-deref-before-null-check": r("null check after deref", "Move the null check BEFORE dereferencing the pointer."),
-  "cpp-008-memcpy-untrusted-len": r("memcpy untrusted length", "Clamp the length against the destination buffer size before memcpy."),
-  "cpp-009-toctou-stat-open": r("TOCTOU stat+open", "Use openat/fstat on the open fd instead of stat() + open()."),
-  "cpp-010-malloc-mul-overflow": r("malloc size overflow", "Check SIZE_MAX / a < b before multiplying in a malloc size."),
-  "cpp-011-signed-unsigned-cmp": r("signed/unsigned compare", "Cast both sides to the same signedness before comparing."),
+  "cpp-005-int-returned-as-size": r(
+    "int→size_t cast",
+    "Return size_t or validate the int is non-negative before casting.",
+  ),
+  "cpp-007-deref-before-null-check": r(
+    "null check after deref",
+    "Move the null check BEFORE dereferencing the pointer.",
+  ),
+  "cpp-008-memcpy-untrusted-len": r(
+    "memcpy untrusted length",
+    "Clamp the length against the destination buffer size before memcpy.",
+  ),
+  "cpp-009-toctou-stat-open": r(
+    "TOCTOU stat+open",
+    "Use openat/fstat on the open fd instead of stat() + open().",
+  ),
+  "cpp-010-malloc-mul-overflow": r(
+    "malloc size overflow",
+    "Check SIZE_MAX / a < b before multiplying in a malloc size.",
+  ),
+  "cpp-011-signed-unsigned-cmp": r(
+    "signed/unsigned compare",
+    "Cast both sides to the same signedness before comparing.",
+  ),
 
   // ── C# ─────────────────────────────────────────────────────
   "cs-001-sql-injection": r("C# SQL injection", W.SQL),
   "cs-002-deserialization": r("C# deserialization", W.DESER),
   "cs-003-hardcoded-connection": r("hardcoded connection string", W.SECRET),
-  "cs-004-async-void": r("async void", "Use async Task instead of async void except for event handlers."),
-  "cs-005-task-not-awaited": r("task not awaited", "Await the returned Task or store it for later await."),
+  "cs-004-async-void": r(
+    "async void",
+    "Use async Task instead of async void except for event handlers.",
+  ),
+  "cs-005-task-not-awaited": r(
+    "task not awaited",
+    "Await the returned Task or store it for later await.",
+  ),
   "cs-006-disposable-no-using": r("IDisposable without using", W.LEAK),
   "cs-007-sql-interpolation": r("C# SQL interpolation", W.SQL),
-  "cs-008-multiple-enumeration": r("multiple enumeration", "Materialize with ToList()/ToArray() before enumerating more than once."),
-  "cs-009-lock-this-typeof": r("lock on this/typeof", "Lock on a private readonly object, not `this` or `typeof(T)`."),
-  "cs-010-configureawait-missing": r("missing ConfigureAwait", "Append .ConfigureAwait(false) in library code."),
+  "cs-008-multiple-enumeration": r(
+    "multiple enumeration",
+    "Materialize with ToList()/ToArray() before enumerating more than once.",
+  ),
+  "cs-009-lock-this-typeof": r(
+    "lock on this/typeof",
+    "Lock on a private readonly object, not `this` or `typeof(T)`.",
+  ),
+  "cs-010-configureawait-missing": r(
+    "missing ConfigureAwait",
+    "Append .ConfigureAwait(false) in library code.",
+  ),
   "cs-011-nullable-no-check": r("nullable without check", W.NULL),
-  "cs-012-dictionary-key-not-found": r("dict key not checked", "Use TryGetValue or ContainsKey before indexing."),
+  "cs-012-dictionary-key-not-found": r(
+    "dict key not checked",
+    "Use TryGetValue or ContainsKey before indexing.",
+  ),
 
   // ── Dart / Flutter ─────────────────────────────────────────
   "dart-001-insecure-http": r("insecure http", W.HTTPS),
   "dart-002-hardcoded-key": r("hardcoded key", W.SECRET),
   "dart-003-force-unwrap": r("force unwrap", W.UNWRAP),
-  "dart-004-dart-mirrors": r("dart:mirrors", "dart:mirrors breaks Flutter tree-shaking — use code generation."),
-  "dart-005-setstate-after-dispose": r("setState after dispose", "Check `mounted` before calling setState."),
+  "dart-004-dart-mirrors": r(
+    "dart:mirrors",
+    "dart:mirrors breaks Flutter tree-shaking — use code generation.",
+  ),
+  "dart-005-setstate-after-dispose": r(
+    "setState after dispose",
+    "Check `mounted` before calling setState.",
+  ),
   "dart-006-future-no-error": r("Future without error", "Add .catchError or wrap in try/catch."),
-  "dart-007-json-null-check": r("json missing null check", "Verify the map has the key and the value is non-null before accessing."),
-  "dart-008-buildcontext-async": r("BuildContext after await", "Check `context.mounted` after the async gap before using BuildContext."),
+  "dart-007-json-null-check": r(
+    "json missing null check",
+    "Verify the map has the key and the value is non-null before accessing.",
+  ),
+  "dart-008-buildcontext-async": r(
+    "BuildContext after await",
+    "Check `context.mounted` after the async gap before using BuildContext.",
+  ),
   "dart-009-http-no-https": r("http without https", W.HTTPS),
   "dart-010-string-hardcoded-secret": r("hardcoded secret", W.SECRET),
 
@@ -1108,85 +1303,181 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "django-003-secret-key": r("hardcoded SECRET_KEY", W.SECRET),
 
   // ── Elixir ─────────────────────────────────────────────────
-  "ex-001-atom-from-user-input": r("atom from user input", "Atoms are never garbage collected — never create atoms from user input."),
-  "ex-002-to-atom-untrusted": r("to_atom on untrusted", "Use String.to_existing_atom/1 or reject unknown values."),
-  "ex-003-unbounded-mailbox": r("unbounded mailbox", "Add backpressure — use GenStage or a bounded buffer."),
+  "ex-001-atom-from-user-input": r(
+    "atom from user input",
+    "Atoms are never garbage collected — never create atoms from user input.",
+  ),
+  "ex-002-to-atom-untrusted": r(
+    "to_atom on untrusted",
+    "Use String.to_existing_atom/1 or reject unknown values.",
+  ),
+  "ex-003-unbounded-mailbox": r(
+    "unbounded mailbox",
+    "Add backpressure — use GenStage or a bounded buffer.",
+  ),
   "ex-004-ets-race-condition": r("ETS race", "Use :ets.update_counter or transaction primitives."),
-  "ex-005-process-exit-kill": r("System.halt in library", "Don't call System.halt from library code — let the supervisor decide."),
+  "ex-005-process-exit-kill": r(
+    "System.halt in library",
+    "Don't call System.halt from library code — let the supervisor decide.",
+  ),
   "ex-006-ecto-raw-sql-injection": r("Ecto raw SQL", W.SQL),
   "ex-007-hardcoded-secrets-config": r("hardcoded secret in config", W.SECRET),
-  "ex-008-missing-supervisor-strategy": r("missing supervisor strategy", "Define a supervision strategy (:one_for_one, etc.) explicitly."),
-  "ex-009-task-async-no-await": r("Task.async not awaited", "Await the task or use Task.Supervisor.async_nolink."),
-  "ex-010-io-inspect-production": r("IO.inspect in production", "Remove IO.inspect before shipping — use Logger.debug."),
+  "ex-008-missing-supervisor-strategy": r(
+    "missing supervisor strategy",
+    "Define a supervision strategy (:one_for_one, etc.) explicitly.",
+  ),
+  "ex-009-task-async-no-await": r(
+    "Task.async not awaited",
+    "Await the task or use Task.Supervisor.async_nolink.",
+  ),
+  "ex-010-io-inspect-production": r(
+    "IO.inspect in production",
+    "Remove IO.inspect before shipping — use Logger.debug.",
+  ),
 
   // ── Express / Node web ─────────────────────────────────────
-  "express-001-nosql-injection": r("NoSQL injection", "Validate input type — use $eq operators explicitly for untrusted input."),
+  "express-001-nosql-injection": r(
+    "NoSQL injection",
+    "Validate input type — use $eq operators explicitly for untrusted input.",
+  ),
   "express-002-xss-render": r("xss in render", W.XSS),
-  "express-003-cors-wildcard": r("CORS wildcard", "Restrict CORS origin to an allowlist instead of '*'."),
+  "express-003-cors-wildcard": r(
+    "CORS wildcard",
+    "Restrict CORS origin to an allowlist instead of '*'.",
+  ),
 
   // ── FastAPI ────────────────────────────────────────────────
   "fastapi-001-sql-raw": r("FastAPI raw SQL", W.SQL),
 
   // ── Flask ──────────────────────────────────────────────────
-  "flask-001-render-string": r("render_template_string", "Use render_template, not render_template_string with user input."),
+  "flask-001-render-string": r(
+    "render_template_string",
+    "Use render_template, not render_template_string with user input.",
+  ),
 
   // ── Go ─────────────────────────────────────────────────────
   "go-001-sql-injection": r("Go SQL injection", W.SQL),
   "go-002-unsafe-pointer": r("unsafe.Pointer", W.UNSAFE),
   "go-003-command-injection": r("command injection", W.SHELL),
   "go-004-error-ignored": r("error ignored", W.ERR),
-  "go-005-tls-skip-verify": r("InsecureSkipVerify", "Remove InsecureSkipVerify or gate it behind a dev-only flag."),
+  "go-005-tls-skip-verify": r(
+    "InsecureSkipVerify",
+    "Remove InsecureSkipVerify or gate it behind a dev-only flag.",
+  ),
   "go-006-blank-error": r("blank error return", W.ERR),
-  "go-007-goroutine-leak": r("goroutine leak", "Ensure this goroutine has an exit path (context.Done or channel close)."),
-  "go-008-defer-in-loop": r("defer in loop", "Move defer out of the loop — it runs on function return, not iteration end."),
+  "go-007-goroutine-leak": r(
+    "goroutine leak",
+    "Ensure this goroutine has an exit path (context.Done or channel close).",
+  ),
+  "go-008-defer-in-loop": r(
+    "defer in loop",
+    "Move defer out of the loop — it runs on function return, not iteration end.",
+  ),
   "go-009-nil-map-write": r("nil map write", "Initialize the map with make() before writing."),
   "go-010-race-shared-var": r("race on shared var", W.RACE),
-  "go-011-context-not-propagated": r("context not propagated", "Thread ctx through the call chain."),
+  "go-011-context-not-propagated": r(
+    "context not propagated",
+    "Thread ctx through the call chain.",
+  ),
   "go-012-infinite-recursion": r("infinite recursion", "Add a base case or convert to iteration."),
   "go-013-hardcoded-credentials": r("hardcoded credentials", W.SECRET),
-  "go-014-unbuffered-channel-deadlock": r("unbuffered channel deadlock", "Use a buffered channel or run sender/receiver in separate goroutines."),
-  "go-015-waitgroup-add-after-go": r("wg.Add after go", "Call wg.Add(1) BEFORE launching the goroutine."),
-  "go-016-http-body-not-closed": r("response body not closed", "defer resp.Body.Close() immediately after the request."),
-  "go-017-slice-append-shared": r("append on shared slice", "Copy the slice with append([]T{}, s...) before append to avoid aliasing."),
-  "go-018-sprintf-hot-path": r("Sprintf in hot path", "Use strings.Builder instead of fmt.Sprintf in hot paths."),
-  "go-019-os-exit-library": r("os.Exit in library", "Don't call os.Exit from library code — return an error."),
-  "go-020-loop-var-goroutine": r("loop var in goroutine", "Shadow the loop variable with `v := v` before `go func()`."),
+  "go-014-unbuffered-channel-deadlock": r(
+    "unbuffered channel deadlock",
+    "Use a buffered channel or run sender/receiver in separate goroutines.",
+  ),
+  "go-015-waitgroup-add-after-go": r(
+    "wg.Add after go",
+    "Call wg.Add(1) BEFORE launching the goroutine.",
+  ),
+  "go-016-http-body-not-closed": r(
+    "response body not closed",
+    "defer resp.Body.Close() immediately after the request.",
+  ),
+  "go-017-slice-append-shared": r(
+    "append on shared slice",
+    "Copy the slice with append([]T{}, s...) before append to avoid aliasing.",
+  ),
+  "go-018-sprintf-hot-path": r(
+    "Sprintf in hot path",
+    "Use strings.Builder instead of fmt.Sprintf in hot paths.",
+  ),
+  "go-019-os-exit-library": r(
+    "os.Exit in library",
+    "Don't call os.Exit from library code — return an error.",
+  ),
+  "go-020-loop-var-goroutine": r(
+    "loop var in goroutine",
+    "Shadow the loop variable with `v := v` before `go func()`.",
+  ),
 
   // ── Haskell ────────────────────────────────────────────────
   "hs-001-head-empty-list": r("head on list", "Use listToMaybe or pattern match instead of head."),
   "hs-002-fromjust": r("fromJust", W.UNWRAP),
-  "hs-003-read-no-error": r("read without error handling", "Use readMaybe instead of read for untrusted input."),
+  "hs-003-read-no-error": r(
+    "read without error handling",
+    "Use readMaybe instead of read for untrusted input.",
+  ),
   "hs-004-unsafe-perform-io": r("unsafePerformIO", W.UNSAFE),
-  "hs-005-space-leak": r("space leak", "Force strict evaluation with seq / $! to avoid thunk accumulation."),
+  "hs-005-space-leak": r(
+    "space leak",
+    "Force strict evaluation with seq / $! to avoid thunk accumulation.",
+  ),
   "hs-006-missing-show-error": r("missing Show instance", "Derive Show or provide an instance."),
-  "hs-007-error-control-flow": r("error for control flow", "Return Either/Maybe instead of calling error for control flow."),
+  "hs-007-error-control-flow": r(
+    "error for control flow",
+    "Return Either/Maybe instead of calling error for control flow.",
+  ),
   "hs-008-string-type": r("String type", "Prefer Text/ByteString over String for performance."),
 
   // ── Java ───────────────────────────────────────────────────
   "java-001-sql-injection": r("Java SQL injection", W.SQL),
   "java-002-deserialization": r("Java deserialization", W.DESER),
-  "java-003-xxe": r("XXE", "Disable DTD: factory.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true)."),
+  "java-003-xxe": r(
+    "XXE",
+    "Disable DTD: factory.setFeature('http://apache.org/xml/features/disallow-doctype-decl', true).",
+  ),
   "java-004-path-traversal": r("path traversal", W.PATH),
   "java-005-nullable-method-call": r("nullable method call", W.NULL),
   "java-006-resource-leak": r("resource leak", "Use try-with-resources to auto-close."),
   "java-007-sql-concat-prepared": r("SQL concat in PreparedStatement", W.SQL),
-  "java-008-concurrent-modification": r("concurrent modification", "Use Iterator.remove() or a concurrent collection."),
-  "java-009-unsafe-singleton": r("unsafe singleton", "Use the holder idiom or an enum singleton for thread-safety."),
+  "java-008-concurrent-modification": r(
+    "concurrent modification",
+    "Use Iterator.remove() or a concurrent collection.",
+  ),
+  "java-009-unsafe-singleton": r(
+    "unsafe singleton",
+    "Use the holder idiom or an enum singleton for thread-safety.",
+  ),
   "java-010-hardcoded-creds": r("hardcoded credentials", W.SECRET),
   "java-011-insecure-deserialize": r("insecure deserialization", W.DESER),
   "java-012-path-traversal-string": r("path traversal string", W.PATH),
-  "java-013-xxe-transformer": r("XXE in transformer", "Set TransformerFactory.FEATURE_SECURE_PROCESSING to true."),
+  "java-013-xxe-transformer": r(
+    "XXE in transformer",
+    "Set TransformerFactory.FEATURE_SECURE_PROCESSING to true.",
+  ),
   "java-014-log-injection": r("log injection", "Strip CRLF from user input before logging."),
   "java-015-infinite-loop": r("infinite loop", "Add a termination condition."),
-  "java-016-equals-no-hashcode": r("equals without hashCode", "Override hashCode() whenever equals() is overridden."),
-  "java-017-mutable-static": r("mutable static field", "Make the field final and the collection immutable."),
-  "java-018-catch-generic-exception": r("generic catch", "Catch specific exceptions, not Exception/Throwable."),
+  "java-016-equals-no-hashcode": r(
+    "equals without hashCode",
+    "Override hashCode() whenever equals() is overridden.",
+  ),
+  "java-017-mutable-static": r(
+    "mutable static field",
+    "Make the field final and the collection immutable.",
+  ),
+  "java-018-catch-generic-exception": r(
+    "generic catch",
+    "Catch specific exceptions, not Exception/Throwable.",
+  ),
 
   // ── JavaScript / TypeScript ───────────────────────────────
   "js-001-eval": r("eval", W.EVAL),
   "js-002-innerhtml": r("innerHTML", "Use textContent or DOMPurify.sanitize() before innerHTML."),
   "js-003-prototype-pollution": r("prototype pollution", W.PROTO),
-  "js-004-nosql-injection": r("NoSQL injection", "Validate input type before passing to the Mongo query."),
+  "js-004-nosql-injection": r(
+    "NoSQL injection",
+    "Validate input type before passing to the Mongo query.",
+  ),
   "js-005-regex-dos": r("regex DoS", W.REDOS),
   "js-006-hardcoded-secret": r("hardcoded secret", W.SECRET),
   "js-007-command-injection": r("command injection", W.SHELL),
@@ -1194,13 +1485,22 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "js-009-redos-nested-quantifier": r("ReDoS nested quantifier", W.REDOS),
   "js-010-innerhtml-xss": r("innerHTML XSS", W.XSS),
   "js-011-eval-new-function": r("new Function()", W.EVAL),
-  "js-012-event-listener-leak": r("event listener leak", "Remove the listener in the cleanup/unmount callback."),
+  "js-012-event-listener-leak": r(
+    "event listener leak",
+    "Remove the listener in the cleanup/unmount callback.",
+  ),
   "js-013-loose-equality": r("loose equality", "Use === or !== for strict comparison."),
-  "js-014-json-parse-no-catch": r("JSON.parse no catch", "Wrap JSON.parse in try/catch and handle SyntaxError."),
+  "js-014-json-parse-no-catch": r(
+    "JSON.parse no catch",
+    "Wrap JSON.parse in try/catch and handle SyntaxError.",
+  ),
   "js-015-promise-no-catch": r("promise no catch", "Add .catch() or await inside try/catch."),
   "js-016-open-redirect": r("open redirect", "Validate the redirect URL against an allowlist."),
   "js-017-hardcoded-secret-inline": r("hardcoded secret inline", W.SECRET),
-  "js-018-document-write": r("document.write", "Avoid document.write — build DOM nodes explicitly."),
+  "js-018-document-write": r(
+    "document.write",
+    "Avoid document.write — build DOM nodes explicitly.",
+  ),
 
   // ── Kotlin ─────────────────────────────────────────────────
   "kt-001-force-unwrap": r("force unwrap !!", W.UNWRAP),
@@ -1208,23 +1508,53 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "kt-003-double-bang-production": r("!! in production", "Use safe call ?. or elvis ?:."),
   "kt-004-lateinit-uninit": r("lateinit unchecked", "Check ::field.isInitialized before use."),
   "kt-005-coroutine-leak": r("coroutine leak", "Launch inside a lifecycle-scoped CoroutineScope."),
-  "kt-006-blocking-in-coroutine": r("blocking in coroutine", "Wrap blocking calls in withContext(Dispatchers.IO)."),
-  "kt-007-platform-type-null": r("platform type null", "Java platform types can be null — annotate or check."),
-  "kt-008-mutable-collection-exposed": r("mutable collection exposed", "Return an immutable view (toList/toSet)."),
+  "kt-006-blocking-in-coroutine": r(
+    "blocking in coroutine",
+    "Wrap blocking calls in withContext(Dispatchers.IO).",
+  ),
+  "kt-007-platform-type-null": r(
+    "platform type null",
+    "Java platform types can be null — annotate or check.",
+  ),
+  "kt-008-mutable-collection-exposed": r(
+    "mutable collection exposed",
+    "Return an immutable view (toList/toSet).",
+  ),
   "kt-009-hardcoded-secrets": r("hardcoded secret", W.SECRET),
   "kt-010-sql-template-injection": r("SQL template injection", W.SQL),
-  "kt-011-runblocking-main": r("runBlocking in main", "Use a CoroutineScope.launch instead of runBlocking in production."),
+  "kt-011-runblocking-main": r(
+    "runBlocking in main",
+    "Use a CoroutineScope.launch instead of runBlocking in production.",
+  ),
   "kt-012-globalscope": r("GlobalScope", "Use a scoped CoroutineScope tied to lifecycle."),
 
   // ── Lua ────────────────────────────────────────────────────
-  "lua-001-global-pollution": r("global pollution", "Declare with `local` to avoid polluting globals."),
+  "lua-001-global-pollution": r(
+    "global pollution",
+    "Declare with `local` to avoid polluting globals.",
+  ),
   "lua-002-loadstring-injection": r("loadstring injection", W.EVAL),
-  "lua-003-table-nil-index": r("table nil index", "Check value ~= nil before chaining further indices."),
-  "lua-004-string-concat-loop": r("string concat in loop", "Accumulate into a table and call table.concat at the end."),
+  "lua-003-table-nil-index": r(
+    "table nil index",
+    "Check value ~= nil before chaining further indices.",
+  ),
+  "lua-004-string-concat-loop": r(
+    "string concat in loop",
+    "Accumulate into a table and call table.concat at the end.",
+  ),
   "lua-005-os-execute-injection": r("os.execute injection", W.SHELL),
-  "lua-006-pcall-no-error-handling": r("pcall no error handling", "Handle the error return of pcall explicitly."),
-  "lua-007-infinite-coroutine": r("infinite coroutine", "Add a termination condition to the coroutine loop."),
-  "lua-008-require-path-injection": r("require path injection", "Validate the require path against an allowlist."),
+  "lua-006-pcall-no-error-handling": r(
+    "pcall no error handling",
+    "Handle the error return of pcall explicitly.",
+  ),
+  "lua-007-infinite-coroutine": r(
+    "infinite coroutine",
+    "Add a termination condition to the coroutine loop.",
+  ),
+  "lua-008-require-path-injection": r(
+    "require path injection",
+    "Validate the require path against an allowlist.",
+  ),
 
   // ── PHP ────────────────────────────────────────────────────
   "php-001-sql-injection": r("PHP SQL injection", W.SQL),
@@ -1236,29 +1566,56 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "php-007-path-traversal": r("path traversal", W.PATH),
   "php-008-csrf-no-token": r("missing CSRF token", "Validate a CSRF token before mutating state."),
   "php-009-type-juggling": r("type juggling", "Use === for strict comparison."),
-  "php-010-extract-user-input": r("extract on user input", "Never extract() user input — assign fields explicitly."),
+  "php-010-extract-user-input": r(
+    "extract on user input",
+    "Never extract() user input — assign fields explicitly.",
+  ),
   "php-011-shell-exec": r("shell exec", W.SHELL),
   "php-012-hardcoded-credentials": r("hardcoded credentials", W.SECRET),
-  "php-013-weak-hash-password": r("weak password hash", "Use password_hash with PASSWORD_BCRYPT or PASSWORD_ARGON2ID."),
+  "php-013-weak-hash-password": r(
+    "weak password hash",
+    "Use password_hash with PASSWORD_BCRYPT or PASSWORD_ARGON2ID.",
+  ),
   "php-014-print-xss": r("print XSS", W.XSS),
   "php-015-backtick-injection": r("backtick injection", W.SHELL),
 
   // ── Python (bespoke covers 001, 002, 004, 005, 008) ───────
   "py-003-pickle-deserialize": r("pickle deserialize", W.DESER),
   "py-006-hardcoded-secret": r("hardcoded secret", W.SECRET),
-  "py-007-assert-security": r("assert for security", "Don't use assert for security — it's stripped in python -O mode."),
+  "py-007-assert-security": r(
+    "assert for security",
+    "Don't use assert for security — it's stripped in python -O mode.",
+  ),
   "py-009-pickle-untrusted": r("pickle untrusted", W.DESER),
-  "py-010-assert-validation": r("assert for validation", "Don't use assert for validation in production."),
+  "py-010-assert-validation": r(
+    "assert for validation",
+    "Don't use assert for validation in production.",
+  ),
   "py-011-eq-without-hash": r("__eq__ without __hash__", "Define __hash__ alongside __eq__."),
-  "py-012-mutable-default-arg": r("mutable default arg", "Use None as default and assign inside the function."),
+  "py-012-mutable-default-arg": r(
+    "mutable default arg",
+    "Use None as default and assign inside the function.",
+  ),
   "py-013-bare-except": r("bare except", "Catch specific exceptions, not bare `except:`."),
-  "py-014-late-binding-closure": r("late-binding closure", "Capture the loop variable with a default arg."),
+  "py-014-late-binding-closure": r(
+    "late-binding closure",
+    "Capture the loop variable with a default arg.",
+  ),
   "py-015-os-system-user-input": r("os.system user input", W.SHELL),
-  "py-016-tempfile-mktemp": r("tempfile.mktemp", "Use tempfile.mkstemp or NamedTemporaryFile — mktemp is race-prone."),
+  "py-016-tempfile-mktemp": r(
+    "tempfile.mktemp",
+    "Use tempfile.mkstemp or NamedTemporaryFile — mktemp is race-prone.",
+  ),
   "py-017-hardcoded-secret-assign": r("hardcoded secret assign", W.SECRET),
   "py-018-re-no-raw-string": r("regex no raw string", "Use raw string r'...' for regex patterns."),
-  "py-019-fstring-logging": r("f-string logging", "Use lazy % formatting: logger.info('msg %s', val)."),
-  "py-020-global-keyword": r("global keyword", "Avoid `global` — pass state explicitly or use a class."),
+  "py-019-fstring-logging": r(
+    "f-string logging",
+    "Use lazy % formatting: logger.info('msg %s', val).",
+  ),
+  "py-020-global-keyword": r(
+    "global keyword",
+    "Avoid `global` — pass state explicitly or use a class.",
+  ),
 
   // ── Rails ──────────────────────────────────────────────────
   "rails-001-html-safe": r("html_safe on user content", W.XSS),
@@ -1278,34 +1635,61 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "rb-012-eval-string": r("eval string", W.EVAL),
 
   // ── React ──────────────────────────────────────────────────
-  "react-001-dangerously-set": r("dangerouslySetInnerHTML", "Use DOMPurify.sanitize() before dangerouslySetInnerHTML."),
+  "react-001-dangerously-set": r(
+    "dangerouslySetInnerHTML",
+    "Use DOMPurify.sanitize() before dangerouslySetInnerHTML.",
+  ),
 
   // ── Rust ───────────────────────────────────────────────────
   "rs-001-unsafe-block": r("unsafe block", W.UNSAFE),
   "rs-002-unwrap-panic": r("unwrap panic", W.UNWRAP),
   "rs-003-sql-injection": r("Rust SQL injection", W.SQL),
   "rs-004-unwrap-non-test": r("unwrap in non-test", W.UNWRAP),
-  "rs-005-expect-no-message": r("expect without message", "Add a descriptive message to .expect() explaining the invariant."),
-  "rs-006-unsafe-no-safety": r("unsafe without SAFETY", "Add a `// SAFETY:` comment above every unsafe block."),
+  "rs-005-expect-no-message": r(
+    "expect without message",
+    "Add a descriptive message to .expect() explaining the invariant.",
+  ),
+  "rs-006-unsafe-no-safety": r(
+    "unsafe without SAFETY",
+    "Add a `// SAFETY:` comment above every unsafe block.",
+  ),
   "rs-007-arc-mutex-read-heavy": r("Arc<Mutex> read-heavy", "Use RwLock for read-heavy workloads."),
-  "rs-008-blocking-in-async": r("blocking in async", "Use tokio::task::spawn_blocking or an async variant."),
+  "rs-008-blocking-in-async": r(
+    "blocking in async",
+    "Use tokio::task::spawn_blocking or an async variant.",
+  ),
   "rs-009-clone-in-loop": r("clone in loop", "Hoist the clone out of the loop."),
-  "rs-010-async-send-sync": r("async Send/Sync", "Ensure the future is Send + Sync when crossing threads."),
+  "rs-010-async-send-sync": r(
+    "async Send/Sync",
+    "Ensure the future is Send + Sync when crossing threads.",
+  ),
   "rs-011-hardcoded-secrets": r("hardcoded secret", W.SECRET),
   "rs-012-panic-in-drop": r("panic in Drop", "Don't panic in Drop::drop."),
-  "rs-013-unbounded-vec": r("unbounded Vec growth", "Preallocate with Vec::with_capacity or cap growth."),
-  "rs-014-mem-transmute": r("mem::transmute", "Prefer safe casting (as / From / Into) over transmute."),
+  "rs-013-unbounded-vec": r(
+    "unbounded Vec growth",
+    "Preallocate with Vec::with_capacity or cap growth.",
+  ),
+  "rs-014-mem-transmute": r(
+    "mem::transmute",
+    "Prefer safe casting (as / From / Into) over transmute.",
+  ),
   "rs-015-format-sql": r("format! SQL", "Use sqlx::query! with parameters."),
 
   // ── Scala ──────────────────────────────────────────────────
   "scala-001-sql-injection": r("Scala SQL injection", W.SQL),
   "scala-002-option-get": r("Option.get", "Use getOrElse or pattern match."),
   "scala-003-blocking-future": r("blocking in Future", "Wrap blocking calls in blocking { ... }."),
-  "scala-004-mutable-concurrent": r("mutable in concurrent", "Use a concurrent collection or synchronized access."),
+  "scala-004-mutable-concurrent": r(
+    "mutable in concurrent",
+    "Use a concurrent collection or synchronized access.",
+  ),
   "scala-005-nonexhaustive-match": r("non-exhaustive match", "Add a wildcard case _."),
   "scala-006-implicit-conversion": r("implicit conversion", "Make the conversion explicit."),
   "scala-007-try-get": r("Try.get", "Pattern match on Success/Failure instead of .get."),
-  "scala-008-akka-unhandled": r("akka unhandled", "Add `case _ => unhandled(msg)` to the receive block."),
+  "scala-008-akka-unhandled": r(
+    "akka unhandled",
+    "Add `case _ => unhandled(msg)` to the receive block.",
+  ),
   "scala-009-sql-string-concat": r("SQL string concat", W.SQL),
   "scala-010-null-usage": r("null usage", "Use Option instead of null."),
 
@@ -1314,90 +1698,225 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
 
   // ── SQL ────────────────────────────────────────────────────
   "sql-001-grant-all": r("GRANT ALL", "Grant specific privileges, not ALL."),
-  "sql-002-plaintext-password": r("plaintext password", "Store a password hash (bcrypt/argon2), never plaintext."),
+  "sql-002-plaintext-password": r(
+    "plaintext password",
+    "Store a password hash (bcrypt/argon2), never plaintext.",
+  ),
 
   // ── Swift ──────────────────────────────────────────────────
   "swift-001-force-unwrap": r("force unwrap", W.UNWRAP),
   "swift-002-force-try": r("force try", "Use do/catch or try?."),
   "swift-003-insecure-http": r("insecure http", W.HTTPS),
-  "swift-004-keychain-no-access": r("keychain no access", "Set kSecAttrAccessibleWhenUnlockedThisDeviceOnly."),
+  "swift-004-keychain-no-access": r(
+    "keychain no access",
+    "Set kSecAttrAccessibleWhenUnlockedThisDeviceOnly.",
+  ),
   "swift-005-hardcoded-secret": r("hardcoded secret", W.SECRET),
   "swift-006-webview-js": r("webview JS", "Validate JavaScript before evaluateJavaScript."),
   "swift-007-force-unwrap-production": r("force unwrap prod", W.UNWRAP),
   "swift-008-retain-cycle": r("retain cycle", "Capture [weak self] in the closure."),
-  "swift-009-main-thread-violation": r("off main thread UI", "Dispatch UI work to DispatchQueue.main."),
+  "swift-009-main-thread-violation": r(
+    "off main thread UI",
+    "Dispatch UI work to DispatchQueue.main.",
+  ),
   "swift-010-force-try-production": r("force try prod", "Use try? or do/catch."),
   "swift-011-force-cast": r("force cast", "Use `as?` for optional cast."),
-  "swift-012-unowned-dealloc": r("unowned may dealloc", "Use [weak self] if the referenced object may outlive self."),
-  "swift-013-missing-main-actor": r("missing @MainActor", "Annotate the class/method with @MainActor."),
+  "swift-012-unowned-dealloc": r(
+    "unowned may dealloc",
+    "Use [weak self] if the referenced object may outlive self.",
+  ),
+  "swift-013-missing-main-actor": r(
+    "missing @MainActor",
+    "Annotate the class/method with @MainActor.",
+  ),
   "swift-014-hardcoded-secret-swift": r("hardcoded secret", W.SECRET),
-  "swift-015-missing-async-error-handling": r("async no error handling", "Wrap the async call in do/catch."),
+  "swift-015-missing-async-error-handling": r(
+    "async no error handling",
+    "Wrap the async call in do/catch.",
+  ),
 
   // ── Universal ──────────────────────────────────────────────
-  "uni-001-hardcoded-ip": r("hardcoded IP", "Move the IP address to config — hardcoding makes deployment brittle."),
+  "uni-001-hardcoded-ip": r(
+    "hardcoded IP",
+    "Move the IP address to config — hardcoding makes deployment brittle.",
+  ),
   "uni-002-security-todo": r("security TODO", "Address this security TODO before shipping."),
-  "uni-003-ssrf": r("SSRF", "Validate the URL against an allowlist of permitted hosts. Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost)."),
-  "uni-004-missing-auth": r("missing auth", "Add authentication middleware/decorator before this endpoint."),
-  "uni-005-weak-auth-compare": r("timing-unsafe compare", "Use constant-time comparison: hmac.compare_digest (Python), crypto.timingSafeEqual (Node.js), subtle.ConstantTimeCompare (Go)."),
-  "uni-006-critical-no-auth": r("critical op no auth", "Require authentication AND authorization before destructive/privileged operations."),
+  "uni-003-ssrf": r(
+    "SSRF",
+    "Validate the URL against an allowlist of permitted hosts. Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x, localhost).",
+  ),
+  "uni-004-missing-auth": r(
+    "missing auth",
+    "Add authentication middleware/decorator before this endpoint.",
+  ),
+  "uni-005-weak-auth-compare": r(
+    "timing-unsafe compare",
+    "Use constant-time comparison: hmac.compare_digest (Python), crypto.timingSafeEqual (Node.js), subtle.ConstantTimeCompare (Go).",
+  ),
+  "uni-006-critical-no-auth": r(
+    "critical op no auth",
+    "Require authentication AND authorization before destructive/privileged operations.",
+  ),
   "uni-007-command-injection-concat": r("command injection concat", W.SHELL),
-  "uni-008-privilege-escalation": r("privilege escalation", "Run with minimum required privileges. Use 0o755 not 0o777. Drop root after binding ports."),
-  "uni-009-code-injection": r("code injection", "Never compile/evaluate user input. Use a sandboxed interpreter or safe template engine."),
-  "uni-010-client-side-auth": r("client-side auth", "Read authorization from server session or validated JWT — never from request body/query/cookies."),
-  "uni-011-weak-crypto": r("weak crypto", "Replace MD5/SHA1/DES/RC4 with SHA-256+, bcrypt/argon2, AES-GCM, or Ed25519."),
-  "uni-012-ldap-injection": r("LDAP injection", "Use parameterized LDAP queries or escape input with ldap.filter.escape_filter_chars."),
-  "uni-013-session-fixation": r("session fixation", "Regenerate the session ID immediately after successful authentication."),
-  "uni-014-no-session-timeout": r("session no timeout", "Set a reasonable session expiration (1-24h) and use refresh token rotation for long-lived sessions."),
-  "uni-015-symlink-toctou": r("symlink TOCTOU", "Use atomic operations (openat + O_NOFOLLOW) or realpath + prefix validation instead of check-then-use."),
-  "uni-016-external-file-path": r("external file path", "Use an allowlist of permitted filenames or a server-side ID-to-path mapping."),
-  "uni-017-info-exposure": r("info exposure", "Strip sensitive fields before serializing the response."),
-  "uni-018-sensitive-error": r("sensitive error", "Return a generic error in production and log details server-side with a correlation ID."),
+  "uni-008-privilege-escalation": r(
+    "privilege escalation",
+    "Run with minimum required privileges. Use 0o755 not 0o777. Drop root after binding ports.",
+  ),
+  "uni-009-code-injection": r(
+    "code injection",
+    "Never compile/evaluate user input. Use a sandboxed interpreter or safe template engine.",
+  ),
+  "uni-010-client-side-auth": r(
+    "client-side auth",
+    "Read authorization from server session or validated JWT — never from request body/query/cookies.",
+  ),
+  "uni-011-weak-crypto": r(
+    "weak crypto",
+    "Replace MD5/SHA1/DES/RC4 with SHA-256+, bcrypt/argon2, AES-GCM, or Ed25519.",
+  ),
+  "uni-012-ldap-injection": r(
+    "LDAP injection",
+    "Use parameterized LDAP queries or escape input with ldap.filter.escape_filter_chars.",
+  ),
+  "uni-013-session-fixation": r(
+    "session fixation",
+    "Regenerate the session ID immediately after successful authentication.",
+  ),
+  "uni-014-no-session-timeout": r(
+    "session no timeout",
+    "Set a reasonable session expiration (1-24h) and use refresh token rotation for long-lived sessions.",
+  ),
+  "uni-015-symlink-toctou": r(
+    "symlink TOCTOU",
+    "Use atomic operations (openat + O_NOFOLLOW) or realpath + prefix validation instead of check-then-use.",
+  ),
+  "uni-016-external-file-path": r(
+    "external file path",
+    "Use an allowlist of permitted filenames or a server-side ID-to-path mapping.",
+  ),
+  "uni-017-info-exposure": r(
+    "info exposure",
+    "Strip sensitive fields before serializing the response.",
+  ),
+  "uni-018-sensitive-error": r(
+    "sensitive error",
+    "Return a generic error in production and log details server-side with a correlation ID.",
+  ),
 
   // ── Zig ────────────────────────────────────────────────────
-  "zig-001-use-after-free": r("use-after-free", "Don't use memory after free — null the pointer or use defer."),
+  "zig-001-use-after-free": r(
+    "use-after-free",
+    "Don't use memory after free — null the pointer or use defer.",
+  ),
   "zig-002-ignored-error": r("ignored error", "Use `try` or `catch` instead of `_ = ...`."),
-  "zig-003-release-ub": r("release UB", "Undefined behavior in release mode — fix or guard with @setRuntimeSafety(.on)."),
-  "zig-004-buffer-overflow": r("buffer overflow", "Clamp the index against buffer.len before access."),
+  "zig-003-release-ub": r(
+    "release UB",
+    "Undefined behavior in release mode — fix or guard with @setRuntimeSafety(.on).",
+  ),
+  "zig-004-buffer-overflow": r(
+    "buffer overflow",
+    "Clamp the index against buffer.len before access.",
+  ),
   "zig-005-memory-leak": r("memory leak", "Use defer allocator.free(...) right after allocation."),
   "zig-006-sentinel-misuse": r("sentinel misuse", "Validate the sentinel byte before slicing."),
-  "zig-007-integer-overflow": r("integer overflow", "Use @addWithOverflow or explicit wrap/saturate."),
+  "zig-007-integer-overflow": r(
+    "integer overflow",
+    "Use @addWithOverflow or explicit wrap/saturate.",
+  ),
   "zig-008-ptrcast-alignment": r("ptrCast alignment", "Validate alignment before @ptrCast."),
-  "zig-009-unreachable-misuse": r("unreachable misuse", "Replace `unreachable` with a real error return or @panic."),
-  "zig-010-comptime-runtime": r("comptime/runtime mix", "Distinguish comptime from runtime evaluation explicitly."),
+  "zig-009-unreachable-misuse": r(
+    "unreachable misuse",
+    "Replace `unreachable` with a real error return or @panic.",
+  ),
+  "zig-010-comptime-runtime": r(
+    "comptime/runtime mix",
+    "Distinguish comptime from runtime evaluation explicitly.",
+  ),
 
   // ── v2.10.314 expansion: crypto misuse ─────────────────────
-  "crypto-001-rand-for-key-material": r("weak RNG for secrets", "Use secrets/crypto.randomBytes/SecureRandom — never rand()/Math.random for keys or tokens."),
+  "crypto-001-rand-for-key-material": r(
+    "weak RNG for secrets",
+    "Use secrets/crypto.randomBytes/SecureRandom — never rand()/Math.random for keys or tokens.",
+  ),
   "crypto-002-static-iv": r("constant IV", "Generate a fresh random IV/nonce per encryption."),
-  "crypto-003-md5-sha1-for-auth": r("MD5/SHA1 for security", "Switch to SHA-256+ for hashes, HMAC-SHA256 for MAC, Argon2/bcrypt for passwords."),
-  "crypto-004-password-fast-hash": r("password without KDF", "Use Argon2id / bcrypt / scrypt / PBKDF2 (≥600k iter) for password hashing."),
-  "crypto-005-timing-safe-compare-missing": r("non-constant-time MAC compare", "Use hmac.compare_digest / crypto.timingSafeEqual / subtle.ConstantTimeCompare."),
+  "crypto-003-md5-sha1-for-auth": r(
+    "MD5/SHA1 for security",
+    "Switch to SHA-256+ for hashes, HMAC-SHA256 for MAC, Argon2/bcrypt for passwords.",
+  ),
+  "crypto-004-password-fast-hash": r(
+    "password without KDF",
+    "Use Argon2id / bcrypt / scrypt / PBKDF2 (≥600k iter) for password hashing.",
+  ),
+  "crypto-005-timing-safe-compare-missing": r(
+    "non-constant-time MAC compare",
+    "Use hmac.compare_digest / crypto.timingSafeEqual / subtle.ConstantTimeCompare.",
+  ),
   "crypto-006-tls-legacy-version": r("TLS ≤ 1.1", "Require TLS 1.2+ (prefer TLS 1.3)."),
   "crypto-007-tls-verify-off": r("TLS verify disabled", W.HTTPS),
   "crypto-008-hardcoded-key": r("hardcoded crypto key", W.SECRET),
   "crypto-009-ecb-mode": r("ECB mode", "Use an authenticated mode: AES-GCM or ChaCha20-Poly1305."),
-  "crypto-010-short-rsa-dh": r("short RSA/DH key", "Use 2048-bit RSA/DH minimum (3072+ for long-term data), or switch to Ed25519/X25519."),
-  "crypto-011-jwt-none-alg": r("JWT alg=none", "Whitelist algorithms explicitly: jwt.decode(..., algorithms=['HS256'])."),
-  "crypto-012-homerolled-xor": r("home-rolled XOR crypto", "Replace with AES-GCM or ChaCha20-Poly1305 from stdlib."),
+  "crypto-010-short-rsa-dh": r(
+    "short RSA/DH key",
+    "Use 2048-bit RSA/DH minimum (3072+ for long-term data), or switch to Ed25519/X25519.",
+  ),
+  "crypto-011-jwt-none-alg": r(
+    "JWT alg=none",
+    "Whitelist algorithms explicitly: jwt.decode(..., algorithms=['HS256']).",
+  ),
+  "crypto-012-homerolled-xor": r(
+    "home-rolled XOR crypto",
+    "Replace with AES-GCM or ChaCha20-Poly1305 from stdlib.",
+  ),
   "crypto-013-static-salt": r("constant KDF salt", "Generate a unique random salt per credential."),
-  "crypto-014-rsa-pkcs1v15-encrypt": r("RSA PKCS#1 v1.5 encryption", "Switch encryption to OAEP padding."),
-  "crypto-015-hmac-truncation": r("truncated HMAC", "Keep HMAC output at ≥128 bits; don't truncate below half the hash width."),
+  "crypto-014-rsa-pkcs1v15-encrypt": r(
+    "RSA PKCS#1 v1.5 encryption",
+    "Switch encryption to OAEP padding.",
+  ),
+  "crypto-015-hmac-truncation": r(
+    "truncated HMAC",
+    "Keep HMAC output at ≥128 bits; don't truncate below half the hash width.",
+  ),
 
   // ── v2.10.314 expansion: injection ─────────────────────────
   "inj-001-sql-string-concat": r("SQL concat", W.SQL),
   "inj-002-subprocess-shell-true": r("subprocess shell=True", W.SHELL),
   "inj-003-os-system-with-var": r("system() with variable", W.SHELL),
-  "inj-004-ssrf-fetch": r("SSRF fetch", "Allowlist permitted hosts; block RFC1918 + loopback + cloud metadata IPs."),
+  "inj-004-ssrf-fetch": r(
+    "SSRF fetch",
+    "Allowlist permitted hosts; block RFC1918 + loopback + cloud metadata IPs.",
+  ),
   "inj-005-path-traversal": r("path traversal", W.PATH),
-  "inj-006-nosql-where": r("NoSQL $where injection", "Use standard Mongo operators ($eq/$gt/$in); never inject into $where."),
-  "inj-007-ldap-filter-concat": r("LDAP filter injection", "Escape LDAP metacharacters before building the filter."),
+  "inj-006-nosql-where": r(
+    "NoSQL $where injection",
+    "Use standard Mongo operators ($eq/$gt/$in); never inject into $where.",
+  ),
+  "inj-007-ldap-filter-concat": r(
+    "LDAP filter injection",
+    "Escape LDAP metacharacters before building the filter.",
+  ),
   "inj-008-xxe-default-parser": r("XXE", "Disable external entities / DTDs on the XML parser."),
-  "inj-009-ssti-render-string": r("SSTI", "Render a fixed template and pass user input as context vars."),
-  "inj-010-open-redirect": r("open redirect", "Restrict redirects to relative URLs or a host allowlist."),
+  "inj-009-ssti-render-string": r(
+    "SSTI",
+    "Render a fixed template and pass user input as context vars.",
+  ),
+  "inj-010-open-redirect": r(
+    "open redirect",
+    "Restrict redirects to relative URLs or a host allowlist.",
+  ),
   "inj-011-redos-pattern": r("ReDoS regex", W.REDOS),
   "inj-012-proto-pollution": r("prototype pollution", W.PROTO),
-  "inj-013-mass-assignment": r("mass assignment", "Use a field allowlist (permit/pick) before assigning request body to a model."),
-  "inj-014-response-splitting": r("response splitting", "Strip CR/LF from any user value before writing it to a response header."),
-  "inj-015-zipslip": r("Zip Slip", "Validate each entry's resolved path stays within the destination before extracting."),
+  "inj-013-mass-assignment": r(
+    "mass assignment",
+    "Use a field allowlist (permit/pick) before assigning request body to a model.",
+  ),
+  "inj-014-response-splitting": r(
+    "response splitting",
+    "Strip CR/LF from any user value before writing it to a response header.",
+  ),
+  "inj-015-zipslip": r(
+    "Zip Slip",
+    "Validate each entry's resolved path stays within the destination before extracting.",
+  ),
 
   // ── v2.10.314 expansion: deserialization ───────────────────
   "des-001-pickle-loads": r("pickle untrusted", W.DESER),
@@ -1412,40 +1931,103 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "des-010-xml-type-resolver": r("polymorphic deserialization", W.DESER),
 
   // ── v2.10.314 expansion: flight software ───────────────────
-  "fsw-001-port-handler-no-check": r("port handler no bounds check", "Add FW_ASSERT(portNum < getNum_<Port>_InputPorts()) at handler start."),
-  "fsw-002-deserialize-no-length-check": r("unchecked deserialize", "Capture deserialize status and verify Fw::FW_SERIALIZE_OK before using the value."),
-  "fsw-003-assert-as-validation": r("FW_ASSERT for input validation", "Use cmdResponse_VALIDATION_ERROR for untrusted input; keep FW_ASSERT for invariants."),
-  "fsw-004-narrow-cast-no-check": r("narrowing cast", "Range-check the source value before static_cast to a narrower type."),
-  "fsw-005-buffer-getdata-unchecked": r("Fw::Buffer.getData null deref", "Guard: FW_ASSERT(buf.getData() != nullptr) before use."),
+  "fsw-001-port-handler-no-check": r(
+    "port handler no bounds check",
+    "Add FW_ASSERT(portNum < getNum_<Port>_InputPorts()) at handler start.",
+  ),
+  "fsw-002-deserialize-no-length-check": r(
+    "unchecked deserialize",
+    "Capture deserialize status and verify Fw::FW_SERIALIZE_OK before using the value.",
+  ),
+  "fsw-003-assert-as-validation": r(
+    "FW_ASSERT for input validation",
+    "Use cmdResponse_VALIDATION_ERROR for untrusted input; keep FW_ASSERT for invariants.",
+  ),
+  "fsw-004-narrow-cast-no-check": r(
+    "narrowing cast",
+    "Range-check the source value before static_cast to a narrower type.",
+  ),
+  "fsw-005-buffer-getdata-unchecked": r(
+    "Fw::Buffer.getData null deref",
+    "Guard: FW_ASSERT(buf.getData() != nullptr) before use.",
+  ),
   "fsw-005b-buffer-size-unchecked": r(
     "Fw::Buffer pointer arithmetic without size bound",
     "Insert FW_ASSERT(buf.getSize() >= <access_bound>) BEFORE the getData()+N or getData()[N] use. The bound is context-dependent (loop limit, header length field, fixed offset) — KCode cannot infer it; this needs human attention.",
   ),
-  "fsw-006-dispatch-loop-unbounded": r("unbounded dispatch loop", "Cap messages per doDispatch() and yield to scheduler."),
-  "fsw-007-assert-with-side-effect": r("FW_ASSERT with side effect", "Split: capture the side-effect into a variable, then FW_ASSERT the variable."),
-  "fsw-008-time-ticks-overflow": r("tick rollover", "Use unsigned difference idiom: static_cast<U32>(now - last) for rollover safety."),
-  "fsw-009-state-switch-default-missing": r("state switch no default", "Add `default: FW_ASSERT(0, state);` as the last case."),
-  "fsw-010-cmd-arg-before-validate": r("cmd arg unvalidated", "Validate command arguments before use; emit VALIDATION_ERROR on failure."),
-  "fsw-011-event-id-hardcoded": r("hardcoded event ID", "Use the autocoded EVENTID_<NAME> enum, not a numeric literal."),
-  "fsw-012-configure-no-state-check": r("method before configure()", "Guard method entry: FW_ASSERT(this->m_configured)."),
-  "fsw-013-reinterpret-cast-untrusted": r("reinterpret_cast untrusted", "Check buf.getSize() >= sizeof(T) before the cast."),
-  "fsw-014-tlm-string-write-unbounded": r("unbounded log string", "Use Fw::StringBase::format with width specifier; guarantee null-termination."),
-  "fsw-015-malloc-in-handler": r("heap alloc in realtime handler", "Use pre-allocated pools (BufferManager / cFE memory pools) on data-plane paths."),
+  "fsw-006-dispatch-loop-unbounded": r(
+    "unbounded dispatch loop",
+    "Cap messages per doDispatch() and yield to scheduler.",
+  ),
+  "fsw-007-assert-with-side-effect": r(
+    "FW_ASSERT with side effect",
+    "Split: capture the side-effect into a variable, then FW_ASSERT the variable.",
+  ),
+  "fsw-008-time-ticks-overflow": r(
+    "tick rollover",
+    "Use unsigned difference idiom: static_cast<U32>(now - last) for rollover safety.",
+  ),
+  "fsw-009-state-switch-default-missing": r(
+    "state switch no default",
+    "Add `default: FW_ASSERT(0, state);` as the last case.",
+  ),
+  "fsw-010-cmd-arg-before-validate": r(
+    "cmd arg unvalidated",
+    "Validate command arguments before use; emit VALIDATION_ERROR on failure.",
+  ),
+  "fsw-011-event-id-hardcoded": r(
+    "hardcoded event ID",
+    "Use the autocoded EVENTID_<NAME> enum, not a numeric literal.",
+  ),
+  "fsw-012-configure-no-state-check": r(
+    "method before configure()",
+    "Guard method entry: FW_ASSERT(this->m_configured).",
+  ),
+  "fsw-013-reinterpret-cast-untrusted": r(
+    "reinterpret_cast untrusted",
+    "Check buf.getSize() >= sizeof(T) before the cast.",
+  ),
+  "fsw-014-tlm-string-write-unbounded": r(
+    "unbounded log string",
+    "Use Fw::StringBase::format with width specifier; guarantee null-termination.",
+  ),
+  "fsw-015-malloc-in-handler": r(
+    "heap alloc in realtime handler",
+    "Use pre-allocated pools (BufferManager / cFE memory pools) on data-plane paths.",
+  ),
 
   // ── v2.10.332 — Phase A web/ML expansion ───────────────────
   "py-021-torch-load-untrusted": r("torch.load untrusted", W.DESER),
-  "go-021-readall-no-limit": r("io.ReadAll no limit", "Wrap with io.LimitReader / http.MaxBytesReader to cap body size."),
-  "go-022-http-no-timeout": r("http.Client no timeout", "Set http.Client.Timeout or pass a deadline-bearing context.Context."),
+  "go-021-readall-no-limit": r(
+    "io.ReadAll no limit",
+    "Wrap with io.LimitReader / http.MaxBytesReader to cap body size.",
+  ),
+  "go-022-http-no-timeout": r(
+    "http.Client no timeout",
+    "Set http.Client.Timeout or pass a deadline-bearing context.Context.",
+  ),
   "go-023-template-html-bypass": r("html/template safe bypass", W.XSS),
   "cpp-013-snprintf-truncation-ignored": r("snprintf truncation ignored", W.ERR),
   "cpp-014-fread-return-ignored": r("fread/read result ignored", W.ERR),
 
   // ── v2.10.333 — Phase A round 2 ────────────────────────────
   "java-019-tls-trust-all": r("TLS trust-all manager", W.HTTPS),
-  "java-020-ssrf-resttemplate": r("RestTemplate SSRF", "Allowlist permitted hosts; block RFC1918 + loopback + cloud metadata."),
-  "java-021-spring-restbody-map": r("Spring @RequestBody Map mass-assignment", "Replace Map<String,Object> with a typed DTO + Bean Validation."),
-  "php-016-ssrf-fetch": r("PHP SSRF", "Allowlist permitted hosts; block RFC1918 + loopback + metadata IPs."),
-  "rb-013-ssrf-net-http": r("Ruby Net::HTTP SSRF", "Allowlist host + restrict scheme to https; block file:/// and metadata IPs."),
+  "java-020-ssrf-resttemplate": r(
+    "RestTemplate SSRF",
+    "Allowlist permitted hosts; block RFC1918 + loopback + cloud metadata.",
+  ),
+  "java-021-spring-restbody-map": r(
+    "Spring @RequestBody Map mass-assignment",
+    "Replace Map<String,Object> with a typed DTO + Bean Validation.",
+  ),
+  "php-016-ssrf-fetch": r(
+    "PHP SSRF",
+    "Allowlist permitted hosts; block RFC1918 + loopback + metadata IPs.",
+  ),
+  "rb-013-ssrf-net-http": r(
+    "Ruby Net::HTTP SSRF",
+    "Allowlist host + restrict scheme to https; block file:/// and metadata IPs.",
+  ),
   "rb-014-send-file-traversal": r("Ruby send_file path traversal", W.PATH),
 
   // ── v2.10.370 — F9 AI/ML Security Pack ─────────────────────
@@ -1453,83 +2035,187 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
     "trust_remote_code=True executes arbitrary repo Python on model load",
     "Drop trust_remote_code=True. If custom code is required, mirror the repo, audit the .py files, and pin a specific revision SHA.",
   ),
-  "ai-002-openai-api-key-hardcoded": r("OpenAI key hardcoded", W.SECRET, "Rotate the leaked key immediately — assume any key that ever lived in a commit is compromised."),
-  "ai-003-anthropic-api-key-hardcoded": r("Anthropic key hardcoded", W.SECRET, "Rotate the leaked key immediately."),
+  "ai-002-openai-api-key-hardcoded": r(
+    "OpenAI key hardcoded",
+    W.SECRET,
+    "Rotate the leaked key immediately — assume any key that ever lived in a commit is compromised.",
+  ),
+  "ai-003-anthropic-api-key-hardcoded": r(
+    "Anthropic key hardcoded",
+    W.SECRET,
+    "Rotate the leaked key immediately.",
+  ),
   "ai-004-prompt-injection-sink": r(
     "prompt built from untrusted input without delimiter",
     "Wrap user input in delimited blocks the system prompt explicitly forbids overriding (<user_input>...</user_input>) and use the API's structured roles instead of concatenated strings.",
   ),
   "ai-005-vector-db-untrusted-query": r(
     "vector DB query without metadata filter",
-    "Add a metadata filter scoping results to the calling user (filter={\"user_id\": current_user.id}). Escape retrieved chunks before feeding back into a prompt.",
+    'Add a metadata filter scoping results to the calling user (filter={"user_id": current_user.id}). Escape retrieved chunks before feeding back into a prompt.',
   ),
 
   // ── v2.10.334 — Phase B: deeper flight-software pack ───────
-  "fsw-016-frame-length-as-offset": r("frame length as offset", "Cap header.get_lengthField() against MAX_PAYLOAD_SIZE before calling moveDeserToOffset / setBuffSize."),
-  "fsw-017-component-array-id-no-check": r("array indexed by external ID", "FW_ASSERT(id < ARRAY_SIZE) before indexing the channels/packets/ports array."),
-  "fsw-018-cmdhandler-stub-only-response": r("cmdHandler stub", "Implement the handler, or emit cmdResponse NOT_IMPLEMENTED so ground sees the gap."),
-  "fsw-019-logger-format-from-arg": r("logger format injection", "Always pass a literal format string; never let user input become the format."),
-  "fsw-020-fwtime-getseconds-no-tb-check": r("Fw::Time TimeBase mismatch", "Check getTimeBase() agreement, or use Fw::Time::sub()."),
+  "fsw-016-frame-length-as-offset": r(
+    "frame length as offset",
+    "Cap header.get_lengthField() against MAX_PAYLOAD_SIZE before calling moveDeserToOffset / setBuffSize.",
+  ),
+  "fsw-017-component-array-id-no-check": r(
+    "array indexed by external ID",
+    "FW_ASSERT(id < ARRAY_SIZE) before indexing the channels/packets/ports array.",
+  ),
+  "fsw-018-cmdhandler-stub-only-response": r(
+    "cmdHandler stub",
+    "Implement the handler, or emit cmdResponse NOT_IMPLEMENTED so ground sees the gap.",
+  ),
+  "fsw-019-logger-format-from-arg": r(
+    "logger format injection",
+    "Always pass a literal format string; never let user input become the format.",
+  ),
+  "fsw-020-fwtime-getseconds-no-tb-check": r(
+    "Fw::Time TimeBase mismatch",
+    "Check getTimeBase() agreement, or use Fw::Time::sub().",
+  ),
 
   // ── v2.10.336 — AST-based patterns ─────────────────────────
   "py-ast-001-eval-of-parameter": r("eval() of function parameter (AST taint)", W.EVAL),
 
   // ── v2.10.340 — JS + Go AST patterns ───────────────────────
-  "js-ast-001-eval-of-parameter": r("eval/Function/setTimeout-string of parameter (AST taint)", W.EVAL),
-  "js-ast-002-child-process-exec-of-parameter": r("child_process.exec of parameter (AST taint)", W.SHELL),
+  "js-ast-001-eval-of-parameter": r(
+    "eval/Function/setTimeout-string of parameter (AST taint)",
+    W.EVAL,
+  ),
+  "js-ast-002-child-process-exec-of-parameter": r(
+    "child_process.exec of parameter (AST taint)",
+    W.SHELL,
+  ),
   "go-ast-001-exec-command-of-parameter": r("exec.Command of parameter (AST taint)", W.SHELL),
   "go-ast-002-os-open-of-parameter": r("os.Open / ReadFile of parameter (AST taint)", W.PATH),
 
   // ── v2.10.341 — TS prototype-pollution + JS RegExp ReDoS ───
-  "ts-ast-001-prototype-pollution-of-parameter": r("obj[key] = ... where key is a parameter (prototype pollution)", W.PROTO),
-  "js-ast-003-regexp-construction-of-parameter": r("new RegExp(p) where p is a parameter (ReDoS)", W.REDOS),
+  "ts-ast-001-prototype-pollution-of-parameter": r(
+    "obj[key] = ... where key is a parameter (prototype pollution)",
+    W.PROTO,
+  ),
+  "js-ast-003-regexp-construction-of-parameter": r(
+    "new RegExp(p) where p is a parameter (ReDoS)",
+    W.REDOS,
+  ),
 
   // ── v2.10.343 — second wave Python AST ─────────────────────
-  "py-ast-002-deserialization-of-parameter": r("pickle/yaml/marshal/dill .loads of parameter (RCE via deserialization)", W.DESER),
-  "py-ast-003-subprocess-of-parameter": r("subprocess / os.system / os.exec of parameter (command injection)", W.SHELL),
+  "py-ast-002-deserialization-of-parameter": r(
+    "pickle/yaml/marshal/dill .loads of parameter (RCE via deserialization)",
+    W.DESER,
+  ),
+  "py-ast-003-subprocess-of-parameter": r(
+    "subprocess / os.system / os.exec of parameter (command injection)",
+    W.SHELL,
+  ),
   "py-ast-004-open-of-parameter": r("open() of parameter (path traversal)", W.PATH),
 
   // ── v2.10.344 — Java AST ───────────────────────────────────
-  "java-ast-001-runtime-exec-of-parameter": r("Runtime.exec / ProcessBuilder of parameter (command injection)", W.SHELL),
-  "java-ast-002-file-construction-of-parameter": r("new File / FileInputStream of parameter (path traversal)", W.PATH),
-  "java-ast-003-class-forname-of-parameter": r("Class.forName / loadClass of parameter (reflection abuse)", W.DESER),
+  "java-ast-001-runtime-exec-of-parameter": r(
+    "Runtime.exec / ProcessBuilder of parameter (command injection)",
+    W.SHELL,
+  ),
+  "java-ast-002-file-construction-of-parameter": r(
+    "new File / FileInputStream of parameter (path traversal)",
+    W.PATH,
+  ),
+  "java-ast-003-class-forname-of-parameter": r(
+    "Class.forName / loadClass of parameter (reflection abuse)",
+    W.DESER,
+  ),
 
   // ── v2.10.346 — C / C++ AST ────────────────────────────────
-  "cpp-ast-001-system-of-parameter": r("system / popen / exec* of parameter (command injection)", W.SHELL),
-  "cpp-ast-002-strcpy-of-parameter": r("strcpy / strcat / sprintf of parameter (buffer overflow)", W.OVERFLOW),
-  "cpp-ast-003-printf-format-of-parameter": r("printf format string from parameter (format-string vulnerability)", W.FORMAT),
+  "cpp-ast-001-system-of-parameter": r(
+    "system / popen / exec* of parameter (command injection)",
+    W.SHELL,
+  ),
+  "cpp-ast-002-strcpy-of-parameter": r(
+    "strcpy / strcat / sprintf of parameter (buffer overflow)",
+    W.OVERFLOW,
+  ),
+  "cpp-ast-003-printf-format-of-parameter": r(
+    "printf format string from parameter (format-string vulnerability)",
+    W.FORMAT,
+  ),
 
   // ── v2.10.348 — Rust AST ───────────────────────────────────
-  "rust-ast-001-command-new-of-parameter": r("Command::new(p) of parameter (command injection)", W.SHELL),
-  "rust-ast-002-fs-path-of-parameter": r("File::open / fs::read_to_string of parameter (path traversal)", W.PATH),
+  "rust-ast-001-command-new-of-parameter": r(
+    "Command::new(p) of parameter (command injection)",
+    W.SHELL,
+  ),
+  "rust-ast-002-fs-path-of-parameter": r(
+    "File::open / fs::read_to_string of parameter (path traversal)",
+    W.PATH,
+  ),
 
   // ── v2.10.349 — Ruby + PHP AST ─────────────────────────────
   "rb-ast-001-eval-of-parameter": r("eval / instance_eval / class_eval of parameter (RCE)", W.EVAL),
-  "rb-ast-002-shell-of-parameter": r("system / exec / spawn / backtick of parameter (command injection)", W.SHELL),
-  "rb-ast-003-file-open-of-parameter": r("File.open / IO.read of parameter (path traversal)", W.PATH),
+  "rb-ast-002-shell-of-parameter": r(
+    "system / exec / spawn / backtick of parameter (command injection)",
+    W.SHELL,
+  ),
+  "rb-ast-003-file-open-of-parameter": r(
+    "File.open / IO.read of parameter (path traversal)",
+    W.PATH,
+  ),
   "php-ast-001-eval-of-parameter": r("eval / assert of parameter (RCE)", W.EVAL),
-  "php-ast-002-shell-of-parameter": r("system / shell_exec / passthru of parameter (command injection)", W.SHELL),
-  "php-ast-003-include-of-parameter": r("include / require / file_get_contents of parameter (RFI/LFI/path traversal)", W.PATH),
+  "php-ast-002-shell-of-parameter": r(
+    "system / shell_exec / passthru of parameter (command injection)",
+    W.SHELL,
+  ),
+  "php-ast-003-include-of-parameter": r(
+    "include / require / file_get_contents of parameter (RFI/LFI/path traversal)",
+    W.PATH,
+  ),
 
   // ── P2.1 (v2.10.389) — Cloud / IaC ─────────────────────────
   // Annotation-tier only: IaC fixes are too context-dependent for
   // automated rewrites (which capabilities does this pod actually
   // need? which actions does this role actually call?). The
   // annotations point the reviewer at the precise issue.
-  "cloud-001-iam-wildcard-action": r("IAM Action='*' grants full account surface", "Replace with the explicit list of API calls the role needs."),
-  "cloud-002-tf-public-s3": r("S3 bucket with public-read ACL", "Use private ACL + CloudFront with an Origin Access Identity for public assets."),
-  "cloud-003-k8s-privileged-container": r("Kubernetes privileged container (full host root)", "Drop privileged: true; request specific capabilities via securityContext.capabilities.add."),
-  "cloud-004-k8s-host-network": r("Pod with hostNetwork: true (bypasses NetworkPolicy)", "Use a Service to expose ports — node-agent pattern is the only legitimate exception."),
-  "cloud-005-dockerfile-secret-arg": r("Dockerfile ARG holding what looks like a secret", "Use BuildKit secret mounts (RUN --mount=type=secret) — ARG values are baked into image history."),
-  "cloud-006-gha-third-party-no-sha": r("Third-party GitHub Action pinned to a tag", "Pin to a 40-char commit SHA. Tag refs are mutable and a repo takeover compromises every workflow using @v1."),
+  "cloud-001-iam-wildcard-action": r(
+    "IAM Action='*' grants full account surface",
+    "Replace with the explicit list of API calls the role needs.",
+  ),
+  "cloud-002-tf-public-s3": r(
+    "S3 bucket with public-read ACL",
+    "Use private ACL + CloudFront with an Origin Access Identity for public assets.",
+  ),
+  "cloud-003-k8s-privileged-container": r(
+    "Kubernetes privileged container (full host root)",
+    "Drop privileged: true; request specific capabilities via securityContext.capabilities.add.",
+  ),
+  "cloud-004-k8s-host-network": r(
+    "Pod with hostNetwork: true (bypasses NetworkPolicy)",
+    "Use a Service to expose ports — node-agent pattern is the only legitimate exception.",
+  ),
+  "cloud-005-dockerfile-secret-arg": r(
+    "Dockerfile ARG holding what looks like a secret",
+    "Use BuildKit secret mounts (RUN --mount=type=secret) — ARG values are baked into image history.",
+  ),
+  "cloud-006-gha-third-party-no-sha": r(
+    "Third-party GitHub Action pinned to a tag",
+    "Pin to a 40-char commit SHA. Tag refs are mutable and a repo takeover compromises every workflow using @v1.",
+  ),
 
   // ── P2.2 (v2.10.389) — Supply-Chain ────────────────────────
   // Same annotation-tier reasoning as cloud — fixing supply-chain
   // bugs requires understanding the build/release pipeline; the
   // recipe points at the precise issue and the canonical guidance.
-  "supply-001-curl-pipe-shell": r("curl <url> | sh — fetch-and-run install", "Download to a file, verify checksum/signature, then run. Or use a signed package manager (apt, brew)."),
-  "supply-002-gha-pull-request-target-checkout-head": r("pull_request_target + checkout PR head — RCE-on-PR", "Switch to pull_request (no secrets), or pass forked PR data via labels/artifacts to a separate workflow without secrets."),
-  "supply-003-pip-extra-index-url": r("pip --extra-index-url — dependency confusion shape", "Use --index-url (single source). Mirror packages internally; pip install --require-hashes for production."),
+  "supply-001-curl-pipe-shell": r(
+    "curl <url> | sh — fetch-and-run install",
+    "Download to a file, verify checksum/signature, then run. Or use a signed package manager (apt, brew).",
+  ),
+  "supply-002-gha-pull-request-target-checkout-head": r(
+    "pull_request_target + checkout PR head — RCE-on-PR",
+    "Switch to pull_request (no secrets), or pass forked PR data via labels/artifacts to a separate workflow without secrets.",
+  ),
+  "supply-003-pip-extra-index-url": r(
+    "pip --extra-index-url — dependency confusion shape",
+    "Use --index-url (single source). Mirror packages internally; pip install --require-hashes for production.",
+  ),
   "supply-004-npm-token-hardcoded": r("npm publish token hardcoded", W.SECRET),
   "supply-005-eval-of-fetch": r("eval/Function over network-fetched payload", W.EVAL),
 
@@ -1537,53 +2223,128 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   // Next-specific bug shapes that can't be fixed mechanically (auth
   // pattern depends on the project's auth lib + middleware setup).
   // Annotation-tier with concrete guidance for each.
-  "next-001-getserversideprops-no-auth": r("getServerSideProps without an auth check", "Add an early `getServerSession`/`auth()` gate that returns a redirect when unauthenticated."),
-  "next-002-server-action-no-auth": r("Server Action exposes a public mutation endpoint", "Wrap with a `withAuth` helper or call `await auth()` on the first line and throw on missing session."),
-  "next-003-next-public-secret": r("NEXT_PUBLIC_<NAME> with secret-shaped name (bundled to client)", "Drop the NEXT_PUBLIC_ prefix; secrets must stay server-side. If the browser needs the API, proxy through a Route Handler."),
-  "next-004-route-handler-no-auth": r("App Router route handler reads request data without auth", "Add `const session = await auth(); if (!session?.user) return new Response('unauthorized', { status: 401 });` at the top."),
-  "next-005-redirect-from-query": r("redirect/router.push with a raw query value", "Validate against an allowlist or restrict to relative paths (`!url.startsWith('/') || url.startsWith('//')` → reject)."),
+  "next-001-getserversideprops-no-auth": r(
+    "getServerSideProps without an auth check",
+    "Add an early `getServerSession`/`auth()` gate that returns a redirect when unauthenticated.",
+  ),
+  "next-002-server-action-no-auth": r(
+    "Server Action exposes a public mutation endpoint",
+    "Wrap with a `withAuth` helper or call `await auth()` on the first line and throw on missing session.",
+  ),
+  "next-003-next-public-secret": r(
+    "NEXT_PUBLIC_<NAME> with secret-shaped name (bundled to client)",
+    "Drop the NEXT_PUBLIC_ prefix; secrets must stay server-side. If the browser needs the API, proxy through a Route Handler.",
+  ),
+  "next-004-route-handler-no-auth": r(
+    "App Router route handler reads request data without auth",
+    "Add `const session = await auth(); if (!session?.user) return new Response('unauthorized', { status: 401 });` at the top.",
+  ),
+  "next-005-redirect-from-query": r(
+    "redirect/router.push with a raw query value",
+    "Validate against an allowlist or restrict to relative paths (`!url.startsWith('/') || url.startsWith('//')` → reject).",
+  ),
 
   // ── P2.3 (v2.10.391) — FastAPI framework pack ──────────────
-  "fastapi-002-cors-wildcard-with-credentials": r("CORS allow_origins='*' + allow_credentials=True", "The two cannot coexist safely. Pick: explicit origin allowlist + credentials, OR '*' without credentials."),
-  "fastapi-003-jwt-no-verify": r("jwt.decode without signature verification", "Pass the verification key + algorithms=['RS256'] (or your signer's algorithm). Never decode without verification."),
+  "fastapi-002-cors-wildcard-with-credentials": r(
+    "CORS allow_origins='*' + allow_credentials=True",
+    "The two cannot coexist safely. Pick: explicit origin allowlist + credentials, OR '*' without credentials.",
+  ),
+  "fastapi-003-jwt-no-verify": r(
+    "jwt.decode without signature verification",
+    "Pass the verification key + algorithms=['RS256'] (or your signer's algorithm). Never decode without verification.",
+  ),
   "fastapi-004-pickle-from-request": r("pickle.loads on attacker-reachable input — RCE", W.DESER),
-  "fastapi-005-route-no-auth-on-mutation": r("Mutation endpoint without an auth Depends", "Add `user: User = Depends(get_current_user)` to the signature, or attach dependencies=[Depends(verify_user)] to the router."),
+  "fastapi-005-route-no-auth-on-mutation": r(
+    "Mutation endpoint without an auth Depends",
+    "Add `user: User = Depends(get_current_user)` to the signature, or attach dependencies=[Depends(verify_user)] to the router.",
+  ),
 
   // ── P2.3 (v2.10.391) — Express framework pack ─────────────
   "express-004-eval-of-req": r("eval/Function over req.body|query|params — RCE", W.EVAL),
-  "express-005-default-session-secret": r("express-session with weak/placeholder secret", "Generate 32 bytes of entropy (`openssl rand -hex 32`); load via process.env.SESSION_SECRET; crash on missing."),
-  "express-006-trust-proxy-true": r("trust proxy = true allows IP spoofing via X-Forwarded-For", "Set to the exact number of proxy hops, or an explicit IP/CIDR allowlist."),
-  "express-007-cookie-no-secure-httponly": r("Auth-shape cookie without httpOnly+secure", "Add `{ httpOnly: true, secure: true, sameSite: 'strict' }` to the options object."),
+  "express-005-default-session-secret": r(
+    "express-session with weak/placeholder secret",
+    "Generate 32 bytes of entropy (`openssl rand -hex 32`); load via process.env.SESSION_SECRET; crash on missing.",
+  ),
+  "express-006-trust-proxy-true": r(
+    "trust proxy = true allows IP spoofing via X-Forwarded-For",
+    "Set to the exact number of proxy hops, or an explicit IP/CIDR allowlist.",
+  ),
+  "express-007-cookie-no-secure-httponly": r(
+    "Auth-shape cookie without httpOnly+secure",
+    "Add `{ httpOnly: true, secure: true, sameSite: 'strict' }` to the options object.",
+  ),
 
   // ── P2.3 (v2.10.391) — Django framework pack ──────────────
-  "django-004-csrf-exempt": r("@csrf_exempt disables CSRF on the view", "If the view is a webhook, verify the upstream signature instead. If it's a public unauthenticated endpoint, document why."),
-  "django-005-debug-true-in-settings": r("DEBUG = True in production settings", "Switch to `DEBUG = os.environ.get('DJANGO_DEBUG', '').lower() == 'true'` — env-controlled, defaults to False."),
-  "django-006-allowed-hosts-wildcard": r("ALLOWED_HOSTS contains '*'", "List the exact hostnames the app serves; for multi-tenant generate from a config table at startup."),
+  "django-004-csrf-exempt": r(
+    "@csrf_exempt disables CSRF on the view",
+    "If the view is a webhook, verify the upstream signature instead. If it's a public unauthenticated endpoint, document why.",
+  ),
+  "django-005-debug-true-in-settings": r(
+    "DEBUG = True in production settings",
+    "Switch to `DEBUG = os.environ.get('DJANGO_DEBUG', '').lower() == 'true'` — env-controlled, defaults to False.",
+  ),
+  "django-006-allowed-hosts-wildcard": r(
+    "ALLOWED_HOSTS contains '*'",
+    "List the exact hostnames the app serves; for multi-tenant generate from a config table at startup.",
+  ),
   "django-007-eval-of-request": r("eval/exec on request.GET|POST data — RCE", W.EVAL),
 
   // ── P2.3 (v2.10.391) — Rails framework pack ───────────────
-  "rails-002-send-to-dynamic-method": r("send/public_send with user-controlled method name — RCE", "Replace dynamic dispatch with a case statement or hash allowlist of allowed method names."),
-  "rails-003-mass-assignment": r("params.permit! or update_attributes(params[:user]) — mass assignment", "Use strong params: params.require(:user).permit(:name, :email). Never use params.permit!."),
-  "rails-004-eval-instance-eval": r("eval/instance_eval/class_eval with dynamic content — RCE", W.EVAL),
-  "rails-005-render-inline": r("render inline: with dynamic content — ERB injection (RCE)", "Use a partial with locals: { ... } instead of inline ERB. Never let user data into a template string."),
+  "rails-002-send-to-dynamic-method": r(
+    "send/public_send with user-controlled method name — RCE",
+    "Replace dynamic dispatch with a case statement or hash allowlist of allowed method names.",
+  ),
+  "rails-003-mass-assignment": r(
+    "params.permit! or update_attributes(params[:user]) — mass assignment",
+    "Use strong params: params.require(:user).permit(:name, :email). Never use params.permit!.",
+  ),
+  "rails-004-eval-instance-eval": r(
+    "eval/instance_eval/class_eval with dynamic content — RCE",
+    W.EVAL,
+  ),
+  "rails-005-render-inline": r(
+    "render inline: with dynamic content — ERB injection (RCE)",
+    "Use a partial with locals: { ... } instead of inline ERB. Never let user data into a template string.",
+  ),
 
   // ── P2.3 (v2.10.391) — Spring framework pack ──────────────
-  "spring-001-deserialization": r("ObjectInputStream.readObject() — Java deserialization RCE", "Replace with Jackson/JSON. If serialization must stay, override resolveClass to enforce a strict class allowlist."),
-  "spring-002-spel-from-input": r("SpEL parseExpression on user input — RCE", "Bind user values as variables (#var) inside a HARDCODED expression; never let users write the expression itself."),
-  "spring-003-request-mapping-no-auth": r("@PostMapping/@PutMapping without @PreAuthorize", "Add @PreAuthorize(\"isAuthenticated()\") above the mapping or class-level."),
+  "spring-001-deserialization": r(
+    "ObjectInputStream.readObject() — Java deserialization RCE",
+    "Replace with Jackson/JSON. If serialization must stay, override resolveClass to enforce a strict class allowlist.",
+  ),
+  "spring-002-spel-from-input": r(
+    "SpEL parseExpression on user input — RCE",
+    "Bind user values as variables (#var) inside a HARDCODED expression; never let users write the expression itself.",
+  ),
+  "spring-003-request-mapping-no-auth": r(
+    "@PostMapping/@PutMapping without @PreAuthorize",
+    'Add @PreAuthorize("isAuthenticated()") above the mapping or class-level.',
+  ),
 
   // ── P2.3 (v2.10.391) — Laravel framework pack ─────────────
-  "laravel-001-mass-assignment-fillable-empty": r("Eloquent ::create($request->all()) — mass assignment", "Use $request->only(['name', 'email']) and set $fillable on the model."),
+  "laravel-001-mass-assignment-fillable-empty": r(
+    "Eloquent ::create($request->all()) — mass assignment",
+    "Use $request->only(['name', 'email']) and set $fillable on the model.",
+  ),
   "laravel-002-eval-of-request": r("eval() with $request — RCE", W.EVAL),
-  "laravel-003-raw-db-query-with-input": r("DB::raw with $request interpolation — SQL injection", W.SQL),
+  "laravel-003-raw-db-query-with-input": r(
+    "DB::raw with $request interpolation — SQL injection",
+    W.SQL,
+  ),
 };
 
 function commentPrefix(path: string): string {
   const p = path.toLowerCase();
   if (
-    p.endsWith(".py") || p.endsWith(".rb") || p.endsWith(".sh") ||
-    p.endsWith(".yaml") || p.endsWith(".yml") || p.endsWith(".toml") ||
-    p.endsWith(".lua") || p.endsWith(".ex") || p.endsWith(".exs")
+    p.endsWith(".py") ||
+    p.endsWith(".rb") ||
+    p.endsWith(".sh") ||
+    p.endsWith(".yaml") ||
+    p.endsWith(".yml") ||
+    p.endsWith(".toml") ||
+    p.endsWith(".lua") ||
+    p.endsWith(".ex") ||
+    p.endsWith(".exs")
   ) {
     return "# ";
   }
@@ -1593,11 +2354,7 @@ function commentPrefix(path: string): string {
   return "// ";
 }
 
-function applyRecipe(
-  lines: string[],
-  finding: Finding,
-  recipe: PatternRecipe,
-): OneFixResult {
+function applyRecipe(lines: string[], finding: Finding, recipe: PatternRecipe): OneFixResult {
   const idx = finding.line - 1;
   if (idx < 0 || idx >= lines.length) {
     return { applied: false, kind: "skipped", lines, description: "Line out of range" };
@@ -1647,14 +2404,10 @@ function applyRecipe(
   const shortId = shortIdMatch ? shortIdMatch[0] : fullId;
   // Build a regex that escapes the IDs (in case they ever contain
   // regex metacharacters — current ids don't, but defensive).
-  const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const idPattern =
-    fullId === shortId
-      ? escape(fullId)
-      : `(?:${escape(fullId)}|${escape(shortId)})`;
-  const tagRegex = new RegExp(
-    `(?:audit-note|audit-fix|KCODE-AUDIT|KCODE-FIX):${idPattern}\\b`,
-  );
+    fullId === shortId ? escapeRegex(fullId) : `(?:${escapeRegex(fullId)}|${escapeRegex(shortId)})`;
+  const tagRegex = new RegExp(`(?:audit-note|audit-fix|KCODE-AUDIT|KCODE-FIX):${idPattern}\\b`);
   for (let i = Math.max(0, idx - WINDOW); i <= Math.min(lines.length - 1, idx + WINDOW); i++) {
     const ln = lines[i]!;
     if (tagRegex.test(ln)) {

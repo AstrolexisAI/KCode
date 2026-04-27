@@ -56,9 +56,9 @@ const CLI_SIGNALS = [
   "meow",
   "arg",
   "clipanion",
-  "click",        // python
-  "typer",        // python
-  "argparse",     // python stdlib — weak signal but still CLI
+  "click", // python
+  "typer", // python
+  "argparse", // python stdlib — weak signal but still CLI
 ];
 
 /** Web frameworks / servers. */

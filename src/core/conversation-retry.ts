@@ -171,10 +171,13 @@ export async function createStreamWithRetry(
           `Rate limit with x-should-retry:false — skipping retries, going to cascade`,
         );
         // Fall through to fallback/cascade logic below
-      } else
+      }
 
       // Rate limits: 3 retries max before cascading to smaller models
-      if (attempt < (isRateLimitError(error) ? Math.max(ctx.maxRetries, 3) : ctx.maxRetries) && isRetryableError(error)) {
+      else if (
+        attempt < (isRateLimitError(error) ? Math.max(ctx.maxRetries, 3) : ctx.maxRetries) &&
+        isRetryableError(error)
+      ) {
         let delay: number;
         if (isRateLimitError(error)) {
           // Use server-provided Retry-After, with a minimum floor
@@ -225,9 +228,10 @@ export async function createStreamWithRetry(
           const { listModels } = await import("./models.js");
           const all = await listModels();
           // Fuzzy match: fallback "claude-haiku-4-5" matches "claude-haiku-4-5-20251001"
-          const match = all.find((m) =>
-            m.name === ctx.config.fallbackModel ||
-            m.name.startsWith(ctx.config.fallbackModel + "-")
+          const match = all.find(
+            (m) =>
+              m.name === ctx.config.fallbackModel ||
+              m.name.startsWith(ctx.config.fallbackModel + "-"),
           );
           if (match) {
             fallbackConfig.apiBase = match.baseUrl;
@@ -267,7 +271,10 @@ export async function createStreamWithRetry(
             ctx.config._rateLimitedModel = ctx.config.model;
             ctx.config._rateLimitedUntil = Date.now() + 5 * 60 * 1000; // 5 min cooldown
             ctx.config.model = ctx.config.fallbackModel;
-            log.warn("llm", `Rate-limited model ${ctx.config._rateLimitedModel} parked for 5 min — using ${ctx.config.model}`);
+            log.warn(
+              "llm",
+              `Rate-limited model ${ctx.config._rateLimitedModel} parked for 5 min — using ${ctx.config.model}`,
+            );
           }
           return stream;
         } catch (fallbackErr) {
@@ -386,7 +393,8 @@ export async function createStreamWithRetry(
           for (const cascadeModel of cascadeFallbacks) {
             if (triedModels.has(cascadeModel)) continue;
             triedModels.add(cascadeModel);
-            const pct = utilization !== undefined ? ` (${Math.round(utilization * 100)}% used)` : "";
+            const pct =
+              utilization !== undefined ? ` (${Math.round(utilization * 100)}% used)` : "";
             log.warn(
               "llm",
               `Rate limit exhausted on ${ctx.config.model}${pct} — auto-cascading to ${cascadeModel}`,

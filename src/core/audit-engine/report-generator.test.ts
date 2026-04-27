@@ -4,8 +4,8 @@
 // they're not.
 
 import { describe, expect, test } from "bun:test";
-import type { AuditResult, Finding, Severity } from "./types";
 import { generateMarkdownReport } from "./report-generator";
+import type { AuditResult, Finding, Severity } from "./types";
 
 function makeFinding(over: Partial<Finding> = {}): Finding {
   const base: Finding = {

@@ -18,7 +18,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If from internal constants or compile-time config, respond FALSE_POSITIVE. " +
       "If from untrusted input, respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Use String.to_existing_atom() which only converts already-existing atoms, or keep as string.",
+    fix_template:
+      "Use String.to_existing_atom() which only converts already-existing atoms, or keep as string.",
   },
   {
     id: "ex-002-to-atom-untrusted",
@@ -33,14 +34,16 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If from internal/compile-time source, respond FALSE_POSITIVE. " +
       "If user-controlled, respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Use String.to_existing_atom() or keep the value as a string. Map strings to atoms with a whitelist.",
+    fix_template:
+      "Use String.to_existing_atom() or keep the value as a string. Map strings to atoms with a whitelist.",
   },
   {
     id: "ex-003-unbounded-mailbox",
     title: "GenServer without backpressure (unbounded mailbox)",
     severity: "medium",
     languages: ["elixir"],
-    regex: /\bGenServer\.cast\s*\([^)]*\)[\s\S]{0,500}?(?!handle_info.*:check_mailbox|Process\.info.*:message_queue_len)/g,
+    regex:
+      /\bGenServer\.cast\s*\([^)]*\)[\s\S]{0,500}?(?!handle_info.*:check_mailbox|Process\.info.*:message_queue_len)/g,
     explanation:
       "GenServer.cast() is fire-and-forget. If messages arrive faster than the server processes them, the mailbox grows unbounded until the VM runs out of memory.",
     verify_prompt:
@@ -48,7 +51,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If it's a low-rate administrative GenServer, respond FALSE_POSITIVE. " +
       "If it could receive bursts of messages without backpressure, respond CONFIRMED.",
     cwe: "CWE-770",
-    fix_template: "Use GenServer.call() for backpressure, or monitor mailbox size with Process.info(self(), :message_queue_len).",
+    fix_template:
+      "Use GenServer.call() for backpressure, or monitor mailbox size with Process.info(self(), :message_queue_len).",
   },
   {
     id: "ex-004-ets-race-condition",
@@ -63,7 +67,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If it's a single-writer table or protected by a GenServer serializing access, respond FALSE_POSITIVE. " +
       "If multiple processes read-modify-write, respond CONFIRMED.",
     cwe: "CWE-362",
-    fix_template: "Use :ets.update_counter() for atomic increments, or serialize access through a GenServer.",
+    fix_template:
+      "Use :ets.update_counter() for atomic increments, or serialize access through a GenServer.",
   },
   {
     id: "ex-005-process-exit-kill",
@@ -78,7 +83,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If it's a fallback after timeout on normal exit, respond FALSE_POSITIVE. " +
       "If it's the first/only shutdown signal, respond CONFIRMED.",
     cwe: "CWE-404",
-    fix_template: "Use Process.exit(pid, :shutdown) first, which allows cleanup. Only use :kill as a timeout fallback.",
+    fix_template:
+      "Use Process.exit(pid, :shutdown) first, which allows cleanup. Only use :kill as a timeout fallback.",
   },
   {
     id: "ex-006-ecto-raw-sql-injection",
@@ -93,7 +99,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If interpolating a module constant or compile-time value, respond FALSE_POSITIVE. " +
       "If user-controlled data, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: 'Use parameterized queries: Ecto.Adapters.SQL.query(repo, "SELECT * FROM t WHERE id = $1", [user_id])',
+    fix_template:
+      'Use parameterized queries: Ecto.Adapters.SQL.query(repo, "SELECT * FROM t WHERE id = $1", [user_id])',
   },
   {
     id: "ex-007-hardcoded-secrets-config",
@@ -115,7 +122,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
     title: "Supervisor without explicit restart strategy",
     severity: "low",
     languages: ["elixir"],
-    regex: /\bSupervisor\.start_link\s*\(\s*\[[^\]]*\]\s*,\s*(?:name:|strategy:(?!\s*:one_for_one|\s*:rest_for_one|\s*:one_for_all))/g,
+    regex:
+      /\bSupervisor\.start_link\s*\(\s*\[[^\]]*\]\s*,\s*(?:name:|strategy:(?!\s*:one_for_one|\s*:rest_for_one|\s*:one_for_all))/g,
     explanation:
       "Using the default supervisor strategy without explicit thought can lead to cascading failures. The default :one_for_one may not be appropriate for processes with dependencies.",
     verify_prompt:
@@ -123,7 +131,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If the children are independent, respond FALSE_POSITIVE. " +
       "If children depend on each other (e.g., producer-consumer), respond CONFIRMED.",
     cwe: "CWE-754",
-    fix_template: "Explicitly set strategy: Supervisor.start_link(children, strategy: :one_for_all) for dependent processes.",
+    fix_template:
+      "Explicitly set strategy: Supervisor.start_link(children, strategy: :one_for_all) for dependent processes.",
   },
   {
     id: "ex-009-task-async-no-await",
@@ -138,7 +147,8 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If awaited, respond FALSE_POSITIVE. " +
       "If the task result is never collected, respond CONFIRMED.",
     cwe: "CWE-404",
-    fix_template: "Add Task.await(task) to collect the result, or use Task.start/Task.start_link for fire-and-forget.",
+    fix_template:
+      "Add Task.await(task) to collect the result, or use Task.start/Task.start_link for fire-and-forget.",
   },
   {
     id: "ex-010-io-inspect-production",
@@ -153,6 +163,7 @@ export const ELIXIR_PATTERNS: BugPattern[] = [
       "If in test files, IEx helpers, or behind a debug flag, respond FALSE_POSITIVE. " +
       "If in production code path (controllers, contexts, GenServers), respond CONFIRMED.",
     cwe: "CWE-532",
-    fix_template: "Use Logger.debug(inspect(value)) for structured logging, or remove the IO.inspect call.",
+    fix_template:
+      "Use Logger.debug(inspect(value)) for structured logging, or remove the IO.inspect call.",
   },
 ];

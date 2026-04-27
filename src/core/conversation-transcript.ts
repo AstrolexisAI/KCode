@@ -14,10 +14,7 @@ export interface TranscriptRecorderContext {
   activeGuardState: LoopGuardState | null;
 }
 
-export function recordTranscriptEvent(
-  ctx: TranscriptRecorderContext,
-  event: StreamEvent,
-): void {
+export function recordTranscriptEvent(ctx: TranscriptRecorderContext, event: StreamEvent): void {
   switch (event.type) {
     case "text_delta":
       // Text deltas are accumulated — we record the final text in turn_end via messages

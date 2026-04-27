@@ -5,22 +5,23 @@ import { Box, Text, useApp } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
 import { getRateLimitUsage } from "../core/request-builder.js";
-import { getSubscription, type SubscriptionTier } from "../core/subscription.js";
 import { SkillManager } from "../core/skills.js";
+import { getSubscription, type SubscriptionTier } from "../core/subscription.js";
 import { CHARS_PER_TOKEN } from "../core/token-budget.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
 import type { KCodeConfig } from "../core/types.js";
 import { getActivePlan, loadLatestPlan, onPlanChange, type Plan } from "../tools/plan.js";
 import ActivePlanPanel from "./components/ActivePlanPanel.js";
+import AgentPanel from "./components/AgentPanel.js";
 import CloudMenu, { type CloudResult } from "./components/CloudMenu.js";
-import KodiAdvisorMenu, { type KodiAdvisorMenuResult } from "./components/KodiAdvisorMenu.js";
 import ContextGrid from "./components/ContextGrid.js";
+import EscalationPrompt from "./components/EscalationPrompt.js";
 import Header from "./components/Header.js";
 import InputPrompt from "./components/InputPrompt.js";
 import InteractiveQuestion from "./components/InteractiveQuestion.js";
 import { KeybindingProvider } from "./components/KeybindingContext.js";
-import AgentPanel from "./components/AgentPanel.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
+import KodiAdvisorMenu, { type KodiAdvisorMenuResult } from "./components/KodiAdvisorMenu.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
 import ModelToggle, { type ModelToggleResult } from "./components/ModelToggle.js";
 import PermissionDialog, {
@@ -28,7 +29,6 @@ import PermissionDialog, {
   type PermissionRequest,
 } from "./components/PermissionDialog.js";
 import QuestionDialog from "./components/QuestionDialog.js";
-import EscalationPrompt from "./components/EscalationPrompt.js";
 import Spinner from "./components/Spinner.js";
 import SudoPasswordPrompt from "./components/SudoPasswordPrompt.js";
 import ToolTabs from "./components/ToolTabs.js";
@@ -307,7 +307,9 @@ export default function App({ config, conversationManager, tools, initialSession
         })),
       });
     };
-    return () => { conversationManager.onAgentProgress = null; };
+    return () => {
+      conversationManager.onAgentProgress = null;
+    };
   }, [conversationManager]);
 
   // Virtual scroll feature flag — set via KCODE_VIRTUAL_SCROLL=1 env var
@@ -359,7 +361,13 @@ export default function App({ config, conversationManager, tools, initialSession
 
   // Per-model session breakdown — aggregated from TurnCostEntry.model
   const [sessionModelBreakdown, setSessionModelBreakdown] = useState<
-    Array<{ model: string; inputTokens: number; outputTokens: number; costUsd: number; turns: number }>
+    Array<{
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      costUsd: number;
+      turns: number;
+    }>
   >([]);
 
   // Recompute running USD cost + per-model breakdown whenever token count changes.
@@ -376,12 +384,20 @@ export default function App({ config, conversationManager, tools, initialSession
         setSessionCostUsd(total);
 
         // Per-model aggregation
-        const byModel = new Map<string, { inputTokens: number; outputTokens: number; costUsd: number; turns: number }>();
+        const byModel = new Map<
+          string,
+          { inputTokens: number; outputTokens: number; costUsd: number; turns: number }
+        >();
         for (const t of turnCosts) {
           if (!t.model) continue;
           // Include local models (costUsd=0) so they appear in mini-Kodi team
           // Mark them as "local" provider for display purposes
-          const existing = byModel.get(t.model) ?? { inputTokens: 0, outputTokens: 0, costUsd: 0, turns: 0 };
+          const existing = byModel.get(t.model) ?? {
+            inputTokens: 0,
+            outputTokens: 0,
+            costUsd: 0,
+            turns: 0,
+          };
           byModel.set(t.model, {
             inputTokens: existing.inputTokens + (t.inputTokens ?? 0),
             outputTokens: existing.outputTokens + (t.outputTokens ?? 0),
@@ -428,7 +444,10 @@ export default function App({ config, conversationManager, tools, initialSession
             setLastKodiEvent({ type: "agent_spawn", detail: "☁ second opinion?" });
           }
           if (scanState.escalated > 0) {
-            setLastKodiEvent({ type: "agent_progress", detail: `☁ ${scanState.escalated} escalated` });
+            setLastKodiEvent({
+              type: "agent_progress",
+              detail: `☁ ${scanState.escalated} escalated`,
+            });
           }
 
           if (!scanState.active && scanState.result) {
@@ -451,7 +470,9 @@ export default function App({ config, conversationManager, tools, initialSession
         } else if (scanProgress !== null) {
           setScanProgress(null);
         }
-      } catch { /* scan-state module not loaded */ }
+      } catch {
+        /* scan-state module not loaded */
+      }
 
       // Also poll PR generation state
       try {
@@ -472,10 +493,7 @@ export default function App({ config, conversationManager, tools, initialSession
           prState.result = undefined;
           setScanProgress(null);
           if (text) {
-            setCompleted((prev) => [
-              ...prev,
-              { kind: "text", role: "assistant", text },
-            ]);
+            setCompleted((prev) => [...prev, { kind: "text", role: "assistant", text }]);
           }
         } else if (prState.error) {
           const errMsg = prState.error;
@@ -486,7 +504,9 @@ export default function App({ config, conversationManager, tools, initialSession
             { kind: "text", role: "assistant", text: `  ✗ PR error: ${errMsg}` },
           ]);
         }
-      } catch { /* pr-state module not loaded */ }
+      } catch {
+        /* pr-state module not loaded */
+      }
     }, 200);
     return () => clearInterval(timer);
   }, [scanProgress]);
@@ -508,7 +528,9 @@ export default function App({ config, conversationManager, tools, initialSession
         } else if (engineProgress?.active) {
           setEngineProgress(null);
         }
-      } catch { /* not loaded */ }
+      } catch {
+        /* not loaded */
+      }
     }, 150);
     return () => clearInterval(timer);
   }, [engineProgress]);
@@ -516,9 +538,7 @@ export default function App({ config, conversationManager, tools, initialSession
   // Terminal tab title — professional block-progress indicator
   useEffect(() => {
     const isWorking =
-      mode === "responding" ||
-      (scanProgress?.active ?? false) ||
-      mode === ("escalation");
+      mode === "responding" || (scanProgress?.active ?? false) || mode === "escalation";
 
     if (isWorking) {
       const frames = [
@@ -579,7 +599,9 @@ export default function App({ config, conversationManager, tools, initialSession
               newModel: lastModel,
               trigger: "saved-preference",
             });
-          } catch { /* non-fatal */ }
+          } catch {
+            /* non-fatal */
+          }
           setCompleted((prev) => [
             ...prev,
             { kind: "text", role: "assistant", text: `  Using ${lastModel} (saved preference).` },
@@ -629,7 +651,10 @@ export default function App({ config, conversationManager, tools, initialSession
         (async () => {
           // Save current model as confirmed — won't ask again
           const { saveUserSettingsRaw } = await import("../core/config.js");
-          await saveUserSettingsRaw({ confirmedModel: config.model, lastSessionModel: config.model });
+          await saveUserSettingsRaw({
+            confirmedModel: config.model,
+            lastSessionModel: config.model,
+          });
         })();
         setCompleted((prev) => [
           ...prev,
@@ -707,27 +732,26 @@ export default function App({ config, conversationManager, tools, initialSession
     [permissionResolver],
   );
 
-  const handleEscalationChoice = useCallback(
-    async (modelName: string | null) => {
-      try {
-        const { scanState } = await import("../core/audit-engine/scan-state.js");
-        scanState.escalationModelChoice = modelName;
-      } catch { /* ignore */ }
-      setEscalationData(null);
-      setTimeout(() => setMode("input"), 50);
-      setCompleted((prev) => [
-        ...prev,
-        {
-          kind: "text",
-          role: "assistant",
-          text: modelName
-            ? `  ☁ Escalating to ${modelName} for second opinion...`
-            : "  ⏭ Skipped cloud verification.",
-        },
-      ]);
-    },
-    [],
-  );
+  const handleEscalationChoice = useCallback(async (modelName: string | null) => {
+    try {
+      const { scanState } = await import("../core/audit-engine/scan-state.js");
+      scanState.escalationModelChoice = modelName;
+    } catch {
+      /* ignore */
+    }
+    setEscalationData(null);
+    setTimeout(() => setMode("input"), 50);
+    setCompleted((prev) => [
+      ...prev,
+      {
+        kind: "text",
+        role: "assistant",
+        text: modelName
+          ? `  ☁ Escalating to ${modelName} for second opinion...`
+          : "  ⏭ Skipped cloud verification.",
+      },
+    ]);
+  }, []);
 
   const handleSudoPassword = useCallback(
     (password: string | null) => {
@@ -791,7 +815,9 @@ export default function App({ config, conversationManager, tools, initialSession
           try {
             const { getClaudeCodeToken } = await import("../core/auth/claude-code-bridge.js");
             discoveryKey = (await getClaudeCodeToken()) ?? "";
-          } catch { /* not available */ }
+          } catch {
+            /* not available */
+          }
         }
 
         const discovered = await fetchProviderModels(provider.id, provider.baseUrl, discoveryKey);
@@ -818,7 +844,9 @@ export default function App({ config, conversationManager, tools, initialSession
         const modelsToRegister = discovered;
 
         // Switch active model to the first discovered model, or keep current if nothing found
-        const existingForProvider = (await listModels()).filter((m) => m.baseUrl === provider.baseUrl);
+        const existingForProvider = (await listModels()).filter(
+          (m) => m.baseUrl === provider.baseUrl,
+        );
         const newModel = discovered[0]?.id ?? existingForProvider[0]?.name ?? config.model;
         config.model = newModel;
         config.modelExplicitlySet = true;
@@ -899,11 +927,7 @@ export default function App({ config, conversationManager, tools, initialSession
             },
           ]);
           const { CompactionManager } = await import("../core/compaction.js");
-          const compactor = new CompactionManager(
-            config.apiKey,
-            config.model,
-            config.apiBase,
-          );
+          const compactor = new CompactionManager(config.apiKey, config.model, config.apiBase);
           const keepLast = 4;
           const toPrune = state.messages.slice(0, -keepLast);
           const kept = state.messages.slice(-keepLast);
@@ -950,7 +974,9 @@ export default function App({ config, conversationManager, tools, initialSession
           newModel,
           trigger: "user",
         });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
 
       const isLocal =
         result.model.baseUrl.includes("localhost") || result.model.baseUrl.includes("127.0.0.1");
@@ -1045,10 +1071,7 @@ export default function App({ config, conversationManager, tools, initialSession
         )}
 
         {mode === "kodi-advisor" && (
-          <KodiAdvisorMenu
-            firstRun={firstRunKodiAdvisor}
-            onClose={handleKodiAdvisorMenuDone}
-          />
+          <KodiAdvisorMenu firstRun={firstRunKodiAdvisor} onClose={handleKodiAdvisorMenuDone} />
         )}
 
         {/* Background scan/pr progress bar */}
@@ -1059,52 +1082,52 @@ export default function App({ config, conversationManager, tools, initialSession
               {scanProgress.phase}
               {` — ${scanProgress.elapsed.toFixed(1)}s`}
             </Text>
-            {scanProgress.total > 0 ? (() => {
-              const pct = Math.round((scanProgress.verified / scanProgress.total) * 100);
-              const filled = Math.round((scanProgress.verified / scanProgress.total) * 20);
-              return (
-                <Text color="cyan">
-                  {"    ["}
-                  {"█".repeat(filled)}
-                  {"░".repeat(20 - filled)}
-                  {"] "}
-                  {scanProgress.verified}/{scanProgress.total}
-                  {` (${pct}%) — `}
-                  {scanProgress.confirmed} confirmed
-                  {(scanProgress as any).escalated > 0 && (
-                    <Text color="yellow">{` — ${(scanProgress as any).escalated} ☁ escalated`}</Text>
-                  )}
-                </Text>
-              );
-            })() : (() => {
-              // v2.10.387 — indeterminate bar for the discovery + scanning
-              // phases (which run before total is known). Without this, the
-              // user saw a static phase line for 5-10s and thought /scan
-              // was hung. The bar now animates a moving "■" inside the
-              // 20-cell width tied to elapsed seconds, so the polling
-              // re-render every 200ms shows visible motion.
-              const width = 20;
-              const pos = Math.floor(scanProgress.elapsed * 4) % (width * 2 - 2);
-              const head = pos < width ? pos : (width * 2 - 2) - pos;
-              const cells: string[] = Array(width).fill("░");
-              cells[head] = "█";
-              if (head > 0) cells[head - 1] = "▓";
-              if (head < width - 1) cells[head + 1] = "▓";
-              return (
-                <Text color="cyan">
-                  {"    ["}
-                  {cells.join("")}
-                  {"]"}
-                </Text>
-              );
-            })()}
+            {scanProgress.total > 0
+              ? (() => {
+                  const pct = Math.round((scanProgress.verified / scanProgress.total) * 100);
+                  const filled = Math.round((scanProgress.verified / scanProgress.total) * 20);
+                  return (
+                    <Text color="cyan">
+                      {"    ["}
+                      {"█".repeat(filled)}
+                      {"░".repeat(20 - filled)}
+                      {"] "}
+                      {scanProgress.verified}/{scanProgress.total}
+                      {` (${pct}%) — `}
+                      {scanProgress.confirmed} confirmed
+                      {(scanProgress as any).escalated > 0 && (
+                        <Text color="yellow">{` — ${(scanProgress as any).escalated} ☁ escalated`}</Text>
+                      )}
+                    </Text>
+                  );
+                })()
+              : (() => {
+                  // v2.10.387 — indeterminate bar for the discovery + scanning
+                  // phases (which run before total is known). Without this, the
+                  // user saw a static phase line for 5-10s and thought /scan
+                  // was hung. The bar now animates a moving "■" inside the
+                  // 20-cell width tied to elapsed seconds, so the polling
+                  // re-render every 200ms shows visible motion.
+                  const width = 20;
+                  const pos = Math.floor(scanProgress.elapsed * 4) % (width * 2 - 2);
+                  const head = pos < width ? pos : width * 2 - 2 - pos;
+                  const cells: string[] = Array(width).fill("░");
+                  cells[head] = "█";
+                  if (head > 0) cells[head - 1] = "▓";
+                  if (head < width - 1) cells[head + 1] = "▓";
+                  return (
+                    <Text color="cyan">
+                      {"    ["}
+                      {cells.join("")}
+                      {"]"}
+                    </Text>
+                  );
+                })()}
             {/* v2.10.385 — cancellation hint. Without this, the only
                 way out of a long scan was Ctrl+C, which exits KCode.
                 Esc is wired in InputPrompt.tsx + file-actions-audit.ts. */}
             <Text color="gray" dimColor>
-              {scanProgress.cancelled
-                ? "    ⏸ cancelling..."
-                : "    Press Esc to cancel"}
+              {scanProgress.cancelled ? "    ⏸ cancelling..." : "    Press Esc to cancel"}
             </Text>
           </Box>
         )}
@@ -1116,30 +1139,31 @@ export default function App({ config, conversationManager, tools, initialSession
               {"  ◆ "}
               {engineProgress.phase}
             </Text>
-            {engineProgress.totalSteps > 0 && (() => {
-              const pct = Math.round((engineProgress.step / engineProgress.totalSteps) * 100);
-              const filled = Math.round((engineProgress.step / engineProgress.totalSteps) * 20);
-              const elapsed = ((Date.now() - engineProgress.startTime) / 1000).toFixed(1);
-              return (
-                <Text color="magenta">
-                  {"    ["}
-                  {"█".repeat(filled)}
-                  {"░".repeat(20 - filled)}
-                  {"] "}
-                  {`${pct}% — ${engineProgress.siteType} — ${elapsed}s`}
-                </Text>
-              );
-            })()}
+            {engineProgress.totalSteps > 0 &&
+              (() => {
+                const pct = Math.round((engineProgress.step / engineProgress.totalSteps) * 100);
+                const filled = Math.round((engineProgress.step / engineProgress.totalSteps) * 20);
+                const elapsed = ((Date.now() - engineProgress.startTime) / 1000).toFixed(1);
+                return (
+                  <Text color="magenta">
+                    {"    ["}
+                    {"█".repeat(filled)}
+                    {"░".repeat(20 - filled)}
+                    {"] "}
+                    {`${pct}% — ${engineProgress.siteType} — ${elapsed}s`}
+                  </Text>
+                );
+              })()}
           </Box>
         )}
 
         {/* Escalation model picker — shown after /scan when uncertain findings need cloud review */}
-        {mode === ("escalation") && escalationData && (
+        {mode === "escalation" && escalationData && (
           <EscalationPrompt
             count={escalationData.count}
             reason={escalationData.reason}
             availableModels={escalationData.availableModels}
-            isActive={mode === ("escalation")}
+            isActive={mode === "escalation"}
             onChoice={handleEscalationChoice}
           />
         )}
@@ -1195,30 +1219,32 @@ export default function App({ config, conversationManager, tools, initialSession
 
         {/* Kodi companion — hidden during /model (toggle) so it doesn't compete
             with the picker's re-renders and cause visual flicker on arrow keys */}
-        {mode !== "toggle" && <KodiCompanion
-          mode={mode}
-          toolUseCount={toolUseCount}
-          tokenCount={tokenCount}
-          sessionCostUsd={sessionCostUsd}
-          activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
-          isThinking={isThinking}
-          runningAgents={runningAgentCount}
-          sessionElapsedMs={Date.now() - sessionStart}
-          lastEvent={lastKodiEvent}
-          model={config.model}
-          version={config.version ?? "?"}
-          workingDirectory={config.workingDirectory}
-          permissionMode={conversationManager.getPermissions().getMode()}
-          activeProfile={config.activeProfile}
-          contextWindowSize={config.contextWindowSize}
-          sessionName={sessionName}
-          sessionStartTime={sessionStart}
-          subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
-          subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
-          tier={subscriptionTier}
-          tierFeatures={subscriptionFeatures}
-          sessionModelBreakdown={sessionModelBreakdown}
-        />}
+        {mode !== "toggle" && (
+          <KodiCompanion
+            mode={mode}
+            toolUseCount={toolUseCount}
+            tokenCount={tokenCount}
+            sessionCostUsd={sessionCostUsd}
+            activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
+            isThinking={isThinking}
+            runningAgents={runningAgentCount}
+            sessionElapsedMs={Date.now() - sessionStart}
+            lastEvent={lastKodiEvent}
+            model={config.model}
+            version={config.version ?? "?"}
+            workingDirectory={config.workingDirectory}
+            permissionMode={conversationManager.getPermissions().getMode()}
+            activeProfile={config.activeProfile}
+            contextWindowSize={config.contextWindowSize}
+            sessionName={sessionName}
+            sessionStartTime={sessionStart}
+            subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
+            subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
+            tier={subscriptionTier}
+            tierFeatures={subscriptionFeatures}
+            sessionModelBreakdown={sessionModelBreakdown}
+          />
+        )}
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
           <QuestionDialog
@@ -1256,7 +1282,7 @@ export default function App({ config, conversationManager, tools, initialSession
             mode !== "cloud" &&
             mode !== "toggle" &&
             mode !== "kodi-advisor" &&
-            mode !== ("escalation")
+            mode !== "escalation"
           }
           isQueuing={mode === "responding"}
           queueSize={messageQueue.length}

@@ -9,10 +9,10 @@
 //   - Report renders the diff-mode banner so a "10 of 1505" line
 //     can't be misread as a coverage gap.
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { execSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { listChangedFilesSinceRef, runAudit } from "./audit-engine";
 import { generateMarkdownReport } from "./report-generator";
 
@@ -20,10 +20,10 @@ let TMP: string;
 beforeEach(() => {
   TMP = `/tmp/kcode-diff-audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   mkdirSync(TMP, { recursive: true });
-  execSync(
-    "git init -q -b main && git config user.email t@t && git config user.name t",
-    { cwd: TMP, stdio: ["pipe", "pipe", "pipe"] },
-  );
+  execSync("git init -q -b main && git config user.email t@t && git config user.name t", {
+    cwd: TMP,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 });
 afterEach(() => {
   try {
@@ -88,33 +88,23 @@ describe("runAudit({ since })", () => {
   it("only scans files in the diff", async () => {
     // Two files. Both contain a strcpy that the C/C++ pack would flag
     // — but we'll modify only one and run --since against the tag.
-    writeFileSync(
-      join(TMP, "old.c"),
-      `void f(const char* s) { char b[8]; strcpy(b, s); }\n`,
-    );
-    writeFileSync(
-      join(TMP, "new.c"),
-      `int main(void) { return 0; }\n`,
-    );
+    writeFileSync(join(TMP, "old.c"), `void f(const char* s) { char b[8]; strcpy(b, s); }\n`);
+    writeFileSync(join(TMP, "new.c"), `int main(void) { return 0; }\n`);
     commit("initial");
     execSync("git tag base", { cwd: TMP, stdio: ["pipe", "pipe", "pipe"] });
-    writeFileSync(
-      join(TMP, "new.c"),
-      `void g(const char* s) { char b[8]; strcpy(b, s); }\n`,
-    );
+    writeFileSync(join(TMP, "new.c"), `void g(const char* s) { char b[8]; strcpy(b, s); }\n`);
     commit("add bug to new.c");
 
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       since: "base",
     });
 
     // Only new.c should appear in the scanned files; old.c is
     // untouched in the diff range.
-    const scannedRel = result.findings.map((f) =>
-      f.file.replace(`${TMP}/`, ""),
-    );
+    const scannedRel = result.findings.map((f) => f.file.replace(`${TMP}/`, ""));
     expect(scannedRel.every((p) => !p.includes("old.c"))).toBe(true);
     // coverage carries the since marker
     expect(result.coverage).toBeDefined();
@@ -124,9 +114,7 @@ describe("runAudit({ since })", () => {
       (result.coverage as { changedFilesInDiff?: number }).changedFilesInDiff,
     ).toBeGreaterThanOrEqual(1);
     // scannedFiles is now the diff-filtered count, not the project total
-    expect(result.coverage.scannedFiles).toBeLessThan(
-      result.coverage.totalCandidateFiles,
-    );
+    expect(result.coverage.scannedFiles).toBeLessThan(result.coverage.totalCandidateFiles);
   });
 
   it("falls back to all files when --since is omitted", async () => {
@@ -136,7 +124,8 @@ describe("runAudit({ since })", () => {
 
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     expect((result.coverage as { since?: string }).since).toBeUndefined();
     expect(result.coverage.scannedFiles).toBe(2);
@@ -153,7 +142,8 @@ describe("renderMarkdown — diff coverage section", () => {
 
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
       since: "base",
     });
     const md = generateMarkdownReport(result);
@@ -166,7 +156,8 @@ describe("renderMarkdown — diff coverage section", () => {
     commit("a");
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     const md = generateMarkdownReport(result);
     expect(md).not.toContain("Mode:** diff-based audit");

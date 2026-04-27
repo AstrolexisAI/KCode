@@ -6,9 +6,9 @@
 // because they're driven by JSON array order. Decisions persist via
 // review_state, review_reason, and review_tags fields added in v2.10.326.
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { handleAuditAction } from "./file-actions-audit";
 
 let TMP: string;
@@ -122,7 +122,11 @@ function readAudit(): {
     verification: { verdict: string; reasoning: string };
     fix_support?: "rewrite" | "annotate" | "manual";
   }>;
-  false_positives_detail: Array<{ pattern_id: string; review_state?: string; verification: { verdict: string; reasoning: string } }>;
+  false_positives_detail: Array<{
+    pattern_id: string;
+    review_state?: string;
+    verification: { verdict: string; reasoning: string };
+  }>;
   needs_context_detail: Array<{ pattern_id: string; review_state?: string }>;
   confirmed_findings: number;
   false_positives: number;
@@ -262,15 +266,16 @@ describe("/review v2 — promote", () => {
     // Two promoted findings landed in confirmed; whichever tier they
     // hit, the post-promote summary's total must equal
     // confirmed_findings.
-    const total = after.fix_support_summary!.rewrite +
-                  after.fix_support_summary!.annotate +
-                  after.fix_support_summary!.manual;
+    const total =
+      after.fix_support_summary!.rewrite +
+      after.fix_support_summary!.annotate +
+      after.fix_support_summary!.manual;
     expect(total).toBe(after.confirmed_findings);
     // And the summary changed from the pre-promote snapshot — at
     // minimum the "manual" bucket grew if both promoted patterns
     // had no recipe. Either way the totals are now consistent with
     // the new confirmed array.
-    expect(beforeManual).toBeLessThanOrEqual(after.fix_support_summary!.manual + 5);  // sanity bound
+    expect(beforeManual).toBeLessThanOrEqual(after.fix_support_summary!.manual + 5); // sanity bound
   });
 });
 
@@ -322,9 +327,9 @@ describe("/review F5 — note", () => {
     );
     expect(out).toContain("Note saved on #1");
     const a = readAudit();
-    expect(
-      (a.findings[0] as { review_note?: string }).review_note,
-    ).toBe("validated by auth middleware");
+    expect((a.findings[0] as { review_note?: string }).review_note).toBe(
+      "validated by auth middleware",
+    );
   });
 
   it("rejects empty note", async () => {
@@ -434,10 +439,7 @@ describe("/review CL.2 — finding_id stable refs", () => {
     audit.findings[0]!.finding_id = "kc-abc123def456";
     writeFileSync(`${TMP}/AUDIT_REPORT.json`, JSON.stringify(audit, null, 2));
 
-    const out = await handleAuditAction(
-      "review",
-      ctx(`${TMP} note kc-abc123def456 "validated"`),
-    );
+    const out = await handleAuditAction("review", ctx(`${TMP} note kc-abc123def456 "validated"`));
     expect(out).toContain("Note saved");
     expect(out).toContain("kc-abc123def456");
     const after = readAudit() as { findings: Array<{ review_note?: string }> };
@@ -468,10 +470,7 @@ describe("/review CL.2 — finding_id stable refs", () => {
 
   it("unknown finding_id returns usage error, not crash", async () => {
     seedAudit();
-    const out = await handleAuditAction(
-      "review",
-      ctx(`${TMP} note kc-doesnotexist "x"`),
-    );
+    const out = await handleAuditAction("review", ctx(`${TMP} note kc-doesnotexist "x"`));
     expect(out).toContain("Usage:");
   });
 });

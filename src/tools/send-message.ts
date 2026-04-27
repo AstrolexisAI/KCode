@@ -60,10 +60,10 @@ function looksLikeOperationalGuidance(text: string): boolean {
     /\blist[ao]\s+para\s+(?:ejecutar|correr|usar)\b/i,
     /\bpresiona\s+(?:ctrl|f\d|esc)/i,
     /\bpress\s+(?:ctrl|f\d|esc|q\b)/i,
-    /\bf1\b.*\bf2\b/i,           // multiple keybinding mention
-    /ps\s+aux\s+\|\s+grep/i,     // fake health check
+    /\bf1\b.*\bf2\b/i, // multiple keybinding mention
+    /ps\s+aux\s+\|\s+grep/i, // fake health check
     /pkill\s+-f/i,
-    /\bkill\s+\$?\d+/i,           // "kill 3292891" suggestion
+    /\bkill\s+\$?\d+/i, // "kill 3292891" suggestion
   ];
   if (patterns.some((p) => p.test(text))) return true;
   // Multi-line messages that list multiple of: url / port / command /
@@ -102,15 +102,13 @@ export async function executeSendMessage(input: Record<string, unknown>): Promis
         scope.phase === "blocked" ||
         scope.phase === "partial" ||
         !scope.completion.mayClaimReady ||
-        (scope.verification.patchAppliedAfterFailure &&
-          !scope.verification.rerunPassedAfterPatch);
+        (scope.verification.patchAppliedAfterFailure && !scope.verification.rerunPassedAfterPatch);
       if (blocked) {
         // Reason precedence: most-actionable first. "Re-run first"
         // beats "task isn't ready" — the model can actually ACT on
         // the rerun instruction.
         const reason =
-          scope.verification.patchAppliedAfterFailure &&
-          !scope.verification.rerunPassedAfterPatch
+          scope.verification.patchAppliedAfterFailure && !scope.verification.rerunPassedAfterPatch
             ? "a patch was applied after a runtime failure and the validation has not been re-run"
             : scope.phase === "blocked"
               ? `the task is blocked (phase=blocked)`

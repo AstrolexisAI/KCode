@@ -27,9 +27,7 @@ describe("extractBashReadTargets", () => {
   });
 
   test("extracts quoted paths", () => {
-    expect(extractBashReadTargets(`cat "path with spaces.cpp"`)).toEqual([
-      "path with spaces.cpp",
-    ]);
+    expect(extractBashReadTargets(`cat "path with spaces.cpp"`)).toEqual(["path with spaces.cpp"]);
   });
 
   test("ignores flags and numbers", () => {

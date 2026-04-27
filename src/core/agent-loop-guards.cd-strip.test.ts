@@ -10,21 +10,17 @@ import { extractBashLoopPattern } from "./agent-loop-guards";
 
 describe("extractBashLoopPattern — cd prefix stripping", () => {
   test("cd abs && bun run → bash:bun (NOT bash:cd)", () => {
-    expect(
-      extractBashLoopPattern("cd /home/curly/proyectos/foo && bun run index.ts"),
-    ).toBe("bash:bun");
-  });
-
-  test("cd rel && mkdir → bash:mkdir", () => {
-    expect(extractBashLoopPattern("cd foo && mkdir -p src/components")).toBe(
-      "bash:mkdir",
+    expect(extractBashLoopPattern("cd /home/curly/proyectos/foo && bun run index.ts")).toBe(
+      "bash:bun",
     );
   });
 
+  test("cd rel && mkdir → bash:mkdir", () => {
+    expect(extractBashLoopPattern("cd foo && mkdir -p src/components")).toBe("bash:mkdir");
+  });
+
   test("cd && bun add → bash:bun", () => {
-    expect(
-      extractBashLoopPattern("cd /proj && bun add blessed bitcoin-core"),
-    ).toBe("bash:bun");
+    expect(extractBashLoopPattern("cd /proj && bun add blessed bitcoin-core")).toBe("bash:bun");
   });
 
   test("cd && bun init → bash:bun", () => {
@@ -46,9 +42,7 @@ describe("extractBashLoopPattern — cd prefix stripping", () => {
   });
 
   test("timeout N cd && X — cd still stripped (timeout is already a skip prefix)", () => {
-    expect(extractBashLoopPattern("timeout 10 cd /proj && bun run index.ts")).toBe(
-      "bash:bun",
-    );
+    expect(extractBashLoopPattern("timeout 10 cd /proj && bun run index.ts")).toBe("bash:bun");
   });
 
   test("bare cd with no && → falls back on the directory argument", () => {
@@ -67,13 +61,7 @@ describe("extractBashLoopPattern — cd prefix stripping", () => {
       "cd /proj && bun run index.ts", // post-patch rerun
     ];
     const patterns = calls.map((c) => extractBashLoopPattern(c));
-    expect(patterns).toEqual([
-      "bash:mkdir",
-      "bash:bun",
-      "bash:bun",
-      "bash:bun",
-      "bash:bun",
-    ]);
+    expect(patterns).toEqual(["bash:mkdir", "bash:bun", "bash:bun", "bash:bun", "bash:bun"]);
     // Only 4 bun calls → below the 5 hard-stop threshold.
     const bunCount = patterns.filter((p) => p === "bash:bun").length;
     expect(bunCount).toBe(4);

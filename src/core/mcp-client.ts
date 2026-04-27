@@ -261,9 +261,25 @@ export class McpServerConnection {
     // SECURITY: whitelist env vars passed to MCP servers — never expose API keys
     // to untrusted third-party processes. Server-specific keys go through config.env.
     const MCP_ENV_ALLOWLIST = new Set([
-      "PATH", "HOME", "USER", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM",
-      "TMPDIR", "TMP", "TEMP", "SHELL", "PWD", "XDG_CONFIG_HOME", "XDG_DATA_HOME",
-      "XDG_CACHE_HOME", "NODE_ENV", "DISPLAY", "WAYLAND_DISPLAY",
+      "PATH",
+      "HOME",
+      "USER",
+      "LANG",
+      "LC_ALL",
+      "LC_CTYPE",
+      "TZ",
+      "TERM",
+      "TMPDIR",
+      "TMP",
+      "TEMP",
+      "SHELL",
+      "PWD",
+      "XDG_CONFIG_HOME",
+      "XDG_DATA_HOME",
+      "XDG_CACHE_HOME",
+      "NODE_ENV",
+      "DISPLAY",
+      "WAYLAND_DISPLAY",
     ]);
     const filteredParentEnv: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {

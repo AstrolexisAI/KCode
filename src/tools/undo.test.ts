@@ -1,8 +1,8 @@
 // Tests for Undo tool — file rollback system
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { UndoManager } from "../core/undo";
 import { executeUndo, setUndoManager, undoDefinition } from "./undo";
 

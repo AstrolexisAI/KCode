@@ -14,7 +14,8 @@ export const LARAVEL_PATTERNS: BugPattern[] = [
     // ::create($request->all()) / ->fill($request->all()) — the
     // `all()` form takes EVERY field. Without a $fillable allowlist
     // on the model, the assignment goes through.
-    regex: /\b(?:::create|->fill|->update|::firstOrCreate|::updateOrCreate)\s*\(\s*\$request->all\s*\(\s*\)/g,
+    regex:
+      /\b(?:::create|->fill|->update|::firstOrCreate|::updateOrCreate)\s*\(\s*\$request->all\s*\(\s*\)/g,
     explanation:
       "Laravel's $request->all() returns every input the user submitted. Passing it to Model::create()/fill() lets the user set any column the model exposes — including admin / role / is_verified flags. The standard Laravel guidance is to set $fillable on every model; apps that skip that AND use ->all() ship mass-assignment vulnerabilities by default. CVE-2018-15133 (Laravel APP_KEY) was the high-profile incident, but the per-app shape recurs constantly.",
     verify_prompt:
@@ -53,7 +54,8 @@ export const LARAVEL_PATTERNS: BugPattern[] = [
     pack: "web",
     // DB::raw("... $request->... ...") OR DB::statement / DB::select
     // with string concatenation of $request data.
-    regex: /\bDB::(?:raw|statement|select|insert|update|delete)\s*\(\s*["'][^"']*?(?:\$\w+|\.\s*\$\w+|\$request)/g,
+    regex:
+      /\bDB::(?:raw|statement|select|insert|update|delete)\s*\(\s*["'][^"']*?(?:\$\w+|\.\s*\$\w+|\$request)/g,
     explanation:
       "Laravel's DB facade has two forms: parameterized (`DB::select('select * from x where y = ?', [$id])`) and raw (`DB::raw(\"... $userInput\")`). Concatenating $request data into the SQL string bypasses Eloquent's binding logic and produces SQL injection.",
     verify_prompt:

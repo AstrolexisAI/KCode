@@ -92,8 +92,7 @@ describe("rewriteFinalTextForGrounding — partial scope", () => {
   });
 
   it("reports replacement reasons for telemetry", () => {
-    const draft =
-      "Ahora tengo una visión profunda. El proyecto está completo. Listo.";
+    const draft = "Ahora tengo una visión profunda. El proyecto está completo. Listo.";
     const rw = rewriteFinalTextForGrounding(draft, scopePartial());
     expect(rw.replacements).toBeGreaterThanOrEqual(2);
     expect(rw.reasons.length).toBeGreaterThanOrEqual(2);

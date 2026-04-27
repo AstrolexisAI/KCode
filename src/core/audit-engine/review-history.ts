@@ -119,10 +119,7 @@ export function pathGlob(file: string, projectRoot: string): string {
     : normalized;
   const lower = rel.toLowerCase();
 
-  if (
-    /(^|\/)(test|tests|__tests__)(\/|$)/.test(lower) ||
-    /\.(test|spec)\.[a-z]+$/i.test(rel)
-  ) {
+  if (/(^|\/)(test|tests|__tests__)(\/|$)/.test(lower) || /\.(test|spec)\.[a-z]+$/i.test(rel)) {
     return "test:*";
   }
   if (/(^|\/)(fixtures?|__mocks__)(\/|$)/.test(lower) || /\.fixture\.[a-z]+$/i.test(rel)) {

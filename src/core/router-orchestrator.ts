@@ -9,11 +9,11 @@
 // routed to the cheapest/fastest model that can handle it. Parallel
 // execution means independent sub-tasks don't serialize wall-clock.
 
+import type { ConversationManager } from "./conversation";
 import { log } from "./logger";
-import type { KCodeConfig, ContentBlock, Message, ToolUseBlock } from "./types";
 import type { ConductorPlan, SubTask } from "./router-conductor";
 import { resolveModelForSubTask } from "./router-conductor";
-import type { ConversationManager } from "./conversation";
+import type { ContentBlock, KCodeConfig, Message, ToolUseBlock } from "./types";
 
 const MAX_SUB_TASK_TURNS = 12;
 const SUMMARY_WARN_TURN = 10; // inject "wrap up" prompt at this turn
@@ -98,7 +98,10 @@ export async function orchestratePlan(
     }
 
     if (ready.length === 0) {
-      log.error("router/orchestrator", `Deadlock in DAG — no tasks ready but ${pending.size} pending`);
+      log.error(
+        "router/orchestrator",
+        `Deadlock in DAG — no tasks ready but ${pending.size} pending`,
+      );
       break;
     }
 
@@ -109,7 +112,9 @@ export async function orchestratePlan(
     );
     onProgress?.({ type: "wave-start", wave: waveNum, taskIds: ready.map((t) => t.id) });
 
-    const promises = ready.map((task) => executeSubTask(task, config, defaultModel, results, onProgress, manager, sharedFileLocks));
+    const promises = ready.map((task) =>
+      executeSubTask(task, config, defaultModel, results, onProgress, manager, sharedFileLocks),
+    );
     const batchResults = await Promise.all(promises);
 
     for (const r of batchResults) {
@@ -150,13 +155,17 @@ async function executeSubTask(
       const depResult = completedResults.get(depId);
       if (!depResult) continue;
       if (depResult.output) {
-        contextParts.push(`=== Output of task ${depId} (${depResult.intent}) ===\n${depResult.output}`);
+        contextParts.push(
+          `=== Output of task ${depId} (${depResult.intent}) ===\n${depResult.output}`,
+        );
       }
       // Flag edit-intent deps that made no successful writes — downstream
       // needs to know there's no actual change to describe, otherwise it
       // hallucinates (e.g., c inventing a "Plan tool fix" that never happened).
-      if ((depResult.intent === "complex-edit" || depResult.intent === "simple-edit")
-          && depResult.hadSuccessfulWrite === false) {
+      if (
+        (depResult.intent === "complex-edit" || depResult.intent === "simple-edit") &&
+        depResult.hadSuccessfulWrite === false
+      ) {
         failedEditDeps.push(depId);
       }
     }
@@ -183,7 +192,16 @@ async function executeSubTask(
 
   try {
     const result = manager
-      ? await runAgentLoopForSubTask(task, model, baseUrl, apiKey ?? "", prompt, config, manager, fileLocks)
+      ? await runAgentLoopForSubTask(
+          task,
+          model,
+          baseUrl,
+          apiKey ?? "",
+          prompt,
+          config,
+          manager,
+          fileLocks,
+        )
       : await callModel(model, baseUrl, apiKey ?? "", prompt);
     const elapsedMs = Date.now() - start;
     onProgress?.({
@@ -205,7 +223,10 @@ async function executeSubTask(
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    log.warn("router/orchestrator", `Sub-task ${task.id} (${task.intent} → ${model}) failed: ${msg}`);
+    log.warn(
+      "router/orchestrator",
+      `Sub-task ${task.id} (${task.intent} → ${model}) failed: ${msg}`,
+    );
     onProgress?.({ type: "task-error", id: task.id, model, error: msg });
     return {
       id: task.id,
@@ -232,7 +253,12 @@ async function runAgentLoopForSubTask(
   parentConfig: KCodeConfig,
   manager: ConversationManager,
   fileLocks?: Map<string, Promise<unknown>>,
-): Promise<{ output: string; inputTokens?: number; outputTokens?: number; hadSuccessfulWrite?: boolean }> {
+): Promise<{
+  output: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  hadSuccessfulWrite?: boolean;
+}> {
   const { executeModelRequest } = await import("./request-builder");
   const { processSSEStream } = await import("./conversation-streaming");
   const { executeToolsSequential } = await import("./tool-executor");
@@ -248,9 +274,7 @@ async function runAgentLoopForSubTask(
     contextWindowSize: (await getModelContextSize(model)) ?? parentConfig.contextWindowSize,
   };
 
-  const messages: Message[] = [
-    { role: "user", content: initialPrompt },
-  ];
+  const messages: Message[] = [{ role: "user", content: initialPrompt }];
   const systemPrompt = parentConfig.systemPrompt as string | undefined;
 
   // Exclude tools that create persistent multi-turn state. Sub-tasks are
@@ -313,7 +337,12 @@ async function runAgentLoopForSubTask(
       abortController,
     );
 
-    const cumulativeUsage = { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 };
+    const cumulativeUsage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+    };
     const streamGen = processSSEStream({
       sseStream,
       tools,
@@ -329,8 +358,14 @@ async function runAgentLoopForSubTask(
     while (!genResult.done) {
       genResult = await streamGen.next();
     }
-    const { assistantContent, toolCalls, stopReason, textChunks, turnInputTokens, turnOutputTokens } =
-      genResult.value;
+    const {
+      assistantContent,
+      toolCalls,
+      stopReason,
+      textChunks,
+      turnInputTokens,
+      turnOutputTokens,
+    } = genResult.value;
 
     totalInput += turnInputTokens;
     totalOutput += turnOutputTokens;
@@ -341,13 +376,20 @@ async function runAgentLoopForSubTask(
     // aborts mid-turn from a reasoning loop detection). Without this,
     // content=null lands in history and gets stripped by the global
     // sanitizer every subsequent turn, polluting the warn log.
-    const safeContent = Array.isArray(assistantContent) && assistantContent.length > 0
-      ? assistantContent
-      : (textChunks.join("").trim()
-        ? [{ type: "text" as const, text: textChunks.join("") }]
-        : [{ type: "text" as const, text: stopReason === "repetition_aborted"
-              ? "[sub-task response aborted due to repetition loop]"
-              : "[sub-task produced no content]" }]);
+    const safeContent =
+      Array.isArray(assistantContent) && assistantContent.length > 0
+        ? assistantContent
+        : textChunks.join("").trim()
+          ? [{ type: "text" as const, text: textChunks.join("") }]
+          : [
+              {
+                type: "text" as const,
+                text:
+                  stopReason === "repetition_aborted"
+                    ? "[sub-task response aborted due to repetition loop]"
+                    : "[sub-task produced no content]",
+              },
+            ];
     messages.push({ role: "assistant", content: safeContent });
 
     if (toolCalls.length === 0 || stopReason === "end_turn" || stopReason === "stop") {
@@ -427,7 +469,9 @@ function extractToolTarget(name: string, input: Record<string, unknown>): string
   return "";
 }
 
-function synthesizeActionSummary(log: Array<{ name: string; target: string; success: boolean }>): string {
+function synthesizeActionSummary(
+  log: Array<{ name: string; target: string; success: boolean }>,
+): string {
   const byName = new Map<string, { success: number; fail: number; targets: Set<string> }>();
   for (const a of log) {
     const entry = byName.get(a.name) ?? { success: 0, fail: 0, targets: new Set() };
@@ -436,11 +480,15 @@ function synthesizeActionSummary(log: Array<{ name: string; target: string; succ
     if (a.target) entry.targets.add(a.target);
     byName.set(a.name, entry);
   }
-  const lines: string[] = ["[auto-generated summary — sub-task exhausted turns without explicit output]"];
+  const lines: string[] = [
+    "[auto-generated summary — sub-task exhausted turns without explicit output]",
+  ];
   for (const [name, entry] of byName.entries()) {
     const total = entry.success + entry.fail;
     const targets = [...entry.targets].slice(0, 5).join(", ");
-    lines.push(`- ${name}: ${total} call${total === 1 ? "" : "s"} (${entry.success} ok, ${entry.fail} fail)${targets ? ` on ${targets}` : ""}`);
+    lines.push(
+      `- ${name}: ${total} call${total === 1 ? "" : "s"} (${entry.success} ok, ${entry.fail} fail)${targets ? ` on ${targets}` : ""}`,
+    );
   }
   // Highlight file modifications specifically (most important for downstream)
   const edits = log.filter((a) => ["Edit", "MultiEdit", "Write"].includes(a.name) && a.success);
@@ -460,9 +508,7 @@ async function callModel(
 ): Promise<{ output: string; inputTokens?: number; outputTokens?: number }> {
   const url = baseUrl.toLowerCase();
   const isAnthropic = url.includes("anthropic.com");
-  const endpoint = isAnthropic
-    ? `${baseUrl}/v1/messages`
-    : `${baseUrl}/v1/chat/completions`;
+  const endpoint = isAnthropic ? `${baseUrl}/v1/messages` : `${baseUrl}/v1/chat/completions`;
 
   const body = isAnthropic
     ? {
@@ -531,7 +577,9 @@ export function formatOrchestrationOutput(result: OrchestrationResult): string {
 
   const lines: string[] = [];
   for (const r of result.results) {
-    lines.push(`### Task ${r.id} — ${r.intent} (${r.model}, ${Math.round(r.elapsedMs / 100) / 10}s)`);
+    lines.push(
+      `### Task ${r.id} — ${r.intent} (${r.model}, ${Math.round(r.elapsedMs / 100) / 10}s)`,
+    );
     lines.push("");
     lines.push(r.output);
     lines.push("");

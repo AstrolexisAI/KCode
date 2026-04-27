@@ -1,10 +1,7 @@
 // Tests for closeout-renderer turn-mode classification (v2.10.306).
 
 import { describe, expect, it } from "bun:test";
-import {
-  classifyTurnMode,
-  renderCloseoutFromScope,
-} from "./closeout-renderer";
+import { classifyTurnMode, renderCloseoutFromScope } from "./closeout-renderer";
 import type { TaskScope } from "./task-scope";
 
 function makeScope(overrides: Partial<TaskScope> = {}): TaskScope {

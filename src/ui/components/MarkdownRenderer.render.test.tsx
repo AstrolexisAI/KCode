@@ -7,11 +7,7 @@ import MarkdownRenderer from "./MarkdownRenderer";
 
 function renderMd(text: string) {
   return render(
-    React.createElement(
-      ThemeProvider,
-      null,
-      React.createElement(MarkdownRenderer, { text }),
-    ),
+    React.createElement(ThemeProvider, null, React.createElement(MarkdownRenderer, { text })),
   );
 }
 
@@ -138,9 +134,7 @@ describe("MarkdownRenderer render", () => {
   });
 
   test("renders simple table", () => {
-    instance = renderMd(
-      "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |",
-    );
+    instance = renderMd("| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |");
     const out = instance.lastFrame()!;
     expect(out).toContain("Alice");
     expect(out).toContain("Bob");
@@ -168,14 +162,14 @@ describe("MarkdownRenderer render", () => {
   });
 
   test("renders rust code block", () => {
-    instance = renderMd("```rust\nfn main() { println!(\"hello\"); }\n```");
+    instance = renderMd('```rust\nfn main() { println!("hello"); }\n```');
     const out = instance.lastFrame()!;
     expect(out).toContain("fn");
     expect(out).toContain("main");
   });
 
   test("renders go code block", () => {
-    instance = renderMd("```go\nfunc main() { fmt.Println(\"hi\") }\n```");
+    instance = renderMd('```go\nfunc main() { fmt.Println("hi") }\n```');
     const out = instance.lastFrame()!;
     expect(out).toContain("func");
     expect(out).toContain("main");
@@ -189,9 +183,7 @@ describe("MarkdownRenderer render", () => {
   });
 
   test("preserves indentation in code blocks", () => {
-    instance = renderMd(
-      "```\n  function foo() {\n    return 1;\n  }\n```",
-    );
+    instance = renderMd("```\n  function foo() {\n    return 1;\n  }\n```");
     const out = instance.lastFrame()!;
     expect(out).toContain("foo");
     expect(out).toContain("return");
@@ -205,7 +197,7 @@ describe("MarkdownRenderer render", () => {
   });
 
   test("renders special characters safely", () => {
-    instance = renderMd("Text with <html> & special \"quotes\" chars");
+    instance = renderMd('Text with <html> & special "quotes" chars');
     expect(instance.lastFrame()).toContain("special");
   });
 

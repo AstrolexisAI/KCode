@@ -6,8 +6,8 @@
 // held back with a message telling the reviewer how to apply them
 // later. These tests pin both branches.
 
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { handleAuditAction } from "./file-actions-audit";
 
@@ -21,7 +21,9 @@ beforeEach(() => {
 afterEach(() => {
   try {
     rmSync(TMP, { recursive: true, force: true });
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
 });
 
 function ctx(args: string) {
@@ -54,10 +56,7 @@ function seedFix(): void {
   print(r.body);
 }\n`,
   );
-  writeFileSync(
-    join(TMP, "x.py"),
-    `def manual_only_pattern():\n    return 1\n`,
-  );
+  writeFileSync(join(TMP, "x.py"), `def manual_only_pattern():\n    return 1\n`);
 
   const audit = {
     project: TMP,
@@ -106,8 +105,12 @@ function seedFix(): void {
     false_positives_detail: [],
     needs_context_detail: [],
     coverage: {
-      totalCandidateFiles: 3, scannedFiles: 3, skippedByLimit: 0,
-      truncated: false, maxFiles: 3, capSource: "user",
+      totalCandidateFiles: 3,
+      scannedFiles: 3,
+      skippedByLimit: 0,
+      truncated: false,
+      maxFiles: 3,
+      capSource: "user",
     },
     elapsed_ms: 0,
   };
@@ -184,7 +187,7 @@ describe("/fix --annotate", () => {
     // recipe, so under --annotate it becomes manual.
     expect(out).toMatch(/✅ Rewritten:\s+0/);
     expect(out).toMatch(/📝 Annotated:\s+1/); // dart-001-insecure-http (has recipe)
-    expect(out).toMatch(/✋ Manual:\s+2/);     // cpp-001 (no recipe) + non-existent-pattern (no recipe)
+    expect(out).toMatch(/✋ Manual:\s+2/); // cpp-001 (no recipe) + non-existent-pattern (no recipe)
   });
 
   test("--annotate emits the mode label and the no-rewrites note", async () => {

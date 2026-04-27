@@ -24,7 +24,7 @@ export interface ModelEntry {
   baseUrl: string;
   contextSize?: number;
   capabilities?: string[]; // e.g. ["code", "vision", "general"]
-  tags?: string[];         // benchmark-based tags: ["coding","fast","analysis","reasoning"]
+  tags?: string[]; // benchmark-based tags: ["coding","fast","analysis","reasoning"]
   gpu?: string; // e.g. "RTX 5090", informational only
   description?: string;
   provider?: ModelProvider; // "openai" (default) or "anthropic" — auto-detected from name if not set
@@ -135,7 +135,17 @@ function parseModelsConfig(raw: any): ModelsConfig {
           gpu: typeof entry.gpu === "string" ? entry.gpu : undefined,
           description: typeof entry.description === "string" ? entry.description : undefined,
           provider: (
-            ["openai", "anthropic", "xai", "google", "deepseek", "groq", "openrouter", "together", "kimi"] as const
+            [
+              "openai",
+              "anthropic",
+              "xai",
+              "google",
+              "deepseek",
+              "groq",
+              "openrouter",
+              "together",
+              "kimi",
+            ] as const
           ).includes(entry.provider)
             ? (entry.provider as ModelProvider)
             : undefined,

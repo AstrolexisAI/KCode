@@ -24,8 +24,9 @@ export async function runPrintMode(
   //      Saves tokens (each sub-task gets only its portion of the prompt).
   //   2) Single intent: classify by regex, switch model, let sendMessage run.
   try {
-    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
-      await import("../core/router.js");
+    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } = await import(
+      "../core/router.js"
+    );
     if (isMultimodelEnabled()) {
       // Conductor path — only for prompts > 60 chars (avoids overhead on short chats)
       if (prompt.length > 60) {
@@ -33,17 +34,25 @@ export async function runPrintMode(
           const { decomposePrompt } = await import("../core/router-conductor.js");
           const plan = await decomposePrompt(prompt);
           if (plan && plan.sub_tasks.length > 1) {
-            const { orchestratePlan, formatOrchestrationOutput } = await import("../core/router-orchestrator.js");
-            process.stderr.write(`\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`);
+            const { orchestratePlan, formatOrchestrationOutput } = await import(
+              "../core/router-orchestrator.js"
+            );
+            process.stderr.write(
+              `\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`,
+            );
             const cfg = conversationManager.getConfig();
             const result = await orchestratePlan(plan, cfg, cfg.model, (ev) => {
               if (ev.type === "wave-start") {
-                process.stderr.write(`\x1b[2m  Wave ${ev.wave}: [${ev.taskIds.join(",")}] in parallel\x1b[0m\n`);
+                process.stderr.write(
+                  `\x1b[2m  Wave ${ev.wave}: [${ev.taskIds.join(",")}] in parallel\x1b[0m\n`,
+                );
               } else if (ev.type === "task-start") {
                 process.stderr.write(`\x1b[2m  ▶ ${ev.id} (${ev.intent}) → ${ev.model}\x1b[0m\n`);
               } else if (ev.type === "task-done") {
                 const s = (ev.elapsedMs / 1000).toFixed(1);
-                process.stderr.write(`\x1b[2m  ✓ ${ev.id} done in ${s}s · ${ev.tokens} tok\x1b[0m\n`);
+                process.stderr.write(
+                  `\x1b[2m  ✓ ${ev.id} done in ${s}s · ${ev.tokens} tok\x1b[0m\n`,
+                );
               } else if (ev.type === "task-error") {
                 process.stderr.write(`\x1b[31m  ✗ ${ev.id} failed: ${ev.error}\x1b[0m\n`);
               }
@@ -76,7 +85,9 @@ export async function runPrintMode(
           const { getModelContextSize } = await import("../core/models.js");
           const ctxSize = await getModelContextSize(route.model);
           if (ctxSize) cfg.contextWindowSize = ctxSize;
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
         process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
       }
     }

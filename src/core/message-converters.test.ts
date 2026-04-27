@@ -70,7 +70,9 @@ describe("convertToOpenAIMessages", () => {
     const result = convertToOpenAIMessages("", messages);
     // Thinking blocks now go into reasoning_content (for providers like Kimi/DeepSeek)
     // not embedded in text content via <thinking> tags
-    expect((result[0] as unknown as Record<string, unknown>).reasoning_content).toBe("step by step");
+    expect((result[0] as unknown as Record<string, unknown>).reasoning_content).toBe(
+      "step by step",
+    );
     expect(result[0]!.content).toBe("Answer");
   });
 
@@ -262,7 +264,12 @@ describe("convertToAnthropicMessages", () => {
         role: "assistant",
         content: [
           { type: "text", text: "ok" },
-          { type: "tool_use", id: "toolu_orphan1", name: "Bash", input: { command: "pkill -9 node" } },
+          {
+            type: "tool_use",
+            id: "toolu_orphan1",
+            name: "Bash",
+            input: { command: "pkill -9 node" },
+          },
         ],
       },
     ];
@@ -272,7 +279,11 @@ describe("convertToAnthropicMessages", () => {
     const injected = result[2]!;
     expect(injected.role).toBe("user");
     expect(Array.isArray(injected.content)).toBe(true);
-    const blocks = injected.content as Array<{ type: string; tool_use_id?: string; is_error?: boolean }>;
+    const blocks = injected.content as Array<{
+      type: string;
+      tool_use_id?: string;
+      is_error?: boolean;
+    }>;
     expect(blocks).toHaveLength(1);
     expect(blocks[0]!.type).toBe("tool_result");
     expect(blocks[0]!.tool_use_id).toBe("toolu_orphan1");
@@ -328,9 +339,7 @@ describe("convertToAnthropicMessages", () => {
     expect(result).toHaveLength(3);
     const toolResultMsg = result[2]!;
     const blocks = toolResultMsg.content as Array<{ type: string; tool_use_id?: string }>;
-    const ids = blocks
-      .filter((b) => b.type === "tool_result")
-      .map((b) => b.tool_use_id);
+    const ids = blocks.filter((b) => b.type === "tool_result").map((b) => b.tool_use_id);
     // Both A and B must be present; order is implementation-defined but
     // the important invariant is both ids appear.
     expect(ids).toContain("toolu_A");
@@ -342,9 +351,7 @@ describe("convertToAnthropicMessages", () => {
       { role: "user", content: "read a file" },
       {
         role: "assistant",
-        content: [
-          { type: "tool_use", id: "toolu_ok", name: "Read", input: { file_path: "/x" } },
-        ],
+        content: [{ type: "tool_use", id: "toolu_ok", name: "Read", input: { file_path: "/x" } }],
       },
       {
         role: "user",

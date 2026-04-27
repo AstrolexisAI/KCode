@@ -734,7 +734,7 @@ export async function handleToolAction(action: string, ctx: ActionContext): Prom
         const { execSync } = await import("node:child_process");
         try {
           // Sanitize glob: strip shell metacharacters to prevent injection
-          const safeGlob = fileGlob.replace(/[^a-zA-Z0-9_.*?\-\/]/g, "");
+          const safeGlob = fileGlob.replace(/[^a-zA-Z0-9_.*?\-/]/g, "");
           const filesRaw = execSync(
             `find . -type f -name '${safeGlob}' -not -path '*/node_modules/*' -not -path '*/.git/*' | head -100`,
             { cwd, timeout: 5000 },

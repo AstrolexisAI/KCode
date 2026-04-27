@@ -126,11 +126,7 @@ export function classifyRuntimeStatus(
   }
 
   // Timeout — process stayed alive but didn't verify anything.
-  if (
-    exitCode === 124 ||
-    /timed\s+out/i.test(lo) ||
-    /Bash failed \(\d+\.\d+s\)/.test(o)
-  ) {
+  if (exitCode === 124 || /timed\s+out/i.test(lo) || /Bash failed \(\d+\.\d+s\)/.test(o)) {
     return "alive_timeout";
   }
 

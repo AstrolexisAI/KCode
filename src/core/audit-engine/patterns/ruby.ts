@@ -14,7 +14,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
     explanation: "eval/send with user input enables arbitrary code execution.",
     verify_prompt: "Is the argument from user input? If internal/constant, respond FALSE_POSITIVE.",
     cwe: "CWE-95",
-    fix_template: "Use a whitelist: ALLOWED_METHODS.include?(method_name) && obj.public_send(method_name)",
+    fix_template:
+      "Use a whitelist: ALLOWED_METHODS.include?(method_name) && obj.public_send(method_name)",
   },
   {
     id: "rb-002-sql-injection",
@@ -23,7 +24,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
     languages: ["ruby"],
     regex: /\b(?:where|find_by_sql|execute|select)\s*\(\s*"/g,
     explanation: "ActiveRecord/SQL with string interpolation is vulnerable to injection.",
-    verify_prompt: "Is user input interpolated via #{}? If using ? placeholders, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is user input interpolated via #{}? If using ? placeholders, respond FALSE_POSITIVE.",
     cwe: "CWE-89",
     fix_template: "User.where('email = ?', params[:email]) instead of string interpolation.",
   },
@@ -34,7 +36,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
     languages: ["ruby"],
     regex: /\bYAML\.load\s*\(/g,
     explanation: "YAML.load in Ruby can execute arbitrary code. Use YAML.safe_load instead.",
-    verify_prompt: "Is the YAML from untrusted source? If from internal config file, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is the YAML from untrusted source? If from internal config file, respond FALSE_POSITIVE.",
     cwe: "CWE-502",
     fix_template: "YAML.safe_load(data, permitted_classes: [Symbol])",
   },
@@ -51,14 +54,16 @@ export const RUBY_PATTERNS: BugPattern[] = [
       "If from a hardcoded symbol or internal constant, respond FALSE_POSITIVE. " +
       "If user-controlled, respond CONFIRMED.",
     cwe: "CWE-95",
-    fix_template: "Whitelist: SAFE = %w[name email]; obj.public_send(method) if SAFE.include?(method)",
+    fix_template:
+      "Whitelist: SAFE = %w[name email]; obj.public_send(method) if SAFE.include?(method)",
   },
   {
     id: "rb-005-mass-assignment",
     title: "Mass assignment without strong parameters",
     severity: "high",
     languages: ["ruby"],
-    regex: /\.(?:new|create|update|update_attributes|assign_attributes)\s*\(\s*params(?!\s*\.\s*(?:require|permit))/g,
+    regex:
+      /\.(?:new|create|update|update_attributes|assign_attributes)\s*\(\s*params(?!\s*\.\s*(?:require|permit))/g,
     explanation:
       "Passing params directly to model methods without permit/require allows attackers to set any column (is_admin, role, etc.).",
     verify_prompt:
@@ -81,7 +86,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
       "If the command is entirely hardcoded, respond FALSE_POSITIVE. " +
       "If user input is interpolated, respond CONFIRMED.",
     cwe: "CWE-78",
-    fix_template: "Use array form: system('ls', '-la', user_input) which avoids shell interpretation.",
+    fix_template:
+      "Use array form: system('ls', '-la', user_input) which avoids shell interpretation.",
   },
   {
     id: "rb-007-open-redirect",
@@ -96,7 +102,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
       "If redirecting to a hardcoded internal path or using only_path: true, respond FALSE_POSITIVE. " +
       "If user-controlled URL, respond CONFIRMED.",
     cwe: "CWE-601",
-    fix_template: "Validate URL: redirect_to(params[:url]) only if URI(params[:url]).host == request.host",
+    fix_template:
+      "Validate URL: redirect_to(params[:url]) only if URI(params[:url]).host == request.host",
   },
   {
     id: "rb-008-hardcoded-secrets",
@@ -157,7 +164,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
       "If from a hardcoded template or internal DSL, respond FALSE_POSITIVE. " +
       "If from untrusted source, respond CONFIRMED.",
     cwe: "CWE-95",
-    fix_template: "Use a block instead of string: instance_eval { method_call } or a whitelist approach.",
+    fix_template:
+      "Use a block instead of string: instance_eval { method_call } or a whitelist approach.",
   },
   {
     id: "rb-012-eval-string",
@@ -172,7 +180,8 @@ export const RUBY_PATTERNS: BugPattern[] = [
       "If it's a known-safe internal string (e.g., generated DSL, hardcoded template), respond FALSE_POSITIVE. " +
       "If it could contain untrusted data, respond CONFIRMED.",
     cwe: "CWE-95",
-    fix_template: "Avoid eval(). Use a hash lookup, case/when, or method dispatch with a whitelist.",
+    fix_template:
+      "Avoid eval(). Use a hash lookup, case/when, or method dispatch with a whitelist.",
   },
 
   // ── v2.10.333 — Phase A round 2 (Ruby) ────────────────────────
@@ -200,8 +209,7 @@ export const RUBY_PATTERNS: BugPattern[] = [
     title: "send_file / send_data with params-derived path (path traversal)",
     severity: "high",
     languages: ["ruby"],
-    regex:
-      /\bsend_file\s+(?:Rails\.root\.join\s*\(\s*)?(?:[^,)\n]*,\s*)*params\[/g,
+    regex: /\bsend_file\s+(?:Rails\.root\.join\s*\(\s*)?(?:[^,)\n]*,\s*)*params\[/g,
     explanation:
       "Rails send_file with a path built from params lets an attacker read any file the Rails process can read. `?file=../../etc/passwd` walks out of the public directory. Even with `Rails.root.join`, the user-supplied component is not normalized — Pathname.new('a/../../../etc/passwd') still resolves outside the root.",
     verify_prompt:

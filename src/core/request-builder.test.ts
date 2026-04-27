@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-
+import { convertToOpenAIMessages } from "./message-converters.ts";
 import {
   classifyApiErrorHint,
   estimateToolDefinitionTokens,
   formatApiErrorMessage,
   resolveApiKey,
 } from "./request-builder.ts";
-import { convertToOpenAIMessages } from "./message-converters.ts";
 import type { KCodeConfig } from "./types.ts";
 
 // ─── resolveApiKey ─────────────────────────────────────────────
@@ -184,9 +183,7 @@ describe("classifyApiErrorHint", () => {
   });
 
   test("returns billing hint when body mentions credits", () => {
-    expect(classifyApiErrorHint(400, "insufficient credit balance")).toMatch(
-      /billing/,
-    );
+    expect(classifyApiErrorHint(400, "insufficient credit balance")).toMatch(/billing/);
   });
 
   test("returns auth hint on 401/403", () => {
@@ -195,9 +192,7 @@ describe("classifyApiErrorHint", () => {
   });
 
   test("returns context hint on 400 with 'too many tokens'", () => {
-    expect(classifyApiErrorHint(400, "too many tokens in prompt")).toMatch(
-      /context window/,
-    );
+    expect(classifyApiErrorHint(400, "too many tokens in prompt")).toMatch(/context window/);
   });
 
   test("returns 5xx hint on 500/502/503 (Orbital session fix)", () => {
@@ -212,20 +207,15 @@ describe("classifyApiErrorHint", () => {
     //   {"error":{"message":"Primary model overloaded"}}
     //   {"error":{"message":"Model overloaded"}}
     //   {"error":{"message":"Internal server error: model overloaded"}}
-    const h1 = classifyApiErrorHint(
-      500,
-      '{"error":{"message":"Primary model overloaded"}}',
-    );
+    const h1 = classifyApiErrorHint(500, '{"error":{"message":"Primary model overloaded"}}');
     expect(h1).toMatch(/overloaded right now/);
     expect(h1).toMatch(/\/toggle to another provider/);
     expect(h1).not.toMatch(/transient/);
 
-    expect(classifyApiErrorHint(500, "Model overloaded")).toMatch(
+    expect(classifyApiErrorHint(500, "Model overloaded")).toMatch(/overloaded right now/);
+    expect(classifyApiErrorHint(503, "Internal server error: model overloaded")).toMatch(
       /overloaded right now/,
     );
-    expect(
-      classifyApiErrorHint(503, "Internal server error: model overloaded"),
-    ).toMatch(/overloaded right now/);
   });
 
   test("returns empty string for unclassified errors", () => {
@@ -279,9 +269,7 @@ describe("formatApiErrorMessage", () => {
       url: "https://api.example.com/v1/foo",
       hint: "",
     });
-    expect(msg).toBe(
-      "API request failed: 502 Bad Gateway from https://api.example.com/v1/foo",
-    );
+    expect(msg).toBe("API request failed: 502 Bad Gateway from https://api.example.com/v1/foo");
   });
 });
 

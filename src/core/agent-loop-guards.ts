@@ -356,10 +356,7 @@ export class LoopGuardState {
    * failure + the tool call index so we can expire stale entries.
    * Cleared by a subsequent successful Edit on the same file.
    */
-  readonly recentEditFailures = new Map<
-    string,
-    { reason: string; callIndex: number }
-  >();
+  readonly recentEditFailures = new Map<string, { reason: string; callIndex: number }>();
 
   /**
    * Phase 32: active phantom-typo claim detected in the current turn's

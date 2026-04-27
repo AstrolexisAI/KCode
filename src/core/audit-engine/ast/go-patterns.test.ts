@@ -5,8 +5,8 @@
 // bundled wasm.
 
 import { describe, expect, it } from "bun:test";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 import { GO_AST_PATTERNS } from "./go-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T): T | undefined {
   if (stats.every((s) => !s.grammar_loaded)) return undefined;
@@ -22,7 +22,9 @@ func handler(userInput string) { exec.Command(userInput) }
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("exec.Command(userInput)");
     });
@@ -43,7 +45,9 @@ func handler(ctx context.Context, x string) { exec.CommandContext(ctx, x) }
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -56,7 +60,9 @@ func f() { exec.Command("ls") }
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -72,7 +78,9 @@ func f() {
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -86,7 +94,9 @@ func (s *S) Run(cmd string) { exec.Command(cmd) }
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("exec.Command(cmd)");
     });
@@ -103,7 +113,9 @@ func outer() {
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("exec.Command(inner)");
     });
@@ -118,7 +130,9 @@ func handler(input string) { var cmd Cmd; cmd.Command(input) }
 `;
     const r = await runAstPatterns(GO_AST_PATTERNS, "/tmp/a.go", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "go-ast-001-exec-command-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "go-ast-001-exec-command-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -188,8 +202,12 @@ describe("go-patterns shape", () => {
       "go-ast-001-exec-command-of-parameter",
       "go-ast-002-os-open-of-parameter",
     ]);
-    expect(GO_AST_PATTERNS.find((p) => p.id === "go-ast-001-exec-command-of-parameter")!.cwe).toBe("CWE-78");
-    expect(GO_AST_PATTERNS.find((p) => p.id === "go-ast-002-os-open-of-parameter")!.cwe).toBe("CWE-22");
+    expect(GO_AST_PATTERNS.find((p) => p.id === "go-ast-001-exec-command-of-parameter")!.cwe).toBe(
+      "CWE-78",
+    );
+    expect(GO_AST_PATTERNS.find((p) => p.id === "go-ast-002-os-open-of-parameter")!.cwe).toBe(
+      "CWE-22",
+    );
     for (const p of GO_AST_PATTERNS) {
       expect(p.languages).toContain("go");
       expect(typeof p.match).toBe("function");

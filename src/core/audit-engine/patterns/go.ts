@@ -11,8 +11,10 @@ export const GO_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["go"],
     regex: /\b(?:db\.(?:Query|Exec|QueryRow)|tx\.(?:Query|Exec))\s*\(\s*(?:fmt\.Sprintf|.*\+)/g,
-    explanation: "SQL queries built with fmt.Sprintf or string concatenation are vulnerable to injection. Use parameterized queries ($1, ?).",
-    verify_prompt: "Is user input interpolated into the SQL string? If parameterized (?, $1), respond FALSE_POSITIVE.",
+    explanation:
+      "SQL queries built with fmt.Sprintf or string concatenation are vulnerable to injection. Use parameterized queries ($1, ?).",
+    verify_prompt:
+      "Is user input interpolated into the SQL string? If parameterized (?, $1), respond FALSE_POSITIVE.",
     cwe: "CWE-89",
     fix_template: 'db.Query("SELECT * FROM users WHERE id = $1", userID)',
   },
@@ -22,8 +24,10 @@ export const GO_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["go"],
     regex: /\bunsafe\.Pointer\s*\(/g,
-    explanation: "unsafe.Pointer bypasses Go's type system and memory safety guarantees. Can cause memory corruption, use-after-free, and buffer overflows.",
-    verify_prompt: "Is this unsafe.Pointer usage in performance-critical code with proper bounds checking? Or is it used carelessly? If well-guarded, respond FALSE_POSITIVE.",
+    explanation:
+      "unsafe.Pointer bypasses Go's type system and memory safety guarantees. Can cause memory corruption, use-after-free, and buffer overflows.",
+    verify_prompt:
+      "Is this unsafe.Pointer usage in performance-critical code with proper bounds checking? Or is it used carelessly? If well-guarded, respond FALSE_POSITIVE.",
     cwe: "CWE-787",
     fix_template: "Avoid unsafe.Pointer where possible. Use encoding/binary for byte manipulation.",
   },
@@ -34,7 +38,8 @@ export const GO_PATTERNS: BugPattern[] = [
     languages: ["go"],
     regex: /\bexec\.Command\s*\(\s*(?:fmt\.Sprintf|.*\+)/g,
     explanation: "Building command strings from user input enables command injection.",
-    verify_prompt: "Does the command include ANY external input? If entirely hardcoded, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Does the command include ANY external input? If entirely hardcoded, respond FALSE_POSITIVE.",
     cwe: "CWE-78",
     fix_template: "Pass args as separate parameters: exec.Command(binary, arg1, arg2).",
   },
@@ -44,8 +49,10 @@ export const GO_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["go"],
     regex: /[^,\s]\s*:?=\s*\w+\.\w+\([^)]*\)\s*\n\s*(?!if\s+err)/g,
-    explanation: "Ignoring error return values in Go can lead to silent failures, data corruption, and security bypasses.",
-    verify_prompt: "Is the error from this function call being checked on the next line or within the same expression? If checked, respond FALSE_POSITIVE.",
+    explanation:
+      "Ignoring error return values in Go can lead to silent failures, data corruption, and security bypasses.",
+    verify_prompt:
+      "Is the error from this function call being checked on the next line or within the same expression? If checked, respond FALSE_POSITIVE.",
     cwe: "CWE-252",
     fix_template: "Always check: if err != nil { return err }",
   },
@@ -56,7 +63,8 @@ export const GO_PATTERNS: BugPattern[] = [
     languages: ["go"],
     regex: /InsecureSkipVerify\s*:\s*true/g,
     explanation: "Disabling TLS certificate verification allows man-in-the-middle attacks.",
-    verify_prompt: "Is this in test code or production code? If test-only, respond FALSE_POSITIVE. If production, respond CONFIRMED.",
+    verify_prompt:
+      "Is this in test code or production code? If test-only, respond FALSE_POSITIVE. If production, respond CONFIRMED.",
     cwe: "CWE-295",
     fix_template: "Remove InsecureSkipVerify: true, or use proper CA certificates.",
   },
@@ -77,7 +85,8 @@ export const GO_PATTERNS: BugPattern[] = [
       "3. Is there a comment explaining why the error is intentionally ignored? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the function can fail in production AND the error is silently discarded.",
     cwe: "CWE-252",
-    fix_template: "Replace `val, _ := foo()` with `val, err := foo(); if err != nil { return err }`.",
+    fix_template:
+      "Replace `val, _ := foo()` with `val, err := foo(); if err != nil { return err }`.",
   },
 
   // ── Goroutine leak ────────────────────────────────────────────
@@ -86,7 +95,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "Goroutine launched without context or done channel",
     severity: "medium",
     languages: ["go"],
-    regex: /\bgo\s+func\s*\([^)]*\)\s*\{(?![\s\S]{0,300}?(?:ctx\.Done|<-done|<-quit|<-stop|context\.))/g,
+    regex:
+      /\bgo\s+func\s*\([^)]*\)\s*\{(?![\s\S]{0,300}?(?:ctx\.Done|<-done|<-quit|<-stop|context\.))/g,
     explanation:
       "A goroutine launched without a context.Done() or done channel has no way to be signaled to stop. If the parent exits or the goroutine blocks on I/O, it leaks forever, consuming memory and OS threads.",
     verify_prompt:
@@ -115,7 +125,8 @@ export const GO_PATTERNS: BugPattern[] = [
       "3. Is the deferred call lightweight (e.g., mutex.Unlock with no allocation)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the loop can run many iterations and defer accumulates heavyweight resources.",
     cwe: "CWE-772",
-    fix_template: "Move the body into a helper function so defer runs per iteration, or close explicitly.",
+    fix_template:
+      "Move the body into a helper function so defer runs per iteration, or close explicitly.",
   },
 
   // ── Nil map write ─────────────────────────────────────────────
@@ -124,7 +135,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "Write to nil map (runtime panic)",
     severity: "high",
     languages: ["go"],
-    regex: /\bvar\s+(\w+)\s+map\s*\[[^\]]+\][^\n=]*\n(?![\s\S]{0,200}?\1\s*=\s*make)[\s\S]{0,200}?\1\s*\[/g,
+    regex:
+      /\bvar\s+(\w+)\s+map\s*\[[^\]]+\][^\n=]*\n(?![\s\S]{0,200}?\1\s*=\s*make)[\s\S]{0,200}?\1\s*\[/g,
     explanation:
       "Declaring a map variable with `var m map[K]V` initializes it to nil. Writing to a nil map causes a runtime panic. The map must be initialized with make() before use.",
     verify_prompt:
@@ -143,7 +155,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "Shared variable accessed in goroutine without synchronization",
     severity: "high",
     languages: ["go"],
-    regex: /\bgo\s+func\s*\([^)]*\)\s*\{[\s\S]{0,300}?(\w+)\s*(?:\+\+|--|(?:\+|-)=|=(?!=))[\s\S]{0,50}?\}\s*\(/g,
+    regex:
+      /\bgo\s+func\s*\([^)]*\)\s*\{[\s\S]{0,300}?(\w+)\s*(?:\+\+|--|(?:\+|-)=|=(?!=))[\s\S]{0,50}?\}\s*\(/g,
     explanation:
       "A variable from the outer scope is modified inside a goroutine without a mutex, atomic, or channel. This is a data race — undefined behavior in Go, detectable with `go test -race`.",
     verify_prompt:
@@ -162,7 +175,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "HTTP handler ignoring request context",
     severity: "medium",
     languages: ["go"],
-    regex: /func\s+\w*\s*\(\s*\w+\s+http\.ResponseWriter\s*,\s*(\w+)\s+\*http\.Request\s*\)[\s\S]{0,500}?(?:http\.Get|http\.Post|http\.Do|sql\.Query|sql\.Exec)\s*\(/g,
+    regex:
+      /func\s+\w*\s*\(\s*\w+\s+http\.ResponseWriter\s*,\s*(\w+)\s+\*http\.Request\s*\)[\s\S]{0,500}?(?:http\.Get|http\.Post|http\.Do|sql\.Query|sql\.Exec)\s*\(/g,
     explanation:
       "An HTTP handler makes outbound calls (HTTP, SQL) without passing the request's context. When the client disconnects, the downstream call continues wasting resources instead of being cancelled.",
     verify_prompt:
@@ -171,7 +185,8 @@ export const GO_PATTERNS: BugPattern[] = [
       "2. Is the outbound call to a local/fast resource where cancellation doesn't matter? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if a slow outbound call ignores the request context.",
     cwe: "CWE-404",
-    fix_template: "Use req.Context(): http.NewRequestWithContext(req.Context(), ...) or db.QueryContext(req.Context(), ...).",
+    fix_template:
+      "Use req.Context(): http.NewRequestWithContext(req.Context(), ...) or db.QueryContext(req.Context(), ...).",
   },
 
   // ── Infinite recursion ────────────────────────────────────────
@@ -180,7 +195,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "Function calls itself without visible base case",
     severity: "high",
     languages: ["go"],
-    regex: /func\s+(\w+)\s*\([^)]*\)[^{]*\{(?![\s\S]{0,200}?\b(?:if|switch|case|return)\b)[\s\S]{0,300}?\b\1\s*\(/g,
+    regex:
+      /func\s+(\w+)\s*\([^)]*\)[^{]*\{(?![\s\S]{0,200}?\b(?:if|switch|case|return)\b)[\s\S]{0,300}?\b\1\s*\(/g,
     explanation:
       "A function calls itself without a visible base case (no if/switch/return before the recursive call). This will cause a stack overflow at runtime.",
     verify_prompt:
@@ -203,12 +219,12 @@ export const GO_PATTERNS: BugPattern[] = [
       "Hardcoded credentials in source code are exposed to anyone with repo access. Secrets should come from environment variables, config files, or a secrets manager.",
     verify_prompt:
       "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
-      "1. Is the value a placeholder like \"changeme\", \"TODO\", \"xxx\", or \"test\"? → FALSE_POSITIVE\n" +
+      '1. Is the value a placeholder like "changeme", "TODO", "xxx", or "test"? → FALSE_POSITIVE\n' +
       "2. Is this in test code or example code? → FALSE_POSITIVE\n" +
       "3. Is it a non-secret identifier (e.g., a header name, env var name)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if it looks like a real credential embedded in production code.",
     cwe: "CWE-798",
-    fix_template: "Use os.Getenv(\"SECRET_KEY\") or a secrets manager.",
+    fix_template: 'Use os.Getenv("SECRET_KEY") or a secrets manager.',
   },
 
   // ── Unbuffered channel deadlock ───────────────────────────────
@@ -227,7 +243,8 @@ export const GO_PATTERNS: BugPattern[] = [
       "3. Is this inside a select statement with a default case? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if both send and receive happen in the same goroutine on an unbuffered channel.",
     cwe: "CWE-833",
-    fix_template: "Use a buffered channel: make(chan T, 1), or move send/receive to separate goroutines.",
+    fix_template:
+      "Use a buffered channel: make(chan T, 1), or move send/receive to separate goroutines.",
   },
 
   // ── WaitGroup misuse ──────────────────────────────────────────
@@ -254,7 +271,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "HTTP response body not closed (connection leak)",
     severity: "medium",
     languages: ["go"],
-    regex: /(?:http\.(?:Get|Post|Head))\s*\([^)]*\)[\s\S]{0,300}?(?![\s\S]{0,300}?\.Body\.Close\s*\(\))/g,
+    regex:
+      /(?:http\.(?:Get|Post|Head))\s*\([^)]*\)[\s\S]{0,300}?(?![\s\S]{0,300}?\.Body\.Close\s*\(\))/g,
     explanation:
       "Not closing the HTTP response body leaks the underlying TCP connection. The transport cannot reuse it, eventually exhausting file descriptors or connection pool.",
     verify_prompt:
@@ -320,7 +338,8 @@ export const GO_PATTERNS: BugPattern[] = [
       "3. Is this in a test file (TestMain)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if os.Exit is called in a library/utility package.",
     cwe: "CWE-705",
-    fix_template: "Return an error instead of calling os.Exit(). Let the caller decide how to handle it.",
+    fix_template:
+      "Return an error instead of calling os.Exit(). Let the caller decide how to handle it.",
   },
 
   // ── Loop variable captured by goroutine ───────────────────────
@@ -329,7 +348,8 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "Loop variable captured by goroutine closure (pre-Go 1.22)",
     severity: "medium",
     languages: ["go"],
-    regex: /\bfor\s+(?:\w+\s*,\s*)?(\w+)\s*:?=\s*range\b[\s\S]{0,200}?\bgo\s+func\s*\([^)]*\)\s*\{[\s\S]{0,200}?\b\1\b/g,
+    regex:
+      /\bfor\s+(?:\w+\s*,\s*)?(\w+)\s*:?=\s*range\b[\s\S]{0,200}?\bgo\s+func\s*\([^)]*\)\s*\{[\s\S]{0,200}?\b\1\b/g,
     explanation:
       "Before Go 1.22, the loop variable is shared across all iterations. Goroutines capturing it by closure all see the LAST value. In Go 1.22+ with GOEXPERIMENT=loopvar this is fixed, but older code is affected.",
     verify_prompt:
@@ -339,7 +359,8 @@ export const GO_PATTERNS: BugPattern[] = [
       "3. Is the project using Go 1.22+ with loopvar semantics? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the loop variable is captured by closure without shadowing.",
     cwe: "CWE-362",
-    fix_template: "Shadow the variable: `v := v` before the go statement, or pass it as a goroutine argument.",
+    fix_template:
+      "Shadow the variable: `v := v` before the go statement, or pass it as a goroutine argument.",
   },
 
   // ── v2.10.332 — Phase A web verticals ──────────────────────────
@@ -367,8 +388,7 @@ export const GO_PATTERNS: BugPattern[] = [
     title: "http.Client without Timeout (default is unlimited)",
     severity: "medium",
     languages: ["go"],
-    regex:
-      /\bhttp\.Client\s*\{\s*(?![\s\S]{0,400}?\bTimeout\s*:)/g,
+    regex: /\bhttp\.Client\s*\{\s*(?![\s\S]{0,400}?\bTimeout\s*:)/g,
     explanation:
       "Go's http.Client default Timeout is 0 (unlimited). A slow / malicious server can keep a connection open indefinitely, exhausting goroutines or starving the request. Production clients should always set a Timeout.",
     verify_prompt:

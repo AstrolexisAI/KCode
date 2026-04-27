@@ -22,6 +22,7 @@ function timingSafeTokenEqual(supplied: string | null | undefined, expected: str
   }
   return timingSafeEqual(a, b);
 }
+
 import { handleApiRequest } from "./api";
 import type { ServerEvent, WebServerConfig } from "./types";
 import { DEFAULT_WEB_CONFIG, MIME_TYPES } from "./types";
@@ -179,7 +180,10 @@ export class WebServer {
     // Token redacted in logs — fragment hash-based handoff only, never
     // stored in log files.
     const tokenPreview = config.auth.token.slice(0, 4) + "…" + config.auth.token.slice(-2);
-    log.info("web", `Auth token: ${tokenPreview} (redacted — full token in browser fragment, not logs)`);
+    log.info(
+      "web",
+      `Auth token: ${tokenPreview} (redacted — full token in browser fragment, not logs)`,
+    );
 
     // Auto-open browser
     if (config.openBrowser) {

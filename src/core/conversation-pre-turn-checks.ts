@@ -74,9 +74,7 @@ export async function runPreTurnChecks(deps: PreTurnCheckDeps): Promise<void> {
         "user-repetition",
         `injected reminder: topics=[${verdict.sharedTopics
           .slice(0, 3)
-          .join(",")}] frustration=[${verdict.frustrationSignals
-          .slice(0, 2)
-          .join(",")}]${
+          .join(",")}] frustration=[${verdict.frustrationSignals.slice(0, 2).join(",")}]${
           saturation !== undefined ? ` saturation=${Math.round(saturation * 100)}%` : ""
         }`,
       );

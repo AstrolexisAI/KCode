@@ -17,13 +17,7 @@
  *   error     — failed with an error message
  *   cancelled — killed by the user or the pool
  */
-export type AgentStatus =
-  | "spawning"
-  | "running"
-  | "waiting"
-  | "done"
-  | "error"
-  | "cancelled";
+export type AgentStatus = "spawning" | "running" | "waiting" | "done" | "error" | "cancelled";
 
 /**
  * Semantic role of an agent. The factory picks a role based on task

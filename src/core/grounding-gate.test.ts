@@ -260,8 +260,7 @@ export async function login(email: string, password: string): Promise<string> {
   // ─── Auth claim detection (issue #101) ────────────────────────
 
   test("detects the EXACT 2026-04-23 phrase '(sin auth, como funciona)'", () => {
-    const finalText =
-      "Conecta al RPC de tu nodo en localhost:8332 (sin auth, como funciona).";
+    const finalText = "Conecta al RPC de tu nodo en localhost:8332 (sin auth, como funciona).";
     const finding = detectAuthClaim(finalText);
     expect(finding).not.toBeNull();
     expect(finding?.snippet).toMatch(/sin auth/i);
@@ -318,10 +317,7 @@ export async function login(email: string, password: string): Promise<string> {
   });
 
   test("detects 'listo para producción'", () => {
-    const finding = detectStrongCompletionClaim(
-      "Implementación lista para producción.",
-      "hazlo",
-    );
+    const finding = detectStrongCompletionClaim("Implementación lista para producción.", "hazlo");
     expect(finding).not.toBeNull();
     expect(finding?.broadRequest).toBe(false);
   });
@@ -331,11 +327,15 @@ export async function login(email: string, password: string): Promise<string> {
   });
 
   test("detects 'works perfectly'", () => {
-    expect(detectStrongCompletionClaim("Everything works perfectly end-to-end.", "fix")).not.toBeNull();
+    expect(
+      detectStrongCompletionClaim("Everything works perfectly end-to-end.", "fix"),
+    ).not.toBeNull();
   });
 
   test("detects 'fully functional'", () => {
-    expect(detectStrongCompletionClaim("The dashboard is fully functional now.", "")).not.toBeNull();
+    expect(
+      detectStrongCompletionClaim("The dashboard is fully functional now.", ""),
+    ).not.toBeNull();
   });
 
   test("does NOT trigger on MVP/scope-honest wording", () => {
@@ -395,9 +395,7 @@ export async function login(email: string, password: string): Promise<string> {
   });
 
   test("detects 'Run it with python3 app.py'", () => {
-    expect(
-      detectReadinessAfterErrors("Run it with: python3 /tmp/app.py", 1, false),
-    ).not.toBeNull();
+    expect(detectReadinessAfterErrors("Run it with: python3 /tmp/app.py", 1, false)).not.toBeNull();
   });
 
   test("detects 'el dashboard muestra'", () => {
@@ -407,9 +405,7 @@ export async function login(email: string, password: string): Promise<string> {
   });
 
   test("does NOT fire when no errors and nothing blocked", () => {
-    expect(
-      detectReadinessAfterErrors("The app is ready to use.", 0, false),
-    ).toBeNull();
+    expect(detectReadinessAfterErrors("The app is ready to use.", 0, false)).toBeNull();
   });
 
   test("does NOT fire on honest partial wording", () => {
@@ -446,7 +442,7 @@ export async function login(email: string, password: string): Promise<string> {
       { name: "Bash", isError: false, summary: "pip install rich" },
       { name: "Write", isError: false, summary: "/tmp/app/app.py" },
       { name: "Bash", isError: true, summary: "python3 app.py" }, // ran_failed
-      { name: "Edit", isError: true, summary: "/tmp/app/app.py" },   // blocked
+      { name: "Edit", isError: true, summary: "/tmp/app/app.py" }, // blocked
       {
         name: "GrepReplace",
         isError: false,
@@ -529,7 +525,8 @@ export async function login(email: string, password: string): Promise<string> {
     const events = [
       {
         command: "timeout 5 python app.py 2>&1 | head -20",
-        output: "Traceback (most recent call last):\n  File \"app.py\", line 5, in <module>\n    import nonexistent\nModuleNotFoundError: No module named 'nonexistent'",
+        output:
+          "Traceback (most recent call last):\n  File \"app.py\", line 5, in <module>\n    import nonexistent\nModuleNotFoundError: No module named 'nonexistent'",
       },
     ];
     const finding = detectRuntimeFailureInOutput(events);

@@ -25,7 +25,8 @@ export const NEXTJS_PATTERNS: BugPattern[] = [
     // Match an exported getServerSideProps that uses ctx.req / ctx.query /
     // ctx.params / ctx.params anywhere in its body. The verifier prompt
     // judges whether an auth check actually exists.
-    regex: /\bexport\s+(?:async\s+)?(?:function|const)\s+getServerSideProps\b[\s\S]*?(?:ctx\.req|context\.req|ctx\.query|context\.query|ctx\.params|context\.params)/g,
+    regex:
+      /\bexport\s+(?:async\s+)?(?:function|const)\s+getServerSideProps\b[\s\S]*?(?:ctx\.req|context\.req|ctx\.query|context\.query|ctx\.params|context\.params)/g,
     explanation:
       "getServerSideProps runs on every request with full server-side privileges. If it returns user-controlled props without authenticating the request first, the page leaks whatever the page reads — user records, internal links, drafts. The pattern hit Vercel's own examples in 2023 and remains the most common Next.js auth-bypass shape.",
     verify_prompt:
@@ -76,7 +77,8 @@ export const NEXTJS_PATTERNS: BugPattern[] = [
     // point of NEXT_PUBLIC_ is "this is bundled into the client" —
     // putting a secret behind that prefix ships the secret to every
     // visitor's browser DevTools.
-    regex: /\bNEXT_PUBLIC_\w*(?:TOKEN|SECRET|API_?KEY|PASSWORD|PRIVATE_KEY|CLIENT_SECRET|SESSION_KEY)\w*\b/gi,
+    regex:
+      /\bNEXT_PUBLIC_\w*(?:TOKEN|SECRET|API_?KEY|PASSWORD|PRIVATE_KEY|CLIENT_SECRET|SESSION_KEY)\w*\b/gi,
     explanation:
       "NEXT_PUBLIC_ is Next's INTENTIONAL client-side env-var prefix — every variable with that prefix is inlined into the JS bundle at build time. Naming a variable NEXT_PUBLIC_API_TOKEN means the token ships in the user's browser, visible in DevTools / source view / network tab. This is a recurring incident shape because the prefix looks like a namespace separator but is actually a publish-to-client switch.",
     verify_prompt:
@@ -100,7 +102,8 @@ export const NEXTJS_PATTERNS: BugPattern[] = [
     // the entry of a route.ts file. The body referencing request
     // headers / cookies / json without an auth check elsewhere is
     // the smell.
-    regex: /\bexport\s+async\s+function\s+(?:GET|POST|PUT|PATCH|DELETE)\s*\([^)]*\)\s*\{[\s\S]{0,400}?(?:request\.(?:json|text|formData|cookies|headers)|cookies\(\)|headers\(\))/g,
+    regex:
+      /\bexport\s+async\s+function\s+(?:GET|POST|PUT|PATCH|DELETE)\s*\([^)]*\)\s*\{[\s\S]{0,400}?(?:request\.(?:json|text|formData|cookies|headers)|cookies\(\)|headers\(\))/g,
     explanation:
       "App Router route handlers (route.ts) are public HTTP endpoints. Reading request body / cookies / headers without authentication on a non-public route exposes the underlying logic to any internet caller — the 2024 t3-app and several authjs-template repos shipped with this exact shape.",
     verify_prompt:
@@ -123,7 +126,8 @@ export const NEXTJS_PATTERNS: BugPattern[] = [
     pack: "web",
     // redirect(searchParams.get('next')) / router.push(query.from) /
     // NextResponse.redirect(req.nextUrl.searchParams.get('redirect'))
-    regex: /\b(?:redirect|router\.push|router\.replace|NextResponse\.redirect)\s*\(\s*(?:[\w.]+\.searchParams\.get\([^)]+\)|[\w.]+\.query\.\w+|searchParams\.get\([^)]+\))\s*[,)]/g,
+    regex:
+      /\b(?:redirect|router\.push|router\.replace|NextResponse\.redirect)\s*\(\s*(?:[\w.]+\.searchParams\.get\([^)]+\)|[\w.]+\.query\.\w+|searchParams\.get\([^)]+\))\s*[,)]/g,
     explanation:
       "Redirecting to a URL pulled from the query string is the classic open-redirect: an attacker crafts a link to your site with `?next=https://evil.example/` and the user's browser follows the trusted-looking domain into the attacker's page. Phishers love this because the initial click looks legitimate. Next's router.push / NextResponse.redirect honor any URL, including absolute ones, unless the caller filters.",
     verify_prompt:

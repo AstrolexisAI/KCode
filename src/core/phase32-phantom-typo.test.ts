@@ -138,9 +138,7 @@ describe("Phase 32 — conversation loop → tool executor handoff", () => {
 
   test("Write is never blocked by phase 32 (phase 31 handles Write escapes)", () => {
     const guardState = new LoopGuardState();
-    guardState.activePhantomClaim = detectPhantomTypoClaim(
-      "setProperty en lugar de setProperty",
-    );
+    guardState.activePhantomClaim = detectPhantomTypoClaim("setProperty en lugar de setProperty");
     expect(guardState.activePhantomClaim).not.toBeNull();
 
     // Phase 32 targets Edit/MultiEdit only. Write is handled by phase
@@ -156,9 +154,7 @@ describe("Phase 32 — conversation loop → tool executor handoff", () => {
     const guardState = new LoopGuardState();
 
     // Turn 1 — phantom claim detected
-    guardState.activePhantomClaim = detectPhantomTypoClaim(
-      "reverse en lugar de reverse",
-    );
+    guardState.activePhantomClaim = detectPhantomTypoClaim("reverse en lugar de reverse");
     expect(guardState.activePhantomClaim).not.toBeNull();
     expect(guardState.activePhantomClaim!.token).toBe("reverse");
 

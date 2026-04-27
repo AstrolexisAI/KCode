@@ -11,8 +11,10 @@ export const SQL_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["sql"],
     regex: /GRANT\s+ALL\s+PRIVILEGES/gi,
-    explanation: "Granting ALL PRIVILEGES violates least-privilege principle. Grant only needed permissions.",
-    verify_prompt: "Is this a setup/migration script for a dedicated service account, or a shared account? If overly broad, respond CONFIRMED." +
+    explanation:
+      "Granting ALL PRIVILEGES violates least-privilege principle. Grant only needed permissions.",
+    verify_prompt:
+      "Is this a setup/migration script for a dedicated service account, or a shared account? If overly broad, respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. This is a local development/test setup script (not used in production)\n" +
       "2. The GRANT is for a dedicated service account with limited scope on a specific database\n" +
@@ -29,7 +31,8 @@ export const SQL_PATTERNS: BugPattern[] = [
     languages: ["sql"],
     regex: /(?:PASSWORD|IDENTIFIED BY)\s+['"][^'"]+['"]/gi,
     explanation: "Plaintext passwords in SQL scripts are exposed to anyone with repo access.",
-    verify_prompt: "Is this a real password or a placeholder like 'changeme'? If real, respond CONFIRMED." +
+    verify_prompt:
+      "Is this a real password or a placeholder like 'changeme'? If real, respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The password is a placeholder ('changeme', 'xxx', 'password', 'TODO', 'REPLACE_ME', 'secret')\n" +
       "2. This is in test, example, seed data, or documentation code\n" +

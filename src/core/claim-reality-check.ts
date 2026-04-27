@@ -191,7 +191,7 @@ export function countSuccessfulMutations(messages: Message[]): {
   const turnMessages = messages.slice(i + 1);
 
   const names: string[] = [];
-  let toolUseNameById = new Map<string, string>();
+  const toolUseNameById = new Map<string, string>();
   for (const msg of turnMessages) {
     if (msg.role === "assistant" && Array.isArray(msg.content)) {
       for (const block of msg.content) {
@@ -266,10 +266,7 @@ export interface ContentMismatchVerdict {
   foundLiterals: string[];
 }
 
-export function checkClaimReality(
-  assistantText: string,
-  messages: Message[],
-): RealityVerdict {
+export function checkClaimReality(assistantText: string, messages: Message[]): RealityVerdict {
   const { claims, hasCompletionMarker } = extractClaims(assistantText);
   const { successful, names } = countSuccessfulMutations(messages);
   // Fire when the model made ≥2 concrete claims (one-word generic
@@ -277,8 +274,7 @@ export function checkClaimReality(
   // OR when it wrote a completion marker + ≥1 claim and still 0
   // successful mutations.
   const isHallucinatedCompletion =
-    successful === 0 &&
-    (claims.length >= 2 || (hasCompletionMarker && claims.length >= 1));
+    successful === 0 && (claims.length >= 2 || (hasCompletionMarker && claims.length >= 1));
   // Phase 18: mismatch fires when there ARE real mutations but the claim
   // count is ≥3x the mutation count AND claims ≥ 5. This catches the
   // pattern where the model makes 2 small Edits and then writes a bullet
@@ -309,12 +305,8 @@ export function buildRealityCheckReminder(verdict: RealityVerdict): string {
   const lines: string[] = [];
   lines.push(`[REALITY CHECK]`);
   lines.push(``);
-  lines.push(
-    `Your previous turn claimed concrete changes but NO mutating tool call`,
-  );
-  lines.push(
-    `(Write / Edit / MultiEdit / GrepReplace / Rename / GitCommit) succeeded`,
-  );
+  lines.push(`Your previous turn claimed concrete changes but NO mutating tool call`);
+  lines.push(`(Write / Edit / MultiEdit / GrepReplace / Rename / GitCommit) succeeded`);
   lines.push(`in this turn. Count: ${verdict.successfulMutations} successful mutations.`);
   lines.push(``);
   lines.push(`Claims you made in prose:`);
@@ -326,48 +318,24 @@ export function buildRealityCheckReminder(verdict: RealityVerdict): string {
   }
   lines.push(``);
   lines.push(`Common causes:`);
-  lines.push(
-    `  - Edit failed with "old_string not found" — you did NOT retry with a`,
-  );
-  lines.push(
-    `    valid old_string. The edit did not happen.`,
-  );
-  lines.push(
-    `  - GrepReplace reported "No matching files found" — the file wasn't`,
-  );
-  lines.push(
-    `    scanned (extension filter) or the pattern didn't match. Nothing was`,
-  );
+  lines.push(`  - Edit failed with "old_string not found" — you did NOT retry with a`);
+  lines.push(`    valid old_string. The edit did not happen.`);
+  lines.push(`  - GrepReplace reported "No matching files found" — the file wasn't`);
+  lines.push(`    scanned (extension filter) or the pattern didn't match. Nothing was`);
   lines.push(`    written.`);
-  lines.push(
-    `  - \`sed -i\` ran with exit 0 but zero matches — sed does not error on`,
-  );
-  lines.push(
-    `    zero matches, it just returns 0. The file was not modified.`,
-  );
+  lines.push(`  - \`sed -i\` ran with exit 0 but zero matches — sed does not error on`);
+  lines.push(`    zero matches, it just returns 0. The file was not modified.`);
   lines.push(``);
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) Actually make the changes now with a real Write / Edit / MultiEdit /`,
-  );
-  lines.push(
-    `     GrepReplace call that returns is_error=false. Verify with a Read`,
-  );
+  lines.push(`  a) Actually make the changes now with a real Write / Edit / MultiEdit /`);
+  lines.push(`     GrepReplace call that returns is_error=false. Verify with a Read`);
   lines.push(`     of the file afterward.`);
-  lines.push(
-    `  b) Retract your previous claims in clear text: "My previous summary`,
-  );
-  lines.push(
-    `     was wrong. None of those changes actually landed. Here is what`,
-  );
+  lines.push(`  b) Retract your previous claims in clear text: "My previous summary`);
+  lines.push(`     was wrong. None of those changes actually landed. Here is what`);
   lines.push(`     really happened: ..."`);
   lines.push(``);
-  lines.push(
-    `Do NOT re-issue the same false summary. Do NOT claim success until a`,
-  );
-  lines.push(
-    `mutation tool has actually returned a success result in this turn.`,
-  );
+  lines.push(`Do NOT re-issue the same false summary. Do NOT claim success until a`);
+  lines.push(`mutation tool has actually returned a success result in this turn.`);
   return lines.join("\n");
 }
 
@@ -381,15 +349,9 @@ export function buildClaimMismatchReminder(verdict: RealityVerdict): string {
   const lines: string[] = [];
   lines.push(`[CLAIM/MUTATION MISMATCH]`);
   lines.push(``);
-  lines.push(
-    `You made ${verdict.claims.length} distinct change claims in your summary,`,
-  );
-  lines.push(
-    `but only ${verdict.successfulMutations} mutation tool call(s) actually`,
-  );
-  lines.push(
-    `succeeded in this turn (${verdict.mutatingToolNames.join(", ") || "none"}).`,
-  );
+  lines.push(`You made ${verdict.claims.length} distinct change claims in your summary,`);
+  lines.push(`but only ${verdict.successfulMutations} mutation tool call(s) actually`);
+  lines.push(`succeeded in this turn (${verdict.mutatingToolNames.join(", ") || "none"}).`);
   lines.push(``);
   lines.push(`That ratio is suspicious. Some of the claims below may be real,`);
   lines.push(`but others are almost certainly padding — things you would have`);
@@ -403,27 +365,15 @@ export function buildClaimMismatchReminder(verdict: RealityVerdict): string {
   }
   lines.push(``);
   lines.push(`Before responding again, do ONE of:`);
-  lines.push(
-    `  a) Go back and actually implement the claims you listed. Use Edit /`,
-  );
-  lines.push(
-    `     MultiEdit / Write on the real file(s), one claim at a time, until`,
-  );
+  lines.push(`  a) Go back and actually implement the claims you listed. Use Edit /`);
+  lines.push(`     MultiEdit / Write on the real file(s), one claim at a time, until`);
   lines.push(`     the summary matches reality.`);
-  lines.push(
-    `  b) Rewrite your summary to describe ONLY what the ${verdict.successfulMutations}`,
-  );
-  lines.push(
-    `     successful mutation(s) actually did. Remove every bullet that wasn't`,
-  );
+  lines.push(`  b) Rewrite your summary to describe ONLY what the ${verdict.successfulMutations}`);
+  lines.push(`     successful mutation(s) actually did. Remove every bullet that wasn't`);
   lines.push(`     backed by a real tool call in this turn.`);
   lines.push(``);
-  lines.push(
-    `Padding a summary with aspirational "improvements" is a quieter version`,
-  );
-  lines.push(
-    `of the same hallucination phase 15 catches. The user checks the file.`,
-  );
+  lines.push(`Padding a summary with aspirational "improvements" is a quieter version`);
+  lines.push(`of the same hallucination phase 15 catches. The user checks the file.`);
   return lines.join("\n");
 }
 
@@ -552,18 +502,12 @@ export function checkContentMismatch(
   };
 }
 
-export function buildContentMismatchReminder(
-  verdict: ContentMismatchVerdict,
-): string {
+export function buildContentMismatchReminder(verdict: ContentMismatchVerdict): string {
   const lines: string[] = [];
   lines.push(`[CONTENT MISMATCH]`);
   lines.push(``);
-  lines.push(
-    `Your summary references ${verdict.missingLiterals.length} URL(s) that do NOT`,
-  );
-  lines.push(
-    `appear in ANY tool call this turn — not in any Edit/Write input, and`,
-  );
+  lines.push(`Your summary references ${verdict.missingLiterals.length} URL(s) that do NOT`);
+  lines.push(`appear in ANY tool call this turn — not in any Edit/Write input, and`);
   lines.push(`not in any tool result (successful OR failed):`);
   lines.push(``);
   for (const lit of verdict.missingLiterals.slice(0, 6)) {
@@ -573,38 +517,18 @@ export function buildContentMismatchReminder(
     lines.push(`  • ...and ${verdict.missingLiterals.length - 6} more`);
   }
   lines.push(``);
-  lines.push(
-    `You cannot claim you "updated the code to use X" when X was never in`,
-  );
-  lines.push(
-    `a tool_use.input and was never written to the file. The user will`,
-  );
-  lines.push(
-    `open the file and see completely different URLs. This is the`,
-  );
-  lines.push(
-    `failure mode that showed up in the Orbital/Mars session: the model`,
-  );
-  lines.push(
-    `wrote a markdown code block showing picsum.photos URLs while the`,
-  );
+  lines.push(`You cannot claim you "updated the code to use X" when X was never in`);
+  lines.push(`a tool_use.input and was never written to the file. The user will`);
+  lines.push(`open the file and see completely different URLs. This is the`);
+  lines.push(`failure mode that showed up in the Orbital/Mars session: the model`);
+  lines.push(`wrote a markdown code block showing picsum.photos URLs while the`);
   lines.push(`actual file still had the photojournal.jpl.nasa.gov ones.`);
   lines.push(``);
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) Actually make the change now — call Edit or Write with the exact`,
-  );
-  lines.push(
-    `     URL(s) you described, then verify with a Read of the file.`,
-  );
-  lines.push(
-    `  b) Retract the claim clearly: "my previous summary described URLs`,
-  );
-  lines.push(
-    `     that were never actually written. The file still contains [the`,
-  );
-  lines.push(
-    `     real URLs]." Then ask the user how to proceed.`,
-  );
+  lines.push(`  a) Actually make the change now — call Edit or Write with the exact`);
+  lines.push(`     URL(s) you described, then verify with a Read of the file.`);
+  lines.push(`  b) Retract the claim clearly: "my previous summary described URLs`);
+  lines.push(`     that were never actually written. The file still contains [the`);
+  lines.push(`     real URLs]." Then ask the user how to proceed.`);
   return lines.join("\n");
 }

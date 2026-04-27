@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createDbProject } from "./db-engine";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createDbProject } from "./db-engine";
 
 describe("db-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-db-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Postgres project with Prisma by default", () => {
@@ -134,13 +138,16 @@ describe("db-engine", () => {
   test("has migrations directory", () => {
     withTmp((dir) => {
       const r = createDbProject("Postgres with users", dir);
-      expect(r.files.some(f => f.path.startsWith("migrations/"))).toBe(true);
+      expect(r.files.some((f) => f.path.startsWith("migrations/"))).toBe(true);
     });
   });
 
   test("detects 10 entity types", () => {
     withTmp((dir) => {
-      const r = createDbProject("Postgres with users, posts, products, orders, comments, categories, tags, tasks, messages, sessions", dir);
+      const r = createDbProject(
+        "Postgres with users, posts, products, orders, comments, categories, tags, tasks, messages, sessions",
+        dir,
+      );
       expect(r.config.entities.length).toBe(10);
     });
   });
@@ -148,8 +155,8 @@ describe("db-engine", () => {
   test("bilingual entity detection (Spanish)", () => {
     withTmp((dir) => {
       const r = createDbProject("Postgres con usuarios y productos", dir);
-      expect(r.config.entities.some(e => e.name === "user")).toBe(true);
-      expect(r.config.entities.some(e => e.name === "product")).toBe(true);
+      expect(r.config.entities.some((e) => e.name === "user")).toBe(true);
+      expect(r.config.entities.some((e) => e.name === "product")).toBe(true);
     });
   });
 

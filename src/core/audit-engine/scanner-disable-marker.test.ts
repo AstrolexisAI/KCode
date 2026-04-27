@@ -13,8 +13,14 @@ import { hasAuditDisableMarker, scanProject } from "./scanner";
 
 let TMP: string;
 
-beforeEach(() => { TMP = mkdtempSync(join(tmpdir(), "kcode-marker-")); });
-afterEach(() => { try { rmSync(TMP, { recursive: true, force: true }); } catch {} });
+beforeEach(() => {
+  TMP = mkdtempSync(join(tmpdir(), "kcode-marker-"));
+});
+afterEach(() => {
+  try {
+    rmSync(TMP, { recursive: true, force: true });
+  } catch {}
+});
 
 describe("hasAuditDisableMarker", () => {
   test("matches // kcode-disable: audit at file top", () => {
@@ -46,9 +52,12 @@ describe("scanProject respects kcode-disable: audit", () => {
   test("file with the marker is excluded from candidates", async () => {
     // A file that WOULD trip a pattern (eval of req.body) — but is
     // marked disabled. Result: zero candidates.
-    writeFileSync(join(TMP, "fixture.js"), `// kcode-disable: audit
+    writeFileSync(
+      join(TMP, "fixture.js"),
+      `// kcode-disable: audit
 const x = eval(req.body.code);
-`);
+`,
+    );
     const result = await scanProject(TMP);
     expect(result.candidates.length).toBe(0);
   });
@@ -62,9 +71,12 @@ const x = eval(req.body.code);
   });
 
   test("marker applies per-file, not per-project", async () => {
-    writeFileSync(join(TMP, "fixture.js"), `// kcode-disable: audit
+    writeFileSync(
+      join(TMP, "fixture.js"),
+      `// kcode-disable: audit
 eval(req.body.code);
-`);
+`,
+    );
     writeFileSync(join(TMP, "real.js"), `eval(req.body.code);`);
     const result = await scanProject(TMP);
     const realFile = result.candidates.find((c) => c.file.endsWith("real.js"));

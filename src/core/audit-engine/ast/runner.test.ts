@@ -9,8 +9,8 @@
 // checkout.
 
 import { describe, expect, it } from "bun:test";
-import { runAstPatterns, _resetAstRunnerForTest } from "./runner";
 import { PYTHON_AST_PATTERNS } from "./python-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 describe("runAstPatterns — graceful degradation", () => {
   it("returns empty candidates and structured stats with no patterns", async () => {
@@ -154,7 +154,9 @@ describe("py-ast-002 deserialization-of-parameter", () => {
     const code = `import pickle\ndef f(p):\n    pickle.loads(p)\n`;
     const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
     if (r.stats.every((s) => !s.grammar_loaded)) return;
-    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    const hits = r.candidates.filter(
+      (c) => c.pattern_id === "py-ast-002-deserialization-of-parameter",
+    );
     expect(hits.length).toBe(1);
     expect(hits[0]!.matched_text).toBe("pickle.loads(p)");
   });
@@ -164,7 +166,9 @@ describe("py-ast-002 deserialization-of-parameter", () => {
     const code = `import yaml\ndef a(p): yaml.load(p)\ndef b(p): yaml.safe_load(p)\n`;
     const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
     if (r.stats.every((s) => !s.grammar_loaded)) return;
-    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    const hits = r.candidates.filter(
+      (c) => c.pattern_id === "py-ast-002-deserialization-of-parameter",
+    );
     expect(hits.length).toBe(1);
     expect(hits[0]!.matched_text).toBe("yaml.load(p)");
   });
@@ -179,7 +183,9 @@ def e(p): yaml.full_load(p)
 `;
     const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
     if (r.stats.every((s) => !s.grammar_loaded)) return;
-    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    const hits = r.candidates.filter(
+      (c) => c.pattern_id === "py-ast-002-deserialization-of-parameter",
+    );
     expect(hits.length).toBe(5);
   });
 
@@ -190,7 +196,9 @@ def b(): pickle.loads(b"safe")
 `;
     const r = await runAstPatterns(PYTHON_AST_PATTERNS, "/tmp/x.py", code);
     if (r.stats.every((s) => !s.grammar_loaded)) return;
-    const hits = r.candidates.filter((c) => c.pattern_id === "py-ast-002-deserialization-of-parameter");
+    const hits = r.candidates.filter(
+      (c) => c.pattern_id === "py-ast-002-deserialization-of-parameter",
+    );
     expect(hits.length).toBe(0);
   });
 });

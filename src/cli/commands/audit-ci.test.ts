@@ -6,9 +6,9 @@
 // handler directly would require mocking process.exit, which is
 // brittle in Bun's test runner.
 
-import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const KCODE_ENTRY = join(__dirname, "..", "..", "index.ts");
@@ -23,10 +23,16 @@ beforeEach(() => {
 afterEach(() => {
   try {
     rmSync(TMP, { recursive: true, force: true });
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
 });
 
-function runAuditCi(extraArgs: string[] = []): { exitCode: number; stdout: string; stderr: string } {
+function runAuditCi(extraArgs: string[] = []): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
   const proc = spawnSync(
     process.execPath,
     ["run", KCODE_ENTRY, "audit", TMP, "--ci", ...extraArgs],
@@ -49,20 +55,14 @@ describe("kcode audit --ci", () => {
 
   test("exits 1 when there are confirmed findings", () => {
     // Pattern py-001 (eval-of-string) reliably fires on this Python.
-    writeFileSync(
-      join(TMP, "bad.py"),
-      `import sys\ndef f(p):\n    eval(p)\n`,
-    );
+    writeFileSync(join(TMP, "bad.py"), `import sys\ndef f(p):\n    eval(p)\n`);
     const { exitCode, stdout } = runAuditCi();
     expect(exitCode).toBe(1);
     expect(stdout).toMatch(/CI gate: \d+ actionable finding/);
   });
 
   test("writes JSON and SARIF artifacts even when exiting 1", () => {
-    writeFileSync(
-      join(TMP, "bad.py"),
-      `def f(p):\n    eval(p)\n`,
-    );
+    writeFileSync(join(TMP, "bad.py"), `def f(p):\n    eval(p)\n`);
     const { exitCode } = runAuditCi();
     expect(exitCode).toBe(1);
     expect(existsSync(join(TMP, "AUDIT_REPORT.md"))).toBe(true);

@@ -53,7 +53,7 @@ describe("ts-ast-001 prototype-pollution-of-parameter", () => {
     });
   });
 
-  it("does not flag obj[\"literal\"] (key is a string, not an identifier)", async () => {
+  it('does not flag obj["literal"] (key is a string, not an identifier)', async () => {
     _resetAstRunnerForTest();
     const code = `function f(target: any) { target["literal"] = 1; }\n`;
     const r = await runAstPatterns(TYPESCRIPT_AST_PATTERNS, "/tmp/a.ts", code);

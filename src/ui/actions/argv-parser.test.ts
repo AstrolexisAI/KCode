@@ -14,11 +14,7 @@ describe("parseArgv — basic tokenization", () => {
   });
 
   test("multiple bare words split on whitespace", () => {
-    expect(parseArgv("scan . --skip-verify")).toEqual([
-      "scan",
-      ".",
-      "--skip-verify",
-    ]);
+    expect(parseArgv("scan . --skip-verify")).toEqual(["scan", ".", "--skip-verify"]);
   });
 
   test("collapses runs of whitespace", () => {
@@ -32,27 +28,15 @@ describe("parseArgv — basic tokenization", () => {
 
 describe("parseArgv — quoting", () => {
   test("double-quoted preserves spaces", () => {
-    expect(parseArgv(`scan "my project" --json`)).toEqual([
-      "scan",
-      "my project",
-      "--json",
-    ]);
+    expect(parseArgv(`scan "my project" --json`)).toEqual(["scan", "my project", "--json"]);
   });
 
   test("single-quoted preserves spaces literally (no escape interpretation)", () => {
-    expect(parseArgv(`note 1 'verbatim \\n text'`)).toEqual([
-      "note",
-      "1",
-      "verbatim \\n text",
-    ]);
+    expect(parseArgv(`note 1 'verbatim \\n text'`)).toEqual(["note", "1", "verbatim \\n text"]);
   });
 
   test("backslash inside double quotes escapes the next char", () => {
-    expect(parseArgv(`note 1 "say \\"hi\\""`)).toEqual([
-      "note",
-      "1",
-      'say "hi"',
-    ]);
+    expect(parseArgv(`note 1 "say \\"hi\\""`)).toEqual(["note", "1", 'say "hi"']);
   });
 
   test("backslash outside quotes escapes whitespace", () => {
@@ -111,16 +95,16 @@ describe("realistic /review note scenarios", () => {
   });
 
   test("ignore with quoted reason after --reason flag", () => {
-    expect(
-      tokenize(`. ignore 4,8 --reason "tracked in JIRA-1234"`),
-    ).toEqual([".", "ignore", "4,8", "--reason", "tracked in JIRA-1234"]);
+    expect(tokenize(`. ignore 4,8 --reason "tracked in JIRA-1234"`)).toEqual([
+      ".",
+      "ignore",
+      "4,8",
+      "--reason",
+      "tracked in JIRA-1234",
+    ]);
   });
 
   test("path with spaces survives", () => {
-    expect(tokenize(`"my client" --since main`)).toEqual([
-      "my client",
-      "--since",
-      "main",
-    ]);
+    expect(tokenize(`"my client" --since main`)).toEqual(["my client", "--since", "main"]);
   });
 });

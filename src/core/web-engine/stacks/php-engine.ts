@@ -5,7 +5,13 @@ import { dirname, join } from "node:path";
 
 export type PhpProjectType = "api" | "web" | "cli" | "library" | "wordpress" | "custom";
 
-interface PhpConfig { name: string; type: PhpProjectType; framework?: string; deps: Record<string, string>; devDeps: Record<string, string>; }
+interface PhpConfig {
+  name: string;
+  type: PhpProjectType;
+  framework?: string;
+  deps: Record<string, string>;
+  devDeps: Record<string, string>;
+}
 
 function detectPhpProject(msg: string): PhpConfig {
   const lower = msg.toLowerCase();
@@ -15,39 +21,41 @@ function detectPhpProject(msg: string): PhpConfig {
   const devDeps: Record<string, string> = { "phpunit/phpunit": "^11.0" };
 
   if (/\b(?:laravel)\b/i.test(lower)) {
-    type = "web"; framework = "laravel";
+    type = "web";
+    framework = "laravel";
     deps["laravel/framework"] = "^11.0";
-  }
-  else if (/\b(?:symfony)\b/i.test(lower)) {
-    type = "api"; framework = "symfony";
+  } else if (/\b(?:symfony)\b/i.test(lower)) {
+    type = "api";
+    framework = "symfony";
     deps["symfony/framework-bundle"] = "^7.0";
     deps["symfony/runtime"] = "^7.0";
-  }
-  else if (/\b(?:slim|api|rest|server)\b/i.test(lower)) {
-    type = "api"; framework = "slim";
+  } else if (/\b(?:slim|api|rest|server)\b/i.test(lower)) {
+    type = "api";
+    framework = "slim";
     deps["slim/slim"] = "^4.0";
     deps["slim/psr7"] = "^1.7";
     deps["php-di/slim-bridge"] = "^3.4";
     deps["monolog/monolog"] = "^3.0";
-  }
-  else if (/\b(?:web|site|app|page)\b/i.test(lower)) {
-    type = "web"; framework = "laravel";
+  } else if (/\b(?:web|site|app|page)\b/i.test(lower)) {
+    type = "web";
+    framework = "laravel";
     deps["laravel/framework"] = "^11.0";
-  }
-  else if (/\b(?:cli|console|command|script)\b/i.test(lower)) {
+  } else if (/\b(?:cli|console|command|script)\b/i.test(lower)) {
     type = "cli";
     deps["symfony/console"] = "^7.0";
-  }
-  else if (/\b(?:lib|library|package|composer)\b/i.test(lower)) { type = "library"; }
-  else if (/\b(?:wordpress|wp|plugin)\b/i.test(lower)) { type = "wordpress"; }
-  else {
+  } else if (/\b(?:lib|library|package|composer)\b/i.test(lower)) {
+    type = "library";
+  } else if (/\b(?:wordpress|wp|plugin)\b/i.test(lower)) {
+    type = "wordpress";
+  } else {
     framework = "slim";
     deps["slim/slim"] = "^4.0";
     deps["slim/psr7"] = "^1.7";
     deps["monolog/monolog"] = "^3.0";
   }
 
-  if (/\b(?:eloquent|database|db|postgres|mysql)\b/i.test(lower)) deps["illuminate/database"] = "^11.0";
+  if (/\b(?:eloquent|database|db|postgres|mysql)\b/i.test(lower))
+    deps["illuminate/database"] = "^11.0";
   if (/\b(?:guzzle|http|client)\b/i.test(lower)) deps["guzzlehttp/guzzle"] = "^7.0";
   if (/\b(?:twig|blade|template)\b/i.test(lower)) deps["twig/twig"] = "^3.0";
   if (/\b(?:monolog|log)\b/i.test(lower)) deps["monolog/monolog"] = "^3.0";
@@ -58,27 +66,49 @@ function detectPhpProject(msg: string): PhpConfig {
   return { name, type, framework, deps, devDeps };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface PhpProjectResult { config: PhpConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface PhpProjectResult {
+  config: PhpConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createPhpProject(userRequest: string, cwd: string): PhpProjectResult {
   const cfg = detectPhpProject(userRequest);
   const files: GenFile[] = [];
 
   // composer.json
-  files.push({ path: "composer.json", content: JSON.stringify({
-    name: `vendor/${cfg.name}`,
-    type: cfg.type === "library" ? "library" : "project",
-    autoload: { "psr-4": { [`${cap(cfg.name)}\\`]: "src/" } },
-    "autoload-dev": { "psr-4": { [`${cap(cfg.name)}\\Tests\\`]: "tests/" } },
-    require: { php: ">=8.3", ...cfg.deps },
-    "require-dev": cfg.devDeps,
-    scripts: { test: "phpunit", serve: cfg.type === "api" ? "php -S localhost:10080 -t public" : "php -S localhost:10080" },
-  }, null, 4), needsLlm: false });
+  files.push({
+    path: "composer.json",
+    content: JSON.stringify(
+      {
+        name: `vendor/${cfg.name}`,
+        type: cfg.type === "library" ? "library" : "project",
+        autoload: { "psr-4": { [`${cap(cfg.name)}\\`]: "src/" } },
+        "autoload-dev": { "psr-4": { [`${cap(cfg.name)}\\Tests\\`]: "tests/" } },
+        require: { php: ">=8.3", ...cfg.deps },
+        "require-dev": cfg.devDeps,
+        scripts: {
+          test: "phpunit",
+          serve: cfg.type === "api" ? "php -S localhost:10080 -t public" : "php -S localhost:10080",
+        },
+      },
+      null,
+      4,
+    ),
+    needsLlm: false,
+  });
 
   // Main code per type
   if (cfg.type === "api" && cfg.framework === "slim") {
-    files.push({ path: "public/index.php", content: `<?php
+    files.push({
+      path: "public/index.php",
+      content: `<?php
 
 declare(strict_types=1);
 
@@ -215,9 +245,13 @@ $app->delete('/api/items/{id}', function (Request $request, Response $response, 
 
 $app->addBodyParsingMiddleware();
 $app->run();
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `src/ItemRepository.php`, content: `<?php
+    files.push({
+      path: `src/ItemRepository.php`,
+      content: `<?php
 
 declare(strict_types=1);
 
@@ -279,10 +313,13 @@ class ItemRepository
         return true;
     }
 }
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "cli") {
-    files.push({ path: "bin/console", content: `#!/usr/bin/env php
+    files.push({
+      path: "bin/console",
+      content: `#!/usr/bin/env php
 <?php
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -293,9 +330,13 @@ use ${cap(cfg.name)}\\Command\\MainCommand;
 $app = new Application('${cfg.name}', '0.1.0');
 $app->add(new MainCommand());
 $app->run();
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `src/Command/MainCommand.php`, content: `<?php
+    files.push({
+      path: `src/Command/MainCommand.php`,
+      content: `<?php
 
 namespace ${cap(cfg.name)}\\Command;
 
@@ -327,10 +368,13 @@ class MainCommand extends Command
         return Command::SUCCESS;
     }
 }
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "library") {
-    files.push({ path: `src/${cap(cfg.name)}.php`, content: `<?php
+    files.push({
+      path: `src/${cap(cfg.name)}.php`,
+      content: `<?php
 
 namespace ${cap(cfg.name)};
 
@@ -353,10 +397,13 @@ class ${cap(cfg.name)}
         return $data;
     }
 }
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "wordpress") {
-    files.push({ path: `${cfg.name}.php`, content: `<?php
+    files.push({
+      path: `${cfg.name}.php`,
+      content: `<?php
 /**
  * Plugin Name: ${cap(cfg.name)}
  * Description: ${cfg.name} WordPress plugin
@@ -381,21 +428,28 @@ add_action('admin_menu', function () {
         'dashicons-admin-generic',
     );
 });
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else {
     // Default web with framework
-    files.push({ path: "public/index.php", content: `<?php
+    files.push({
+      path: "public/index.php",
+      content: `<?php
 require __DIR__ . '/../vendor/autoload.php';
 
 // TODO: implement application entry point
 echo json_encode(['status' => 'ok', 'app' => '${cfg.name}']);
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Test
   if (cfg.type === "api" && cfg.framework === "slim") {
-    files.push({ path: `tests/${cap(cfg.name)}Test.php`, content: `<?php
+    files.push({
+      path: `tests/${cap(cfg.name)}Test.php`,
+      content: `<?php
 
 namespace ${cap(cfg.name)}\\Tests;
 
@@ -472,9 +526,13 @@ class ${cap(cfg.name)}Test extends TestCase
         $this->assertCount(3, $this->repo->findAll());
     }
 }
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
   } else {
-    files.push({ path: `tests/${cap(cfg.name)}Test.php`, content: `<?php
+    files.push({
+      path: `tests/${cap(cfg.name)}Test.php`,
+      content: `<?php
 
 namespace ${cap(cfg.name)}\\Tests;
 
@@ -489,11 +547,15 @@ class ${cap(cfg.name)}Test extends TestCase
 
     // TODO: add tests
 }
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // phpunit.xml
-  files.push({ path: "phpunit.xml", content: `<?xml version="1.0" encoding="UTF-8"?>
+  files.push({
+    path: "phpunit.xml",
+    content: `<?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="vendor/autoload.php" colors="true">
     <testsuites>
         <testsuite name="default">
@@ -501,11 +563,19 @@ class ${cap(cfg.name)}Test extends TestCase
         </testsuite>
     </testsuites>
 </phpunit>
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Extras
-  files.push({ path: ".gitignore", content: "vendor/\n.env\n*.cache\n.phpunit.result.cache\n", needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM php:8.3-fpm-alpine
+  files.push({
+    path: ".gitignore",
+    content: "vendor/\n.env\n*.cache\n.phpunit.result.cache\n",
+    needsLlm: false,
+  });
+  files.push({
+    path: "Dockerfile",
+    content: `FROM php:8.3-fpm-alpine
 RUN apk add --no-cache curl && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 WORKDIR /app
 COPY composer.* ./
@@ -513,15 +583,39 @@ RUN composer install --no-dev --optimize-autoloader
 COPY . .
 EXPOSE 10080
 CMD ["php", "-S", "0.0.0.0:10080", "-t", "public"]
-`, needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: shivammathur/setup-php@v2\n        with: { php-version: "8.3" }\n      - run: composer install\n      - run: composer test\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nPHP ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\ncomposer install\ncomposer serve\ncomposer test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: shivammathur/setup-php@v2\n        with: { php-version: "8.3" }\n      - run: composer install\n      - run: composer test\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nPHP ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\ncomposer install\ncomposer serve\ncomposer test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement PHP ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement PHP ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }
 
-function cap(s: string): string { return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(""); }
+function cap(s: string): string {
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

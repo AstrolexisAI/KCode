@@ -76,8 +76,9 @@ export function registerLicenseCommand(program: Command): void {
     .command("status")
     .description("Show current license status")
     .action(async () => {
-      const { formatLicenseStatus, checkOfflineLicense, formatLicenseFailureGuide } =
-        await import("../../core/license");
+      const { formatLicenseStatus, checkOfflineLicense, formatLicenseFailureGuide } = await import(
+        "../../core/license"
+      );
       console.log(formatLicenseStatus());
       // If a license file exists but failed to verify, surface the
       // actionable fix list below the one-line status. If no file is
@@ -98,9 +99,7 @@ export function registerLicenseCommand(program: Command): void {
       "Activate a license — accepts a .jwt file path OR the raw JWT string pasted directly. Omit argument for interactive paste prompt.",
     )
     .action(async (jwtOrFile: string | undefined) => {
-      const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import(
-        "node:fs"
-      );
+      const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import("node:fs");
       const { resolve, dirname } = await import("node:path");
       const { kcodePath } = await import("../../core/paths");
       const { verifyLicenseJwt } = await import("../../core/license");
@@ -112,13 +111,10 @@ export function registerLicenseCommand(program: Command): void {
         const { createInterface } = await import("node:readline");
         const rl = createInterface({ input: process.stdin, output: process.stdout });
         token = await new Promise<string>((r) => {
-          rl.question(
-            "Paste your license JWT (press Enter when done):\n> ",
-            (a) => {
-              rl.close();
-              r(a.trim());
-            },
-          );
+          rl.question("Paste your license JWT (press Enter when done):\n> ", (a) => {
+            rl.close();
+            r(a.trim());
+          });
         });
       } else if (looksLikeJwt(jwtOrFile)) {
         // User pasted the JWT directly as the argument.
@@ -167,7 +163,9 @@ export function registerLicenseCommand(program: Command): void {
       console.log(`  Tier:     ${c.tier ?? "pro"}`);
       console.log(`  Seats:    ${c.seats}`);
       console.log(`  Features: ${c.features.join(", ")}`);
-      console.log(`  Expires:  ${daysLeft} days (${new Date(c.exp * 1000).toISOString().slice(0, 10)})`);
+      console.log(
+        `  Expires:  ${daysLeft} days (${new Date(c.exp * 1000).toISOString().slice(0, 10)})`,
+      );
       if (c.hardware) {
         console.log(`  \x1b[2mHardware-bound\x1b[0m`);
       }
@@ -229,11 +227,7 @@ export function registerLicenseCommand(program: Command): void {
     .requiredOption("--sub <email>", "Subject (customer email)")
     .option("--tier <tier>", "pro | team | enterprise", "pro")
     .option("--seats <n>", "Number of seats", "1")
-    .option(
-      "--features <list>",
-      "Comma-separated features (e.g. pro,enterprise,swarm)",
-      "pro",
-    )
+    .option("--features <list>", "Comma-separated features (e.g. pro,enterprise,swarm)", "pro")
     .option("--expires <date>", "Expiry as ISO date (e.g. 2027-01-01)")
     .option("--days <n>", "Expiry in N days from now (alternative to --expires)")
     .option("--org <name>", "Organization name")
@@ -266,7 +260,10 @@ export function registerLicenseCommand(program: Command): void {
             sub: opts.sub,
             tier: opts.tier as "pro" | "team" | "enterprise",
             seats: parseInt(opts.seats, 10) || 1,
-            features: opts.features.split(",").map((s) => s.trim()).filter(Boolean),
+            features: opts.features
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
             expiresAt,
             orgName: opts.org,
             hardware: opts.hardware ?? null,
@@ -276,7 +273,9 @@ export function registerLicenseCommand(program: Command): void {
           if (opts.output) {
             const { writeFileSync } = await import("node:fs");
             writeFileSync(opts.output, result.jwt, "utf-8");
-            console.log(`✓ License written to ${opts.output} (expires in ${result.expiresInDays} days)`);
+            console.log(
+              `✓ License written to ${opts.output} (expires in ${result.expiresInDays} days)`,
+            );
           } else {
             console.log(result.jwt);
           }

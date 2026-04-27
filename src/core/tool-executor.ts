@@ -341,10 +341,7 @@ export async function* executeToolsSequential(
                   const cmdFiles = Array.from(
                     command.matchAll(/([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs))/g),
                   ).map((m) => m[1]!);
-                  return (
-                    rerunFiles.length > 0 &&
-                    rerunFiles.some((f) => cmdFiles.includes(f))
-                  );
+                  return rerunFiles.length > 0 && rerunFiles.some((f) => cmdFiles.includes(f));
                 })());
             if (sameAsRerun && entry.count >= LOOP_PATTERN_HARD_STOP) {
               log.info(
@@ -540,793 +537,798 @@ export async function* executeToolsSequential(
       permResult.updatedInput ??
       call.input;
     try {
-    if (ctx.hooks.hasHooks("PreToolUse")) {
-      const hookResult = await ctx.hooks.runPreToolUse(call);
-      if (!hookResult.allowed) {
-        const blockedContent = `Blocked by hook: ${hookResult.reason ?? "PreToolUse hook denied execution"}`;
-        yield {
-          type: "tool_result",
-          name: call.name,
-          toolUseId: call.id,
-          result: blockedContent,
-          isError: true,
-        };
-        toolResultBlocks.push({
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: blockedContent,
-          is_error: true,
-        });
-        continue;
+      if (ctx.hooks.hasHooks("PreToolUse")) {
+        const hookResult = await ctx.hooks.runPreToolUse(call);
+        if (!hookResult.allowed) {
+          const blockedContent = `Blocked by hook: ${hookResult.reason ?? "PreToolUse hook denied execution"}`;
+          yield {
+            type: "tool_result",
+            name: call.name,
+            toolUseId: call.id,
+            result: blockedContent,
+            isError: true,
+          };
+          toolResultBlocks.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: blockedContent,
+            is_error: true,
+          });
+          continue;
+        }
+        if (hookResult.updatedInput) {
+          effectiveInput = hookResult.updatedInput;
+        }
       }
-      if (hookResult.updatedInput) {
-        effectiveInput = hookResult.updatedInput;
-      }
-    }
 
-    // Phase 32 — semantic phantom-typo claim block
-    //
-    // The conversation loop scanned the current turn's assistant text
-    // for "X en lugar de X" / "X instead of X" patterns and stored
-    // any hit on guardState.activePhantomClaim. If one is active AND
-    // the model is now trying an Edit/MultiEdit, the entire Edit is
-    // suspicious: the model declared a phantom bug in its own prose
-    // and is acting on it. Block the call and force the model to
-    // re-investigate.
-    //
-    // Precision guard: we only block when the claimed token actually
-    // appears in the Edit's old_string or new_string. An Edit on a
-    // completely different part of the file is allowed through —
-    // even if the prose happened to contain a phantom phrase, it's
-    // unrelated to this particular surgical change.
-    if (
-      (call.name === "Edit" || call.name === "MultiEdit") &&
-      guardState.activePhantomClaim
-    ) {
-      const claim = guardState.activePhantomClaim;
-      let editTouchesToken = false;
+      // Phase 32 — semantic phantom-typo claim block
+      //
+      // The conversation loop scanned the current turn's assistant text
+      // for "X en lugar de X" / "X instead of X" patterns and stored
+      // any hit on guardState.activePhantomClaim. If one is active AND
+      // the model is now trying an Edit/MultiEdit, the entire Edit is
+      // suspicious: the model declared a phantom bug in its own prose
+      // and is acting on it. Block the call and force the model to
+      // re-investigate.
+      //
+      // Precision guard: we only block when the claimed token actually
+      // appears in the Edit's old_string or new_string. An Edit on a
+      // completely different part of the file is allowed through —
+      // even if the prose happened to contain a phantom phrase, it's
+      // unrelated to this particular surgical change.
+      if ((call.name === "Edit" || call.name === "MultiEdit") && guardState.activePhantomClaim) {
+        const claim = guardState.activePhantomClaim;
+        let editTouchesToken = false;
 
-      if (call.name === "Edit") {
-        const oldStr = String((effectiveInput as Record<string, unknown>).old_string ?? "");
-        const newStr = String((effectiveInput as Record<string, unknown>).new_string ?? "");
-        editTouchesToken = oldStr.includes(claim.token) || newStr.includes(claim.token);
-      } else {
-        // MultiEdit: scan every sub-edit
-        const edits = (effectiveInput as Record<string, unknown>).edits;
-        if (Array.isArray(edits)) {
-          for (const edit of edits) {
-            const e = edit as Record<string, unknown>;
-            const o = String(e.old_string ?? "");
-            const n = String(e.new_string ?? "");
-            if (o.includes(claim.token) || n.includes(claim.token)) {
-              editTouchesToken = true;
-              break;
+        if (call.name === "Edit") {
+          const oldStr = String((effectiveInput as Record<string, unknown>).old_string ?? "");
+          const newStr = String((effectiveInput as Record<string, unknown>).new_string ?? "");
+          editTouchesToken = oldStr.includes(claim.token) || newStr.includes(claim.token);
+        } else {
+          // MultiEdit: scan every sub-edit
+          const edits = (effectiveInput as Record<string, unknown>).edits;
+          if (Array.isArray(edits)) {
+            for (const edit of edits) {
+              const e = edit as Record<string, unknown>;
+              const o = String(e.old_string ?? "");
+              const n = String(e.new_string ?? "");
+              if (o.includes(claim.token) || n.includes(claim.token)) {
+                editTouchesToken = true;
+                break;
+              }
             }
+          }
+        }
+
+        if (editTouchesToken) {
+          if (ctx.debugTracer?.isEnabled()) {
+            ctx.debugTracer.traceGuard(
+              "phase-32-phantom-typo",
+              true,
+              `Blocked ${call.name} — phantom-typo claim "${claim.phrase.slice(0, 80)}" touches token "${claim.token}"`,
+            );
+          }
+          const blockedContent =
+            `PHANTOM_TYPO_CLAIM_BLOCKED: your reasoning contained the phrase "${claim.phrase}" — ` +
+            `a self-referential "X in place of X" claim where both sides of the replacement are the ` +
+            `same identifier ("${claim.token}"). This is a hallucinated bug; "${claim.token}" does NOT ` +
+            `need to be renamed to "${claim.token}". STOP. Do NOT retry this Edit. ` +
+            `If the user reported a runtime symptom (service down, chart broken, no funciona), the real ` +
+            `fix is visible in the actual runtime output (browser console, server log, test output) — ` +
+            `not in imagined typography. Re-read the file carefully or ask the user what they actually see. ` +
+            `Respond with text only until you have evidence of the real bug.`;
+          log.warn(
+            "tool",
+            `phase 32 blocked ${call.name} on phantom-typo claim (token="${claim.token}")`,
+          );
+          yield {
+            type: "tool_result",
+            name: call.name,
+            toolUseId: call.id,
+            result: blockedContent,
+            isError: true,
+          };
+          toolResultBlocks.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: blockedContent,
+            is_error: true,
+          });
+          continue;
+        }
+      }
+
+      // Phase 31 — rewrite-after-failed-Edit escape block
+      //
+      // When a model's Edit fails (especially from the phantom-typo
+      // detector where old_string === new_string), the common failure
+      // mode is to escape by rewriting the whole file via Write. That
+      // wipes the 850 lines of already-working code and typically
+      // produces a strictly worse version (NEXUS Telemetry mark6 session,
+      // 850 → 627 lines). This guard catches a Write on a file that has
+      // a recent Edit failure recorded against it, blocks the call, and
+      // redirects the model to re-read and produce a surgical fix.
+      //
+      // Expires after ~6 tool calls (inside getRecentEditFailure) so the
+      // guard doesn't outlive its usefulness — if the model legitimately
+      // investigated and concluded that a rewrite is needed, they can
+      // still do it after some intervening tool activity.
+      if (call.name === "Write" && typeof effectiveInput.file_path === "string") {
+        const fp = effectiveInput.file_path as string;
+        const failureReason = guardState.getRecentEditFailure(fp, ctx.toolUseCount);
+        if (failureReason) {
+          if (ctx.debugTracer?.isEnabled()) {
+            ctx.debugTracer.traceGuard(
+              "phase-31-rewrite-escape",
+              true,
+              `Blocked Write on ${fp} — recent Edit failed: ${failureReason.slice(0, 80)}`,
+            );
+          }
+          const blockedContent =
+            `REWRITE_ESCAPE_BLOCKED: You just failed an Edit on ${fp} (reason: ${failureReason.slice(0, 200)}). ` +
+            `Do NOT escape by rewriting the whole file with Write — that destroys information and typically produces a strictly worse version. ` +
+            `Instead: (1) Read the current file state again, (2) identify the REAL problem based on observable behavior (not imagined typos), ` +
+            `(3) produce a surgical Edit targeting only the broken section. ` +
+            `If the user reported a runtime issue, open the ACTUAL runtime output (browser console, server log, test output) ` +
+            `before touching the source again. This block expires after ~6 more tool calls, but you should only proceed to Write ` +
+            `after you've genuinely investigated — not as an escape.`;
+          log.warn("tool", `phase 31 blocked rewrite-after-failed-Edit on ${fp}`);
+          yield {
+            type: "tool_result",
+            name: call.name,
+            toolUseId: call.id,
+            result: blockedContent,
+            isError: true,
+          };
+          toolResultBlocks.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: blockedContent,
+            is_error: true,
+          });
+          continue;
+        }
+      }
+
+      // 3a. Auto-checkpoint conversation state before file modifications
+      // (checkpoint saving is handled by the caller — we just yield an event marker)
+
+      // 3b. Capture undo snapshot for file-modifying tools
+      let undoSnapshot: FileSnapshot | null = null;
+      let undoSnapshots: FileSnapshot[] | null = null;
+      if (
+        (call.name === "Edit" || call.name === "Write") &&
+        typeof effectiveInput.file_path === "string"
+      ) {
+        undoSnapshot = ctx.undoManager.captureSnapshot(effectiveInput.file_path as string);
+      } else if (call.name === "MultiEdit" && Array.isArray(effectiveInput.edits)) {
+        const seen = new Set<string>();
+        undoSnapshots = [];
+        for (const edit of effectiveInput.edits as Array<{ file_path?: string }>) {
+          const fp = edit.file_path;
+          if (typeof fp === "string" && !seen.has(fp)) {
+            seen.add(fp);
+            undoSnapshots.push(ctx.undoManager.captureSnapshot(fp));
           }
         }
       }
 
-      if (editTouchesToken) {
-        if (ctx.debugTracer?.isEnabled()) {
-          ctx.debugTracer.traceGuard(
-            "phase-32-phantom-typo",
-            true,
-            `Blocked ${call.name} — phantom-typo claim "${claim.phrase.slice(0, 80)}" touches token "${claim.token}"`,
-          );
-        }
-        const blockedContent =
-          `PHANTOM_TYPO_CLAIM_BLOCKED: your reasoning contained the phrase "${claim.phrase}" — ` +
-          `a self-referential "X in place of X" claim where both sides of the replacement are the ` +
-          `same identifier ("${claim.token}"). This is a hallucinated bug; "${claim.token}" does NOT ` +
-          `need to be renamed to "${claim.token}". STOP. Do NOT retry this Edit. ` +
-          `If the user reported a runtime symptom (service down, chart broken, no funciona), the real ` +
-          `fix is visible in the actual runtime output (browser console, server log, test output) — ` +
-          `not in imagined typography. Re-read the file carefully or ask the user what they actually see. ` +
-          `Respond with text only until you have evidence of the real bug.`;
-        log.warn(
-          "tool",
-          `phase 32 blocked ${call.name} on phantom-typo claim (token="${claim.token}")`,
-        );
-        yield {
-          type: "tool_result",
-          name: call.name,
-          toolUseId: call.id,
-          result: blockedContent,
-          isError: true,
-        };
-        toolResultBlocks.push({
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: blockedContent,
-          is_error: true,
-        });
-        continue;
-      }
-    }
-
-    // Phase 31 — rewrite-after-failed-Edit escape block
-    //
-    // When a model's Edit fails (especially from the phantom-typo
-    // detector where old_string === new_string), the common failure
-    // mode is to escape by rewriting the whole file via Write. That
-    // wipes the 850 lines of already-working code and typically
-    // produces a strictly worse version (NEXUS Telemetry mark6 session,
-    // 850 → 627 lines). This guard catches a Write on a file that has
-    // a recent Edit failure recorded against it, blocks the call, and
-    // redirects the model to re-read and produce a surgical fix.
-    //
-    // Expires after ~6 tool calls (inside getRecentEditFailure) so the
-    // guard doesn't outlive its usefulness — if the model legitimately
-    // investigated and concluded that a rewrite is needed, they can
-    // still do it after some intervening tool activity.
-    if (call.name === "Write" && typeof effectiveInput.file_path === "string") {
-      const fp = effectiveInput.file_path as string;
-      const failureReason = guardState.getRecentEditFailure(fp, ctx.toolUseCount);
-      if (failureReason) {
-        if (ctx.debugTracer?.isEnabled()) {
-          ctx.debugTracer.traceGuard(
-            "phase-31-rewrite-escape",
-            true,
-            `Blocked Write on ${fp} — recent Edit failed: ${failureReason.slice(0, 80)}`,
-          );
-        }
-        const blockedContent =
-          `REWRITE_ESCAPE_BLOCKED: You just failed an Edit on ${fp} (reason: ${failureReason.slice(0, 200)}). ` +
-          `Do NOT escape by rewriting the whole file with Write — that destroys information and typically produces a strictly worse version. ` +
-          `Instead: (1) Read the current file state again, (2) identify the REAL problem based on observable behavior (not imagined typos), ` +
-          `(3) produce a surgical Edit targeting only the broken section. ` +
-          `If the user reported a runtime issue, open the ACTUAL runtime output (browser console, server log, test output) ` +
-          `before touching the source again. This block expires after ~6 more tool calls, but you should only proceed to Write ` +
-          `after you've genuinely investigated — not as an escape.`;
-        log.warn(
-          "tool",
-          `phase 31 blocked rewrite-after-failed-Edit on ${fp}`,
-        );
-        yield {
-          type: "tool_result",
-          name: call.name,
-          toolUseId: call.id,
-          result: blockedContent,
-          isError: true,
-        };
-        toolResultBlocks.push({
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: blockedContent,
-          is_error: true,
-        });
-        continue;
-      }
-    }
-
-    // 3a. Auto-checkpoint conversation state before file modifications
-    // (checkpoint saving is handled by the caller — we just yield an event marker)
-
-    // 3b. Capture undo snapshot for file-modifying tools
-    let undoSnapshot: FileSnapshot | null = null;
-    let undoSnapshots: FileSnapshot[] | null = null;
-    if (
-      (call.name === "Edit" || call.name === "Write") &&
-      typeof effectiveInput.file_path === "string"
-    ) {
-      undoSnapshot = ctx.undoManager.captureSnapshot(effectiveInput.file_path as string);
-    } else if (call.name === "MultiEdit" && Array.isArray(effectiveInput.edits)) {
-      const seen = new Set<string>();
-      undoSnapshots = [];
-      for (const edit of effectiveInput.edits as Array<{ file_path?: string }>) {
-        const fp = edit.file_path;
-        if (typeof fp === "string" && !seen.has(fp)) {
-          seen.add(fp);
-          undoSnapshots.push(ctx.undoManager.captureSnapshot(fp));
-        }
-      }
-    }
-
-    // 4. World Model — predict outcome before executing
-    let prediction: { action: string; expected: string; confidence: number } | null = null;
-    try {
-      prediction = getWorldModel().predict(call.name, effectiveInput);
-    } catch (err) {
-      log.debug("world-model", "Failed to predict outcome for " + call.name + ": " + err);
-    }
-
-    // Execute the tool
-    yield { type: "tool_executing", name: call.name, toolUseId: call.id, input: effectiveInput };
-
-    const toolStartMs = Date.now();
-    let result: import("./types").ToolResult;
-
-    // File locking: prevent race conditions when parallel sub-tasks
-    // target the same file. Acquire = wait for in-flight operations on
-    // these paths to complete. We get setLock/release callbacks to manage
-    // the lock lifecycle around the actual tool execution below.
-    const modifiedFiles = getModifiedFiles(call.name, effectiveInput);
-    let lockHandle: Awaited<ReturnType<typeof acquireFileLocks>> | null = null;
-    if (modifiedFiles.length > 0 && ctx.fileLocks) {
-      lockHandle = await acquireFileLocks(modifiedFiles, ctx.fileLocks);
-    }
-
-    // PreBash hook: fires before Bash execution
-    if (call.name === "Bash") {
+      // 4. World Model — predict outcome before executing
+      let prediction: { action: string; expected: string; confidence: number } | null = null;
       try {
-        await ctx.hooks.runEventHook("PreBash", { command: effectiveInput.command as string });
+        prediction = getWorldModel().predict(call.name, effectiveInput);
       } catch (err) {
-        log.debug("hooks", `PreBash hook failed: ${err}`);
+        log.debug("world-model", "Failed to predict outcome for " + call.name + ": " + err);
       }
-    }
 
-    // PreEdit hook: fires before Edit/MultiEdit execution
-    if (call.name === "Edit" || call.name === "MultiEdit") {
-      try {
-        await ctx.hooks.runEventHook("PreEdit", {
-          file_path: effectiveInput.file_path as string,
-          tool_name: call.name,
-        });
-      } catch (err) {
-        log.debug("hooks", `PreEdit hook failed: ${err}`);
+      // Execute the tool
+      yield { type: "tool_executing", name: call.name, toolUseId: call.id, input: effectiveInput };
+
+      const toolStartMs = Date.now();
+      let result: import("./types").ToolResult;
+
+      // File locking: prevent race conditions when parallel sub-tasks
+      // target the same file. Acquire = wait for in-flight operations on
+      // these paths to complete. We get setLock/release callbacks to manage
+      // the lock lifecycle around the actual tool execution below.
+      const modifiedFiles = getModifiedFiles(call.name, effectiveInput);
+      let lockHandle: Awaited<ReturnType<typeof acquireFileLocks>> | null = null;
+      if (modifiedFiles.length > 0 && ctx.fileLocks) {
+        lockHandle = await acquireFileLocks(modifiedFiles, ctx.fileLocks);
       }
-    }
 
-    // PreWrite hook: fires before Write execution
-    if (call.name === "Write" && typeof effectiveInput.file_path === "string") {
-      try {
-        await ctx.hooks.runEventHook("PreWrite", {
-          file_path: effectiveInput.file_path as string,
-          tool_name: "Write",
-        });
-      } catch (err) {
-        log.debug("hooks", `PreWrite hook failed: ${err}`);
-      }
-    }
-
-    // Stream Bash output in real-time via tool_stream events
-    if (call.name === "Bash" && !(effectiveInput as Record<string, unknown>).run_in_background) {
-      const streamQueue: string[] = [];
-      const { setBashStreamCallback } = await import("../tools/bash.js");
-      setBashStreamCallback((chunk: string) => {
-        streamQueue.push(chunk);
-      });
-      const bashToolPromise = ctx.tools.execute(call.name, effectiveInput);
-      if (lockHandle) lockHandle.setLock(bashToolPromise);
-
-      // Poll for stream chunks while the tool is running
-      let done = false;
-      let toolResult: import("./types").ToolResult | undefined;
-      bashToolPromise
-        .then((r: import("./types").ToolResult) => {
-          toolResult = r;
-          done = true;
-        })
-        .catch((err: unknown) => {
-          toolResult = {
-            tool_use_id: call.id,
-            content: `Error: ${err instanceof Error ? err.message : String(err)}`,
-            is_error: true,
-          };
-          done = true;
-        });
-
-      while (!done) {
-        // Check if user aborted (Ctrl+C)
-        if (ctx.abortController?.signal.aborted) {
-          setBashStreamCallback(undefined);
-          break;
+      // PreBash hook: fires before Bash execution
+      if (call.name === "Bash") {
+        try {
+          await ctx.hooks.runEventHook("PreBash", { command: effectiveInput.command as string });
+        } catch (err) {
+          log.debug("hooks", `PreBash hook failed: ${err}`);
         }
-        // Drain any queued stream chunks
+      }
+
+      // PreEdit hook: fires before Edit/MultiEdit execution
+      if (call.name === "Edit" || call.name === "MultiEdit") {
+        try {
+          await ctx.hooks.runEventHook("PreEdit", {
+            file_path: effectiveInput.file_path as string,
+            tool_name: call.name,
+          });
+        } catch (err) {
+          log.debug("hooks", `PreEdit hook failed: ${err}`);
+        }
+      }
+
+      // PreWrite hook: fires before Write execution
+      if (call.name === "Write" && typeof effectiveInput.file_path === "string") {
+        try {
+          await ctx.hooks.runEventHook("PreWrite", {
+            file_path: effectiveInput.file_path as string,
+            tool_name: "Write",
+          });
+        } catch (err) {
+          log.debug("hooks", `PreWrite hook failed: ${err}`);
+        }
+      }
+
+      // Stream Bash output in real-time via tool_stream events
+      if (call.name === "Bash" && !(effectiveInput as Record<string, unknown>).run_in_background) {
+        const streamQueue: string[] = [];
+        const { setBashStreamCallback } = await import("../tools/bash.js");
+        setBashStreamCallback((chunk: string) => {
+          streamQueue.push(chunk);
+        });
+        const bashToolPromise = ctx.tools.execute(call.name, effectiveInput);
+        if (lockHandle) lockHandle.setLock(bashToolPromise);
+
+        // Poll for stream chunks while the tool is running
+        let done = false;
+        let toolResult: import("./types").ToolResult | undefined;
+        bashToolPromise
+          .then((r: import("./types").ToolResult) => {
+            toolResult = r;
+            done = true;
+          })
+          .catch((err: unknown) => {
+            toolResult = {
+              tool_use_id: call.id,
+              content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+              is_error: true,
+            };
+            done = true;
+          });
+
+        while (!done) {
+          // Check if user aborted (Ctrl+C)
+          if (ctx.abortController?.signal.aborted) {
+            setBashStreamCallback(undefined);
+            break;
+          }
+          // Drain any queued stream chunks
+          while (streamQueue.length > 0) {
+            const chunk = streamQueue.shift()!;
+            yield { type: "tool_stream" as const, toolUseId: call.id, name: call.name, chunk };
+          }
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        // Drain remaining chunks after completion
         while (streamQueue.length > 0) {
           const chunk = streamQueue.shift()!;
           yield { type: "tool_stream" as const, toolUseId: call.id, name: call.name, chunk };
         }
-        await new Promise((r) => setTimeout(r, 50));
+        setBashStreamCallback(undefined);
+        result = toolResult ?? { tool_use_id: call.id, content: "Aborted by user", is_error: true };
+      } else {
+        const execPromise = ctx.tools.execute(call.name, effectiveInput);
+        if (lockHandle) lockHandle.setLock(execPromise);
+        result = await execPromise;
       }
-      // Drain remaining chunks after completion
-      while (streamQueue.length > 0) {
-        const chunk = streamQueue.shift()!;
-        yield { type: "tool_stream" as const, toolUseId: call.id, name: call.name, chunk };
+
+      // Release file locks now that the tool has finished (or errored).
+      // Safe against new locks acquired after us: release() checks identity.
+      if (lockHandle) lockHandle.release();
+
+      const toolDurationMs = Date.now() - toolStartMs;
+
+      // PostBash hook: fires after Bash execution
+      if (call.name === "Bash") {
+        try {
+          ctx.hooks.fireAndForget("PostBash", {
+            command: effectiveInput.command as string,
+            exitCode: (result as { exitCode?: number }).exitCode ?? 0,
+          });
+        } catch (err) {
+          log.debug("hooks", `PostBash hook failed: ${err}`);
+        }
       }
-      setBashStreamCallback(undefined);
-      result = toolResult ?? { tool_use_id: call.id, content: "Aborted by user", is_error: true };
-    } else {
-      const execPromise = ctx.tools.execute(call.name, effectiveInput);
-      if (lockHandle) lockHandle.setLock(execPromise);
-      result = await execPromise;
-    }
 
-    // Release file locks now that the tool has finished (or errored).
-    // Safe against new locks acquired after us: release() checks identity.
-    if (lockHandle) lockHandle.release();
+      // PostEdit hook: fires after successful Edit/MultiEdit execution
+      if (
+        (call.name === "Edit" || call.name === "MultiEdit") &&
+        !result.is_error &&
+        typeof effectiveInput.file_path === "string"
+      ) {
+        try {
+          ctx.hooks.fireAndForget("PostEdit", {
+            file_path: effectiveInput.file_path,
+            tool_name: call.name,
+            success: true,
+          });
+        } catch (err) {
+          log.debug("hooks", `PostEdit hook failed: ${err}`);
+        }
+      }
 
-    const toolDurationMs = Date.now() - toolStartMs;
+      // PostWrite hook: fires after successful Write execution
+      if (
+        call.name === "Write" &&
+        !result.is_error &&
+        typeof effectiveInput.file_path === "string"
+      ) {
+        try {
+          ctx.hooks.fireAndForget("PostWrite", {
+            file_path: effectiveInput.file_path,
+            tool_name: "Write",
+            success: true,
+          });
+        } catch (err) {
+          log.debug("hooks", `PostWrite hook failed: ${err}`);
+        }
+      }
 
-    // PostBash hook: fires after Bash execution
-    if (call.name === "Bash") {
+      // Record to persistent analytics
       try {
-        ctx.hooks.fireAndForget("PostBash", {
-          command: effectiveInput.command as string,
-          exitCode: (result as { exitCode?: number }).exitCode ?? 0,
+        const { recordToolEvent } = await import("./analytics.js");
+        recordToolEvent({
+          sessionId: ctx.sessionId,
+          toolName: call.name,
+          model: ctx.config.model,
+          durationMs: toolDurationMs,
+          isError: !!result.is_error,
         });
       } catch (err) {
-        log.debug("hooks", `PostBash hook failed: ${err}`);
+        log.debug("analytics", "Failed to record tool event: " + err);
       }
-    }
 
-    // PostEdit hook: fires after successful Edit/MultiEdit execution
-    if (
-      (call.name === "Edit" || call.name === "MultiEdit") &&
-      !result.is_error &&
-      typeof effectiveInput.file_path === "string"
-    ) {
+      // World Model: Compare prediction with actual result
       try {
-        ctx.hooks.fireAndForget("PostEdit", {
-          file_path: effectiveInput.file_path,
-          tool_name: call.name,
-          success: true,
-        });
+        if (prediction) getWorldModel().compare(prediction, result.content, result.is_error);
       } catch (err) {
-        log.debug("hooks", `PostEdit hook failed: ${err}`);
+        log.debug("world-model", "Failed to compare prediction for " + call.name + ": " + err);
       }
-    }
 
-    // PostWrite hook: fires after successful Write execution
-    if (call.name === "Write" && !result.is_error && typeof effectiveInput.file_path === "string") {
+      // Intention Engine: Record action for post-task evaluation
       try {
-        ctx.hooks.fireAndForget("PostWrite", {
-          file_path: effectiveInput.file_path,
-          tool_name: "Write",
-          success: true,
-        });
-      } catch (err) {
-        log.debug("hooks", `PostWrite hook failed: ${err}`);
-      }
-    }
-
-    // Record to persistent analytics
-    try {
-      const { recordToolEvent } = await import("./analytics.js");
-      recordToolEvent({
-        sessionId: ctx.sessionId,
-        toolName: call.name,
-        model: ctx.config.model,
-        durationMs: toolDurationMs,
-        isError: !!result.is_error,
-      });
-    } catch (err) {
-      log.debug("analytics", "Failed to record tool event: " + err);
-    }
-
-    // World Model: Compare prediction with actual result
-    try {
-      if (prediction) getWorldModel().compare(prediction, result.content, result.is_error);
-    } catch (err) {
-      log.debug("world-model", "Failed to compare prediction for " + call.name + ": " + err);
-    }
-
-    // Intention Engine: Record action for post-task evaluation
-    try {
-      getIntentionEngine().recordAction(call.name, effectiveInput, result.content, result.is_error);
-    } catch (err) {
-      log.debug("intention", "Failed to record action for " + call.name + ": " + err);
-    }
-
-    // Auto-pin: Track file accesses for intelligent auto-pinning
-    if (!result.is_error && typeof effectiveInput.file_path === "string") {
-      try {
-        const { getAutoPinManager } = await import("./auto-pin.js");
-        const isEdit = call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit";
-        getAutoPinManager(ctx.config.workingDirectory ?? process.cwd()).recordAccess(
-          effectiveInput.file_path as string,
-          isEdit,
+        getIntentionEngine().recordAction(
+          call.name,
+          effectiveInput,
+          result.content,
+          result.is_error,
         );
       } catch (err) {
-        log.debug("auto-pin", `Failed to record access: ${err}`);
+        log.debug("intention", "Failed to record action for " + call.name + ": " + err);
       }
-    }
 
-    // LSP: notify file change and append diagnostics to result
-    if (!result.is_error && (call.name === "Write" || call.name === "Edit")) {
-      try {
-        const { getLspManager } = await import("./lsp.js");
-        const lsp = getLspManager();
-        if (lsp?.isActive()) {
-          const filePath = String(effectiveInput.file_path ?? "");
-          if (filePath) {
-            const { readFileSync } = await import("node:fs");
-            const content = readFileSync(filePath, "utf-8");
-            lsp.notifyFileChanged(filePath, content);
-            await new Promise((r) => setTimeout(r, 500));
-            const diagMsg = lsp.formatDiagnosticsForFile(filePath);
-            if (diagMsg) {
-              result = { ...result, content: result.content + "\n\n" + diagMsg };
+      // Auto-pin: Track file accesses for intelligent auto-pinning
+      if (!result.is_error && typeof effectiveInput.file_path === "string") {
+        try {
+          const { getAutoPinManager } = await import("./auto-pin.js");
+          const isEdit = call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit";
+          getAutoPinManager(ctx.config.workingDirectory ?? process.cwd()).recordAccess(
+            effectiveInput.file_path as string,
+            isEdit,
+          );
+        } catch (err) {
+          log.debug("auto-pin", `Failed to record access: ${err}`);
+        }
+      }
+
+      // LSP: notify file change and append diagnostics to result
+      if (!result.is_error && (call.name === "Write" || call.name === "Edit")) {
+        try {
+          const { getLspManager } = await import("./lsp.js");
+          const lsp = getLspManager();
+          if (lsp?.isActive()) {
+            const filePath = String(effectiveInput.file_path ?? "");
+            if (filePath) {
+              const { readFileSync } = await import("node:fs");
+              const content = readFileSync(filePath, "utf-8");
+              lsp.notifyFileChanged(filePath, content);
+              await new Promise((r) => setTimeout(r, 500));
+              const diagMsg = lsp.formatDiagnosticsForFile(filePath);
+              if (diagMsg) {
+                result = { ...result, content: result.content + "\n\n" + diagMsg };
+              }
             }
           }
+        } catch (err) {
+          log.debug("lsp", "Failed to get LSP diagnostics after file change: " + err);
         }
-      } catch (err) {
-        log.debug("lsp", "Failed to get LSP diagnostics after file change: " + err);
       }
-    }
 
-    // Phase 31 — track Edit failures and clear on success. Write on a
-    // file with a recent failed Edit is blocked upstream (rewrite-
-    // escape guard) but we can't catch phantom-typo Edits there
-    // because the failure happens inside the tool. Record it here and
-    // clear on a successful Edit/Write.
-    if (call.name === "Edit" && typeof effectiveInput.file_path === "string") {
-      const fp = effectiveInput.file_path as string;
-      if (result.is_error) {
-        // Record the failure with the actual error message so the
-        // block message can quote it back to the model.
-        guardState.recordEditFailure(fp, result.content, ctx.toolUseCount);
-      } else {
-        // Successful Edit — clear any prior failure on this file.
-        guardState.clearEditFailure(fp);
-      }
-    } else if (
-      call.name === "Write" &&
-      !result.is_error &&
-      typeof effectiveInput.file_path === "string"
-    ) {
-      // Successful Write also clears (model wrote something and it
-      // stuck, so the prior failure is no longer load-bearing).
-      guardState.clearEditFailure(effectiveInput.file_path as string);
-    } else if (call.name === "MultiEdit" && Array.isArray(effectiveInput.edits)) {
-      // Phase 31 extends to MultiEdit: on failure, every file in the
-      // edits array inherits the failure so a subsequent Write on any
-      // of them is still blocked. On success, all cleared.
-      const edits = effectiveInput.edits as Array<{ file_path?: string }>;
-      for (const edit of edits) {
-        const fp = edit.file_path;
-        if (typeof fp !== "string" || !fp) continue;
+      // Phase 31 — track Edit failures and clear on success. Write on a
+      // file with a recent failed Edit is blocked upstream (rewrite-
+      // escape guard) but we can't catch phantom-typo Edits there
+      // because the failure happens inside the tool. Record it here and
+      // clear on a successful Edit/Write.
+      if (call.name === "Edit" && typeof effectiveInput.file_path === "string") {
+        const fp = effectiveInput.file_path as string;
         if (result.is_error) {
+          // Record the failure with the actual error message so the
+          // block message can quote it back to the model.
           guardState.recordEditFailure(fp, result.content, ctx.toolUseCount);
         } else {
+          // Successful Edit — clear any prior failure on this file.
           guardState.clearEditFailure(fp);
         }
-      }
-    }
-
-    // After successful Edit/Write, reset cross-turn dedup for Bash/Read
-    if (!result.is_error && (call.name === "Edit" || call.name === "Write")) {
-      guardState.resetAfterFileEdit();
-      // Also reset intention engine's action history for Bash/Read
-      try {
-        getIntentionEngine().resetTestFixCycle();
-      } catch (err) {
-        log.debug("intention", "Failed to reset test-fix cycle: " + err);
-      }
-
-      // Invalidate tool cache for modified files
-      try {
-        const { getToolCache } = await import("./tool-cache.js");
-        const filePath = String(effectiveInput.file_path ?? "");
-        if (filePath) getToolCache().invalidate(filePath);
-      } catch (err) {
-        log.debug("cache", "Failed to invalidate tool cache for edited file: " + err);
-      }
-    } else if (!result.is_error && call.name === "MultiEdit") {
-      try {
-        const { getToolCache } = await import("./tool-cache.js");
-        const edits = effectiveInput.edits as Array<{ file_path?: string }> | undefined;
-        if (edits) {
-          for (const edit of edits) {
-            if (edit.file_path) getToolCache().invalidate(edit.file_path);
+      } else if (
+        call.name === "Write" &&
+        !result.is_error &&
+        typeof effectiveInput.file_path === "string"
+      ) {
+        // Successful Write also clears (model wrote something and it
+        // stuck, so the prior failure is no longer load-bearing).
+        guardState.clearEditFailure(effectiveInput.file_path as string);
+      } else if (call.name === "MultiEdit" && Array.isArray(effectiveInput.edits)) {
+        // Phase 31 extends to MultiEdit: on failure, every file in the
+        // edits array inherits the failure so a subsequent Write on any
+        // of them is still blocked. On success, all cleared.
+        const edits = effectiveInput.edits as Array<{ file_path?: string }>;
+        for (const edit of edits) {
+          const fp = edit.file_path;
+          if (typeof fp !== "string" || !fp) continue;
+          if (result.is_error) {
+            guardState.recordEditFailure(fp, result.content, ctx.toolUseCount);
+          } else {
+            guardState.clearEditFailure(fp);
           }
         }
-      } catch (err) {
-        log.debug("cache", "Failed to invalidate tool cache for multi-edited files: " + err);
       }
-    }
 
-    // Record undo action if snapshot was captured and tool succeeded
-    if (undoSnapshot && !result.is_error) {
-      const desc =
-        call.name === "Edit"
-          ? `Edit ${effectiveInput.file_path}`
-          : `Write ${effectiveInput.file_path}`;
-      ctx.undoManager.pushAction(call.name, [undoSnapshot], desc);
-    } else if (undoSnapshots && undoSnapshots.length > 0 && !result.is_error) {
-      ctx.undoManager.pushAction(
-        "MultiEdit",
-        undoSnapshots,
-        `MultiEdit ${undoSnapshots.length} file(s)`,
-      );
-    }
+      // After successful Edit/Write, reset cross-turn dedup for Bash/Read
+      if (!result.is_error && (call.name === "Edit" || call.name === "Write")) {
+        guardState.resetAfterFileEdit();
+        // Also reset intention engine's action history for Bash/Read
+        try {
+          getIntentionEngine().resetTestFixCycle();
+        } catch (err) {
+          log.debug("intention", "Failed to reset test-fix cycle: " + err);
+        }
 
-    yield {
-      type: "tool_result",
-      name: call.name,
-      toolUseId: call.id,
-      result: result.content,
-      isError: result.is_error,
-      durationMs: toolDurationMs,
-    };
-
-    // Truncate large tool results to protect context window
-    // contextWindowSize is in tokens; multiply by ~4 to convert to chars
-    const CHARS_PER_TOKEN = 4;
-    const maxResultChars = Math.floor(ctx.contextWindowSize * CHARS_PER_TOKEN * 0.6);
-    let contextContent = result.content;
-    if (contextContent.length > maxResultChars) {
-      contextContent =
-        contextContent.slice(0, maxResultChars) +
-        `\n\n... [truncated: result was ${result.content.length} chars, showing first ${maxResultChars}]`;
-      log.warn(
-        "tool",
-        `Truncated ${call.name} result from ${result.content.length} to ${maxResultChars} chars`,
-      );
-    }
-
-    // Phase 5: route tool output through the unified visible-text
-    // renderer. Redacts secrets AND records findings to scope.secrets
-    // so the closeout can surface detected categories. Opt-out via
-    // KCODE_DISABLE_REDACTION=1 (same as before). Issues #100, #107.
-    {
-      const { renderVisibleText } = await import("./visible-text-renderer.js");
-      contextContent = renderVisibleText(contextContent, { source: "tool_output" });
-    }
-
-    toolResultBlocks.push({
-      type: "tool_result",
-      tool_use_id: call.id,
-      content: contextContent,
-      is_error: result.is_error,
-    });
-
-    // Phase 3+4 follow-up: record successful mutations / runtime
-    // events into the TaskScope so the closeout renderer has
-    // authoritative accounting. Without this the scope reports
-    // "Files: none created or edited" even after a successful
-    // Write (#107 follow-up).
-    if (!result.is_error) {
-      try {
-        const { getTaskScopeManager } = await import("./task-scope.js");
-        const mgr = getTaskScopeManager();
-        if (mgr.current()) {
-          // Mutations
-          const input = call.input as Record<string, unknown>;
-          const filePath = typeof input.file_path === "string" ? input.file_path : "";
-          if (call.name === "Write" && filePath) {
-            mgr.recordMutation({ tool: "Write", path: filePath, at: Date.now() });
-          } else if ((call.name === "Edit" || call.name === "MultiEdit") && filePath) {
-            mgr.recordMutation({ tool: call.name, path: filePath, at: Date.now() });
-          } else if (call.name === "GrepReplace") {
-            // GrepReplace content includes "Applied N replacement(s) in M file(s)"
-            // — infer path from the result.content when possible
-            const matches = result.content.match(/\b([\/\w.-]+\.[a-zA-Z]+)\b/g);
-            if (matches) {
-              for (const p of new Set(matches)) {
-                mgr.recordMutation({ tool: "GrepReplace", path: p, at: Date.now() });
-              }
-            }
-          } else if (call.name === "Bash") {
-            const cmd = typeof input.command === "string" ? input.command : "";
-            // File-mutation detection — Bash can create/edit files
-            // via redirection (cat > X, echo > X), sed/perl/awk -i,
-            // mv, touch, cp. Without this wiring the scope's
-            // filesWritten/filesEdited stay empty even when the
-            // model DID create files through Bash, and the closeout
-            // renderer reports 'Files: none'. Issue #111 v288/v289
-            // repro: .env.example created via 'cat > .env.example'
-            // never appeared in the final artifact accounting.
-            try {
-              const { extractBashFileMutations } = await import(
-                "./audit-guards.js"
-              );
-              const targets = extractBashFileMutations(cmd);
-              for (const target of targets) {
-                const abs = target.startsWith("/")
-                  ? target
-                  : `${process.cwd()}/${target}`;
-                mgr.recordMutation({
-                  tool: "Bash",
-                  path: abs,
-                  at: Date.now(),
-                });
-              }
-              // Handle mv / cp / touch separately — extractBashFileMutations
-              // covers redirects and in-place edit flags, not rename/touch.
-              // mv SRC DST → SRC gets removed from filesWritten/Edited, DST added
-              const mvMatch = cmd.match(
-                /\bmv\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/,
-              );
-              if (mvMatch) {
-                const dst = mvMatch[2]!.replace(/^['"]|['"]$/g, "");
-                const absDst = dst.startsWith("/") ? dst : `${process.cwd()}/${dst}`;
-                mgr.recordMutation({
-                  tool: "Bash",
-                  path: absDst,
-                  at: Date.now(),
-                });
-              }
-              // touch FILE → create (empty)
-              const touchMatches = cmd.matchAll(/\btouch\s+([^\s;&|<>`]+)/g);
-              for (const m of touchMatches) {
-                const p = m[1]!.replace(/^['"]|['"]$/g, "");
-                const abs = p.startsWith("/") ? p : `${process.cwd()}/${p}`;
-                mgr.recordMutation({
-                  tool: "Bash",
-                  path: abs,
-                  at: Date.now(),
-                });
-              }
-              // cp SRC DST → DST is a new file (treat as Write)
-              const cpMatch = cmd.match(
-                /\bcp\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/,
-              );
-              if (cpMatch) {
-                const dst = cpMatch[2]!.replace(/^['"]|['"]$/g, "");
-                const absDst = dst.startsWith("/") ? dst : `${process.cwd()}/${dst}`;
-                mgr.recordMutation({
-                  tool: "Write",
-                  path: absDst,
-                  at: Date.now(),
-                });
-              }
-            } catch (err) {
-              log.debug(
-                "task-scope",
-                `bash file-mutation recording failed: ${err instanceof Error ? err.message : err}`,
-              );
-            }
-            // Runtime command detection: python/node/bun/cargo/go run
-            if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(cmd)) {
-              const { classifyRuntimeStatus, isFailedStatus } = await import(
-                "./runtime-classifier.js"
-              );
-              let status = classifyRuntimeStatus(cmd, 0, result.content);
-
-              // v297 P1-1: post-spawn liveness probe. If the bash
-              // wrapper output contains 'PID: N' and the classifier
-              // leaned toward verified/started_unverified, check if
-              // the process is still alive. Dead-on-arrival means
-              // the app crashed inside the wrapper's reporting window
-              // and we shouldn't claim verified.
-              const pidMatch = result.content.match(/PID:\s*(\d+)/);
-              if (pidMatch && (status === "verified" || status === "started_unverified")) {
-                const pid = parseInt(pidMatch[1]!, 10);
-                if (Number.isFinite(pid) && pid > 0) {
-                  try {
-                    // kill(pid, 0) throws if process doesn't exist.
-                    process.kill(pid, 0);
-                    // Still alive — keep original status.
-                  } catch {
-                    // Dead — downgrade. Even if classifier said
-                    // verified, the process isn't running anymore.
-                    log.info(
-                      "runtime-classifier",
-                      `post-spawn liveness: PID ${pid} already dead; downgrading ${status} → started_unverified`,
-                    );
-                    status = "started_unverified";
-                  }
-                }
-              }
-
-              mgr.recordRuntimeCommand({
-                command: cmd,
-                exitCode: 0,
-                output: result.content.slice(0, 1000),
-                runtimeFailed: isFailedStatus(status),
-                status,
-                timestamp: Date.now(),
-              });
-            }
-            // Package-manager detection — record successful install ops
-            // so plan reconciliation can mark the "install dependencies"
-            // step as done. Issue #111 v285: `bun add blessed ...` ran
-            // clean but the plan step stayed open. Matches the common
-            // install-y verb patterns across ecosystems.
-            const isInstall =
-              /\b(?:bun\s+add|npm\s+install|npm\s+i\s|yarn\s+add|pnpm\s+(?:add|install|i)|pip\s+install|pip3\s+install|cargo\s+add|cargo\s+install|go\s+get|gem\s+install|composer\s+require|poetry\s+add)\b/i.test(cmd);
-            if (isInstall) {
-              const current = mgr.current();
-              if (current) {
-                mgr.update({
-                  verification: {
-                    packageManagerOps: [
-                      ...(current.verification.packageManagerOps ?? []),
-                      cmd.slice(0, 200),
-                    ],
-                  },
-                });
-              }
+        // Invalidate tool cache for modified files
+        try {
+          const { getToolCache } = await import("./tool-cache.js");
+          const filePath = String(effectiveInput.file_path ?? "");
+          if (filePath) getToolCache().invalidate(filePath);
+        } catch (err) {
+          log.debug("cache", "Failed to invalidate tool cache for edited file: " + err);
+        }
+      } else if (!result.is_error && call.name === "MultiEdit") {
+        try {
+          const { getToolCache } = await import("./tool-cache.js");
+          const edits = effectiveInput.edits as Array<{ file_path?: string }> | undefined;
+          if (edits) {
+            for (const edit of edits) {
+              if (edit.file_path) getToolCache().invalidate(edit.file_path);
             }
           }
+        } catch (err) {
+          log.debug("cache", "Failed to invalidate tool cache for multi-edited files: " + err);
         }
-      } catch (err) {
-        log.debug(
-          "task-scope",
-          `recordMutation wiring error (non-fatal): ${err instanceof Error ? err.message : err}`,
+      }
+
+      // Record undo action if snapshot was captured and tool succeeded
+      if (undoSnapshot && !result.is_error) {
+        const desc =
+          call.name === "Edit"
+            ? `Edit ${effectiveInput.file_path}`
+            : `Write ${effectiveInput.file_path}`;
+        ctx.undoManager.pushAction(call.name, [undoSnapshot], desc);
+      } else if (undoSnapshots && undoSnapshots.length > 0 && !result.is_error) {
+        ctx.undoManager.pushAction(
+          "MultiEdit",
+          undoSnapshots,
+          `MultiEdit ${undoSnapshots.length} file(s)`,
         );
       }
-    } else if (result.is_error) {
-      // Bash that EXITED with error AND ran a runtime command → classify
-      // properly: timeout is "alive but not verified" (the TUI started
-      // and stayed up until the wrapper killed it), not "failed".
-      // Only mark failed when the output shows an actual error
-      // signature (Traceback, ImportError, panic, etc.). Issue #111
-      // follow-up: v271 reported 'Runtime: failed (Bitcoin TUI Dashboard)'
-      // for a timeout-killed TUI that had only produced its startup
-      // banner — misleading.
-      try {
-        if (call.name === "Bash") {
-          const input = call.input as Record<string, unknown>;
-          const cmd = typeof input.command === "string" ? input.command : "";
-          if (/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc)\b/i.test(cmd)) {
-            const { getTaskScopeManager } = await import("./task-scope.js");
-            const mgr = getTaskScopeManager();
-            if (mgr.current()) {
-              const isTimeout =
-                /exit code 124/.test(result.content) ||
-                /timed out/i.test(result.content) ||
-                /Bash failed \(\d+\.\d+s\)/.test(result.content);
-              const exitCode = isTimeout ? 124 : null;
-              const { classifyRuntimeStatus, isFailedStatus } = await import(
-                "./runtime-classifier.js"
-              );
-              const status = classifyRuntimeStatus(cmd, exitCode, result.content);
-              mgr.recordRuntimeCommand({
-                command: cmd,
-                exitCode,
-                output: result.content.slice(0, 1000),
-                // alive_timeout is "started and stayed up" — not a failure.
-                runtimeFailed: isFailedStatus(status),
-                status,
-                timestamp: Date.now(),
-              });
-            }
-          }
-        }
-      } catch (err) {
-        log.debug(
-          "task-scope",
-          `runtime-error wiring error: ${err instanceof Error ? err.message : err}`,
+
+      yield {
+        type: "tool_result",
+        name: call.name,
+        toolUseId: call.id,
+        result: result.content,
+        isError: result.is_error,
+        durationMs: toolDurationMs,
+      };
+
+      // Truncate large tool results to protect context window
+      // contextWindowSize is in tokens; multiply by ~4 to convert to chars
+      const CHARS_PER_TOKEN = 4;
+      const maxResultChars = Math.floor(ctx.contextWindowSize * CHARS_PER_TOKEN * 0.6);
+      let contextContent = result.content;
+      if (contextContent.length > maxResultChars) {
+        contextContent =
+          contextContent.slice(0, maxResultChars) +
+          `\n\n... [truncated: result was ${result.content.length} chars, showing first ${maxResultChars}]`;
+        log.warn(
+          "tool",
+          `Truncated ${call.name} result from ${result.content.length} to ${maxResultChars} chars`,
         );
       }
-    }
 
-    // 5. Run PostToolUse hooks (for logging/notification, non-blocking)
-    if (ctx.hooks.hasHooks("PostToolUse")) {
-      await ctx.hooks.runPostToolUse(call, {
+      // Phase 5: route tool output through the unified visible-text
+      // renderer. Redacts secrets AND records findings to scope.secrets
+      // so the closeout can surface detected categories. Opt-out via
+      // KCODE_DISABLE_REDACTION=1 (same as before). Issues #100, #107.
+      {
+        const { renderVisibleText } = await import("./visible-text-renderer.js");
+        contextContent = renderVisibleText(contextContent, { source: "tool_output" });
+      }
+
+      toolResultBlocks.push({
+        type: "tool_result",
         tool_use_id: call.id,
-        content: result.content,
+        content: contextContent,
         is_error: result.is_error,
       });
-    }
 
-    // 6. Auto-test suggestion
-    if (
-      (call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit") &&
-      !result.is_error
-    ) {
-      try {
-        const { getTestSuggestion } = await import("./auto-test.js");
-        const inp = call.input as Record<string, unknown>;
-        const fp = String(
-          inp?.file_path ??
-            (inp?.edits as Record<string, unknown>[] | undefined)?.[0]?.file_path ??
-            "",
-        );
-        if (fp) {
-          const suggestion = getTestSuggestion(fp, ctx.config.workingDirectory);
-          if (suggestion) {
-            const useRunner = ctx.tools.has("TestRunner");
-            yield {
-              type: "suggestion",
-              suggestions: [
-                {
-                  type: "test",
-                  message: useRunner
-                    ? `Related test found: ${suggestion.testFile} — use TestRunner tool to run it`
-                    : `Related test: ${suggestion.testFile} -- run with: ${suggestion.command}`,
-                  priority: "low",
-                },
-              ],
-            };
+      // Phase 3+4 follow-up: record successful mutations / runtime
+      // events into the TaskScope so the closeout renderer has
+      // authoritative accounting. Without this the scope reports
+      // "Files: none created or edited" even after a successful
+      // Write (#107 follow-up).
+      if (!result.is_error) {
+        try {
+          const { getTaskScopeManager } = await import("./task-scope.js");
+          const mgr = getTaskScopeManager();
+          if (mgr.current()) {
+            // Mutations
+            const input = call.input as Record<string, unknown>;
+            const filePath = typeof input.file_path === "string" ? input.file_path : "";
+            if (call.name === "Write" && filePath) {
+              mgr.recordMutation({ tool: "Write", path: filePath, at: Date.now() });
+            } else if ((call.name === "Edit" || call.name === "MultiEdit") && filePath) {
+              mgr.recordMutation({ tool: call.name, path: filePath, at: Date.now() });
+            } else if (call.name === "GrepReplace") {
+              // GrepReplace content includes "Applied N replacement(s) in M file(s)"
+              // — infer path from the result.content when possible
+              const matches = result.content.match(/\b([/\w.-]+\.[a-zA-Z]+)\b/g);
+              if (matches) {
+                for (const p of new Set(matches)) {
+                  mgr.recordMutation({ tool: "GrepReplace", path: p, at: Date.now() });
+                }
+              }
+            } else if (call.name === "Bash") {
+              const cmd = typeof input.command === "string" ? input.command : "";
+              // File-mutation detection — Bash can create/edit files
+              // via redirection (cat > X, echo > X), sed/perl/awk -i,
+              // mv, touch, cp. Without this wiring the scope's
+              // filesWritten/filesEdited stay empty even when the
+              // model DID create files through Bash, and the closeout
+              // renderer reports 'Files: none'. Issue #111 v288/v289
+              // repro: .env.example created via 'cat > .env.example'
+              // never appeared in the final artifact accounting.
+              try {
+                const { extractBashFileMutations } = await import("./audit-guards.js");
+                const targets = extractBashFileMutations(cmd);
+                for (const target of targets) {
+                  const abs = target.startsWith("/") ? target : `${process.cwd()}/${target}`;
+                  mgr.recordMutation({
+                    tool: "Bash",
+                    path: abs,
+                    at: Date.now(),
+                  });
+                }
+                // Handle mv / cp / touch separately — extractBashFileMutations
+                // covers redirects and in-place edit flags, not rename/touch.
+                // mv SRC DST → SRC gets removed from filesWritten/Edited, DST added
+                const mvMatch = cmd.match(/\bmv\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/);
+                if (mvMatch) {
+                  const dst = mvMatch[2]!.replace(/^['"]|['"]$/g, "");
+                  const absDst = dst.startsWith("/") ? dst : `${process.cwd()}/${dst}`;
+                  mgr.recordMutation({
+                    tool: "Bash",
+                    path: absDst,
+                    at: Date.now(),
+                  });
+                }
+                // touch FILE → create (empty)
+                const touchMatches = cmd.matchAll(/\btouch\s+([^\s;&|<>`]+)/g);
+                for (const m of touchMatches) {
+                  const p = m[1]!.replace(/^['"]|['"]$/g, "");
+                  const abs = p.startsWith("/") ? p : `${process.cwd()}/${p}`;
+                  mgr.recordMutation({
+                    tool: "Bash",
+                    path: abs,
+                    at: Date.now(),
+                  });
+                }
+                // cp SRC DST → DST is a new file (treat as Write)
+                const cpMatch = cmd.match(/\bcp\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/);
+                if (cpMatch) {
+                  const dst = cpMatch[2]!.replace(/^['"]|['"]$/g, "");
+                  const absDst = dst.startsWith("/") ? dst : `${process.cwd()}/${dst}`;
+                  mgr.recordMutation({
+                    tool: "Write",
+                    path: absDst,
+                    at: Date.now(),
+                  });
+                }
+              } catch (err) {
+                log.debug(
+                  "task-scope",
+                  `bash file-mutation recording failed: ${err instanceof Error ? err.message : err}`,
+                );
+              }
+              // Runtime command detection: python/node/bun/cargo/go run
+              if (
+                /\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(
+                  cmd,
+                )
+              ) {
+                const { classifyRuntimeStatus, isFailedStatus } = await import(
+                  "./runtime-classifier.js"
+                );
+                let status = classifyRuntimeStatus(cmd, 0, result.content);
+
+                // v297 P1-1: post-spawn liveness probe. If the bash
+                // wrapper output contains 'PID: N' and the classifier
+                // leaned toward verified/started_unverified, check if
+                // the process is still alive. Dead-on-arrival means
+                // the app crashed inside the wrapper's reporting window
+                // and we shouldn't claim verified.
+                const pidMatch = result.content.match(/PID:\s*(\d+)/);
+                if (pidMatch && (status === "verified" || status === "started_unverified")) {
+                  const pid = parseInt(pidMatch[1]!, 10);
+                  if (Number.isFinite(pid) && pid > 0) {
+                    try {
+                      // kill(pid, 0) throws if process doesn't exist.
+                      process.kill(pid, 0);
+                      // Still alive — keep original status.
+                    } catch {
+                      // Dead — downgrade. Even if classifier said
+                      // verified, the process isn't running anymore.
+                      log.info(
+                        "runtime-classifier",
+                        `post-spawn liveness: PID ${pid} already dead; downgrading ${status} → started_unverified`,
+                      );
+                      status = "started_unverified";
+                    }
+                  }
+                }
+
+                mgr.recordRuntimeCommand({
+                  command: cmd,
+                  exitCode: 0,
+                  output: result.content.slice(0, 1000),
+                  runtimeFailed: isFailedStatus(status),
+                  status,
+                  timestamp: Date.now(),
+                });
+              }
+              // Package-manager detection — record successful install ops
+              // so plan reconciliation can mark the "install dependencies"
+              // step as done. Issue #111 v285: `bun add blessed ...` ran
+              // clean but the plan step stayed open. Matches the common
+              // install-y verb patterns across ecosystems.
+              const isInstall =
+                /\b(?:bun\s+add|npm\s+install|npm\s+i\s|yarn\s+add|pnpm\s+(?:add|install|i)|pip\s+install|pip3\s+install|cargo\s+add|cargo\s+install|go\s+get|gem\s+install|composer\s+require|poetry\s+add)\b/i.test(
+                  cmd,
+                );
+              if (isInstall) {
+                const current = mgr.current();
+                if (current) {
+                  mgr.update({
+                    verification: {
+                      packageManagerOps: [
+                        ...(current.verification.packageManagerOps ?? []),
+                        cmd.slice(0, 200),
+                      ],
+                    },
+                  });
+                }
+              }
+            }
           }
+        } catch (err) {
+          log.debug(
+            "task-scope",
+            `recordMutation wiring error (non-fatal): ${err instanceof Error ? err.message : err}`,
+          );
         }
-      } catch (err) {
-        log.debug("auto-test", "Failed to detect related tests: " + err);
+      } else if (result.is_error) {
+        // Bash that EXITED with error AND ran a runtime command → classify
+        // properly: timeout is "alive but not verified" (the TUI started
+        // and stayed up until the wrapper killed it), not "failed".
+        // Only mark failed when the output shows an actual error
+        // signature (Traceback, ImportError, panic, etc.). Issue #111
+        // follow-up: v271 reported 'Runtime: failed (Bitcoin TUI Dashboard)'
+        // for a timeout-killed TUI that had only produced its startup
+        // banner — misleading.
+        try {
+          if (call.name === "Bash") {
+            const input = call.input as Record<string, unknown>;
+            const cmd = typeof input.command === "string" ? input.command : "";
+            if (
+              /\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc)\b/i.test(
+                cmd,
+              )
+            ) {
+              const { getTaskScopeManager } = await import("./task-scope.js");
+              const mgr = getTaskScopeManager();
+              if (mgr.current()) {
+                const isTimeout =
+                  /exit code 124/.test(result.content) ||
+                  /timed out/i.test(result.content) ||
+                  /Bash failed \(\d+\.\d+s\)/.test(result.content);
+                const exitCode = isTimeout ? 124 : null;
+                const { classifyRuntimeStatus, isFailedStatus } = await import(
+                  "./runtime-classifier.js"
+                );
+                const status = classifyRuntimeStatus(cmd, exitCode, result.content);
+                mgr.recordRuntimeCommand({
+                  command: cmd,
+                  exitCode,
+                  output: result.content.slice(0, 1000),
+                  // alive_timeout is "started and stayed up" — not a failure.
+                  runtimeFailed: isFailedStatus(status),
+                  status,
+                  timestamp: Date.now(),
+                });
+              }
+            }
+          }
+        } catch (err) {
+          log.debug(
+            "task-scope",
+            `runtime-error wiring error: ${err instanceof Error ? err.message : err}`,
+          );
+        }
       }
-    }
+
+      // 5. Run PostToolUse hooks (for logging/notification, non-blocking)
+      if (ctx.hooks.hasHooks("PostToolUse")) {
+        await ctx.hooks.runPostToolUse(call, {
+          tool_use_id: call.id,
+          content: result.content,
+          is_error: result.is_error,
+        });
+      }
+
+      // 6. Auto-test suggestion
+      if (
+        (call.name === "Edit" || call.name === "Write" || call.name === "MultiEdit") &&
+        !result.is_error
+      ) {
+        try {
+          const { getTestSuggestion } = await import("./auto-test.js");
+          const inp = call.input as Record<string, unknown>;
+          const fp = String(
+            inp?.file_path ??
+              (inp?.edits as Record<string, unknown>[] | undefined)?.[0]?.file_path ??
+              "",
+          );
+          if (fp) {
+            const suggestion = getTestSuggestion(fp, ctx.config.workingDirectory);
+            if (suggestion) {
+              const useRunner = ctx.tools.has("TestRunner");
+              yield {
+                type: "suggestion",
+                suggestions: [
+                  {
+                    type: "test",
+                    message: useRunner
+                      ? `Related test found: ${suggestion.testFile} — use TestRunner tool to run it`
+                      : `Related test: ${suggestion.testFile} -- run with: ${suggestion.command}`,
+                    priority: "low",
+                  },
+                ],
+              };
+            }
+          }
+        } catch (err) {
+          log.debug("auto-test", "Failed to detect related tests: " + err);
+        }
+      }
     } catch (execError) {
       // SAFETY NET: If ANY exception occurs during tool execution, we MUST still
       // produce a tool_result block. Without it, the conversation messages will have

@@ -80,8 +80,7 @@ const PROVIDERS: CloudProviderOption[] = [
     signupUrl: "https://console.x.ai/",
     settingsField: "xaiApiKey",
     envVar: "XAI_API_KEY",
-    costNote:
-      "$3/MTok in, $15/MTok out for Grok 4. Grok Code Fast at $0.20/$1.50 for coding.",
+    costNote: "$3/MTok in, $15/MTok out for Grok 4. Grok Code Fast at $0.20/$1.50 for coding.",
     supportsOAuth: false,
     suggestedModels: ["grok-4", "grok-3", "grok-code-fast-1"],
   },
@@ -217,9 +216,7 @@ export interface CloudSetupResult {
  * If the user declines cloud entirely, returns `{ declined: true }`
  * so the caller can fall back to local (or exit with a clear message).
  */
-export async function runCloudSetup(opts?: {
-  tierReason?: string;
-}): Promise<CloudSetupResult> {
+export async function runCloudSetup(opts?: { tierReason?: string }): Promise<CloudSetupResult> {
   console.log();
   console.log("\x1b[1m\x1b[36m   Cloud provider setup\x1b[0m");
   console.log();
@@ -331,9 +328,7 @@ export async function runCloudSetup(opts?: {
   try {
     mkdirSync(dirname(settingsPath), { recursive: true });
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-    console.log(
-      `   \x1b[32m✓\x1b[0m Saved ${spec.settingsField} to ~/.kcode/settings.json`,
-    );
+    console.log(`   \x1b[32m✓\x1b[0m Saved ${spec.settingsField} to ~/.kcode/settings.json`);
   } catch (err) {
     log.warn("cloud-setup", `failed to write settings.json: ${err}`);
   }

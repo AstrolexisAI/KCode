@@ -319,10 +319,9 @@ describe("license", () => {
 
   describe("formatLicenseFailureGuide", () => {
     test("includes the reason, plain", () => {
-      const out = formatLicenseFailureGuide(
-        "License is bound to a different machine",
-        { color: false },
-      );
+      const out = formatLicenseFailureGuide("License is bound to a different machine", {
+        color: false,
+      });
       expect(out).toContain("License is bound to a different machine");
       expect(out).toContain("✗ License error:");
     });

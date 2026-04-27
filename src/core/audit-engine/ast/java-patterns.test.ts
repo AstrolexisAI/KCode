@@ -1,8 +1,8 @@
 // KCode - Java AST patterns tests (v2.10.344)
 
 import { describe, expect, it } from "bun:test";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 import { JAVA_AST_PATTERNS } from "./java-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T): T | undefined {
   if (stats.every((s) => !s.grammar_loaded)) return undefined;
@@ -15,7 +15,9 @@ describe("java-ast-001 runtime-exec-of-parameter", () => {
     const code = `class A { void f(String userInput) throws Exception { Runtime.getRuntime().exec(userInput); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe(".exec(userInput)");
     });
@@ -26,7 +28,9 @@ describe("java-ast-001 runtime-exec-of-parameter", () => {
     const code = `class A { void f(String userInput) throws Exception { new ProcessBuilder(userInput).start(); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("new ProcessBuilder(userInput)");
     });
@@ -37,7 +41,9 @@ describe("java-ast-001 runtime-exec-of-parameter", () => {
     const code = `class A { public A(String x) throws Exception { Runtime.getRuntime().exec(x); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -53,7 +59,9 @@ class A { void f() {
 `;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -63,7 +71,9 @@ class A { void f() {
     const code = `class A { void f(String... args) throws Exception { Runtime.getRuntime().exec(args); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -73,7 +83,9 @@ class A { void f() {
     const code = `class A { void f() throws Exception { Runtime.getRuntime().exec("ls -la"); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -83,7 +95,9 @@ class A { void f() {
     const code = `class A { void f() throws Exception { String cmd = "ls"; Runtime.getRuntime().exec(cmd); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -97,7 +111,9 @@ class A { File f(String path) { return new File(path); } }
 `;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("new File(path)");
     });
@@ -116,7 +132,9 @@ class A {
 `;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(5);
     });
   });
@@ -126,7 +144,9 @@ class A {
     const code = `class A { void f(String p) { new StringBuilder(p); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -136,7 +156,9 @@ class A {
     const code = `import java.io.*; class A { File f() { return new File("/tmp/known"); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -148,7 +170,9 @@ describe("java-ast-003 class-forname-of-parameter", () => {
     const code = `class A { Class<?> f(String name) throws Exception { return Class.forName(name); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-003-class-forname-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-003-class-forname-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe(".forName(name)");
     });
@@ -159,7 +183,9 @@ describe("java-ast-003 class-forname-of-parameter", () => {
     const code = `class A { Class<?> f(ClassLoader cl, String name) throws Exception { return cl.loadClass(name); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-003-class-forname-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-003-class-forname-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -169,7 +195,9 @@ describe("java-ast-003 class-forname-of-parameter", () => {
     const code = `class A { void f(String name) { someConfig.load(name); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-003-class-forname-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-003-class-forname-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -181,7 +209,9 @@ describe("java-ast-001/002 — fully-qualified names (v344 audit fix)", () => {
     const code = `class A { java.io.File f(String p) { return new java.io.File(p); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("new File(p)");
     });
@@ -192,7 +222,9 @@ describe("java-ast-001/002 — fully-qualified names (v344 audit fix)", () => {
     const code = `class A { void f(String p) throws Exception { new java.lang.ProcessBuilder(p).start(); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-001-runtime-exec-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("new ProcessBuilder(p)");
     });
@@ -203,7 +235,9 @@ describe("java-ast-001/002 — fully-qualified names (v344 audit fix)", () => {
     const code = `class A { void f(java.io.Reader r) { new java.io.BufferedReader(r); } }\n`;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -217,7 +251,9 @@ describe("java-ast-001/002 — fully-qualified names (v344 audit fix)", () => {
 `;
     const r = await runAstPatterns(JAVA_AST_PATTERNS, "/tmp/a.java", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "java-ast-002-file-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "java-ast-002-file-construction-of-parameter",
+      );
       expect(hits.length).toBe(2);
     });
   });

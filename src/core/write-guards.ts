@@ -44,7 +44,7 @@ const SKELETON_PATTERNS: Array<{ name: string; regex: RegExp }> = [
   //   earthImages: [ /* EPIC images */ ]
   {
     name: "array-with-placeholder-comment",
-    regex: /\[\s*\/\*[^\[\]{}]{3,120}\*\/\s*\]/g,
+    regex: /\[\s*\/\*[^[\]{}]{3,120}\*\/\s*\]/g,
   },
   // object literal containing only a placeholder comment:
   //   apod: { /* ... */ }
@@ -60,7 +60,8 @@ const SKELETON_PATTERNS: Array<{ name: string; regex: RegExp }> = [
   // HTML "same pattern as above / follow the same" stubs
   {
     name: "follow-same-pattern",
-    regex: /<!--[^>]*\b(?:follow\s+the\s+same|same\s+(?:clean\s+)?pattern\s+as\s+above)\b[^>]*-->/gi,
+    regex:
+      /<!--[^>]*\b(?:follow\s+the\s+same|same\s+(?:clean\s+)?pattern\s+as\s+above)\b[^>]*-->/gi,
   },
   // bare placeholder comment lines like `/* ... */` sitting alone
   {
@@ -199,64 +200,37 @@ export function buildSkeletonReport(filePath: string, verdict: SkeletonVerdict):
     lines.push(`  [${h.name}] ${h.snippet}`);
   }
   lines.push("");
-  lines.push(
-    `Placeholder stubs like \`{ /* ... */ }\`, \`[ /* data */ ]\`, and`,
-  );
-  lines.push(
-    `\`<!-- condensed for brevity -->\` mean the file will NOT function. Writing`,
-  );
-  lines.push(
-    `a skeleton and declaring it "refactored" or "organized" is a completion`,
-  );
+  lines.push(`Placeholder stubs like \`{ /* ... */ }\`, \`[ /* data */ ]\`, and`);
+  lines.push(`\`<!-- condensed for brevity -->\` mean the file will NOT function. Writing`);
+  lines.push(`a skeleton and declaring it "refactored" or "organized" is a completion`);
   lines.push(`hallucination — the user will open the file and see a broken stub.`);
   lines.push("");
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) Re-issue the Write with the FULL implementation inlined — no`,
-  );
+  lines.push(`  a) Re-issue the Write with the FULL implementation inlined — no`);
   lines.push(`     \`/* ... */\` placeholders, no \`<!-- condensed -->\` comments.`);
-  lines.push(
-    `  b) Use Edit on the ORIGINAL file to make a targeted change instead`,
-  );
+  lines.push(`  b) Use Edit on the ORIGINAL file to make a targeted change instead`);
   lines.push(`     of rewriting from scratch.`);
   lines.push("");
-  lines.push(
-    `Do NOT tell the user the file was created. It was not.`,
-  );
+  lines.push(`Do NOT tell the user the file was created. It was not.`);
   return lines.join("\n");
 }
 
-export function buildProliferationReport(
-  filePath: string,
-  verdict: ProliferationVerdict,
-): string {
+export function buildProliferationReport(filePath: string, verdict: ProliferationVerdict): string {
   const lines: string[] = [];
   lines.push(`BLOCKED — FILE NOT CREATED: "${basename(filePath)}" would proliferate siblings.`);
   lines.push("");
-  lines.push(
-    `"${verdict.existingSibling}" already exists. Creating "${basename(filePath)}"`,
-  );
-  lines.push(
-    `alongside it leaves two divergent copies — the user will not know which`,
-  );
+  lines.push(`"${verdict.existingSibling}" already exists. Creating "${basename(filePath)}"`);
+  lines.push(`alongside it leaves two divergent copies — the user will not know which`);
   lines.push(`one is authoritative, and the next session will find three.`);
   lines.push("");
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) Use Edit or MultiEdit on "${verdict.existingSibling}" to make the`,
-  );
+  lines.push(`  a) Use Edit or MultiEdit on "${verdict.existingSibling}" to make the`);
   lines.push(`     changes in place.`);
-  lines.push(
-    `  b) Use Write on "${verdict.existingSibling}" directly to replace its`,
-  );
+  lines.push(`  b) Use Write on "${verdict.existingSibling}" directly to replace its`);
   lines.push(`     contents (NOT a new ${verdict.variant ?? "variant"} copy).`);
   lines.push("");
-  lines.push(
-    `If the user explicitly asked for a separate file under a different name,`,
-  );
-  lines.push(
-    `pick a name that does NOT look like a variant of an existing file.`,
-  );
+  lines.push(`If the user explicitly asked for a separate file under a different name,`);
+  lines.push(`pick a name that does NOT look like a variant of an existing file.`);
   return lines.join("\n");
 }
 
@@ -324,10 +298,7 @@ const SHRINKAGE_MIN_ORIGINAL_LINES = 300;
 /** Fire when new content is less than this fraction of the original. */
 const SHRINKAGE_MAX_RATIO = 0.65;
 
-export function detectInPlaceShrinkage(
-  filePath: string,
-  newContent: string,
-): ShrinkageVerdict {
+export function detectInPlaceShrinkage(filePath: string, newContent: string): ShrinkageVerdict {
   try {
     if (!existsSync(filePath)) {
       return { isShrinking: false, originalLines: 0, newLines: 0, ratio: 1 };
@@ -354,56 +325,29 @@ export function detectInPlaceShrinkage(
   }
 }
 
-export function buildShrinkageReport(
-  filePath: string,
-  verdict: ShrinkageVerdict,
-): string {
+export function buildShrinkageReport(filePath: string, verdict: ShrinkageVerdict): string {
   const pct = Math.round((1 - verdict.ratio) * 100);
   const lines: string[] = [];
-  lines.push(
-    `BLOCKED — FILE NOT OVERWRITTEN: "${basename(filePath)}" would shrink by ${pct}%.`,
-  );
+  lines.push(`BLOCKED — FILE NOT OVERWRITTEN: "${basename(filePath)}" would shrink by ${pct}%.`);
   lines.push("");
   lines.push(
     `Original: ${verdict.originalLines} lines. Your new content: ${verdict.newLines} lines.`,
   );
-  lines.push(
-    `That's a ${pct}% reduction on a file that already works. Rewriting a large`,
-  );
-  lines.push(
-    `file from scratch in one Write almost always drops features silently —`,
-  );
-  lines.push(
-    `the model writes what it remembers, not what's actually there.`,
-  );
+  lines.push(`That's a ${pct}% reduction on a file that already works. Rewriting a large`);
+  lines.push(`file from scratch in one Write almost always drops features silently —`);
+  lines.push(`the model writes what it remembers, not what's actually there.`);
   lines.push("");
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) Use Edit / MultiEdit for targeted changes. Keep the original file`,
-  );
-  lines.push(
-    `     intact and change only the specific lines that need to change.`,
-  );
-  lines.push(
-    `  b) If you genuinely want a full rewrite, first LIST every feature in`,
-  );
-  lines.push(
-    `     the original (counters, modals, event handlers, animations, data`,
-  );
-  lines.push(
-    `     structures, keyboard shortcuts) and confirm each one is in your new`,
-  );
+  lines.push(`  a) Use Edit / MultiEdit for targeted changes. Keep the original file`);
+  lines.push(`     intact and change only the specific lines that need to change.`);
+  lines.push(`  b) If you genuinely want a full rewrite, first LIST every feature in`);
+  lines.push(`     the original (counters, modals, event handlers, animations, data`);
+  lines.push(`     structures, keyboard shortcuts) and confirm each one is in your new`);
   lines.push(`     content. Do NOT claim "behavior is identical" without that check.`);
-  lines.push(
-    `  c) If the user explicitly asked for a shorter version, include that`,
-  );
-  lines.push(
-    `     intent in your response and list the features you are removing.`,
-  );
+  lines.push(`  c) If the user explicitly asked for a shorter version, include that`);
+  lines.push(`     intent in your response and list the features you are removing.`);
   lines.push("");
-  lines.push(
-    `Do NOT tell the user "behavior is identical" after a ${pct}% shrink —`,
-  );
+  lines.push(`Do NOT tell the user "behavior is identical" after a ${pct}% shrink —`);
   lines.push(`that claim is almost certainly false.`);
   return lines.join("\n");
 }
@@ -508,9 +452,10 @@ const DOC_ALLOWANCE_KEYWORDS = [
  * ALL user text messages — the user might set scope in an earlier
  * turn and keep issuing small follow-ups after.
  */
-export function userAllowedDocs(
-  userTexts: readonly string[],
-): { allowed: boolean; matchedKeyword: string | null } {
+export function userAllowedDocs(userTexts: readonly string[]): {
+  allowed: boolean;
+  matchedKeyword: string | null;
+} {
   for (const text of userTexts) {
     if (!text) continue;
     for (const re of DOC_ALLOWANCE_KEYWORDS) {
@@ -553,61 +498,33 @@ export function detectUnsolicitedDoc(
   return { isUnsolicitedDoc: true, filename, allowanceKeyword: "" };
 }
 
-export function buildUnsolicitedDocReport(
-  verdict: UnsolicitedDocVerdict,
-): string {
+export function buildUnsolicitedDocReport(verdict: UnsolicitedDocVerdict): string {
   const lines: string[] = [];
   lines.push(
     `BLOCKED — FILE NOT CREATED: "${verdict.filename}" looks like an unsolicited documentation file.`,
   );
   lines.push("");
-  lines.push(
-    `The user did NOT ask for docs. None of their messages in this`,
-  );
-  lines.push(
-    `conversation contain any of: readme, documentation, guide, docs,`,
-  );
-  lines.push(
-    `tutorial, changelog, instructions, manual, complete project, full`,
-  );
-  lines.push(
-    `project, proyecto completo, repositorio, boilerplate, scaffold,`,
-  );
+  lines.push(`The user did NOT ask for docs. None of their messages in this`);
+  lines.push(`conversation contain any of: readme, documentation, guide, docs,`);
+  lines.push(`tutorial, changelog, instructions, manual, complete project, full`);
+  lines.push(`project, proyecto completo, repositorio, boilerplate, scaffold,`);
   lines.push(`deliverable, multiple files, varios archivos.`);
   lines.push("");
-  lines.push(
-    `The Write tool description is explicit: "NEVER create documentation`,
-  );
-  lines.push(
-    `files (*.md) or README files unless explicitly requested by the`,
-  );
+  lines.push(`The Write tool description is explicit: "NEVER create documentation`);
+  lines.push(`files (*.md) or README files unless explicitly requested by the`);
   lines.push(`User." This file is blocked for that reason.`);
   lines.push("");
   lines.push(`You MUST do ONE of:`);
-  lines.push(
-    `  a) If the user asked for a single file or a specific deliverable,`,
-  );
-  lines.push(
-    `     put any explanatory text as inline comments in that file instead`,
-  );
+  lines.push(`  a) If the user asked for a single file or a specific deliverable,`);
+  lines.push(`     put any explanatory text as inline comments in that file instead`);
   lines.push(`     of a separate doc.`);
-  lines.push(
-    `  b) Skip the doc. Finish the real task. If the user wants a README`,
-  );
+  lines.push(`  b) Skip the doc. Finish the real task. If the user wants a README`);
   lines.push(`     later, they'll ask.`);
-  lines.push(
-    `  c) If you believe the user DID ask for docs and the detection is`,
-  );
-  lines.push(
-    `     wrong, re-read their request carefully. Common trigger phrases`,
-  );
-  lines.push(
-    `     are "full project", "complete repo", "README", "documentation".`,
-  );
+  lines.push(`  c) If you believe the user DID ask for docs and the detection is`);
+  lines.push(`     wrong, re-read their request carefully. Common trigger phrases`);
+  lines.push(`     are "full project", "complete repo", "README", "documentation".`);
   lines.push(`     If none of those are there, they did not ask for docs.`);
   lines.push("");
-  lines.push(
-    `Do NOT tell the user you created "${verdict.filename}" — you did not.`,
-  );
+  lines.push(`Do NOT tell the user you created "${verdict.filename}" — you did not.`);
   return lines.join("\n");
 }

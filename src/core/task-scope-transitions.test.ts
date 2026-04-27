@@ -28,8 +28,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     mgr.recordRuntimeCommand({
       command: "python test_connection.py",
       exitCode: 0,
-      output:
-        "❌ RPC Error: -342: non-JSON HTTP response with '401 Unauthorized' from server",
+      output: "❌ RPC Error: -342: non-JSON HTTP response with '401 Unauthorized' from server",
       runtimeFailed: true,
       status: "failed_auth",
       timestamp: Date.now(),
@@ -38,9 +37,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     expect(scope.type).toBe("configure");
     expect(scope.phase).toBe("blocked");
     expect(scope.completion.mayClaimReady).toBe(false);
-    expect(scope.completion.reasons).toContain(
-      "RPC authentication failed — credentials required",
-    );
+    expect(scope.completion.reasons).toContain("RPC authentication failed — credentials required");
   });
 
   test("scaffold scope stays scaffold on failed_traceback (NOT auth)", () => {
@@ -81,9 +78,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     const scope = mgr.current()!;
     expect(scope.phase).toBe("partial");
     expect(scope.type).toBe("scaffold"); // NOT flipped to configure
-    expect(scope.completion.reasons.some((r) => /wrong execution mode/i.test(r))).toBe(
-      true,
-    );
+    expect(scope.completion.reasons.some((r) => /wrong execution mode/i.test(r))).toBe(true);
   });
 
   test("closeout for runner_misfire renders next-step text and suppresses generic verdict", () => {
@@ -97,8 +92,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     mgr.recordRuntimeCommand({
       command: "bun run index.ts",
       exitCode: null,
-      output:
-        "Port 3000 is already in use. Spawning bun-direct on this port would race and fail.",
+      output: "Port 3000 is already in use. Spawning bun-direct on this port would race and fail.",
       runtimeFailed: false,
       status: "runner_misfire",
       timestamp: Date.now(),
@@ -131,9 +125,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     const scope = mgr.current()!;
     expect(scope.phase).toBe("partial");
     expect(scope.completion.mayClaimReady).toBe(false);
-    expect(scope.completion.reasons.some((r) => /stayed alive under timeout/i.test(r))).toBe(
-      true,
-    );
+    expect(scope.completion.reasons.some((r) => /stayed alive under timeout/i.test(r))).toBe(true);
   });
 
   test("started_unverified → phase=partial", () => {
@@ -202,9 +194,9 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
       timestamp: Date.now(),
     });
     expect(mgr.current()!.phase).toBe("failed");
-    expect(
-      mgr.current()!.completion.reasons.some((r) => r.startsWith("runtime failure")),
-    ).toBe(true);
+    expect(mgr.current()!.completion.reasons.some((r) => r.startsWith("runtime failure"))).toBe(
+      true,
+    );
 
     // Patch index.ts
     mgr.recordMutation({ tool: "Edit", path: "/proj/index.ts", at: Date.now() });
@@ -226,9 +218,7 @@ describe("task-scope: failed_auth → configure/blocked transition", () => {
     // 'Status: failed' self-contradiction.
     expect(scope.phase).not.toBe("failed");
     // Stale 'runtime failure' reason dropped.
-    expect(
-      scope.completion.reasons.some((r) => r.startsWith("runtime failure")),
-    ).toBe(false);
+    expect(scope.completion.reasons.some((r) => r.startsWith("runtime failure"))).toBe(false);
   });
 
   test("alive_timeout after post-patch edit does NOT clear rerunPassedAfterPatch", () => {
@@ -281,7 +271,11 @@ describe("closeout: failed_auth renders configure/blocked next step", () => {
   test("renders 'Runtime: failed_auth' line and credentials next step", () => {
     const mgr = newScaffoldScope();
     mgr.recordDirectoryVerified("/proj/bitcoin-tui-dashboard");
-    mgr.recordMutation({ tool: "Write", path: "/proj/bitcoin-tui-dashboard/main.py", at: Date.now() });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/main.py",
+      at: Date.now(),
+    });
     mgr.recordRuntimeCommand({
       command: "python test_connection.py",
       exitCode: 0,
@@ -376,9 +370,21 @@ describe("closeout: plan progress derived from verification state", () => {
       },
     });
     mgr.recordDirectoryVerified("/proj/bitcoin-tui-dashboard");
-    mgr.recordMutation({ tool: "Write", path: "/proj/bitcoin-tui-dashboard/requirements.txt", at: Date.now() });
-    mgr.recordMutation({ tool: "Write", path: "/proj/bitcoin-tui-dashboard/main.py", at: Date.now() });
-    mgr.recordMutation({ tool: "Write", path: "/proj/bitcoin-tui-dashboard/test_connection.py", at: Date.now() });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/requirements.txt",
+      at: Date.now(),
+    });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/main.py",
+      at: Date.now(),
+    });
+    mgr.recordMutation({
+      tool: "Write",
+      path: "/proj/bitcoin-tui-dashboard/test_connection.py",
+      at: Date.now(),
+    });
     mgr.recordRuntimeCommand({
       command: "python test_connection.py",
       exitCode: 0,

@@ -92,19 +92,11 @@ export function detectServerSpawn(command: string): SpawnDetection | null {
   // used when the user bypasses `npm run dev`. Only trigger on the
   // filename allowlist to avoid hijacking one-shot scripts like
   // `node scripts/migrate.js` or `node benchmarks/bench.js`.
-  if (
-    /\bnode\s+(?:[\w\-/.]+\/)?(?:server|app|index|main)\.(?:js|mjs|cjs)\b/.test(
-      c,
-    )
-  ) {
+  if (/\bnode\s+(?:[\w\-/.]+\/)?(?:server|app|index|main)\.(?:js|mjs|cjs)\b/.test(c)) {
     return { framework: "node-direct", defaultPort: 3000 };
   }
   // Bun equivalent
-  if (
-    /\bbun\s+(?:run\s+)?(?:[\w\-/.]+\/)?(?:server|app|index|main)\.(?:ts|js|mjs|cjs)\b/.test(
-      c,
-    )
-  ) {
+  if (/\bbun\s+(?:run\s+)?(?:[\w\-/.]+\/)?(?:server|app|index|main)\.(?:ts|js|mjs|cjs)\b/.test(c)) {
     return { framework: "bun-direct", defaultPort: 3000 };
   }
 
@@ -195,10 +187,7 @@ function firstExecutable(segment: string): string | null {
  * Checks (in order): `PORT=` env, `--port=N`, `--port N`, `-p N`,
  * `php -S host:N`, then falls back to the framework default.
  */
-export function extractDeclaredPort(
-  command: string,
-  defaultPort?: number,
-): number | null {
+export function extractDeclaredPort(command: string, defaultPort?: number): number | null {
   // PORT=N env prefix (most reliable)
   const envMatch = command.match(/\bPORT=(\d+)/);
   if (envMatch) return parseInt(envMatch[1]!, 10);
@@ -372,7 +361,7 @@ export async function verifyBackgroundSpawn(
       // Effective cwd: honor `cd SUBDIR && ...` in the command so the
       // package.json / entry file we scan belongs to the project
       // actually being spawned, not the session cwd.
-      const effective = cwd ? extractEffectiveCwd(command, cwd) : cwd ?? "";
+      const effective = cwd ? extractEffectiveCwd(command, cwd) : (cwd ?? "");
       const mode = effective ? inferRuntimeModeFromCwd(effective) : "unknown";
       if (skipsServerPreflight(mode)) {
         log.debug(
@@ -444,9 +433,7 @@ export async function verifyBackgroundSpawn(
     lines.push(`  output (last 15 lines):`);
     for (const ln of tail.split("\n")) lines.push(`    ${ln}`);
   }
-  lines.push(
-    `  Do NOT retry the same command without diagnosing first. Likely causes:`,
-  );
+  lines.push(`  Do NOT retry the same command without diagnosing first. Likely causes:`);
   lines.push(`    - port ${port} already in use (check 'ss -tlnp | grep ${port}')`);
   lines.push(`    - dependencies missing (check the output above for ENOENT/EMFILE)`);
   lines.push(`    - server crashed during boot (check the output above for stack traces)`);

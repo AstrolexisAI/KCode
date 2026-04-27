@@ -48,18 +48,23 @@ export async function checkLocalCapability(): Promise<HardwareCheck> {
   // Check NVIDIA GPU
   try {
     const { execSync } = require("child_process");
-    const output = execSync("nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits", {
-      encoding: "utf-8",
-      timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    const output = execSync(
+      "nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits",
+      {
+        encoding: "utf-8",
+        timeout: 5000,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    ).trim();
     if (output) {
       const [name, vram] = output.split("\n")[0]!.split(", ");
       hasGPU = true;
       gpuName = name?.trim();
       vramMB = parseInt(vram?.trim() ?? "0", 10);
     }
-  } catch { /* no NVIDIA GPU */ }
+  } catch {
+    /* no NVIDIA GPU */
+  }
 
   // Check Apple Silicon (always has shared memory)
   if (!hasGPU && process.platform === "darwin" && process.arch === "arm64") {
@@ -90,7 +95,11 @@ export async function checkLocalCapability(): Promise<HardwareCheck> {
  * the resolver falling through to "no cloud configured → start local
  * llama.cpp" even after a successful `kcode setup` run.
  */
-export function checkCloudProviders(): Array<{ name: string; envVar: string; configured: boolean }> {
+export function checkCloudProviders(): Array<{
+  name: string;
+  envVar: string;
+  configured: boolean;
+}> {
   // Read settings.json once. Failures (file missing, malformed JSON,
   // permission errors) fall back to an empty object — the subsequent
   // checks will just rely on env vars.
@@ -115,10 +124,7 @@ export function checkCloudProviders(): Array<{ name: string; envVar: string; con
     {
       name: "Anthropic",
       envVar: "ANTHROPIC_API_KEY",
-      configured: has(
-        ["ANTHROPIC_API_KEY", "KCODE_ANTHROPIC_KEY"],
-        ["anthropicApiKey"],
-      ),
+      configured: has(["ANTHROPIC_API_KEY", "KCODE_ANTHROPIC_KEY"], ["anthropicApiKey"]),
     },
     {
       name: "OpenAI",
@@ -167,7 +173,9 @@ export function getSavedPreference(): { mode: InferenceMode; provider?: string }
         provider: settings.inferenceProvider as string | undefined,
       };
     }
-  } catch { /* no saved preference */ }
+  } catch {
+    /* no saved preference */
+  }
   return null;
 }
 
@@ -177,12 +185,15 @@ export function getSavedPreference(): { mode: InferenceMode; provider?: string }
 export async function resolveStartup(): Promise<StartupDecision> {
   const hw = await checkLocalCapability();
   const cloudProviders = checkCloudProviders();
-  const configuredCloud = cloudProviders.filter(p => p.configured);
+  const configuredCloud = cloudProviders.filter((p) => p.configured);
   const saved = getSavedPreference();
   const hasLocalModel = existsSync(kcodePath("server.port")) || existsSync(kcodePath("models"));
 
-  log.debug("startup", `Hardware: GPU=${hw.hasGPU} (${hw.gpuName ?? "none"}) VRAM=${hw.vramMB ?? 0}MB RAM=${hw.ramMB}MB canLocal=${hw.canRunLocal}`);
-  log.debug("startup", `Cloud: ${configuredCloud.map(p => p.name).join(", ") || "none"}`);
+  log.debug(
+    "startup",
+    `Hardware: GPU=${hw.hasGPU} (${hw.gpuName ?? "none"}) VRAM=${hw.vramMB ?? 0}MB RAM=${hw.ramMB}MB canLocal=${hw.canRunLocal}`,
+  );
+  log.debug("startup", `Cloud: ${configuredCloud.map((p) => p.name).join(", ") || "none"}`);
   log.debug("startup", `Saved preference: ${saved?.mode ?? "none"}`);
 
   // ── Case 1: Saved preference — use it silently ──

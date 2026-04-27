@@ -28,9 +28,7 @@ import { Client } from 'bitcoin-core';
   });
 
   test("fastify → web", () => {
-    expect(inferRuntimeModeFromText(`const fastify = require("fastify");`)).toBe(
-      "web",
-    );
+    expect(inferRuntimeModeFromText(`const fastify = require("fastify");`)).toBe("web");
   });
 
   test("Bun.serve → web", () => {
@@ -42,15 +40,11 @@ import { Client } from 'bitcoin-core';
   });
 
   test("fastapi + uvicorn → web", () => {
-    expect(
-      inferRuntimeModeFromText("from fastapi import FastAPI\nimport uvicorn"),
-    ).toBe("web");
+    expect(inferRuntimeModeFromText("from fastapi import FastAPI\nimport uvicorn")).toBe("web");
   });
 
   test("commander → cli", () => {
-    expect(inferRuntimeModeFromText(`import { Command } from "commander";`)).toBe(
-      "cli",
-    );
+    expect(inferRuntimeModeFromText(`import { Command } from "commander";`)).toBe("cli");
   });
 
   test("yargs → cli", () => {
@@ -83,9 +77,7 @@ import { Command } from "commander";
     // does NOT match there. This is the practical case that matters — avoid
     // naming collisions with unrelated libraries that happen to start with a
     // signal word.
-    expect(inferRuntimeModeFromText("import x from 'expressjs-helpers';")).toBe(
-      "unknown",
-    );
+    expect(inferRuntimeModeFromText("import x from 'expressjs-helpers';")).toBe("unknown");
   });
 });
 
@@ -100,22 +92,22 @@ describe("extractEffectiveCwd", () => {
   });
 
   test("cd relative path && cmd → resolved against fallback", () => {
-    expect(extractEffectiveCwd("cd bitcoin-tui-dashboard && bun run index.ts", "/home/curly/proyectos")).toBe(
-      "/home/curly/proyectos/bitcoin-tui-dashboard",
-    );
+    expect(
+      extractEffectiveCwd("cd bitcoin-tui-dashboard && bun run index.ts", "/home/curly/proyectos"),
+    ).toBe("/home/curly/proyectos/bitcoin-tui-dashboard");
   });
 
   test("cd ./rel && cmd → resolved against fallback (no double-slash)", () => {
-    expect(
-      extractEffectiveCwd("cd ./sub && bun run app.ts", "/home/curly/proyectos"),
-    ).toBe("/home/curly/proyectos/sub");
+    expect(extractEffectiveCwd("cd ./sub && bun run app.ts", "/home/curly/proyectos")).toBe(
+      "/home/curly/proyectos/sub",
+    );
   });
 
   test("cd ~/abs/path → HOME expansion", () => {
     process.env.HOME = "/home/curly";
-    expect(
-      extractEffectiveCwd("cd ~/proyectos/app && bun run app.ts", "/tmp"),
-    ).toBe("/home/curly/proyectos/app");
+    expect(extractEffectiveCwd("cd ~/proyectos/app && bun run app.ts", "/tmp")).toBe(
+      "/home/curly/proyectos/app",
+    );
   });
 
   test("no cd prefix → returns fallback", () => {
@@ -126,15 +118,13 @@ describe("extractEffectiveCwd", () => {
 
   test("timeout wrapper before cd is NOT supported (returns fallback)", () => {
     // Documented limitation — matches conservative behavior.
-    expect(
-      extractEffectiveCwd("timeout 5 cd sub && bun run index.ts", "/home/curly"),
-    ).toBe("/home/curly");
+    expect(extractEffectiveCwd("timeout 5 cd sub && bun run index.ts", "/home/curly")).toBe(
+      "/home/curly",
+    );
   });
 
   test("semicolon separator also splits", () => {
-    expect(
-      extractEffectiveCwd("cd /tmp/proj ; bun run index.ts", "/home/curly"),
-    ).toBe("/tmp/proj");
+    expect(extractEffectiveCwd("cd /tmp/proj ; bun run index.ts", "/home/curly")).toBe("/tmp/proj");
   });
 });
 

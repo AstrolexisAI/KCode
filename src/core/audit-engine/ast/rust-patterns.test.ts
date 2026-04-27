@@ -15,7 +15,9 @@ describe("rust-ast-001 command-new-of-parameter", () => {
     const code = `fn run(cmd: &str) { Command::new(cmd); }\n`;
     const r = await runAstPatterns(RUST_AST_PATTERNS, "/tmp/a.rs", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "rust-ast-001-command-new-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "rust-ast-001-command-new-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("Command::new(cmd)");
     });
@@ -26,7 +28,9 @@ describe("rust-ast-001 command-new-of-parameter", () => {
     const code = `fn run(cmd: &str) { std::process::Command::new(cmd); }\n`;
     const r = await runAstPatterns(RUST_AST_PATTERNS, "/tmp/a.rs", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "rust-ast-001-command-new-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "rust-ast-001-command-new-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -39,7 +43,9 @@ fn outer() { let f = |cmd: &str| Command::new(cmd); }
 `;
     const r = await runAstPatterns(RUST_AST_PATTERNS, "/tmp/a.rs", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "rust-ast-001-command-new-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "rust-ast-001-command-new-of-parameter",
+      );
       expect(hits.length).toBe(3);
     });
   });
@@ -49,7 +55,9 @@ fn outer() { let f = |cmd: &str| Command::new(cmd); }
     const code = `fn run() { Command::new("ls"); }\n`;
     const r = await runAstPatterns(RUST_AST_PATTERNS, "/tmp/a.rs", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "rust-ast-001-command-new-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "rust-ast-001-command-new-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -59,7 +67,9 @@ fn outer() { let f = |cmd: &str| Command::new(cmd); }
     const code = `fn run(cmd: &str) { Box::new(cmd); }\n`;
     const r = await runAstPatterns(RUST_AST_PATTERNS, "/tmp/a.rs", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "rust-ast-001-command-new-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "rust-ast-001-command-new-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -69,7 +79,9 @@ fn outer() { let f = |cmd: &str| Command::new(cmd); }
     const code = `fn run() { let cmd = "ls"; Command::new(cmd); }\n`;
     const r = await runAstPatterns(RUST_AST_PATTERNS, "/tmp/a.rs", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "rust-ast-001-command-new-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "rust-ast-001-command-new-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });

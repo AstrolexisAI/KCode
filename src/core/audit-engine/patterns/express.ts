@@ -14,7 +14,8 @@ export const EXPRESS_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["javascript", "typescript"],
     pack: "web",
-    regex: /\b(?:eval|Function|new\s+Function)\s*\(\s*(?:[^)]*?\breq\.(?:body|query|params|cookies|headers))/g,
+    regex:
+      /\b(?:eval|Function|new\s+Function)\s*\(\s*(?:[^)]*?\breq\.(?:body|query|params|cookies|headers))/g,
     explanation:
       "eval() or `new Function()` over request input gives the caller arbitrary JavaScript execution in your Node process. Even when the surrounding code 'sanitizes' (by stripping characters, by checking against a regex), the patterns are bypass-able and the cost of getting it wrong is RCE. There is no scenario where this is the right primitive.",
     verify_prompt:
@@ -34,7 +35,8 @@ export const EXPRESS_PATTERNS: BugPattern[] = [
     pack: "web",
     // session({ secret: '<short literal>' }) where the literal is too
     // short or matches well-known placeholders.
-    regex: /\bsession\s*\(\s*\{[^}]*?\bsecret\s*:\s*["'`](?:keyboard cat|changeme|secret|change\s*me|placeholder|your-secret-here|default|test|dev|admin|password|[\w-]{1,16})["'`]/gi,
+    regex:
+      /\bsession\s*\(\s*\{[^}]*?\bsecret\s*:\s*["'`](?:keyboard cat|changeme|secret|change\s*me|placeholder|your-secret-here|default|test|dev|admin|password|[\w-]{1,16})["'`]/gi,
     explanation:
       "express-session uses the secret to sign session cookies. A weak / hardcoded / well-known secret means anyone can forge a session cookie — log in as any user, escalate privileges, replay sessions. The 'keyboard cat' default from the docs ships in production thousands of times per year. The signing key should be at LEAST 32 bytes of entropy, loaded from a secrets manager.",
     verify_prompt:
@@ -72,7 +74,8 @@ export const EXPRESS_PATTERNS: BugPattern[] = [
     // res.cookie('session'/'token'/'auth'/'jwt', value, OPTIONS) where
     // OPTIONS doesn't contain httpOnly: true. We match the FIRST 200
     // chars of the call to keep the regex tractable.
-    regex: /\bres\.cookie\s*\(\s*["'`]\w*(?:session|token|auth|jwt|sid|sess)\w*["'`][^)]{0,200}\)/gi,
+    regex:
+      /\bres\.cookie\s*\(\s*["'`]\w*(?:session|token|auth|jwt|sid|sess)\w*["'`][^)]{0,200}\)/gi,
     explanation:
       "Auth-bearing cookies (session, token, JWT) without httpOnly are readable by any XSS — an injected script can exfiltrate them via document.cookie. Without `secure: true` the cookie travels over HTTP, exposing the value to any on-path attacker (Wi-Fi, ISP, MITM). Both flags are non-optional for any cookie that grants auth.",
     verify_prompt:

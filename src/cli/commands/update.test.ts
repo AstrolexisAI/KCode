@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { Command } from "commander";
 import { registerUpdateCommand } from "./update";
 
-
 const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
 
 function buildManifest(latest: string) {

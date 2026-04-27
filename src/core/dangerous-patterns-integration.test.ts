@@ -188,17 +188,11 @@ describe("dangerous-patterns integration → PermissionManager", () => {
 
   describe("database destructive operations are hard-blocked", () => {
     test("psql DROP DATABASE is blocked", async () => {
-      await expectAutoBlocks(
-        `psql -h prod -c "DROP DATABASE production_users"`,
-        "drop",
-      );
+      await expectAutoBlocks(`psql -h prod -c "DROP DATABASE production_users"`, "drop");
     });
 
     test("mysql TRUNCATE TABLE is blocked", async () => {
-      await expectAutoBlocks(
-        `mysql -h prod -e "TRUNCATE TABLE users"`,
-        "truncate",
-      );
+      await expectAutoBlocks(`mysql -h prod -e "TRUNCATE TABLE users"`, "truncate");
     });
 
     test("redis-cli FLUSHALL is blocked", async () => {
@@ -234,10 +228,7 @@ describe("dangerous-patterns integration → PermissionManager", () => {
     });
 
     test("base64-decode-pipe-to-shell (obfuscation) is blocked", async () => {
-      await expectAutoBlocks(
-        "echo bWFsaWNpb3Vz | base64 -d | bash",
-        "base64",
-      );
+      await expectAutoBlocks("echo bWFsaWNpb3Vz | base64 -d | bash", "base64");
     });
   });
 

@@ -120,8 +120,10 @@ describe("detectDevServer — static HTML files", () => {
     // Pre-fix: cwd with orbital.html but no index.html and no
     // package.json hit the early-return subdirectory-scan block
     // and returned null without reaching the static-HTML branch.
-    const content = "<!DOCTYPE html><html><head><title>Orbital</title></head><body>" +
-      "x".repeat(600) + "</body></html>";
+    const content =
+      "<!DOCTYPE html><html><head><title>Orbital</title></head><body>" +
+      "x".repeat(600) +
+      "</body></html>";
     writeFileSync(join(cwd, "orbital.html"), content);
     const srv = detectDevServer(cwd);
     expect(srv).not.toBeNull();

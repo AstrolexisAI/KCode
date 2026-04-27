@@ -12,9 +12,16 @@ describe("McpManager.loadFromConfigs — prototype pollution", () => {
   test("does not pollute Object.prototype via __proto__ server name", async () => {
     // Stub network side effects so the test stays hermetic.
     const mgr = new McpManager();
-    const anyMgr = mgr as unknown as { startServers: () => Promise<void>; startHealthChecks: () => void };
-    anyMgr.startServers = async () => { /* no-op */ };
-    anyMgr.startHealthChecks = () => { /* no-op */ };
+    const anyMgr = mgr as unknown as {
+      startServers: () => Promise<void>;
+      startHealthChecks: () => void;
+    };
+    anyMgr.startServers = async () => {
+      /* no-op */
+    };
+    anyMgr.startHealthChecks = () => {
+      /* no-op */
+    };
 
     // Use JSON.parse so TS doesn't narrow away the __proto__ literal.
     const hostile = JSON.parse(`{
@@ -36,10 +43,17 @@ describe("McpManager.loadFromConfigs — prototype pollution", () => {
 
   test("legitimate server names are still accepted", async () => {
     const mgr = new McpManager();
-    const anyMgr = mgr as unknown as { startServers: (c: unknown) => Promise<void>; startHealthChecks: () => void };
+    const anyMgr = mgr as unknown as {
+      startServers: (c: unknown) => Promise<void>;
+      startHealthChecks: () => void;
+    };
     let startedWith: unknown = null;
-    anyMgr.startServers = async (configs) => { startedWith = configs; };
-    anyMgr.startHealthChecks = () => { /* no-op */ };
+    anyMgr.startServers = async (configs) => {
+      startedWith = configs;
+    };
+    anyMgr.startHealthChecks = () => {
+      /* no-op */
+    };
 
     const configs = JSON.parse(`{
       "good-server": { "command": "echo", "args": ["hi"] }

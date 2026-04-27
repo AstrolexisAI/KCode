@@ -116,7 +116,7 @@ const PHP_FILE_CALLEES = new Set([
   "fopen",
   "readfile",
   "file",
-  "include",   // include() is also callable as a function in some PHP versions
+  "include", // include() is also callable as a function in some PHP versions
   "require",
   "include_once",
   "require_once",

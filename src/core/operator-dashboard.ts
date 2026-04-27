@@ -26,8 +26,8 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readlinkSync } from "node:fs";
-import { checkInotifyState } from "./bash-spawn-preflight.js";
 import { snapshotBashHistory } from "./bash-spawn-history.js";
+import { checkInotifyState } from "./bash-spawn-preflight.js";
 import { snapshotEditHistory } from "./file-edit-history.js";
 import { log } from "./logger.js";
 
@@ -103,8 +103,8 @@ const DEV_SERVER_COMMS = new Set([
   "nodemon",
   "uvicorn",
   "gunicorn",
-  "node",       // generic — many dev tools run as bare `node`, filtered by cwd match
-  "bun",        // bun --watch
+  "node", // generic — many dev tools run as bare `node`, filtered by cwd match
+  "bun", // bun --watch
   "rails",
 ]);
 

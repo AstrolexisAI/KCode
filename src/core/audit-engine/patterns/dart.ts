@@ -22,8 +22,10 @@ export const DART_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["dart"],
     regex: /(?:apiKey|secretKey|password|token)\s*[:=]\s*['"][A-Za-z0-9+/=_-]{16,}['"]/g,
-    explanation: "Hardcoded secrets in Dart/Flutter apps can be extracted from the compiled binary.",
-    verify_prompt: "Is this a real key or placeholder? If real, respond CONFIRMED." +
+    explanation:
+      "Hardcoded secrets in Dart/Flutter apps can be extracted from the compiled binary.",
+    verify_prompt:
+      "Is this a real key or placeholder? If real, respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The value is a placeholder ('changeme', 'xxx', 'your-api-key-here', 'TODO', 'REPLACE_ME', 'test')\n" +
       "2. This is in test, example, or documentation code\n" +
@@ -46,7 +48,8 @@ export const DART_PATTERNS: BugPattern[] = [
       "If the value is guaranteed non-null by a preceding null check or assert, respond FALSE_POSITIVE. " +
       "If it's on data from JSON parsing, API response, or user input, respond CONFIRMED.",
     cwe: "CWE-476",
-    fix_template: "Use null-aware operators: value?.property ?? defaultValue, or guard with if (value != null).",
+    fix_template:
+      "Use null-aware operators: value?.property ?? defaultValue, or guard with if (value != null).",
   },
   {
     id: "dart-004-dart-mirrors",
@@ -83,7 +86,8 @@ export const DART_PATTERNS: BugPattern[] = [
     title: "Future without error handling",
     severity: "medium",
     languages: ["dart"],
-    regex: /\bFuture\s*\.\s*(?:delayed|wait|forEach)\s*\([^)]*\)(?!\s*\.\s*(?:catchError|onError|then\([^)]*,[^)]*onError))/g,
+    regex:
+      /\bFuture\s*\.\s*(?:delayed|wait|forEach)\s*\([^)]*\)(?!\s*\.\s*(?:catchError|onError|then\([^)]*,[^)]*onError))/g,
     explanation:
       "Futures without error handling silently swallow exceptions. Unhandled errors in Flutter can crash the app or leave it in an inconsistent state.",
     verify_prompt:
@@ -106,14 +110,16 @@ export const DART_PATTERNS: BugPattern[] = [
       "If the key is optional or from an external API, respond CONFIRMED. " +
       "If the JSON structure is validated beforehand, respond FALSE_POSITIVE.",
     cwe: "CWE-476",
-    fix_template: "Use null-safe access: (json['key'] as String?) ?? 'default', or use json_serializable.",
+    fix_template:
+      "Use null-safe access: (json['key'] as String?) ?? 'default', or use json_serializable.",
   },
   {
     id: "dart-008-buildcontext-async",
     title: "BuildContext used after async gap",
     severity: "high",
     languages: ["dart"],
-    regex: /await\s+\w[\w.]*\([^)]*\)\s*;[\s\S]{0,100}?\b(?:Navigator|ScaffoldMessenger|Theme|MediaQuery|showDialog)\s*\.\s*of\s*\(\s*context/g,
+    regex:
+      /await\s+\w[\w.]*\([^)]*\)\s*;[\s\S]{0,100}?\b(?:Navigator|ScaffoldMessenger|Theme|MediaQuery|showDialog)\s*\.\s*of\s*\(\s*context/g,
     explanation:
       "Using BuildContext after an async gap (await) is unsafe because the widget may have been unmounted. The context may point to a disposed element tree.",
     verify_prompt:
@@ -121,14 +127,16 @@ export const DART_PATTERNS: BugPattern[] = [
       "If mounted check exists, respond FALSE_POSITIVE. " +
       "If context is used directly after await without checking, respond CONFIRMED.",
     cwe: "CWE-672",
-    fix_template: "Add: if (!mounted) return; // or if (!context.mounted) return; before using context after await.",
+    fix_template:
+      "Add: if (!mounted) return; // or if (!context.mounted) return; before using context after await.",
   },
   {
     id: "dart-009-http-no-https",
     title: "http.get/post without HTTPS enforcement",
     severity: "high",
     languages: ["dart"],
-    regex: /\bhttp\.(?:get|post|put|delete|patch)\s*\(\s*(?:Uri\.parse\s*\(\s*)?['"]http:\/\/(?!localhost|127\.0\.0\.1)/g,
+    regex:
+      /\bhttp\.(?:get|post|put|delete|patch)\s*\(\s*(?:Uri\.parse\s*\(\s*)?['"]http:\/\/(?!localhost|127\.0\.0\.1)/g,
     explanation:
       "Making HTTP requests over plaintext HTTP exposes request/response data (including auth tokens, user data) to network attackers.",
     verify_prompt:
@@ -143,7 +151,8 @@ export const DART_PATTERNS: BugPattern[] = [
     title: "Hardcoded secret string in Dart/Flutter",
     severity: "high",
     languages: ["dart"],
-    regex: /(?:const|final)\s+\w*(?:secret|key|password|token|auth)\w*\s*=\s*['"][A-Za-z0-9+/=_-]{16,}['"]/gi,
+    regex:
+      /(?:const|final)\s+\w*(?:secret|key|password|token|auth)\w*\s*=\s*['"][A-Za-z0-9+/=_-]{16,}['"]/gi,
     explanation:
       "Constants containing secrets are compiled into the Dart binary and can be extracted with string analysis tools.",
     verify_prompt:

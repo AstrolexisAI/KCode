@@ -11,8 +11,10 @@ export const RUST_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["rust"],
     regex: /\bunsafe\s*\{/g,
-    explanation: "unsafe blocks bypass Rust's borrow checker. Memory corruption, use-after-free, and data races are possible inside unsafe.",
-    verify_prompt: "Is this unsafe block well-documented with a SAFETY comment explaining why it's sound? If properly justified, respond FALSE_POSITIVE. If no safety comment, respond CONFIRMED.",
+    explanation:
+      "unsafe blocks bypass Rust's borrow checker. Memory corruption, use-after-free, and data races are possible inside unsafe.",
+    verify_prompt:
+      "Is this unsafe block well-documented with a SAFETY comment explaining why it's sound? If properly justified, respond FALSE_POSITIVE. If no safety comment, respond CONFIRMED.",
     cwe: "CWE-787",
     fix_template: "Add a // SAFETY: comment, or refactor to avoid unsafe.",
   },
@@ -22,8 +24,10 @@ export const RUST_PATTERNS: BugPattern[] = [
     severity: "low",
     languages: ["rust"],
     regex: /\.\s*(?:unwrap|expect)\s*\(\s*\)/g,
-    explanation: "unwrap() panics on None/Err. In server code, this crashes the process. Use proper error handling with ? operator.",
-    verify_prompt: "Is this in application code that should handle errors gracefully, or in test/CLI code where panicking is acceptable? If test code, respond FALSE_POSITIVE.",
+    explanation:
+      "unwrap() panics on None/Err. In server code, this crashes the process. Use proper error handling with ? operator.",
+    verify_prompt:
+      "Is this in application code that should handle errors gracefully, or in test/CLI code where panicking is acceptable? If test code, respond FALSE_POSITIVE.",
     cwe: "CWE-754",
     fix_template: "Replace .unwrap() with .map_err(|e| ...)? or .unwrap_or_default().",
   },
@@ -33,8 +37,10 @@ export const RUST_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["rust"],
     regex: /\b(?:query|execute)\s*\(\s*&?format!\s*\(/g,
-    explanation: "SQL queries built with format!() are vulnerable to injection. Use parameterized queries.",
-    verify_prompt: "Is user input interpolated via format!()? If parameterized ($1, ?), respond FALSE_POSITIVE.",
+    explanation:
+      "SQL queries built with format!() are vulnerable to injection. Use parameterized queries.",
+    verify_prompt:
+      "Is user input interpolated via format!()? If parameterized ($1, ?), respond FALSE_POSITIVE.",
     cwe: "CWE-89",
     fix_template: 'Use sqlx::query("SELECT * FROM t WHERE id = $1").bind(id).',
   },
@@ -45,7 +51,7 @@ export const RUST_PATTERNS: BugPattern[] = [
     title: ".unwrap() in non-test production code",
     severity: "medium",
     languages: ["rust"],
-    regex: /(?<!\#\[test\][\s\S]{0,500})\.\s*unwrap\s*\(\s*\)/g,
+    regex: /(?<!#\[test\][\s\S]{0,500})\.\s*unwrap\s*\(\s*\)/g,
     explanation:
       ".unwrap() panics on None/Err, crashing the process. In server or library code this is unacceptable — a single bad input kills the service.",
     verify_prompt:
@@ -65,15 +71,16 @@ export const RUST_PATTERNS: BugPattern[] = [
     title: ".expect() with generic or empty message",
     severity: "low",
     languages: ["rust"],
-    regex: /\.expect\s*\(\s*"(?:failed|error|unexpected|should not happen|impossible|bug|todo|fixme|unreachable|panic|oops|crash)"\s*\)/gi,
+    regex:
+      /\.expect\s*\(\s*"(?:failed|error|unexpected|should not happen|impossible|bug|todo|fixme|unreachable|panic|oops|crash)"\s*\)/gi,
     explanation:
-      ".expect() should provide a meaningful error message explaining WHY the value should be present. Generic messages like \"failed\" give no debugging context when the panic occurs in production logs.",
+      '.expect() should provide a meaningful error message explaining WHY the value should be present. Generic messages like "failed" give no debugging context when the panic occurs in production logs.',
     verify_prompt:
       "Does the .expect() message explain the specific condition that was expected? " +
-      "If the message is descriptive (e.g., \"database connection must be initialized before query\"), " +
-      "respond FALSE_POSITIVE. If it's generic (\"failed\", \"error\", \"should not happen\"), respond CONFIRMED.",
+      'If the message is descriptive (e.g., "database connection must be initialized before query"), ' +
+      'respond FALSE_POSITIVE. If it\'s generic ("failed", "error", "should not happen"), respond CONFIRMED.',
     cwe: "CWE-754",
-    fix_template: "Use a descriptive message: .expect(\"config file must exist after init phase\")",
+    fix_template: 'Use a descriptive message: .expect("config file must exist after init phase")',
   },
 
   // ── unsafe without SAFETY comment ─────────────────────────────
@@ -110,7 +117,8 @@ export const RUST_PATTERNS: BugPattern[] = [
       "3. Is the Mutex protecting a resource that requires exclusive access (e.g., socket, file)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the data is clearly read-heavy and would benefit from concurrent reads.",
     cwe: "CWE-1050",
-    fix_template: "Replace Mutex with RwLock: Arc<RwLock<T>>. Use .read() for shared access, .write() for exclusive.",
+    fix_template:
+      "Replace Mutex with RwLock: Arc<RwLock<T>>. Use .read() for shared access, .write() for exclusive.",
   },
 
   // ── Blocking in async ─────────────────────────────────────────
@@ -119,7 +127,8 @@ export const RUST_PATTERNS: BugPattern[] = [
     title: "Blocking call inside async function",
     severity: "high",
     languages: ["rust"],
-    regex: /async\s+fn\s+\w+[\s\S]{0,500}?(?:std::thread::sleep|std::fs::\w+|std::net::\w+|\.read_to_string|\.write_all)\s*\(/g,
+    regex:
+      /async\s+fn\s+\w+[\s\S]{0,500}?(?:std::thread::sleep|std::fs::\w+|std::net::\w+|\.read_to_string|\.write_all)\s*\(/g,
     explanation:
       "Calling std::thread::sleep, std::fs, or std::net (blocking I/O) inside an async function blocks the executor thread. This starves other tasks on the same runtime, causing latency spikes or deadlocks.",
     verify_prompt:
@@ -148,7 +157,8 @@ export const RUST_PATTERNS: BugPattern[] = [
       "3. Can the clone be replaced with a borrow (&T) or Cow? → If yes, respond CONFIRMED.\n" +
       "Only respond CONFIRMED if the cloned data is large and the loop is hot.",
     cwe: "CWE-1050",
-    fix_template: "Use references (&T), Cow<T>, or Arc<T> instead of cloning. Move allocation outside the loop.",
+    fix_template:
+      "Use references (&T), Cow<T>, or Arc<T> instead of cloning. Move allocation outside the loop.",
   },
 
   // ── Missing Send + Sync on async return ───────────────────────
@@ -157,16 +167,18 @@ export const RUST_PATTERNS: BugPattern[] = [
     title: "Async function return not Send (cannot spawn across threads)",
     severity: "medium",
     languages: ["rust"],
-    regex: /async\s+fn\s+\w+[^{]*->\s*(?:impl\s+Future|Box\s*<\s*dyn\s+Future)(?![\s\S]{0,50}?Send)/g,
+    regex:
+      /async\s+fn\s+\w+[^{]*->\s*(?:impl\s+Future|Box\s*<\s*dyn\s+Future)(?![\s\S]{0,50}?Send)/g,
     explanation:
       "Async functions that return impl Future without a Send bound cannot be spawned with tokio::spawn() or used in multi-threaded executors. This causes confusing compile errors downstream.",
     verify_prompt:
       "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
-      "1. Is this explicitly single-threaded (e.g., LocalSet, #[tokio::main(flavor = \"current_thread\")])? → FALSE_POSITIVE\n" +
+      '1. Is this explicitly single-threaded (e.g., LocalSet, #[tokio::main(flavor = "current_thread")])? → FALSE_POSITIVE\n' +
       "2. Does the return type already include + Send? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the future is used in a multi-threaded context without Send bound.",
     cwe: "CWE-704",
-    fix_template: "Add Send bound: -> impl Future<Output = T> + Send, or use Pin<Box<dyn Future + Send>>.",
+    fix_template:
+      "Add Send bound: -> impl Future<Output = T> + Send, or use Pin<Box<dyn Future + Send>>.",
   },
 
   // ── Hardcoded secrets ─────────────────────────────────────────
@@ -180,11 +192,11 @@ export const RUST_PATTERNS: BugPattern[] = [
       "Hardcoded credentials in source code are exposed to anyone with repo access. Compiled binaries also contain string literals that can be extracted.",
     verify_prompt:
       "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
-      "1. Is the value a placeholder like \"changeme\", \"TODO\", \"test\", or \"example\"? → FALSE_POSITIVE\n" +
+      '1. Is the value a placeholder like "changeme", "TODO", "test", or "example"? → FALSE_POSITIVE\n' +
       "2. Is this in test code or documentation? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if it looks like a real credential in production code.",
     cwe: "CWE-798",
-    fix_template: "Use std::env::var(\"SECRET_KEY\") or a config/secrets manager.",
+    fix_template: 'Use std::env::var("SECRET_KEY") or a config/secrets manager.',
   },
 
   // ── Panic in Drop ─────────────────────────────────────────────
@@ -193,7 +205,8 @@ export const RUST_PATTERNS: BugPattern[] = [
     title: "Potential panic inside Drop implementation",
     severity: "high",
     languages: ["rust"],
-    regex: /impl\s+Drop\s+for\s+\w+[\s\S]{0,300}?(?:\.unwrap\(\)|\.expect\(|panic!\(|unreachable!\()/g,
+    regex:
+      /impl\s+Drop\s+for\s+\w+[\s\S]{0,300}?(?:\.unwrap\(\)|\.expect\(|panic!\(|unreachable!\()/g,
     explanation:
       "Panicking inside a Drop implementation causes a double panic if the Drop runs during stack unwinding from another panic. This aborts the process immediately with no cleanup.",
     verify_prompt:
@@ -202,7 +215,8 @@ export const RUST_PATTERNS: BugPattern[] = [
       "2. Is there a std::thread::panicking() check before the panic-able code? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the Drop impl can panic on a fallible operation.",
     cwe: "CWE-754",
-    fix_template: "Use if let Ok(v) = ... or .unwrap_or_else(|_| default) instead of unwrap/expect in Drop.",
+    fix_template:
+      "Use if let Ok(v) = ... or .unwrap_or_else(|_| default) instead of unwrap/expect in Drop.",
   },
 
   // ── Unbounded Vec from user input ─────────────────────────────
@@ -211,7 +225,8 @@ export const RUST_PATTERNS: BugPattern[] = [
     title: "Vec grown from untrusted input without capacity limit",
     severity: "high",
     languages: ["rust"],
-    regex: /(?:Vec::with_capacity|Vec::new)\s*\([^)]*\)[\s\S]{0,300}?(?:\.push|\.extend|\.append)\s*\([^)]*(?:input|request|body|payload|data|recv|read)/g,
+    regex:
+      /(?:Vec::with_capacity|Vec::new)\s*\([^)]*\)[\s\S]{0,300}?(?:\.push|\.extend|\.append)\s*\([^)]*(?:input|request|body|payload|data|recv|read)/g,
     explanation:
       "Growing a Vec from untrusted input without a maximum capacity allows an attacker to trigger OOM by sending a large payload. The program allocates until it crashes.",
     verify_prompt:
@@ -240,7 +255,8 @@ export const RUST_PATTERNS: BugPattern[] = [
       "3. Can this be replaced with safe alternatives (as, From, TryFrom, bytemuck)? → If yes, CONFIRMED.\n" +
       "Only respond CONFIRMED if the transmute is unjustified or can be replaced with safe code.",
     cwe: "CWE-843",
-    fix_template: "Use safe alternatives: `as` casts, From/TryFrom, bytemuck::cast, or pointer::cast.",
+    fix_template:
+      "Use safe alternatives: `as` casts, From/TryFrom, bytemuck::cast, or pointer::cast.",
   },
 
   // ── String formatting in SQL ──────────────────────────────────
@@ -257,6 +273,7 @@ export const RUST_PATTERNS: BugPattern[] = [
       "bind parameters ($1, ?, :name) instead of string interpolation, respond FALSE_POSITIVE. " +
       "If user input is formatted into the SQL string, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: "Use parameterized queries: sqlx::query(\"SELECT * FROM t WHERE id = $1\").bind(id).",
+    fix_template:
+      'Use parameterized queries: sqlx::query("SELECT * FROM t WHERE id = $1").bind(id).',
   },
 ];

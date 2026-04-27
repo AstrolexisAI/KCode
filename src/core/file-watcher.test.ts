@@ -10,8 +10,8 @@
 // test. The suggester is pure in-memory logic.
 
 import { describe, expect, test } from "bun:test";
-import { FileChangeSuggester } from "./file-watcher";
 import type { FileChangeEvent } from "./file-watcher";
+import { FileChangeSuggester } from "./file-watcher";
 
 function makeChanges(n: number, baseName: string): FileChangeEvent[] {
   const events: FileChangeEvent[] = [];

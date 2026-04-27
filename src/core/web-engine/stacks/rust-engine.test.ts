@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createRustProject } from "./rust-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createRustProject } from "./rust-engine";
 
 describe("rust-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-rs-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates CLI project", () => {
@@ -51,7 +55,7 @@ describe("rust-engine", () => {
   test("has CI workflow", () => {
     withTmp((dir) => {
       const r = createRustProject("CLI", dir);
-      expect(r.files.some(f => f.path.includes("ci.yml"))).toBe(true);
+      expect(r.files.some((f) => f.path.includes("ci.yml"))).toBe(true);
     });
   });
 });

@@ -86,7 +86,9 @@ function sanitizeTranscriptContent(text: string): string {
   );
   // Truncate oversized content to prevent replay-based prompt injection
   if (text.length > MAX_ENTRY_CONTENT_CHARS) {
-    text = text.slice(0, MAX_ENTRY_CONTENT_CHARS) + `\n... [truncated: ${text.length - MAX_ENTRY_CONTENT_CHARS} chars]`;
+    text =
+      text.slice(0, MAX_ENTRY_CONTENT_CHARS) +
+      `\n... [truncated: ${text.length - MAX_ENTRY_CONTENT_CHARS} chars]`;
   }
   return text;
 }

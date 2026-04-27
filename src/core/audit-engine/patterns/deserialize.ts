@@ -13,8 +13,7 @@ export const DESERIALIZE_PATTERNS: BugPattern[] = [
     title: "pickle.loads / cPickle on untrusted data",
     severity: "critical",
     languages: ["python"],
-    regex:
-      /\b(?:pickle|cPickle|_pickle|dill|cloudpickle|pathos)\.(?:loads?|Unpickler)\s*\(/g,
+    regex: /\b(?:pickle|cPickle|_pickle|dill|cloudpickle|pathos)\.(?:loads?|Unpickler)\s*\(/g,
     explanation:
       "Python's pickle is Turing-complete deserialization. Any attacker-controlled pickle blob gives remote code execution via `__reduce__` payloads. Python docs explicitly say: `Never unpickle data received from an untrusted or unauthenticated source.`",
     verify_prompt:
@@ -64,8 +63,7 @@ export const DESERIALIZE_PATTERNS: BugPattern[] = [
     title: "Java ObjectInputStream without serialization filter",
     severity: "critical",
     languages: ["java"],
-    regex:
-      /\bnew\s+ObjectInputStream\s*\([^)]*\)(?![\s\S]*?setObjectInputFilter)/g,
+    regex: /\bnew\s+ObjectInputStream\s*\([^)]*\)(?![\s\S]*?setObjectInputFilter)/g,
     explanation:
       "Java ObjectInputStream deserializes any serializable class on the classpath — including Commons Collections gadget chains that chain into RCE. Fixed in JEP 290 (Java 9) via ObjectInputFilter, but codebases rarely set one.",
     verify_prompt:
@@ -81,8 +79,7 @@ export const DESERIALIZE_PATTERNS: BugPattern[] = [
     title: "PHP unserialize on user-controllable data",
     severity: "critical",
     languages: ["php"],
-    regex:
-      /\bunserialize\s*\(\s*\$(?:_POST|_GET|_REQUEST|_COOKIE|HTTP_)/gi,
+    regex: /\bunserialize\s*\(\s*\$(?:_POST|_GET|_REQUEST|_COOKIE|HTTP_)/gi,
     explanation:
       "PHP unserialize triggers __wakeup / __destruct on arbitrary classes, which combined with POP gadgets (Laravel, phpggc) gives RCE. CVE-2022-31625 (phpMyAdmin), CVE-2021-3618 (dozens more).",
     verify_prompt:
@@ -104,8 +101,7 @@ export const DESERIALIZE_PATTERNS: BugPattern[] = [
     verify_prompt:
       "Is the load called on data that could come from an HTTP request, uploaded file, database field populated from a request, or cookie? If the input is trusted (internal config file, redis key written by same app), FALSE_POSITIVE. Untrusted → CONFIRMED.",
     cwe: "CWE-502",
-    fix_template:
-      "YAML.safe_load for YAML. For anything else, use JSON.parse.",
+    fix_template: "YAML.safe_load for YAML. For anything else, use JSON.parse.",
   },
 
   // ── C# BinaryFormatter ──────────────────────────────────────────

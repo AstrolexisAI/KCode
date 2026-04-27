@@ -11,7 +11,7 @@ export const ZIG_PATTERNS: BugPattern[] = [
     title: "Potential use-after-free (access after allocator.free/destroy)",
     severity: "critical",
     languages: ["zig"],
-    regex: /(?:allocator\.free|allocator\.destroy)\s*\([^)]*(\w+)[^)]*\)[\s\S]{0,200}?\1\s*[\[.]/g,
+    regex: /(?:allocator\.free|allocator\.destroy)\s*\([^)]*(\w+)[^)]*\)[\s\S]{0,200}?\1\s*[[.]/g,
     explanation:
       "Accessing memory after calling allocator.free() or allocator.destroy() is undefined behavior. The memory may be reused by subsequent allocations, causing silent data corruption or crashes.",
     verify_prompt:
@@ -21,7 +21,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is the free conditional and the access is in the non-freed branch? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the same pointer/slice is accessed after being freed.",
     cwe: "CWE-416",
-    fix_template: "Set the pointer to undefined after free: ptr = undefined; or restructure to not access after free.",
+    fix_template:
+      "Set the pointer to undefined after free: ptr = undefined; or restructure to not access after free.",
   },
 
   // ── Ignoring error return ─────────────────────────────────────
@@ -51,7 +52,7 @@ export const ZIG_PATTERNS: BugPattern[] = [
     languages: ["zig"],
     regex: /\b(?:@intCast|@truncate|@ptrCast)\s*\(/g,
     explanation:
-      "Zig builtins like @intCast, @truncate, and @ptrCast perform safety checks in Debug mode but become undefined behavior in ReleaseFast/ReleaseSmall if the precondition is violated. Code that \"works in debug\" may silently corrupt data in release.",
+      'Zig builtins like @intCast, @truncate, and @ptrCast perform safety checks in Debug mode but become undefined behavior in ReleaseFast/ReleaseSmall if the precondition is violated. Code that "works in debug" may silently corrupt data in release.',
     verify_prompt:
       "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
       "1. Is the input value validated/bounded before the cast? → FALSE_POSITIVE\n" +
@@ -59,7 +60,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is this in code that only runs in Debug mode? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the cast could fail at runtime without prior validation.",
     cwe: "CWE-681",
-    fix_template: "Validate the value before casting, or use std.math.cast() which returns null on failure.",
+    fix_template:
+      "Validate the value before casting, or use std.math.cast() which returns null on failure.",
   },
 
   // ── Buffer overflow via unchecked indexing ────────────────────
@@ -68,7 +70,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
     title: "Slice indexing without bounds check (UB in release)",
     severity: "high",
     languages: ["zig"],
-    regex: /\b(\w+)\s*\[\s*(\w+)\s*\](?!\s*(?:\.\.|\s*=\s*))[\s\S]{0,50}?(?![\s\S]{0,200}?(?:if\s*\(\s*\2\s*<\s*\1\.len|assert\s*\(\s*\2\s*<))/g,
+    regex:
+      /\b(\w+)\s*\[\s*(\w+)\s*\](?!\s*(?:\.\.|\s*=\s*))[\s\S]{0,50}?(?![\s\S]{0,200}?(?:if\s*\(\s*\2\s*<\s*\1\.len|assert\s*\(\s*\2\s*<))/g,
     explanation:
       "Array/slice indexing in Zig is bounds-checked in Debug but becomes undefined behavior in release modes. If the index comes from external input without validation, this is a buffer overflow in production.",
     verify_prompt:
@@ -78,7 +81,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is this in code that always runs with safety checks enabled? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the index comes from runtime input without prior bounds validation.",
     cwe: "CWE-120",
-    fix_template: "Add bounds check: if (idx < slice.len) slice[idx] else return error.OutOfBounds;",
+    fix_template:
+      "Add bounds check: if (idx < slice.len) slice[idx] else return error.OutOfBounds;",
   },
 
   // ── Memory leak ───────────────────────────────────────────────
@@ -87,7 +91,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
     title: "Allocation without corresponding free (memory leak)",
     severity: "medium",
     languages: ["zig"],
-    regex: /allocator\.(?:alloc|create|dupe|dupeZ|alignedAlloc)\s*\([^)]*\)[\s\S]{0,500}?(?:return|break|continue)(?![\s\S]{0,300}?(?:defer\s+allocator\.free|errdefer\s+allocator\.free))/g,
+    regex:
+      /allocator\.(?:alloc|create|dupe|dupeZ|alignedAlloc)\s*\([^)]*\)[\s\S]{0,500}?(?:return|break|continue)(?![\s\S]{0,300}?(?:defer\s+allocator\.free|errdefer\s+allocator\.free))/g,
     explanation:
       "Memory allocated with an allocator but not freed (or not covered by defer/errdefer) leaks. Unlike garbage-collected languages, Zig requires explicit memory management.",
     verify_prompt:
@@ -97,7 +102,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is this using an arena allocator that frees everything at once? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the allocation has no corresponding free on all code paths.",
     cwe: "CWE-401",
-    fix_template: "Add defer allocator.free(ptr) immediately after allocation, or use errdefer for error paths.",
+    fix_template:
+      "Add defer allocator.free(ptr) immediately after allocation, or use errdefer for error paths.",
   },
 
   // ── Sentinel-terminated string misuse ─────────────────────────
@@ -116,7 +122,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is the slice known to be null-terminated from its source? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if a non-sentinel slice is passed where a sentinel-terminated one is expected.",
     cwe: "CWE-170",
-    fix_template: "Use [:0]u8 type explicitly, or use std.mem.sliceTo() to create a sentinel-terminated slice.",
+    fix_template:
+      "Use [:0]u8 type explicitly, or use std.mem.sliceTo() to create a sentinel-terminated slice.",
   },
 
   // ── Integer overflow in release ───────────────────────────────
@@ -125,7 +132,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
     title: "Arithmetic overflow undefined in release mode",
     severity: "high",
     languages: ["zig"],
-    regex: /(?:@as\s*\(\s*u\d+|:\s*u\d+\s*=)[\s\S]{0,100}?(?:\+\s*(?!%)|(?<!\+)%\s*(?!\+)|-\s*(?!%)|\*\s*(?!%))/g,
+    regex:
+      /(?:@as\s*\(\s*u\d+|:\s*u\d+\s*=)[\s\S]{0,100}?(?:\+\s*(?!%)|(?<!\+)%\s*(?!\+)|-\s*(?!%)|\*\s*(?!%))/g,
     explanation:
       "Integer arithmetic in Zig is checked in Debug (panic on overflow) but wraps silently in ReleaseFast/ReleaseSmall. Use +% (wrapping add), -% (wrapping sub), or std.math.add for explicit overflow handling.",
     verify_prompt:
@@ -135,7 +143,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is this using std.math.add/sub/mul which return errors on overflow? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if unchecked arithmetic on unsigned types could overflow with runtime values.",
     cwe: "CWE-190",
-    fix_template: "Use std.math.add(a, b) catch return error.Overflow, or +% for intentional wrapping.",
+    fix_template:
+      "Use std.math.add(a, b) catch return error.Overflow, or +% for intentional wrapping.",
   },
 
   // ── @ptrCast without alignment ────────────────────────────────
@@ -144,7 +153,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
     title: "@ptrCast without verifying alignment requirements",
     severity: "high",
     languages: ["zig"],
-    regex: /@ptrCast\s*\(\s*(?:\[\*\]|[*])\s*(?:align\s*\(\s*\d+\s*\)\s*)?(?:const\s+)?(?:u8|i8|c_char|anyopaque)/g,
+    regex:
+      /@ptrCast\s*\(\s*(?:\[\*\]|[*])\s*(?:align\s*\(\s*\d+\s*\)\s*)?(?:const\s+)?(?:u8|i8|c_char|anyopaque)/g,
     explanation:
       "@ptrCast can change alignment requirements. Casting a [*]u8 (align 1) to [*]u32 (align 4) on a non-aligned address is undefined behavior. This causes SIGBUS on ARM and silent corruption on x86.",
     verify_prompt:
@@ -154,7 +164,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is the target type the same or smaller alignment than the source? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the cast increases alignment requirements without verification.",
     cwe: "CWE-188",
-    fix_template: "Use @alignCast before @ptrCast: @ptrCast(@alignCast(ptr)), or use std.mem.bytesAsSlice.",
+    fix_template:
+      "Use @alignCast before @ptrCast: @ptrCast(@alignCast(ptr)), or use std.mem.bytesAsSlice.",
   },
 
   // ── Unreachable code ──────────────────────────────────────────
@@ -165,7 +176,7 @@ export const ZIG_PATTERNS: BugPattern[] = [
     languages: ["zig"],
     regex: /\bunreachable\s*[;,)]/g,
     explanation:
-      "In Zig, `unreachable` is a promise to the compiler that code is never reached. In Debug mode it panics, but in release mode it's undefined behavior. If the code CAN be reached (e.g., in an else branch for \"impossible\" cases), this causes silent corruption.",
+      'In Zig, `unreachable` is a promise to the compiler that code is never reached. In Debug mode it panics, but in release mode it\'s undefined behavior. If the code CAN be reached (e.g., in an else branch for "impossible" cases), this causes silent corruption.',
     verify_prompt:
       "Check ALL of these before confirming. Respond FALSE_POSITIVE if ANY is true:\n" +
       "1. Is this truly unreachable (e.g., after exhaustive switch, after noreturn)? → FALSE_POSITIVE\n" +
@@ -173,7 +184,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is there a comment explaining why this is genuinely unreachable? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the unreachable could be reached at runtime (e.g., catch-all else branch).",
     cwe: "CWE-561",
-    fix_template: "Replace unreachable with an explicit error: return error.UnexpectedState, or use @panic() for debugging.",
+    fix_template:
+      "Replace unreachable with an explicit error: return error.UnexpectedState, or use @panic() for debugging.",
   },
 
   // ── Comptime vs runtime confusion ─────────────────────────────
@@ -182,7 +194,8 @@ export const ZIG_PATTERNS: BugPattern[] = [
     title: "Comptime value used in runtime context (or vice versa)",
     severity: "medium",
     languages: ["zig"],
-    regex: /comptime\s+(?:var|const)\s+\w+[\s\S]{0,200}?(?:if\s*\(|while\s*\(|for\s*\()(?!comptime)/g,
+    regex:
+      /comptime\s+(?:var|const)\s+\w+[\s\S]{0,200}?(?:if\s*\(|while\s*\(|for\s*\()(?!comptime)/g,
     explanation:
       "Mixing comptime and runtime values can cause subtle bugs. A comptime variable used in a runtime branch always takes the compile-time value, ignoring runtime state. Conversely, trying to use runtime values in comptime context causes compile errors that are confusing.",
     verify_prompt:
@@ -192,6 +205,7 @@ export const ZIG_PATTERNS: BugPattern[] = [
       "3. Is the developer clearly aware of the comptime/runtime boundary? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if a comptime value is mistakenly expected to change at runtime.",
     cwe: "CWE-758",
-    fix_template: "Use var instead of comptime var for runtime-changing values, or use comptime blocks explicitly.",
+    fix_template:
+      "Use var instead of comptime var for runtime-changing values, or use comptime blocks explicitly.",
   },
 ];

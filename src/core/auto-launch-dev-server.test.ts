@@ -293,11 +293,7 @@ describe("extractRequestedPort", () => {
   });
 
   test("scans across all user texts, returns first match", () => {
-    const texts = [
-      "crea una aplicacion",
-      "en el puerto 24564",
-      "ponle un header",
-    ];
+    const texts = ["crea una aplicacion", "en el puerto 24564", "ponle un header"];
     expect(extractRequestedPort(texts)).toBe(24564);
   });
 });
