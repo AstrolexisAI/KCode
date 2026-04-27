@@ -395,6 +395,93 @@ Future<void> fetch() async {
     expect(thirdCount).toBe(1);
   });
 
+  // FIX.B (v2.10.381) — applyRecipe's idempotency check now matches
+  // ALL tag-prefix variants any prior /fix run could have inserted.
+  // Without this, a file with `audit-fix:` (bespoke form) or
+  // `KCODE-FIX:` (legacy bespoke) tags would NOT be detected by the
+  // recipe path's `audit-note:` regex, and a re-run in --annotate
+  // mode would duplicate annotations.
+  test("applyRecipe idempotency recognizes audit-fix: tags from prior bespoke /fix runs", async () => {
+    // Seed a file that already has a bespoke-form `audit-fix:dart-001-insecure-http`
+    // marker. Even though the marker is the BESPOKE form (not the
+    // recipe form), a re-run via applyRecipe must skip insertion.
+    writeFileSync(
+      join(tmp, "api.dart"),
+      `import 'package:http/http.dart' as http;
+
+Future<void> fetch() async {
+  // audit-fix:dart-001-insecure-http — prior /fix bespoke run
+  final r = await http.get(Uri.parse('http://api.example.com/data'));
+  print(r.body);
+}
+`,
+    );
+    const r = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      skipVerification: true,
+    });
+    applyFixes(r, { annotateOnly: true });
+    const after = readFileSync(join(tmp, "api.dart"), "utf-8");
+    // Pre-existing audit-fix marker stays; no NEW audit-note marker is inserted.
+    const fixCount = (after.match(/audit-fix:dart-001-insecure-http/g) ?? []).length;
+    const noteCount = (after.match(/audit-note:dart-001-insecure-http/g) ?? []).length;
+    expect(fixCount).toBe(1);
+    expect(noteCount).toBe(0);
+  });
+
+  test("applyRecipe idempotency recognizes legacy KCODE-FIX: tags", async () => {
+    writeFileSync(
+      join(tmp, "api.dart"),
+      `import 'package:http/http.dart' as http;
+
+Future<void> fetch() async {
+  // KCODE-FIX:dart-001-insecure-http — legacy /fix run pre-v2.10.300
+  final r = await http.get(Uri.parse('http://api.example.com/data'));
+  print(r.body);
+}
+`,
+    );
+    const r = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      skipVerification: true,
+    });
+    applyFixes(r, { annotateOnly: true });
+    const after = readFileSync(join(tmp, "api.dart"), "utf-8");
+    expect((after.match(/audit-note:dart-001-insecure-http/g) ?? []).length).toBe(0);
+    expect((after.match(/KCODE-FIX:dart-001-insecure-http/g) ?? []).length).toBe(1);
+  });
+
+  test("applyRecipe idempotency recognizes short-form ids (audit-fix:fsw-005)", async () => {
+    // Bespoke fixers use the short-form pattern id (e.g. `fsw-005`
+    // from the full `fsw-005-buffer-getdata-unchecked`). The recipe
+    // path's idempotency check must recognize the short form too.
+    // Seed a file where a bespoke run left `audit-fix:fsw-005` and
+    // verify a follow-up recipe run doesn't insert
+    // `audit-note:fsw-005-buffer-getdata-unchecked` on top of it.
+    writeFileSync(
+      join(tmp, "Test.cpp"),
+      `void f(Fw::Buffer& fwBuffer) {
+  // audit-fix:fsw-005 — prior bespoke /fix run
+  U8* p = fwBuffer.getData() + 4;
+  (void)p;
+}
+`,
+    );
+    const r = await runAudit({
+      projectRoot: tmp,
+      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      skipVerification: true,
+    });
+    applyFixes(r, { annotateOnly: true });
+    const after = readFileSync(join(tmp, "Test.cpp"), "utf-8");
+    // Short-form `audit-fix:fsw-005` blocks the full-id recipe insertion.
+    expect(
+      (after.match(/audit-note:fsw-005-buffer-getdata-unchecked/g) ?? []).length,
+    ).toBe(0);
+  });
+
   test("generic recipes are reported as 'annotated', not 'transformed'", async () => {
     // Pick a pattern that uses the generic recipe fallback (no bespoke
     // fixer). dart-001-insecure-http is a simple regex pattern with only
