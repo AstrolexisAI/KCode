@@ -71,3 +71,7 @@ backend/data/
 # Baselines (baseline-v*.json) ARE tracked — they're the regression
 # floor. Timestamped runs are ephemeral.
 benchmarks/audit/results/run-*.json
+
+# Local-only working files (kept on disk, never committed).
+kulsh/
+docs/brochure.pdf
