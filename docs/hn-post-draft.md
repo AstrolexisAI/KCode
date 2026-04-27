@@ -3,14 +3,14 @@
 Title (pick one; first is recommended):
 
 1. **Show HN: KCode – a SAST scanner that uses a local LLM to strip false positives**
-2. Show HN: KCode – deterministic security scanner for C/Rust/Go, 256 patterns, local-first
+2. Show HN: KCode – deterministic security scanner for C/Rust/Go, 399 patterns, local-first
 3. Show HN: Found 28 bugs in NASA's IDF in 50s with a local LLM + 10k tokens
 
 ---
 
 ## Body
 
-KCode is a static security scanner that flips the usual LLM-SAST split. Instead of sending your whole codebase to a cloud model and hoping it notices the bug, a deterministic scanner runs 256 hand-written patterns locally and then a small local LLM (runs on a 24GB GPU) verifies each candidate in isolation. The LLM's job is just to strip false positives — not to find bugs.
+KCode is a static security scanner that flips the usual LLM-SAST split. Instead of sending your whole codebase to a cloud model and hoping it notices the bug, a deterministic scanner runs 399 hand-written patterns locally and then a small local LLM (runs on a 24GB GPU) verifies each candidate in isolation. The LLM's job is just to strip false positives — not to find bugs.
 
 Open source, Apache 2.0: https://github.com/AstrolexisAI/KCode
 
@@ -20,7 +20,7 @@ I spent six months watching LLM-first audit tools either hallucinate bugs that w
 
 So we split the problem. Deterministic things should be deterministic:
 
-1. **Scanner** — 256 curated patterns across 20+ languages (C, C++, Rust, Go, Python, Java, JS/TS, Ruby, PHP, Swift, Kotlin, Scala, Haskell, Zig, Dart, Lua, SQL + framework packs for Flask, Rails, React). Hand-written, not LLM-generated. Each pattern ships with positive + negative fixtures and survives a CI regression harness (158 fixture tests + 29 scanner-utility tests).
+1. **Scanner** — 399 curated patterns across 20+ languages (C, C++, Rust, Go, Python, Java, JS/TS, Ruby, PHP, Swift, Kotlin, Scala, Haskell, Zig, Dart, Lua, SQL + framework packs for Flask, Rails, React). Hand-written, not LLM-generated. Each pattern ships with positive + negative fixtures and survives a CI regression harness (863 audit-engine tests + 29 scanner-utility tests).
 
 2. **Verifier** — the LLM receives one candidate at a time with a focused prompt: "Is this actually triggered? Prove it with an execution path or respond FALSE_POSITIVE." ~10k tokens per full audit instead of ~300k for an LLM-first tool. Uses a local 14B-31B model by default; optional cloud verifier for higher accuracy on complex bugs.
 

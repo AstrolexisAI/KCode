@@ -46,6 +46,7 @@ export interface AdvisoryRecord {
 
 export interface SbomFinding {
   pattern_id: string;
+  ecosystem: DepEcosystem;
   package: string;
   installed_spec: string;
   affected: string;
@@ -335,6 +336,7 @@ export function scanDependencies(
         if (!matchesRange(d.versionSpec, adv.affected)) continue;
         findings.push({
           pattern_id: `sbom-${adv.id}`,
+          ecosystem: d.ecosystem,
           package: d.name,
           installed_spec: d.versionSpec,
           affected: adv.affected,

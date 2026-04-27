@@ -189,11 +189,12 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
 
   // Phase 1: Discovery + scanning.
   //
-  // When `opts.since` is set we run scanProject as usual to get the
-  // full file universe, then narrow to the intersection with the git
-  // diff. The narrowing happens AFTER scanProject so the report's
-  // coverage shape stays internally consistent (totalCandidateFiles
-  // = full project, scannedFiles = the diff-filtered subset).
+  // v2.10.394 (external audit P1) — diff pre-filter. Resolve the
+  // changed-file set from git BEFORE scanProject runs, then pass it
+  // as `restrictToFiles` so the scanner skips out-of-diff files
+  // entirely (no read, no regex, no AST). On a 10k-file repo with
+  // a small PR, this turns a 10s scan into a 0.5s scan — the speedup
+  // that makes /scan --since usable as a CI pre-merge gate.
   // F9 (v2.10.370) — when opts.pack is set, narrow the regex pattern
   // set to that pack only. AST patterns get the same filter below.
   let regexPatterns: BugPattern[] | undefined;
@@ -201,43 +202,14 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const { ALL_PATTERNS } = await import("./patterns");
     regexPatterns = ALL_PATTERNS.filter((p) => p.pack === opts.pack);
   }
-  opts.onPhase?.("scanning", "regex patterns over file tree");
-  // v2.10.388: scanProject is now async with periodic yields. The
-  // event loop stays responsive throughout (TUI poll keeps ticking,
-  // Esc cancellation works) instead of blocking for tens of seconds
-  // on large repos.
-  let scanResult = await scanProject(opts.projectRoot, {
-    maxFiles: opts.maxFiles,
-    ...(regexPatterns ? { patterns: regexPatterns } : {}),
-    ...(opts.signal ? { signal: opts.signal } : {}),
-    onProgress: (scanned, total) => {
-      opts.onPhase?.("scanning", `regex: ${scanned}/${total} files`);
-    },
-  });
   let changedFilesInDiff: number | undefined;
+  let restrictToFiles: Set<string> | undefined;
   if (opts.since) {
     opts.onPhase?.("discovery", `diff filter: ${opts.since}...HEAD`);
     try {
       const changed = await listChangedFilesSinceRef(opts.projectRoot, opts.since);
       changedFilesInDiff = changed.length;
-      const changedSet = new Set(changed);
-      const filteredFiles = scanResult.files.filter((f) => changedSet.has(f));
-      const filteredCandidates = scanResult.candidates.filter((c) =>
-        changedSet.has(c.file),
-      );
-      scanResult = {
-        files: filteredFiles,
-        candidates: filteredCandidates,
-        coverage: {
-          ...scanResult.coverage,
-          scannedFiles: filteredFiles.length,
-          skippedByLimit: scanResult.coverage.totalCandidateFiles - filteredFiles.length,
-          // Truncated stays driven by the cap; the diff filter is
-          // expressed via `since` / `changedFilesInDiff` instead so
-          // callers don't conflate "ran out of budget" with "deliberately
-          // narrow".
-        },
-      };
+      restrictToFiles = new Set(changed);
     } catch (err) {
       throw new Error(
         `--since ${opts.since} failed: ${err instanceof Error ? err.message : String(err)}. ` +
@@ -245,6 +217,20 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       );
     }
   }
+  opts.onPhase?.("scanning", "regex patterns over file tree");
+  // v2.10.388: scanProject is now async with periodic yields. The
+  // event loop stays responsive throughout (TUI poll keeps ticking,
+  // Esc cancellation works) instead of blocking for tens of seconds
+  // on large repos.
+  const scanResult = await scanProject(opts.projectRoot, {
+    maxFiles: opts.maxFiles,
+    ...(regexPatterns ? { patterns: regexPatterns } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+    ...(restrictToFiles ? { restrictToFiles } : {}),
+    onProgress: (scanned, total) => {
+      opts.onPhase?.("scanning", `regex: ${scanned}/${total} files`);
+    },
+  });
   const { files, coverage: scanCoverage } = scanResult;
   let { candidates: rawCandidates } = scanResult;
   const languages = detectLanguages(files);
@@ -573,22 +559,57 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     opts.onPhase?.("verifying", "scanning dependency manifests");
     try {
       const { scanDependencies } = await import("./sbom");
+      const { computeFindingId } = await import("./finding-id");
       const sbomFindings = scanDependencies(opts.projectRoot);
       for (const sf of sbomFindings) {
+        const matched_text = `"${sf.package}": "${sf.installed_spec}"`;
+        // v2.10.394 (external audit P1) — SBOM findings need the
+        // same finding_id treatment as source-code findings so they
+        // round-trip through SARIF, /review (kc-* lookup), and the
+        // learning loop. CL.2's stable id (sha256 of pattern + path
+        // + matched_text) gives us cross-run identity.
+        const finding_id = computeFindingId({
+          pattern_id: sf.pattern_id,
+          file: sf.manifest,
+          matched_text,
+          projectRoot: opts.projectRoot,
+        });
+        // Build the structured Evidence Pack so the SBOM finding
+        // renders with the same shape as source-code findings (sink
+        // = the dependency manifest entry, input_boundary = the
+        // package registry, mitigations_found = the advisory's
+        // patched-from constraint).
+        const evidence: import("./types").VerifierEvidence = {
+          input_boundary: `package registry (${sf.ecosystem})`,
+          execution_path_steps: [
+            `manifest declares ${sf.package}@${sf.installed_spec} (${sf.source})`,
+            `advisory ${sf.pattern_id.replace(/^sbom-/, "")} flags ${sf.affected}`,
+            `installed spec satisfies the affected range`,
+          ],
+          sink: `${sf.package}@${sf.installed_spec}`,
+          sanitizers_checked: [],
+          mitigations_found: [],
+          suggested_fix: sf.url
+            ? `Upgrade to a version outside ${sf.affected}. Advisory: ${sf.url}`
+            : `Upgrade to a version outside ${sf.affected}.`,
+          suggested_fix_strategy: "manual",
+        };
         findings.push({
           pattern_id: sf.pattern_id,
           pattern_title: `${sf.package}@${sf.installed_spec} — ${sf.summary.slice(0, 80)}`,
           severity: sf.severity,
           file: sf.manifest,
           line: 1,
-          matched_text: `"${sf.package}": "${sf.installed_spec}"`,
+          matched_text,
           context: `Dependency ${sf.package} (${sf.source}) — affected range ${sf.affected}`,
           verification: {
             verdict: "confirmed",
             reasoning: sf.summary,
+            evidence,
           },
           ...(sf.cwe ? { cwe: sf.cwe } : {}),
           fix_support: "manual" as const,
+          finding_id,
         });
       }
       // Keep these out of patternMetrics — they're not regex-pattern

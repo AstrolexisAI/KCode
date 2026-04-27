@@ -489,6 +489,12 @@ export async function handleAuditAction(
         );
       }
 
+      // v2.10.394 (external audit P1) — fields the code below uses
+      // were missing from the type declaration. finding_id is the
+      // CL.2 stable id (kc-<12hex>); review_note is the free-form
+      // reviewer annotation. Without these, every code site that
+      // reads either field tripped TS2339 and the typecheck couldn't
+      // catch unrelated bugs in this file.
       type Reviewable = {
         pattern_id: string;
         pattern_title?: string;
@@ -499,6 +505,8 @@ export async function handleAuditAction(
         review_state?: string;
         review_reason?: string;
         review_tags?: string[];
+        finding_id?: string;
+        review_note?: string;
       };
       // v2.10.367 — guard against a corrupt AUDIT_REPORT.json (partial
       // write, manual edit, or version skew). Without try/catch a
@@ -1279,6 +1287,41 @@ export async function handleAuditAction(
       const annotated = fixes.filter((f) => f.kind === "annotated");
       const manual = fixes.filter((f) => f.kind === "manual");
       const skipped = fixes.filter((f) => f.kind === "skipped");
+
+      // v2.10.394 (external audit P1) — emit FIX_RESULT.json so /pr
+      // (and CI) can read the structured outcome instead of inferring
+      // from git diff. One artifact per /fix invocation, beside
+      // AUDIT_REPORT.json. Future slice: /pr reads this to attribute
+      // each finding to its bucket without re-running the fixer.
+      const { writeFileSync: writeFs2 } = await import("node:fs");
+      const { resolve: resolvePath2 } = await import("node:path");
+      const fixResultPath = resolvePath2(projectRoot, "FIX_RESULT.json");
+      const fixResultPayload = {
+        schema_version: 1,
+        project: projectRoot,
+        timestamp: new Date().toISOString(),
+        mode: safeOnly ? "safe-only" : annotateMode ? "annotate" : "all",
+        held_back_for_safe_only: heldBackForSafeOnly,
+        counts: {
+          transformed: transformed.length,
+          annotated: annotated.length,
+          manual: manual.length,
+          skipped: skipped.length,
+        },
+        fixes: fixes.map((f) => ({
+          file: f.file,
+          line: f.line,
+          pattern_id: f.pattern_id,
+          kind: f.kind,
+          applied: f.applied,
+          description: f.description,
+        })),
+      };
+      try {
+        writeFs2(fixResultPath, JSON.stringify(fixResultPayload, null, 2));
+      } catch (err) {
+        log.warn("audit", `failed to write FIX_RESULT.json: ${err instanceof Error ? err.message : String(err)}`);
+      }
 
       const modeLabel = safeOnly
         ? ciMode

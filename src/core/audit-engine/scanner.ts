@@ -802,6 +802,15 @@ export async function scanProject(
     onProgress?: (scanned: number, total: number) => void;
     /** Cancellation signal — checked on each yield boundary. Throws on abort. */
     signal?: AbortSignal;
+    /**
+     * v2.10.394 (external audit P1) — restrict scanning to a specific
+     * set of files. Provided by the diff-mode pre-filter so the scanner
+     * doesn't burn cycles on files outside the diff. Paths must be
+     * absolute (matching enumerateSourceFiles output). When set,
+     * `coverage.totalCandidateFiles` still counts the full enumeration
+     * so the report can show "scanned X of Y" deliberately.
+     */
+    restrictToFiles?: Set<string>;
   },
 ): Promise<{
   files: string[];
@@ -813,16 +822,34 @@ export async function scanProject(
     truncated: boolean;
     maxFiles: number;
     capSource: "user" | "adaptive";
+    /**
+     * v2.10.394 — paths that carried a `kcode-disable: audit`
+     * directive and were therefore skipped from pattern matching.
+     * Reported back so the audit summary can surface "audit-disabled:
+     * 6 files" — without this counter the marker mechanism could
+     * silently hide findings (external audit P1).
+     */
+    auditDisabledFiles?: string[];
   };
 }> {
   // Enumerate first so we know the full universe and can report coverage.
   const all = enumerateSourceFiles(projectRoot);
 
+  // v2.10.394 — apply the diff pre-filter BEFORE the maxFiles cap +
+  // ranking so big repos in CI don't waste a cap budget on out-of-diff
+  // files. totalCandidateFiles still reports the FULL count so the
+  // user sees "scanned X of Y deliberately" (the FullCandidateCount
+  // var captures the pre-restriction count). External audit P1.
+  const FullCandidateCount = all.length;
+  const restricted = opts?.restrictToFiles
+    ? all.filter((f) => opts.restrictToFiles!.has(f))
+    : all;
+
   const userSetMax = opts?.maxFiles !== undefined;
-  const maxFiles = userSetMax ? opts!.maxFiles! : defaultMaxFiles(all.length);
+  const maxFiles = userSetMax ? opts!.maxFiles! : defaultMaxFiles(restricted.length);
   const capSource: "user" | "adaptive" = userSetMax ? "user" : "adaptive";
 
-  const { selected, total, truncated } = selectFilesForAudit(all, maxFiles);
+  const { selected, total, truncated } = selectFilesForAudit(restricted, maxFiles);
   const patterns = opts?.patterns ?? getAllPatterns();
   const candidates: Candidate[] = [];
 
@@ -832,6 +859,7 @@ export async function scanProject(
   // in one chunk with no yield — cheaper than the baseline.
   const YIELD_EVERY = 64;
   let scanned = 0;
+  const auditDisabledFiles: string[] = [];
   for (const file of selected) {
     if (opts?.signal?.aborted) {
       const { ScanCancelledError } = await import("./scan-state");
@@ -866,6 +894,7 @@ export async function scanProject(
     // `audit` covers the common case of "this file is fixtures, don't
     // grep me for bug shapes".
     if (hasAuditDisableMarker(content)) {
+      auditDisabledFiles.push(file);
       scanned++;
       continue;
     }
@@ -895,12 +924,17 @@ export async function scanProject(
     files: selected,
     candidates,
     coverage: {
-      totalCandidateFiles: total,
+      // v2.10.394 — totalCandidateFiles reports the FULL enumeration,
+      // not the diff-restricted subset. Lets the report say "scanned
+      // X of Y" so a CI run with --since main is honest about what
+      // it skipped on purpose vs by truncation.
+      totalCandidateFiles: FullCandidateCount,
       scannedFiles: selected.length,
       skippedByLimit: total - selected.length,
       truncated,
       maxFiles,
       capSource,
+      ...(auditDisabledFiles.length > 0 ? { auditDisabledFiles } : {}),
     },
   };
 }
