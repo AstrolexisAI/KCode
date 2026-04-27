@@ -1532,6 +1532,16 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "supply-003-pip-extra-index-url": r("pip --extra-index-url — dependency confusion shape", "Use --index-url (single source). Mirror packages internally; pip install --require-hashes for production."),
   "supply-004-npm-token-hardcoded": r("npm publish token hardcoded", W.SECRET),
   "supply-005-eval-of-fetch": r("eval/Function over network-fetched payload", W.EVAL),
+
+  // ── P2.3 (v2.10.391) — Next.js framework starter ───────────
+  // Next-specific bug shapes that can't be fixed mechanically (auth
+  // pattern depends on the project's auth lib + middleware setup).
+  // Annotation-tier with concrete guidance for each.
+  "next-001-getserversideprops-no-auth": r("getServerSideProps without an auth check", "Add an early `getServerSession`/`auth()` gate that returns a redirect when unauthenticated."),
+  "next-002-server-action-no-auth": r("Server Action exposes a public mutation endpoint", "Wrap with a `withAuth` helper or call `await auth()` on the first line and throw on missing session."),
+  "next-003-next-public-secret": r("NEXT_PUBLIC_<NAME> with secret-shaped name (bundled to client)", "Drop the NEXT_PUBLIC_ prefix; secrets must stay server-side. If the browser needs the API, proxy through a Route Handler."),
+  "next-004-route-handler-no-auth": r("App Router route handler reads request data without auth", "Add `const session = await auth(); if (!session?.user) return new Response('unauthorized', { status: 401 });` at the top."),
+  "next-005-redirect-from-query": r("redirect/router.push with a raw query value", "Validate against an allowlist or restrict to relative paths (`!url.startsWith('/') || url.startsWith('//')` → reject)."),
 };
 
 function commentPrefix(path: string): string {

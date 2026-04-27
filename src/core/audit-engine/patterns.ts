@@ -65,6 +65,8 @@ import { AI_ML_PATTERNS } from "./patterns/ai-ml";
 import { CLOUD_PATTERNS } from "./patterns/cloud";
 // P2.2 (v2.10.389) — Supply-chain pack.
 import { SUPPLY_CHAIN_PATTERNS } from "./patterns/supply-chain";
+// P2.3 (v2.10.391) — Next.js framework starter (web pack).
+import { NEXTJS_PATTERNS } from "./patterns/nextjs";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -95,6 +97,7 @@ export {
   AI_ML_PATTERNS,
   CLOUD_PATTERNS,
   SUPPLY_CHAIN_PATTERNS,
+  NEXTJS_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -125,6 +128,7 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...AI_ML_PATTERNS,
   ...CLOUD_PATTERNS,
   ...SUPPLY_CHAIN_PATTERNS,
+  ...NEXTJS_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */
