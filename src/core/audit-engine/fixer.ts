@@ -1548,6 +1548,18 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "fastapi-003-jwt-no-verify": r("jwt.decode without signature verification", "Pass the verification key + algorithms=['RS256'] (or your signer's algorithm). Never decode without verification."),
   "fastapi-004-pickle-from-request": r("pickle.loads on attacker-reachable input — RCE", W.DESER),
   "fastapi-005-route-no-auth-on-mutation": r("Mutation endpoint without an auth Depends", "Add `user: User = Depends(get_current_user)` to the signature, or attach dependencies=[Depends(verify_user)] to the router."),
+
+  // ── P2.3 (v2.10.391) — Express framework pack ─────────────
+  "express-004-eval-of-req": r("eval/Function over req.body|query|params — RCE", W.EVAL),
+  "express-005-default-session-secret": r("express-session with weak/placeholder secret", "Generate 32 bytes of entropy (`openssl rand -hex 32`); load via process.env.SESSION_SECRET; crash on missing."),
+  "express-006-trust-proxy-true": r("trust proxy = true allows IP spoofing via X-Forwarded-For", "Set to the exact number of proxy hops, or an explicit IP/CIDR allowlist."),
+  "express-007-cookie-no-secure-httponly": r("Auth-shape cookie without httpOnly+secure", "Add `{ httpOnly: true, secure: true, sameSite: 'strict' }` to the options object."),
+
+  // ── P2.3 (v2.10.391) — Django framework pack ──────────────
+  "django-004-csrf-exempt": r("@csrf_exempt disables CSRF on the view", "If the view is a webhook, verify the upstream signature instead. If it's a public unauthenticated endpoint, document why."),
+  "django-005-debug-true-in-settings": r("DEBUG = True in production settings", "Switch to `DEBUG = os.environ.get('DJANGO_DEBUG', '').lower() == 'true'` — env-controlled, defaults to False."),
+  "django-006-allowed-hosts-wildcard": r("ALLOWED_HOSTS contains '*'", "List the exact hostnames the app serves; for multi-tenant generate from a config table at startup."),
+  "django-007-eval-of-request": r("eval/exec on request.GET|POST data — RCE", W.EVAL),
 };
 
 function commentPrefix(path: string): string {
