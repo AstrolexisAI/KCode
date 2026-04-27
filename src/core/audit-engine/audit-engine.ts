@@ -50,6 +50,18 @@ export interface AuditEngineOptions {
    */
   pack?: import("./types").PatternPack;
   /**
+   * P1.3 (v2.10.389) — generate proof-of-concept exploit data for
+   * each confirmed finding. Off by default to keep /scan output focused
+   * on the audit shape; enable with /scan --exploits or
+   * `kcode audit . --exploits` when you want to demonstrate
+   * exploitability (security review, customer report, etc.). Templates
+   * exist for ~10 patterns and produce deterministic PoCs;
+   * uncovered patterns optionally use the LLM verifier callback for
+   * an LLM-assisted PoC. The module never EXECUTES anything — it
+   * generates structured data the report renders.
+   */
+  generateExploits?: boolean;
+  /**
    * Optional cancellation signal. The pipeline checks it at every
    * phase boundary and propagates it into verification so an in-flight
    * /scan can be interrupted from the TUI (Esc) without killing the
@@ -540,6 +552,27 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     }
   }
 
+  // P1.3 (v2.10.389) — opt-in exploit generation. Off by default
+  // (preserves the existing /scan output shape); enable with
+  // generateExploits=true (CLI flag --exploits / TUI flag --exploits).
+  // generateExploits() never executes anything — it produces structured
+  // PoC data the report renders for the user/reviewer.
+  let exploits: Awaited<ReturnType<typeof import("./exploit-gen").generateExploits>> | undefined;
+  if (opts.generateExploits && findings.length > 0) {
+    opts.onPhase?.("verifying", `generating exploit proofs for ${findings.length} confirmed findings`);
+    try {
+      const { generateExploits: genExploits } = await import("./exploit-gen");
+      // Pass the verifier callback so patterns without a deterministic
+      // template can ask the model for an LLM-assisted PoC.
+      exploits = await genExploits(findings, opts.skipVerification ? undefined : opts.llmCallback);
+    } catch (err) {
+      // Exploit generation is opt-in and additive — failure here must
+      // not break the audit. Log and continue with no exploits attached.
+      // eslint-disable-next-line no-console
+      console.warn(`[audit-engine] exploit generation failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   opts.onPhase?.("reporting");
 
   const result: AuditResult = {
@@ -559,6 +592,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       ...(opts.since ? { since: opts.since } : {}),
       ...(changedFilesInDiff !== undefined ? { changedFilesInDiff } : {}),
     },
+    ...(exploits && exploits.length > 0 ? { exploits } : {}),
     fix_support_summary: fixSupportSummary,
     pattern_metrics: patternMetrics,
     // v2.10.351 P1 — surface whether the LLM verifier ran. Used by
