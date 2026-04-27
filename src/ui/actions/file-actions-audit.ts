@@ -92,24 +92,29 @@ export async function handleAuditAction(
         return `  Path not found or not a directory: ${pathToken}`;
       }
 
+      // v2.10.387 — activate the progress bar BEFORE the heavy imports
+      // below. scan-state itself is tiny (~80 LOC, no deps), so loading
+      // it first costs ~0. With an early `scanState.active = true`,
+      // App.tsx's 200ms poll picks up the active state and the
+      // indeterminate bar (introduced same release) renders within
+      // ~200ms of the user pressing Enter — no perceived "dead air".
+      const { scanState, resetScanState } = await import(
+        "../../core/audit-engine/scan-state.js"
+      );
+      resetScanState();
+      scanState.active = true;
+      scanState.startTime = Date.now();
+      scanState.phase = "loading audit engine...";
+
       const { runAudit } = await import("../../core/audit-engine/audit-engine.js");
       const { generateMarkdownReport } = await import(
         "../../core/audit-engine/report-generator.js"
-      );
-
-      // Fire-and-forget: start the audit in the background, update global
-      // scanState, and return immediately so Ink regains control of the
-      // render loop. App.tsx polls scanState via setInterval to show progress.
-      const { scanState, resetScanState } = await import(
-        "../../core/audit-engine/scan-state.js"
       );
       const { buildAuditLlmCallbackFromConfigAsync } = await import(
         "../../core/audit-engine/llm-callback.js"
       );
 
-      resetScanState();
-      scanState.active = true;
-      scanState.startTime = Date.now();
+      // Heavy modules loaded — switch phase before the audit pipeline starts.
       scanState.phase = "discovery";
 
       // v2.10.385 — cancellation: TUI sets scanState.cancelled = true on
@@ -428,7 +433,7 @@ export async function handleAuditAction(
       })();
 
       // Return immediately — progress renders via polling in App.tsx
-      return `  ◆ Scanning ${projectRoot.split("/").pop()}/ in background...`;
+      return `  ◆ Starting scanning ${projectRoot.split("/").pop()}/ in background...`;
     }
 
     case "review": {

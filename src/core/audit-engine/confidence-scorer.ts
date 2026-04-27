@@ -218,25 +218,28 @@ export function computeAuditConfidence(result: AuditResult): AuditConfidence {
     if (w) warnings.push(w);
   }
 
-  // Weighted average over the non-null subscores. We keep the *original*
-  // weight when a subscore is null (re-normalizing would let a single
-  // surviving score dominate); instead we explicitly drop the null
-  // subscore's contribution and divide by the surviving weights' sum.
-  // Net effect: if verifier_score is null, the headline is computed
-  // from coverage+ast at 0.40 weight rather than ramping up to 100%.
-  const contributions: Array<{ score: number; weight: number }> = [];
-  if (coverage.score !== null) contributions.push({ score: coverage.score, weight: WEIGHTS.coverage });
-  if (verifier.score !== null) contributions.push({ score: verifier.score, weight: WEIGHTS.verifier });
-  if (ast.score !== null) contributions.push({ score: ast.score, weight: WEIGHTS.ast });
-  if (noise.score !== null) contributions.push({ score: noise.score, weight: WEIGHTS.noise });
-  if (fixability.score !== null) contributions.push({ score: fixability.score, weight: WEIGHTS.fixability });
-
-  let score = 0;
-  if (contributions.length > 0) {
-    const totalWeight = contributions.reduce((acc, c) => acc + c.weight, 0);
-    const weightedSum = contributions.reduce((acc, c) => acc + c.score * c.weight, 0);
-    score = Math.round(weightedSum / totalWeight);
-  }
+  // v2.10.388 P0 fix — divide by the FULL original-weight sum (1.0),
+  // not the surviving weights. Previously the script renormalized over
+  // surviving weights, so a `--skip-verify` run with coverage+ast+
+  // fixability at 100 produced a 100/100 headline that hid the missing
+  // semantic verification. The intended behavior (already stated in
+  // the prior comment, just contradicted by the implementation) is:
+  //   - keep the original 1.0 weight budget
+  //   - missing subscores contribute 0
+  //   - headline naturally caps at sum-of-surviving-weights * 100
+  //
+  // Concrete: --skip-verify drops verifier (0.2) and noise (0.2);
+  // headline can't exceed 60 even if everything else is perfect.
+  // The numeric cap reinforces the explicit `warnings[]` text without
+  // letting users glance at a headline and miss the gap.
+  const TOTAL_WEIGHT = WEIGHTS.coverage + WEIGHTS.verifier + WEIGHTS.ast + WEIGHTS.noise + WEIGHTS.fixability;
+  let weightedSum = 0;
+  if (coverage.score !== null) weightedSum += coverage.score * WEIGHTS.coverage;
+  if (verifier.score !== null) weightedSum += verifier.score * WEIGHTS.verifier;
+  if (ast.score !== null) weightedSum += ast.score * WEIGHTS.ast;
+  if (noise.score !== null) weightedSum += noise.score * WEIGHTS.noise;
+  if (fixability.score !== null) weightedSum += fixability.score * WEIGHTS.fixability;
+  const score = Math.round(weightedSum / TOTAL_WEIGHT);
 
   return {
     score,

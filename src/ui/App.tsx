@@ -1054,8 +1054,9 @@ export default function App({ config, conversationManager, tools, initialSession
             <Text color="cyan">
               {"  ◆ "}
               {scanProgress.phase}
+              {` — ${scanProgress.elapsed.toFixed(1)}s`}
             </Text>
-            {scanProgress.total > 0 && (() => {
+            {scanProgress.total > 0 ? (() => {
               const pct = Math.round((scanProgress.verified / scanProgress.total) * 100);
               const filled = Math.round((scanProgress.verified / scanProgress.total) * 20);
               return (
@@ -1070,7 +1071,27 @@ export default function App({ config, conversationManager, tools, initialSession
                   {(scanProgress as any).escalated > 0 && (
                     <Text color="yellow">{` — ${(scanProgress as any).escalated} ☁ escalated`}</Text>
                   )}
-                  {` — ${scanProgress.elapsed.toFixed(1)}s`}
+                </Text>
+              );
+            })() : (() => {
+              // v2.10.387 — indeterminate bar for the discovery + scanning
+              // phases (which run before total is known). Without this, the
+              // user saw a static phase line for 5-10s and thought /scan
+              // was hung. The bar now animates a moving "■" inside the
+              // 20-cell width tied to elapsed seconds, so the polling
+              // re-render every 200ms shows visible motion.
+              const width = 20;
+              const pos = Math.floor(scanProgress.elapsed * 4) % (width * 2 - 2);
+              const head = pos < width ? pos : (width * 2 - 2) - pos;
+              const cells: string[] = Array(width).fill("░");
+              cells[head] = "█";
+              if (head > 0) cells[head - 1] = "▓";
+              if (head < width - 1) cells[head + 1] = "▓";
+              return (
+                <Text color="cyan">
+                  {"    ["}
+                  {cells.join("")}
+                  {"]"}
                 </Text>
               );
             })()}

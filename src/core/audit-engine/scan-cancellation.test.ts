@@ -66,11 +66,8 @@ describe("verifier respects AbortSignal", () => {
       file,
       line,
       severity: "high",
-      cwe: "CWE-95",
-      title: "test",
-      description: "test",
       matched_text: "eval(req.body)",
-      context_lines: ["eval(req.body);"],
+      context: "eval(req.body);",
     };
   }
 

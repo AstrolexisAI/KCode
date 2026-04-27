@@ -320,10 +320,14 @@ describe("aggregate score", () => {
     expect(c.score).toBe(100);
   });
 
-  test("dropped subscores are excluded from the weighted average, not zeroed", () => {
-    // skip-verify nulls verifier_score and noise_score directly; in
-    // realistic skip-verify output the synthesized findings have no
-    // evidence, so fixability is also null.
+  test("dropped subscores contribute 0, capping the headline below 100", () => {
+    // v2.10.388 P0 — `--skip-verify` nulls verifier_score and
+    // noise_score; the synthesized findings have no evidence, so
+    // fixability is also null. The headline MUST cap at the sum of
+    // surviving weights (0.25 coverage + 0.15 ast = 0.40), so that
+    // skip-verify runs can't show 100/100 and pretend they were
+    // semantically verified. External audit (2026-04-27) flagged the
+    // prior renormalize-over-surviving-weights as misleading.
     const noStrategy = makeFinding({
       verification: { verdict: "confirmed", reasoning: "Verification skipped — static-only mode" },
     });
@@ -340,8 +344,12 @@ describe("aggregate score", () => {
     expect(c.verifier_score).toBeNull();
     expect(c.noise_score).toBeNull();
     expect(c.fixability_score).toBeNull();
-    // Coverage 100 (weight 0.25) + AST 100 (weight 0.15) = 100
-    expect(c.score).toBe(100);
+    // Coverage 100 * 0.25 + AST 100 * 0.15 = 40 / TOTAL_WEIGHT 1.0 = 40
+    expect(c.score).toBe(40);
+    // The two skip-verify warnings must be present so users know why
+    // the score capped.
+    expect(c.warnings.some((w) => w.includes("Verifier was skipped"))).toBe(true);
+    expect(c.warnings.some((w) => w.includes("Noise score requires the verifier"))).toBe(true);
   });
 
   test("realistic mixed run: 25% coverage + clean verifier + half-fixable", () => {
