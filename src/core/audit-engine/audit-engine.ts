@@ -179,13 +179,17 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     regexPatterns = ALL_PATTERNS.filter((p) => p.pack === opts.pack);
   }
   opts.onPhase?.("scanning", "regex patterns over file tree");
-  // Yield once more right before the heavy scan so the phase update
-  // above lands on screen before the (sync, multi-second) scanProject
-  // call locks the event loop.
-  await new Promise((r) => setImmediate(r));
-  let scanResult = scanProject(opts.projectRoot, {
+  // v2.10.388: scanProject is now async with periodic yields. The
+  // event loop stays responsive throughout (TUI poll keeps ticking,
+  // Esc cancellation works) instead of blocking for tens of seconds
+  // on large repos.
+  let scanResult = await scanProject(opts.projectRoot, {
     maxFiles: opts.maxFiles,
     ...(regexPatterns ? { patterns: regexPatterns } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+    onProgress: (scanned, total) => {
+      opts.onPhase?.("scanning", `regex: ${scanned}/${total} files`);
+    },
   });
   let changedFilesInDiff: number | undefined;
   if (opts.since) {

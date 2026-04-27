@@ -742,11 +742,24 @@ function applyPattern(
 /**
  * Scan a whole project: for each source file, apply every applicable pattern,
  * collecting candidate findings.
+ *
+ * v2.10.388: now async with periodic yields to the event loop. The
+ * regex-pre-pass over thousands of files used to lock the JS thread for
+ * many seconds, freezing the TUI's progress bar polling. With yields
+ * every YIELD_EVERY files (and an `onProgress` callback), the bar's
+ * elapsed counter keeps ticking and Esc can interrupt the scan.
  */
-export function scanProject(
+export async function scanProject(
   projectRoot: string,
-  opts?: { maxFiles?: number; patterns?: BugPattern[] },
-): {
+  opts?: {
+    maxFiles?: number;
+    patterns?: BugPattern[];
+    /** Called every YIELD_EVERY files with the current count. */
+    onProgress?: (scanned: number, total: number) => void;
+    /** Cancellation signal — checked on each yield boundary. Throws on abort. */
+    signal?: AbortSignal;
+  },
+): Promise<{
   files: string[];
   candidates: Candidate[];
   coverage: {
@@ -757,7 +770,7 @@ export function scanProject(
     maxFiles: number;
     capSource: "user" | "adaptive";
   };
-} {
+}> {
   // Enumerate first so we know the full universe and can report coverage.
   const all = enumerateSourceFiles(projectRoot);
 
@@ -769,25 +782,50 @@ export function scanProject(
   const patterns = opts?.patterns ?? getAllPatterns();
   const candidates: Candidate[] = [];
 
+  // Yield to the event loop every YIELD_EVERY files. 64 keeps overhead
+  // negligible (<1%) while ensuring the TUI poll fires roughly every
+  // ~50–200 ms on typical hardware. Smaller projects (<64 files) finish
+  // in one chunk with no yield — cheaper than the baseline.
+  const YIELD_EVERY = 64;
+  let scanned = 0;
   for (const file of selected) {
+    if (opts?.signal?.aborted) {
+      const { ScanCancelledError } = await import("./scan-state");
+      throw new ScanCancelledError(
+        `Scan cancelled during regex pass at file ${scanned}/${selected.length}`,
+      );
+    }
     let content: string;
     try {
       content = readFileSync(file, "utf-8");
     } catch {
+      scanned++;
       continue;
     }
     // Skip excessively large files
-    if (content.length > 500_000) continue;
+    if (content.length > 500_000) {
+      scanned++;
+      continue;
+    }
     // Skip minified / machine-generated files that slipped past filename
     // and path filters. These produce massive false-positive counts because
     // their single long lines match many regexes accidentally.
-    if (looksMinified(content)) continue;
+    if (looksMinified(content)) {
+      scanned++;
+      continue;
+    }
 
     for (const pattern of patterns) {
       const lang = getLanguageForFile(file);
       if (!lang || !pattern.languages.includes(lang)) continue;
       const matches = applyPattern(pattern, file, content);
       candidates.push(...matches);
+    }
+    scanned++;
+
+    if (scanned % YIELD_EVERY === 0) {
+      opts?.onProgress?.(scanned, selected.length);
+      await new Promise((r) => setImmediate(r));
     }
   }
 
