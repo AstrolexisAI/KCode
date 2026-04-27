@@ -24,6 +24,7 @@ export async function handleGitAction(
         return `  ${(err as Error).message}`;
       }
       const dryRun = tokens.includes("--dry-run");
+      const compact = tokens.includes("--compact");
       const repoFlag = tokens.indexOf("--repo");
       const repo = repoFlag >= 0 ? tokens[repoFlag + 1] : undefined;
       // pathToken is the first non-flag, non-flag-value token. Skip
@@ -59,6 +60,7 @@ export async function handleGitAction(
             llmCallback,
             repo,
             dryRun,
+            compact,
             onStep: (step) => { prState.step = step; },
           });
 
