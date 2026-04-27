@@ -1620,24 +1620,67 @@ function applyRecipe(
  * (either a bespoke fixer above or a PATTERN_RECIPES entry). Used by
  * tests to detect when a new pattern is added without a fix recipe.
  */
-const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
+/**
+ * Bespoke fixers whose transformation is mechanical and semantically
+ * preserves intent: same input → same output behavior, modulo the bug
+ * itself. Safe to apply under `--safe-only` (CI gate) without human
+ * review.
+ */
+const SAFE_BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
   "cpp-001-ptr-address-index",
   "cpp-002-unreachable-after-return",
   "cpp-003-unchecked-data-index",
   "cpp-004-fd-leak-throw",
-  "cpp-006-strcpy-family",
   "cpp-012-loop-unvalidated-bound",
-  "py-001-eval-exec",
-  "py-002-shell-injection",
-  "py-004-sql-injection",
   "py-005-yaml-unsafe-load",
-  "py-008-path-traversal",
   "py-013-bare-except",
   "dart-005-setstate-after-dispose",
   "dart-007-json-null-check",
-  // v2.10.315 flight-software bespoke fixers
   "fsw-005-buffer-getdata-unchecked",
   "fsw-010-cmd-arg-before-validate",
+]);
+
+/**
+ * Bespoke fixers whose transformation depends on context that may not
+ * hold in every case. External audit (2026-04-27, P1.2) flagged these
+ * as too heuristic for `--safe-only`. They remain available under
+ * `--all` (the user is explicitly opting into the more aggressive
+ * tier), but the audit summary's `fix_support` reports them as
+ * "annotate" so the headline numbers don't promise a rewrite that
+ * could break the program at runtime.
+ *
+ * Specific failure modes:
+ *   - cpp-006-strcpy-family: strncpy ≠ strcpy. strncpy does NOT
+ *     null-terminate when src ≥ len. Also doesn't apply to non-literal
+ *     sources (most real bugs).
+ *   - py-001-eval-exec: ast.literal_eval only accepts literal
+ *     expressions. If the original eval was for code (the common
+ *     case), this BREAKS the program at runtime.
+ *   - py-002-shell-injection: shell=False requires the cmd to be a
+ *     LIST, not a string. Replacing in-place with the original string
+ *     argument crashes at runtime.
+ *   - py-004-sql-injection: parameterized form depends on the DB
+ *     driver (positional vs named placeholders).
+ *   - py-008-path-traversal: inserts `assert path.startswith(cwd)`,
+ *     which Python silently REMOVES under `python -O` (production
+ *     mode). The guard would disappear in real deployments.
+ */
+const HEURISTIC_BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
+  "cpp-006-strcpy-family",
+  "py-001-eval-exec",
+  "py-002-shell-injection",
+  "py-004-sql-injection",
+  "py-008-path-traversal",
+]);
+
+/**
+ * Backwards-compatible union: any pattern with a bespoke fixer (safe
+ * or heuristic) belongs here. Used by `hasFixRecipe()` to gate the
+ * "every pattern must have a fix" coverage test.
+ */
+const BESPOKE_PATTERN_IDS: ReadonlySet<string> = new Set([
+  ...SAFE_BESPOKE_PATTERN_IDS,
+  ...HEURISTIC_BESPOKE_PATTERN_IDS,
 ]);
 
 export function hasFixRecipe(patternId: string): boolean {
@@ -1661,7 +1704,13 @@ export function hasFixRecipe(patternId: string): boolean {
  * /fix what fraction is actually mechanical. v2.10.328.
  */
 export function fixSupportFor(patternId: string): "rewrite" | "annotate" | "manual" {
-  if (BESPOKE_PATTERN_IDS.has(patternId)) return "rewrite";
+  // v2.10.389 (P1.2) — only the SAFE tier reports "rewrite". The
+  // heuristic tier reports "annotate" so `--safe-only` filters them
+  // out and the audit summary tells the user they need attention.
+  // The bespoke fixer code is still wired for `--all` mode; this
+  // function only controls how the audit headline labels them.
+  if (SAFE_BESPOKE_PATTERN_IDS.has(patternId)) return "rewrite";
+  if (HEURISTIC_BESPOKE_PATTERN_IDS.has(patternId)) return "annotate";
   if (patternId in PATTERN_RECIPES) return "annotate";
   return "manual";
 }
