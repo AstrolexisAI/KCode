@@ -747,28 +747,147 @@ async function publishToGitHub(
     console.log(`  · release ${tag} already exists — uploading assets with --clobber`);
   }
 
-  // ─── Upload assets ───
-  const uploadArgs = [
-    "release",
-    "upload",
-    tag,
-    "-R",
-    "AstrolexisAI/KCode",
+  // ─── Upload assets (per-file with retry) ───
+  //
+  // Per-file instead of batch: v2.10.385 ran a batch `gh release upload
+  // file1 file2 ... --clobber` and one of the 9 files came back HTTP 404
+  // mid-batch. Worse, `gh` exited non-zero overall but most files
+  // actually got uploaded — and a subset of `.sha256` sidecars ended up
+  // with WRONG CONTENT (the right tarball bytes, the wrong hash file
+  // bytes). Per-file isolates the failure: each upload has its own
+  // exit code, its own retry, and a known list of files that didn't
+  // make it on the first pass.
+  const filesToUpload: string[] = [
     ...assets.flatMap((a) => [a.tarballPath, a.shaPath]),
     ...(installShExists ? [installShPath] : []),
-    "--clobber",
   ];
-  const upload = shellCapture("gh", uploadArgs);
-  if (!upload.ok) {
-    console.log(`  ✗ gh release upload failed: ${upload.stderr.slice(0, 300)}`);
+
+  let uploadedOk = 0;
+  const uploadFailures: Array<{ file: string; error: string }> = [];
+  for (const filePath of filesToUpload) {
+    const fileLabel = filePath.split("/").pop() ?? filePath;
+    const result = await uploadOneAsset(tag, filePath);
+    if (result.ok) {
+      uploadedOk++;
+    } else {
+      console.log(`    ✗ ${fileLabel} after ${result.attempts} attempts: ${(result.lastError ?? "").slice(0, 120)}`);
+      uploadFailures.push({ file: fileLabel, error: result.lastError ?? "" });
+    }
+  }
+
+  if (uploadFailures.length > 0) {
+    console.log(`  ✗ ${uploadFailures.length}/${filesToUpload.length} asset(s) failed all retries.`);
     if (createdNew) {
-      console.log("  Release page exists but assets are missing. Re-run release.ts to retry.\n");
+      console.log("  Release page exists; re-run release.ts to retry the missing assets.\n");
     }
     return;
   }
-  const assetCount = assets.length * 2 + (installShExists ? 1 : 0);
-  console.log(`  ✓ uploaded ${assetCount} assets to ${tag}`);
+  console.log(`  ✓ uploaded ${uploadedOk} assets to ${tag}`);
+
+  // ─── Verify .sha256 sidecars actually contain the right hashes ───
+  //
+  // v2.10.385 saw 3/4 .sha256 files arrive on GitHub with hashes that
+  // didn't match the local tarball. Cause was either (a) gh CLI
+  // batch-upload race or (b) GitHub edge-cache lag. Either way a user
+  // running `sha256sum -c kcode-*.sha256` would have seen a corruption
+  // alarm. We now fetch each sidecar back from GitHub via a
+  // cache-busted URL and re-upload + retry if the content disagrees
+  // with the local file.
+  const verify = await verifyAndFixShaSidecars(tag, assets);
+  if (!verify.ok) {
+    console.log(`  ⚠ ${verify.mismatches.length} sha256 sidecar(s) STILL mismatched after retries:`);
+    for (const m of verify.mismatches) console.log(`      ${m}`);
+    console.log("  These point at corrupted tarballs from the user's perspective. Investigate manually.");
+  } else {
+    console.log(`  ✓ verified ${assets.length} sha256 sidecar(s) match local tarballs`);
+  }
+
   console.log(`  https://github.com/AstrolexisAI/KCode/releases/tag/${tag}\n`);
+}
+
+// ─── Upload helpers ─────────────────────────────────────────────
+
+/**
+ * Upload a single asset with --clobber, retrying up to maxAttempts on
+ * non-zero exit. Backoff doubles each attempt (1s, 2s, 4s) — the
+ * intermittent 404 we saw on v2.10.385 cleared on second attempt in
+ * post-mortem testing.
+ */
+async function uploadOneAsset(
+  tag: string,
+  filePath: string,
+  maxAttempts = 3,
+): Promise<{ ok: boolean; attempts: number; lastError?: string }> {
+  let lastError = "";
+  let backoffMs = 1000;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const r = shellCapture("gh", [
+      "release",
+      "upload",
+      tag,
+      "-R",
+      "AstrolexisAI/KCode",
+      filePath,
+      "--clobber",
+    ]);
+    if (r.ok) {
+      const fileLabel = filePath.split("/").pop() ?? filePath;
+      const sizeMB = (statSync(filePath).size / (1024 * 1024)).toFixed(1);
+      console.log(`    ✓ ${fileLabel} (${sizeMB} MB)${attempt > 1 ? ` after ${attempt} attempts` : ""}`);
+      return { ok: true, attempts: attempt };
+    }
+    lastError = r.stderr || r.stdout;
+    if (attempt < maxAttempts) {
+      await sleepMs(backoffMs);
+      backoffMs *= 2;
+    }
+  }
+  return { ok: false, attempts: maxAttempts, lastError };
+}
+
+/**
+ * After upload, fetch each .tar.gz.sha256 from GitHub via a
+ * cache-busted URL. If the remote content disagrees with the local
+ * file, re-upload and try again. Returns the list of files that are
+ * STILL mismatched after exhausting the retry budget.
+ */
+async function verifyAndFixShaSidecars(
+  tag: string,
+  assets: PackedAsset[],
+  maxAttempts = 3,
+): Promise<{ ok: boolean; mismatches: string[] }> {
+  const mismatches: string[] = [];
+  for (const asset of assets) {
+    const localContent = readFileSync(asset.shaPath, "utf-8").trim();
+    const shaName = asset.shaPath.split("/").pop() ?? asset.shaPath;
+    let verified = false;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const url = `https://github.com/AstrolexisAI/KCode/releases/download/${tag}/${shaName}?t=${Date.now()}`;
+      let remoteContent = "";
+      try {
+        const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+        if (res.ok) remoteContent = (await res.text()).trim();
+      } catch (err) {
+        remoteContent = `<<fetch error: ${(err as Error).message}>>`;
+      }
+      if (remoteContent === localContent) {
+        verified = true;
+        break;
+      }
+      if (attempt < maxAttempts) {
+        // Re-upload the sidecar (one shot, no inner retry — outer loop
+        // handles it) and wait for the GitHub edge cache to flip.
+        await uploadOneAsset(tag, asset.shaPath, 1);
+        await sleepMs(5000);
+      }
+    }
+    if (!verified) mismatches.push(shaName);
+  }
+  return { ok: mismatches.length === 0, mismatches };
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 main();
