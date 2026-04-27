@@ -27,7 +27,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("http://localhost:10100", text: $settings.serverURL)
+                    TextField("http://localhost:10101", text: $settings.serverURL)
                         .textContentType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()

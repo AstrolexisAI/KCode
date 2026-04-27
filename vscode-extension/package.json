@@ -172,8 +172,8 @@
       "properties": {
         "kcode.serverUrl": {
           "type": "string",
-          "default": "http://localhost:10091",
-          "description": "URL of the KCode HTTP API server"
+          "default": "http://localhost:10101",
+          "description": "URL of the KCode HTTP API server (kcode serve default port; the LLM model server is on 10091, separate surface)"
         },
         "kcode.model": {
           "type": "string",
