@@ -162,7 +162,11 @@ describe("/pr v2.10.329 — structured-first body", () => {
       llmCallback: async () => "Brief executive summary, two paragraphs.",
       dryRun: true,
     });
-    expect(result.prDescription).toContain("Findings demoted by reviewer");
+    // CL.7 (v2.10.377) — section was renamed to "Ignored / demoted"
+    // and now combines reviewer-ignored findings with verifier-FPs
+    // demoted by the reviewer. The trusted_boundary reason still
+    // appears in the per-row label.
+    expect(result.prDescription).toContain("Ignored / demoted");
     expect(result.prDescription).toContain("trusted_boundary");
   });
 
@@ -209,8 +213,9 @@ describe("/pr v2.10.329 — LLM summary fallback", () => {
       dryRun: true,
     });
     expect(result.prDescription).toContain("See findings below");
-    // The structured sections after the placeholder are still there.
-    expect(result.prDescription).toContain("Findings and fixes");
+    // CL.7 — "Findings and fixes" was split into Fixed/Manual/Ignored
+    // sections. At least one of the bucketed headers must appear.
+    expect(result.prDescription).toMatch(/### Fixed findings|### Manual findings|### Ignored \/ demoted/);
     expect(result.prDescription).toContain("Methodology");
     expect(result.prDescription).toContain("Testing");
   });
@@ -226,6 +231,50 @@ describe("/pr v2.10.329 — LLM summary fallback", () => {
       dryRun: true,
     });
     expect(result.prDescription).toContain("Security and code-quality audit");
-    expect(result.prDescription).toContain("Findings and fixes");
+    expect(result.prDescription).toMatch(/### Fixed findings|### Manual findings/);
+  });
+});
+
+// CL.7 (v2.10.377) — explicit Fixed / Manual / Ignored section
+// counts must be internally consistent so a CI gate can verify them
+// against AUDIT_REPORT.json without re-deriving the totals.
+describe("/pr CL.7 — section counts consistent with AUDIT_REPORT.json", () => {
+  it("Fixed count = confirmed findings with fix_support='rewrite'", async () => {
+    seedAudit("cmake");
+    const result = await createPr({
+      projectRoot: TMP,
+      llmCallback: async () => "summary",
+      dryRun: true,
+    });
+    // The seeded audit has 1 rewrite + 1 annotate confirmed finding.
+    expect(result.prDescription).toMatch(/### Fixed findings \(1\)/);
+    expect(result.prDescription).toMatch(/### Manual findings \(1\)/);
+  });
+
+  it("Ignored count = ignored findings + demoted_fp FPs", async () => {
+    seedAudit("cmake");
+    const result = await createPr({
+      projectRoot: TMP,
+      llmCallback: async () => "summary",
+      dryRun: true,
+    });
+    // The seeded audit has 1 demoted_fp in false_positives_detail
+    // and 0 ignored confirmed findings. Total = 1.
+    expect(result.prDescription).toMatch(/### Ignored \/ demoted \(1\)/);
+  });
+
+  it("each section has a body line, not just the header", async () => {
+    seedAudit("cmake");
+    const r = await createPr({
+      projectRoot: TMP,
+      llmCallback: async () => "summary",
+      dryRun: true,
+    });
+    // Fixed section has the explanation line.
+    expect(r.prDescription).toContain("patched mechanically by `/fix`");
+    // Manual section has its explanation.
+    expect(r.prDescription).toContain("need human review");
+    // Ignored section has its explanation.
+    expect(r.prDescription).toContain("explicitly chose not to act on");
   });
 });
