@@ -2,6 +2,7 @@
 // Extracted from App.tsx — handles slash commands, bash mode, file mentions,
 // LLM message sending, multiline input, and message queue draining
 
+import type React from "react";
 import { useCallback, useRef } from "react";
 import type { ConversationManager } from "../../core/conversation.js";
 import type { SkillManager } from "../../core/skills.js";
@@ -41,7 +42,7 @@ export interface UseMessageProcessorParams {
   setStreamingThinking: (text: string) => void;
   setIsThinking: (v: boolean) => void;
   setLoadingMessage: (msg: string) => void;
-  setTokenCount: (count: number) => void;
+  setTokenCount: React.Dispatch<React.SetStateAction<number>>;
   setTurnTokens: (count: number) => void;
   setTurnStartTime: (time: number) => void;
   setSpinnerPhase: (phase: "thinking" | "streaming" | "tool") => void;
@@ -491,9 +492,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         if (lower === "/kodi-advisor reset") {
           try {
             const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../../core/config");
-            const raw = loadUserSettingsRaw();
-            if (raw.kodiAdvisor) {
-              raw.kodiAdvisor.declined = false;
+            const raw = await loadUserSettingsRaw();
+            if (raw.kodiAdvisor && typeof raw.kodiAdvisor === "object") {
+              (raw.kodiAdvisor as { declined?: boolean }).declined = false;
               saveUserSettingsRaw(raw);
             }
             setCompleted((prev) => [

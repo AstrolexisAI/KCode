@@ -92,6 +92,10 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
   // this value unchanged, avoiding the need to add actionNudgeUsed
   // to every single return statement.
   let actionNudgeUsed = ctx.actionNudgeUsed;
+  // Same pattern as actionNudgeUsed: most returns inherit this unchanged,
+  // only the reasoning-loop detection path mutates it. Hoisted here so
+  // every return doesn't have to re-spell ctx.consecutiveTextOnlyTurns.
+  const consecutiveTextOnlyTurns = ctx.consecutiveTextOnlyTurns;
   let {
     maxTokensContinuations,
     emptyEndTurnCount,
@@ -136,6 +140,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       previousTurnTail,
       turnsSinceLastExtraction,
       actionNudgeUsed,
+      consecutiveTextOnlyTurns,
     };
   }
 
@@ -165,6 +170,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       previousTurnTail,
       turnsSinceLastExtraction,
       actionNudgeUsed,
+      consecutiveTextOnlyTurns,
     };
   }
 
@@ -264,6 +270,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         previousTurnTail,
         turnsSinceLastExtraction,
         actionNudgeUsed: true,
+        consecutiveTextOnlyTurns,
       };
     }
   }
@@ -428,6 +435,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       previousTurnTail,
       turnsSinceLastExtraction,
       actionNudgeUsed,
+      consecutiveTextOnlyTurns,
     };
   }
 
@@ -478,6 +486,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
         lastEmptyType,
         previousTurnTail,
         turnsSinceLastExtraction,
+        actionNudgeUsed,
+        consecutiveTextOnlyTurns,
       };
     }
 
@@ -519,6 +529,8 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           lastEmptyType,
           previousTurnTail,
           turnsSinceLastExtraction,
+          actionNudgeUsed,
+          consecutiveTextOnlyTurns,
         };
       }
     } catch (err) {
@@ -1272,11 +1284,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           if (typeof c === "string") {
             lastUserPrompt = c;
           } else if (Array.isArray(c)) {
-            lastUserPrompt = c
-              .filter((b: unknown): b is { type: string; text: string } =>
-                typeof b === "object" && b !== null && (b as { type?: unknown }).type === "text",
-              )
-              .map((b) => b.text)
+            lastUserPrompt = (c as Array<{ type?: string; text?: string }>)
+              .filter((b) => b?.type === "text" && typeof b.text === "string")
+              .map((b) => b.text!)
               .join(" ");
           }
           break;
@@ -1364,6 +1374,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             previousTurnTail,
             turnsSinceLastExtraction,
             actionNudgeUsed,
+            consecutiveTextOnlyTurns,
           };
         }
       }
@@ -1738,12 +1749,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
             if (typeof c === "string") {
               sc_userPrompt = c;
             } else if (Array.isArray(c)) {
-              sc_userPrompt = c
-                .filter((b: unknown): b is { type: string; text: string } =>
-                  typeof b === "object" && b !== null &&
-                  (b as { type?: unknown }).type === "text",
-                )
-                .map((b) => b.text)
+              sc_userPrompt = (c as Array<{ type?: string; text?: string }>)
+                .filter((b) => b?.type === "text" && typeof b.text === "string")
+                .map((b) => b.text!)
                 .join(" ");
             }
             if (sc_userPrompt) break;
@@ -1879,5 +1887,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     lastEmptyType,
     previousTurnTail,
     turnsSinceLastExtraction,
+    actionNudgeUsed,
+    consecutiveTextOnlyTurns,
   };
 }

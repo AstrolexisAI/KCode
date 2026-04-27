@@ -17,6 +17,9 @@ export type EnsembleTrigger = "always" | "complex" | "manual";
 // ─── Configuration ──────────────────────────────────────────────
 
 export interface EnsembleConfig {
+  /** Master switch — `false` disables ensemble even when settings are present.
+   *  Defaults to `false` if absent (must be explicitly opted in). */
+  enabled?: boolean;
   /** Which ensemble strategy to use */
   strategy: EnsembleStrategy;
   /** Model names to use in the ensemble */
