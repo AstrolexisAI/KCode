@@ -1736,7 +1736,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 // created. Even though we excluded Plan from sub-task tools,
                 // leave this as a safety net in case something else touches it.
                 try {
-                  const { clearActivePlan } = await import("../../core/tools/plan.js");
+                  const { clearActivePlan } = await import("../../tools/plan.js");
                   clearActivePlan();
                 } catch { /* module absent */ }
                 // Record per-model costs so Kodi's session economy reflects

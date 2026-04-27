@@ -27,15 +27,14 @@ bun run dev
 bun run src/index.ts
 ```
 
-## Dual license + DCO sign-off
+## License + DCO sign-off
 
-KCode is dual-licensed (AGPL-3.0 + commercial — see
-[README](./README.md#license--dual-licensed)).
+KCode is licensed under **Apache-2.0** (see [LICENSE](./LICENSE)).
 
 **Every commit must be signed off** under the Developer
-Certificate of Origin so contributions can land under both
-licenses. Sign-off is automatic when you pass `-s` to
-`git commit`:
+Certificate of Origin so contributions are explicitly attested
+to be your own work and licensable under Apache-2.0. Sign-off
+is automatic when you pass `-s` to `git commit`:
 
 ```bash
 git commit -s -m "your commit message"
@@ -256,6 +255,6 @@ Report security vulnerabilities to **contact@astrolexis.space** (see [SECURITY.m
 
 ## License
 
-KCode is licensed under **AGPL-3.0-only**. By submitting a contribution, you agree that your work is licensed under the same terms. See [LICENSE](./LICENSE) for details.
+KCode is licensed under **Apache-2.0**. By submitting a contribution, you agree that your work is licensed under the same terms. See [LICENSE](./LICENSE) for details.
 
 Copyright (c) 2026 Astrolexis.

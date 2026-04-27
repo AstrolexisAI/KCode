@@ -145,7 +145,7 @@ Supports Spanish (with accent handling for `analizá`, `cambiá`, `auditá`) and
 - **Planning**: PlanMode for structured multi-step task execution
 - **Agent**: Skill, ToolSearch, AskUser, SendMessage for orchestration
 
-### 152+ Slash Commands
+### 195+ Slash Commands
 
 - **Git**: `/commit`, `/diff`, `/branch`, `/log`, `/stash`, `/review-pr`
 - **Code analysis**: `/simplify`, `/explain`, `/find-bug`, `/security-review`
