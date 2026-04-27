@@ -63,7 +63,7 @@ describe("ThreeWayMerge", () => {
       const result = merger.merge(base, ours, theirs);
       expect(result.conflicts.length).toBeGreaterThanOrEqual(1);
 
-      const conflict = result.conflicts[0];
+      const conflict = result.conflicts[0]!;
       expect(conflict.ours).toContain("our version");
       expect(conflict.theirs).toContain("their version");
     });
@@ -75,8 +75,8 @@ describe("ThreeWayMerge", () => {
 
       const result = merger.merge(base, ours, theirs);
       expect(result.conflicts.length).toBeGreaterThanOrEqual(1);
-      expect(result.conflicts[0].id).toBeTruthy();
-      expect(typeof result.conflicts[0].id).toBe("string");
+      expect(result.conflicts[0]!.id).toBeTruthy();
+      expect(typeof result.conflicts[0]!.id).toBe("string");
     });
 
     test("conflict includes base content", () => {
@@ -86,7 +86,7 @@ describe("ThreeWayMerge", () => {
 
       const result = merger.merge(base, ours, theirs);
       expect(result.conflicts.length).toBeGreaterThanOrEqual(1);
-      expect(result.conflicts[0].base).toContain("original");
+      expect(result.conflicts[0]!.base).toContain("original");
     });
 
     test("conflict markers appear in content", () => {
@@ -110,34 +110,34 @@ describe("ThreeWayMerge", () => {
       let result = merger.merge(base, ours, theirs);
       expect(result.conflicts.length).toBeGreaterThanOrEqual(1);
 
-      const conflictId = result.conflicts[0].id;
+      const conflictId = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, conflictId, "ours");
-      expect(result.conflicts[0].resolution).toBe("ours");
+      expect(result.conflicts[0]!.resolution).toBe("ours");
     });
 
     test("resolveConflict with 'theirs' sets resolution", () => {
       const base = "x\n";
       let result = merger.merge(base, "a\n", "b\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "theirs");
-      expect(result.conflicts[0].resolution).toBe("theirs");
+      expect(result.conflicts[0]!.resolution).toBe("theirs");
     });
 
     test("resolveConflict with 'both' sets resolution", () => {
       const base = "x\n";
       let result = merger.merge(base, "a\n", "b\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "both");
-      expect(result.conflicts[0].resolution).toBe("both");
+      expect(result.conflicts[0]!.resolution).toBe("both");
     });
 
     test("resolveConflict with 'custom' stores custom content", () => {
       const base = "x\n";
       let result = merger.merge(base, "a\n", "b\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "custom", "my custom resolution");
-      expect(result.conflicts[0].resolution).toBe("custom");
-      expect(result.conflicts[0].customContent).toBe("my custom resolution");
+      expect(result.conflicts[0]!.resolution).toBe("custom");
+      expect(result.conflicts[0]!.customContent).toBe("my custom resolution");
     });
   });
 
@@ -145,7 +145,7 @@ describe("ThreeWayMerge", () => {
     test("replaces conflict markers with 'ours' content", () => {
       const base = "x\n";
       let result = merger.merge(base, "our line\n", "their line\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "ours");
 
       const final = merger.applyResolutions(result);
@@ -157,7 +157,7 @@ describe("ThreeWayMerge", () => {
     test("replaces conflict markers with 'theirs' content", () => {
       const base = "x\n";
       let result = merger.merge(base, "our line\n", "their line\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "theirs");
 
       const final = merger.applyResolutions(result);
@@ -168,7 +168,7 @@ describe("ThreeWayMerge", () => {
     test("replaces conflict markers with both combined for 'both'", () => {
       const base = "x\n";
       let result = merger.merge(base, "our line\n", "their line\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "both");
 
       const final = merger.applyResolutions(result);
@@ -179,7 +179,7 @@ describe("ThreeWayMerge", () => {
     test("replaces conflict markers with custom content", () => {
       const base = "x\n";
       let result = merger.merge(base, "a\n", "b\n");
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "custom", "completely custom");
 
       const final = merger.applyResolutions(result);

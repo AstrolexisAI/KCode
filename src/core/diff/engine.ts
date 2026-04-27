@@ -73,7 +73,7 @@ export class DiffEngine {
       // Copy unchanged lines before this hunk
       const hunkStart = hunk.startLineOld - 1; // convert to 0-based
       while (oldIdx < hunkStart && oldIdx < oldLines.length) {
-        result.push(oldLines[oldIdx]);
+        result.push(oldLines[oldIdx]!);
         oldIdx++;
       }
 
@@ -98,7 +98,7 @@ export class DiffEngine {
 
     // Copy remaining original lines
     while (oldIdx < oldLines.length) {
-      result.push(oldLines[oldIdx]);
+      result.push(oldLines[oldIdx]!);
       oldIdx++;
     }
 
@@ -148,10 +148,14 @@ export class DiffEngine {
 
       for (let k = -d; k <= d; k += 2) {
         let x: number;
-        if (k === -d || (k !== d && V[offset + k - 1] < V[offset + k + 1])) {
-          x = V[offset + k + 1]; // move down
+        // Int32Array indexed access is always a number, but TS treats it as
+        // `number | undefined` under noUncheckedIndexedAccess. The bounds
+        // here are k ∈ [-d, d] and offset = MAX, so offset±k ∈ [0, 2*MAX]
+        // which is always within the size-2*MAX+1 buffer.
+        if (k === -d || (k !== d && V[offset + k - 1]! < V[offset + k + 1]!)) {
+          x = V[offset + k + 1]!; // move down
         } else {
-          x = V[offset + k - 1] + 1; // move right
+          x = V[offset + k - 1]! + 1; // move right
         }
 
         let y = x - k;
@@ -207,17 +211,20 @@ export class DiffEngine {
     let y = M;
 
     for (let d = trace.length - 1; d >= 0; d--) {
-      const V = trace[d];
+      // trace was populated d+1 times in the forward pass, so trace[d]
+      // is always defined here. Same Int32Array bounds-safety argument
+      // applies as in the forward pass — V[offset±k] is always defined.
+      const V = trace[d]!;
       const k = x - y;
 
       let prevK: number;
-      if (k === -d || (k !== d && V[offset + k - 1] < V[offset + k + 1])) {
+      if (k === -d || (k !== d && V[offset + k - 1]! < V[offset + k + 1]!)) {
         prevK = k + 1;
       } else {
         prevK = k - 1;
       }
 
-      const prevX = V[offset + prevK];
+      const prevX = V[offset + prevK]!;
       const prevY = prevX - prevK;
 
       // Diagonal moves (equal lines)
@@ -254,7 +261,7 @@ export class DiffEngine {
     let rangeStart = 0;
 
     for (let i = 0; i < editScript.length; i++) {
-      if (editScript[i].op !== EditOp.Equal) {
+      if (editScript[i]!.op !== EditOp.Equal) {
         if (!inChange) {
           rangeStart = i;
           inChange = true;
@@ -273,15 +280,17 @@ export class DiffEngine {
     if (changeRanges.length === 0) return [];
 
     // Merge change ranges that have overlapping context
-    const mergedRanges: Array<{ start: number; end: number }> = [changeRanges[0]];
+    // changeRanges.length > 0 verified above; mergedRanges always non-empty
+    // inside the loop because we seeded with changeRanges[0].
+    const mergedRanges: Array<{ start: number; end: number }> = [changeRanges[0]!];
     for (let i = 1; i < changeRanges.length; i++) {
-      const prev = mergedRanges[mergedRanges.length - 1];
-      const curr = changeRanges[i];
+      const prev = mergedRanges[mergedRanges.length - 1]!;
+      const curr = changeRanges[i]!;
 
       // Count equal entries between prev.end and curr.start
       let equalCount = 0;
       for (let j = prev.end + 1; j < curr.start; j++) {
-        if (editScript[j].op === EditOp.Equal) equalCount++;
+        if (editScript[j]!.op === EditOp.Equal) equalCount++;
       }
 
       if (equalCount <= CONTEXT_LINES * 2) {
@@ -303,20 +312,22 @@ export class DiffEngine {
       let maxNewIdx = -1;
 
       for (let i = range.start; i <= range.end; i++) {
-        const entry = editScript[i];
+        // i ∈ [range.start, range.end] which were derived from the
+        // editScript loop above — entry is always defined.
+        const entry = editScript[i]!;
         if (entry.op === EditOp.Delete) {
-          removed.push(oldLines[entry.oldIndex]);
+          removed.push(oldLines[entry.oldIndex]!);
           minOldIdx = Math.min(minOldIdx, entry.oldIndex);
           maxOldIdx = Math.max(maxOldIdx, entry.oldIndex);
         } else if (entry.op === EditOp.Insert) {
-          added.push(newLines[entry.newIndex]);
+          added.push(newLines[entry.newIndex]!);
           minNewIdx = Math.min(minNewIdx, entry.newIndex);
           maxNewIdx = Math.max(maxNewIdx, entry.newIndex);
         } else if (entry.op === EditOp.Equal) {
           // Equal lines inside a merged range act as intra-hunk context
           // Include them in both sides
-          removed.push(oldLines[entry.oldIndex]);
-          added.push(newLines[entry.newIndex]);
+          removed.push(oldLines[entry.oldIndex]!);
+          added.push(newLines[entry.newIndex]!);
           minOldIdx = Math.min(minOldIdx, entry.oldIndex);
           maxOldIdx = Math.max(maxOldIdx, entry.oldIndex);
           minNewIdx = Math.min(minNewIdx, entry.newIndex);
@@ -328,8 +339,8 @@ export class DiffEngine {
       if (minOldIdx === Infinity) {
         // Find nearest old index from surrounding edits
         for (let i = range.start - 1; i >= 0; i--) {
-          if (editScript[i].oldIndex >= 0) {
-            minOldIdx = editScript[i].oldIndex + 1;
+          if (editScript[i]!.oldIndex >= 0) {
+            minOldIdx = editScript[i]!.oldIndex + 1;
             maxOldIdx = minOldIdx - 1; // empty range
             break;
           }
@@ -341,8 +352,8 @@ export class DiffEngine {
       }
       if (minNewIdx === Infinity) {
         for (let i = range.start - 1; i >= 0; i--) {
-          if (editScript[i].newIndex >= 0) {
-            minNewIdx = editScript[i].newIndex + 1;
+          if (editScript[i]!.newIndex >= 0) {
+            minNewIdx = editScript[i]!.newIndex + 1;
             maxNewIdx = minNewIdx - 1;
             break;
           }
@@ -357,14 +368,14 @@ export class DiffEngine {
       const contextBefore: string[] = [];
       const contextAfter: string[] = [];
       for (let i = Math.max(0, minOldIdx - CONTEXT_LINES); i < minOldIdx; i++) {
-        contextBefore.push(oldLines[i]);
+        contextBefore.push(oldLines[i]!);
       }
       for (
         let i = maxOldIdx + 1;
         i < Math.min(oldLines.length, maxOldIdx + 1 + CONTEXT_LINES);
         i++
       ) {
-        contextAfter.push(oldLines[i]);
+        contextAfter.push(oldLines[i]!);
       }
 
       // Determine type
@@ -372,9 +383,9 @@ export class DiffEngine {
       const pureRemoved: string[] = [];
       const pureAdded: string[] = [];
       for (let i = range.start; i <= range.end; i++) {
-        const entry = editScript[i];
-        if (entry.op === EditOp.Delete) pureRemoved.push(oldLines[entry.oldIndex]);
-        else if (entry.op === EditOp.Insert) pureAdded.push(newLines[entry.newIndex]);
+        const entry = editScript[i]!;
+        if (entry.op === EditOp.Delete) pureRemoved.push(oldLines[entry.oldIndex]!);
+        else if (entry.op === EditOp.Insert) pureAdded.push(newLines[entry.newIndex]!);
       }
 
       let type: DiffHunk["type"];
