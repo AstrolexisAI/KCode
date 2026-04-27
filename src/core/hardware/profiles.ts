@@ -7,7 +7,7 @@ import type { HardwareProfile, ModelRecommendation } from "./types";
  * Named hardware profiles representing common user configurations.
  * Used for testing recommendations and as fallbacks when detection fails.
  */
-export const HARDWARE_PROFILES: Record<string, HardwareProfile> = {
+export const HARDWARE_PROFILES = {
   // High-end desktop: dual GPU workstation
   "high-end-nvidia": {
     cpu: {
@@ -201,7 +201,7 @@ export const HARDWARE_PROFILES: Record<string, HardwareProfile> = {
     storage: { availableGb: 1000, type: "ssd" },
     os: { platform: "linux", release: "6.8.0", isWSL: false },
   },
-};
+} satisfies Record<string, HardwareProfile>;
 
 /**
  * Get a named hardware profile by key.

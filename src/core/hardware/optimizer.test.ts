@@ -12,66 +12,66 @@ describe("HardwareOptimizer", () => {
     test("high-end NVIDIA recommends 32B model first", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["high-end-nvidia"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("32b");
-      expect(recs[0].gpuLayers).toBe(-1);
-      expect(recs[0].contextWindow).toBe(16384);
+      expect(recs[0]!.model).toContain("32b");
+      expect(recs[0]!.gpuLayers).toBe(-1);
+      expect(recs[0]!.contextWindow).toBe(16384);
     });
 
     test("mid-range NVIDIA recommends 14B model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["mid-range-nvidia"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("14b");
-      expect(recs[0].gpuLayers).toBe(-1);
+      expect(recs[0]!.model).toContain("14b");
+      expect(recs[0]!.gpuLayers).toBe(-1);
     });
 
     test("budget NVIDIA recommends 7B model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["budget-nvidia"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("7b");
+      expect(recs[0]!.model).toContain("7b");
     });
 
     test("CPU-only high RAM recommends 7B CPU model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["cpu-only-high-ram"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("7b");
-      expect(recs[0].gpuLayers).toBe(0);
-      expect(recs[0].contextWindow).toBe(4096);
+      expect(recs[0]!.model).toContain("7b");
+      expect(recs[0]!.gpuLayers).toBe(0);
+      expect(recs[0]!.contextWindow).toBe(4096);
     });
 
     test("CPU-only low RAM recommends 3B model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["cpu-only-low-ram"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("3b");
-      expect(recs[0].gpuLayers).toBe(0);
-      expect(recs[0].contextWindow).toBe(2048);
+      expect(recs[0]!.model).toContain("3b");
+      expect(recs[0]!.gpuLayers).toBe(0);
+      expect(recs[0]!.contextWindow).toBe(2048);
     });
 
     test("Apple Silicon M2 Pro (32GB) recommends 32B model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["apple-m2-pro"]);
       expect(recs.length).toBeGreaterThan(0);
       // M2 Pro with 32GB -> should get 32B and 14B recommendations
-      expect(recs[0].model).toContain("32b");
-      expect(recs[0].reason).toContain("Apple Silicon");
+      expect(recs[0]!.model).toContain("32b");
+      expect(recs[0]!.reason).toContain("Apple Silicon");
     });
 
     test("Apple Silicon M3 Max (64GB) recommends 32B model first", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["apple-m3-max"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("32b");
+      expect(recs[0]!.model).toContain("32b");
     });
 
     test("dual GPU recommends 32B model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["dual-gpu"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("32b");
+      expect(recs[0]!.model).toContain("32b");
       // 24+32=56GB total VRAM, easily fits 32B
-      expect(recs[0].vramRequired).toBeLessThanOrEqual(56);
+      expect(recs[0]!.vramRequired).toBeLessThanOrEqual(56);
     });
 
     test("WSL mid-range recommends 7B model", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["wsl-mid-range"]);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("7b");
+      expect(recs[0]!.model).toContain("7b");
     });
 
     test("all profiles produce at least one recommendation", () => {
@@ -127,7 +127,7 @@ describe("HardwareOptimizer", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["high-end-nvidia"]);
       // Should have at least 2 recommendations: 32B + 7B fallback
       expect(recs.length).toBeGreaterThanOrEqual(2);
-      const last = recs[recs.length - 1];
+      const last = recs[recs.length - 1]!;
       expect(last.model).toContain("7b");
     });
 
@@ -141,7 +141,7 @@ describe("HardwareOptimizer", () => {
       };
       const recs = optimizer.recommend(appleProfile);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("14b");
+      expect(recs[0]!.model).toContain("14b");
     });
 
     test("Apple Silicon with 8GB recommends 7B", () => {
@@ -154,7 +154,7 @@ describe("HardwareOptimizer", () => {
       };
       const recs = optimizer.recommend(appleProfile);
       expect(recs.length).toBeGreaterThan(0);
-      expect(recs[0].model).toContain("7b");
+      expect(recs[0]!.model).toContain("7b");
     });
   });
 
@@ -164,20 +164,20 @@ describe("HardwareOptimizer", () => {
     test("generates valid config for high-end NVIDIA", () => {
       const profile = HARDWARE_PROFILES["high-end-nvidia"];
       const recs = optimizer.recommend(profile);
-      const config = optimizer.generateLlamaCppConfig(recs[0], profile);
+      const config = optimizer.generateLlamaCppConfig(recs[0]!, profile);
 
-      expect(config.model).toBe(recs[0].model);
-      expect(config.contextSize).toBe(recs[0].contextWindow);
-      expect(config.batchSize).toBe(recs[0].batchSize);
-      expect(config.threads).toBe(recs[0].threads);
-      expect(config.gpuLayers).toBe(recs[0].gpuLayers);
+      expect(config.model).toBe(recs[0]!.model);
+      expect(config.contextSize).toBe(recs[0]!.contextWindow);
+      expect(config.batchSize).toBe(recs[0]!.batchSize);
+      expect(config.threads).toBe(recs[0]!.threads);
+      expect(config.gpuLayers).toBe(recs[0]!.gpuLayers);
       expect(config.mmap).toBe(true);
     });
 
     test("enables flash attention for NVIDIA with CC >= 8.0", () => {
       const profile = HARDWARE_PROFILES["high-end-nvidia"];
       const recs = optimizer.recommend(profile);
-      const config = optimizer.generateLlamaCppConfig(recs[0], profile);
+      const config = optimizer.generateLlamaCppConfig(recs[0]!, profile);
 
       expect(config.flashAttention).toBe(true);
     });
@@ -185,7 +185,7 @@ describe("HardwareOptimizer", () => {
     test("disables flash attention when no NVIDIA GPU", () => {
       const profile = HARDWARE_PROFILES["cpu-only-high-ram"];
       const recs = optimizer.recommend(profile);
-      const config = optimizer.generateLlamaCppConfig(recs[0], profile);
+      const config = optimizer.generateLlamaCppConfig(recs[0]!, profile);
 
       expect(config.flashAttention).toBe(false);
     });
@@ -193,7 +193,7 @@ describe("HardwareOptimizer", () => {
     test("enables NUMA distribute for high-thread-count CPUs", () => {
       const profile = HARDWARE_PROFILES["high-end-nvidia"]; // 32 threads
       const recs = optimizer.recommend(profile);
-      const config = optimizer.generateLlamaCppConfig(recs[0], profile);
+      const config = optimizer.generateLlamaCppConfig(recs[0]!, profile);
 
       expect(config.numa).toBe("distribute");
     });
@@ -201,7 +201,7 @@ describe("HardwareOptimizer", () => {
     test("disables NUMA for low-thread-count CPUs", () => {
       const profile = HARDWARE_PROFILES["budget-nvidia"]; // 12 threads
       const recs = optimizer.recommend(profile);
-      const config = optimizer.generateLlamaCppConfig(recs[0], profile);
+      const config = optimizer.generateLlamaCppConfig(recs[0]!, profile);
 
       expect(config.numa).toBe("disable");
     });
@@ -210,7 +210,7 @@ describe("HardwareOptimizer", () => {
       const profile = HARDWARE_PROFILES["high-end-nvidia"]; // 48GB available
       const recs = optimizer.recommend(profile);
       // rec needs 4GB RAM, 4 < 48*0.5=24, so mlock=true
-      const config = optimizer.generateLlamaCppConfig(recs[0], profile);
+      const config = optimizer.generateLlamaCppConfig(recs[0]!, profile);
       expect(config.mlock).toBe(true);
     });
   });
@@ -220,17 +220,17 @@ describe("HardwareOptimizer", () => {
   describe("generateOllamaConfig()", () => {
     test("returns expected env vars", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["high-end-nvidia"]);
-      const config = optimizer.generateOllamaConfig(recs[0]);
+      const config = optimizer.generateOllamaConfig(recs[0]!);
 
       expect(config.OLLAMA_NUM_PARALLEL).toBe("2");
       expect(config.OLLAMA_MAX_LOADED_MODELS).toBe("1");
-      expect(config.OLLAMA_NUM_GPU).toBe(String(recs[0].gpuLayers));
+      expect(config.OLLAMA_NUM_GPU).toBe(String(recs[0]!.gpuLayers));
       expect(config.OLLAMA_FLASH_ATTENTION).toBe("1");
     });
 
     test("CPU-only sets OLLAMA_NUM_GPU to 0", () => {
       const recs = optimizer.recommend(HARDWARE_PROFILES["cpu-only-high-ram"]);
-      const config = optimizer.generateOllamaConfig(recs[0]);
+      const config = optimizer.generateOllamaConfig(recs[0]!);
       expect(config.OLLAMA_NUM_GPU).toBe("0");
     });
   });
@@ -241,7 +241,7 @@ describe("HardwareOptimizer", () => {
     test("valid recommendation returns null", () => {
       const profile = HARDWARE_PROFILES["high-end-nvidia"];
       const recs = optimizer.recommend(profile);
-      const error = optimizer.validateRecommendation(recs[0], profile);
+      const error = optimizer.validateRecommendation(recs[0]!, profile);
       expect(error).toBeNull();
     });
 

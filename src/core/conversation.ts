@@ -369,7 +369,7 @@ export class ConversationManager {
     // Load previous progress and inject as context
     const progress = loadCoordinatorProgress(this.sessionId);
     if (progress) {
-      this.messages.unshift({
+      this.state.messages.unshift({
         role: "user",
         content: `[Coordinator session restored]\n\nPrevious progress:\n${progress}`,
       });
@@ -773,7 +773,8 @@ export class ConversationManager {
                 );
                 let content = "";
                 for await (const chunk of stream) {
-                  if (chunk.type === "content_delta" && chunk.text) content += chunk.text;
+                  if (chunk.type === "content_delta" && "text" in chunk && chunk.text)
+                    content += chunk.text;
                 }
                 return {
                   content,
@@ -859,7 +860,9 @@ export class ConversationManager {
           }
           genResult = await streamGen.next();
         }
-        streamResult = genResult.value;
+        // genResult.done is true here so .value is the generator's return
+        // type (StreamAccumulator), not a yielded StreamEvent.
+        streamResult = genResult.value as StreamAccumulator;
       } catch (error) {
         yield {
           type: "error",
@@ -884,14 +887,14 @@ export class ConversationManager {
       // Guard: if content is empty (e.g. repetition_aborted with no text generated),
       // inject a placeholder so subsequent API calls don't fail with
       // "Each message must have at least one content element" (400 Bad Request).
-      let safeContent = assistantContent;
+      let safeContent: string | ContentBlock[] = assistantContent;
       const isEmpty = !safeContent ||
         (Array.isArray(safeContent) && safeContent.length === 0) ||
         (Array.isArray(safeContent) && safeContent.every((b) => {
           if (b.type === "text") return !(b as { text?: string }).text?.trim();
           return false;
         })) ||
-        (typeof safeContent === "string" && !safeContent.trim());
+        (typeof safeContent === "string" && !(safeContent as string).trim());
       if (isEmpty) {
         safeContent = [{
           type: "text",
@@ -999,13 +1002,8 @@ export class ConversationManager {
         continue;
       }
       if (planResult.blockedResults.length > 0) {
-        const blockedBlocks: Array<{
-          type: string;
-          tool_use_id: string;
-          content: string;
-          is_error: boolean;
-        }> = planResult.blockedResults.map((r) => ({
-          type: "tool_result",
+        const blockedBlocks: ContentBlock[] = planResult.blockedResults.map((r) => ({
+          type: "tool_result" as const,
           tool_use_id: r.tool_use_id,
           content: r.content,
           is_error: true,
@@ -1110,13 +1108,10 @@ export class ConversationManager {
                     break;
                   }
                   if (Array.isArray(c)) {
-                    const textBlocks = c.filter(
-                      (b: unknown): b is { type: string; text: string } =>
-                        typeof b === "object" && b !== null &&
-                        (b as { type?: unknown }).type === "text",
-                    );
+                    const textBlocks = (c as Array<{ type?: string; text?: string }>)
+                      .filter((b) => b?.type === "text" && typeof b.text === "string");
                     if (textBlocks.length > 0) {
-                      const joined = textBlocks.map((b) => b.text).join(" ");
+                      const joined = textBlocks.map((b) => b.text!).join(" ");
                       if (!joined.startsWith("[SYSTEM]") && !joined.startsWith("[REALITY")) {
                         userPrompt = joined;
                         break;
@@ -1258,6 +1253,7 @@ export class ConversationManager {
           debugTracer: this.debugTracer,
           collectSessionData: () => this.collectSessionData(),
           actionNudgeUsed,
+          consecutiveTextOnlyTurns: guardState.consecutiveTextOnlyTurns,
         });
 
         // Apply state updates from post-turn handler

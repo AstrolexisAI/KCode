@@ -139,6 +139,11 @@ export interface KCodeConfig {
   offline?: import("./offline/types").OfflineSettings; // Offline mode configuration
   deployment?: import("./config").DeploymentMode; // "cloud" | "hybrid" | "air-gap"
   language?: string; // UI language code (e.g. "en", "es", "fr")
+  /** Auto-memory extraction settings — see src/core/config.ts AutoMemorySettings.
+   *  `true`/`false` toggle the feature; an object overrides defaults. */
+  autoMemory?: boolean | import("./config").AutoMemorySettings;
+  /** Multi-model ensemble settings (best-of-n / majority-vote / merge / verify / specialize). */
+  ensemble?: import("./ensemble/types").EnsembleConfig;
 }
 
 export type PermissionMode = "ask" | "auto" | "plan" | "deny" | "acceptEdits";
@@ -275,7 +280,20 @@ export type StreamEvent =
       filesModified: string[];
       lastError?: string;
       summary: string;
-    };
+    }
+  /**
+   * Standalone banner emitted by conversation-post-turn checks (stub markers,
+   * grounding-gate findings, scope-flagger warnings). Stream handler converts
+   * to a MessageEntry banner. Unlike `compaction_start` etc, this isn't tied
+   * to a specific lifecycle event — it carries its own copy.
+   */
+  | { type: "banner"; title: string; subtitle: string }
+  /**
+   * Emitted when truncation retries are exhausted but the response still
+   * looks incomplete. Stream handler renders as a dedicated MessageEntry kind
+   * (not a text_delta — that would contaminate message history).
+   */
+  | { type: "incomplete_response"; continuations: number; stopReason: string };
 
 // ─── Tool Input/Output Schemas ───────────────────────────────────
 

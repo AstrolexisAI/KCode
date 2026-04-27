@@ -12,7 +12,9 @@ import ThinkingBlockComponent from "./ThinkingBlock.js";
 
 export interface TextEntry {
   kind: "text";
-  role: "user" | "assistant";
+  /** "system" is used for app-emitted status messages (e.g. "Opening browser...",
+   *  "/login result"); not the LLM's system prompt. */
+  role: "user" | "assistant" | "system";
   text: string;
 }
 
